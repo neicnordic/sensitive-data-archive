@@ -7,6 +7,7 @@ The following environment variables can be used to configure the broker:
 | Variable | Description |
 |---------:|:------------|
 | `MQ_USER` | Default user (with admin rights) |
+| `MQ_PASSWORD` | Password for the above user |
 | `MQ_PASSWORD_HASH` | Password hash for the above user |
 | `CEGA_CONNECTION` | DSN URL for the shovels and federated queues with CentralEGA |
 

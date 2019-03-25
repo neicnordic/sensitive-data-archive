@@ -5,13 +5,14 @@ set -x
 
 [[ -z "${CEGA_CONNECTION}" ]] && echo 'Environment CEGA_CONNECTION is empty' 1>&2 && exit 1
 [[ -z "${MQ_USER}" ]] && echo 'Environment MQ_USER is empty' 1>&2 && exit 1
+[[ -z "${MQ_PASSWORD}" ]] && echo 'Environment MQ_PASSWORD is empty' 1>&2 && exit 1
 [[ -z "${MQ_PASSWORD_HASH}" ]] && echo 'Environment MQ_PASSWORD_HASH is empty' 1>&2 && exit 1
 
 cat > /etc/rabbitmq/defs.json <<EOF
 {"rabbit_version":"3.6.14",
  "users":[{"name":"${MQ_USER}","password_hash":"${MQ_PASSWORD_HASH}","hashing_algorithm":"rabbit_password_hashing_sha256","tags":"administrator"}],
  "vhosts":[{"name":"/"}],
- "permissions":[{"user":"guest","vhost":"/","configure":".*","write":".*","read":".*"}],
+ "permissions":[{"user":"${MQ_USER}","vhost":"/","configure":".*","write":".*","read":".*"}],
  "parameters":[],
  "global_parameters":[{"name":"cluster_name","value":"rabbit@localhost"}],
  "policies":[],
@@ -53,7 +54,6 @@ chmod 640 /etc/rabbitmq/rabbitmq.config
 
 # dest-exchange-key is not set for the shovel, so the key is re-used.
 
-# For the moment, still using guest:guest
 cat > /etc/rabbitmq/defs-cega.json <<EOF
 {"parameters":[{"value": {"src-uri": "amqp://",
 			  "src-exchange": "cega",
@@ -125,8 +125,8 @@ chown -R rabbitmq /var/lib/rabbitmq
     ((ROUND<0)) && echo "Central EGA broker *_not_* started" 2>&1 && exit 1
 
     ROUND=30
-    until rabbitmqadmin import /etc/rabbitmq/defs-cega.json || ((ROUND<0))
-    do
+    until rabbitmqadmin -u "${MQ_USER}" -p "${MQ_PASSWORD}" import /etc/rabbitmq/defs-cega.json || ((ROUND<0))
+     do
  	sleep 1
  	$((ROUND--))
     done
