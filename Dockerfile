@@ -1,20 +1,17 @@
-FROM rabbitmq:3.6.14-management
+FROM rabbitmq:3.7.8-management-alpine
 
-EXPOSE 5672 15672
+RUN rabbitmq-plugins enable --offline rabbitmq_federation rabbitmq_federation_management rabbitmq_shovel rabbitmq_shovel_management
 
-VOLUME /var/lib/rabbitmq
+COPY entrypoint.sh /usr/local/bin/ega-entrypoint.sh
 
-RUN mkdir -p /etc/rabbitmq/ && \
-    chown -R rabbitmq:rabbitmq /etc/rabbitmq
+RUN chmod +x /usr/local/bin/ega-entrypoint.sh
 
-# Initialization
-RUN rabbitmq-plugins enable --offline rabbitmq_federation            && \
-    rabbitmq-plugins enable --offline rabbitmq_federation_management && \
-    rabbitmq-plugins enable --offline rabbitmq_shovel                && \
-    rabbitmq-plugins enable --offline rabbitmq_shovel_management
+COPY definitions.json /etc/rabbitmq/definitions.json
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod 755 /usr/local/bin/entrypoint.sh
+COPY advanced.config /etc/rabbitmq/advanced.config
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+COPY rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
+
+ENTRYPOINT ["/usr/local/bin/ega-entrypoint.sh"]
+
 CMD ["rabbitmq-server"]
