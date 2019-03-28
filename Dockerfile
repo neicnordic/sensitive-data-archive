@@ -1,4 +1,13 @@
-FROM rabbitmq:3.6.14-management
+FROM rabbitmq:3.6.16-management-alpine
+
+ARG BUILD_DATE
+ARG SOURCE_COMMIT
+
+LABEL maintainer "EGA System Developers"
+LABEL org.label-schema.schema-version="1.0"
+LABEL org.label-schema.build-date=$BUILD_DATE
+LABEL org.label-schema.vcs-url="https://github.com/EGA-archive/LocalEGA-mq"
+LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 EXPOSE 5672 15672
 
