@@ -19,10 +19,6 @@ COPY entrypoint.sh /usr/local/bin/ega-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/ega-entrypoint.sh
 
-COPY definitions.json /etc/rabbitmq/definitions.json
-
-COPY advanced.config /etc/rabbitmq/advanced.config
-
 COPY rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
 
 ENTRYPOINT ["/usr/local/bin/ega-entrypoint.sh"]
