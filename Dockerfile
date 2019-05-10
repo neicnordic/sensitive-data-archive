@@ -9,9 +9,9 @@ LABEL org.label-schema.build-date=$BUILD_DATE
 LABEL org.label-schema.vcs-url="https://github.com/EGA-archive/LocalEGA-mq"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
-EXPOSE 5672 15672
-
 VOLUME /var/lib/rabbitmq
+
+RUN apk add --no-cache ca-certificates
 
 RUN rabbitmq-plugins enable --offline rabbitmq_federation rabbitmq_federation_management rabbitmq_shovel rabbitmq_shovel_management
 
