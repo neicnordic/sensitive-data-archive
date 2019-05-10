@@ -4,6 +4,23 @@
 [[ -z "${MQ_PASSWORD_HASH}" ]] && echo 'Environment variable MQ_PASSWORD_HASH is empty' 1>&2 && exit 1
 [[ -z "${CEGA_CONNECTION}" ]] && echo 'Environment variable CEGA_CONNECTION is empty' 1>&2 && exit 1
 
+
+cat >> /etc/rabbitmq/rabbitmq.conf <<EOF
+listeners.ssl.default = 5671
+ssl_options.cacertfile = ${MQ_CA:-/etc/rabbitmq/ssl/ca.pem}
+ssl_options.certfile = ${MQ_SERVER_CERT:-/etc/rabbitmq/ssl/mq-server.pem}
+ssl_options.keyfile = ${MQ_SERVER_KEY:-/etc/rabbitmq/ssl/mq-server-key.pem}
+ssl_options.verify = verify_peer
+ssl_options.fail_if_no_peer_cert = true
+ssl_options.versions.1 = tlsv1.2
+disk_free_limit.absolute = 1GB
+management.listener.port = 15672
+management.load_definitions = /etc/rabbitmq/definitions.json
+EOF
+
+chown rabbitmq:rabbitmq /etc/rabbitmq/rabbitmq.conf
+chmod 600 /etc/rabbitmq/rabbitmq.conf
+
 cat > /etc/rabbitmq/definitions.json <<EOF
 {
   "users": [
