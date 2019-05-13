@@ -136,4 +136,11 @@ chown rabbitmq:rabbitmq /etc/rabbitmq/advanced.config
 chmod 600 /etc/rabbitmq/advanced.config
 
 
-exec "$@"
+# Ownership by 'rabbitmq'
+[[ -e "${MQ_CA}" ]] && chown rabbitmq:rabbitmq "${MQ_CA}"
+[[ -e "${MQ_SERVER_CERT}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_CERT}"
+[[ -e "${MQ_SERVER_KEY}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_KEY}"
+find /var/lib/rabbitmq \! -user rabbitmq -exec chown rabbitmq '{}' +
+
+# Run as 'rabbitmq'
+exec su-exec rabbitmq "$@"
