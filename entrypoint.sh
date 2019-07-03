@@ -10,15 +10,15 @@ listeners.ssl.default = 5671
 ssl_options.cacertfile = ${MQ_CA:-/etc/rabbitmq/ssl/ca.pem}
 ssl_options.certfile = ${MQ_SERVER_CERT:-/etc/rabbitmq/ssl/mq-server.pem}
 ssl_options.keyfile = ${MQ_SERVER_KEY:-/etc/rabbitmq/ssl/mq-server-key.pem}
-ssl_options.verify = verify_peer
+ssl_options.verify = ${MQ_VERIFY:-verify_peer}
 ssl_options.fail_if_no_peer_cert = true
 ssl_options.versions.1 = tlsv1.2
 disk_free_limit.absolute = 1GB
 management.listener.port = 15672
 management.load_definitions = /etc/rabbitmq/definitions.json
+default_vhost = ${MQ_VHOST:-/}
 EOF
 
-chown rabbitmq:rabbitmq /etc/rabbitmq/rabbitmq.conf
 chmod 600 /etc/rabbitmq/rabbitmq.conf
 
 cat > /etc/rabbitmq/definitions.json <<EOF
@@ -30,46 +30,45 @@ cat > /etc/rabbitmq/definitions.json <<EOF
     }
   ],
   "vhosts": [
-    { "name": "/" }
+    { "name": "${MQ_VHOST:-/}" }
   ],
   "permissions": [
-    { "user": "${MQ_USER}", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*" }
+    { "user": "${MQ_USER}", "vhost": "${MQ_VHOST:-/}", "configure": ".*", "write": ".*", "read": ".*" }
   ],
   "parameters": [
     {
-      "name": "CEGA-ids", "vhost": "/", "component": "federation-upstream",
+      "name": "CEGA-ids", "vhost": "${MQ_VHOST:-/}", "component": "federation-upstream",
       "value": { "ack-mode": "on-confirm", "queue": "v1.stableIDs", "trust-user-id": false, "uri": "${CEGA_CONNECTION}" }
     },
     {
-      "name": "CEGA-files", "vhost": "/", "component": "federation-upstream",
+      "name": "CEGA-files", "vhost": "${MQ_VHOST:-/}", "component": "federation-upstream",
       "value": { "ack-mode": "on-confirm", "queue": "v1.files", "trust-user-id": false, "uri": "${CEGA_CONNECTION}" }
     }
   ],
   "policies": [
     {
-      "vhost": "/", "name": "CEGA-files", "pattern": "files", "apply-to": "queues", "priority": 0,
+      "vhost": "${MQ_VHOST:-/}", "name": "CEGA-files", "pattern": "files", "apply-to": "queues", "priority": 0,
       "definition": { "federation-upstream": "CEGA-files" }
     },
     {
-      "vhost": "/", "name": "CEGA-ids", "pattern": "stableIDs", "apply-to": "queues", "priority": 0,
+      "vhost": "${MQ_VHOST:-/}", "name": "CEGA-ids", "pattern": "stableIDs", "apply-to": "queues", "priority": 0,
       "definition": { "federation-upstream": "CEGA-ids" }
     }
   ],
   "queues": [
-    {"name": "stableIDs", "vhost": "/", "durable": true, "auto_delete": false, "arguments":{}},
-    {"name": "files",     "vhost": "/", "durable": true, "auto_delete": false, "arguments":{}},
-    {"name": "archived",  "vhost": "/", "durable": true, "auto_delete": false, "arguments":{}}
+    {"name": "stableIDs", "vhost": "${MQ_VHOST:-/}", "durable": true, "auto_delete": false, "arguments":{}},
+    {"name": "files",     "vhost": "${MQ_VHOST:-/}", "durable": true, "auto_delete": false, "arguments":{}},
+    {"name": "archived",  "vhost": "${MQ_VHOST:-/}", "durable": true, "auto_delete": false, "arguments":{}}
   ],
   "exchanges": [
-    {"name":"cega", "vhost":"/", "type":"topic", "durable":true, "auto_delete":false, "internal":false, "arguments":{}}, 
-    {"name":"lega", "vhost":"/", "type":"topic", "durable":true, "auto_delete":false, "internal":false, "arguments":{}}
+    {"name":"cega", "vhost":"${MQ_VHOST:-/}", "type":"topic", "durable":true, "auto_delete":false, "internal":false, "arguments":{}}, 
+    {"name":"lega", "vhost":"${MQ_VHOST:-/}", "type":"topic", "durable":true, "auto_delete":false, "internal":false, "arguments":{}}
   ], 
   "bindings": [
-    { "source":"lega", "vhost": "/", "destination":"archived", "destination_type":"queue", "routing_key":"archived", "arguments":{}}
+    { "source":"lega", "vhost": "${MQ_VHOST:-/}", "destination":"archived", "destination_type":"queue", "routing_key":"archived", "arguments":{}}
   ]
 }
 EOF
-chown rabbitmq:rabbitmq /etc/rabbitmq/definitions.json
 chmod 600 /etc/rabbitmq/definitions.json
 
 cat > /etc/rabbitmq/advanced.config <<EOF
@@ -132,15 +131,14 @@ cat > /etc/rabbitmq/advanced.config <<EOF
     ]}
 ].
 EOF
-chown rabbitmq:rabbitmq /etc/rabbitmq/advanced.config
 chmod 600 /etc/rabbitmq/advanced.config
 
 
 # Ownership by 'rabbitmq'
-[[ -e "${MQ_CA}" ]] && chown rabbitmq:rabbitmq "${MQ_CA}"
-[[ -e "${MQ_SERVER_CERT}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_CERT}"
-[[ -e "${MQ_SERVER_KEY}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_KEY}"
-find /var/lib/rabbitmq \! -user rabbitmq -exec chown rabbitmq '{}' +
+#[[ -e "${MQ_CA}" ]] && chown rabbitmq:rabbitmq "${MQ_CA}"
+#[[ -e "${MQ_SERVER_CERT}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_CERT}"
+#[[ -e "${MQ_SERVER_KEY}" ]] && chown rabbitmq:rabbitmq "${MQ_SERVER_KEY}"
+#find /var/lib/rabbitmq \! -user rabbitmq -exec chown rabbitmq '{}' +
 
 # Run as 'rabbitmq'
-exec su-exec rabbitmq "$@"
+exec "$@"

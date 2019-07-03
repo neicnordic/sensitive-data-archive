@@ -19,6 +19,8 @@ COPY entrypoint.sh /usr/local/bin/ega-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/ega-entrypoint.sh
 
+USER 100:101
+
 ENTRYPOINT ["/usr/local/bin/ega-entrypoint.sh"]
 
 CMD ["rabbitmq-server"]
