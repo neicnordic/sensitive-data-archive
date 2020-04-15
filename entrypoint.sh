@@ -81,6 +81,9 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
 EOF
 chmod 600 "/var/lib/rabbitmq/definitions.json"
 
+if [ -n "${MQ_VHOST}" ];then
+MQ_VHOST="/${MQ_VHOST}"
+fi
 cat > "/var/lib/rabbitmq/advanced.config" <<EOF
 [
   {rabbit,
@@ -91,7 +94,7 @@ cat > "/var/lib/rabbitmq/advanced.config" <<EOF
       {to_cega,
         [{source,
           [{protocol, amqp091},
-            {uris, ["amqp://"]},
+            {uris, ["amqp://${MQ_VHOST:-}"]},
             {declarations, [{'queue.declare', [{exclusive, true}]},
               {'queue.bind',
                 [{exchange, <<"cega">>},
@@ -114,7 +117,7 @@ cat > "/var/lib/rabbitmq/advanced.config" <<EOF
       {cega_completion,
         [{source,
           [{protocol, amqp091},
-            {uris, ["amqp://"]},
+            {uris, ["amqp://${MQ_VHOST:-}"]},
             {declarations, [{'queue.declare', [{exclusive, true}]},
               {'queue.bind',
                 [{exchange, <<"lega">>},
@@ -127,7 +130,7 @@ cat > "/var/lib/rabbitmq/advanced.config" <<EOF
           ]},
           {destination,
             [{protocol, amqp091},
-              {uris, ["amqp://"]},
+              {uris, ["amqp://${MQ_VHOST:-}"]},
               {declarations, []},
               {publish_properties, [{delivery_mode, 2}]},
               {publish_fields, [{exchange, <<"cega">>},
