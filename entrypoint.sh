@@ -11,7 +11,7 @@ openssl req -x509 -newkey rsa:2048 \
     -keyout "/var/lib/rabbitmq/ssl/mq-server.key" -nodes \
     -out "/var/lib/rabbitmq/ssl/mq-server.pem" -sha256 \
     -days 1000 -subj "${SSL_SUBJ}" && \
-    chmod 600 "/var/lib/rabbitmq/ssl/mq-server.*"
+    chmod 600 /var/lib/rabbitmq/ssl/mq-server.*
 fi
 
 cat >> "/var/lib/rabbitmq/rabbitmq.conf" <<EOF
