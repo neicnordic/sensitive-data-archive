@@ -17,12 +17,12 @@ RUN apk add --no-cache ca-certificates openssl
 
 RUN rabbitmq-plugins enable --offline rabbitmq_federation rabbitmq_federation_management rabbitmq_shovel rabbitmq_shovel_management
 
-COPY entrypoint.sh /usr/local/bin/ega-entrypoint.sh
+COPY entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN chmod +x /usr/local/bin/ega-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 USER 100:101
 
-ENTRYPOINT ["/usr/local/bin/ega-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 CMD ["rabbitmq-server"]
