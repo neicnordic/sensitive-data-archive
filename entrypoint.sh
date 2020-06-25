@@ -215,6 +215,32 @@ cat > "/var/lib/rabbitmq/advanced.config" <<EOF
             ]},
           {ack_mode, on_confirm},
           {reconnect_delay, 5}
+        ]},
+      {cega_verification,
+        [{source,
+          [{protocol, amqp091},
+            {uris, ["amqp://${MQ_VHOST:-}"]},
+            {declarations, [{'queue.declare', [{exclusive, true}]},
+              {'queue.bind',
+                [{exchange, <<"lega">>},
+                  {queue, <<>>},
+                  {routing_key, <<"verified">>}
+                ]}
+            ]},
+            {queue, <<>>},
+            {prefetch_count, 10}
+          ]},
+          {destination,
+            [{protocol, amqp091},
+              {uris, ["amqp://${MQ_VHOST:-}"]},
+              {declarations, []},
+              {publish_properties, [{delivery_mode, 2}]},
+              {publish_fields, [{exchange, <<"cega">>},
+                {routing_key, <<"files.verified">>}
+              ]}
+            ]},
+          {ack_mode, on_confirm},
+          {reconnect_delay, 5}
         ]}
     ]}
     ]}
@@ -272,6 +298,13 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
     },
     {
       "name": "files.completed",
+      "vhost": "${MQ_VHOST:-/}",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "files.verified",
       "vhost": "${MQ_VHOST:-/}",
       "durable": true,
       "auto_delete": false,
@@ -341,6 +374,14 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "arguments": {},
       "destination": "files.completed",
       "routing_key": "files.completed"
+    },
+    {
+      "source": "lega",
+      "vhost": "${MQ_VHOST:-/}",
+      "destination_type": "queue",
+      "arguments": {},
+      "destination": "files.verified",
+      "routing_key": "files.verified"
     },
     {
       "source": "lega",
