@@ -124,7 +124,7 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "arguments": {}
     },
     {
-      "name": "stableIDs",
+      "name": "accessionIDs",
       "vhost": "${MQ_VHOST:-/}",
       "durable": true,
       "auto_delete": false,
@@ -347,7 +347,7 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "arguments": {}
     },
     {
-      "name": "stableIDs",
+      "name": "accessionIDs",
       "vhost": "${MQ_VHOST:-/}",
       "durable": true,
       "auto_delete": false,
