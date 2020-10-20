@@ -319,6 +319,13 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "arguments": {}
     },
     {
+      "name": "error",
+      "vhost": "${MQ_VHOST:-/}",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
       "name": "files",
       "vhost": "${MQ_VHOST:-/}",
       "durable": true,
