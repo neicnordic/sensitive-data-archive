@@ -157,6 +157,72 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "internal": false,
       "arguments": {}
     }
+  ],
+  "bindings": [
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "archived",
+        "routing_key": "archived"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "accessionIDs",
+        "routing_key": "accessionIDs"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "completed",
+        "routing_key": "completed"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "error",
+        "routing_key": "error"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "files",
+        "routing_key": "files"
+    },
+    {
+        "source": "localega",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "inbox",
+        "routing_key": "inbox"
+    },
+    {
+        "source": "localega",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "ingest",
+        "routing_key": "ingest"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "verified",
+        "routing_key": "verified"
+    }
   ]
 }
 EOF
@@ -377,6 +443,72 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "archived",
+        "routing_key": "archived"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "accessionIDs",
+        "routing_key": "accessionIDs"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "completed",
+        "routing_key": "completed"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "error",
+        "routing_key": "error"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "files",
+        "routing_key": "files"
+    },
+    {
+        "source": "localega",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "inbox",
+        "routing_key": "inbox"
+    },
+    {
+        "source": "localega",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "ingest",
+        "routing_key": "ingest"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "verified",
+        "routing_key": "verified"
     }
   ]
 }
