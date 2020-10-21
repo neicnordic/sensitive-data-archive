@@ -1,4 +1,4 @@
-# LocalEGA internal message broker in a docker image
+# NeIC SDA internal message broker in a docker image
 
 We use [RabbitMQ 3.7.8](https://hub.docker.com/_/rabbitmq) including the management plugins.
 
