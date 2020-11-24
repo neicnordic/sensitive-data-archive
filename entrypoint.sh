@@ -235,6 +235,14 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
         "vhost": "${MQ_VHOST:-/}",
         "destination_type": "queue",
         "arguments": {},
+        "destination": "mappings",
+        "routing_key": "mappings"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
         "destination": "verified",
         "routing_key": "verified"
     }
@@ -531,6 +539,14 @@ cat > "/var/lib/rabbitmq/definitions.json" <<EOF
         "arguments": {},
         "destination": "ingest",
         "routing_key": "ingest"
+    },
+    {
+        "source": "sda",
+        "vhost": "${MQ_VHOST:-/}",
+        "destination_type": "queue",
+        "arguments": {},
+        "destination": "mappings",
+        "routing_key": "mappings"
     },
     {
         "source": "sda",
