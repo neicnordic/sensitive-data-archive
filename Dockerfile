@@ -6,11 +6,11 @@ ARG SOURCE_COMMIT
 LABEL maintainer "EGA System Developers"
 LABEL org.label-schema.schema-version="1.0"
 LABEL org.label-schema.build-date=$BUILD_DATE
-LABEL org.label-schema.vcs-url="https://github.com/neicnordic/LocalEGA-mq"
+LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda-mq"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq
-ENV RABBITMQ_ADVANCED_CONFIG_FILE=/var/lib/rabbitmq/advanced
+ENV RABBITMQ_ADVANCED_CONFIG_FILE=/var/lib/rabbitmq/advanced.config
 ENV RABBITMQ_LOG_BASE=/var/lib/rabbitmq
 
 RUN apk add --no-cache ca-certificates openssl
