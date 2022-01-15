@@ -119,6 +119,13 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 				"arguments": {}
 			},
 			{
+				"name": "error",
+				"vhost": "${MQ_VHOST:-/}",
+				"durable": true,
+				"auto_delete": false,
+				"arguments": {}
+			},
+			{
 				"name": "files",
 				"vhost": "${MQ_VHOST:-/}",
 				"durable": true,
@@ -231,7 +238,7 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					"routing_key": "files"
 			},
 			{
-					"source": "localega",
+					"source": "sda",
 					"vhost": "${MQ_VHOST:-/}",
 					"destination_type": "queue",
 					"arguments": {},
@@ -239,7 +246,7 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					"routing_key": "inbox"
 			},
 			{
-					"source": "localega",
+					"source": "sda",
 					"vhost": "${MQ_VHOST:-/}",
 					"destination_type": "queue",
 					"arguments": {},
@@ -307,8 +314,8 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					{source,  [
 											{protocol, amqp091},
 											{uris, ["amqp://${MQ_VHOST:-}"]},
-											{declarations, [{'queue.declare', [{exclusive, true}] }, {'queue.bind', [{exchange, <<"sda">>}, {queue, <<>>}, {routing_key, <<"completed">>}] } ] },
-											{queue, <<>>},
+											{declarations, []},
+											{queue, <<"completed">>},
 											{prefetch_count, 10}
 										]},
 					{destination, [
@@ -327,8 +334,8 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					{source,  [
 											{protocol, amqp091},
 											{uris, ["amqp://${MQ_VHOST:-}"]},
-											{declarations, [{'queue.declare', [{exclusive, true}] }, {'queue.bind', [{exchange, <<"sda">>}, {queue, <<>>}, {routing_key, <<"error">>}] } ] },
-											{queue, <<>>},
+											{declarations, []},
+											{queue, <<"error">>},
 											{prefetch_count, 10}
 										]},
 					{destination, [
@@ -347,8 +354,8 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					{source,  [
 											{protocol, amqp091},
 											{uris, ["amqp://${MQ_VHOST:-}"]},
-											{declarations, [{'queue.declare', [{exclusive, true}] }, {'queue.bind', [{exchange, <<"sda">>}, {queue, <<>>}, {routing_key, <<"inbox">>}] } ] },
-											{queue, <<>>},
+											{declarations, []},
+											{queue, <<"inbox">>},
 											{prefetch_count, 10}
 										]},
 					{destination, [
@@ -367,8 +374,8 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 					{source,  [
 											{protocol, amqp091},
 											{uris, ["amqp://${MQ_VHOST:-}"]},
-											{declarations, [{'queue.declare', [{exclusive, true}] }, {'queue.bind', [{exchange, <<"sda">>}, {queue, <<>>}, {routing_key, <<"verified">>}] } ] },
-											{queue, <<>>},
+											{declarations, []},
+											{queue, <<"verified">>},
 											{prefetch_count, 10}
 										]},
 					{destination, [
