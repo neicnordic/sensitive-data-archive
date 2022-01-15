@@ -1,0 +1,46 @@
+archive:
+  type: "posix"
+  location: "/archive"
+
+backup:
+  type: "posix"
+  location: "/backup"
+
+broker:
+  host: "mq"
+  port: 5671
+  user: "test"
+  password: "test"
+  vhost: "test"
+  queue: ""
+  exchange: "sda"
+  routingKey: ""
+  routingError: "error"
+  ssl: "true"
+  verifyPeer: "false"
+  cacert: "./certs/ca.pem"
+# If the FQDN and hostname of the broker differ
+# serverName can be set to the SAN name in the certificate
+  #  serverName: ""
+
+c4gh:
+  passphrase: "VoaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
+  filepath: "./c4gh.sec.pem"
+
+db:
+  host: "db"
+  port: 5432
+  user: "lega_in"
+  password: "lega_in"
+  database: "lega"
+  cacert: "./certs/ca.pem"
+  clientCert: "./certs/client.pem"
+  clientKey: "./certs/client-key.pem"
+  sslmode: "verify-ca"
+
+inbox:
+  type: "posix"
+  location: "/inbox"
+
+log:
+  level: "debug"
