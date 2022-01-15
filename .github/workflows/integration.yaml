@@ -1,0 +1,30 @@
+name: integration tests
+on: [pull_request]
+
+env:
+  svc_list: 'finalize inbox ingest mapper verify'
+
+jobs:
+  integrationtests:
+    name: integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install deps
+        run: curl -L https://github.com/elixir-oslo/crypt4gh/releases/download/v1.3.0/crypt4gh_linux_x86_64.tar.gz | sudo tar -xz -C /usr/bin/
+
+      - name: Run setup scripts
+        run: 'set -e;              
+              ls -1 .github/integration/setup/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+                 echo "Executing setup script $runscript";
+                 bash -x "$runscript";
+              done'
+
+      - name: Run tests
+        run: 'ls -1 .github/integration/tests/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+                echo "Executing test script $runscript";
+                bash -x "$runscript";
+              done'
