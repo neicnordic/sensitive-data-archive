@@ -9,15 +9,14 @@ The following environment variables can be used to configure the broker:
 | Variable | Description |
 |---------:|:------------|
 | `MQ_VHOST` | Default vhost other than `/` |
-| `MQ_VERIFY` | Set to `verify_none` to disable verification of client certificate |
 | `MQ_USER` | Default user (with admin rights) |
 | `MQ_PASSWORD_HASH` | Password hash for the above user |
 | `CEGA_CONNECTION` | DSN URL for the shovels and federated queues with CentralEGA |
 | `MQ_SERVER_CERT` | Path to the server SSL certificate |
 | `MQ_SERVER_KEY` | Path to the server SSL key |
 | `MQ_CA` | Path to the CA root certificate |
-| `MQ_VERIFY` | Require client certificates (`verify_peer` or `verify_none`)
-| `NOTLS` | Run the server without SSL |
+| `MQ_VERIFY` | Require the clients to have valid TLS certificates (`verify_peer`) or do not require clients to have certificates (`verify_none`) |
+| `NOTLS` | Run the server without TLS enabled (default is to run the server with TLS activated) |
 
 If you want persistent data, you can use a named volume or a bind-mount and make it point to `/var/lib/rabbitmq`.
 
