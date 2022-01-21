@@ -1,0 +1,217 @@
+version: "2.4"
+services:
+  cegamq:
+    container_name: cegamq
+    depends_on:
+      - certfixer
+    image: rabbitmq:3.8.16-management-alpine
+    environment:
+      - RABBITMQ_CONFIG_FILE=/etc/rabbitmq/conf/cega
+      - RABBITMQ_ENABLED_PLUGINS_FILE=/etc/rabbitmq/conf/cega.plugins
+    ports:
+      - "15671:15671"
+      - "25672:15672"
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+      - ./cega.conf:/etc/rabbitmq/conf/cega.conf
+      - ./cega.json:/etc/rabbitmq/conf/cega.json
+      - ./cega.plugins:/etc/rabbitmq/conf/cega.plugins
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  certfixer:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /origcerts/* /certs
+        chown -R nobody.nobody /certs/*
+        chmod -R og-rw /certs/*-key.pem
+        chown -R 70.70 /certs/db*
+        chown -R 100.101 /certs/mq*
+        ls -la /certs/
+
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./certs:/origcerts
+      - certs:/certs
+  db:
+    command: server /data
+    container_name: db
+    depends_on:
+      - certfixer
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - PKI_VOLUME_PATH=/certs/
+      - PG_CA=/var/lib/postgresql/tls/ca.pem
+      - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
+      - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sda-db:v1.4.0
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/data:/data
+      - certs:/var/lib/postgresql/tls/
+  mq:
+    container_name: mq
+    build:
+      context: ../../
+    image: ghcr.io/neicnordic/sda-mq:latest
+    depends_on:
+      - cegamq
+    environment:
+      - CEGA_CONNECTION=amqps://test:test@cegamq:5671/lega?cacertfile=/etc/rabbitmq/ssl/ca.pem
+      - MQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.pem
+      - MQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
+      - MQ_CA=/etc/rabbitmq/ssl/ca.pem
+      - MQ_USER=test
+      - MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm
+      - MQ_VHOST=test
+      - MQ_VERIFY=verify_none
+    ports:
+      - "15672:15672"
+    volumes:
+      - ./certs/ca.pem:/etc/rabbitmq/ssl/ca.pem
+      - ./certs/mq.pem:/etc/rabbitmq/ssl/mq.pem
+      - ./certs/mq-key.pem:/etc/rabbitmq/ssl/mq.key
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  ingest:
+    command: sda-ingest
+    container_name: ingest
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    environment:
+      - BROKER_QUEUE=ingest
+      - BROKER_ROUTINGKEY=archived
+      - BROKER_ROUTINGERROR=error
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./c4gh.sec.pem:/c4gh.sec.pem
+      - archive:/archive
+      - certs:/certs
+      - inbox:/inbox
+    mem_limit: 1024m
+    restart: always
+  verify:
+    command: sda-verify
+    container_name: verify
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    environment:
+      - BROKER_QUEUE=archived
+      - BROKER_ROUTINGKEY=verified
+      - BROKER_ROUTINGERROR=error
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./c4gh.sec.pem:/c4gh.sec.pem
+      - certs:/certs
+      - archive:/archive
+    mem_limit: 256m
+    restart: always
+  finalize:
+    command: sda-finalize
+    container_name: finalize
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    environment:
+      - BROKER_QUEUE=accessionIDs
+      - BROKER_ROUTINGKEY=backup
+      - BROKER_ROUTINGERROR=error
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - certs:/certs
+    mem_limit: 64m
+    restart: always
+  sync:
+    command: sda-sync
+    container_name: sync
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    environment:
+      - BROKER_QUEUE=backup
+      - BROKER_ROUTINGKEY=completed
+      - BROKER_ROUTINGERROR=error
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - certs:/certs
+      - archive:/archive
+      - backup:/backup
+    mem_limit: 64m
+    restart: always
+  mapper:
+    command: sda-mapper
+    container_name: mapper
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    environment:
+      - BROKER_QUEUE=mappings
+      - BROKER_ROUTINGERROR=error
+      - DB_USER=lega_out
+      - DB_PASSWORD=lega_out
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - certs:/certs
+    mem_limit: 64m
+    restart: always
+  interceptor:
+    command: sda-intercept
+    container_name: intercept
+    depends_on:
+      - certfixer
+      - mq
+    environment:
+      - BROKER_QUEUE=files
+      - BROKER_ROUTINGERROR=error
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+
+    volumes:
+      - ./config.yaml:/config.yaml
+      - certs:/certs
+    mem_limit: 64m
+    restart: always
+
+volumes:
+  inbox:
+  archive:
+  certs:
+  backup:
