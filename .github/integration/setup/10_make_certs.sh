@@ -17,7 +17,7 @@ openssl req -config setup/ssl.cnf -new -nodes -newkey rsa:4096 -keyout ./certs/d
 openssl x509 -req -in ./certs/db.csr -days 1200 -CA ./certs/ca.pem -CAkey ./certs/ca-key.pem -set_serial 01 -out ./certs/db.pem -extensions server_cert -extfile setup/ssl.cnf
 
 # Create client certificate
-openssl req -config setup/ssl.cnf -new -nodes -newkey rsa:4096 -keyout ./certs/client-key.pem -out ./certs/client.csr -extensions client_cert
+openssl req -config setup/ssl.cnf -new -nodes -newkey rsa:4096 -keyout ./certs/client-key.pem -out ./certs/client.csr -extensions client_cert -subj "/CN=lega_in/CN=admin/"
 openssl x509 -req -in ./certs/client.csr -days 1200 -CA ./certs/ca.pem -CAkey ./certs/ca-key.pem -set_serial 01 -out ./certs/client.pem -extensions client_cert -extfile setup/ssl.cnf
 
 chmod 644 certs/*

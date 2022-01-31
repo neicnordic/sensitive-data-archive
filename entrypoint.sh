@@ -43,6 +43,12 @@ else
 		echo 'No server certificates found, shuting down.' 1>&2 && exit 1
 	fi
 
+	if [ -e "${MQ_SERVER_CERT}" ] && [ -e "${MQ_SERVER_KEY}" ]; then
+		cat >>"/var/lib/rabbitmq/rabbitmq.conf" <<-EOF
+			listeners.tcp  = none
+		EOF
+	fi
+
 	chmod 600 "/var/lib/rabbitmq/rabbitmq.conf"
 fi
 
@@ -359,18 +365,6 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 		}
 	EOF
 
-	if [ -e "${MQ_SERVER_CERT}" ] && [ -e "${MQ_SERVER_KEY}" ]; then
-		cat >"/var/lib/rabbitmq/advanced.config" <<-EOF
-			[
-				{rabbit,  [
-					{tcp_listeners, []}
-				]}
-			].
-		EOF
-	else
-		echo "[]." >"/var/lib/rabbitmq/advanced.config"
-	fi
-	chmod 600 "/var/lib/rabbitmq/advanced.config"
 else
 	cat >"/var/lib/rabbitmq/definitions.json" <<-EOF
 		{
