@@ -10,7 +10,6 @@ LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda-mq"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq
-ENV RABBITMQ_ADVANCED_CONFIG_FILE=/var/lib/rabbitmq/advanced.config
 ENV RABBITMQ_LOG_BASE=/var/lib/rabbitmq
 
 RUN apk add --no-cache ca-certificates openssl

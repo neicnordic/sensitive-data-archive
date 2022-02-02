@@ -12,7 +12,7 @@ if [ -n "${NOTLS+x}" ]; then
 		listeners.tcp.default = 5672
 		disk_free_limit.absolute = 1GB
 		management.tcp.port = 15672
-		management.load_definitions = /var/lib/rabbitmq/definitions.json
+		load_definitions = /var/lib/rabbitmq/definitions.json
 		default_vhost = ${MQ_VHOST:-/}
 	EOF
 else
@@ -27,7 +27,7 @@ else
 			management.ssl.port = 15672
 			management.ssl.certfile   = ${MQ_SERVER_CERT}
 			management.ssl.keyfile    = ${MQ_SERVER_KEY}
-			management.load_definitions = /var/lib/rabbitmq/definitions.json
+			load_definitions = /var/lib/rabbitmq/definitions.json
 			default_vhost = ${MQ_VHOST:-/}
 		EOF
 
@@ -43,7 +43,17 @@ else
 		echo 'No server certificates found, shuting down.' 1>&2 && exit 1
 	fi
 
+	if [ -e "${MQ_SERVER_CERT}" ] && [ -e "${MQ_SERVER_KEY}" ]; then
+		cat >>"/var/lib/rabbitmq/rabbitmq.conf" <<-EOF
+			listeners.tcp  = none
+		EOF
+	fi
+
 	chmod 600 "/var/lib/rabbitmq/rabbitmq.conf"
+fi
+
+if [ -n "${MQ_VHOST}" ]; then
+	MQ_SHOVEL_VHOST="/${MQ_VHOST}"
 fi
 
 if [ -n "${CEGA_CONNECTION}" ]; then
@@ -73,15 +83,97 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 			],
 			"parameters": [
 				{
-					"name": "CEGA-files",
-					"vhost": "${MQ_VHOST:-/}",
+					"component": "shovel",
+					"name": "to_cega",
+					"value": {
+						"ack-mode": "on-confirm",
+						"dest-add-forward-headers": true,
+						"dest-exchange": "localega.v1",
+						"dest-protocol": "amqp091",
+						"dest-uri": "${CEGA_CONNECTION}",
+						"reconnect-delay": 5,
+						"src-delete-after": "never",
+						"src-exchange": "to_cega",
+						"src-exchange-key": "#",
+						"src-protocol": "amqp091",
+						"src-uri": "amqp://${MQ_SHOVEL_VHOST:-}"
+					},
+					"vhost": "${MQ_VHOST:-/}"
+				},
+				{
+					"component": "shovel",
+					"name": "cega_inbox",
+					"value": {
+						"ack-mode": "on-confirm",
+						"dest-exchange": "to_cega",
+						"dest-exchange-key": "files.inbox",
+						"dest-protocol": "amqp091",
+						"dest-uri": "amqp://${MQ_SHOVEL_VHOST:-}",
+						"src-delete-after": "never",
+						"src-protocol": "amqp091",
+						"src-queue": "inbox",
+						"src-uri": "amqp://${MQ_SHOVEL_VHOST:-}"
+					},
+					"vhost": "${MQ_VHOST:-/}"
+				},
+				{
+					"component": "shovel",
+					"name": "cega_completion",
+					"value": {
+						"ack-mode": "on-confirm",
+						"dest-exchange": "to_cega",
+						"dest-exchange-key": "files.completed",
+						"dest-protocol": "amqp091",
+						"dest-uri": "amqp://${MQ_SHOVEL_VHOST:-}",
+						"src-delete-after": "never",
+						"src-protocol": "amqp091",
+						"src-queue": "completed",
+						"src-uri": "amqp://${MQ_SHOVEL_VHOST:-}"
+					},
+					"vhost": "${MQ_VHOST:-/}"
+				},
+				{
+					"component": "shovel",
+					"name": "cega_verified",
+					"value": {
+						"ack-mode": "on-confirm",
+						"dest-exchange": "to_cega",
+						"dest-exchange-key": "files.verified",
+						"dest-protocol": "amqp091",
+						"dest-uri": "amqp://${MQ_SHOVEL_VHOST:-}",
+						"src-delete-after": "never",
+						"src-protocol": "amqp091",
+						"src-queue": "verified",
+						"src-uri": "amqp://${MQ_SHOVEL_VHOST:-}"
+					},
+					"vhost": "${MQ_VHOST:-/}"
+				},
+				{
+					"component": "shovel",
+					"name": "cega_error",
+					"value": {
+						"ack-mode": "on-confirm",
+						"dest-exchange": "to_cega",
+						"dest-exchange-key": "files.error",
+						"dest-protocol": "amqp091",
+						"dest-uri": "amqp://${MQ_SHOVEL_VHOST:-}",
+						"src-delete-after": "never",
+						"src-protocol": "amqp091",
+						"src-queue": "error",
+						"src-uri": "amqp://${MQ_SHOVEL_VHOST:-}"
+					},
+					"vhost": "${MQ_VHOST:-/}"
+				},
+				{
 					"component": "federation-upstream",
+					"name": "CEGA-files",
 					"value": {
 						"ack-mode": "on-confirm",
 						"queue": "v1.files",
 						"trust-user-id": false,
 						"uri": "${CEGA_CONNECTION}"
-					}
+					},
+					"vhost": "${MQ_VHOST:-/}"
 				}
 			],
 			"policies": [
@@ -273,128 +365,6 @@ if [ -n "${CEGA_CONNECTION}" ]; then
 		}
 	EOF
 
-	if [ -n "${MQ_VHOST}" ]; then
-		MQ_VHOST="/${MQ_VHOST}"
-	fi
-	if [ -e "${MQ_SERVER_CERT}" ] && [ -e "${MQ_SERVER_KEY}" ]; then
-		cat >"/var/lib/rabbitmq/advanced.config" <<-EOF
-			[
-				{rabbit,  [
-					{tcp_listeners, []}
-				]},
-		EOF
-	else
-		echo "[" >"/var/lib/rabbitmq/advanced.config"
-	fi
-	cat >>"/var/lib/rabbitmq/advanced.config" <<-EOF
-		{rabbitmq_shovel, [
-			{shovels, [
-				{to_cega, [
-					{source, [
-						{protocol, amqp091},
-						{uris,[ "amqp://${MQ_VHOST:-}" ]},
-						{declarations,  [
-							{'queue.declare', [{exclusive, true}]},
-							{'queue.bind', [{exchange, <<"to_cega">>}, {queue, <<>>}, {routing_key, <<"#">>}]}
-						]},
-						{queue, <<>>},
-						{prefetch_count, 10}
-					]},
-					{destination, [
-						{protocol, amqp091},
-						{uris, ["${CEGA_CONNECTION}"]},
-						{declarations, []},
-						{publish_properties, [{delivery_mode, 2}]},
-						{publish_fields, [{exchange, <<"localega.v1">>}]}
-					]},
-					{ack_mode, on_confirm},
-					{reconnect_delay, 5}
-				]},
-				{cega_completion, [
-					{source,  [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{queue, <<"completed">>},
-						{prefetch_count, 10}
-					]},
-					{destination, [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{publish_properties, [{delivery_mode, 2}]},
-						{publish_fields, [{exchange, <<"to_cega">>},
-						{routing_key, <<"files.completed">>}
-					]},
-					{ack_mode, on_confirm},
-					{reconnect_delay, 5}
-					]}
-				]},
-				{cega_error, [
-					{source,  [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{queue, <<"error">>},
-						{prefetch_count, 10}
-					]},
-					{destination, [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{publish_properties, [{delivery_mode, 2}]},
-						{publish_fields, [{exchange, <<"to_cega">>},
-						{routing_key, <<"files.error">>}
-					]},
-					{ack_mode, on_confirm},
-					{reconnect_delay, 5}
-					]}
-				]},
-				{cega_inbox, [
-					{source,  [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{queue, <<"inbox">>},
-						{prefetch_count, 10}
-					]},
-					{destination, [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{publish_properties, [{delivery_mode, 2}]},
-						{publish_fields, [{exchange, <<"to_cega">>},
-						{routing_key, <<"files.inbox">>}
-					]},
-					{ack_mode, on_confirm},
-					{reconnect_delay, 5}
-					]}
-				]},
-				{cega_verified, [
-					{source,  [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{queue, <<"verified">>},
-						{prefetch_count, 10}
-					]},
-					{destination, [
-						{protocol, amqp091},
-						{uris, ["amqp://${MQ_VHOST:-}"]},
-						{declarations, []},
-						{publish_properties, [{delivery_mode, 2}]},
-						{publish_fields, [{exchange, <<"to_cega">>},
-						{routing_key, <<"files.verified">>}
-					]},
-					{ack_mode, on_confirm},
-					{reconnect_delay, 5}
-					]}
-				]}
-			]}
-		]}
-		].
-	EOF
-	chmod 600 "/var/lib/rabbitmq/advanced.config"
 else
 	cat >"/var/lib/rabbitmq/definitions.json" <<-EOF
 		{
