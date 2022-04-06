@@ -22,7 +22,7 @@ services:
           "CMD",
           "bash",
           "-c",
-          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms"
         ]
       interval: 5s
       timeout: 20s
@@ -57,7 +57,15 @@ services:
       - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
       - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "localhost",
+          "-U",
+          "lega_out"
+        ]
       interval: 5s
       timeout: 20s
       retries: 3
@@ -95,7 +103,7 @@ services:
           "CMD",
           "bash",
           "-c",
-          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms"
         ]
       interval: 5s
       timeout: 20s
@@ -137,6 +145,7 @@ services:
       - ./c4gh.sec.pem:/c4gh.sec.pem
       - certs:/certs
       - archive:/archive
+      - inbox:/inbox
     mem_limit: 256m
     restart: always
   finalize:
