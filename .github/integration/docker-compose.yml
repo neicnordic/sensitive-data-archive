@@ -33,7 +33,7 @@ services:
       - -c
       - |
         cp /origcerts/* /certs
-        chown -R nobody.nobody /certs/*
+        chown -R nobody.nobody /certs/client*
         chmod -R og-rw /certs/*-key.pem
         chown -R 100.101 /certs/mq*
         ls -la /certs/
@@ -58,7 +58,7 @@ services:
       - MQ_USER=test
       - MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm
       - MQ_VHOST=test
-      - MQ_VERIFY=verify_none
+      - MQ_VERIFY=verify_peer
     ports:
       - "15672:15672"
     volumes:
@@ -81,8 +81,19 @@ services:
       - certfixer
       - mq
     environment:
+      - BROKER_HOST=MQ
+      - BROKER_PORT=5671
+      - BROKER_USER=test
+      - BROKER_PASSWORD=test
+      - BROKER_VHOST=test
       - BROKER_QUEUE=files
       - BROKER_ROUTINGERROR=error
+      - BROKER_VERIFYPEER=true
+      - BROKER_SSL=true
+      - BROKER_CLIENTCERT=/certs/client.pem
+      - BROKER_CLIENTKEY=/certs/client-key.pem
+      - BROKER_CACERT=/certs/ca.pem
+      - LOG_LEVEL=debug
     image: ghcr.io/neicnordic/sda-pipeline:latest
     volumes:
       - certs:/certs
