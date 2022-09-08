@@ -82,7 +82,7 @@ subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer:always
 keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = clientAuth, serverAuth
-subjectAltName = DNS:localhost,DNS:client,IP:127.0.0.1
+subjectAltName = DNS:localhost,DNS:intercept,IP:127.0.0.1
 
 [ server_cert ]
 # Extensions for server certificates (`man x509v3_config`).
@@ -91,7 +91,7 @@ subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer:always
 keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = clientAuth, serverAuth
-subjectAltName = DNS:localhost,DNS:cegamq,DNS:mq,DNS:db,IP:127.0.0.1
+subjectAltName = DNS:localhost,DNS:cegamq,DNS:mq,IP:127.0.0.1
 
 [ crl_ext ]
 # Extension for CRLs (`man x509v3_config`).

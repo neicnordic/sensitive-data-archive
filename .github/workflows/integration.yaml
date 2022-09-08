@@ -13,9 +13,6 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Install deps
-        run: curl -L https://github.com/elixir-oslo/crypt4gh/releases/download/v1.5.0/crypt4gh_linux_x86_64.tar.gz | sudo tar -xz -C /usr/bin/
-
       - name: Run setup scripts
         run: 'set -e;              
               ls -1 .github/integration/setup/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
