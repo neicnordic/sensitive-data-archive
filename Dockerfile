@@ -1,4 +1,4 @@
-FROM rabbitmq:3.8.16-management-alpine
+FROM rabbitmq:3.8.34-management-alpine
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
@@ -12,7 +12,9 @@ LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq
 ENV RABBITMQ_LOG_BASE=/var/lib/rabbitmq
 
-RUN apk add --no-cache ca-certificates openssl
+RUN apk -U upgrade && \
+    apk add ca-certificates openssl && \
+    rm -rf /var/cache/apk/*
 
 RUN rabbitmq-plugins enable --offline rabbitmq_federation rabbitmq_federation_management rabbitmq_shovel rabbitmq_shovel_management
 
