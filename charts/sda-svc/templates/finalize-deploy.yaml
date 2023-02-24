@@ -1,0 +1,179 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-finalize
+  labels:
+    role: finalize
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-finalize
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-finalize
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-finalize
+        role: finalize
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/finalize-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.finalize.annotations }}
+{{- toYaml .Values.finalize.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+    {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
+      initContainers:
+      - name: tls-init
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args: ["/bin/cp /tls-certs/* /tls/ && chown 65534:65534 /tls/* && chmod 0600 /tls/*"]
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tls
+          mountPath: /tls
+    {{- end }}
+      containers:
+      - name: finalize
+        image: "{{ .Values.finalize.repository }}:{{ .Values.finalize.imageTag }}"
+        imagePullPolicy: {{ .Values.finalize.imagePullPolicy | quote }}
+        command: ["sda-finalize"]
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+        - name: BROKER_DURABLE
+          value: {{ .Values.global.broker.durable | quote }}
+        - name: BROKER_EXCHANGE
+          value: {{ default "sda" .Values.global.broker.exchange }}
+        - name: BROKER_QUEUE
+          value: "accessionIDs"
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_ROUTINGERROR
+          value: {{ .Values.global.broker.routingError }}
+        - name: BROKER_ROUTINGKEY
+          value: {{ ternary .Values.global.broker.backupRoutingKey "completed" (.Values.backup.deploy) }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+        - name: BROKER_SERVERNAME
+          value: {{ .Values.global.broker.host | quote }}
+        - name: BROKER_SSL
+          value: {{ .Values.global.tls.enabled | quote }}
+        {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+        - name: BROKER_VERIFYPEER
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+        - name: BROKER_CACERT
+          value: {{ include "tlsPath" . }}/ca.crt
+        {{- if .Values.global.broker.verifyPeer }}
+        - name: BROKER_CLIENTCERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: BROKER_CLIENTKEY
+          value: {{ include "tlsPath" . }}/tls.key
+        {{- end }}
+      {{- end }}
+      {{- if .Values.global.tls.enabled }}
+        - name: DB_CACERT
+          value: {{ include "tlsPath" . }}/ca.crt
+        {{- if ne "verify-none" .Values.global.db.sslMode }}
+        - name: DB_CLIENTCERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: DB_CLIENTKEY
+          value: {{ include "tlsPath" . }}/tls.key
+        {{- end }}
+      {{- end }}
+        - name: DB_DATABASE
+          value: {{ default "lega" .Values.global.db.name | quote }}
+        - name: DB_HOST
+          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.global.db.port | quote }}
+        - name: DB_SSLMODE
+          value: {{ template "dbSSLmode" . }}
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+        - name: SCHEMA_TYPE
+          value: {{ default "federated" .Values.global.schemaType }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-finalize
+                key: mqPassword
+        - name: BROKER_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-finalize
+                key: mqUser
+        - name: DB_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-finalize
+                key: dbPassword
+        - name: DB_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-finalize
+                key: dbUser
+      {{ else }}
+        - name: CONFIGFILE
+          value: {{ include "confFile" . }}
+      {{- end }}
+        resources:
+{{ toYaml .Values.finalize.resources | trim | indent 10 }}
+  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        volumeMounts:
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+      volumes:
+        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
+          projected:
+            sources:
+            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-finalize-certs
+            {{- else }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
+            {{- end }}
+      {{- if .Values.global.pkiPermissions }}
+        - name: tls
+          emptyDir:
+            medium: Memory
+            sizeLimit: 10Mi
+      {{- end }}
+    {{- end }}
+      restartPolicy: Always
+{{- end }}

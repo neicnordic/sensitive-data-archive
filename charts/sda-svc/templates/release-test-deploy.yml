@@ -1,0 +1,149 @@
+{{- if .Values.releasetest.run }}
+{{- if eq "s3" .Values.global.inbox.storageType }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "{{ .Release.Name }}-release-test-passwords"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+type: Opaque
+data:
+  accessToken: {{ required "Access token is required for testing the S3 inbox" .Values.releasetest.secrets.accessToken | b64enc }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-release-test-app"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+data:
+  {{- ( .Files.Glob ( "test/release-test.sh" )).AsConfig | nindent 2 }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  resourceVersion: "{{ .Release.Name }}-{{ .Release.Revision }}"
+  labels:
+    role: test
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-release-test
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "10"
+spec:
+  containers:
+    - name: "{{ .Release.Name }}-test"
+      image:  "{{ .Values.releasetest.repository }}:{{ .Values.releasetest.imageTag }}"
+      imagePullPolicy: {{ .Values.releasetest.imagePullPolicy | quote }}
+      volumeMounts:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: certs
+          mountPath: /tls
+      {{- end }}
+        - name: release-test-app
+          mountPath: "/release-test-app"
+      env:
+        - name: TLS
+          value: {{ .Values.global.tls.enabled | quote}}
+      {{- if .Values.global.pkiService }}
+        - name: PKI_PATH
+          value: {{include "secretsPath" }}
+      {{- else }}
+        - name: PKI_PATH
+          value: /tls
+      {{- end }}
+        - name: DEPLOYMENT_TYPE
+          value: "{{ .Values.global.deploymentType }}"
+        - name: INBOX_SERVICE_NAME
+          value: "{{ template "sda.fullname" . }}-inbox"
+      {{- if eq "s3" .Values.global.inbox.storageType }}
+        - name: AUTH_SERVICE_NAME
+          value: "{{ template "sda.fullname" . }}-auth"
+        - name: INBOX_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-release-test-passwords
+              key: accessToken
+      {{- end }}
+      {{- if and .Values.global.tls.enabled .Values.global.doa.enabled }}
+        - name: DOA_SERVICE_NAME
+          value: "{{ template "sda.fullname" . }}-doa"
+        {{- end }}
+      {{- if .Values.global.download.enabled }}
+        - name: DOWNLOAD_SERVICE_NAME
+          value: "{{ template "sda.fullname" . }}-download"
+        {{- end }}
+        - name: INBOX_STORAGE_TYPE
+          value: {{ required "Missing storage type for inbox" .Values.global.inbox.storageType | quote }}
+        - name: ARCHIVE_STORAGE_TYPE
+          value: {{ required "Missing storage type for archive" .Values.global.archive.storageType | quote }}
+      command: [ "/bin/bash" ]
+      args:
+        - "/release-test-app/release-test.sh"
+  volumes:
+    {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+      - name: certs
+        projected:
+          sources:
+          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-tester-certs
+          {{- else }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for releasetest" .Values.releasetest.tls.secretName }}
+          {{- end }}
+    {{- end }}
+      - name: release-test-app
+        projected:
+          sources:
+            - configMap:
+                name: "{{ .Release.Name }}-release-test-app"
+                items:
+                  - key: release-test.sh
+                    path: release-test.sh
+  restartPolicy: Never
+---
+{{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "sda.fullname" . }}-tester-certs
+spec:
+  # Secret names are always required.
+  secretName: {{ template "sda.fullname" . }}-tester-certs
+  duration: 2160h
+  # The use of the common name field has been deprecated since 2000 and is
+  # discouraged from being used.
+  commonName: {{ template "sda.fullname" . }}-tester
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - client auth
+  # At least one of a DNS Name, URI, or IP address is required.
+  dnsNames:
+    - {{ template "sda.fullname" . }}-tester
+    - {{ template "sda.fullname" . }}-tester.{{ .Release.Namespace }}.svc
+  ipAddresses:
+    - 127.0.0.1
+  # Issuer references are always required.
+  issuerRef:
+    name: {{ template "TLSissuer" . }}
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
+    # This is optional since cert-manager will default to this value however
+    # if you are using an external issuer, change this to that issuer group.
+    group: cert-manager.io
+{{- end -}}
+{{- end -}}

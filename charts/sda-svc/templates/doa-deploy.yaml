@@ -1,0 +1,325 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.tls.enabled }}
+{{- if .Values.global.doa.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-doa
+  labels:
+    role: doa
+    app: {{ template "sda.fullname" . }}-doa
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: "{{ .Values.doa.name }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.doa.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-doa
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-doa
+        role: doa
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/doa-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.doa.annotations }}
+{{- toYaml .Values.doa.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-doa
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534 
+        runAsGroup: 65534
+        fsGroup: 65534
+    {{- if not .Values.global.pkiService }}
+      initContainers:
+      - name: init-java-certs
+        image: neicnordic/openssl-alpine:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            keytool -import \
+                    -trustcacerts \
+                    -file /tls-certs/ca.crt \
+                    -alias legaCA -storetype JKS \
+                    -keystore /tls/cacerts \
+                    -storepass "${KEYSTORE_PASSWORD}" \
+                    -noprompt &&
+            openssl pkcs12 -export \
+                           -out /tls/doa.p12 \
+                           -inkey /tls-certs/tls.key \
+                           -in /tls-certs/tls.crt \
+                           -passout pass:"${KEYSTORE_PASSWORD}" &&
+            openssl pkcs8 -topk8 \
+                          -inform pem \
+                          -outform der \
+                          -in /tls-certs/tls.key \
+                          -out /tls/tls.key.der \
+                          -nocrypt &&
+            cp /tls-certs/* /tls/
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+        - name: KEYSTORE_PASSWORD
+          value: {{ required "Keystore password is required" .Values.sftpInbox.keystorePass | quote }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tmp
+          mountPath: /tls
+    {{- end }}
+      containers:
+      - name: doa
+        image: "{{ .Values.doa.repository }}:{{ .Values.doa.imageTag }}"
+        imagePullPolicy: {{ .Values.doa.imagePullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+      {{- if .Values.global.vaultSecrets }}
+        command: ["/bin/sh"]
+        args: ["-c", "source {{ include "secretsPath" . }}/{{ .Values.global.doa.envFile }} && docker-entrypoint.sh && java -jar /localega-doa.jar"]
+      {{- end }}
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: no-oss,LocalEGA
+      {{- if .Values.global.doa.outbox.enabled }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+        - name: BROKER_VALIDATE
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+        {{- if not .Values.global.vaultSecrets }}
+        - name: BROKER_USERNAME
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-doa
+                key: mqUser
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-doa
+                key: mqPassword
+        {{- end }}
+      {{- end }}
+        - name: DB_INSTANCE
+          value: {{ required "A valid database host is required" .Values.global.db.host | quote}}
+        - name: DB_PORT
+          value: {{ .Values.global.db.port | quote }}
+        - name: POSTGRES_DB
+          value: {{ required "A database name is required" .Values.global.db.name | quote }}
+        - name: SSL_MODE
+          value: {{ .Values.global.db.sslMode | quote }}
+        {{- if not .Values.global.vaultSecrets }}
+        - name: POSTGRES_USER
+          value: {{ include "dbUserDoa" . | quote }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-doa
+                key: dbPassword
+        {{- end }}
+      {{- if eq "s3" .Values.global.archive.storageType }}
+        - name: S3_ENDPOINT
+          value: {{ required "A valid archive S3 URL entry is required!" .Values.global.archive.s3Url | quote }}
+        - name: S3_PORT
+          value: {{ .Values.global.archive.s3Port | quote }}
+        {{- if not .Values.global.vaultSecrets }}
+        - name: S3_ACCESS_KEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-s3archive-keys
+                key: s3ArchiveAccessKey
+        - name: S3_SECRET_KEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-s3archive-keys
+                key: s3ArchiveSecretKey
+        {{- end }}
+        - name: S3_REGION
+          value: {{ .Values.global.archive.s3Region }}
+        - name: S3_SECURE
+          value: "true"
+        - name: S3_BUCKET
+          value: {{ .Values.global.archive.s3Bucket | quote}}
+        {{- if .Values.global.archive.s3CaFile }}
+        - name: S3_ROOT_CERT_PATH
+          value: "/etc/ssl/certs/java/ca.crt"
+        {{- end }}
+      {{- else }}
+        - name: ARCHIVE_PATH
+          value: {{ .Values.global.archive.volumePath | quote }}
+      {{- end }}
+      {{- if .Values.global.elixir.pubKey }}
+        - name: PASSPORT_PUBLIC_KEY_PATH
+          value: "{{ include "secretsPath" . }}/{{ .Values.global.elixir.pubKey }}"
+      {{- end }}
+        - name: KEYSTORE_PATH
+          value: {{ ternary (print "/etc/ssl/certs/java/doa.p12") (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.keyStore) (empty .Values.global.pkiService) }}
+        - name: KEYSTORE_PASSWORD
+          value: {{ .Values.doa.keystorePass | quote }}
+        - name: ROOT_CERT_PATH
+          value: {{ ternary (print "/etc/ssl/certs/java/ca.crt" ) (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.cacert) (empty .Values.global.pkiService) }}
+        - name: CERT_PATH
+          value: {{ ternary (printf "/etc/ssl/certs/java/tls.crt" ) (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.certFile) (empty .Values.global.pkiService) }}
+        - name: CERT_KEY
+          value: {{ ternary (printf "/etc/ssl/certs/java/tls.key.der" ) (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.keyFile) (empty .Values.global.pkiService) }}
+        - name: CRYPT4GH_PRIVATE_KEY_PATH
+          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
+        - name: CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH
+          value: "{{ template "c4ghPath" . }}/passphrase"
+        - name: OPENID_CONFIGURATION_URL
+          value: "{{ .Values.global.elixir.oidcdHost }}.well-known/openid-configuration"
+        - name: OUTBOX_ENABLED
+          value: {{ .Values.global.doa.outbox.enabled | quote }}
+      {{- if .Values.global.doa.outbox.enabled }}
+        - name: OUTBOX_QUEUE
+          value: {{ .Values.global.doa.outbox.queue | quote }}
+        - name: OUTBOX_TYPE
+          value: {{ .Values.global.doa.outbox.type | quote}}
+        {{- if eq "s3" .Values.global.doa.outbox.type }}
+        - name: S3_OUT_ENDPOINT
+          value: {{ .Values.global.doa.outbox.s3Url | quote}}
+        - name: S3_OUT_PORT
+          value: {{ .Values.global.doa.outbox.s3Port | quote}}
+        - name: S3_OUT_REGION
+          value: {{ .Values.global.doa.outbox.s3Region | quote}}
+        - name: S3_OUT_BUCKET
+          value: {{ .Values.global.doa.outbox.s3Bucket | quote}}
+        - name: S3_OUT_SECURE
+          value: "true"
+        {{- if .Values.global.doa.outbox.s3CaFile }}
+        - name: S3_OUT_ROOT_CERT_PATH
+          value: "/etc/ssl/certs/java/{{ .Values.doa.tls.javaCert }}"
+        {{- end }}
+        - name: S3_OUT_ACCESS_KEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-doa
+                key: s3OutboxAccessKey
+        - name: S3_OUT_SECRET_KEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-doa
+                key: s3OutboxAccessKey
+        {{- else }}
+        - name: OUTBOX_LOCATION
+          value: {{ .Values.global.doa.outbox.path | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.global.pkiService }}
+        - name: PKI_PATH
+          value: {{ include "secretsPath" . }}
+      {{- end }}
+        ports:
+        - name: doa
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          tcpSocket:
+            port: doa
+          initialDelaySeconds: 120
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: doa
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+{{ toYaml .Values.doa.resources | trim | indent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: "/tmp"
+      {{- if not .Values.global.pkiService }}
+        - name: tmp
+          mountPath: "/etc/ssl/certs/java"
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+      {{- if .Values.global.elixir.pubKey }}
+        - name: jwt-token
+          mountPath: {{ include "secretsPath" . }}
+      {{- end }}
+        - name: c4gh-key
+          mountPath: {{ template "c4ghPath" . }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+          mountPath: {{ .Values.global.archive.volumePath | quote }}
+      {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if not .Values.global.pkiService }}
+        - name: tls-certs
+          projected:
+            sources:
+          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-doa-certs
+          {{- else }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for doa" .Values.doa.tls.secretName }}
+          {{- end }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+      {{- if .Values.global.elixir.pubKey }}
+        - name: jwt-token
+          projected:
+            defaultMode: 0440
+            sources:
+            - secret:
+                name: {{ template "sda.fullname" . }}-doa
+                items:
+                  - key: {{ .Values.global.elixir.pubKey }}
+                    path: {{ .Values.global.elixir.pubKey }}
+      {{- end }}
+        - name: c4gh-key
+          secret:
+            secretName: {{ .Values.global.c4gh.secretName }}
+            defaultMode: 0440
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+          {{- if .Values.global.archive.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.archive.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
+            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

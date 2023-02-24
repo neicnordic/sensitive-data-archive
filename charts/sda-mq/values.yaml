@@ -1,0 +1,104 @@
+global:
+  adminUser:
+  adminPasswordHash:
+  tls:
+    enabled: true
+    issuer: ""
+    clusterIssuer: ""
+    secretName: ""
+    certName: tls.crt
+    keyName: tls.key
+    caCert: ca.crt
+    verifyPeer: true
+# if a different vhost than the default `/` is to be used
+  vhost: ""
+
+# Upstream shovel recipient
+# only used in a federated setup
+  shovel:
+    host: ""
+    pass: ""
+    port: 5671
+    user: ""
+    vhost: ""
+
+
+# If an external PKI infrastructure is used to supply certificates set this to true
+externalPkiService:
+# tlsPath is the path where the external service mounts the certificates
+  tlsPath:
+
+# Extra security context to apply to all pods
+# This should be a multi-line string mapping directly to the a map of
+# the securityContext to apply to the service pods
+extraSecurityContext: {}
+
+image:
+  repository: ghcr.io/neicnordic/sda-mq
+  tag: v1.4.20
+  pullPolicy: Always
+
+# utilize network isolation
+# Make sure you’ve configured a network provider with network policy support.
+# There are a number of network providers that support NetworkPolicy, including:
+# Calico, Cilium, Kube-router, Romana and Weave Net
+networkPolicy:
+  create: false
+# App labels that are allowed to connect to the database
+# This should be a multi-line string mapping directly to the a map of
+# the podselector of the network policy
+  matchLabels: |
+    app: sda-svc
+
+## Persistent Volume Storage Class
+## If defined, storageClassName: <storageClass>
+## If set to "-", storageClassName: "", which disables dynamic provisioning
+## If undefined (the default) or set to null, no storageClassName spec is
+##   set, choosing the default provisioner.
+persistence: 
+  enabled: false
+  storageSize: 8Gi
+  storageClass: null
+  existingClaim: null
+## volumePermissions: Change the owner of the persist volume mountpoint to RunAsUser:fsGroup
+  volumePermissions: true
+
+# Annotations applied to the pod.
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+podAnnotations: |
+#  "key": "value"
+
+# RBAC is assumed to be enabled in the cluster
+rbacEnabled: true
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "1"
+
+## RevisionHistory
+##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
+##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
+# revisionHistory: 3
+
+securityPolicy:
+  create: true
+
+service:
+  type: ClusterIP
+
+updateStrategyType: RollingUpdate
+
+testimage:
+  repository: neicnordic/sda-helm-tests-support
+  tag: latest
+  pullPollicy: Always
+  tls:
+    secretName: 
+    tlsKey: tls.key
+    tlsCert: tls.crt
+    caCert: ca.crt

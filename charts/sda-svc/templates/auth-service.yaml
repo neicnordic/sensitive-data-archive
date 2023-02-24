@@ -1,0 +1,18 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if eq "s3" .Values.global.inbox.storageType }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-auth
+  labels:
+    app: {{ template "sda.fullname" . }}-auth
+spec:
+  ports:
+  - name: auth
+    port: {{ ternary 443 80 ( .Values.global.tls.enabled ) }}
+    targetPort: auth
+    protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}-auth
+{{- end }}
+{{- end }}

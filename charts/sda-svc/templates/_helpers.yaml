@@ -1,0 +1,318 @@
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "sda.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "sda.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "sda.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "sda.auth.fullname" -}}
+{{- if .Values.auth.fullnameOverride -}}
+{{- .Values.auth.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- printf "%s-%s" .Release.Name .Values.auth.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-%s" .Release.Name $name .Values.auth.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sda.finalize.fullname" -}}
+{{- if .Values.finalize.fullnameOverride -}}
+{{- .Values.finalize.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- printf "%s-%s" .Release.Name .Values.finalize.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-%s" .Release.Name $name .Values.finalize.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sda.inbox.fullname" -}}
+{{- if .Values.inbox.fullnameOverride -}}
+{{- .Values.inbox.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- printf "%s-%s" .Release.Name .Values.inbox.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-%s" .Release.Name $name .Values.inbox.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sda.ingest.fullname" -}}
+{{- if .Values.ingest.fullnameOverride -}}
+{{- .Values.ingest.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- printf "%s-%s" .Release.Name .Values.ingest.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-%s" .Release.Name $name .Values.ingest.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sda.verify.fullname" -}}
+{{- if .Values.verify.fullnameOverride -}}
+{{- .Values.verify.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- printf "%s-%s" .Release.Name .Values.verify.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s-%s" .Release.Name $name .Values.verify.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/**/}}
+
+{{- define "secretsPath" -}}
+  {{- .Values.global.secretsPath -}}
+{{- end -}}
+
+{{- define "c4ghPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.c4ghPath) (empty .Values.global.c4ghPath) -}}
+{{- end -}}
+
+{{- define "trustedIssPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.download.trusted.configPath) (empty .Values.global.download.trusted.configPath) -}}
+{{- end -}}
+
+{{- define "tlsPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.tlsPath) (empty .Values.global.tlsPath) -}}
+{{- end -}}
+
+{{- define "jwtPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.jwtPath) (empty .Values.global.jwtPath) -}}
+{{- end -}}
+
+{{- define "confFile" -}}
+  {{- if .Values.global.confFilePath -}}
+    {{- printf "%s/%s/%s" .Values.global.secretsPath .Values.global.confFilePath .Values.global.confFile }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.secretsPath .Values.global.confFile -}}
+  {{ end }}
+{{- end -}}
+
+{{- define "brokerVhost" -}}
+  {{ if or (eq "/" .Values.global.broker.vhost) (not .Values.global.broker.vhost) }}
+    {{- print "%2f" -}}
+  {{ else }}
+    {{- printf "/%s" .Values.global.broker.vhost -}}
+  {{ end }}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserBackup" -}}
+{{- ternary "lega_in" .Values.credentials.backup.dbUser (empty .Values.credentials.backup.dbUser) -}}
+{{- end -}}
+{{- define "dbPassBackup" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.backup.dbPassword (empty .Values.credentials.backup.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserBackup" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.backup.mqUser (empty .Values.credentials.backup.mqUser) -}}
+{{- end -}}
+{{- define "mqPassBackup" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.backup.mqPassword (empty .Values.credentials.backup.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserDoa" -}}
+{{- ternary "lega_out" .Values.credentials.doa.dbUser (empty .Values.credentials.doa.dbUser) -}}
+{{- end -}}
+{{- define "dbPassDoa" -}}
+{{- ternary .Values.global.db.passOutgest .Values.credentials.doa.dbPassword (empty .Values.credentials.doa.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserDoa" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.doa.mqUser (empty .Values.credentials.doa.mqUser) -}}
+{{- end -}}
+{{- define "mqPassDoa" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.doa.mqPassword (empty .Values.credentials.doa.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserDownload" -}}
+{{- ternary "lega_out" .Values.credentials.download.dbUser (empty .Values.credentials.download.dbUser) -}}
+{{- end -}}
+{{- define "dbPassDownload" -}}
+{{- ternary .Values.global.db.passOutgest .Values.credentials.download.dbPassword (empty .Values.credentials.download.dbPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserFinalize" -}}
+{{- ternary "lega_in" .Values.credentials.finalize.dbUser (empty .Values.credentials.finalize.dbUser) -}}
+{{- end -}}
+{{- define "dbPassFinalize" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.finalize.dbPassword (empty .Values.credentials.finalize.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserFinalize" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.finalize.mqUser (empty .Values.credentials.finalize.mqUser) -}}
+{{- end -}}
+{{- define "mqPassFinalize" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.finalize.mqPassword (empty .Values.credentials.finalize.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserIngest" -}}
+{{- ternary "lega_in" .Values.credentials.ingest.dbUser (empty .Values.credentials.ingest.dbUser) -}}
+{{- end -}}
+{{- define "dbPassIngest" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.ingest.dbPassword (empty .Values.credentials.ingest.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserIngest" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.ingest.mqUser (empty .Values.credentials.ingest.mqUser) -}}
+{{- end -}}
+{{- define "mqPassIngest" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.ingest.mqPassword (empty .Values.credentials.ingest.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserInbox" -}}
+{{- ternary "lega_in" .Values.credentials.inbox.dbUser (empty .Values.credentials.inbox.dbUser) -}}
+{{- end -}}
+{{- define "dbPassInbox" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.inbox.dbPassword (empty .Values.credentials.inbox.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserInbox" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.inbox.mqUser (empty .Values.credentials.inbox.mqUser) -}}
+{{- end -}}
+{{- define "mqPassInbox" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.inbox.mqPassword (empty .Values.credentials.inbox.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "mqUserInterceptor" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.intercept.mqUser (empty .Values.credentials.intercept.mqUser) -}}
+{{- end -}}
+{{- define "mqPassInterceptor" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.intercept.mqPassword (empty .Values.credentials.intercept.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "dbUserMapper" -}}
+{{- ternary "lega_out" .Values.credentials.mapper.dbUser (empty .Values.credentials.mapper.dbUser) -}}
+{{- end -}}
+{{- define "dbPassMapper" -}}
+{{- ternary .Values.global.db.passOutgest .Values.credentials.mapper.dbPassword (empty .Values.credentials.mapper.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserMapper" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.mapper.mqUser (empty .Values.credentials.mapper.mqUser) -}}
+{{- end -}}
+{{- define "mqPassMapper" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.mapper.mqPassword (empty .Values.credentials.mapper.mqPassword) -}}
+{{- end -}}
+{{/**/}}
+
+{{/**/}}
+{{- define "dbUserReleaseTest" -}}
+{{- ternary "lega_in" .Values.credentials.releasetest.dbUser (empty .Values.credentials.releasetest.dbUser) -}}
+{{- end -}}
+{{- define "dbPassReleaseTest" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.releasetest.dbPassword (empty .Values.credentials.releasetest.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserReleaseTest" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.releasetest.mqUser (empty .Values.credentials.releasetest.mqUser) -}}
+{{- end -}}
+{{- define "mqPassReleaseTest" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.releasetest.mqPassword (empty .Values.credentials.releasetest.mqPassword) -}}
+{{- end -}}
+{{/**/}}
+
+
+{{/**/}}
+{{- define "dbUserVerify" -}}
+{{- ternary "lega_in" .Values.credentials.verify.dbUser (empty .Values.credentials.verify.dbUser) -}}
+{{- end -}}
+{{- define "dbPassVerify" -}}
+{{- ternary .Values.global.db.passIngest .Values.credentials.verify.dbPassword (empty .Values.credentials.verify.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserVerify" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.verify.mqUser (empty .Values.credentials.verify.mqUser) -}}
+{{- end -}}
+{{- define "mqPassVerify" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.verify.mqPassword (empty .Values.credentials.verify.mqPassword) -}}
+{{- end -}}
+{{/**/}}
+
+{{- define "dbSSLmode" -}}
+{{- if .Values.global.tls.enabled }}
+  {{- printf "%s" .Values.global.db.sslMode }}
+{{- else }}
+  {{- print "disable" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "authRedirect" -}}
+{{- if .Values.global.tls.enabled }}
+  {{- printf "https://%s/elixir/login" .Values.global.ingress.hostName.auth }}
+{{- else }}
+  {{- printf "http://%s/elixir/login" .Values.global.ingress.hostName.auth }}
+{{- end -}}
+{{- end -}}
+
+{{- define "inboxServicePort" -}}
+  {{- if .Values.global.tls.enabled }}
+    {{- printf "%d" (ternary 2222 443 ( empty .Values.global.inbox.s3Url )) }}
+  {{- else }}
+    {{- printf "%d" (ternary 2222 80 ( empty .Values.global.inbox.s3Url )) }}
+  {{- end -}}
+{{- end -}}
+
+{{- define "S3InboxURL" -}}
+  {{- if .Values.global.inbox.s3Port }}
+    {{- printf "%s:%v" .Values.global.inbox.s3Url .Values.global.inbox.s3Port }}
+  {{- else }}
+    {{- printf "%s" .Values.global.inbox.s3Url }}
+  {{- end }}
+{{- end -}}
+
+{{- define "S3ArchiveURL" -}}
+  {{- if .Values.global.inbox.s3Port }}
+    {{- printf "%s:%v" .Values.global.inbox.s3Url .Values.global.inbox.s3Port }}
+  {{- else }}
+    {{- printf "%s" .Values.global.inbox.s3Url }}
+  {{- end }}
+{{- end -}}
+
+{{- define "TLSissuer" -}}
+    {{- if and .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+        {{- fail "Only one of global.tls.issuer or global.tls.clusterIssuer should be set" }}
+    {{- end -}}
+
+    {{- if .Values.global.tls.issuer }}
+        {{- printf "%s" .Values.global.tls.issuer }}
+    {{- else if and .Values.global.tls.clusterIssuer }}
+        {{- printf "%s" .Values.global.tls.clusterIssuer }}
+    {{- end -}}
+{{- end -}}

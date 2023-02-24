@@ -1,0 +1,127 @@
+{{- if .Values.intercept.deploy}}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-intercept
+  labels:
+    role: intercept
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-intercept
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-intercept
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-intercept
+        role: intercept
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/intercept-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.intercept.annotations }}
+{{- toYaml .Values.intercept.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: intercept
+        image: "{{ .Values.intercept.repository }}:{{ .Values.intercept.imageTag }}"
+        imagePullPolicy: {{ .Values.intercept.imagePullPolicy | quote }}
+        command: ["sda-intercept"]
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        env:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-intercept
+                key: mqPassword
+        - name: BROKER_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-intercept
+                key: mqUser
+      {{- else }}
+        - name: CONFIGFILE
+          value: {{ template "confFile" . }}
+      {{- end }}
+        - name: BROKER_SSL
+          value: {{ .Values.global.tls.enabled | quote }}
+      {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+        - name: BROKER_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if .Values.global.broker.verifyPeer }}
+        - name: BROKER_CLIENTCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: BROKER_CLIENTKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+        - name: BROKER_VERIFYPEER
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+      {{- end }}
+        - name: BROKER_DURABLE
+          value: "true"
+        - name: BROKER_EXCHANGE
+          value: {{ default "sda" .Values.global.broker.exchange | quote}}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_QUEUE
+          value: "files"
+        - name: BROKER_ROUTINGERROR
+          value: {{ .Values.global.broker.routingError | quote }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+        resources:
+{{ toYaml .Values.intercept.resources | trim | indent 10 }}
+  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        volumeMounts:
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+      volumes:
+        - name: {{ "tls"  }}
+          projected:
+            sources:
+            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-intercept-certs
+            {{- else }}
+              - secret:
+                  name: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
+            {{- end }}
+    {{- end }}
+      restartPolicy: Always
+{{- end }}
+{{- end }}

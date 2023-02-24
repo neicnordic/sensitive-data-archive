@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}
+  labels:
+    app: {{ template "sda.fullname" . }}
+spec:
+  ports:
+    - name: postgresql
+      port: {{ .Values.service.port }}
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}

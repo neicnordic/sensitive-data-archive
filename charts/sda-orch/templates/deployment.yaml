@@ -1,0 +1,171 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-orchestrate
+  labels:
+    role: orchestrate
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-orchestrate
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ default "3" .Values.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-orchestrate
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-orchestrate
+        role: orchestrate
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.podAnnotations }}
+{{- toYaml .Values.podAnnotations | nindent 8 -}}
+{{- end }}
+    spec:
+    {{- if .Values.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+    {{- if .Values.tls.permissions }}
+      initContainers:
+      - name: tls-init
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args: ["/bin/cp {{ include "tlsPath" . }}/* /tls/ && chown 1000:1000 /tls/* && chmod 0400 /tls/*"]
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tls
+          mountPath: /tls
+    {{- end }}
+      containers:
+      - name: orchestrate
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.imagePullPolicy | quote }}
+      {{- if .Values.vaultSecrets }}
+        command: ["/bin/sh", "-c"]
+        args: ["source {{ include "tlsPath" . }}/{{ .Values.envFile }} && supervisord --configuration /etc/supervisor.conf"]
+      {{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+        - name: LOG_LEVEL
+          value: {{ .Values.logLevel | quote }}
+      {{- if not .Values.vaultSecrets }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-orchestrate
+                key: mqPassword
+        - name: BROKER_USER
+          value: {{ .Values.broker.username | quote }}
+      {{- end }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ Host is required" .Values.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.broker.port | quote }}
+        - name: BROKER_VHOST
+          value: {{ .Values.broker.vhost | quote }}
+        - name: BROKER_EXCHANGE
+          value: {{ .Values.broker.exchange | quote }}
+        - name: VERIFIED_QUEUE
+          value: {{ .Values.broker.queue.verify | quote }}
+        - name: COMPLETED_QUEUE
+          value: {{ .Values.broker.queue.completed | quote }}
+        - name: INBOX_QUEUE
+          value: {{ .Values.broker.queue.inbox | quote }}
+        - name: INGEST_QUEUE
+          value: {{ .Values.broker.queue.ingest | quote }}
+        - name: ACCESSIONIDS_QUEUE
+          value: {{ .Values.broker.queue.accessionids | quote }}
+        - name: MAPPINGS_QUEUE
+          value: {{ .Values.broker.queue.mappings | quote }}
+      {{- if .Values.datasetID.external }}
+        - name: DOI_API
+          value: {{ required "DOI API url missing" .Values.datasetID.datacite.apiURL | quote }}
+        - name: REMS_API
+          value: {{ required "REMS API url missing" .Values.datasetID.rems.apiURL | quote }}
+        - name: DOI_PREFIX
+          value: {{ required "DOI datacite prefix missing" .Values.datasetID.datacite.prefix | quote }}
+        {{- if not .Values.vaultSecrets }}
+        - name: DOI_USER
+          value: {{ required "DOI API user missing" .Values.datasetID.datacite.user | quote }}
+        - name: DOI_KEY
+          valueFrom:
+            secretKeyRef:
+                name: {{ template "sda.fullname" . }}-orchestrate
+                key: dataciteKey
+        - name: REMS_USER
+          value: {{ required "REMS API user missing" .Values.datasetID.rems.user | quote }}
+        - name: REMS_KEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-orchestrate
+                key: remsKey
+        {{- end }}
+        {{- if .Values.datasetID.useCustomConfig  }}
+        - name: CONFIG_FILE
+          value: /config/config.json
+        {{- end }}
+      {{- end }}
+      {{- if .Values.tls.enabled}}
+        - name: BROKER_SSL
+          value: "true"
+        - name: SSL_CACERT
+          value: {{ include "caCert" . | quote }}
+        {{- if .Values.broker.verifyPeer }}
+        - name: SSL_CLIENTCERT
+          value: {{ include "orchCert" . | quote }}
+        - name: SSL_CLIENTKEY
+          value: {{ include "orchKey" . | quote }}
+        {{- end }}
+      {{- else }}
+        - name: BROKER_SSL
+          value: "false"
+      {{- end }}
+        resources:
+{{ toYaml .Values.resources | trim | indent 10 }}
+        volumeMounts:
+        {{- if and .Values.tls.enabled (not .Values.pkiService.enabled) }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
+        - name: tmp
+          mountPath: "/tmp"
+        {{- if and .Values.datasetID.external .Values.datasetID.useCustomConfig  }}
+        - name: service-config
+          mountPath: /config
+        {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+    {{- if and .Values.tls.enabled (not .Values.pkiService.enabled) }}
+      - name: {{ ternary "tls" "tls-certs" (empty .Values.tls.permissions) }}
+        secret:
+          defaultMode: 0440
+          secretName: {{ template "TLSsecret" . }}
+      {{- if .Values.tls.permissions }}
+      - name: tls
+        emptyDir:
+          medium: Memory
+          sizeLimit: 10Mi
+      {{- end }}
+    {{- end }}
+    {{- if and .Values.datasetID.external .Values.datasetID.useCustomConfig  }}
+      - name: service-config
+        configMap:
+          name: {{ template "sda.fullname" . }}-orchestrate-config
+    {{- end }}

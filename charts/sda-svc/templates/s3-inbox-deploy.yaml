@@ -1,0 +1,258 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if eq "s3" .Values.global.inbox.storageType }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-s3inbox
+  labels:
+    role: inbox
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-inbox
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.s3Inbox.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-inbox
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-inbox
+        role: inbox
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/shared-secrets.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/s3-inbox-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.s3Inbox.annotations }}
+{{- toYaml .Values.s3Inbox.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-inbox
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled }}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+    {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
+      initContainers:
+      - name: tls-init
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args: ["/bin/cp /tls-certs/* /tls/ && chown 65534:65534 /tls/* && chmod 0600 /tls/*"]
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tls
+          mountPath: /tls
+    {{- end }}
+      containers:
+      - name: s3inbox
+        image: "{{ .Values.s3Inbox.repository }}:{{ .Values.s3Inbox.imageTag }}"
+        imagePullPolicy: {{ .Values.s3Inbox.imagePullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        env:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: AWS_ACCESSKEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-inbox
+                key: s3InboxAccessKey
+        - name: AWS_SECRETKEY
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-inbox
+                key: s3InboxSecretKey
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-inbox
+                key: mqPassword
+        - name: BROKER_USER
+          value: {{ include "mqUserInbox" . | quote }}
+        - name: DB_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-inbox
+                key: dbPassword
+        - name: DB_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-inbox
+                key: dbUser
+      {{- else }}
+        - name: SERVER_CONFFILE
+          value: {{ include "confFile" .}}
+      {{- end }}
+        - name: AWS_URL
+          value: {{ template "S3InboxURL" . }}
+      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
+        - name: AWS_CACERT
+          value: "{{ include "tlsPath" . }}/ca.crt"
+      {{- end }}
+      {{- if .Values.global.inbox.s3Region }}
+        - name: AWS_REGION
+          value: {{ .Values.global.inbox.s3Region | quote }}
+      {{- end }}
+        - name: AWS_BUCKET
+          value: {{ .Values.global.inbox.s3Bucket | quote }}
+      {{- if .Values.global.inbox.s3ReadyPath }}
+        - name: AWS_READYPATH
+          value: {{ .Values.global.inbox.s3ReadyPath }}
+      {{- end }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_VHOST
+          value: {{ include "brokerVhost" . | quote }}
+        - name: BROKER_EXCHANGE
+          value: {{ .Values.global.broker.exchange | quote }}
+        - name: BROKER_ROUTINGKEY
+          value: "inbox"
+        - name: BROKER_SSL
+          value: {{ .Values.global.tls.enabled | quote }}
+      {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+        - name: BROKER_VERIFYPEER
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+        - name: BROKER_CACERT
+          value: {{ include "tlsPath" . }}/ca.crt
+        {{- if .Values.global.broker.verifyPeer }}
+        - name: BROKER_CLIENTCERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: BROKER_CLIENTKEY
+          value: {{ include "tlsPath" . }}/tls.key
+        {{- end }}
+      {{- end }}
+       {{- if .Values.global.tls.enabled }}
+        - name: DB_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+      {{- if ne "verify-none" .Values.global.db.sslMode }}
+        - name: DB_CLIENTCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: DB_CLIENTKEY
+          value: {{ template "tlsPath" . }}/tls.key
+      {{- end }}
+    {{- end }}
+        - name: DB_DATABASE
+          value: {{ default "lega" .Values.global.db.name | quote }}
+        - name: DB_HOST
+          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.global.db.port | quote }}
+        - name: DB_SSLMODE
+          value: {{ template "dbSSLmode" . }}
+      {{- if .Values.global.tls.enabled }}
+        - name: SERVER_CERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: SERVER_KEY
+          value: {{ include "tlsPath" . }}/tls.key
+      {{- end }}
+        {{- if.Values.global.auth.jwtPub }}
+        - name: SERVER_JWTPUBKEYPATH
+          value: {{ include "jwtPath" . }}
+        {{- else }}
+          {{ fail "The global.auth.jwtPub is required for s3Inbox" }}
+        {{- end }}
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+        ports:
+        - name: inbox
+          containerPort: 8000
+          protocol: TCP
+        - name: liveness-port
+          containerPort: 8001
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: liveness-port
+          failureThreshold: 1
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: liveness-port
+          failureThreshold: 1
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.s3Inbox.resources | trim | indent 10 }}
+        volumeMounts:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ include "tlsPath" . }}
+      {{- end }}
+      {{- if .Values.global.auth.jwtPub }}
+        - name: jwt
+          mountPath: {{ include "jwtPath" . }}
+      {{- end }}
+      volumes:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
+          projected:
+            defaultMode: 256
+            sources:
+            - secret:
+          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+                name: {{ template "sda.fullname" . }}-inbox-certs
+          {{- else }}
+                name: {{ required "An certificate issuer or a TLS secret name is required for S3Inbox" .Values.s3Inbox.tls.secretName }}
+          {{- end }}
+        {{- if .Values.global.pkiPermissions }}
+        - name: tls
+          emptyDir:
+            medium: Memory
+            sizeLimit: 10Mi
+      {{- end }}
+      {{- end }}
+      {{- if .Values.global.auth.jwtPub }}
+        - name: jwt
+          projected:
+            sources:
+            - secret:
+                name: {{ .Values.global.auth.jwtSecret }}
+                items:
+                  - key: {{ required "The name of the JWT signing key is needed" .Values.global.auth.jwtPub }}
+                    path: "{{ .Values.global.ingress.hostName.auth }}.pub"
+      {{- end }}
+      restartPolicy: Always
+{{- end }}
+{{- end }}

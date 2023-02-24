@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oidc-server
+spec:
+  selector:
+    matchLabels:
+      app: oidc-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: oidc-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsGroup: 1000
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: oidc-server
+        image: "neicnordic/mock-oidc:latest"
+        ports:
+        - containerPort: 8080
+        env:
+          - name: PORT
+            value: "8080"
+          - name: HOST
+            value: oidc-server
+          - name: CLIENT_ID
+            value: DfCieZLuBU
+          - name: CLIENT_SECRET
+            value: DfCieZLuBU
+          - name: CLIENT_REDIRECT_URI
+            value: http://sda-auth/elixir/login
+        resources:
+          limits:
+            cpu: 250m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oidc-server
+  labels:
+    app: oidc-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: oidc-server

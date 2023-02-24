@@ -1,0 +1,192 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if eq "s3" .Values.global.inbox.storageType }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-auth
+  labels:
+    role: auth
+    app: {{ template "sda.fullname" . }}-auth
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: "{{ .Values.auth.name }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.auth.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-auth
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-auth
+        role: auth
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/auth-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.auth.annotations }}
+{{- toYaml .Values.auth.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-auth
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: auth
+        image: "{{ .Values.auth.repository }}:{{ .Values.auth.imageTag }}"
+        imagePullPolicy: {{ .Values.auth.imagePullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        env:
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: ELIXIR_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-auth
+              key: elixirID
+        - name: ELIXIR_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-auth
+              key: elixirSecret
+        {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
+        - name: CEGA_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-auth
+              key: cegaID
+        - name: CEGA_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-auth
+              key: cegaSecret
+        {{- end }}
+      {{- else }}
+        - name: SERVER_CONFFILE
+          value: {{ include "confFile" . }}
+      {{- end }}
+        - name: ELIXIR_REDIRECTURL
+          value: {{ template "authRedirect" .}}
+        - name: ELIXIR_PROVIDER
+          value: "{{ .Values.global.elixir.provider }}"
+        - name: ELIXIR_SCOPE
+          value: "ga4gh_passport_v1"
+        {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
+        - name: CEGA_AUTHURL
+          value: {{ .Values.global.cega.host | quote }}
+        {{- end }}
+        - name: JWTISSUER
+        {{- if .Values.global.tls.enabled }}
+          value: "https://{{ .Values.global.ingress.hostName.auth }}"
+        {{- else }}
+          value: "http://{{ .Values.global.ingress.hostName.auth }}"
+        {{- end }}
+        - name: JWTPRIVATEKEY
+          value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
+        - name: JWTSIGNATUREALG
+          value: {{ .Values.global.auth.jwtAlg }}
+        {{- if .Values.global.tls.enabled}}
+        - name: SERVER_CERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: SERVER_KEY
+          value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+        - name: S3INBOX
+          value: {{ .Values.global.ingress.hostName.s3Inbox }}
+        ports:
+        - name: auth
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            port: auth
+            path: /
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
+            httpHeaders:
+            - name: Host
+              value: {{ .Values.global.ingress.hostName.auth }}
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            port: auth
+            path: /
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
+            httpHeaders:
+            - name: Host
+              value: {{ .Values.global.ingress.hostName.auth }}
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+{{ toYaml .Values.s3Inbox.resources | trim | indent 10 }}
+        volumeMounts:
+      {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: jwt
+          mountPath: {{ template "jwtPath" . }}
+      {{- end }}
+      volumes:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: jwt
+          projected:
+            defaultMode: 0440
+            sources:
+            - secret:
+                name: {{ required "A secret for the JWT signing key is needed" .Values.global.auth.jwtSecret }}
+                items:
+                  - key: {{ required "The name of the JWT signing key is needed" .Values.global.auth.jwtKey }}
+                    path: {{ .Values.global.auth.jwtKey }}
+      {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          projected:
+            sources:
+          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-auth-certs
+          {{- else }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for auth" .Values.auth.tls.secretName }}
+          {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,192 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if and (eq "posix" .Values.global.inbox.storageType) .Values.global.tls.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-inbox
+  labels:
+    role: inbox
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-inbox
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.sftpInbox.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-inbox
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-inbox
+        role: inbox
+        release: {{ .Release.Name }}
+        type: sftp-inbox
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/sftp-inbox-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- tpl .Values.global.podAnnotations . | nindent 8 -}}
+{{- end }}
+{{- if .Values.sftpInbox.annotations }}
+{{- tpl .Values.sftpInbox.annotations . | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-inbox
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.sftpInbox.nodeHostname }}
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.sftpInbox.nodeHostname }}
+    {{- end }}
+    {{- if .Values.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534 
+        runAsGroup: 65534
+        fsGroup: 65534
+      {{- if not .Values.global.pkiService }}
+      initContainers:
+      - name: init-java-certs
+        image: neicnordic/openssl-alpine:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            keytool -import \
+                    -trustcacerts \
+                    -file /tls-certs/ca.crt \
+                    -alias legaCA -storetype JKS \
+                    -keystore /tls/cacerts \
+                    -storepass "${KEYSTORE_PASSWORD}" \
+                    -noprompt &&
+            openssl pkcs12 -export \
+                           -out /tls/keystore.p12 \
+                           -inkey /tls-certs/tls.key \
+                           -in /tls-certs/tls.crt \
+                           -passout pass:"${KEYSTORE_PASSWORD}"
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+        - name: KEYSTORE_PASSWORD
+          value: {{ required "Keystore password is required" .Values.sftpInbox.keystorePass | quote }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tmp
+          mountPath: /tls
+      {{- end }}
+      containers:
+      - name: inbox
+        image: "{{ .Values.sftpInbox.repository }}:{{ .Values.sftpInbox.imageTag }}"
+        imagePullPolicy: {{ .Values.sftpInbox.imagePullPolicy | quote }}
+        command: ["java", "-jar", "inbox-0.0.3-SNAPSHOT.jar"]
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        resources:
+{{ toYaml .Values.sftpInbox.resources | trim | indent 10 }}
+        env:
+        - name: LOGGING_LEVEL_SE_NBIS_LEGA_INBOX
+          value: {{ .Values.global.logLevel | quote }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-inbox
+              key: mqPassword
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_EXCHANGE
+          value: {{ .Values.global.broker.exchange | quote }}
+        - name: BROKER_ROUTINGKEY
+          value: "inbox"
+        - name: BROKER_USERNAME
+          value: {{ include "mqUserInbox" . | quote }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+        - name: CEGA_ENDPOINT
+          value: {{ printf "%s%s" (.Values.global.cega.host) "/username/%s" | quote }}
+        - name: CEGA_ENDPOINT_CREDS
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-inbox
+              key: cegaCredentials
+        - name: KEYSTORE_PATH
+          value: {{ ternary "/etc/ssl/certs/java/keystore.p12" (printf "%s/%s" .Values.global.secretsPath .Values.sftpInbox.tls.keyStoreFile ) (empty .Values.global.pkiService)}}
+        - name: KEYSTORE_PASSWORD
+          value: {{ .Values.sftpInbox.keystorePass | quote }}
+        - name: KEYSTORE_TYPE
+          value: "PKCS12"
+        - name: USE_SSL
+          value: "true"
+        ports:
+        - name: inbox
+          containerPort: 2222
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - netstat -an | grep -q ':2222 '
+          initialDelaySeconds: 120
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - netstat -an | grep -q ':2222 '
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        volumeMounts:
+        - name: inbox
+          mountPath: "/ega/inbox"
+        - name: tmp
+          mountPath: "/etc/ssl/certs/java"
+        - name: tmp
+          mountPath: /tmp/
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: inbox
+      {{- if .Values.global.inbox.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.inbox.existingClaim }}
+      {{- else }}
+          nfs:
+            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
+            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote}}{{ else }}{{ "/" }}{{ end }}
+      {{- end }}
+        - name: tls-certs
+          projected:
+            sources:
+            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-inbox-certs
+            {{- else}}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for sftpInbobx" .Values.sftpInbox.tls.secretName }}
+            {{- end }}
+{{- end }}
+{{- end }}

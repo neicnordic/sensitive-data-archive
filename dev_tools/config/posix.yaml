@@ -1,0 +1,76 @@
+global:
+  c4ghPath: c4gh
+  jwtPath: jwt
+  tlsPath: tls
+  podSecurityPolicy:
+    create: false
+  archive:
+    storageType: posix
+    existingClaim: archive-volume
+    volumePath: "/archive"
+  backupArchive:
+    storageType: posix
+    existingClaim: backup-volume
+    volumePath: "/backup"
+  broker:
+    host: "broker-sda-mq"
+    exchange: "sda"
+    port: 5671
+    verifyPeer: true
+    password: "admin"
+    username: "admin"
+    backupRoutingKey: "backup"
+  c4gh:
+    secretName: c4gh
+    keyFile: c4gh.sec.pem
+    publicFile: c4gh.pub.pem
+  cega:
+    host: "cega-users"
+    user: "legatest"
+  db:
+    host: "postgres-sda-db"
+    sslMode: "verify-ca"
+  inbox:
+    storageType: posix
+    path: "/inbox"
+    user: "lega"
+    existingClaim: inbox-volume
+  ingress:
+    deploy: false
+    hostName:
+      download: sda-sda-svc-download
+  logLevel: debug
+  tls:
+    enabled: true
+backup:
+  deploy: true
+  tls:
+    secretName: "backup-certs"
+doa:
+  tls:
+    secretName: "doa-certs"
+finalize:
+  tls:
+    secretName: "finalize-certs"
+ingest:
+  tls:
+    secretName: "ingest-certs"
+intercept:
+  tls:
+    secretName: "intercept-certs"
+mapper:
+  tls:
+    secretName: "mapper-certs"
+sftpInbox:
+  tls:
+    secretName: "inbox-certs"
+verify:
+  tls:
+    secretName: "verify-certs"
+download:
+  tls:
+    secretName: "download-certs"
+releasetest:
+  run: true
+  tls:
+    secretName: "tester-certs"
