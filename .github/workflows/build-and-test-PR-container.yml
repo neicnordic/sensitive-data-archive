@@ -1,10 +1,10 @@
-name: build and scan container
+name: build PR container
 on:
   pull_request:
 jobs:
   build:
     name: Build PR image
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -22,8 +22,7 @@ jobs:
       - name: Build container
         uses: docker/build-push-action@v4
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./sda-mq
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:PR${{ github.event.number }}

@@ -16,25 +16,12 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Delete 'PR' containers older than a week
+      - name: Delete 'PR' containers older than a month
         uses: snok/container-retention-policy@v2.0.0
         with:
-          image-names: sda-db
           filter-tags: PR*, sha-*
-          cut-off: A week ago UTC
+          cut-off: A month ago UTC
           account-type: org
           org-name: ${{ github.repository_owner }}
           keep-at-least: 1
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete all containers older than treee months, using a wildcard
-        uses: snok/container-retention-policy@v2.0.0
-        with:
-          image-names: sda-db
-          filter_tags: v*
-          cut-off: Three months ago UTC
-          account-type: org
-          org-name: ${{ github.repository_owner }}
-          keep-at-least: 2
-          skip-tags: latest
           token: ${{ secrets.GITHUB_TOKEN }}
