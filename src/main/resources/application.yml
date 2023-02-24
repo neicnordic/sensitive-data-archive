@@ -1,0 +1,76 @@
+logging.level.root: info
+
+rest.enabled: ${REST_ENABLED:true}
+
+server.ssl:
+  enabled: ${SSL_ENABLED:true}
+  key-store-type: PKCS12
+  key-store: file:${KEYSTORE_PATH:/etc/ega/ssl/server.cert}
+  key-store-password: ${KEYSTORE_PASSWORD}
+
+spring.rabbitmq:
+  host: ${BROKER_HOST:private-mq}
+  port: ${BROKER_PORT:5671}
+  virtual-host: ${BROKER_VHOST:sda}
+  username: ${BROKER_USERNAME:admin}
+  password: ${BROKER_PASSWORD:guest}
+  ssl:
+    enabled: true
+    algorithm: TLSv1.2
+    validate-server-certificate: ${BROKER_VALIDATE:true}
+    trust-store-type: PKCS12
+    key-store-type: PKCS12
+
+outbox:
+  enabled: ${OUTBOX_ENABLED:true}
+  type: ${OUTBOX_TYPE:POSIX}
+  queue: ${OUTBOX_QUEUE:exportRequests}
+  location: ${OUTBOX_LOCATION:/ega/outbox/p11-%s/files/}
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_INSTANCE:db}:${DB_PORT:5432}/${POSTGRES_DB:lega}?sslmode=${SSL_MODE:verify-full}&sslrootcert=${ROOT_CERT_PATH:/etc/ega/ssl/CA.cert}&sslcert=${CERT_PATH:/etc/ega/ssl/client.cert}&sslkey=${CERT_KEY:/etc/ega/ssl/client.key}
+    username: ${POSTGRES_USER:lega_out}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa.properties.hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+
+s3:
+  endpoint: ${S3_ENDPOINT:vault}
+  port: ${S3_PORT:443}
+  access-key: ${S3_ACCESS_KEY:minio}
+  secret-key: ${S3_SECRET_KEY:miniostorage}
+  region: ${S3_REGION:us-west-1}
+  bucket: ${S3_BUCKET:lega}
+  secure: ${S3_SECURE:true}
+  root-ca: ${S3_ROOT_CERT_PATH:/etc/ssl/certs/ca-certificates.crt}
+
+s3.out:
+  endpoint: ${S3_OUT_ENDPOINT:outbox}
+  port: ${S3_OUT_PORT:443}
+  access-key: ${S3_OUT_ACCESS_KEY:minio}
+  secret-key: ${S3_OUT_SECRET_KEY:miniostorage}
+  region: ${S3_OUT_REGION:us-west-1}
+  bucket: ${S3_OUT_BUCKET:lega}
+  secure: ${S3_OUT_SECURE:true}
+  root-ca: ${S3_OUT_ROOT_CERT_PATH:/etc/ssl/certs/ca-certificates.crt}
+
+archive:
+  path: ${ARCHIVE_PATH:/}
+
+ga4gh:
+  passport:
+    # First, the public key is checked. If present, it's used for validating the token and openid-configuration-url is not used.
+    public-key-path: ${PASSPORT_PUBLIC_KEY_PATH:/etc/ega/jwt/passport.pem}
+    # If public key is absent, then openid-configuration-url is used to query JWK and fetch the public key.
+    openid-configuration-url: ${OPENID_CONFIGURATION_URL:https://login.elixir-czech.org/oidc/.well-known/openid-configuration}
+    # /userinfo endpoint URL for handling opaque access tokens
+    userinfo-endpoint-url: ${USERINFO_ENDPOINT_URL:https://login.elixir-czech.org/oidc/userinfo}
+  visa:
+    # First, the public key is checked. If present, it's used for validating the token. Otherwise, JKU is used instead (entry in the header).
+    public-key-path: ${VISA_PUBLIC_KEY_PATH:/etc/ega/jwt/visa.pem}
+
+
+crypt4gh:
+  private-key-path: ${CRYPT4GH_PRIVATE_KEY_PATH:/etc/ega/crypt4gh/key.pem}
+  private-key-password-path: ${CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH:/etc/ega/crypt4gh/key.pass}
