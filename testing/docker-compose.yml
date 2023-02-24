@@ -1,0 +1,76 @@
+services:
+
+  mq_server:
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    container_name: common-mq
+    image: rabbitmq:3.10.7-management-alpine
+    ports:
+      - "15678:15678"
+      - "15679:15679"
+      - "5678:5678"
+      - "5679:5679"
+    volumes:
+      - ./defs.json:/etc/rabbitmq/defs.json
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - certs:/etc/rabbitmq/ssl/
+
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "5678" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  certfixer:
+    image: alpine:3
+    container_name: certfixer
+    command: >
+      /bin/sh -c
+      "/bin/make-certs -host=mq,servername -path=certs &&
+      mkdir -p /tmp/$$(date +'%Y-%m-%d') &&
+       cp /certs/* /tmp/$$(date +'%Y-%m-%d')/ &&
+       chown -Rc $USR:$GRP /tmp/$$(date +'%Y-%m-%d')/"
+    environment:
+      - USR
+      - GRP
+    volumes:
+      - ./make-certs:/bin/make-certs
+      - certs:/certs
+      - /tmp/:/tmp/
+
+  db:
+    command: server /data
+    container_name: db
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - NOTLS=true
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: neicnordic/sda-db:${DATABASE_VERSION:-v1.4.0}
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/data
+
+  tests:
+    image: golang:${GOLANG_VERSION:-1.19}
+    profiles:
+      - testing
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../:/app
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "cd /app; go test ./..."
+
+volumes:
+  certs:
+  dbdata:
