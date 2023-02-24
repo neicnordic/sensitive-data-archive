@@ -1,0 +1,127 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+# Each subfolder needs to be checked separately
+  - package-ecosystem: docker
+    directory: "/sda-auth"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-auth"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-db"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-doa"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-download"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-mq"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-pipeline"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-s3proxy"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: docker
+    directory: "/sda-sftp-iinbox"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+# Each subfolder needs to be checked separately
+  - package-ecosystem: gomod
+    directory: "/sda-auth"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: gomod
+    directory: "/sda-common"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: gomod
+    directory: "/sda-download"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: gomod
+    directory: "/sda-pipeline"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: gomod
+    directory: "/sda-s3proxy"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+# Each subfolder needs to be checked separately
+  - package-ecosystem: maven
+    directory: "/sda-doa"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+  - package-ecosystem: maven
+    directory: "/sda-sftp-inbox"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
