@@ -1,0 +1,63 @@
+app:
+  host: "0.0.0.0"
+  servercert: "./dev_utils/certs/download.pem"
+  serverkey: "./dev_utils/certs/download-key.pem"
+  port: "8443"
+
+log:
+  level: "debug"
+  format: "json"
+
+archive:
+  type: ""
+  # S3 backend
+  url: "https://localhost"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretkey"
+  bucket: "archive"
+  chunksize: 32
+  cacert: "./dev_utils/certs/ca.pem"
+  # posix backend
+  location: "/tmp"
+
+session:
+  # session key expiration time in seconds
+  # default value = -1 for disabled state
+  # a positive integer enables sessions
+  # a negative integer disables sessions
+  expiration: 28800
+  # domain name must be set to the hostname (FQDN) of the service
+  domain: "localhost"
+  # session cookie Secure value, if true, TLS must be active
+  # default value = true
+  secure: true
+  # session cookie HttpOnly value, if true, TLS must be active
+  # default value = true
+  httponly: true
+  # name of session cookie
+  # default value = sda_session_key
+  name: "sda_session_key"
+
+c4gh:
+  passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
+  filepath: "./dev_utils/c4gh.sec.pem"
+
+db:
+  host: "localhost"
+  port: 5432
+  user: "lega_out"
+  password: "lega_out"
+  database: "lega"
+  cacert: "./dev_utils/certs/ca.pem"
+  clientCert: "./dev_utils/certs/client.pem"
+  clientKey: "./dev_utils/certs/client-key.pem"
+  sslmode: "verify-ca"
+
+oidc:
+  cacert: "./dev_utils/certs/ca.pem"
+  # oidc configuration API must have values for "userinfo_endpoint" and "jwks_uri"
+  configuration:
+    url: "https://mockauth:8000/.well-known/openid-configuration"
+  trusted:
+    iss: "/iss.json"
