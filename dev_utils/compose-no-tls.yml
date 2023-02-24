@@ -1,0 +1,219 @@
+version: "3.7"
+services:
+  db:
+    command: server /data
+    container_name: db
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - NOTLS=true
+      - POSTGRES_PASSWORD=rootpassword
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: neicnordic/sda-db:v2.0.10
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/data:/data
+  mq:
+    image: ghcr.io/neicnordic/sda-mq:v1.4.25
+    container_name: mq
+    environment:
+      - MQ_USER=test
+      - MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm
+      - MQ_VHOST=test
+      - NOTLS=true
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  s3:
+    command: server /data --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio:RELEASE.2022-09-25T15-44-53Z
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+  createbucket:
+    image: minio/mc
+    depends_on:
+      - s3
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc config host add s3 http://s3:9000 access secretkey;
+      /usr/bin/mc mb s3/inbox || true;
+      /usr/bin/mc mb s3/archive || true;
+      /usr/bin/mc mb s3/backup || true;
+      exit 0;
+      "
+  ingest:
+    command: sda-ingest
+    container_name: ingest
+    depends_on:
+      - db
+      - mq
+      - s3
+    environment:
+      - ARCHIVE_TYPE=s3
+      - ARCHIVE_URL=http://s3
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=ingest
+      - BROKER_ROUTINGKEY=archived
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+      - INBOX_TYPE=s3
+      - INBOX_URL=http://s3
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+      - archive:/tmp
+    restart: always
+  verify:
+    command: sda-verify
+    container_name: verify
+    depends_on:
+      - db
+      - mq
+      - s3
+    environment:
+      - ARCHIVE_URL=http://s3
+      - ARCHIVE_TYPE=s3
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=archived
+      - BROKER_ROUTINGKEY=verified
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+      - INBOX_TYPE=s3
+      - INBOX_URL=http://s3
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+      - archive:/tmp
+    restart: always
+  finalize:
+    command: sda-finalize
+    container_name: finalize
+    depends_on:
+      - db
+      - mq
+    environment:
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=accessionIDs
+      - BROKER_ROUTINGKEY=backup
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+    restart: always
+  backup:
+    command: sda-backup
+    container_name: backup
+    depends_on:
+      - db
+      - mq
+      - s3
+    environment:
+      - ARCHIVE_TYPE=s3
+      - ARCHIVE_URL=http://s3
+      - BACKUP_TYPE=s3
+      - BACKUP_URL=http://s3
+      - BACKUP_LOCATION=/backup
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=backup
+      - BROKER_ROUTINGKEY=completed
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+      - archive:/tmp
+      - backup:/backup
+    restart: always
+  mapper:
+    command: sda-mapper
+    container_name: mapper
+    depends_on:
+      - db
+      - mq
+    environment:
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=mappings
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+      - DB_USER=lega_out
+      - DB_PASSWORD=lega_out
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+    restart: always
+  interceptor:
+    command: sda-intercept
+    depends_on:
+      - mq
+    environment:
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_QUEUE=files
+      - BROKER_ROUTINGKEY=ingest
+      - BROKER_ROUTINGERROR=error
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+    restart: always
+  api:
+    command: sda-api
+    container_name: api
+    depends_on:
+      - db
+      - mq
+    environment:
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=mq
+      - BROKER_ROUTINGKEY=ingest
+      - BROKER_ROUTINGERROR=error
+      - DB_HOST=db
+    image: neicnordic/sda-pipeline:latest
+    ports:
+      - "8080:8080"
+    restart: always
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+volumes:
+  archive:
+  backup:
+  inbox:

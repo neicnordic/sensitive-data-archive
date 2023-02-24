@@ -1,0 +1,247 @@
+version: "2.4"
+services:
+  certfixer:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /origcerts/* /certs
+        chown -R nobody.nobody /certs/*
+        chmod -R og-rw /certs/*-key.pem
+        chown -R 70.70 /certs/db*
+        chown -R 100.101 /certs/mq*
+        ls -la /certs/
+
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./certs:/origcerts
+      - certs:/certs
+  db:
+    command: server /data
+    container_name: db
+    depends_on:
+      - certfixer
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - PKI_VOLUME_PATH=/certs/
+      - PG_CA=/var/lib/postgresql/tls/ca.pem
+      - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
+      - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
+      - POSTGRES_PASSWORD=rootpassword
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sda-db:v2.0.10
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/data:/data
+      - certs:/var/lib/postgresql/tls/
+  mq:
+    container_name: mq
+    image: ghcr.io/neicnordic/sda-mq:v1.4.25
+    environment:
+      - MQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.pem
+      - MQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
+      - MQ_CA=/etc/rabbitmq/ssl/ca.pem
+      - MQ_USER=test
+      - MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm
+      - MQ_VHOST=test
+      - MQ_VERIFY=verify_none
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+      - "5671:5671"
+    volumes:
+      - ./certs/ca.pem:/etc/rabbitmq/ssl/ca.pem
+      - ./certs/mq.pem:/etc/rabbitmq/ssl/mq.pem
+      - ./certs/mq-key.pem:/etc/rabbitmq/ssl/mq.key
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  s3:
+    command: server /data --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio:RELEASE.2022-09-25T15-44-53Z
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
+      - ./certs/s3.pem:/root/.minio/certs/public.crt
+      - ./certs/s3-key.pem:/root/.minio/certs/private.key
+  createbucket:
+    container_name: buckets
+    image: minio/mc
+    depends_on:
+      - s3
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc config host add s3 https://s3:9000 access secretkey;
+      /usr/bin/mc mb s3/inbox;
+      /usr/bin/mc mb s3/archive;
+      /usr/bin/mc mb s3/backup;
+      exit 0;
+      "
+    volumes:
+      - ./certs/ca.pem:/etc/ssl/certs/public.crt
+  ingest:
+    command: sda-ingest
+    container_name: ingest
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    env_file: ./env.ingest
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - archive:/tmp
+      - inbox:/inbox
+      - certs:/dev_utils/certs
+    mem_limit: 1024m
+    restart: always
+  verify:
+    command: sda-verify
+    container_name: verify
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    env_file: ./env.verify
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+      - archive:/tmp
+      - inbox:/inbox
+    mem_limit: 256m
+    restart: always
+  finalize:
+    command: sda-finalize
+    container_name: finalize
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    env_file: ./env.finalize
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+    mem_limit: 64m
+    restart: always
+  backup:
+    command: sda-backup
+    container_name: backup
+    depends_on:
+      - certfixer
+      - mq
+      - db
+      - sftp-server
+    env_file: ./env.backup
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+      - archive:/tmp
+      - backup:/backup
+      - ./keys:/keys/
+    mem_limit: 64m
+    restart: always
+  mapper:
+    command: sda-mapper
+    container_name: mapper
+    depends_on:
+      - certfixer
+      - mq
+      - db
+    env_file: ./env.mapper
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+    mem_limit: 64m
+    restart: always
+  interceptor:
+    command: sda-intercept
+    container_name: intercept
+    depends_on:
+      - certfixer
+      - mq
+    env_file: ./env.intercept
+    image: neicnordic/sda-pipeline:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+    mem_limit: 64m
+    restart: always
+  api:
+    command: sda-api
+    container_name: api
+    depends_on:
+      - certfixer
+      - db
+      - mq
+    env_file: ./env.api
+    image: neicnordic/sda-pipeline:latest
+    ports:
+      - "8080:8080"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - certs:/dev_utils/certs
+
+  sftp-server:
+    build:
+      context: sftp-server
+    hostname: sftp-serv
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - SFTP_USER=user
+      - SFTP_USER_PASS=user
+      - SFTP_USER_PUB_KEY=/keys/sftp-key.pub
+    container_name: sftp-server-local
+    ports:
+      - "6222:22"
+    volumes:
+      - uploads:/uploads
+      - ./certs:/keys
+
+volumes:
+  archive:
+  certs:
+  backup:
+  inbox:
+  uploads:

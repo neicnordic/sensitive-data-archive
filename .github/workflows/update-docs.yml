@@ -1,0 +1,25 @@
+name: Update documentation
+
+# NOTE: This action requires that a github secret exists in this repository
+#       named NEIC_SDA_ACCESS, containing a github token with the
+#       "Actions: Read and Write" permission on the neicnordic/neic-sda
+#       repository.
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+
+  build:
+    name: Trigger documentation rebuild in neic-sda
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          result=$(curl -X POST \
+          -H "Authorization: Bearer ${{secrets.NEIC_SDA_ACCESS}}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/neicnordic/neic-sda/actions/workflows/aggregate.yml/dispatches \
+          -d "{\"ref\": \"master\", \"inputs\":{\"repository\": \"$GITHUB_REPOSITORY\"}}")
+          [ -z "$result" ] && true || (echo "$result" && false)
