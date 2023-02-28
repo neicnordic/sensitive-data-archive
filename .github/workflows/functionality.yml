@@ -1,0 +1,35 @@
+name: Functionality tests
+
+on:
+  pull_request:
+
+jobs:
+  sda-auth:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.19]
+    steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.7
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox tox-gh-actions
+      - name: Add oidc to /etc/hosts
+        run: |
+          sudo echo "127.0.0.1 oidc" | sudo tee -a /etc/hosts
+      - name: Start virtual infrastructure
+        run: |
+          cd sda-auth
+          GOLANG_VERSION=${{ matrix.go-version }} docker-compose -f ./dev-server/docker-compose.yml up -d --force-recreate --build
+      - name: Run unit tests
+        run: tox -e unit_tests -c sda-auth/tests/tox.ini
