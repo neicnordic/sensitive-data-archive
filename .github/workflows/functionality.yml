@@ -95,3 +95,38 @@ jobs:
             echo "Executing test script $runscript";
             bash -x "$runscript";
           done
+
+  sda-pipeline:
+    name: sda-pipeline-integration-${{ matrix.storagetype }}
+    runs-on: ubuntu-latest
+    env:
+      STORAGETYPE: ${{ matrix.storagetype }}
+
+    strategy:
+      matrix:
+        storagetype: [s3, posix, s3notls, s3header, s3notlsheader, posixheader, sftp, sftpheader]
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-pipeline
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-pipeline
+          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
