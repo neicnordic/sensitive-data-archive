@@ -3,6 +3,9 @@ name: Functionality tests
 on:
   pull_request:
 
+env:
+  svc_list: 'finalize inbox ingest mapper verify'
+
 jobs:
   sda-auth:
     runs-on: ubuntu-latest
@@ -65,6 +68,30 @@ jobs:
         run: |
           cd sda-download
           ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
+
+  rabbitmq:
+    name: rabbitmq-integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-mq
+          ls -1 .github/integration/setup/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-mq
+          ls -1 .github/integration/tests/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
             echo "Executing test script $runscript";
             bash -x "$runscript";
           done
