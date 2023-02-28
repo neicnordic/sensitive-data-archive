@@ -33,3 +33,38 @@ jobs:
           GOLANG_VERSION=${{ matrix.go-version }} docker-compose -f ./dev-server/docker-compose.yml up -d --force-recreate --build
       - name: Run unit tests
         run: tox -e unit_tests -c sda-auth/tests/tox.ini
+
+  sda-download:
+    name: sda-download-integration-${{ matrix.storagetype }}
+    runs-on: ubuntu-latest
+    env:
+      STORAGETYPE: ${{ matrix.storagetype }}
+
+    strategy:
+      matrix:
+        storagetype: [s3, posix, s3notls]
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-download
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-download
+          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
