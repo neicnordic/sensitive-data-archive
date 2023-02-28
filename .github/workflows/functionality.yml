@@ -130,3 +130,34 @@ jobs:
             echo "Executing test script $runscript";
             bash -x "$runscript";
           done
+
+  sftp-inbox:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build image
+        run: |
+          cd sda-sftp-inbox
+          docker build -t neicnordic/sda-inbox-sftp:latest .
+
+      - name: Start Services
+        run: |
+          cd sda-sftp-inbox/dev_utils
+          bash ./make_certs.sh
+          docker-compose up certfixer
+          docker-compose up -d
+          sleep 20
+
+      - name: Run test for sftp ssh connection
+        run: |
+          cd sda-sftp-inbox
+          chmod 700 src/test/resources/id_ed25519
+          sh ./dev_utils/sftp-testing-ssh.sh
+
+      - name: Run test for sftp with password
+        run: |
+          cd sda-sftp-inbox
+          sudo apt-get install expect -y
+          sh ./dev_utils/sftp-testing-pass.sh
