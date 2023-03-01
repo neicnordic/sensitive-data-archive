@@ -1,0 +1,131 @@
+{
+    "rabbit_version": "3.11.11",
+    "rabbitmq_version": "3.11.11",
+    "product_name": "RabbitMQ",
+    "product_version": "3.11.11",
+    "users": [],
+    "vhosts": [],
+    "permissions": [],
+    "global_parameters": [],
+    "queues": [],
+    "exchanges": [
+        {
+            "name": "to_cega",
+            "vhost": "sda",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [],
+    "parameters": [
+        {
+            "component": "federation-upstream",
+            "name": "from_cega",
+            "value": {
+                "ack-mode": "on-confirm",
+                "queue": "to_fega",
+                "trust-user-id": false,
+                "uri": "CEGA_CONNECTION"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "cega_completed",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-exchange": "to_cega",
+                "dest-exchange-key": "files.completed",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "completed",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "cega_error",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-exchange": "to_cega",
+                "dest-exchange-key": "files.error",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "error",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "cega_inbox",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-add-forward-headers": false,
+                "dest-exchange": "to_cega",
+                "dest-exchange-key": "files.inbox",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "inbox",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "cega_verified",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-exchange": "to_cega",
+                "dest-exchange-key": "files.verified",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "verified",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "to_cega",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-add-forward-headers": true,
+                "dest-exchange": "localega",
+                "dest-protocol": "amqp091",
+                "dest-uri": "CEGA_CONNECTION",
+                "reconnect-delay": 5,
+                "src-delete-after": "never",
+                "src-exchange": "to_cega",
+                "src-exchange-key": "#",
+                "src-protocol": "amqp091",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        }
+    ],
+    "policies": [
+        {
+            "vhost": "sda",
+            "name": "from_cega",
+            "pattern": "from_cega",
+            "apply-to": "queues",
+            "priority": 0,
+            "definition": {
+                "federation-upstream": "from_cega"
+            }
+        }
+    ]
+}

@@ -1,29 +1,22 @@
-FROM rabbitmq:3.11.9-management-alpine
+FROM rabbitmq:3.11.11-management-alpine
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
 
-LABEL maintainer "EGA System Developers"
+LABEL org.opencontainers.image.authors="NeIC System Developers"
 LABEL org.label-schema.schema-version="1.0"
 LABEL org.label-schema.build-date=$BUILD_DATE
-LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda-mq"
+LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
-ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq
-ENV RABBITMQ_LOG_BASE=/var/lib/rabbitmq
+ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq.conf
 
-RUN apk -U upgrade && \
-    apk add ca-certificates openssl && \
-    rm -rf /var/cache/apk/*
+COPY *.json /etc/rabbitmq/
 
 RUN rabbitmq-plugins enable --offline rabbitmq_federation rabbitmq_federation_management rabbitmq_shovel rabbitmq_shovel_management
 
-COPY entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-USER 100:101
-
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 CMD ["rabbitmq-server"]

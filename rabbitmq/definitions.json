@@ -1,0 +1,186 @@
+{
+    "rabbit_version": "3.11.11",
+    "rabbitmq_version": "3.11.11",
+    "product_name": "RabbitMQ",
+    "product_version": "3.11.11",
+    "users": [
+        {
+            "name": "RABBITMQ_DEFAULT_USER",
+            "password": "RABBITMQ_DEFAULT_PASS",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "sda"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "RABBITMQ_DEFAULT_USER",
+            "vhost": "sda",
+            "configure": ".*",
+            "write": ".*",
+            "read": ".*"
+        }
+    ],
+    "parameters": [],
+    "global_parameters": [],
+    "policies": [],
+    "queues": [
+        {
+            "name": "accession",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "archived",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "completed",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-max-age": "7D",
+                "x-queue-type": "stream"
+            }
+        },
+        {
+            "name": "error",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-max-age": "1M",
+                "x-queue-type": "stream"
+            }
+        },
+        {
+            "name": "from_cega",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "inbox",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "ingest",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "mappings",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "verified",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "sda",
+            "vhost": "sda",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "archived",
+            "routing_key": "archived"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "accession",
+            "routing_key": "accession"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "completed",
+            "routing_key": "completed"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "error",
+            "routing_key": "error"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "files",
+            "routing_key": "files"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "inbox",
+            "routing_key": "inbox"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "ingest",
+            "routing_key": "ingest"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "mappings",
+            "routing_key": "mappings"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "verified",
+            "routing_key": "verified"
+        }
+    ]
+}
