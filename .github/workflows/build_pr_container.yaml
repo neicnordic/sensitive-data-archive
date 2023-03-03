@@ -6,6 +6,10 @@ on:
       - ".github/**"
       - ".gitignore"
       - "**/README.md"
+
+env:
+  PR_NUMBER: ${{ github.event.number }}
+
 jobs:
   build_go_images:
     name: Build PR image (golang)
@@ -108,10 +112,10 @@ jobs:
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build container for sda-mq
+      - name: Build container for rabbitmq
         uses: docker/build-push-action@v4
         with:
-          context: ./sda-mq
+          context: ./rabbitmq
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
@@ -196,3 +200,16 @@ jobs:
         with:
           sarif_file: 'inbox-results.sarif'
           category: sftp-inbox
+
+  rabbitmq:
+    needs:
+      - build_go_images
+      - build_server_images
+    name: rabbitmq-federation-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Test rabbitmq federation
+        run: docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
