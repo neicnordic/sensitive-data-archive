@@ -1,7 +1,7 @@
 name: Multilinters
 
 on:
-  push:
+  pull_request:
     paths:
       - '**.go'
       - '**/go.*'
@@ -10,7 +10,16 @@ jobs:
   lint_auth:
     name: Lint auth code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
     steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
@@ -23,7 +32,16 @@ jobs:
   lint_common:
     name: Lint common code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
     steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
@@ -36,7 +54,16 @@ jobs:
   lint_download:
     name: Lint download code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
     steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
@@ -49,7 +76,16 @@ jobs:
   lint_pipeline:
     name: Lint pipeline code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
     steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
@@ -62,7 +98,16 @@ jobs:
   lint_s3proxy:
     name: Lint s3proxy code
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
     steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
