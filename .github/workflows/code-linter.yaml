@@ -27,7 +27,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck
+          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck --timeout 5m
           working-directory: sda-auth
 
   lint_common:
@@ -50,7 +50,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck
+          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck --timeout 5m
           working-directory: sda-common
 
   lint_download:
@@ -73,7 +73,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck -e G401,G501,G107
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck -e G401,G501,G107 --timeout 5m
           working-directory: sda-auth
 
   lint_pipeline:
@@ -96,7 +96,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck
+          args: -E gosec,goconst,nestif,bodyclose,rowserrcheck --timeout 5m
           working-directory: sda-pipeline
 
   lint_s3proxy:
@@ -119,5 +119,5 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive -e G107
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive -e G107 --timeout 5m
           working-directory: sda-s3proxy
