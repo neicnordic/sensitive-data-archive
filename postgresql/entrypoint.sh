@@ -1,44 +1,38 @@
-#!/bin/sh
+#!/usr/bin/env bash
+set -Eeo pipefail
 
-args=$*
-
-migrate () {
-
-	if echo "$args" | grep -q "nomigrate"; then
-		# Allow skipping migrations if they break so one can try to repair the server.
-		return
+# allow the container to be started with `--user`
+if [[ "$1" == postgres* ]] && [ "$(id -u)" = '0' ]; then
+	if [ "$1" = 'postgres' ]; then
+		find /var/lib/postgresql \! -user postgres -exec chown postgres '{}' +
 	fi
 
-	runmigration=1;
+	exec su-exec postgres "${BASH_SOURCE[0]}" "$@"
+fi
+
+migrate() {
+	runmigration=1
 	migfile="${PGDATA}/migrations.$$"
 
 	echo
 	echo "Running schema migrations"
 	echo
 
-	PGUSER=$(openssl rand -base64 32 | tr -c -d '[:alpha:]'  | tr '[:upper:]' '[:lower:]')
-	PGPASSWORD=$(openssl rand -base64 32 | tr -c -d '[:alnum:]' )
+	POSTGRES_USER=postgres
+	export PGPASSWORD="${PGPASSWORD:-$POSTGRES_PASSWORD}"
 
-	postgres --single -D "$PGDATA" -c password_encryption=scram-sha-256 <<-EOF
-	CREATE ROLE $PGUSER SUPERUSER LOGIN PASSWORD '$PGPASSWORD';
-	EOF
-
-	sleep 3
-	pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -k \"$PGDATA\"" -w start
+	temp_server_start "$@"
 	sleep 2
-	
-	export PGUSER
-	export PGPASSWORD
 
 	while [ 0 -lt "$runmigration" ]; do
 
 		for f in migratedb.d/*.sql; do
 			echo "Running migration script $f"
-			psql -h "$PGDATA" -v ON_ERROR_STOP=1 --username="$PGUSER" --dbname lega -f "$f";
+			psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --no-psqlrc --dbname "${POSTGRES_DB:-sda}" -f "$f"
 			echo "Done"
 		done 2>&1 | tee "$migfile"
-		
-		if grep -F 'Doing migration from' "$migfile" ; then
+
+		if grep -F 'Doing migration from' "$migfile"; then
 			runmigration=1
 			echo
 			echo "At least one change occured, running migrations scripts again"
@@ -55,157 +49,94 @@ migrate () {
 
 	pg_ctl -D "$PGDATA" -w stop
 
-	postgres --single -D "$PGDATA" <<-EOF
-	DROP ROLE $PGUSER;
-	EOF
-
 	unset PGPASSWORD
+}
+
+temp_server_start() {
+	if [ "$1" = 'postgres' ]; then
+		shift
+	fi
+
+	# internal start of server in order to allow setup using psql client
+	# does not listen on external TCP/IP and waits until start finishes
+
+	PGUSER="${POSTGRES_USER:-postgres}" \
+		pg_ctl -D "$PGDATA" \
+		-o "-c listen_addresses='' -p 5432" \
+		-w start
+}
+
+setup_hba_conf() {
+	if [ -f "$POSTGRES_SERVER_CERT" ] && [ -f "$POSTGRES_SERVER_KEY" ] && [ -f "$POSTGRES_SERVER_CACERT" ]; then
+		echo "Enabeling TLS"
+		# - Enforcing SSL communication for all connections
+		cat >"$PGDATA/pg_hba.conf" <<-EOF
+			# TYPE    DATABASE USER ADDRESS      METHOD
+			local     all      all               scram-sha-256
+			hostnossl all      all  0.0.0.0/0    reject
+			hostssl   all      all  127.0.0.1/32 scram-sha-256
+			hostssl   all      all  ::1/128      scram-sha-256
+			hostssl   all      all  0.0.0.0/0    scram-sha-256 clientcert=${POSTGRES_VERIFY_PEER:-verify-ca}
+		EOF
+
+		cat >>"$PGDATA/postgresql.conf" <<-EOF
+			ssl = on
+			ssl_cert_file = '${POSTGRES_SERVER_CERT}'
+			ssl_key_file = '${POSTGRES_SERVER_KEY}'
+			ssl_ca_file = '${POSTGRES_SERVER_CACERT}'
+		EOF
+	else
+		cat >"$PGDATA/pg_hba.conf" <<-EOF
+			# TYPE    DATABASE USER ADDRESS      METHOD
+			local     all      all               scram-sha-256
+			hostnossl all      all  127.0.0.1/32 scram-sha-256
+			hostnossl all      all  ::1/128      scram-sha-256
+			hostnossl all      all  0.0.0.0/0    scram-sha-256
+		EOF
+	fi
 }
 
 # If already initiliazed, then run
 if [ -s "$PGDATA/PG_VERSION" ]; then
+	migrate "$@"
 
-	# Do a little dance here
-	#
-	# We want server to run locally only when we run migrations
-	# as well as supporting changes that requires database restarts
-	# as well as getting output to stdout to support standard
-	# container log collections
+	setup_hba_conf
 
-	 migrate
-
-	 # Hand over to postgres proper
-	 exec postgres -c config_file="${PGDATA}/postgresql.conf"
+	exec "$@"
 fi
 
 # Otherwise, do initilization (as postgres user)
-initdb --username=postgres # no password: no authentication for postgres user
+if [ -z "$POSTGRES_PASSWORD" ]; then
+	echo "You must specify POSTGRES_PASSWORD to a non-empty value for the superuser."
+	exit 1
+fi
 
-# Allow "trust" authentication for local connections, during setup
-cat > "$PGDATA/pg_hba.conf" <<-EOF
-local   all             all                                     trust
-host    all             all             127.0.0.1/32            trust
-host    all             all             ::1/128                 trust
-EOF
+initdb --username=postgres --pwfile=<(printf "%s\n" "$POSTGRES_PASSWORD") # no password: no authentication for postgres user
 
-# Internal start of the server for setup via 'psql'
-# Note: does not listen on external TCP/IP and waits until start finishes
-pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -c password_encryption=scram-sha-256 -k $PGDATA" -w start
+export PGPASSWORD="${PGPASSWORD:-$POSTGRES_PASSWORD}"
+temp_server_start "$@"
 
-# Create lega database
-psql -h "$PGDATA" -v ON_ERROR_STOP=1 --username postgres --no-password --dbname postgres <<-'EOSQL'
-SET TIME ZONE 'UTC';
-CREATE DATABASE lega;
+# Create database
+psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres --set db="${POSTGRES_DB:-sda}" <<-'EOSQL'
+	SET TIME ZONE 'UTC';
+	CREATE DATABASE :"db" ;
 EOSQL
 
 for f in docker-entrypoint-initdb.d/*; do
-	echo "$0: running $f";
+	echo "$0: running $f"
 	echo
-	psql -h "$PGDATA" -v ON_ERROR_STOP=1 --username postgres --no-password --dbname lega -f "$f";
+	psql -v ON_ERROR_STOP=1 --username postgres --dbname "${POSTGRES_DB:-sda}" -f "$f"
 	echo
 done
 
-# Set password for lega_in and lega_out users
+pg_ctl -D "$PGDATA" -m fast -w stop
 
-[ -z "${DB_LEGA_IN_PASSWORD}" ] && echo 'Environment DB_LEGA_IN_PASSWORD is empty' 1>&2 && exit 1
-[ -z "${DB_LEGA_OUT_PASSWORD}" ] && echo 'Environment DB_LEGA_OUT_PASSWORD is empty' 1>&2 && exit 1
+unset PGPASSWORD
 
-psql -h "$PGDATA" -v ON_ERROR_STOP=1 --username postgres --no-password --dbname lega <<EOSQL
-ALTER USER lega_in WITH PASSWORD '${DB_LEGA_IN_PASSWORD}';
-ALTER USER lega_out WITH PASSWORD '${DB_LEGA_OUT_PASSWORD}';
-EOSQL
-
-if [ -n "$POSTGRES_PASSWORD" ]; then
-	echo "Creating superuser"
-	psql -h "$PGDATA" -v ON_ERROR_STOP=1 --username postgres --no-password --dbname postgres <<-EOSQL
-	ALTER ROLE postgres WITH LOGIN SUPERUSER PASSWORD '${POSTGRES_PASSWORD}';
-	EOSQL
-fi
-
-pg_ctl -D "$PGDATA" -w stop
-
-# Run migration scripts
-migrate
-
-# Copy config file to presistent volume
-cat > "${PGDATA}/postgresql.conf" <<-EOF
-listen_addresses = '*'
-max_connections = 100
-authentication_timeout = 10s
-password_encryption = scram-sha-256
-shared_buffers = 128MB
-dynamic_shared_memory_type = posix
-log_timezone = 'UTC'
-datestyle = 'iso, mdy'
-timezone = 'UTC'
-# These settings are initialized by initdb, but they can be changed.
-lc_messages = 'en_US.utf8'		# locale for system error message strings
-lc_monetary = 'en_US.utf8'		# locale for monetary formatting
-lc_numeric = 'en_US.utf8'		# locale for number formatting
-lc_time = 'en_US.utf8'			# locale for time formatting
-# default configuration for text search
-default_text_search_config = 'pg_catalog.english'
-unix_socket_directories = '${PGDATA}'
-EOF
-
-# Securing the access
-# - Kill 'trust' for local connections
-# - Requiring password authentication for all, in case someone logs onto that machine
-# - Using scram-sha-256 is stronger than md5
-
-cat > "$PGDATA/pg_hba.conf" <<-EOF
-# TYPE  DATABASE  USER  ADDRESS       METHOD
-local   all       all                 scram-sha-256
-host    all       all   127.0.0.1/32  scram-sha-256
-host    all       all   ::1/128       scram-sha-256
-host    all       all   all           scram-sha-256
-EOF
-
-echo
-echo 'PostgreSQL setting paths to TLS certificates.'
-echo
-
-PG_SERVER_CERT=${PG_SERVER_CERT:-/var/lib/postgresql/certs/pg.crt}
-PG_SERVER_KEY=${PG_SERVER_KEY:-/var/lib/postgresql/certs/pg.key}
-PG_CA=${PG_CA:-/var/lib/postgresql/certs/ca.crt}
-
-if [ -n "${NOTLS+x}" ]; then
-	echo "Disabling TLS"
-	unset PG_SERVER_CERT
-	unset PG_SERVER_KEY
-	unset PG_CA
-else
-	if [ -e "${PG_SERVER_CERT}" ] && [ -e "${PG_SERVER_KEY}" ]; then
-
-		echo "Enabeling TLS"
-
-		PG_VERIFY_PEER=${PG_VERIFY_PEER:-verify-ca}
-
-		# - Enforcing SSL communication for all connections
-		cat > "$PGDATA/pg_hba.conf" <<-EOF
-		# TYPE	DATABASE	USER	ADDRESS			METHOD
-		local	all			all						scram-sha-256
-		hostssl	all			all		127.0.0.1/32	scram-sha-256
-		hostssl	all			all		::1/128			scram-sha-256
-		hostssl	all			all		all				scram-sha-256	clientcert=${PG_VERIFY_PEER}
-		EOF
-
-		cat >> "${PGDATA}/postgresql.conf" <<-EOF
-		ssl = on
-		ssl_cert_file = '${PG_SERVER_CERT}'
-		ssl_key_file = '${PG_SERVER_KEY}'
-		EOF
-
-		if [ -e "${PG_CA}" ]; then
-			echo "ssl_ca_file = '${PG_CA}'" >> "${PGDATA}/postgresql.conf"
-		fi
-	else
-		echo 'No server certificates found, shuting down.' 1>&2 && exit 1
-	fi
-fi
+setup_hba_conf
 
 echo
 echo 'PostgreSQL init process complete; ready for start up.'
 echo
 
-exec postgres -c config_file="${PGDATA}/postgresql.conf"
+exec "$@"
