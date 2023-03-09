@@ -1,0 +1,87 @@
+name: Publish version tag
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  tag:
+    name: bump tags
+    outputs:
+      part: ${{ steps.bump_tag.outputs.part }}
+      tag: ${{ steps.bump_tag.outputs.tag }}
+      new_tag: ${{ steps.bump_tag.outputs.new_tag }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: '1'
+    - name: Bump version and push tag
+      id: bump_tag
+      uses: anothrNick/github-tag-action@1.61.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+
+  push_to_registry:
+    needs: tag
+    if: needs.tag.outputs.part != ''
+    name: Push Docker image to Github Container registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+
+      - name: Log in to the Github Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag PR image for auth
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
+
+
+      - name: Retag PR image for db
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-db
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-db ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-db
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-db
+
+      - name: Retag PR image for }-download
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
+
+      - name: Retag PR image for }-pipeline
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
+
+      - name: Retag PR image for rabbitmq
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
+
+      - name: Retag PR image for sftp-inbox
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
+
+      - name: Retag PR image for }-s3proxy
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
