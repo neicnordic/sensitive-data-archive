@@ -1,0 +1,16 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-inbox
+  labels:
+    app: {{ template "sda.fullname" . }}-inbox
+spec:
+  ports:
+  - name: inbox
+    port: {{ template "inboxServicePort" . }}
+    targetPort: inbox
+    protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}-inbox
+{{- end }}

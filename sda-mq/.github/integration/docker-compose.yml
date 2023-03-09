@@ -1,0 +1,103 @@
+version: "2.4"
+services:
+  cegamq:
+    container_name: cegamq
+    depends_on:
+      - certfixer
+    image: rabbitmq:3.8.16-management-alpine
+    environment:
+      - RABBITMQ_CONFIG_FILE=/etc/rabbitmq/conf/cega
+      - RABBITMQ_ENABLED_PLUGINS_FILE=/etc/rabbitmq/conf/cega.plugins
+    ports:
+      - "15671:15671"
+      - "25672:15672"
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+      - ./cega.conf:/etc/rabbitmq/conf/cega.conf
+      - ./cega.json:/etc/rabbitmq/conf/cega.json
+      - ./cega.plugins:/etc/rabbitmq/conf/cega.plugins
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms"
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  certfixer:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /origcerts/* /certs
+        chown -R nobody.nobody /certs/client*
+        chmod -R og-rw /certs/*-key.pem
+        chown -R 100.101 /certs/mq*
+        ls -la /certs/
+
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./certs:/origcerts
+      - certs:/certs
+  mq:
+    container_name: mq
+    build:
+      context: ../../
+    image: ghcr.io/neicnordic/sda-mq:latest
+    depends_on:
+      - cegamq
+    environment:
+      - CEGA_CONNECTION=amqps://test:test@cegamq:5671/lega?cacertfile=/etc/rabbitmq/ssl/ca.pem
+      - MQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.pem
+      - MQ_SERVER_KEY=/etc/rabbitmq/ssl/mq-key.pem
+      - MQ_CA=/etc/rabbitmq/ssl/ca.pem
+      - MQ_USER=test
+      - MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm
+      - MQ_VHOST=test
+      - MQ_VERIFY=verify_peer
+    ports:
+      - "15672:15672"
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms"
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+  interceptor:
+    command: sda-intercept
+    container_name: intercept
+    depends_on:
+      - certfixer
+      - mq
+    environment:
+      - BROKER_HOST=MQ
+      - BROKER_PORT=5671
+      - BROKER_USER=test
+      - BROKER_PASSWORD=test
+      - BROKER_VHOST=test
+      - BROKER_QUEUE=files
+      - BROKER_ROUTINGERROR=error
+      - BROKER_VERIFYPEER=true
+      - BROKER_SSL=true
+      - BROKER_CLIENTCERT=/certs/client.pem
+      - BROKER_CLIENTKEY=/certs/client-key.pem
+      - BROKER_CACERT=/certs/ca.pem
+      - LOG_LEVEL=debug
+    image: ghcr.io/neicnordic/sda-pipeline:latest
+    volumes:
+      - certs:/certs
+    mem_limit: 64m
+    restart: always
+volumes:
+  certs:

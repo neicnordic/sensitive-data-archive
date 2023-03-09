@@ -1,0 +1,116 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ template "sda.fullname" . }}-test"
+  resourceVersion: {{ template "sda.fullname" . }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  securityContext:
+    runAsUser: 70
+    fsGroup: 70
+  containers:
+    - name: {{ template "sda.fullname" . }}-test
+      image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+      {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
+      volumeMounts:
+        - name: certs
+          mountPath: /certs
+      {{- end }}
+      env:
+        {{- if .Values.externalPkiService.tlsPath }}
+        - name: PKI_VOLUME_PATH
+          value: {{.Values.externalPkiService.tlsPath }}
+        {{- end }}
+        {{- if .Values.global.tls.enabled }}
+        - name: PGSSLMODE
+          value: {{ .Values.global.tls.verifyPeer }}
+        - name: PGSSL
+          value: ".postgresql"
+        {{- end }}
+        - name: DB_HOST
+          value: "{{ template "sda.fullname" . }}"
+        - name: PGPASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}
+                key: pgInPasswd             
+      command: [ "/bin/bash" ]
+      args:
+        - "-c"
+        {{- if .Values.global.tls.enabled }}
+        - 'cd $HOME;
+           mkdir -p $PGSSL;
+           s=${PKI_VOLUME_PATH:-/certs};
+           cp "$s/{{ .Values.global.tls.certName }}" $PGSSL/postgresql.crt;
+           cp "$s/{{ .Values.global.tls.keyName }}" $PGSSL/postgresql.key;
+           cp "$s/{{ .Values.global.tls.CAFile }}" $PGSSL/root.crt;
+           chmod -R og-rw $PGSSL;
+           count=1;
+           until (psql -h ${DB_HOST} -U lega_in lega -c "select * from local_ega.dbschema_version" || [ "$count" -ge 10 ]); do 
+             sleep 10;
+             count=$((count+1));
+           done |
+           grep -F "Created with version"'
+        {{- else }}
+        - 'count=1;
+           until (psql -h ${DB_HOST} -U lega_in lega -c "select * from local_ega.dbschema_version" || [ "$count" -ge 10 ]); do 
+             sleep 10;
+             count=$((count+1));
+           done |
+           grep -F "Created with version"'
+        {{- end }}
+    {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
+  volumes:
+      - name: certs
+        secret:
+          secretName: {{ template "testTLSsecret" . }}
+    {{- end }}
+  restartPolicy: Never
+---
+{{- if  or .Values.global.tls.clusterIssuer .Values.global.tls.issuer -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "sda.fullname" . }}-test
+spec:
+  # Secret names are always required.
+  secretName: {{ template "sda.fullname" . }}-test-certs
+
+  # The block below requires cert-manger v1.7, needs testing
+  # secretTemplate:
+  #   annotations:
+  #   "helm.sh/hook": test
+  #   "helm.sh/hook-weight": "10"
+  #   "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+
+  duration: 2160h # 90d
+
+  # The use of the common name field has been deprecated since 2000 and is
+  # discouraged from being used.
+  commonName: lega_in
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - client auth
+  # At least one of a DNS Name, URI, or IP address is required.
+  dnsNames:
+    - {{ template "sda.fullname" . }}-test
+  ipAddresses:
+    - 127.0.0.1
+  # Issuer references are always required.
+  issuerRef:
+    name: {{ template "TLSissuer" . }}
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
+    # This is optional since cert-manager will default to this value however
+    # if you are using an external issuer, change this to that issuer group.
+    group: cert-manager.io
+{{- end }}

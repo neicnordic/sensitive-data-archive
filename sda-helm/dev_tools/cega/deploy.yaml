@@ -1,0 +1,172 @@
+---
+# Source: cega/templates/cega-deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cega-users
+  labels:
+    role: fake-users
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cega-users
+  template:
+    metadata:
+      labels:
+        app: cega-users
+        role: fake-users
+    spec:
+      serviceAccountName: cega
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: cega-users
+        image: "egarchive/lega-base:release.v0.2.0"
+        imagePullPolicy: "Always"
+        command: ["python", "/cega/users.py", "0.0.0.0", "8443", "/cega/users.json"]
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+          - name: LEGA_INSTANCES
+            value: legatest
+          - name: CEGA_USERS_PASSWORD
+            value: OfEoDPVadIfd4CZUWkisrrVQbJ2yQPIH
+          - name: CEGA_USERS_USER
+            value: legatest
+        ports:
+        - name: cega-users
+          containerPort: 443
+          protocol: TCP
+        volumeMounts:
+        - name: cega-config
+          mountPath: /cega
+        - name: cega-certs
+          mountPath: /tls/
+      volumes:
+        - name: cega-config
+          secret:
+            secretName: cega-users-config
+            defaultMode: 0440
+        - name: cega-certs
+          secret:
+            secretName: cega-certs
+            defaultMode: 0440
+---
+# Source: cega/templates/cegamq-deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cega-mq
+  labels:
+    role: cega-broker
+    app: cega-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cega-mq
+  template:
+    metadata:
+      labels:
+        app: cega-mq
+    spec:
+      serviceAccountName: cega
+      securityContext:
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+      - name: cega-mq
+        image: "rabbitmq:3.7.8-management-alpine"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+         allowPrivilegeEscalation: false
+        env:
+        - name: RABBITMQ_CONFIG_FILE
+          value: /etc/rabbitmq/conf/cega
+        - name: RABBITMQ_ENABLED_PLUGINS_FILE
+          value: /etc/rabbitmq/conf/cega.plugins
+        ports:
+        - containerPort: 15671
+          protocol: TCP
+          name: https
+        - containerPort: 15672
+          protocol: TCP
+          name: http
+        - containerPort: 5672
+          name: amqp
+        - containerPort: 5671
+          name: amqps
+        volumeMounts:
+        - name: conf
+          mountPath: /etc/rabbitmq/conf
+        - name: rabbitmq
+          mountPath: /var/lib/rabbitmq
+        - name: ssl-certs
+          mountPath: /etc/rabbitmq/ssl
+      volumes:
+      - name: ssl-certs
+        secret:
+          secretName: cega-certs
+          defaultMode: 0440
+      - name: conf
+        secret:
+          secretName: cega-mq-config
+          defaultMode: 0440
+      - name: rabbitmq
+        emptyDir: {}
+---
+# Source: cega/templates/cega-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cega-users
+  labels:
+    app: cega-users
+spec:
+  ports:
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+  selector:
+    app: cega-users
+---
+# Source: cega/templates/cegamq-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cega-mq
+  labels:
+    app: cega-mq
+spec:
+  ports:
+  - port: 5672
+    targetPort: 5672
+    protocol: TCP
+    name: amqp
+  - port: 5671
+    targetPort: 5671
+    protocol: TCP
+    name: amqps
+  - port: 4369
+    name: epmd
+  - port: 25672
+    name: rabbitmq-dist
+  selector:
+    app: cega-mq
+---
+# Source: cega/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: cega-serviceAccount
+    chart: cega-0.3.3
+    heritage: Helm
+    release: cega
+  name: cega
+  namespace: default
+

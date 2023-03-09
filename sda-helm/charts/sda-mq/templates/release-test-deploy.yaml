@@ -1,0 +1,119 @@
+{{- define "mqfullname" -}}
+{{- if .Values.fullnameOverride -}}
+  {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+  {{- else -}}
+  {{- $name := default .Chart.Name .Values.nameOverride -}}
+    {{- if contains $name .Release.Name -}}
+    {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+    {{- else -}}
+    {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  resourceVersion: {{ template "mqfullname" . }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "10"
+spec:
+  containers:
+    - name: {{ .Release.Name }}-test
+      {{- if .Values.global.tls.enabled }}
+      image: "{{ .Values.testimage.repository }}:{{ .Values.testimage.tag }}"
+      {{- else }}
+      image: "subfuzion/netcat:latest"
+      {{- end }}
+      imagePullPolicy: {{ .Values.testimage.pullPolicy | quote }}
+      volumeMounts:
+      {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
+        - name: certs
+          mountPath: /certs
+      {{- end }}
+      env:
+        {{- if .Values.externalPkiService.tlsPath }}
+        - name: PKI_VOLUME_PATH
+          value: {{ .Values.externalPkiService.tlsPath }}
+        {{- end }}
+        - name: MQ_HOST
+          value: {{ template "mqfullname" . }}
+      command: [ "/bin/sh" ]
+      args:
+        - "-x"
+        - "-c"
+        {{- if .Values.global.tls.enabled }}
+        - 'P=${PKI_VOLUME_PATH:-/certs}; 
+           count=1;
+           until openssl s_client -connect "${MQ_HOST}:5671" -verify 50 -key "$P/{{ .Values.testimage.tls.tlsKey }}" -cert "$P/{{ .Values.testimage.tls.tlsCert }}" -verify_return_error -CAfile "$P/{{ .Values.testimage.tls.caCert }}" </dev/null; do
+             sleep 5;
+             count=$((count+1));
+             if [ "$count" -gt 10 ]; then
+               exit 1;
+             fi;
+           done;
+           exit 0'
+        {{- else }}
+        - 'count=1;
+          until nc -zvw10 ${MQ_HOST} 5672 </dev/null; do
+             sleep 5;
+             count=$((count+1));
+             if [ "$count" -gt 10 ]; then
+               exit 1;
+             fi;
+           done;
+           exit 0'
+        {{- end }}
+  {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
+  volumes:
+      - name: certs
+        secret:
+          secretName: {{ template "testTLSsecret" . }}
+    {{- end }}
+  restartPolicy: Never
+---
+{{- if  or .Values.global.tls.clusterIssuer .Values.global.tls.issuer -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "sda.fullname" . }}-test
+spec:
+  # Secret names are always required.
+  secretName: {{ template "sda.fullname" . }}-test-certs
+
+  # The block below requires cert-manger v1.7, needs testing
+  # secretTemplate:
+  #   annotations:
+  #   "helm.sh/hook": test
+  #   "helm.sh/hook-weight": "10"
+  #   "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+
+  duration: 2160h # 90d
+
+  # The use of the common name field has been deprecated since 2000 and is
+  # discouraged from being used.
+  commonName: lega_in
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - client auth
+  # At least one of a DNS Name, URI, or IP address is required.
+  dnsNames:
+    - {{ template "sda.fullname" . }}-test
+  ipAddresses:
+    - 127.0.0.1
+  # Issuer references are always required.
+  issuerRef:
+    name: {{ template "TLSissuer" . }}
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
+    # This is optional since cert-manager will default to this value however
+    # if you are using an external issuer, change this to that issuer group.
+    group: cert-manager.io
+{{- end }}

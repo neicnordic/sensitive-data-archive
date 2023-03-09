@@ -1,0 +1,81 @@
+services:
+  oidc:
+    container_name: oidc
+    build:
+      context: ./oidc
+      dockerfile: Dockerfile
+    image: mock-oidc-user-server
+    environment:
+      - PORT=9090
+      - HOST=oidc
+      - CLIENT_ID=XC56EL11xx
+      - CLIENT_SECRET=wHPVQaYXmdDHg
+      - CLIENT_REDIRECT_URI=http://localhost:8080/elixir/login
+      - AUTH_ROUTE=/auth
+      - INTROSPECTION_ROUTE=/token/introspection
+      - JWKS_ROUTE=/jwks
+      - REVOCATION_ROUTE=/token/revocation
+      - TOKEN_ROUTE=/token
+      - USERINFO_ROUTE=/userinfo
+    ports:
+      - 9090:9090
+  cega:
+    container_name: cega
+    image: egarchive/lega-base:release.v0.2.0
+    volumes:
+      - ./cega-users:/cega
+    command:
+      [
+        "python",
+        "/cega/cega-mock.py",
+        "0.0.0.0",
+        "8443",
+        "/cega/users.json"
+      ]
+    environment:
+      - LEGA_INSTANCES=dummy
+      - CEGA_USERS_PASSWORD=dummy
+      - CEGA_USERS_USER=dummy
+    ports:
+      - 8443:8443
+  auth:
+    container_name: auth
+    build:
+      context: ../
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION-1.18}
+      dockerfile: Dockerfile
+    depends_on:
+      oidc:
+        condition: service_started
+      cega:
+        condition: service_started
+    environment:
+      - ELIXIR_ID=XC56EL11xx
+      - ELIXIR_PROVIDER=http://oidc:9090
+      - ELIXIR_SECRET=wHPVQaYXmdDHg
+      - ELIXIR_JWKPATH=/jwks
+      - CEGA_AUTHURL=http://cega:8443/lega/v1/legas/users/
+      - CEGA_ID=dummy
+      - CEGA_SECRET=dummy
+      - CORS_ORIGINS=http://localhost:8080
+      - CORS_METHODS=GET,POST, OPTIONS
+      - CORS_CREDENTIALS=TRUE
+      - LOG_LEVEL=info
+      - S3INBOX=s3.example.com
+      - JWTISSUER=http://auth:8080
+      - JWTPRIVATEKEY=keys/sign-jwt.key
+      - JWTSIGNATUREALG=ES256
+    volumes:
+      - ../keys:/keys
+      - ../:/sda-auth
+    image: sda-auth
+    ports:
+      - 8080:8080
+  remote:
+    container_name: remote
+    image: nginx:1.21
+    volumes:
+      - ./remote:/usr/share/nginx/html
+    ports:
+      - 8000:80

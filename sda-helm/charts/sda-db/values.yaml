@@ -1,0 +1,101 @@
+global:
+  pg_in_password: ""
+  pg_out_password: ""
+  tls:
+    enabled: true
+    issuer: ""
+    clusterIssuer: ""
+    secretName: ""
+    certName: tls.crt
+    keyName: tls.key
+    CAFile: ca.crt
+# If client verification is to be used set verifyPeer to verify-full or verify-ca
+# To disable certificate validation set to verify-none
+    verifyPeer: verify-ca
+
+
+# If an external PKI infrastructure is used to supply certificates set this to true
+externalPkiService:
+# tlsPath is the path where the external service mounts the certificates
+  tlsPath:
+
+# Extra security context to apply to all pods
+# This should be a multi-line string mapping directly to the a map of
+# the securityContext to apply to the service pods
+extraSecurityContext: {}
+
+image:
+  repository: ghcr.io/neicnordic/sda-db
+  tag: v2.0.7
+  pullPolicy: IfNotPresent
+
+# utilize network isolation
+# Make sure you’ve configured a network provider with network policy support.
+# There are a number of network providers that support NetworkPolicy, including:
+# Calico, Cilium, Kube-router, Romana and Weave Net
+networkPolicy:
+  create: false
+# App labels that are allowed to connect to the database
+# This should be a multi-line string mapping directly to the a map of
+# the podselector of the network policy
+  matchLabels: |
+    app: sda-svc
+
+## Persistent Volume Storage Class
+## If defined, storageClassName: <storageClass>
+## If set to "-", storageClassName: "", which disables dynamic provisioning
+## If undefined (the default) or set to null, no storageClassName spec is
+##   set, choosing the default provisioner.
+persistence: 
+  enabled: true
+  mountPath: "/var/lib/postgresql/data/"
+  storageSize: 8Gi
+  storageClass:
+  existingClaim:
+## volumePermissions: Change the owner of the persist volume mountpoint to RunAsUser:fsGroup
+  volumePermissions: true
+
+# Annotations applied to the pod.
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+# podAnnotations: |
+  #  "key": "value"
+
+# if a port other than the default 5432 is used in the pod set the value here.
+# port: 5432
+
+# if an admin user is to be created during the first setup, set the password below
+# This can only be done during the first setup
+# postgresAdminPassword:
+
+# RBAC is assumed to be enabled in the cluster
+rbacEnabled: true
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "250m"
+
+## RevisionHistory
+##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
+##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
+# revisionHistory: 3
+
+securityPolicy:
+  create: true
+
+service:
+  type: ClusterIP
+  port: 5432
+
+updateStrategyType: RollingUpdate
+
+
+# secret containing the TLS certificates for the release tester
+# if no certificate issuer is used
+testimage:
+  tls:
+    secretName: ""

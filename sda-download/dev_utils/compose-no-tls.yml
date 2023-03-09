@@ -1,0 +1,85 @@
+version: "3.7"
+services:
+  db:
+    command: server /data
+    container_name: db
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - NOTLS=true
+      - POSTGRES_PASSWORD=rootpassword
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sda-db:v2.0.10
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/data:/data
+  s3:
+    command: server /data
+    container_name: s3
+    environment:
+      - MINIO_ACCESS_KEY=access
+      - MINIO_SECRET_KEY=secretkey
+    healthcheck:
+      test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio:RELEASE.2021-11-24T23-19-33Z
+    ports:
+      - "9000:9000"
+  createbucket:
+    image: minio/mc
+    depends_on:
+      - s3
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc config host add s3 http://s3:9000 access secretkey;
+      /usr/bin/mc mb s3/archive || true;
+      exit 0;
+      "
+  download:
+    command: sda-download
+    container_name: download
+    depends_on:
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+    environment:
+      - ARCHIVE_URL=http://s3
+      - ARCHIVE_TYPE=s3
+      - DB_HOST=db
+    image: neicnordic/sda-download:latest
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+    ports:
+      - "8080:8080"
+    restart: always
+  mockauth:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip
+        pip install aiohttp Authlib
+        python -u /mockoidc.py
+    container_name: mockauth
+    image: python:3.10-slim
+    volumes:
+      - ./mockoidc/mockoidc.py:/mockoidc.py
+      - ./certs:/certs
+    mem_limit: 256m
+    ports:
+      - "8000:8000"
+    restart: always
+
+volumes:
+  archive:

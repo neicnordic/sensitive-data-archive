@@ -1,0 +1,70 @@
+{{- if .Values.global.networkPolicy.create }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-access
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-verify
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-verify
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.brokerNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.brokerNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: broker
+    ports:
+    - protocol: TCP
+      port: 5432
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: database
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+{{- end }}
+
+{{- end }}

@@ -1,0 +1,302 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-verify
+  labels:
+    role: verify
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-verify
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-verify
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-verify
+        role: verify
+        release: {{ .Release.Name }}
+      annotations:
+      {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/shared-secrets.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/verify-secrets.yaml") . | sha256sum }}
+      {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.verify.annotations }}
+{{- toYaml .Values.verify.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+    {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
+      initContainers:
+      - name: tls-init
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args: ["/bin/cp /tls-certs/* /tls/ && chown 65534:65534 /tls/* && chmod 0600 /tls/*"]
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /tls-certs
+        - name: tls
+          mountPath: /tls
+    {{- end }}
+      containers:
+      - name: verify
+        image: "{{ .Values.verify.repository }}:{{ .Values.verify.imageTag }}"
+        imagePullPolicy: {{ .Values.verify.imagePullPolicy | quote }}
+        command: ["sda-verify"]
+        securityContext:
+          allowPrivilegeEscalation: false
+        env:
+        - name: ARCHIVE_TYPE
+      {{- if eq "s3" .Values.global.archive.storageType }}
+          value: "s3"
+        - name: ARCHIVE_URL
+          value: {{ required "S3 archive URL missing" .Values.global.archive.s3Url }}
+      {{- if .Values.global.archive.s3Port }}
+        - name: ARCHIVE_PORT
+          value: {{ .Values.global.archive.s3Port | quote }}
+      {{- end }}
+        - name: ARCHIVE_BUCKET
+          value: {{ required "S3 archive bucket missing" .Values.global.archive.s3Bucket }}
+        - name: ARCHIVE_REGION
+          value: {{ default "us-east-1" .Values.global.archive.s3Region }}
+        - name: ARCHIVE_CHUNKSIZE
+          value: {{ .Values.global.archive.s3ChunkSize | quote }}
+        {{- if and .Values.global.archive.s3CaFile .Values.global.tls.enabled }}
+        - name: ARCHIVE_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- end }}
+      {{- else }}
+          value: "posix"
+        - name: ARCHIVE_LOCATION
+          value: "{{ .Values.global.archive.volumePath }}"
+      {{- end }}
+        - name: INBOX_TYPE
+      {{- if eq "s3" .Values.global.inbox.storageType }}
+          value: "s3"
+        - name: INBOX_BUCKET
+          value: {{ required "S3 inbox bucket missing" .Values.global.inbox.s3Bucket }}
+      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
+        - name: INBOX_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+      {{- end }}
+        - name: INBOX_REGION
+          value: {{ default "us-east-1" .Values.global.inbox.s3Region }}
+        - name: INBOX_URL
+          value: {{ required "S3 inbox URL missing" .Values.global.inbox.s3Url }}
+      {{- if .Values.global.inbox.s3Port }}
+        - name: INBOX_PORT
+          value: {{ .Values.global.inbox.s3Port | quote }}
+      {{- end }}
+      {{- else }}
+          value: "posix"
+        - name: INBOX_LOCATION
+          value: "{{ .Values.global.inbox.path }}/"
+      {{- end }}
+        - name: BROKER_SSL
+          value: {{ .Values.global.tls.enabled | quote }}
+      {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+        - name: BROKER_VERIFYPEER
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+        - name: BROKER_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if .Values.global.broker.verifyPeer }}
+        - name: BROKER_CLIENTCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: BROKER_CLIENTKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+      {{- end }}
+        - name: BROKER_DURABLE
+          value: {{ .Values.global.broker.durable | quote }}
+        - name: BROKER_EXCHANGE
+          value: {{ default "sda" .Values.global.broker.exchange }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_QUEUE
+          value: "archived"
+        - name: BROKER_ROUTINGERROR
+          value: {{ .Values.global.broker.routingError }}
+        - name: BROKER_ROUTINGKEY
+          value: "verified"
+      {{- if .Values.global.broker.serverName }}
+        - name: BROKER_SERVERNAME
+          value: {{ .Values.global.broker.serverName | quote }}
+      {{- end }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+        - name: C4GH_FILEPATH
+          value: {{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}
+    {{- if .Values.global.tls.enabled }}
+        - name: DB_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+      {{- if ne "verify-none" .Values.global.db.sslMode }}
+        - name: DB_CLIENTCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: DB_CLIENTKEY
+          value: {{ template "tlsPath" . }}/tls.key
+      {{- end }}
+    {{- end }}
+        - name: DB_DATABASE
+          value: {{ default "lega" .Values.global.db.name | quote }}
+        - name: DB_HOST
+          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.global.db.port | quote }}
+        - name: DB_SSLMODE
+          value: {{ template "dbSSLmode" . }}
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        {{- if eq "s3" .Values.global.archive.storageType }}
+        - name: ARCHIVE_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveAccessKey
+        - name: ARCHIVE_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveSecretKey
+        {{- end }}
+        {{- if eq "s3" .Values.global.inbox.storageType }}
+        - name: INBOX_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3inbox-keys
+              key: s3InboxAccessKey
+        - name: INBOX_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3inbox-keys
+              key: s3InboxSecretKey
+        {{- end }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-verify
+                key: mqPassword
+        - name: BROKER_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-verify
+                key: mqUser
+        - name: C4GH_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+              key: passphrase
+        - name: DB_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-verify
+                key: dbPassword
+        - name: DB_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-verify
+                key: dbUser
+      {{- else }}
+        - name: CONFIGFILE
+          value: {{ include "confFile" . }}
+      {{- end }}
+        resources:
+{{ toYaml .Values.verify.resources | trim | indent 10 }}
+        volumeMounts:
+        {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          mountPath: {{ template "c4ghPath" . }}
+        {{- end }}
+        {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
+        {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+          mountPath: {{ .Values.global.archive.volumePath | quote }}
+        {{- end }}
+        {{- if eq "posix" .Values.global.inbox.storageType }}
+        - name: inbox
+          mountPath: {{ .Values.global.inbox.path | quote }}
+        {{- end }}
+      volumes:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
+          projected:
+            sources:
+            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-verify-certs
+            {{- else if .Values.verify.tls.secretName }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for verify" .Values.verify.tls.secretName }}
+            {{- end }}
+        {{- if .Values.global.pkiPermissions }}
+        - name: tls
+          emptyDir:
+            medium: Memory
+            sizeLimit: 10Mi
+        {{- end }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+            items:
+            - key: {{ .Values.global.c4gh.keyFile }}
+              path: {{ .Values.global.c4gh.keyFile }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+        {{- if .Values.global.archive.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.archive.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
+            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.inbox.storageType }}
+        - name: inbox
+        {{- if .Values.global.inbox.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.inbox.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
+            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
+      restartPolicy: Always
+{{- end }}

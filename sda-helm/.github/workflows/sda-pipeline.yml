@@ -1,0 +1,94 @@
+name: sda-pipeline deployment
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        inbox: [posix, s3]
+        deployment: [federated, standalone]
+        cert: [issuer, manual]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.3.0
+
+      - name: Install kube dependencies
+        run: bash ./dev_tools/scripts/install-kube-deps.sh
+
+      - name: Initialise k3d
+        run: bash ./dev_tools/scripts/init-k3d.sh
+
+      - name: Wait for k3d to become ready
+        run: bash ./dev_tools/scripts/wait-for-pods.sh metrics-server k8s-app kube-system
+
+      - name: Install sda dependencies
+        run: bash ./dev_tools/scripts/install-sda-deps.sh
+
+      - name: Create certificates
+        if: matrix.cert == 'manual'
+        run: bash ./dev_tools/scripts/make-certs.sh
+
+      - name: Create certificate issuer
+        if: matrix.cert == 'issuer'
+        run: bash ./dev_tools/scripts/deploy-cert-manager.sh
+
+      - name: Create secrets
+        run: bash ./dev_tools/scripts/create-secrets.sh
+
+      - name: Set up services configuration
+        if: matrix.cert == 'manual'
+        run: bash ./dev_tools/scripts/svc-setup.sh
+
+      - name: Deploy SDA database
+        run: bash ./dev_tools/scripts/deploy-db.sh "${{ matrix.cert }}"
+
+      - name: Wait for database to become ready
+        run: bash ./dev_tools/scripts/wait-for-pods.sh database
+
+      - name: Deploy mock oidc server
+        if: matrix.inbox == 's3'
+        run: bash ./dev_tools/scripts/deploy-oidc.sh 
+
+      - name: Deploy minio
+        if: matrix.inbox == 's3'
+        run: bash ./dev_tools/scripts/deploy-minio.sh "${{ matrix.cert }}"
+
+      - name: Wait for minio to become ready
+        if: matrix.inbox == 's3'
+        run: bash ./dev_tools/scripts/wait-for-pods.sh minio app
+
+      - name: Create s3 buckets
+        if: matrix.inbox == 's3'
+        run: bash ./dev_tools/scripts/create-s3-buckets.sh
+
+      - name: Start CEGA services
+        if: matrix.deployment == 'federated'
+        run: bash ./dev_tools/scripts/deploy-cega.sh "${{ matrix.cert }}"
+
+      - name: Wait for CEGA to become ready
+        if: matrix.deployment == 'federated'
+        run: bash ./dev_tools/scripts/wait-for-pods.sh cega-mq app
+
+      - name: Deploy SDA message broker
+        run: bash ./dev_tools/scripts/deploy-mq.sh "${{ matrix.deployment }}" "${{ matrix.cert }}"
+
+      - name: Wait for broker to become ready
+        run: bash ./dev_tools/scripts/wait-for-pods.sh broker
+
+      - name: Deploy the SDA stack for posix
+        if: matrix.inbox == 'posix'
+        run: |
+          kubectl apply -f dev_tools/config/posix-volumes.yaml;
+          bash ./dev_tools/scripts/sda/deploy-posix.sh "${{ matrix.deployment }}" "${{ matrix.cert }}"
+
+      - name: Deploy the SDA stack for s3
+        if: matrix.inbox == 's3'
+        run: bash ./dev_tools/scripts/sda/deploy-s3.sh "${{ matrix.deployment }}" "${{ matrix.cert }}"
+
+      - name: Wait for sda to become ready
+        run: bash ./dev_tools/scripts/wait-for-pods.sh "${{ format('{0}_{1}_svc_list', matrix.deployment, matrix.inbox) }}"
+
+      - name: Run helm test
+        run: bash ./dev_tools/scripts/run-helm-test.sh

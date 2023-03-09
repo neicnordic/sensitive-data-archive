@@ -1,0 +1,102 @@
+
+image:
+  repository: ghcr.io/neicnordic/sda-orch
+  tag: v0.10.2
+  pullPolicy: Always
+logLevel: "info"
+
+## RevisionHistory
+##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
+##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
+  # revisionHistory: 3
+
+# Annotations applied to pods of all services.
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+podAnnotations: {}
+
+# If an external PKI infrastructure is used set enabled to true
+pkiService: 
+  enabled: false
+  tlsPath: ""
+
+# Assume RBAC is enabled in the cluster
+rbacEnabled: true
+
+podSecurityPolicy:
+  create: true
+
+# utilize network isolation
+# Make sure you’ve configured a network provider with network policy support.
+# There are a number of network providers that support NetworkPolicy, including:
+# Calico, Cilium, Kube-router, Romana and Weave Net
+networkPolicy:
+  create: false
+  brokerNamespace: ""
+
+tls:
+  enabled: true
+  issuer: ""
+  clusterIssuer: ""
+  secretName: 
+  permissions: false
+  cert: tls.crt
+  key: tls.key
+  caCert: ca.crt
+
+## RevisionHistory
+##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
+##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
+  # revisionHistory: 3
+
+# If an external secrets management service is used set this to true
+vaultSecrets: false
+
+# env file for use with secretsservice
+envFile: "env"
+
+# used by Message Broker
+broker:
+  exchange: "foo"
+  host: "foo"
+  password: "bar"
+  port: 5671
+  username: "baz"
+  vhost: "/"
+  queue:
+    inbox: "inbox"
+    completed: "completed"
+    verify: "verified"
+    accessionids: "accessionIDs"
+    ingest: "ingest"
+    mappings: "mappings"
+  verifyPeer: true
+
+# Datacite and REMS depend on one another
+# if we set one the other one needs to be configured
+# By default the dataset IDs are not exposed and are assigned
+# internally with no visibility to the user.
+datasetID:
+  external: false
+  # If `useCustomConfig` is enabled it expects a file
+  # with the name `config.json` so that it can load it as configuration from it.
+  # config example: https://github.com/neicnordic/sda-orchestration/blob/master/sda_orchestrator/config/config.json
+  useCustomConfig: false
+  datacite:
+    apiURL: ""
+    user: ""
+    key: ""
+    # only one prefix can be used at this time
+    prefix: ""
+  rems:
+    apiURL: ""
+    user: ""
+    key: ""
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "250m"

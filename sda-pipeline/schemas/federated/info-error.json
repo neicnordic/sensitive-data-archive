@@ -1,0 +1,32 @@
+{
+    "title": "JSON schema for Local EGA dataset mapping message interface",
+    "$id": "https://github.com/neicnordic/sda-pipeline/tree/master/schemas/info-error.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "error",
+        "reason",
+        "original-message"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "error": {
+            "$id": "#/properties/error",
+            "type": "string",
+            "title": "The error message",
+            "description": "The error message"
+        },
+        "reason": {
+            "$id": "#/properties/reason",
+            "type": "string",
+            "title": "",
+            "description": ""
+        },
+        "original-message": {
+            "$id": "#/properties/original-message",
+            "type": "string",
+            "title": "Original MQ message",
+            "description": "Original MQ message"
+        }
+    }
+}

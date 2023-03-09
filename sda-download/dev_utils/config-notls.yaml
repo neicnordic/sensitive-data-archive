@@ -1,0 +1,33 @@
+log:
+  level: "debug"
+  format: "json"
+
+archive:
+  type: ""
+  # S3 backend
+  url: "http://localhost"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretkey"
+  bucket: "archive"
+  chunksize: 32
+  # posix backend
+  location: "/tmp"
+
+c4gh:
+  passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
+  filepath: "./dev_utils/c4gh.sec.pem"
+
+db:
+  host: "localhost"
+  port: 5432
+  user: "lega_out"
+  password: "lega_out"
+  database: "lega"
+  sslmode: "disable"
+
+oidc:
+  cacert: "./dev_utils/certs/ca.pem"
+  # oidc configuration API must have values for "userinfo_endpoint" and "jwks_uri"
+  configuration:
+    url: "https://mockauth:8000/.well-known/openid-configuration"

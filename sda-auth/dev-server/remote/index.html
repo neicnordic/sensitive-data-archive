@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>CORS login test page</title>
+    </head>
+
+    <body>
+        <a href="http://localhost:8080/elixir?redirect_uri=http://localhost:8000">Log in</a>
+        <br>
+        <a href="http://localhost:8000/">Reset</a>
+
+        <div id="download"></div>
+        <pre id="result"></pre>
+
+    </body>
+    <script>
+        const $=document.querySelector.bind(document)
+        const authURL=`http://localhost:8080/elixir`
+
+        const params = new URLSearchParams( document.location.href.split('?')[1])
+        if (params.has("code") && params.has("state")) {
+            const url = `${authURL}/cors_login?${params.toString()}`
+            fetch(url, {credentials: 'include'})
+                .then(data => data.json())
+                .then(r => {
+                    $("#result").innerHTML = JSON.stringify(r, null, 2)
+                    let element = document.createElement('a')
+                    let s3conf_data = ""
+                    for (const key in r["S3Conf"]) {
+                        s3conf_data += `${key} = ${r["S3Conf"][key]}\n`
+                    }
+
+                    element.setAttribute('href', 'data:text/plain;charset=utf-8,' +
+                                                  encodeURIComponent(s3conf_data))
+                    element.setAttribute('download', 's3cmd.conf')
+                    element.innerHTML = "download s3conf"
+
+                    document.getElementById("download").appendChild(element)
+                })
+        }
+    </script>
+</html>

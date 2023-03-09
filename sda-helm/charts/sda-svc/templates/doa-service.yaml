@@ -1,0 +1,20 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if and .Values.global.tls.enabled .Values.global.doa.enabled }}
+{{- if .Values.global.doa.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-doa
+  labels:
+    app: {{ template "sda.fullname" . }}-doa
+spec:
+  ports:
+  - name: doa
+    port: 443
+    targetPort: doa
+    protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}-doa
+{{- end }}
+{{- end }}
+{{- end }}

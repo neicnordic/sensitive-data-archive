@@ -1,0 +1,29 @@
+name: Go tests
+on: [push]
+jobs:
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.19']
+    steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Check out source code
+        uses: actions/checkout@v3
+
+      - name: Run test container
+        run: cd dev_utils && GOLANG_VERSION=${{ matrix.go-version }} docker compose run tests
+
+      - name: Codecov
+        uses: codecov/codecov-action@v3.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.txt
+          flags: unittests
+          fail_ci_if_error: false

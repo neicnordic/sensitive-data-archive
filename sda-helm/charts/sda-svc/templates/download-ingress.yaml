@@ -1,0 +1,50 @@
+{{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
+{{- if and .Values.global.ingress.deploy .Values.global.download.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "sda.fullname" . }}-download-ingress
+  labels:
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.global.ingress.labels }}
+{{ toYaml .Values.global.ingress.labels | indent 4 }}
+{{- end }}
+  annotations:
+    {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
+    nginx.ingress.kubernetes.io/rewrite-target: "/"
+    nginx.ingress.kubernetes.io/backend-protocol: "{{ ternary "HTTPS" "HTTP" .Values.global.tls.enabled }}"
+    {{- end }}
+    {{- if .Values.global.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
+    {{- else if .Values.global.ingress.issuer }}
+    cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
+    {{- end }}
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.global.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.global.ingress.ingressClassName }}
+{{- end }}
+  rules:
+  - host: {{ required "An ingress hostname is required!" .Values.global.ingress.hostName.download }}
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: {{ template "sda.fullname" . }}-download
+            port:
+              number: {{ ternary 443 80 .Values.global.tls.enabled }}
+{{- if .Values.global.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ required "An ingress hostname is required!" .Values.global.ingress.hostName.download }}
+    secretName: {{ if .Values.global.ingress.secretNames.download }}{{ .Values.global.ingress.secretNames.download }}{{- else }}"{{ template "sda.fullname" . }}-ingress-download"{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

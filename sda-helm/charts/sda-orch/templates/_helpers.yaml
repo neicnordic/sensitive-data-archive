@@ -1,0 +1,96 @@
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "sda.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "sda.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "sda.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "tlsPath" -}}
+    {{- if .Values.pkiService.enabled }}
+        {{- printf "%s" (regexReplaceAll "/$"  (required "pkiService.tlsPath is required if pkiservice is enabled" .Values.pkiService.tlsPath) "" ) -}}
+    {{- else }}
+        {{- printf "/tls/certs" }}
+    {{- end -}}
+{{- end -}}
+
+{{/**/}}
+{{- define "mqPass" -}}
+{{- .Values.broker.password -}}
+{{- end -}}
+
+{{- define "orchCert" -}}
+    {{- if .Values.pkiService.enabled }}
+        {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.pkiService.tlsPath (required "a TLS certificate is required" .Values.tls.cert)) "/")}}
+    {{- else if or .Values.tls.clusterIssuer .Values.tls.issuer }}
+        {{- printf "/tls/certs/tls.crt" -}}
+    {{- else }}
+        {{- printf "/tls/certs/%s" (required "a TLS certificate is required" .Values.tls.cert)}}
+    {{- end -}}
+{{- end -}}
+
+{{- define "orchKey" -}}
+    {{- if .Values.pkiService.enabled }}
+        {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.pkiService.tlsPath (required "a TLS key is required" .Values.tls.key)) "/")}}
+    {{- else if or .Values.tls.clusterIssuer .Values.tls.issuer }}
+        {{- printf "/tls/certs/tls.key" -}}
+    {{- else }}
+        {{- printf "/tls/certs/%s" (required "a TLS key is required" .Values.tls.key)}}
+    {{- end -}}
+{{- end -}}
+
+{{- define "caCert" -}}
+    {{- if .Values.pkiService.enabled }}
+        {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.pkiService.tlsPath (required "a CA certificate is required" .Values.tls.caCert)) "/")}}
+    {{- else if or .Values.tls.clusterIssuer .Values.tls.issuer }}
+        {{- printf "/tls/certs/ca.crt" -}}
+    {{- else }}
+        {{- printf "/tls/certs/%s" (required "a CA certificate is required" .Values.tls.caCert) }}
+    {{- end -}}
+{{- end -}}
+
+{{- define "TLSissuer" -}}
+    {{- if and .Values.tls.clusterIssuer .Values.tls.issuer }}
+        {{- fail "Only one of tls.issuer or tls.clusterIssuer should be set" }}
+    {{- end -}}
+
+    {{- if and .Values.tls.issuer }}
+        {{- printf "%s" .Values.tls.issuer }}
+    {{- else if and .Values.tls.clusterIssuer }}
+        {{- printf "%s" .Values.tls.clusterIssuer }}
+    {{- end -}}
+{{- end -}}
+
+{{- define "TLSsecret" -}}
+    {{- if and .Values.tls.enabled (not .Values.pkiService.tlsPath) }}
+        {{- if and (not .Values.tls.issuer) (not .Values.tls.clusterIssuer) }}
+            {{ printf "%s" (required "TLS secret name is required when TLS in enabled without issuer or PKI service" .Values.tls.secretName) }}
+        {{- else }}
+            {{- printf "%s-certs" (include "sda.fullname" .) }}
+        {{- end -}}
+    {{- end -}}
+{{- end -}}

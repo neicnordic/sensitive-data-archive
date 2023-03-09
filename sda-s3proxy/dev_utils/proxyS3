@@ -1,0 +1,15 @@
+[default]
+access_key=dummy
+secret_key=dummy
+access_token=TOKEN
+check_ssl_certificate = False
+check_ssl_hostname = False
+encoding = UTF-8
+encrypt = False
+guess_mime_type = True
+host_base = localhost:8000
+host_bucket = localhost:8000
+human_readable_sizes = true
+multipart_chunk_size_mb = 5
+use_https = True
+socket_timeout = 30

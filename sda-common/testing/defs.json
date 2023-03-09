@@ -1,0 +1,64 @@
+{
+    "rabbit_version": "3.10.7",
+    "users": [
+        {
+            "name": "user",
+            "password_hash": "mQ8XzNI0YQRdGYC8gq628/NhwXLvzr39D8NG/fy7/GJ90eLx",
+            "hashing_algorithm": "rabbit_password_hashing_sha256",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "vhost"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "user",
+            "vhost": "vhost",
+            "configure": ".*",
+            "write": ".*",
+            "read": ".*"
+        }
+    ],
+    "topic_permissions": [],
+    "parameters": [],
+    "global_parameters": [
+        {
+            "name": "cluster_name",
+            "value": "rabbit@rabbitmq-0.rabbitmq-discovery.rabbitmq.svc.cluster.local"
+        }
+    ],
+    "policies": [],
+    "queues": [
+        {
+            "name": "queue",
+            "vhost": "vhost",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "sda",
+            "vhost": "vhost",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "sda",
+            "vhost": "vhost",
+            "destination": "inbox",
+            "destination_type": "queue",
+            "routing_key": "inbox",
+            "arguments": {}
+        }
+    ]
+}

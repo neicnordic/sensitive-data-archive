@@ -1,0 +1,65 @@
+archive:
+  type: ""
+  # S3 backend
+  url: "http://localhost"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretkey"
+  bucket: "archive"
+  chunksize: 32
+  # posix backend
+  location: "/tmp"
+
+backup:
+  type: ""
+  # S3 backend
+  url: "http://localhost"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretkey"
+  bucket: "backup"
+  chunksize: 5
+  # posix backend
+  location: "dev_utils"
+  copyHeader: "false"
+
+broker:
+  host: "localhost"
+  port: 5672
+  user: "test"
+  password: "test"
+  vhost: "test"
+  queue: "error"
+  exchange: "sda"
+  routingKey: ""
+  routingError: ""
+  ssl: "false"
+
+c4gh:
+  passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
+  filepath: "./dev_utils/c4gh.sec.pem"
+  backupPubKey: "./dev_utils/c4gh-new.pub.pem"
+
+db:
+  host: "localhost"
+  port: 5432
+  user: "lega_in"
+  password: "lega_in"
+  database: "lega"
+  sslmode: "disable"
+
+inbox:
+  type: ""
+  # S3 backend
+  url: "http://localhost"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretkey"
+  bucket: "inbox"
+  chunksize: 32
+  # posix backend
+  location: "dev_utils"
+
+log:
+  level: "debug"
+  format: "json"

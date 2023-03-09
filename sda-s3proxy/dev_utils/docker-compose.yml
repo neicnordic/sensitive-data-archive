@@ -1,0 +1,240 @@
+services:
+  certfixer:
+    image: neicnordic/sda-helm-tests-support:latest
+    command: /bin/sh /certfixer/make_certs.sh
+    user: "0:0"
+    volumes:
+      - ./certfixer:/certfixer
+      - pubcert:/pubcert
+      - s3_certs:/s3_certs
+      - mq_certs:/mq_certs
+      - proxy_certs:/proxy_certs
+      - keys:/keys
+
+  s3:
+    image: minio/minio:RELEASE.2022-09-25T15-44-53Z
+    command: server /data  --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=ElixirID
+      - MINIO_ROOT_PASSWORD=987654321
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - s3_certs:/root/.minio/certs
+      - data:/data
+
+  createbucket:
+    image: minio/mc:RELEASE.2022-10-01T07-56-14Z
+    container_name: buckets
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add s3 https://s3:9000 ElixirID 987654321;
+      /usr/bin/mc mb -p s3/test;
+      exit 0;
+      "
+    volumes:
+      - pubcert:/etc/ssl/certs
+
+  mq:
+    image: rabbitmq:3.11.2-management-alpine
+    container_name: mq
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+      - "5671:5671"
+    volumes:
+      - ./defs.json:/etc/rabbitmq/defs.json
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - mq_certs:/etc/rabbitmq/ssl
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "5672" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  s3_proxy:
+    build:
+      context: ../
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION:-1.19}
+    image: neicnordic/sda-inbox-s3proxy
+    container_name: proxy
+    depends_on:
+      mq:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+      certfixer:
+        condition: service_completed_successfully
+      createbucket:
+        condition: service_completed_successfully
+    restart: always
+    environment:
+      - LOG_LEVEL=info
+      - AWS_URL=https://s3:9000
+      - AWS_ACCESSKEY=ElixirID
+      - AWS_SECRETKEY=987654321
+      - AWS_BUCKET=test
+      - AWS_REGION=us-east-1
+      - AWS_READYPATH=/minio/health/ready
+      - AWS_CACERT=/certs/ca.crt
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=lega_in
+      - DB_PASSWORD=lega_in
+      - DB_DATABASE=lega
+      - DB_CACERT=
+      - DB_SSLMODE=disable
+      - DB_CLIENTCERT=
+      - DB_CLIENTKEY=
+      - BROKER_HOST=mq
+      - BROKER_USER=test
+      - BROKER_PASSWORD=test
+      - BROKER_PORT=5671
+      - BROKER_VHOST=/test
+      - BROKER_EXCHANGE=localega.v1
+      - BROKER_ROUTINGKEY=files.inbox
+      - BROKER_SSL=true
+      - BROKER_CACERT=/certs/ca.crt
+      - BROKER_CLIENTCERT=/certs/client.crt
+      - BROKER_CLIENTKEY=/certs/client.key
+      - BROKER_VERIFYPEER=true
+      - SERVER_CERT=/certs/proxy.crt
+      - SERVER_KEY=/certs/proxy.key
+      - SERVER_JWTPUBKEYPATH=/keys/
+      - LOG_FORMAT=json
+    volumes:
+      - proxy_certs:/certs
+      - keys:/keys
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+
+  database:
+    container_name: db
+    image: ghcr.io/neicnordic/sda-db:v2.0.11
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - PGVOLUME=/var/lib/postgresql
+      - NOTLS=true
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "lega_in", "-h", "localhost" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - psqldata:/var/lib/postgresql
+    ports:
+      - 2345:5432
+
+  tests:
+    image: golang:${GOLANG_VERSION:-1.19}
+    container_name: s3proxy-tests
+    profiles:
+      - test
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "cd /app; echo 'Running go ${GOLANG_VERSION:-1.19} tests';
+         go test ./... -v -coverprofile=coverage.txt -covermode=atomic"
+    depends_on:
+      mq:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+      certfixer:
+        condition: service_completed_successfully
+    volumes:
+      - proxy_certs:/certs
+      - ..:/app
+
+  integration_tests:
+    image: python:3.9.15-buster
+    container_name: s3proxy-integration-tests
+    profiles:
+      - test
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "cd /app; pip install s3cmd && bash ./tests/tests.sh"
+    depends_on:
+      mq:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      s3_proxy:
+        condition: service_started
+      certfixer:
+        condition: service_completed_successfully
+      createbucket:
+        condition: service_completed_successfully
+    volumes:
+      - proxy_certs:/certs
+      - ..:/app
+      - keys:/keys
+
+  local:
+    image: python:3.9.15-buster
+    container_name: local-tests
+    profiles:
+      - local
+    command:
+      - "/bin/sh"
+      - "/dev_utils/local.sh"
+    depends_on:
+      mq:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      s3_proxy:
+        condition: service_started
+      certfixer:
+        condition: service_completed_successfully
+      createbucket:
+        condition: service_completed_successfully
+    volumes:
+      - proxy_certs:/certs
+      - .:/dev_utils
+      - keys:/keys
+      - /tmp:/local_tmp
+
+volumes:
+  keys:
+  pubcert:
+  s3_certs:
+  mq_certs:
+  proxy_certs:
+  psqldata:
+  data:
+    # These settings only work on linux (including WSL2), and can be used to
+    # test when the disk is full.
+    # driver: local
+    # driver_opts:
+    #   type: tmpfs
+    #   device: tmpfs
+    #   o: "size=100m"

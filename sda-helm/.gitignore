@@ -1,0 +1,10 @@
+*.pem
+*.csr
+*.crt
+*.key
+*.p12
+cacerts
+*.pub
+*.sec
+sda-deploy-init/*
+LocalEGA-helm/*

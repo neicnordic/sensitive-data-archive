@@ -1,0 +1,8 @@
+{{- if and .Values.datasetID.external .Values.datasetID.useCustomConfig }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sda.fullname" . }}-orchestrate-config
+data:
+  {{- ( .Files.Glob ( "files/config.json" )).AsConfig | nindent 2 }}
+{{- end }}

@@ -1,0 +1,22 @@
+ChallengeResponseAuthentication no
+UsePAM yes
+PrintMotd no
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTunnel no
+
+ChallengeResponseAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+AuthorizedKeysFile    /uploads/user/.ssh/authorized_keys
+PasswordAuthentication no
+
+Subsystem sftp internal-sftp
+Match Group sftp
+    ChrootDirectory %h
+    X11Forwarding no
+    AllowTcpForwarding no
+    AllowAgentForwarding no
+    PermitTunnel no
+    ForceCommand internal-sftp -l VERBOSE -d /upload

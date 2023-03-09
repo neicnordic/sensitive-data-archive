@@ -1,0 +1,18 @@
+broker:
+  vhost: "sda"
+  host: "broker-sda-mq"
+  exchange: "sda"
+  password: "admin"
+  username: "admin"
+  queue:
+    inbox: inbox
+    completed: completed
+    verify: archived
+    files: files
+    stableid: accessionIDs
+logLevel: debug
+tls:
+  secretName: orch-certs
+  cert: orch.crt
+  key: orch.key
+  caCert: ca.crt

@@ -1,0 +1,39 @@
+{{- if .Values.global.doa.enabled }}
+{{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "sda.fullname" . }}-doa-certs
+spec:
+  # Secret names are always required.
+  secretName: {{ template "sda.fullname" . }}-doa-certs
+
+  duration: 2160h # 90d
+
+  # The use of the common name field has been deprecated since 2000 and is
+  # discouraged from being used.
+  commonName: {{ template "sda.fullname" . }}-doa
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - client auth
+    - server auth
+  # At least one of a DNS Name, URI, or IP address is required.
+  dnsNames:
+    - {{ template "sda.fullname" . }}-doa
+    - {{ template "sda.fullname" . }}-doa.{{ .Release.Namespace }}.svc
+  ipAddresses:
+    - 127.0.0.1
+  # Issuer references are always required.
+  issuerRef:
+    name: {{ template "TLSissuer" . }}
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
+    # This is optional since cert-manager will default to this value however
+    # if you are using an external issuer, change this to that issuer group.
+    group: cert-manager.io
+{{- end -}}
+{{- end -}}

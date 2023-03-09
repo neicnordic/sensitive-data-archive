@@ -1,0 +1,31 @@
+name: Integration test
+
+on:
+  pull_request:
+
+jobs:
+
+  test_inbox_connectivity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build image
+        run: docker build -t neicnordic/sda-inbox-sftp:latest .
+      - name: Start Services
+        run: |
+          cd dev_utils
+          bash ./make_certs.sh
+          docker-compose up certfixer
+          docker-compose up -d
+          sleep 20
+
+      - name: Run test for sftp ssh connection
+        run: |
+          chmod 700 src/test/resources/id_ed25519
+          sh ./dev_utils/sftp-testing-ssh.sh
+
+      - name: Run test for sftp with password
+        run: |
+          sudo apt-get install expect -y
+          sh ./dev_utils/sftp-testing-pass.sh

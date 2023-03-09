@@ -1,0 +1,24 @@
+name: Bump version
+on:
+  push:
+    branches:
+    - master
+jobs:
+  tag:
+    name: bump tags
+    outputs:
+      part: ${{ steps.bump_tag.outputs.part }}
+      tag: ${{ steps.bump_tag.outputs.tag }}
+      new_tag: ${{ steps.bump_tag.outputs.new_tag }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: '1'
+    - name: Bump version and push tag
+      id: bump_tag
+      uses: anothrNick/github-tag-action@1.61.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch

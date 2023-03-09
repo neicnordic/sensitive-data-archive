@@ -1,0 +1,70 @@
+{{- if semverCompare "<v1.25.0" .Capabilities.KubeVersion.Version }}
+{{- if and .Values.global.rbacEnabled .Values.global.podSecurityPolicy.create }}
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ .Release.Name }}-psp
+  annotations:
+   seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+   seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+spec:
+  requiredDropCapabilities:
+    - ALL
+  privileged: false
+  allowPrivilegeEscalation: false
+  defaultAllowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+    - min: 1
+      max: 65535
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+    - min: 1
+      max: 65535
+  volumes:
+  - secret
+  - configMap
+  - emptyDir
+  - projected
+  - downwardAPI
+  - nfs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-psp-role
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - {{ .Release.Name }}-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-psp-rolebinding
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-psp-role
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}
+{{- end }}
+{{- end }}
