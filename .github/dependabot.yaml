@@ -17,13 +17,6 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
   - package-ecosystem: docker
-    directory: "/sda-auth"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: docker
     directory: "/sda-db"
     schedule:
       interval: weekly
