@@ -1,4 +1,4 @@
-{"rabbit_version":"3.8",
+{"rabbit_version":"3.11",
      "users":[{"name":"test",
             "password_hash":"C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm","hashing_algorithm":"rabbit_password_hashing_sha256","tags":"administrator"}],   "vhosts":[{"name":"lega"}],
             "permissions":[{"user":"test", "vhost":"lega", "configure":".*", "write":".*", "read":".*"}],
