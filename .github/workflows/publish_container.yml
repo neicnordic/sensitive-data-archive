@@ -43,45 +43,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Pull PR containers
+        run : |
+          for t in auth download pipeline postgres rabbitmq sftp-inbox s3proxy; do
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-$t
+          done
+
       - name: Retag PR image for auth
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
 
 
       - name: Retag PR image for db
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-db
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-db ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-db
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-db
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
 
       - name: Retag PR image for }-download
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
 
       - name: Retag PR image for }-pipeline
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
 
       - name: Retag PR image for rabbitmq
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
 
       - name: Retag PR image for sftp-inbox
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
 
       - name: Retag PR image for }-s3proxy
         run: |
-          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
