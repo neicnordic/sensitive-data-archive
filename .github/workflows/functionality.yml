@@ -1,0 +1,163 @@
+name: Functionality tests
+
+on:
+  pull_request:
+
+env:
+  svc_list: 'finalize inbox ingest mapper verify'
+
+jobs:
+  sda-auth:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.19]
+    steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.7
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox tox-gh-actions
+      - name: Add oidc to /etc/hosts
+        run: |
+          sudo echo "127.0.0.1 oidc" | sudo tee -a /etc/hosts
+      - name: Start virtual infrastructure
+        run: |
+          cd sda-auth
+          GOLANG_VERSION=${{ matrix.go-version }} docker-compose -f ./dev-server/docker-compose.yml up -d --force-recreate --build
+      - name: Run unit tests
+        run: tox -e unit_tests -c sda-auth/tests/tox.ini
+
+  sda-download:
+    name: sda-download-integration-${{ matrix.storagetype }}
+    runs-on: ubuntu-latest
+    env:
+      STORAGETYPE: ${{ matrix.storagetype }}
+
+    strategy:
+      matrix:
+        storagetype: [s3, posix, s3notls]
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-download
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-download
+          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
+
+  rabbitmq:
+    name: rabbitmq-integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-mq
+          ls -1 .github/integration/setup/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-mq
+          ls -1 .github/integration/tests/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
+
+  sda-pipeline:
+    name: sda-pipeline-integration-${{ matrix.storagetype }}
+    runs-on: ubuntu-latest
+    env:
+      STORAGETYPE: ${{ matrix.storagetype }}
+
+    strategy:
+      matrix:
+        storagetype: [s3, posix, s3notls, s3header, s3notlsheader, posixheader, sftp, sftpheader]
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Run setup scripts
+        run: |
+          cd sda-pipeline
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-pipeline
+          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
+
+  sftp-inbox:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build image
+        run: |
+          cd sda-sftp-inbox
+          docker build -t neicnordic/sda-inbox-sftp:latest .
+
+      - name: Start Services
+        run: |
+          cd sda-sftp-inbox/dev_utils
+          bash ./make_certs.sh
+          docker-compose up certfixer
+          docker-compose up -d
+          sleep 20
+
+      - name: Run test for sftp ssh connection
+        run: |
+          cd sda-sftp-inbox
+          chmod 700 src/test/resources/id_ed25519
+          sh ./dev_utils/sftp-testing-ssh.sh
+
+      - name: Run test for sftp with password
+        run: |
+          cd sda-sftp-inbox
+          sudo apt-get install expect -y
+          sh ./dev_utils/sftp-testing-pass.sh

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+    paths:
+      - "sda-helm/charts/**"
 
 jobs:
   release:
@@ -11,7 +13,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.3.0
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -22,10 +24,10 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v3.5
-        with:
-          version: v3.4.0
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.5.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          charts_dir: sda-helm/charts

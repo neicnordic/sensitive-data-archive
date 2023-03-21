@@ -1,0 +1,30 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: ghcr.io
+
+on:
+  push:
+  schedule:
+    - cron: "21 21 * * *"
+
+jobs:
+  clean-ghcr:
+    name: Delete old unused container images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete 'PR' containers older than a week
+        uses: snok/container-retention-policy@v2.0.0
+        with:
+          image-names: sensitive-data-archive
+          filter-tags: PR*,sha-*
+          cut-off: A week ago UTC
+          account-type: org
+          org-name: ${{ github.repository_owner }}
+          keep-at-least: 1
+          token: ${{ secrets.GHCR_TOKEN }}
+          timestamp-to-use: updated_at
