@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
 	github.com/johannesboyne/gofakes3 v0.0.0-20220627085814-c3ac35da23b2
-	github.com/lestrrat/go-jwx v0.0.0-20180221005942-b7d4802280ae
+	github.com/lestrrat/go-jwx v0.9.1
 	github.com/minio/minio-go/v6 v6.0.43
 	github.com/neicnordic/sda-common v0.0.3-0.20221122104056-37b54aea80a7
 	github.com/pkg/errors v0.9.1
