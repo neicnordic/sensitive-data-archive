@@ -16,7 +16,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.6.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.15.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/xeipuuv/gojsonschema v1.2.0
 )
 
