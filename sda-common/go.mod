@@ -7,7 +7,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.7.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.2.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 )
 
 require (
