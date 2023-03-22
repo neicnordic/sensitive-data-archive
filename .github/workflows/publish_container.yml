@@ -46,7 +46,7 @@ jobs:
       - name: Pull PR containers
         run : |
           for t in auth download pipeline postgres rabbitmq sftp-inbox s3proxy; do
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-$t
+            docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-$t
           done
 
       - name: Retag PR image for auth
