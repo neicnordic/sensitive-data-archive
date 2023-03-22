@@ -3,7 +3,7 @@ name: Publish charts
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "charts/**"
 
