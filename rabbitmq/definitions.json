@@ -96,11 +96,29 @@
             "durable": true,
             "auto_delete": false,
             "arguments": {}
+        },
+        {
+            "name": "catch_all.dead",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
         }
     ],
     "exchanges": [
         {
             "name": "sda",
+            "vhost": "sda",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {
+                "alternate-exchange": "sda.dead"
+            }
+        },
+        {
+            "name": "sda.dead",
             "vhost": "sda",
             "type": "topic",
             "durable": true,
@@ -181,6 +199,14 @@
             "arguments": {},
             "destination": "verified",
             "routing_key": "verified"
+        },
+        {
+            "source": "sda.dead",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "catch_all.dead",
+            "routing_key": "#"
         }
     ]
 }
