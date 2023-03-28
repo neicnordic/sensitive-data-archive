@@ -79,6 +79,7 @@ services:
       - BROKER_CACERT=/certs/ca.crt
       - LOG_LEVEL=debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-pipeline
+    restart: always
     volumes:
       - certs:/certs
 
