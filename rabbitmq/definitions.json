@@ -88,7 +88,10 @@
             "vhost": "sda",
             "durable": true,
             "auto_delete": false,
-            "arguments": {}
+            "arguments": {
+                "x-max-age": "1M",
+                "x-queue-type": "stream"
+            }
         },
         {
             "name": "verified",
