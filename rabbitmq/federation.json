@@ -7,7 +7,15 @@
     "vhosts": [],
     "permissions": [],
     "global_parameters": [],
-    "queues": [],
+    "queues": [
+        {
+            "name": "from_cega",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
     "exchanges": [
         {
             "name": "to_cega",

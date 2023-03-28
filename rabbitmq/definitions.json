@@ -63,13 +63,6 @@
             }
         },
         {
-            "name": "from_cega",
-            "vhost": "sda",
-            "durable": true,
-            "auto_delete": false,
-            "arguments": {}
-        },
-        {
             "name": "inbox",
             "vhost": "sda",
             "durable": true,
