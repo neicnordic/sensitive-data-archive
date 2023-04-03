@@ -1,0 +1,121 @@
+services:
+  cegamq:
+    container_name: cegamq
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: rabbitmq:3.11.11-management-alpine
+    ports:
+      - "15671:15671"
+    restart: always
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+      - ./rabbitmq/cega.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./rabbitmq/cega.json:/etc/rabbitmq/cega.json
+      - ./rabbitmq/cega.plugins:/etc/rabbitmq/enabled_plugins
+
+  certfixer:
+    command:
+      - /bin/sh
+      - /scripts/make_certs.sh
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./scripts:/scripts
+      - certs:/certs
+      - client_certs:/client_certs
+      - /tmp:/temp
+
+  federation_test:
+    command:
+      - /bin/sh
+      - /tests/rabbitmq/10_federation_test.sh
+    container_name: federation
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      interceptor:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    image: alpine:latest
+    profiles:
+      - federation
+    volumes:
+      - ./tests:/tests
+      - client_certs:/tmp/certs
+
+  interceptor:
+    command: sda-intercept
+    container_name: intercept
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - BROKER_HOST=mq
+      - BROKER_PORT=5671
+      - BROKER_USER=guest
+      - BROKER_PASSWORD=guest
+      - BROKER_VHOST=sda
+      - BROKER_QUEUE=from_cega
+      - BROKER_ROUTINGERROR=error
+      - BROKER_VERIFYPEER=false
+      - BROKER_SSL=true
+      - BROKER_CLIENTCERT=/certs/client.crt
+      - BROKER_CLIENTKEY=/certs/client.key
+      - BROKER_CACERT=/certs/ca.crt
+      - LOG_LEVEL=debug
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-pipeline
+    restart: always
+    volumes:
+      - certs:/certs
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    container_name: mq
+    depends_on:
+      cegamq:
+        condition: service_healthy
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - CEGA_CONNECTION=amqp://test:test@cegamq:5672/cega
+      - RABBITMQ_SERVER_CACERT=/etc/rabbitmq/ssl/ca.pem
+      - RABBITMQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.crt
+      - RABBITMQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
+      - RABBITMQ_SERVER_VERIFY=verify_none
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    ports:
+      - "15672:15671"
+    restart: always
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+
+volumes:
+  certs:
+  client_certs:

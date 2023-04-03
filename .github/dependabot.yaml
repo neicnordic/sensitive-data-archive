@@ -31,7 +31,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
   - package-ecosystem: docker
-    directory: "/sda-mq"
+    directory: "/rabbitmq"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
