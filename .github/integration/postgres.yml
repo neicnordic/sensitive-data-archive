@@ -1,0 +1,96 @@
+services:
+  certfixer:
+    command:
+      - /bin/sh
+      - /scripts/make_certs.sh
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./scripts:/scripts
+      - certs:/certs
+      - client_certs:/client_certs
+      - /tmp:/temp
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "/scripts/make_credentials.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres_tls:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: ubuntu:kinetic
+    volumes:
+      - ./scripts:/scripts
+
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: db
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  postgres_tls:
+    container_name: tlsdb
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+      - POSTGRES_SERVER_CACERT=/certs/ca.crt
+      - POSTGRES_SERVER_CERT=/certs/db.crt
+      - POSTGRES_SERVER_KEY=/certs/db.key
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "25432:5432"
+    restart: always
+    volumes:
+      - certs:/certs
+      - pgtlsdata:/var/lib/postgresql/data
+
+  tests:
+    container_name: tester
+    command:
+      - "/bin/sh"
+      - "/tests/run_scripts.sh"
+      - "/tests/postgres"
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: ubuntu:kinetic
+    profiles:
+      - tests
+    volumes:
+      - ./tests:/tests
+      - client_certs:/certs
+
+volumes:
+  certs:
+  client_certs:
+  pgdata:
+  pgtlsdata:
