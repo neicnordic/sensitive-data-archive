@@ -129,6 +129,9 @@ CREATE ROLE download;
 GRANT USAGE ON SCHEMA sda TO download;
 GRANT SELECT ON sda.files TO download;
 GRANT SELECT ON sda.file_dataset TO download;
+GRANT SELECT ON sda.checksums TO download;
+GRANT SELECT ON sda.datasets TO download;
+GRANT SELECT ON sda.file_event_log TO download;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO download;
