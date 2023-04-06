@@ -17,6 +17,7 @@ func (suite *DatabaseTests) TestRegisterFile() {
 	fileId, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
 	if db.Version < 4 {
 		assert.NotNil(suite.T(), err, "RegisterFile() should not work in db version %v", db.Version)
+
 		return
 	}
 	assert.Nil(suite.T(), err, "failed to register file in database")
@@ -50,6 +51,7 @@ func (suite *DatabaseTests) TestMarkFileAsUploaded() {
 	fileId, err := db.RegisterFile("/testuser/file2.c4gh", "testuser")
 	if db.Version < 4 {
 		assert.NotNil(suite.T(), err, "MarkFileAsUploaded() should not work in db version %v", db.Version)
+
 		return
 	}
 	assert.Nil(suite.T(), err, "failed to register file in database")

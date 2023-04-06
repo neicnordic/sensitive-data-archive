@@ -92,6 +92,7 @@ func (dbs *SDAdb) Connect() error {
 		err := dbs.DB.Ping()
 		if err == nil {
 			log.Infoln("Already connected to database")
+
 			return nil
 		}
 	}
@@ -111,6 +112,7 @@ func (dbs *SDAdb) Connect() error {
 			// connection to the database. To verify that the data source name
 			// is valid, call Ping.
 			err = dbs.DB.Ping()
+
 			return err
 		}
 		if time.Since(start) < FastConnectTimeout {
@@ -160,8 +162,8 @@ func (dbs *SDAdb) getVersion() (int, error) {
 	query := "SELECT MAX(version) FROM local_ega.dbschema_version"
 
 	var dbVersion = -1
-
 	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
+
 	return dbVersion, err
 }
 
@@ -171,7 +173,7 @@ func (dbs *SDAdb) checkAndReconnectIfNeeded() {
 	err := dbs.DB.Ping()
 	if err != nil {
 		log.Errorf("Database connection problem: %v", err)
-		dbs.Connect()
+		_ = dbs.Connect()
 	}
 }
 
