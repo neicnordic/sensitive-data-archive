@@ -26,7 +26,7 @@ There is an README file in the [dev_utils](/dev_utils) folder with sections for 
 | Component     | Role |
 |---------------|------|
 | middleware     | Performs access token verification and validation |
-| sda        | Constructs the main API endpoints fort the NeIC SDA Data Out API. |
+| sda        | Constructs the main API endpoints for the NeIC SDA Data Out API. |
 
 
 ## Internal Components

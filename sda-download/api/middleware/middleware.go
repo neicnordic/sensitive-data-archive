@@ -1,46 +1,43 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
 	"github.com/neicnordic/sda-download/pkg/auth"
 	log "github.com/sirupsen/logrus"
 )
 
-type stringVariable string
-
-// as specified in docs: https://pkg.go.dev/context#WithValue
-var datasetsKey = stringVariable("datasets")
+var datasetsKey = "datasets"
 
 // TokenMiddleware performs access token verification and validation
 // JWTs are verified and validated by the app, opaque tokens are sent to AAI for verification
 // Successful auth results in list of authorised datasets
-func TokenMiddleware(nextHandler http.Handler) http.Handler {
+func TokenMiddleware() gin.HandlerFunc {
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
+	return func(c *gin.Context) {
 		// Check if dataset permissions are cached to session
-		sessionCookie, err := r.Cookie(config.Config.Session.Name)
+		sessionCookie, err := c.Cookie(config.Config.Session.Name)
 		if err != nil {
 			log.Debugf("no session cookie received")
 		}
 		var datasets []string
 		var exists bool
-		if sessionCookie != nil {
+		if sessionCookie != "" {
 			log.Debug("session cookie received")
-			datasets, exists = session.Get(sessionCookie.Value)
+			datasets, exists = session.Get(sessionCookie)
 		}
 
 		if !exists {
 			log.Debug("no session found, create new session")
 
 			// Check that a token is provided
-			token, code, err := auth.GetToken(r.Header.Get("Authorization"))
+			token, code, err := auth.GetToken(c.Request.Header.Get("Authorization"))
 			if err != nil {
-				http.Error(w, err.Error(), code)
+				c.String(code, err.Error())
+				c.AbortWithStatus(code)
 
 				return
 			}
@@ -49,7 +46,8 @@ func TokenMiddleware(nextHandler http.Handler) http.Handler {
 			visas, err := auth.GetVisas(auth.Details, token)
 			if err != nil {
 				log.Debug("failed to validate token at AAI")
-				http.Error(w, "bad token", 401)
+				c.String(http.StatusUnauthorized, "get visas failed")
+				c.AbortWithStatus(code)
 
 				return
 			}
@@ -64,47 +62,40 @@ func TokenMiddleware(nextHandler http.Handler) http.Handler {
 			// Start a new session and store datasets under the session key
 			key := session.NewSessionKey()
 			session.Set(key, datasets)
-			sessionCookie := &http.Cookie{
-				Name:     config.Config.Session.Name,
-				Value:    key,
-				Domain:   config.Config.Session.Domain,
-				Secure:   config.Config.Session.Secure,
-				HttpOnly: config.Config.Session.HTTPOnly,
-				// time.Duration is stored in nanoseconds, but MaxAge wants seconds
-				MaxAge: int(config.Config.Session.Expiration) / 1e9,
-			}
-			http.SetCookie(w, sessionCookie)
+			c.SetCookie(config.Config.Session.Name, // name
+				key, // value
+				int(config.Config.Session.Expiration)/1e9, // max age
+				"/",                            // path
+				config.Config.Session.Domain,   // domain
+				config.Config.Session.Secure,   // secure
+				config.Config.Session.HTTPOnly, // httpOnly
+			)
 			log.Debug("authorization check passed")
 		}
 
 		// Store dataset list to request context, for use in the endpoint handlers
-		modifiedContext := storeDatasets(r.Context(), datasets)
-		modifiedRequest := r.WithContext(modifiedContext)
+		c = storeDatasets(c, datasets)
 
 		// Forward request to the next endpoint handler
-		nextHandler.ServeHTTP(w, modifiedRequest)
-	})
+		c.Next()
+	}
 
 }
 
 // storeDatasets stores the dataset list to the request context
-func storeDatasets(ctx context.Context, datasets []string) context.Context {
+func storeDatasets(c *gin.Context, datasets []string) *gin.Context {
 	log.Debugf("storing %v datasets to request context", datasets)
 
-	ctx = context.WithValue(ctx, datasetsKey, datasets)
+	c.Set(datasetsKey, datasets)
 
-	return ctx
+	return c
 }
 
 // GetDatasets extracts the dataset list from the request context
-var GetDatasets = func(ctx context.Context) []string {
-	datasets := ctx.Value(datasetsKey)
-	if datasets == nil {
-		log.Debug("request datasets context is empty")
+var GetDatasets = func(c *gin.Context) []string {
+	datasets := c.GetStringSlice(datasetsKey)
 
-		return []string{}
-	}
 	log.Debugf("returning %v from request context", datasets)
 
-	return datasets.([]string)
+	return datasets
 }
