@@ -27,7 +27,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.4.0
         with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck --timeout 5m
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck --timeout 5m
           working-directory: sda-auth
 
   lint_common:
