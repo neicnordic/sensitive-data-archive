@@ -19,17 +19,17 @@ func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
 
 	query := "SELECT sda.register_file($1, $2)"
 
-	var fileId string
+	var fileID string
 
-	err := dbs.DB.QueryRow(query, uploadPath, uploadUser).Scan(&fileId)
+	err := dbs.DB.QueryRow(query, uploadPath, uploadUser).Scan(&fileID)
 
-	return fileId, err
+	return fileID, err
 }
 
 // MarkFileAsUploaded updates a file that is currently "registered" to
 // "uploaded" to show that a file has finished uploading. The message parameter
 // is the rabbitmq message sent on file upload.
-func (dbs *SDAdb) MarkFileAsUploaded(fileId, userId, message string) error {
+func (dbs *SDAdb) MarkFileAsUploaded(fileID, userID, message string) error {
 
 	dbs.checkAndReconnectIfNeeded()
 
@@ -39,7 +39,7 @@ func (dbs *SDAdb) MarkFileAsUploaded(fileId, userId, message string) error {
 
 	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, 'uploaded', $2, $3)"
 
-	_, err := dbs.DB.Exec(query, fileId, userId, message)
+	_, err := dbs.DB.Exec(query, fileID, userID, message)
 
 	return err
 }

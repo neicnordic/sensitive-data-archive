@@ -178,7 +178,7 @@ func (broker *AMQPBroker) GetMessages(queue string) (<-chan amqp.Delivery, error
 }
 
 // SendMessage sends a message to RabbitMQ
-func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, reliable bool, body []byte) error {
+func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, _ bool, body []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
