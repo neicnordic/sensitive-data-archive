@@ -10,7 +10,7 @@ elixir:
   secret: "wHPVQaYXmdDHg"
   jwkPath: "/jwks"
 cega:
-  authUrl: "http://cega:8443/lega/v1/legas/users/"
+  authUrl: "http://cega:8443/username/"
   id: "dummy"
   secret: "dummy"
 server:
@@ -21,3 +21,4 @@ s3Inbox: "s3.example.com"
 jwtIssuer: "http://auth:8080"
 jwtPrivateKey: "keys/sign-jwt.key"
 jwtSignatureAlg: "ES256"
+resignJwt: true

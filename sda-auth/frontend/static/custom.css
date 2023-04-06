@@ -1,0 +1,15 @@
+#loginbox {
+    max-width: 800px;
+}
+
+#egalogin {
+    max-width: 400px;
+}
+
+#loginbox1 {
+    max-width: 600px;
+}
+
+#logintext {
+    user-select: "all";
+}
