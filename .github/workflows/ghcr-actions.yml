@@ -6,7 +6,6 @@
 name: ghcr.io
 
 on:
-  push:
   schedule:
     - cron: "21 21 * * *"
 
