@@ -232,9 +232,6 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 			logFatalf("No certificates supplied")
 		}
 	}
-	if config.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
-	}
 
 	return &tlsConfig, nil
 }
