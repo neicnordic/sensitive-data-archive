@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 
 	"sda-pipeline/internal/broker"
 	"sda-pipeline/internal/config"
@@ -45,6 +44,7 @@ type checksums struct {
 }
 
 func main() {
+	forever := make(chan bool)
 	conf, err := config.NewConfig("verify")
 	if err != nil {
 		log.Fatal(err)
@@ -77,10 +77,14 @@ func main() {
 	go func() {
 		connError := mq.ConnectionWatcher()
 		log.Error(connError)
-		os.Exit(1)
+		forever <- false
 	}()
 
-	forever := make(chan bool)
+	go func() {
+		connError := mq.ChannelWatcher()
+		log.Error(connError)
+		forever <- false
+	}()
 
 	log.Info("starting verify service")
 
@@ -171,6 +175,7 @@ func main() {
 						message.ReVerify,
 						e)
 				}
+
 				continue
 			}
 
@@ -238,6 +243,7 @@ func main() {
 						e)
 
 				}
+
 				// Restart on new message
 				continue
 			}
@@ -386,6 +392,7 @@ func main() {
 						message.EncryptedChecksums,
 						message.ReVerify,
 						err)
+
 					continue
 				}
 

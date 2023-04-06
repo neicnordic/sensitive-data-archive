@@ -165,6 +165,6 @@ If the message can’t be validated it is discarded with an error message in the
  - Backup writes messages to one rabbitmq queue (default `completed`)
 
  - Backup optionally reads encryption headers from the database and can not be started without a database connection.
-   This is done using the `GetArchived`, and `GetHeaderForStableId` functions.
+   This is done using the `GetArchived`, and `GetHeaderForStableID` functions.
 
  - Backup reads data from archive storage and writes data to backup storage.

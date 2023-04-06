@@ -133,7 +133,7 @@ On error, the error is written to the logs, the message is Nacked and forwarded 
 1. A uuid is generated, and a file writer is created in the archive using the uuid as filename.
 On error the error is written to the logs and the message is Nacked and then re-queued.
 
-1. The filename is inserted into the database along with the user id of the uploading user.
+1. The filename is inserted into the database along with the user id of the uploading user. In case the file is already existing in the database, the status is updated.
 Errors are written to the error log.
 Errors writing the filename to the database do not halt ingestion progress.
 

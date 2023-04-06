@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/smtp"
-	"os"
 	"sda-pipeline/internal/broker"
 	"sda-pipeline/internal/common"
 	"sda-pipeline/internal/config"
@@ -20,6 +19,7 @@ const err = "error"
 const ready = "ready"
 
 func main() {
+	forever := make(chan bool)
 	conf, err := config.NewConfig("notify")
 	if err != nil {
 		log.Fatal(err)
@@ -35,10 +35,14 @@ func main() {
 	go func() {
 		connError := mq.ConnectionWatcher()
 		log.Error(connError)
-		os.Exit(1)
+		forever <- false
 	}()
 
-	forever := make(chan bool)
+	go func() {
+		connError := mq.ChannelWatcher()
+		log.Error(connError)
+		forever <- false
+	}()
 
 	log.Infof("Starting %s notify service", conf.Broker.Queue)
 

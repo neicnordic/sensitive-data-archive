@@ -145,15 +145,16 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 // GetHeader retrieves the file header
 func (dbs *SQLdb) GetHeader(fileID int) ([]byte, error) {
 	var (
-		r     []byte = nil
-		err   error  = nil
-		count int    = 0
+		r     []byte
+		err   error
+		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
 		r, err = dbs.getHeader(fileID)
 		count++
 	}
+
 	return r, err
 }
 
@@ -177,8 +178,8 @@ func (dbs *SQLdb) getHeader(fileID int) ([]byte, error) {
 	return header, nil
 }
 
-// GetHeaderForStableId retrieves the file header by using stable id
-func (dbs *SQLdb) GetHeaderForStableId(stableID string) (string, error) {
+// GetHeaderForStableID retrieves the file header by using stable id
+func (dbs *SQLdb) GetHeaderForStableID(stableID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -195,8 +196,8 @@ func (dbs *SQLdb) GetHeaderForStableId(stableID string) (string, error) {
 // MarkCompleted marks the file as "COMPLETED"
 func (dbs *SQLdb) MarkCompleted(file FileInfo, fileID int) error {
 	var (
-		err   error = nil
-		count int   = 0
+		err   error
+		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
@@ -241,15 +242,16 @@ func (dbs *SQLdb) markCompleted(file FileInfo, fileID int) error {
 // InsertFile inserts a file in the database
 func (dbs *SQLdb) InsertFile(filename, user string) (int64, error) {
 	var (
-		err   error = nil
-		r     int64 = 0
-		count int   = 0
+		err   error
+		r     int64
+		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
 		r, err = dbs.insertFile(filename, user)
 		count++
 	}
+
 	return r, err
 }
 
@@ -266,25 +268,38 @@ func (dbs *SQLdb) insertFile(filename, user string) (int64, error) {
 		"status, " +
 		"encryption_method) " +
 		"VALUES($1, $2, $3,'INIT', 'CRYPT4GH') RETURNING id;"
+
 	var fileID int64
-	err := db.QueryRow(query, filename, strings.Replace(filepath.Ext(filename), ".", "", -1), user).Scan(&fileID)
+
+	err := db.QueryRow(query, filename, strings.ReplaceAll(filepath.Ext(filename), ".", ""), user).Scan(&fileID)
+	if err == nil {
+		return fileID, nil
+	}
+	// We can only handle the duplicate key error for now
+	if !strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+		return 0, err
+	}
+	const updateQuery = "UPDATE local_ega.main SET status = 'IN_INGESTION' WHERE local_ega.main.submission_file_path = $1 AND local_ega.main.submission_user = $2 AND local_ega.main.status = $3 RETURNING id;"
+	err = db.QueryRow(updateQuery, filename, user, "INIT").Scan(&fileID)
 	if err != nil {
 		return 0, err
 	}
+
 	return fileID, nil
 }
 
 // StoreHeader stores the file header in the database
 func (dbs *SQLdb) StoreHeader(header []byte, id int64) error {
 	var (
-		err   error = nil
-		count int   = 0
+		err   error
+		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
 		err = dbs.storeHeader(header, id)
 		count++
 	}
+
 	return err
 }
 
@@ -301,20 +316,22 @@ func (dbs *SQLdb) storeHeader(header []byte, id int64) error {
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")
 	}
+
 	return nil
 }
 
 // SetArchived marks the file as 'ARCHIVED'
 func (dbs *SQLdb) SetArchived(file FileInfo, id int64) error {
 	var (
-		err   error = nil
-		count int   = 0
+		err   error
+		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
 		err = dbs.setArchived(file, id)
 		count++
 	}
+
 	return err
 }
 
@@ -341,6 +358,7 @@ func (dbs *SQLdb) setArchived(file FileInfo, id int64) error {
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")
 	}
+
 	return nil
 }
 
@@ -375,6 +393,7 @@ func (dbs *SQLdb) markReady(accessionID, user, filepath, checksum string) error 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")
 	}
+
 	return nil
 }
 
@@ -413,6 +432,7 @@ func (dbs *SQLdb) mapFilesToDataset(datasetID string, accessionIDs []string) err
 			if e := transaction.Rollback(); e != nil {
 				log.Errorf("failed to rollback the transaction: %s", e)
 			}
+
 			return err
 		}
 		_, err = transaction.Exec(mapping, fileID, datasetID)
@@ -421,25 +441,28 @@ func (dbs *SQLdb) mapFilesToDataset(datasetID string, accessionIDs []string) err
 			if e := transaction.Rollback(); e != nil {
 				log.Errorf("failed to rollback the transaction: %s", e)
 			}
+
 			return err
 		}
 	}
+
 	return transaction.Commit()
 }
 
 // GetArchived retrieves the location and size of archive
 func (dbs *SQLdb) GetArchived(user, filepath, checksum string) (string, int, error) {
 	var (
-		filePath string = ""
-		fileSize int    = 0
-		err      error  = nil
-		count    int    = 0
+		filePath string
+		fileSize int
+		err      error
+		count    int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
 		filePath, fileSize, err = dbs.getArchived(user, filepath, checksum)
 		count++
 	}
+
 	return filePath, fileSize, err
 }
 

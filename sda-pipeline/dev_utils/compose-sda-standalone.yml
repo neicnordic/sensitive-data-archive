@@ -1,15 +1,14 @@
 services:
-
   certfixer:
     command:
       - /bin/sh
       - -c
       - |
         cp /origcerts/* /certs
-        chown -R nobody.nobody /certs/*
+        chown -R nobody:nobody /certs/*
         chmod -R og-rw /certs/*-key.pem
-        chown -R 70.70 /certs/db*
-        chown -R 100.101 /certs/mq*
+        chown -R 70:70 /certs/db*
+        chown -R 100:101 /certs/mq*
         ls -la /certs/
 
     container_name: certfixer
@@ -17,7 +16,6 @@ services:
     volumes:
       - ./certs:/origcerts
       - certs:/certs
-
   db:
     command: server /data
     container_name: db
@@ -37,19 +35,16 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.3
+    image: ghcr.io/neicnordic/sda-db:v2.0.10
     ports:
       - "5432:5432"
     volumes:
       - /tmp/data:/data
       - certs:/var/lib/postgresql/tls/
-
   mq:
     container_name: mq
-    depends_on:
-      certfixer:
-        condition: service_completed_successfully
-    image: ghcr.io/neicnordic/sda-mq:v1.4.30
+    image: ghcr.io/neicnordic/sda-mq:v1.4.25
+    # image: neicnordic/sda-mq:latest
     environment:
       - MQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.pem
       - MQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
@@ -70,20 +65,16 @@ services:
       test:
         [
           "CMD",
-          "bash",
+          "/bin/sh",
           "-c",
           "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
         ]
       interval: 5s
       timeout: 20s
       retries: 3
-
   s3:
     command: server /data --console-address ":9001"
     container_name: s3
-    depends_on:
-      certfixer:
-        condition: service_completed_successfully
     environment:
       - MINIO_ROOT_USER=access
       - MINIO_ROOT_PASSWORD=secretkey
@@ -101,39 +92,37 @@ services:
       - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
       - ./certs/s3.pem:/root/.minio/certs/public.crt
       - ./certs/s3-key.pem:/root/.minio/certs/private.key
-
   createbucket:
     container_name: buckets
     image: minio/mc
     depends_on:
-      certfixer:
-        condition: service_completed_successfully
       s3:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       sleep 10;
-      /usr/bin/mc config host add s3 https://s3:9000 access secretkey;
-      /usr/bin/mc mb s3/inbox;
-      /usr/bin/mc mb s3/archive;
-      /usr/bin/mc mb s3/backup;
+      mc config host add s3 https://s3:9000 access secretkey;
+      mc mb --ignore-existing s3/inbox;
+      mc mb --ignore-existing s3/archive;
+      mc mb --ignore-existing s3/backup;
       exit 0;
       "
     volumes:
       - ./certs/ca.pem:/etc/ssl/certs/public.crt
-
   ingest:
     command: sda-ingest
     container_name: ingest
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
+        condition: service_healthy
+      db:
         condition: service_healthy
     env_file: ./env.ingest
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
@@ -142,19 +131,20 @@ services:
       - certs:/dev_utils/certs
     mem_limit: 1024m
     restart: always
-
   verify:
     command: sda-verify
     container_name: verify
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
+        condition: service_healthy
+      db:
         condition: service_healthy
     env_file: ./env.verify
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
@@ -163,38 +153,46 @@ services:
       - inbox:/inbox
     mem_limit: 256m
     restart: always
-
   finalize:
     command: sda-finalize
     container_name: finalize
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
         condition: service_healthy
+      db:
+        condition: service_healthy
     env_file: ./env.finalize
+    environment:
+      - SCHEMA_TYPE="standalone"
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - certs:/dev_utils/certs
     mem_limit: 64m
     restart: always
-
   backup:
     command: sda-backup
     container_name: backup
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
         condition: service_healthy
+      db:
+        condition: service_healthy
+      sftp-server:
+        condition: service_started
     env_file: ./env.backup
+    environment:
+      - SCHEMA_TYPE="standalone"
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
@@ -204,53 +202,42 @@ services:
       - ./keys:/keys/
     mem_limit: 64m
     restart: always
-
   mapper:
     command: sda-mapper
     container_name: mapper
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
         condition: service_healthy
+      db:
+        condition: service_healthy
     env_file: ./env.mapper
+    environment:
+      - SCHEMA_TYPE="standalone"
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - certs:/dev_utils/certs
     mem_limit: 64m
     restart: always
-
-  interceptor:
-    command: sda-intercept
-    container_name: intercept
-    depends_on:
-      - certfixer
-      - mq
-    env_file: ./env.intercept
-    image: neicnordic/sda-pipeline:latest
-    volumes:
-      - ./config.yaml:/config.yaml
-      - ./:/dev_utils/
-      - certs:/dev_utils/certs
-    mem_limit: 64m
-    restart: always
-
   api:
     command: sda-api
     container_name: api
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       mq:
+        condition: service_healthy
+      db:
         condition: service_healthy
     env_file: ./env.api
     image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
     ports:
       - "8080:8080"
     restart: always
@@ -258,6 +245,40 @@ services:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - certs:/dev_utils/certs
+  orchestrator:
+    command: sda-orchestrate
+    container_name: orchestrate
+    env_file: ./env.orchestrate
+    image: neicnordic/sda-pipeline:latest
+    build:
+      context: ..
+    environment:
+      - BROKER_PORT=5671
+      - BROKER_USER=test
+      - BROKER_PASSWORD=test
+      - BROKER_VHOST=test
+      # the following is a repetition of orchestrator default variables
+      - INBOX_QUEUE=inbox
+      - COMPLETED_QUEUE=completed
+      - VERIFIED_QUEUE=verified
+      - ACCESSIONIDS_QUEUE=accessionIDs
+      - INGEST_QUEUE=ingest
+      - MAPPINGS_QUEUE=mappings
+      - SSL_CACERT=/dev_utils/certs/ca.pem
+      - SSL_CLIENTCERT=/dev_utils/certs/orch.pem
+      - SSL_CLIENTKEY=/dev_utils/certs/orch.key
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      mq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    volumes:
+      - ./config.yaml:/config.yaml
+      - certs:/dev_utils/certs
+    mem_limit: 256m
+    restart: always
 
   sftp-server:
     build:
