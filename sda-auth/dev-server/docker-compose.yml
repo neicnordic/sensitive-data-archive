@@ -55,7 +55,7 @@ services:
       - ELIXIR_PROVIDER=http://oidc:9090
       - ELIXIR_SECRET=wHPVQaYXmdDHg
       - ELIXIR_JWKPATH=/jwks
-      - CEGA_AUTHURL=http://cega:8443/lega/v1/legas/users/
+      - CEGA_AUTHURL=http://cega:8443/username/
       - CEGA_ID=dummy
       - CEGA_SECRET=dummy
       - CORS_ORIGINS=http://localhost:8080

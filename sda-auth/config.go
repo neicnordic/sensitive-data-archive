@@ -52,6 +52,7 @@ type Config struct {
 	JwtSignatureAlg string
 	Server          ServerConfig
 	S3Inbox         string
+	ResignJwt       bool
 }
 
 // NewConfig initializes and parses the config file and/or environment using
@@ -89,6 +90,9 @@ func (c *Config) readConfig() error {
 	c.JwtPrivateKey = viper.GetString("JwtPrivateKey")
 	c.JwtSignatureAlg = viper.GetString("JwtSignatureAlg")
 	c.JwtIssuer = viper.GetString("jwtIssuer")
+
+	viper.SetDefault("ResignJwt", true)
+	c.ResignJwt = viper.GetBool("resignJwt")
 
 	// Setup elixir
 	elixir := ElixirConfig{}

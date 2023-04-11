@@ -9,16 +9,18 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
 	"github.com/neicnordic/sda-download/pkg/auth"
+	log "github.com/sirupsen/logrus"
 )
 
 const token string = "token"
 
 // testEndpoint mimics the endpoint handlers that perform business logic after passing the
 // authentication middleware. This handler is generic and can be used for all cases.
-func testEndpoint(w http.ResponseWriter, r *http.Request) {}
+func testEndpoint(_ *gin.Context) {}
 
 func TestTokenMiddleware_Fail_GetToken(t *testing.T) {
 
@@ -32,18 +34,19 @@ func TestTokenMiddleware_Fail_GetToken(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
 
 	// Send a request through the middleware
-	testHandler := TokenMiddleware(http.HandlerFunc(testEndpoint))
-	testHandler.ServeHTTP(w, r)
+	router.GET("/", TokenMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
 
 	// Test the outcomes of the handler
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 401
-	expectedBody := []byte("access token must be provided\n")
+	expectedBody := []byte("access token must be provided")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestTokenMiddleware_Fail_GetToken failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -71,23 +74,24 @@ func TestTokenMiddleware_Fail_GetVisas(t *testing.T) {
 		return token, 200, nil
 	}
 	auth.GetVisas = func(o auth.OIDCDetails, token string) (*auth.Visas, error) {
-		return nil, errors.New("bad token")
+		return nil, errors.New("get visas failed")
 	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
 
 	// Send a request through the middleware
-	testHandler := TokenMiddleware(http.HandlerFunc(testEndpoint))
-	testHandler.ServeHTTP(w, r)
+	router.GET("/", TokenMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
 
 	// Test the outcomes of the handler
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 401
-	expectedBody := []byte("bad token\n")
+	expectedBody := []byte("get visas failed")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestTokenMiddleware_Fail_GetVisas failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -125,11 +129,12 @@ func TestTokenMiddleware_Fail_GetPermissions(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
 
 	// Send a request through the middleware
-	testHandler := TokenMiddleware(http.HandlerFunc(testEndpoint))
-	testHandler.ServeHTTP(w, r)
+	router.GET("/", TokenMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
 
 	// Test the outcomes of the handler
 	response := w.Result()
@@ -171,20 +176,21 @@ func TestTokenMiddleware_Success_NoCache(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
 
 	// Now that we are modifying the request context, we need to place the context test inside the handler
 	expectedDatasets := []string{"dataset1", "dataset2"}
-	testEndpointWithContextData := func(w http.ResponseWriter, r *http.Request) {
-		datasets := r.Context().Value(datasetsKey).([]string)
+	testEndpointWithContextData := func(c *gin.Context) {
+		datasets := c.GetStringSlice(datasetsKey)
 		if !reflect.DeepEqual(datasets, expectedDatasets) {
 			t.Errorf("TestTokenMiddleware_Success_NoCache failed, got %s expected %s", datasets, expectedDatasets)
 		}
 	}
 
 	// Send a request through the middleware
-	testHandler := TokenMiddleware(http.HandlerFunc(testEndpointWithContextData))
-	testHandler.ServeHTTP(w, r)
+	router.GET("/", TokenMiddleware(), testEndpointWithContextData)
+	router.ServeHTTP(w, r)
 
 	// Test the outcomes of the handler
 	response := w.Result()
@@ -219,12 +225,18 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 
 	// Substitute mock functions
 	session.Get = func(key string) ([]string, bool) {
+		log.Warningf("session.Get %v", key)
+
 		return []string{"dataset1", "dataset2"}, true
 	}
 
+	config.Config.Session.Name = "sda_session_key"
+
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
+
 	r.AddCookie(&http.Cookie{
 		Name:  "sda_session_key",
 		Value: "key",
@@ -232,16 +244,16 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 
 	// Now that we are modifying the request context, we need to place the context test inside the handler
 	expectedDatasets := []string{"dataset1", "dataset2"}
-	testEndpointWithContextData := func(w http.ResponseWriter, r *http.Request) {
-		datasets := r.Context().Value(datasetsKey).([]string)
+	testEndpointWithContextData := func(c *gin.Context) {
+		datasets := c.GetStringSlice(datasetsKey)
 		if !reflect.DeepEqual(datasets, expectedDatasets) {
 			t.Errorf("TestTokenMiddleware_Success_FromCache failed, got %s expected %s", datasets, expectedDatasets)
 		}
 	}
 
 	// Send a request through the middleware
-	testHandler := TokenMiddleware(http.HandlerFunc(testEndpointWithContextData))
-	testHandler.ServeHTTP(w, r)
+	router.GET("/", TokenMiddleware(), testEndpointWithContextData)
+	router.ServeHTTP(w, r)
 
 	// Test the outcomes of the handler
 	response := w.Result()
@@ -264,13 +276,13 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 }
 
 func TestStoreDatasets(t *testing.T) {
-
 	// Get a request context for testing if data is saved
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
 
 	// Store data to request context
 	datasets := []string{"dataset1", "dataset2"}
-	modifiedContext := storeDatasets(r.Context(), datasets)
+	modifiedContext := storeDatasets(c, datasets)
 
 	// Verify that context has new data
 	storedDatasets := modifiedContext.Value(datasetsKey).([]string)
@@ -283,15 +295,15 @@ func TestStoreDatasets(t *testing.T) {
 func TestGetDatasets(t *testing.T) {
 
 	// Get a request context for testing if data is saved
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
 
 	// Store data to request context
 	datasets := []string{"dataset1", "dataset2"}
-	modifiedContext := storeDatasets(r.Context(), datasets)
-	modifiedRequest := r.WithContext(modifiedContext)
+	modifiedContext := storeDatasets(c, datasets)
 
 	// Verify that context has new data
-	storedDatasets := GetDatasets(modifiedRequest.Context())
+	storedDatasets := GetDatasets(modifiedContext)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
 	}

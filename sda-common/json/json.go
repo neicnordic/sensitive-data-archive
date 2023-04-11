@@ -9,7 +9,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-
 func ValidateJSON(reference string, body []byte) error {
 	dest := getStructName(reference)
 	if dest == "" {

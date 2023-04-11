@@ -8,7 +8,10 @@ COPY src/ /src/
 
 RUN mvn clean install -DskipTests --no-transfer-progress
 
-FROM openjdk:19-alpine
+FROM eclipse-temurin:19-alpine
+
+RUN apk add --no-cache --upgrade ca-certificates java-cacerts libssl3 libcrypto3 \
+    && ln -sf /etc/ssl/certs/java/cacerts $JAVA_HOME/lib/security/cacerts
 
 RUN addgroup -g 1000 lega && \
     adduser -D -u 1000 -G lega lega

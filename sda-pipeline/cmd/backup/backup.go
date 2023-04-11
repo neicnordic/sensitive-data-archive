@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"os"
 	"strings"
 
 	"sda-pipeline/internal/broker"
@@ -35,6 +34,7 @@ type checksums struct {
 }
 
 func main() {
+	forever := make(chan bool)
 	conf, err := config.NewConfig("backup")
 	if err != nil {
 		log.Fatal(err)
@@ -78,10 +78,14 @@ func main() {
 	go func() {
 		connError := mq.ConnectionWatcher()
 		log.Error(connError)
-		os.Exit(1)
+		forever <- false
 	}()
 
-	forever := make(chan bool)
+	go func() {
+		connError := mq.ChannelWatcher()
+		log.Error(connError)
+		forever <- false
+	}()
 
 	log.Info("Starting backup service")
 	var message backup
@@ -328,9 +332,9 @@ func main() {
 			//nolint:nestif
 			if config.CopyHeader() {
 				// Get the header from db
-				header, err := db.GetHeaderForStableId(message.AccessionID)
+				header, err := db.GetHeaderForStableID(message.AccessionID)
 				if err != nil {
-					log.Errorf("GetHeaderForStableId failed "+
+					log.Errorf("GetHeaderForStableID failed "+
 						"(corr-id: %s, "+
 						"filepath: %s, "+
 						"user: %s, "+

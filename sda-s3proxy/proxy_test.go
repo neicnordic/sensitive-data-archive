@@ -139,7 +139,7 @@ func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 type AlwaysDeny struct{}
 
 // Authenticate does not authenticate anyone.
-func (u *AlwaysDeny) Authenticate(r *http.Request) (jwt.MapClaims, error) {
+func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.MapClaims, error) {
 	return nil, fmt.Errorf("denied")
 }
 

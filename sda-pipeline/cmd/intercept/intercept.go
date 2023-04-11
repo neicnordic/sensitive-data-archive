@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"sda-pipeline/internal/broker"
 	"sda-pipeline/internal/config"
@@ -22,6 +21,7 @@ const (
 )
 
 func main() {
+	forever := make(chan bool)
 	conf, err := config.NewConfig("intercept")
 	if err != nil {
 		log.Fatal(err)
@@ -37,10 +37,14 @@ func main() {
 	go func() {
 		connError := mq.ConnectionWatcher()
 		log.Error(connError)
-		os.Exit(1)
+		forever <- false
 	}()
 
-	forever := make(chan bool)
+	go func() {
+		connError := mq.ChannelWatcher()
+		log.Error(connError)
+		forever <- false
+	}()
 
 	log.Info("Starting intercept service")
 
@@ -72,6 +76,7 @@ func main() {
 						"(corr-id: %s, reason: %v)",
 						delivered.CorrelationId, e)
 				}
+
 				// Restart on new message
 				continue
 			}
@@ -98,6 +103,7 @@ func main() {
 						"(corr-id: %s, reason: %v)",
 						delivered.CorrelationId, e)
 				}
+
 				// Restart on new message
 				continue
 			}

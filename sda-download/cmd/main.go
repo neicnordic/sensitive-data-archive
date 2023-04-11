@@ -70,8 +70,8 @@ func main() {
 	if config.Config.App.ServerCert != "" && config.Config.App.ServerKey != "" {
 		log.Infof("Web server is ready to receive connections at https://%s:%d", config.Config.App.Host, config.Config.App.Port)
 		log.Fatal(srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey))
-	} else {
-		log.Infof("Web server is ready to receive connections at http://%s:%d", config.Config.App.Host, config.Config.App.Port)
-		log.Fatal(srv.ListenAndServe())
 	}
+
+	log.Infof("Web server is ready to receive connections at http://%s:%d", config.Config.App.Host, config.Config.App.Port)
+	log.Fatal(srv.ListenAndServe())
 }

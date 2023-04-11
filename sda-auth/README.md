@@ -25,6 +25,7 @@ Parameter | Description | Defined value
 `JWTISSUER` | Issuer of JWT tokens | `http://auth:8080`
 `JWTPRIVATEKEY` | Path to private key for signing the JWT token | `keys/sign-jwt.key`
 `JWTSIGNATUREALG` | Algorithm used to sign the JWT token. ES256 (ECDSA) or RS256 (RSA) are supported | `RS256`
+`RESIGNJWT` | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it | `""`
 
 ## Running the development setup
 

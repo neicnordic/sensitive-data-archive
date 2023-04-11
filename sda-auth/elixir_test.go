@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/oauth2-proxy/mockoidc"
@@ -157,7 +158,8 @@ func (suite *ElixirTests) TestValidateJwt() {
 	// Create HS256 test token
 	mySigningKey := []byte("AllYourBase")
 	claims := &jwt.RegisteredClaims{
-		Issuer: "test",
+		Issuer:    "test",
+		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(time.Hour)),
 	}
 	tokenHS256 := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	testTokenHS256, err := tokenHS256.SignedString(mySigningKey)
@@ -176,7 +178,7 @@ func (suite *ElixirTests) TestValidateJwt() {
 		log.Error(err)
 	}
 
-	// Create RSA test token
+	// Create ECDSA test token
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		log.Error(err)
@@ -187,31 +189,54 @@ func (suite *ElixirTests) TestValidateJwt() {
 		log.Error(err)
 	}
 
+	// Create expired RSA test token
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(-time.Hour))
+	expiredTokenRSA := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	testExpiredTokenRSA, err := expiredTokenRSA.SignedString(rsaKey)
+	if err != nil {
+		log.Error(err)
+	}
+
 	// sanity check
-	token, err := validateToken(elixirJWT, suite.mockServer.JWKSEndpoint())
+	token, expDate, err := validateToken(elixirJWT, suite.mockServer.JWKSEndpoint())
 	if assert.Nil(suite.T(), err) {
 		assert.True(suite.T(), token.Valid, "Validation failed but without returning errors")
+		assert.Equal(suite.T(), expDate, elixirIdentity.ExpDate, "Returned wrong exp date but without returning errors")
 	}
 
 	// wrong jwk url
-	_, err = validateToken(elixirJWT, "http://some/jwk/endpoint")
+	_, _, err = validateToken(elixirJWT, "http://some/jwk/endpoint")
 	assert.ErrorContains(suite.T(), err, "failed to fetch remote JWK")
 
 	// wrong signing method
-	_, err = validateToken(testTokenHS256, suite.mockServer.JWKSEndpoint())
+	_, _, err = validateToken(testTokenHS256, suite.mockServer.JWKSEndpoint())
 	if assert.Error(suite.T(), err) {
 		assert.Equal(suite.T(), "unexpected signing method", err.Error())
 	}
 
 	// wrong private key, RSA
-	_, err = validateToken(testTokenRSA, suite.mockServer.JWKSEndpoint())
+	_, _, err = validateToken(testTokenRSA, suite.mockServer.JWKSEndpoint())
 	if assert.Error(suite.T(), err) {
 		assert.Equal(suite.T(), "signature not valid: crypto/rsa: verification error", err.Error())
 	}
 
 	// wrong private key, ECDSA
-	_, err = validateToken(testTokenEC, suite.mockServer.JWKSEndpoint())
+	_, _, err = validateToken(testTokenEC, suite.mockServer.JWKSEndpoint())
 	if assert.Error(suite.T(), err) {
 		assert.Equal(suite.T(), "signature not valid: key is of invalid type", err.Error())
 	}
+
+	// expired token
+	_, _, err = validateToken(testExpiredTokenRSA, suite.mockServer.JWKSEndpoint())
+	assert.Equal(suite.T(), "Token is expired", err.Error())
+
+	// check that we handle the case where token has no expiration date
+	claims.ExpiresAt = nil
+	expiredTokenRSA = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	testExpiredTokenRSA, err = expiredTokenRSA.SignedString(rsaKey)
+	if err != nil {
+		log.Error(err)
+	}
+	_, _, err = validateToken(testExpiredTokenRSA, suite.mockServer.JWKSEndpoint())
+	assert.ErrorContains(suite.T(), err, "signature not valid")
 }

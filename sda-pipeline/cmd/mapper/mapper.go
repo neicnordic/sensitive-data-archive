@@ -4,7 +4,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 
 	"sda-pipeline/internal/broker"
 	"sda-pipeline/internal/config"
@@ -20,6 +19,7 @@ type message struct {
 }
 
 func main() {
+	forever := make(chan bool)
 	conf, err := config.NewConfig("mapper")
 	if err != nil {
 		log.Fatal(err)
@@ -40,10 +40,14 @@ func main() {
 	go func() {
 		connError := mq.ConnectionWatcher()
 		log.Error(connError)
-		os.Exit(1)
+		forever <- false
 	}()
 
-	forever := make(chan bool)
+	go func() {
+		connError := mq.ChannelWatcher()
+		log.Error(connError)
+		forever <- false
+	}()
 
 	log.Info("Starting mapper service")
 	var mappings message

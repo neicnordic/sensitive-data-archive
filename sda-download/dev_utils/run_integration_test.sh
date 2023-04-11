@@ -40,7 +40,7 @@ docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs"
 	-t -c "INSERT INTO local_ega_ebi.filedataset (id, file_id, dataset_stable_id) VALUES (1, 1, 'https://doi.example/ty009.sfrrss/600.45asasga');"
 
 
-# Make buckets if they don't exist already 
+# Make buckets if they don't exist already
 s3cmd -c s3cmd.conf mb s3://archive || true
 
 # Upload test file
@@ -140,7 +140,7 @@ else
     echo "Files are different"
 fi
 
-# Test bad token
+# Test get visas failed
 
 token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
 

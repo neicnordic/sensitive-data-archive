@@ -348,11 +348,9 @@ func TLSkeyToFile(filename string, key *ecdsa.PrivateKey) error {
 	if err != nil {
 		return err
 	}
-	if err := pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: pk}); err != nil {
-		return err
-	}
+	err = pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: pk})
 
-	return nil
+	return err
 }
 
 func TLScertToFile(filename string, derBytes []byte) error {
@@ -361,9 +359,7 @@ func TLScertToFile(filename string, derBytes []byte) error {
 		return err
 	}
 	defer certFile.Close()
-	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return err
-	}
+	err = pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
-	return nil
+	return err
 }

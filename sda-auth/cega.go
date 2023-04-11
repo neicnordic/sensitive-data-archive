@@ -15,18 +15,8 @@ type EGALoginError struct {
 	Reason string
 }
 
-// CegaUserResponse captures the response key
+// CegaUserResponse captures the response list
 type CegaUserResponse struct {
-	Results CegaUserResults `json:"response"`
-}
-
-// CegaUserResults captures the result key
-type CegaUserResults struct {
-	Response []CegaUserInfo `json:"result"`
-}
-
-// CegaUserInfo captures the password hash
-type CegaUserInfo struct {
 	PasswordHash string `json:"passwordHash"`
 }
 
@@ -55,7 +45,7 @@ func verifyPassword(password, hash string) bool {
 func authenticateWithCEGA(conf CegaConfig, username string) (*http.Response, error) {
 	client := &http.Client{}
 	payload := strings.NewReader("")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s?idType=username", conf.AuthURL, username), payload)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", strings.TrimSuffix(conf.AuthURL, "/"), username), payload)
 
 	if err != nil {
 		log.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -28,6 +29,7 @@ type ConfigTests struct {
 	JwtPrivateKey     string
 	JwtPrivateKeyFile *os.File
 	JwtSignatureAlg   string
+	ResignJwt         bool
 }
 
 func TestConfigTestSuite(t *testing.T) {
@@ -82,6 +84,7 @@ func (suite *ConfigTests) SetupTest() {
 	suite.JwtIssuer = "JwtIssuer"
 	suite.JwtPrivateKey = suite.JwtPrivateKeyFile.Name()
 	suite.JwtSignatureAlg = "RS256"
+	suite.ResignJwt = true
 
 	// Write config to temp config file
 	configYaml, err := yaml.Marshal(Config{
@@ -92,6 +95,7 @@ func (suite *ConfigTests) SetupTest() {
 		JwtIssuer:       suite.JwtIssuer,
 		JwtPrivateKey:   suite.JwtPrivateKey,
 		JwtSignatureAlg: suite.JwtSignatureAlg,
+		ResignJwt:       suite.ResignJwt,
 	})
 	if err != nil {
 		log.Errorf("Error marshalling config yaml: %v", err)
@@ -141,6 +145,7 @@ func (suite *ConfigTests) TestConfig() {
 	assert.Equal(suite.T(), suite.JwtIssuer, config.JwtIssuer, "JwtIssuer misread from config file")
 	assert.Equal(suite.T(), suite.JwtPrivateKey, config.JwtPrivateKey, "JwtPrivateKey misread from config file")
 	assert.Equal(suite.T(), suite.JwtSignatureAlg, config.JwtSignatureAlg, "JwtSignatureAlg misread from config file")
+	assert.Equal(suite.T(), suite.ResignJwt, config.ResignJwt, "ResignJwt misread from config file")
 
 	// sanitycheck without config file or ENVs
 	// this should fail
@@ -167,6 +172,7 @@ func (suite *ConfigTests) TestConfig() {
 	os.Setenv("JWTISSUER", fmt.Sprintf("env_%v", suite.JwtIssuer))
 	os.Setenv("JWTPRIVATEKEY", fmt.Sprintf("%v_env", suite.JwtPrivateKey))
 	os.Setenv("JWTSIGNATUREALG", fmt.Sprintf("env_%v", suite.JwtSignatureAlg))
+	os.Setenv("RESIGNJWT", fmt.Sprintf("%t", suite.ResignJwt))
 
 	// re-read the config
 	config, err = NewConfig()
@@ -189,11 +195,12 @@ func (suite *ConfigTests) TestConfig() {
 	assert.Equal(suite.T(), fmt.Sprintf("env_%v", suite.JwtIssuer), config.JwtIssuer, "JwtIssuer misread from environment variable")
 	assert.Equal(suite.T(), fmt.Sprintf("%v_env", suite.JwtPrivateKey), config.JwtPrivateKey, "JwtPrivateKey misread from environment variable")
 	assert.Equal(suite.T(), fmt.Sprintf("env_%v", suite.JwtSignatureAlg), config.JwtSignatureAlg, "JwtSignatureAlg misread from environment variable")
+	assert.Equal(suite.T(), fmt.Sprintf("%t", suite.ResignJwt), strconv.FormatBool(config.ResignJwt), "ResignJwt misread from environment variable")
 
 	// Check missing private key
 	os.Setenv("JWTPRIVATEKEY", "nonexistent-key-file")
 
 	// re-read the config
 	_, err = NewConfig()
-	assert.ErrorContains(suite.T(), err, "Error when reading from private key file")
+	assert.ErrorContains(suite.T(), err, "Missing private key file")
 }

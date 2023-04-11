@@ -2,7 +2,6 @@ package sda
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sda-download/api/middleware"
@@ -24,21 +24,22 @@ func TestDatasets(t *testing.T) {
 	originalGetDatasets := middleware.GetDatasets
 
 	// Substitute mock functions
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(c *gin.Context) []string {
 		return []string{"dataset1", "dataset2"}
 	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
+	c.Set("datasets", []string{"dataset1", "dataset2"})
 
 	// Test the outcomes of the handler
-	Datasets(w, r)
+	Datasets(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 200
-	expectedBody := []byte(`["dataset1","dataset2"]` + "\n")
+	expectedBody := []byte(`["dataset1","dataset2"]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -96,7 +97,7 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 	originalGetFilesDB := database.GetFiles
 
 	// Substitute mock functions
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1", "dataset2"}
 	}
 	database.GetFiles = func(datasetID string) ([]*database.FileInfo, error) {
@@ -104,7 +105,9 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 	}
 
 	// Run test target
-	fileInfo, statusCode, err := getFiles("dataset1", context.TODO())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	fileInfo, statusCode, err := getFiles("dataset1", c)
 
 	// Expected results
 	expectedStatusCode := 500
@@ -132,12 +135,14 @@ func TestGetFiles_Fail_NotFound(t *testing.T) {
 	originalGetDatasets := middleware.GetDatasets
 
 	// Substitute mock functions
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1", "dataset2"}
 	}
 
 	// Run test target
-	fileInfo, statusCode, err := getFiles("dataset3", context.TODO())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	fileInfo, statusCode, err := getFiles("dataset3", c)
 
 	// Expected results
 	expectedStatusCode := 404
@@ -164,7 +169,7 @@ func TestGetFiles_Success(t *testing.T) {
 	originalGetFilesDB := database.GetFiles
 
 	// Substitute mock functions
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1", "dataset2"}
 	}
 	database.GetFiles = func(datasetID string) ([]*database.FileInfo, error) {
@@ -178,7 +183,9 @@ func TestGetFiles_Success(t *testing.T) {
 	}
 
 	// Run test target
-	fileInfo, statusCode, err := getFiles("dataset1", context.TODO())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	fileInfo, statusCode, err := getFiles("dataset1", c)
 
 	// Expected results
 	expectedStatusCode := 200
@@ -206,21 +213,21 @@ func TestFiles_Fail(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(datasetID string, ctx context.Context) ([]*database.FileInfo, int, error) {
+	getFiles = func(datasetID string, ctx *gin.Context) ([]*database.FileInfo, int, error) {
 		return nil, 404, errors.New("dataset not found")
 	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Files(w, r)
+	Files(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 404
-	expectedBody := []byte("dataset not found\n")
+	expectedBody := []byte("dataset not found")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -243,7 +250,7 @@ func TestFiles_Success(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(datasetID string, ctx context.Context) ([]*database.FileInfo, int, error) {
+	getFiles = func(datasetID string, ctx *gin.Context) ([]*database.FileInfo, int, error) {
 		fileInfo := database.FileInfo{
 			FileID:                    "file1",
 			DatasetID:                 "dataset1",
@@ -263,10 +270,10 @@ func TestFiles_Success(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Files(w, r)
+	Files(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
@@ -274,7 +281,7 @@ func TestFiles_Success(t *testing.T) {
 	expectedBody := []byte(
 		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","fileName":` +
 			`"file1.txt","fileSize":200,"decryptedFileSize":100,"decryptedFileChecksum":"hash",` +
-			`"decryptedFileChecksumType":"sha256","fileStatus":"READY"}]` + "\n")
+			`"decryptedFileChecksumType":"sha256","fileStatus":"READY"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -400,15 +407,15 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 404
-	expectedBody := []byte("file not found\n")
+	expectedBody := []byte("file not found")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_FileNotFound failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -436,21 +443,21 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 		// nolint:goconst
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{}
 	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 401
-	expectedBody := []byte("unauthorised\n")
+	expectedBody := []byte("unauthorised")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_NoPermissions failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -479,7 +486,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.CheckFilePermission = func(fileID string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1"}
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
@@ -488,15 +495,15 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 500
-	expectedBody := []byte("database error\n")
+	expectedBody := []byte("database error")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_GetFile failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -527,7 +534,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	database.CheckFilePermission = func(fileID string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1"}
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
@@ -542,15 +549,15 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 500
-	expectedBody := []byte("archive error\n")
+	expectedBody := []byte("archive error")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_OpenFile failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -559,7 +566,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 		// visual byte comparison in terminal (easier to find string differences)
 		t.Error(body)
 		t.Error([]byte(expectedBody))
-		t.Errorf("TestDownload_Fail_OpenFile failed, got %s expected %s", string(body), string(expectedBody))
+		t.Errorf("TestDownload_Fail_OpenFile failed, got '%s' expected '%s'", string(body), string(expectedBody))
 	}
 
 	// Return mock functions to originals
@@ -583,7 +590,7 @@ func TestDownload_Fail_ParseCoordinates(t *testing.T) {
 	database.CheckFilePermission = func(fileID string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1"}
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
@@ -601,15 +608,15 @@ func TestDownload_Fail_ParseCoordinates(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 400
-	expectedBody := []byte("bad params\n")
+	expectedBody := []byte("bad params")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_ParseCoordinates failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -644,7 +651,7 @@ func TestDownload_Fail_StreamFile(t *testing.T) {
 	database.CheckFilePermission = func(fileID string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1"}
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
@@ -665,15 +672,15 @@ func TestDownload_Fail_StreamFile(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 500
-	expectedBody := []byte("file stream error\n")
+	expectedBody := []byte("file stream error")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_StreamFile failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -710,7 +717,7 @@ func TestDownload_Success(t *testing.T) {
 	database.CheckFilePermission = func(fileID string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetDatasets = func(ctx context.Context) []string {
+	middleware.GetDatasets = func(ctx *gin.Context) []string {
 		return []string{"dataset1"}
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
@@ -735,10 +742,10 @@ func TestDownload_Success(t *testing.T) {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "https://testing.fi", nil)
+	c, _ := gin.CreateTestContext(w)
 
 	// Test the outcomes of the handler
-	Download(w, r)
+	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)

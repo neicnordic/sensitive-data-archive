@@ -82,12 +82,12 @@ func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(500)
 }
 
-func (p *Proxy) notAllowedResponse(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) notAllowedResponse(w http.ResponseWriter, _ *http.Request) {
 	log.Debug("not allowed response")
 	w.WriteHeader(403)
 }
 
-func (p *Proxy) notAuthorized(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
 	log.Debug("not authorized")
 	w.WriteHeader(401) // Actually correct!
 }

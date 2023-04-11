@@ -34,7 +34,7 @@ func NewAlwaysAllow() *AlwaysAllow {
 }
 
 // Authenticate authenticates everyone.
-func (u *AlwaysAllow) Authenticate(r *http.Request) (jwt.MapClaims, error) {
+func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.MapClaims, error) {
 	return nil, nil
 }
 

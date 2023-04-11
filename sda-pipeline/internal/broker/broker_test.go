@@ -51,9 +51,16 @@ func (c *mockChannel) Confirm(noWait bool) error {
 	return nil
 }
 
+func (c *mockChannel) NotifyClose(ch chan *amqp.Error) chan *amqp.Error {
+	close(ch)
+
+	return ch
+}
+
 func (c *mockChannel) NotifyPublish(confirm chan amqp.Confirmation) chan amqp.Confirmation {
 
 	c.confirmChannel = confirm
+
 	return confirm
 }
 
@@ -138,8 +145,6 @@ func TestBuildMqURI(t *testing.T) {
 
 func TestNewMQ(t *testing.T) {
 	noSSLPort := 5555 // + int(rand.Float64()*32768)
-	sslPort := noSSLPort + 1
-
 	s := startServer(t, noSSLPort)
 
 	noSslConf := tMqconf
@@ -160,25 +165,6 @@ func TestNewMQ(t *testing.T) {
 	errret = CatchNewMQPanic(t, noSslConf)
 	assert.NotNil(t, errret, "NewMQ did fail as expected")
 	s.Close()
-
-	sslConf := tMqconf
-	sslConf.Ssl = true
-	sslConf.VerifyPeer = false
-	sslConf.Port = sslPort
-	sslConf.ServerName = sslConf.Host
-
-	serverTLSConfig := tlsServerConfig()
-	serverTLSConfig.ClientAuth = tls.NoClientCert
-
-	ss := startTLSServer(t, sslPort, serverTLSConfig)
-
-	go handleOneConnection(ss.Sessions, false, false)
-
-	b, _ = NewMQ(sslConf)
-	assert.NotNil(t, b, "NewMQ with ssl did not return a broker")
-
-	ss.Close()
-
 }
 
 func CatchNewMQPanic(t *testing.T, conf MQConf) (err error) {
@@ -226,6 +212,30 @@ func TestNewMQConn_Error(t *testing.T) {
 	}
 }
 
+func TestNewMQTLS(t *testing.T) {
+	if _, err := os.Stat("../../dev_utils/certs/ca.pem"); err != nil {
+		t.Skip("skip test since certificates are not present")
+	}
+	sslPort := 5556
+	sslConf := tMqconf
+	sslConf.Ssl = true
+	sslConf.VerifyPeer = false
+	sslConf.Port = sslPort
+	sslConf.ServerName = sslConf.Host
+
+	serverTLSConfig := tlsServerConfig()
+	serverTLSConfig.ClientAuth = tls.NoClientCert
+
+	ss := startTLSServer(t, sslPort, serverTLSConfig)
+	go handleOneConnection(ss.Sessions, false, false)
+
+	b, e := NewMQ(sslConf)
+	assert.Nil(t, e, "Unwanted Error")
+	assert.NotNil(t, b, "NewMQ with ssl did not return a broker")
+
+	ss.Close()
+}
+
 func CatchTLSConfigBrokerPanic(b MQConf) (cfg *tls.Config, err error) {
 	defer func() {
 		r := recover()
@@ -241,6 +251,9 @@ func CatchTLSConfigBrokerPanic(b MQConf) (cfg *tls.Config, err error) {
 
 func TestTLSConfigBroker(t *testing.T) {
 	tlsConfig, err := TLSConfigBroker(tMqconf)
+	if err != nil && strings.Contains(err.Error(), "no such file or directory") {
+		t.Skip("skip test since certificates are not present")
+	}
 	assert.NoError(t, err, "Unexpected error")
 	assert.NotZero(t, tlsConfig.Certificates, "Expected warnings were missing")
 	assert.EqualValues(t, tlsConfig.ServerName, "servername")
