@@ -68,7 +68,7 @@ temp_server_start() {
 
 setup_hba_conf() {
 	if [ -f "$POSTGRES_SERVER_CERT" ] && [ -f "$POSTGRES_SERVER_KEY" ] && [ -f "$POSTGRES_SERVER_CACERT" ]; then
-		echo "Enabeling TLS"
+		echo "Enabling TLS"
 		# - Enforcing SSL communication for all connections
 		cat >"$PGDATA/pg_hba.conf" <<-EOF
 			# TYPE    DATABASE USER ADDRESS      METHOD
@@ -96,7 +96,7 @@ setup_hba_conf() {
 	fi
 }
 
-# If already initiliazed, then run
+# If already initialized, then run
 if [ -s "$PGDATA/PG_VERSION" ]; then
 	migrate "$@"
 
@@ -105,7 +105,7 @@ if [ -s "$PGDATA/PG_VERSION" ]; then
 	exec "$@"
 fi
 
-# Otherwise, do initilization (as postgres user)
+# Otherwise, do initialization (as postgres user)
 if [ -z "$POSTGRES_PASSWORD" ]; then
 	echo "You must specify POSTGRES_PASSWORD to a non-empty value for the superuser."
 	exit 1
