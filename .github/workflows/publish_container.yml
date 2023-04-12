@@ -1,12 +1,12 @@
 name: Publish version tag
 on:
-  push:
-    branches:
-    - main
+  pull_request:
+    types: [ closed ]
 
 jobs:
-  tag:
-    name: bump tags
+  tag_release:
+    if: github.event.pull_request.merged == true
+    name: tag version
     outputs:
       part: ${{ steps.bump_tag.outputs.part }}
       tag: ${{ steps.bump_tag.outputs.tag }}
@@ -25,7 +25,7 @@ jobs:
         DEFAULT_BUMP: patch
 
   push_to_registry:
-    needs: tag
+    needs: tag_release
     if: needs.tag.outputs.part != ''
     name: Push Docker image to Github Container registry
     runs-on: ubuntu-latest
@@ -54,21 +54,20 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
 
-
-      - name: Retag PR image for db
-        run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
-
-      - name: Retag PR image for }-download
+      - name: Retag PR image for download
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
 
-      - name: Retag PR image for }-pipeline
+      - name: Retag PR image for pipeline
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
+
+      - name: Retag PR image for postgres
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
 
       - name: Retag PR image for rabbitmq
         run: |
@@ -80,7 +79,7 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
 
-      - name: Retag PR image for }-s3proxy
+      - name: Retag PR image for s3proxy
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-s3proxy
