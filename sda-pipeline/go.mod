@@ -8,7 +8,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.5
 	github.com/google/uuid v1.3.0
 	github.com/johannesboyne/gofakes3 v0.0.0-20230129080941-f6a8a9ae6fd3
-	github.com/lib/pq v1.10.7
+	github.com/lib/pq v1.10.8
 	github.com/mocktools/go-smtp-mock v1.10.0
 	github.com/neicnordic/crypt4gh v1.7.3
 	github.com/pkg/errors v0.9.1
