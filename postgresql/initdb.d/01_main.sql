@@ -18,7 +18,8 @@ VALUES (0, now(), 'Created with version'),
        (1, now(), 'Noop version'),
        (2, now(), 'Added decrypted_checksum et al'),
        (3, now(), 'Reorganized out views/tables'),
-       (4, now(), 'Refactored schema');
+       (4, now(), 'Refactored schema'),
+       (5, now(), 'Add field for correlation ids');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -26,7 +27,8 @@ CREATE TABLE datasets (
     id                  SERIAL PRIMARY KEY,
     stable_id           TEXT UNIQUE,
     title               TEXT,
-    description         TEXT
+    description         TEXT,
+    created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
 );
 
 -- `files` is the main table of the schema, holding the file paths, encryption
@@ -121,6 +123,7 @@ CREATE TABLE file_event_log (
     id                  SERIAL PRIMARY KEY,
     file_id             UUID REFERENCES files(id),
     event               TEXT REFERENCES file_events(title),
+    correlation_id      UUID, -- Correlation ID in the message's header
     user_id             TEXT, -- Elixir user id (or pipeline-step for ingestion,
                               -- etc.)
     details             JSONB,  -- This is my solution to fields such as

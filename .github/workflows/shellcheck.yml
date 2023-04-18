@@ -1,0 +1,20 @@
+name: shellcheck
+
+on:
+  push:
+    branches:
+      - "**"    # matches every branch
+      - "!main" # excludes main
+    paths:
+      - "**.sh"
+
+jobs:
+  shelcheck:
+    name: shellsheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: check all scripts
+        uses: ludeeus/action-shellcheck@master
