@@ -16,7 +16,6 @@
             "type": "string",
             "title": "The username",
             "description": "The username",
-            "minLength": 1,
             "examples": [
                 "user.name@central-ega.eu"
             ]
@@ -26,7 +25,6 @@
             "type": "string",
             "title": "The new filepath",
             "description": "The new filepath",
-            "minLength": 2,
             "examples": [
                 "/ega/inbox/user.name@central-ega.eu/the-file.c4gh"
             ]
@@ -36,7 +34,6 @@
             "type": "string",
             "title": "The old filepath",
             "description": "The old filepath",
-            "minLength": 2,
             "examples": [
                 "/ega/inbox/user.name@central-ega.eu/the-old-file.c4gh"
             ]

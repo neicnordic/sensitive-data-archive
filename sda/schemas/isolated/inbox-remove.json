@@ -15,7 +15,6 @@
             "type": "string",
             "title": "The username",
             "description": "The username",
-            "minLength": 1,
             "examples": [
                 "user.name@central-ega.eu"
             ]
@@ -25,7 +24,6 @@
             "type": "string",
             "title": "The unique identifier to the file location",
             "description": "The unique identifier to the file location",
-            "minLength": 2,
             "examples": [
                 "/ega/inbox/user.name@central-ega.eu/the-file.c4gh"
             ]

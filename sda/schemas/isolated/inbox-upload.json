@@ -1,12 +1,12 @@
 {
-    "title": "JSON schema for Local EGA message interface to Central EGA",
-    "$id": "https://github.com/EGA-archive/LocalEGA/tree/master/schemas/ingestion-user-error.json",
+    "title": "JSON schema for Local EGA inbox upload message interface",
+    "$id": "https://github.com/EGA-archive/LocalEGA/tree/master/schemas/inbox-upload.json",
     "$schema": "http://json-schema.org/draft-07/schema",
     "type": "object",
     "required": [
         "user",
         "filepath",
-        "reason"
+        "operation"
     ],
     "additionalProperties": true,
     "definitions": {
@@ -89,7 +89,6 @@
             "type": "string",
             "title": "The username",
             "description": "The username",
-            "minLength": 1,
             "examples": [
                 "user.name@central-ega.eu"
             ]
@@ -99,27 +98,34 @@
             "type": "string",
             "title": "The new filepath",
             "description": "The new filepath",
-            "minLength": 2,
             "examples": [
                 "/ega/inbox/user.name@central-ega.eu/the-file.c4gh"
             ]
         },
-        "reason": {
-            "$id": "#/properties/reason",
+        "operation": {
+            "$id": "#/properties/operation",
             "type": "string",
-            "title": "A user-related error",
-            "description": "The reason why the error occurred",
-            "minLength": 1,
-            "examples": [
-                "File not found in the inbox",
-                "Invalid file decryption"
-            ]
+            "const": "upload",
+            "title": "The operation type",
+            "description": "The operation type"
+        },
+        "filesize": {
+            "$id": "#/properties/filesize",
+            "type": "integer",
+            "title": "The size of the file in bytes",
+            "description": "The size of the file in bytes"
+        },
+        "file_last_modified": {
+            "$id": "#/properties/file_last_modified",
+            "type": "integer",
+            "title": "The UNIX timestamp of last modification on the file",
+            "description": "The UNIX timestamp of last modification on the file"
         },
         "encrypted_checksums": {
             "$id": "#/properties/encrypted_checksums",
             "type": "array",
-            "title": "The checksums of the original file",
-            "description": "The checksums of the original file. The md5 one is required",
+            "title": "The checksums of the encrypted file",
+            "description": "An explanation about the purpose of this instance.",
             "examples": [
                 [
                     {
