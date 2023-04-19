@@ -11,19 +11,28 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestHttpsGetCheck(t *testing.T) {
+type HealthcheckTestSuite struct {
+	suite.Suite
+}
+
+func TestHealthcheckTestSuite(t *testing.T) {
+	suite.Run(t, new(HealthcheckTestSuite))
+}
+
+func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 	h := NewHealthCheck(8888,
 		S3Config{url: "http://localhost:8080", readypath: "/"},
 		BrokerConfig{host: "localhost", port: "8080"},
 		new(tls.Config))
 
-	assert.NoError(t, h.httpsGetCheck("https://www.nbis.se", 10*time.Second)())
-	assert.Error(t, h.httpsGetCheck("https://www.nbis.se/nonexistent", 5*time.Second)(), "404 should fail")
+	assert.NoError(suite.T(), h.httpsGetCheck("https://www.nbis.se", 10*time.Second)())
+	assert.Error(suite.T(), h.httpsGetCheck("https://www.nbis.se/nonexistent", 5*time.Second)(), "404 should fail")
 }
 
-func TestHealthchecks(t *testing.T) {
+func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	l, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err != nil {
 		log.Fatal(err)
@@ -54,7 +63,7 @@ func TestHealthchecks(t *testing.T) {
 	}
 
 	if res.StatusCode != http.StatusOK {
-		t.Errorf("Response code was %v; want 200", res.StatusCode)
+		suite.T().Errorf("Response code was %v; want 200", res.StatusCode)
 	}
 
 	ts.Close()
