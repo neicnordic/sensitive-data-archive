@@ -1,57 +1,74 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"os"
 	"testing"
+
+	helper "sensitive-data-archive/internal/helper"
 
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestBuildMqURI(t *testing.T) {
+type MessengerTestSuite struct {
+	suite.Suite
+}
+
+func (suite *MessengerTestSuite) SetupTest() {
+	certPath, _ = os.MkdirTemp("", "gocerts")
+	helper.MakeCerts(certPath)
+
+	viper.Set("broker.host", "localhost")
+	viper.Set("broker.port", MQport)
+	viper.Set("broker.user", "guest")
+	viper.Set("broker.password", "guest")
+	viper.Set("broker.routingkey", "ingest")
+	viper.Set("broker.exchange", "sda")
+	viper.Set("broker.vhost", "sda")
+	viper.Set("aws.url", "testurl")
+	viper.Set("aws.accesskey", "testaccess")
+	viper.Set("aws.secretkey", "testsecret")
+	viper.Set("aws.bucket", "testbucket")
+	viper.Set("server.jwtpubkeypath", "testpath")
+}
+func TestMessengerTestSuite(t *testing.T) {
+	suite.Run(t, new(MessengerTestSuite))
+}
+
+func (suite *MessengerTestSuite) TestBuildMqURI() {
 	amqps := buildMqURI("localhost", "5555", "mquser", "mqpass", "/vhost", true)
-	assert.Equal(t, "amqps://mquser:mqpass@localhost:5555/vhost", amqps)
+	assert.Equal(suite.T(), "amqps://mquser:mqpass@localhost:5555/vhost", amqps)
 	amqp := buildMqURI("localhost", "5555", "mquser", "mqpass", "/vhost", false)
-	assert.Equal(t, "amqp://mquser:mqpass@localhost:5555/vhost", amqp)
+	assert.Equal(suite.T(), "amqp://mquser:mqpass@localhost:5555/vhost", amqp)
 }
 
-func TestNewAMQPMessenger(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.confFile", "dev_utils/config.yaml")
-
+func (suite *MessengerTestSuite) TestNewAMQPMessenger() {
 	config, err := NewConfig()
-	assert.NoError(t, err)
-	assert.NotNil(t, config)
-	tlsConfig, err := TLSConfigBroker(config)
-	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since certificates are not present")
-	}
-	assert.NotNil(t, tlsConfig)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), config)
+	tlsConfig := new(tls.Config)
+
+	assert.NotNil(suite.T(), tlsConfig)
+	assert.NoError(suite.T(), err)
 	m, err := NewAMQPMessenger(config.Broker, tlsConfig)
-	assert.NoError(t, err)
-	assert.NotNil(t, m)
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), m)
 }
 
-func TestSendMessage(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.confFile", "dev_utils/config.yaml")
-
+func (suite *MessengerTestSuite) TestSendMessage() {
 	config, err := NewConfig()
-	assert.NotNil(t, config)
-	assert.NoError(t, err)
+	assert.NotNil(suite.T(), config)
+	assert.NoError(suite.T(), err)
 	tlsConfig, err := TLSConfigBroker(config)
-	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since certificates are not present")
-	}
-	assert.NotNil(t, tlsConfig)
-	assert.NoError(t, err)
+	assert.NotNil(suite.T(), tlsConfig)
+	assert.NoError(suite.T(), err)
 
 	messenger, err := NewAMQPMessenger(config.Broker, tlsConfig)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 	event := Event{}
 	checksum := Checksum{}
 	event.Operation = "TestSendMessage"
@@ -61,31 +78,24 @@ func TestSendMessage(t *testing.T) {
 	event.Checksum = []interface{}{checksum}
 
 	jsonMessage, err := json.Marshal(event)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 	uuid, _ := uuid.NewRandom()
-	t.Log("uuid: ", uuid)
+	suite.T().Log("uuid: ", uuid)
 	err = messenger.SendMessage(uuid.String(), jsonMessage)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 }
 
-func TestCreateNewChannel(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.confFile", "dev_utils/config.yaml")
-
+func (suite *MessengerTestSuite) TestCreateNewChannel() {
 	config, err := NewConfig()
-	assert.NotNil(t, config)
-	assert.NoError(t, err)
+	assert.NotNil(suite.T(), config)
+	assert.NoError(suite.T(), err)
 	tlsConfig, err := TLSConfigBroker(config)
-	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since certificates are not present")
-	}
-	assert.NotNil(t, tlsConfig)
-	assert.NoError(t, err)
+	assert.NotNil(suite.T(), tlsConfig)
+	assert.NoError(suite.T(), err)
 
 	messenger, err := NewAMQPMessenger(config.Broker, tlsConfig)
 	messenger.channel.Close()
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 	event := Event{}
 	checksum := Checksum{}
 	event.Operation = "TestRecreateChannel"
@@ -95,9 +105,9 @@ func TestCreateNewChannel(t *testing.T) {
 	event.Checksum = []interface{}{checksum}
 
 	jsonMessage, err := json.Marshal(event)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 	uuid, _ := uuid.NewRandom()
-	t.Log("uuid: ", uuid)
+	suite.T().Log("uuid: ", uuid)
 	err = messenger.SendMessage(uuid.String(), jsonMessage)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 }

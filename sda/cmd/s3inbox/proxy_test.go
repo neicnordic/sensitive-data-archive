@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"testing"
 
 	"sensitive-data-archive/internal/database"
@@ -52,22 +51,14 @@ func (suite *ProxyTests) SetupTest() {
 	// Create a database configuration for the fake database
 	suite.DBConf = database.DBConf{
 		Host:       "localhost",
-		Port:       2345,
-		User:       "lega_in",
-		Password:   "lega_in",
-		Database:   "lega",
+		Port:       DBport,
+		User:       "postgres",
+		Password:   "rootpasswd",
+		Database:   "sda",
 		CACert:     "",
 		SslMode:    "disable",
 		ClientCert: "",
 		ClientKey:  "",
-	}
-
-	var err error
-
-	_, err = os.Stat("/.dockerenv")
-	if err == nil {
-		suite.DBConf.Host = "db"
-		suite.DBConf.Port = 5432
 	}
 
 	suite.database = &database.SDAdb{}
@@ -231,10 +222,7 @@ func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 func (suite *ProxyTests) TestServeHTTP_allowed() {
 
 	// Start proxy that allows everything
-	database, err := database.NewSDAdb(suite.DBConf)
-	if err != nil {
-		suite.T().Skip("skip TestShutdown since broker not present")
-	}
+	database, _ := database.NewSDAdb(suite.DBConf)
 	proxy := NewProxy(suite.S3conf, NewAlwaysAllow(), suite.messenger, database, new(tls.Config))
 
 	// List files works
@@ -359,10 +347,7 @@ func (suite *ProxyTests) TestMessageFormatting() {
 
 func (suite *ProxyTests) TestDatabaseConnection() {
 	database, err := database.NewSDAdb(suite.DBConf)
-	if err != nil {
-		suite.T().Skip("skip TestShutdown since DB not present: ", err)
-	}
-
+	assert.NoError(suite.T(), err)
 	// Start proxy that allows everything
 	proxy := NewProxy(suite.S3conf, NewAlwaysAllow(), suite.messenger, database, new(tls.Config))
 
@@ -397,5 +382,4 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 		assert.Nil(suite.T(), err, "Failed to find '%v' event in database", status)
 		assert.Equal(suite.T(), exists, 1, "File '%v' event does not exist", status)
 	}
-
 }
