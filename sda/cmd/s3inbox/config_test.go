@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	helper "sensitive-data-archive/internal/helper"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/spf13/viper"
@@ -14,13 +17,16 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type TestSuite struct {
+type ConfigTestSuite struct {
 	suite.Suite
 }
 
-var certPath string
+var certPath, rootDir string
 
-func (suite *TestSuite) SetupTest() {
+func (suite *ConfigTestSuite) SetupTest() {
+	_, b, _, _ := runtime.Caller(0)
+	rootDir = path.Join(path.Dir(b), "../../../")
+	// pwd, _ = os.Getwd()
 	certPath, _ = os.MkdirTemp("", "gocerts")
 	helper.MakeCerts(certPath)
 
@@ -38,48 +44,51 @@ func (suite *TestSuite) SetupTest() {
 	viper.Set("server.jwtpubkeypath", "testpath")
 }
 
-func (suite *TestSuite) TearDownTest() {
+func (suite *ConfigTestSuite) TearDownTest() {
 	viper.Reset()
 	defer os.RemoveAll(certPath)
 }
 
 func TestConfigTestSuite(t *testing.T) {
-	suite.Run(t, new(TestSuite))
+	suite.Run(t, new(ConfigTestSuite))
 }
 
-func (suite *TestSuite) TestConfigFile() {
-	viper.Set("server.confFile", "dev_utils/config.yaml")
+func (suite *ConfigTestSuite) TestConfigFile() {
+	viper.Set("server.confFile", rootDir+"/.github/integration/sda/config.yaml")
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "dev_utils/config.yaml", viper.ConfigFileUsed())
-}
-
-func (suite *TestSuite) TestWrongConfigFile() {
-	viper.Set("server.confFile", "dev_utils/rabbitmq.conf")
-	config, err := NewConfig()
-	assert.Nil(suite.T(), config)
-	assert.Error(suite.T(), err)
-	assert.Equal(suite.T(), "dev_utils/rabbitmq.conf", viper.ConfigFileUsed())
-}
-
-func (suite *TestSuite) TestConfigPath() {
-	viper.Set("server.confPath", "./dev_utils")
-	config, err := NewConfig()
-	assert.NotNil(suite.T(), config)
-	assert.NoError(suite.T(), err)
-	absPath, _ := filepath.Abs("dev_utils/config.yaml")
+	absPath, _ := filepath.Abs(rootDir + "/.github/integration/sda/config.yaml")
 	assert.Equal(suite.T(), absPath, viper.ConfigFileUsed())
 }
 
-func (suite *TestSuite) TestNoConfig() {
+func (suite *ConfigTestSuite) TestWrongConfigFile() {
+	viper.Set("server.confFile", rootDir+"/.github/integration/rabbitmq/cega.conf")
+	config, err := NewConfig()
+	assert.Nil(suite.T(), config)
+	assert.Error(suite.T(), err)
+	absPath, _ := filepath.Abs(rootDir + "/.github/integration/rabbitmq/cega.conf")
+	assert.Equal(suite.T(), absPath, viper.ConfigFileUsed())
+}
+
+func (suite *ConfigTestSuite) TestConfigPath() {
+	viper.Reset()
+	viper.Set("server.confPath", rootDir+"/.github/integration/sda/")
+	config, err := NewConfig()
+	assert.NotNil(suite.T(), config)
+	assert.NoError(suite.T(), err)
+	absPath, _ := filepath.Abs(rootDir + "/.github/integration/sda/config.yaml")
+	assert.Equal(suite.T(), absPath, viper.ConfigFileUsed())
+}
+
+func (suite *ConfigTestSuite) TestNoConfig() {
 	viper.Reset()
 	config, err := NewConfig()
 	assert.Nil(suite.T(), config)
 	assert.Error(suite.T(), err)
 }
 
-func (suite *TestSuite) TestMissingRequiredConfVar() {
+func (suite *ConfigTestSuite) TestMissingRequiredConfVar() {
 	for _, requiredConfVar := range requiredConfVars {
 		requiredConfVarValue := viper.Get(requiredConfVar)
 		viper.Set(requiredConfVar, nil)
@@ -93,7 +102,7 @@ func (suite *TestSuite) TestMissingRequiredConfVar() {
 	}
 }
 
-func (suite *TestSuite) TestConfigS3Storage() {
+func (suite *ConfigTestSuite) TestConfigS3Storage() {
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
@@ -104,7 +113,7 @@ func (suite *TestSuite) TestConfigS3Storage() {
 	assert.Equal(suite.T(), "testbucket", config.S3.bucket)
 }
 
-func (suite *TestSuite) TestConfigBroker() {
+func (suite *ConfigTestSuite) TestConfigBroker() {
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
@@ -128,7 +137,7 @@ func (suite *TestSuite) TestConfigBroker() {
 	assert.Equal(suite.T(), "/", config.Broker.vhost)
 }
 
-func (suite *TestSuite) TestTLSConfigBroker() {
+func (suite *ConfigTestSuite) TestTLSConfigBroker() {
 	viper.Set("broker.serverName", "broker")
 	viper.Set("broker.ssl", true)
 	viper.Set("broker.cacert", certPath+"/ca.crt")
@@ -159,7 +168,7 @@ func (suite *TestSuite) TestTLSConfigBroker() {
 	assert.Error(suite.T(), err)
 }
 
-func (suite *TestSuite) TestTLSConfigProxy() {
+func (suite *ConfigTestSuite) TestTLSConfigProxy() {
 	viper.Set("aws.cacert", certPath+"/ca.crt")
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
@@ -169,7 +178,7 @@ func (suite *TestSuite) TestTLSConfigProxy() {
 	assert.NoError(suite.T(), err)
 }
 
-func (suite *TestSuite) TestDefaultLogLevel() {
+func (suite *ConfigTestSuite) TestDefaultLogLevel() {
 	viper.Set("log.level", "test")
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)

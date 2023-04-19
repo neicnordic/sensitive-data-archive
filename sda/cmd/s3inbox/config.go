@@ -5,11 +5,11 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"path"
 	"reflect"
 	"strings"
 
 	"sensitive-data-archive/internal/database"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -79,11 +79,7 @@ func NewConfig() (*Config, error) {
 		if !strings.HasSuffix(cp, "/") {
 			cp += "/"
 		}
-		ss := strings.Split(strings.TrimLeft(cp, "/"), "/")
-		if ss[0] != "config" {
-			ss = ss[:len(ss)-1]
-		}
-		viper.AddConfigPath(path.Join(ss...))
+		viper.AddConfigPath(cp)
 	}
 	if viper.IsSet("server.confFile") {
 		viper.SetConfigFile(viper.GetString("server.confFile"))
