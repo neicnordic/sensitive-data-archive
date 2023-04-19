@@ -11,22 +11,34 @@ import (
 	"github.com/johannesboyne/gofakes3/backend/s3mem"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
 var ts *httptest.Server
 
-func TestMain(m *testing.M) {
+type BucketTestSuite struct {
+	suite.Suite
+}
 
+func (suite *BucketTestSuite) SetupTest() {
 	err := setupFakeS3()
-
 	if err != nil {
 		log.Error("Setup of fake s3 failed, bailing out")
 		os.Exit(1)
 	}
 
-	ret := m.Run()
-	ts.Close()
-	os.Exit(ret)
+	viper.Set("broker.host", "localhost")
+	viper.Set("broker.port", "1234")
+	viper.Set("broker.user", "guest")
+	viper.Set("broker.password", "guest")
+	viper.Set("broker.routingkey", "ingest")
+	viper.Set("broker.exchange", "amq.topic")
+	viper.Set("broker.vhost", "/")
+	viper.Set("aws.url", ts.URL)
+	viper.Set("aws.accesskey", "testaccess")
+	viper.Set("aws.secretkey", "testsecret")
+	viper.Set("aws.bucket", "testbucket")
+	viper.Set("server.jwtpubkeypath", "testpath")
 }
 
 func setupFakeS3() (err error) {
@@ -50,11 +62,11 @@ func setupFakeS3() (err error) {
 	return err
 }
 
-func (suite *TestSuite) TestBucketPass() {
-	viper.Set("aws.url", ts.URL)
-	viper.Set("aws.accesskey", "fakeaccess")
-	viper.Set("aws.secretkey", "testsecret")
-	viper.Set("aws.bucket", "testbucket")
+func TestBucketTestSuite(t *testing.T) {
+	suite.Run(t, new(BucketTestSuite))
+}
+
+func (suite *BucketTestSuite) TestBucketPass() {
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
@@ -63,7 +75,7 @@ func (suite *TestSuite) TestBucketPass() {
 	assert.NoError(suite.T(), err)
 }
 
-func (suite *TestSuite) TestBucketFail() {
+func (suite *BucketTestSuite) TestBucketFail() {
 	viper.Set("aws.url", "http://localhost:12345")
 	config, err := NewConfig()
 	assert.NotNil(suite.T(), config)
