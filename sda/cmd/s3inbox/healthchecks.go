@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 // HealthCheck registers and endpoint for healthchecking the service
 type HealthCheck struct {
 	port      int
+	DB        *sql.DB
 	s3URL     string
 	brokerURL string
 	tlsConfig *tls.Config
@@ -20,15 +22,15 @@ type HealthCheck struct {
 
 // NewHealthCheck creates a new healthchecker. It needs to know where to find
 // the backend S3 storage and the Message Broker so it can report readiness.
-func NewHealthCheck(port int, s3 S3Config, broker BrokerConfig, tlsConfig *tls.Config) *HealthCheck {
-	s3URL := s3.url
-	if s3.readypath != "" {
-		s3URL = s3.url + s3.readypath
+func NewHealthCheck(port int, db *sql.DB, conf *Config, tlsConfig *tls.Config) *HealthCheck {
+	s3URL := conf.S3.url
+	if conf.S3.readypath != "" {
+		s3URL = conf.S3.url + conf.S3.readypath
 	}
 
-	brokerURL := broker.host + ":" + broker.port
+	brokerURL := conf.Broker.host + ":" + conf.Broker.port
 
-	return &HealthCheck{port, s3URL, brokerURL, tlsConfig}
+	return &HealthCheck{port, db, s3URL, brokerURL, tlsConfig}
 }
 
 // RunHealthChecks should be run as a go routine in the main app. It registers
@@ -42,6 +44,8 @@ func (h *HealthCheck) RunHealthChecks() {
 	health.AddReadinessCheck("S3-backend-http", h.httpsGetCheck(h.s3URL, 5000*time.Millisecond))
 
 	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 50*time.Millisecond))
+
+	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(h.DB, 1*time.Second))
 
 	addr := ":" + strconv.Itoa(h.port)
 	server := &http.Server{

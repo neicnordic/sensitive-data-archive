@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -22,10 +24,29 @@ func TestHealthcheckTestSuite(t *testing.T) {
 	suite.Run(t, new(HealthcheckTestSuite))
 }
 
+func (suite *HealthcheckTestSuite) SetupTest() {
+	viper.Set("broker.host", "localhost")
+	viper.Set("broker.port", "8080")
+	viper.Set("broker.user", "guest")
+	viper.Set("broker.password", "guest")
+	viper.Set("broker.routingkey", "ingest")
+	viper.Set("broker.exchange", "sda")
+	viper.Set("broker.vhost", "sda")
+	viper.Set("aws.url", "http://localhost:8080")
+	viper.Set("aws.accesskey", "testaccess")
+	viper.Set("aws.secretkey", "testsecret")
+	viper.Set("aws.bucket", "testbucket")
+	viper.Set("server.jwtpubkeypath", "testpath")
+}
+
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
+	db, _, _ := sqlmock.New()
+	conf, err := NewConfig()
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,
-		S3Config{url: "http://localhost:8080", readypath: "/"},
-		BrokerConfig{host: "localhost", port: "8080"},
+		db,
+		conf,
 		new(tls.Config))
 
 	assert.NoError(suite.T(), h.httpsGetCheck("https://www.nbis.se", 10*time.Second)())
@@ -43,9 +64,14 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	ts.Listener = l
 	ts.Start()
 
+	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	mock.ExpectPing()
+	conf, err := NewConfig()
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,
-		S3Config{url: "http://localhost:8080", readypath: "/"},
-		BrokerConfig{host: "localhost", port: "8080"},
+		db,
+		conf,
 		new(tls.Config))
 
 	go h.RunHealthChecks()
@@ -56,7 +82,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = io.ReadAll(res.Body)
+	b, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -64,6 +90,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	if res.StatusCode != http.StatusOK {
 		suite.T().Errorf("Response code was %v; want 200", res.StatusCode)
+		suite.T().Errorf("Response: %s", b)
 	}
 
 	ts.Close()

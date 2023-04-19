@@ -104,7 +104,7 @@ func main() {
 
 	http.Handle("/", proxy)
 
-	hc := NewHealthCheck(8001, Conf.S3, Conf.Broker, tlsProxy)
+	hc := NewHealthCheck(8001, sdaDB.DB, Conf, tlsProxy)
 	go hc.RunHealthChecks()
 
 	server := &http.Server{
