@@ -211,3 +211,23 @@ func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, _ boo
 
 	return nil
 }
+
+func (broker *AMQPBroker) CreateNewChannel() error {
+	c, err := broker.Connection.Channel()
+	if err != nil {
+		return err
+	}
+
+	confirmsChan := make(chan amqp.Confirmation, 1)
+	if err := c.Confirm(false); err != nil {
+		close(confirmsChan)
+
+		return fmt.Errorf("channel could not be put into confirm mode: %v", err)
+	}
+
+	log.Debugln("reconnected to new channel")
+	broker.Channel = c
+	broker.confirmsChan = c.NotifyPublish(confirmsChan)
+
+	return nil
+}

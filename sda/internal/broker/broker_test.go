@@ -276,6 +276,19 @@ func (suite *BrokerTestSuite) TestGetMessages() {
 	b.Connection.Close()
 }
 
+func (suite *BrokerTestSuite) TestCreateNewChannel() {
+	b, err := NewMQ(tMqconf)
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), b.Channel.IsClosed())
+
+	b.Channel.Close()
+	assert.True(suite.T(), b.Channel.IsClosed())
+
+	assert.NoError(suite.T(), b.CreateNewChannel())
+	assert.False(suite.T(), b.Channel.IsClosed())
+
+}
+
 // Helper functions below this line
 
 func writeConf(dest string) error {
