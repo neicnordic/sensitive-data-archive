@@ -68,14 +68,14 @@ jobs:
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build container for sda-s3proxy
+      - name: Build container for sensitive-data-archive
         uses: docker/build-push-action@v4
         with:
-          context: ./sda-s3proxy
+          context: ./sda
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-s3proxy
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
