@@ -16,10 +16,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	log "github.com/sirupsen/logrus"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
+
+type BrokerTestSuite struct {
+	suite.Suite
+}
 
 var tMqconf = MQConf{
 	"127.0.0.1",
@@ -41,20 +46,24 @@ var tMqconf = MQConf{
 	"",
 }
 
-func TestBuildMqURI(t *testing.T) {
-	amqps := buildMQURI("localhost", "user", "pass", "/vhost", 5555, true)
-	assert.Equal(t, "amqps://user:pass@localhost:5555/vhost", amqps)
-	amqp := buildMQURI("localhost", "user", "pass", "/vhost", 5555, false)
-	assert.Equal(t, "amqp://user:pass@localhost:5555/vhost", amqp)
+func TestBrokerTestSuite(t *testing.T) {
+	suite.Run(t, new(BrokerTestSuite))
 }
 
-func TestTLSConfigBroker(t *testing.T) {
+func (suite *BrokerTestSuite) TestBuildMqURI() {
+	amqps := buildMQURI("localhost", "user", "pass", "/vhost", 5555, true)
+	assert.Equal(suite.T(), "amqps://user:pass@localhost:5555/vhost", amqps)
+	amqp := buildMQURI("localhost", "user", "pass", "/vhost", 5555, false)
+	assert.Equal(suite.T(), "amqp://user:pass@localhost:5555/vhost", amqp)
+}
+
+func (suite *BrokerTestSuite) TestTLSConfigBroker() {
 	tempDir, err := os.MkdirTemp("", "gotest")
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 	defer os.RemoveAll(tempDir)
 
 	err = certsetup(tempDir)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	confOK := tMqconf
 	confOK.Ssl = true
@@ -64,15 +73,15 @@ func TestTLSConfigBroker(t *testing.T) {
 	confOK.ClientKey = tempDir + "/tls.key"
 
 	tlsConfig, err := TLSConfigBroker(confOK)
-	assert.NoError(t, err, "Unexpected error")
-	assert.NotZero(t, tlsConfig.Certificates, "Expected warnings were missing")
-	assert.NotZero(t, tlsConfig.RootCAs, "Expected warnings were missing")
-	assert.EqualValues(t, tlsConfig.ServerName, "servername")
+	assert.NoError(suite.T(), err, "Unexpected error")
+	assert.NotZero(suite.T(), tlsConfig.Certificates, "Expected warnings were missing")
+	assert.NotZero(suite.T(), tlsConfig.RootCAs, "Expected warnings were missing")
+	assert.EqualValues(suite.T(), tlsConfig.ServerName, "servername")
 
 	noCa := confOK
 	noCa.CACert = ""
 	_, err = TLSConfigBroker(noCa)
-	assert.NoError(t, err, "Unexpected error")
+	assert.NoError(suite.T(), err, "Unexpected error")
 
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
@@ -81,23 +90,23 @@ func TestTLSConfigBroker(t *testing.T) {
 	}()
 	noCa.CACert = tempDir + "/tls.key"
 	_, err = TLSConfigBroker(noCa)
-	assert.NoError(t, err, "Unexpected error")
-	assert.Contains(t, buf.String(), "No certs appended, using system certs only")
+	assert.NoError(suite.T(), err, "Unexpected error")
+	assert.Contains(suite.T(), buf.String(), "No certs appended, using system certs only")
 
 	badCertConf := confOK
 	badCertConf.ClientCert = tempDir + "/bar"
 	_, err = CatchTLSConfigBrokerPanic(badCertConf)
-	assert.EqualError(t, err, "open "+tempDir+"/bar: no such file or directory")
+	assert.EqualError(suite.T(), err, "open "+tempDir+"/bar: no such file or directory")
 
 	badKeyConf := confOK
 	badKeyConf.ClientKey = tempDir + "/foo"
 	_, err = CatchTLSConfigBrokerPanic(badKeyConf)
-	assert.EqualError(t, err, "open "+tempDir+"/foo: no such file or directory")
+	assert.EqualError(suite.T(), err, "open "+tempDir+"/foo: no such file or directory")
 
 	noPemFile := confOK
 	noPemFile.ClientKey = "broker.go"
 	_, err = CatchTLSConfigBrokerPanic(noPemFile)
-	assert.EqualError(t, err, "tls: failed to find any PEM data in key input")
+	assert.EqualError(suite.T(), err, "tls: failed to find any PEM data in key input")
 }
 
 func CatchTLSConfigBrokerPanic(c MQConf) (cfg *tls.Config, err error) {
@@ -112,22 +121,22 @@ func CatchTLSConfigBrokerPanic(c MQConf) (cfg *tls.Config, err error) {
 	return cfg, err
 }
 
-func TestNewMQNoTLS(t *testing.T) {
+func (suite *BrokerTestSuite) TestNewMQNoTLS() {
 	noSslConf := tMqconf
 	noSslConf.Ssl = false
 	b, err := NewMQ(noSslConf)
 	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since a real MQ is not present")
+		suite.T().Log(err)
+		suite.T().Skip("skip test since a real MQ is not present")
 	}
-	assert.NotNil(t, b, "NewMQ without ssl did not return a broker")
-	assert.False(t, b.Connection.IsClosed())
+	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(suite.T(), b.Connection.IsClosed())
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func TestNewMQTLS(t *testing.T) {
+func (suite *BrokerTestSuite) TestNewMQTLS() {
 	certDir := fmt.Sprintf("/tmp/%d-%d-%d", time.Now().Year(), time.Now().Month(), time.Now().Day())
 
 	SslConf := tMqconf
@@ -139,52 +148,52 @@ func TestNewMQTLS(t *testing.T) {
 
 	b, err := NewMQ(SslConf)
 	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since a real MQ is not present")
+		suite.T().Log(err)
+		suite.T().Skip("skip test since a real MQ is not present")
 	}
-	assert.NotNil(t, b, "NewMQ without ssl did not return a broker")
-	assert.False(t, b.Connection.IsClosed())
+	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(suite.T(), b.Connection.IsClosed())
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func TestSendMessage(t *testing.T) {
+func (suite *BrokerTestSuite) TestSendMessage() {
 	noSslConf := tMqconf
 	noSslConf.Ssl = false
 	b, err := NewMQ(noSslConf)
 	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since a real MQ is not present")
+		suite.T().Log(err)
+		suite.T().Skip("skip test since a real MQ is not present")
 	}
-	assert.NotNil(t, b, "NewMQ without ssl did not return a broker")
-	assert.False(t, b.Connection.IsClosed())
+	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(suite.T(), b.Connection.IsClosed())
 
 	err = b.SendMessage("1", "", "queue", true, []byte("test message"))
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func TestGetMessages(t *testing.T) {
+func (suite *BrokerTestSuite) TestGetMessages() {
 	noSslConf := tMqconf
 	noSslConf.Ssl = false
 	b, err := NewMQ(noSslConf)
 	if err != nil {
-		t.Log(err)
-		t.Skip("skip test since a real MQ is not present")
+		suite.T().Log(err)
+		suite.T().Skip("skip test since a real MQ is not present")
 	}
-	assert.NotNil(t, b, "NewMQ without ssl did not return a broker")
-	assert.False(t, b.Connection.IsClosed())
+	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(suite.T(), b.Connection.IsClosed())
 
 	d, err := b.GetMessages("queue")
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	for message := range d {
 		if "test message" == string(message.Body) {
 			err := message.Ack(false)
-			assert.NoError(t, err)
+			assert.NoError(suite.T(), err)
 
 			break
 		}
