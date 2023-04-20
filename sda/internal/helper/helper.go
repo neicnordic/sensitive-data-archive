@@ -319,7 +319,7 @@ func MakeCerts(outDir string) {
 			CommonName:   "test_cert",
 		},
 		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
-		DNSNames:    []string{"localhost,mq,proxy,s3"},
+		DNSNames:    []string{"localhost", "mq", "proxy", "s3"},
 		NotBefore:   time.Now(),
 		NotAfter:    time.Now().AddDate(0, 0, 1),
 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
