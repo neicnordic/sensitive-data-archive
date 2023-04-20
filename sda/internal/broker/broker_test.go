@@ -2,19 +2,12 @@ package broker
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"math/big"
-	"net"
 	"os"
 	"testing"
-	"time"
+
+	"sensitive-data-archive/internal/helper"
 
 	log "github.com/sirupsen/logrus"
 
@@ -26,24 +19,37 @@ type BrokerTestSuite struct {
 	suite.Suite
 }
 
-var tMqconf = MQConf{
-	"127.0.0.1",
-	5678,
-	"user",
-	"password",
-	"/vhost",
-	"queue",
-	"exchange",
-	"routingkey",
-	"routingError",
-	true,
-	false,
-	"../dev_utils/certs/ca.pem",
-	"../dev_utils/certs/client.pem",
-	"../dev_utils/certs/client-key.pem",
-	"servername",
-	true,
-	"",
+var certPath string
+var tMqconf = MQConf{}
+
+func (suite *BrokerTestSuite) SetupTest() {
+	certPath, _ = os.MkdirTemp("", "gocerts")
+	// defer os.RemoveAll(certPath)
+	helper.MakeCerts(certPath)
+
+	tMqconf = MQConf{
+		"127.0.0.1",
+		5678,
+		"guest",
+		"guest",
+		"/",
+		"ingest",
+		"amq.default",
+		"ingest",
+		"error",
+		false,
+		false,
+		certPath + "/ca.crt",
+		certPath + "/tls.crt",
+		certPath + "/tls.key",
+		"mq",
+		true,
+		"",
+	}
+}
+
+func (suite *BrokerTestSuite) TearDownTest() {
+	defer os.RemoveAll(certPath)
 }
 
 func TestBrokerTestSuite(t *testing.T) {
@@ -58,25 +64,18 @@ func (suite *BrokerTestSuite) TestBuildMqURI() {
 }
 
 func (suite *BrokerTestSuite) TestTLSConfigBroker() {
-	tempDir, err := os.MkdirTemp("", "gotest")
-	assert.NoError(suite.T(), err)
-	defer os.RemoveAll(tempDir)
-
-	err = certsetup(tempDir)
-	assert.NoError(suite.T(), err)
-
 	confOK := tMqconf
 	confOK.Ssl = true
 	confOK.VerifyPeer = true
-	confOK.CACert = tempDir + "/ca.crt"
-	confOK.ClientCert = tempDir + "/tls.crt"
-	confOK.ClientKey = tempDir + "/tls.key"
+	confOK.CACert = certPath + "/ca.crt"
+	confOK.ClientCert = certPath + "/tls.crt"
+	confOK.ClientKey = certPath + "/tls.key"
 
 	tlsConfig, err := TLSConfigBroker(confOK)
 	assert.NoError(suite.T(), err, "Unexpected error")
 	assert.NotZero(suite.T(), tlsConfig.Certificates, "Expected warnings were missing")
 	assert.NotZero(suite.T(), tlsConfig.RootCAs, "Expected warnings were missing")
-	assert.EqualValues(suite.T(), tlsConfig.ServerName, "servername")
+	assert.EqualValues(suite.T(), tlsConfig.ServerName, "mq")
 
 	noCa := confOK
 	noCa.CACert = ""
@@ -88,20 +87,20 @@ func (suite *BrokerTestSuite) TestTLSConfigBroker() {
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()
-	noCa.CACert = tempDir + "/tls.key"
+	noCa.CACert = certPath + "/tls.key"
 	_, err = TLSConfigBroker(noCa)
 	assert.NoError(suite.T(), err, "Unexpected error")
 	assert.Contains(suite.T(), buf.String(), "No certs appended, using system certs only")
 
 	badCertConf := confOK
-	badCertConf.ClientCert = tempDir + "/bar"
+	badCertConf.ClientCert = certPath + "/bar"
 	_, err = CatchTLSConfigBrokerPanic(badCertConf)
-	assert.EqualError(suite.T(), err, "open "+tempDir+"/bar: no such file or directory")
+	assert.EqualError(suite.T(), err, "open "+certPath+"/bar: no such file or directory")
 
 	badKeyConf := confOK
-	badKeyConf.ClientKey = tempDir + "/foo"
+	badKeyConf.ClientKey = certPath + "/foo"
 	_, err = CatchTLSConfigBrokerPanic(badKeyConf)
-	assert.EqualError(suite.T(), err, "open "+tempDir+"/foo: no such file or directory")
+	assert.EqualError(suite.T(), err, "open "+certPath+"/foo: no such file or directory")
 
 	noPemFile := confOK
 	noPemFile.ClientKey = "broker.go"
@@ -137,14 +136,9 @@ func (suite *BrokerTestSuite) TestNewMQNoTLS() {
 }
 
 func (suite *BrokerTestSuite) TestNewMQTLS() {
-	certDir := fmt.Sprintf("/tmp/%d-%d-%d", time.Now().Year(), time.Now().Month(), time.Now().Day())
-
 	SslConf := tMqconf
 	SslConf.Port = 5679
-	SslConf.CACert = certDir + "/ca.crt"
 	SslConf.VerifyPeer = true
-	SslConf.ClientCert = certDir + "/tls.crt"
-	SslConf.ClientKey = certDir + "/tls.key"
 
 	b, err := NewMQ(SslConf)
 	if err != nil {
@@ -201,109 +195,4 @@ func (suite *BrokerTestSuite) TestGetMessages() {
 
 	b.Channel.Close()
 	b.Connection.Close()
-}
-
-// Helper functions below this line
-
-func certsetup(tempDir string) error {
-	// set up our CA certificate
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(2000),
-		Subject: pkix.Name{
-			Organization:  []string{"NEIC"},
-			Country:       []string{""},
-			Province:      []string{""},
-			Locality:      []string{""},
-			StreetAddress: []string{""},
-			PostalCode:    []string{""},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(0, 0, 7),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-
-	// create our private and public key
-	caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return err
-	}
-
-	// create the CA certificate
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return err
-	}
-
-	err = TLScertToFile(tempDir+"/ca.crt", caBytes)
-	if err != nil {
-		return err
-	}
-
-	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return err
-	}
-
-	err = TLSkeyToFile(tempDir+"/tls.key", tlsKey)
-	if err != nil {
-		return err
-	}
-
-	// set up our server certificate
-	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(2121),
-		Subject: pkix.Name{
-			Organization:  []string{"NEIC"},
-			Country:       []string{""},
-			Province:      []string{""},
-			Locality:      []string{""},
-			StreetAddress: []string{""},
-			PostalCode:    []string{""},
-		},
-		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
-		DNSNames:     []string{"localhost", "servername"},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(0, 0, 1),
-		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-
-	// create the TLS certificate
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &tlsKey.PublicKey, tlsKey)
-	if err != nil {
-		return err
-	}
-
-	err = TLScertToFile(tempDir+"/tls.crt", certBytes)
-
-	return err
-}
-
-func TLSkeyToFile(filename string, key *ecdsa.PrivateKey) error {
-	keyFile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer keyFile.Close()
-
-	pk, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return err
-	}
-
-	return pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: pk})
-}
-
-func TLScertToFile(filename string, derBytes []byte) error {
-	certFile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer certFile.Close()
-
-	return pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 }
