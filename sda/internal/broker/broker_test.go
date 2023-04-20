@@ -2,15 +2,22 @@ package broker
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	"sensitive-data-archive/internal/helper"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -19,17 +26,89 @@ type BrokerTestSuite struct {
 	suite.Suite
 }
 
+var mqPort, tlsPort int
 var certPath string
 var tMqconf = MQConf{}
 
-func (suite *BrokerTestSuite) SetupTest() {
+func TestMain(m *testing.M) {
 	certPath, _ = os.MkdirTemp("", "gocerts")
-	// defer os.RemoveAll(certPath)
+	defer os.RemoveAll(certPath)
 	helper.MakeCerts(certPath)
+	_ = writeConf(certPath)
 
+	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
+	pool, err := dockertest.NewPool("")
+	if err != nil {
+		log.Fatalf("Could not construct pool: %s", err)
+	}
+
+	// uses pool to try to connect to Docker
+	err = pool.Client.Ping()
+	if err != nil {
+		log.Fatalf("Could not connect to Docker: %s", err)
+	}
+
+	// pulls an image, creates a container based on it and runs it
+	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "rabbitmq",
+		Tag:        "3-management",
+		Mounts: []string{
+			certPath + "/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf",
+			certPath + "/ca.crt:/etc/rabbitmq/ca.crt",
+			certPath + "/tls.crt:/etc/rabbitmq/tls.crt",
+			certPath + "/tls.key:/etc/rabbitmq/tls.key",
+		},
+		Name: "mq",
+	}, func(config *docker.HostConfig) {
+		// set AutoRemove to true so that stopped container goes away by itself
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{
+			Name: "no",
+		}
+	})
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+
+	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
+	tlsPort, _ = strconv.Atoi(rabbitmq.GetPort("5671/tcp"))
+	mqHostAndPort := rabbitmq.GetHostPort("15672/tcp")
+
+	client := http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(http.MethodPut, "http://"+mqHostAndPort+"/api/queues/%2F/ingest", http.NoBody)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.SetBasicAuth("guest", "guest")
+
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	if err := pool.Retry(func() error {
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+
+		return nil
+	}); err != nil {
+		if err := pool.Purge(rabbitmq); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
+		log.Fatalf("Could not connect to rabbitmq: %s", err)
+	}
+
+	_ = m.Run()
+
+	log.Println("tests completed")
+	if err := pool.Purge(rabbitmq); err != nil {
+		log.Fatalf("Could not purge resource: %s", err)
+	}
+}
+
+func (suite *BrokerTestSuite) SetupTest() {
 	tMqconf = MQConf{
 		"127.0.0.1",
-		5678,
+		mqPort,
 		"guest",
 		"guest",
 		"/",
@@ -46,10 +125,6 @@ func (suite *BrokerTestSuite) SetupTest() {
 		true,
 		"",
 	}
-}
-
-func (suite *BrokerTestSuite) TearDownTest() {
-	defer os.RemoveAll(certPath)
 }
 
 func TestBrokerTestSuite(t *testing.T) {
@@ -121,13 +196,8 @@ func CatchTLSConfigBrokerPanic(c MQConf) (cfg *tls.Config, err error) {
 }
 
 func (suite *BrokerTestSuite) TestNewMQNoTLS() {
-	noSslConf := tMqconf
-	noSslConf.Ssl = false
-	b, err := NewMQ(noSslConf)
-	if err != nil {
-		suite.T().Log(err)
-		suite.T().Skip("skip test since a real MQ is not present")
-	}
+	b, err := NewMQ(tMqconf)
+	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(suite.T(), b.Connection.IsClosed())
 
@@ -137,14 +207,12 @@ func (suite *BrokerTestSuite) TestNewMQNoTLS() {
 
 func (suite *BrokerTestSuite) TestNewMQTLS() {
 	SslConf := tMqconf
-	SslConf.Port = 5679
+	SslConf.Port = tlsPort
+	SslConf.Ssl = true
 	SslConf.VerifyPeer = true
 
 	b, err := NewMQ(SslConf)
-	if err != nil {
-		suite.T().Log(err)
-		suite.T().Skip("skip test since a real MQ is not present")
-	}
+	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(suite.T(), b.Connection.IsClosed())
 
@@ -153,17 +221,12 @@ func (suite *BrokerTestSuite) TestNewMQTLS() {
 }
 
 func (suite *BrokerTestSuite) TestSendMessage() {
-	noSslConf := tMqconf
-	noSslConf.Ssl = false
-	b, err := NewMQ(noSslConf)
-	if err != nil {
-		suite.T().Log(err)
-		suite.T().Skip("skip test since a real MQ is not present")
-	}
+	b, err := NewMQ(tMqconf)
+	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(suite.T(), b.Connection.IsClosed())
 
-	err = b.SendMessage("1", "", "queue", true, []byte("test message"))
+	err = b.SendMessage("1", "", "ingest", true, []byte("test message"))
 	assert.NoError(suite.T(), err)
 
 	b.Channel.Close()
@@ -171,21 +234,37 @@ func (suite *BrokerTestSuite) TestSendMessage() {
 }
 
 func (suite *BrokerTestSuite) TestGetMessages() {
-	noSslConf := tMqconf
-	noSslConf.Ssl = false
-	b, err := NewMQ(noSslConf)
-	if err != nil {
-		suite.T().Log(err)
-		suite.T().Skip("skip test since a real MQ is not present")
-	}
+	b, err := NewMQ(tMqconf)
+	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(suite.T(), b.Connection.IsClosed())
 
-	d, err := b.GetMessages("queue")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = b.Channel.PublishWithContext(
+		ctx,
+		"",
+		"ingest",
+		false, // mandatory
+		false, // immediate
+		amqp.Publishing{
+			Headers:         amqp.Table{},
+			ContentEncoding: "UTF-8",
+			ContentType:     "application/json",
+			DeliveryMode:    amqp.Persistent, // 1=non-persistent, 2=persistent
+			CorrelationId:   "getMessage",
+			Priority:        0, // 0-9
+			Body:            []byte("test message"),
+		},
+	)
+	assert.NoError(suite.T(), err)
+
+	d, err := b.GetMessages("ingest")
 	assert.NoError(suite.T(), err)
 
 	for message := range d {
-		if "test message" == string(message.Body) {
+		if string(message.Body) == "test message" {
 			err := message.Ack(false)
 			assert.NoError(suite.T(), err)
 
@@ -195,4 +274,29 @@ func (suite *BrokerTestSuite) TestGetMessages() {
 
 	b.Channel.Close()
 	b.Connection.Close()
+}
+
+// Helper functions below this line
+
+func writeConf(dest string) error {
+	f, err := os.Create(dest + "/rabbitmq.conf")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	conf := []byte("listeners.ssl.default  = 5671\n" +
+		"ssl_options.cacertfile           = /etc/rabbitmq/ca.crt\n" +
+		"ssl_options.certfile             = /etc/rabbitmq/tls.crt\n" +
+		"ssl_options.keyfile              = /etc/rabbitmq/tls.key\n" +
+		"ssl_options.verify               = verify_peer\n" +
+		"ssl_options.fail_if_no_peer_cert = true\n",
+	)
+
+	_, err = f.Write(conf)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
