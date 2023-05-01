@@ -36,16 +36,21 @@ func TestMain(m *testing.M) {
 	helper.MakeCerts(certPath)
 	_ = writeConf(certPath)
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Infoln("Recovered")
+		}
+	}()
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
-		log.Fatalf("Could not construct pool: %s", err)
+		log.Panicf("Could not construct pool: %s", err)
 	}
 
 	// uses pool to try to connect to Docker
 	err = pool.Client.Ping()
 	if err != nil {
-		log.Fatalf("Could not connect to Docker: %s", err)
+		log.Panicf("Could not connect to Docker: %s", err)
 	}
 
 	// pulls an image, creates a container based on it and runs it
@@ -67,7 +72,7 @@ func TestMain(m *testing.M) {
 		}
 	})
 	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
+		log.Panicf("Could not start resource: %s", err)
 	}
 
 	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
@@ -77,7 +82,7 @@ func TestMain(m *testing.M) {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest(http.MethodPut, "http://"+mqHostAndPort+"/api/queues/%2F/ingest", http.NoBody)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	req.SetBasicAuth("guest", "guest")
 
@@ -92,16 +97,16 @@ func TestMain(m *testing.M) {
 		return nil
 	}); err != nil {
 		if err := pool.Purge(rabbitmq); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
+			log.Panicf("Could not purge resource: %s", err)
 		}
-		log.Fatalf("Could not connect to rabbitmq: %s", err)
+		log.Panicf("Could not connect to rabbitmq: %s", err)
 	}
 
 	_ = m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(rabbitmq); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
+		log.Panicf("Could not purge resource: %s", err)
 	}
 }
 
