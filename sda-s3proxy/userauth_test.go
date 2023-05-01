@@ -25,9 +25,26 @@ func TestUserTokenAuthenticator_NoFile(t *testing.T) {
 	a.pubkeys = make(map[string][]byte)
 	err := a.getjwtkey("")
 	assert.Error(t, err)
+}
 
-	err = a.getjwtpubkey("")
-	assert.Error(t, err)
+func TestUserTokenAuthenticator_GetFile(t *testing.T) {
+	// Create temp demo rsa key pair
+	demoKeysPath := "temp-rsa-keys"
+	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
+	assert.NoError(t, err)
+
+	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
+	assert.NoError(t, err)
+
+	var pubkeys map[string][]byte
+	jwtpubkeypath := demoKeysPath + "/public-key/"
+
+	a := NewValidateFromToken(pubkeys)
+	a.pubkeys = make(map[string][]byte)
+	err = a.getjwtkey(jwtpubkeypath)
+	assert.NoError(t, err)
+
+	defer os.RemoveAll(demoKeysPath)
 }
 
 func TestUserTokenAuthenticator_WrongURL(t *testing.T) {
@@ -37,7 +54,27 @@ func TestUserTokenAuthenticator_WrongURL(t *testing.T) {
 	jwtpubkeyurl := "/dummy/"
 
 	err := a.getjwtpubkey(jwtpubkeyurl)
-	assert.Error(t, err)
+	assert.Equal(t, "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
+}
+
+func TestUserTokenAuthenticator_BadURL(t *testing.T) {
+	var pubkeys map[string][]byte
+	a := NewValidateFromToken(pubkeys)
+	a.pubkeys = make(map[string][]byte)
+	jwtpubkeyurl := "dummy.com/jwk"
+
+	err := a.getjwtpubkey(jwtpubkeyurl)
+	assert.Equal(t, "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
+}
+
+func TestUserTokenAuthenticator_GoodURL(t *testing.T) {
+	var pubkeys map[string][]byte
+	a := NewValidateFromToken(pubkeys)
+	a.pubkeys = make(map[string][]byte)
+	jwtpubkeyurl := "https://example.com/jwk/"
+
+	err := a.getjwtpubkey(jwtpubkeyurl)
+	assert.ErrorContains(t, err, "failed to fetch remote JWK")
 }
 
 func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {
@@ -250,6 +287,22 @@ func TestUserTokenAuthenticator_ValidateSignature_EC(t *testing.T) {
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
 	assert.Contains(t, err.Error(), "failed to get issuer from token")
+
+	// Test LS-AAI user authentication
+	token, err := helper.CreateECToken(prKeyParsed, "ES256", "JWT", helper.WrongUserClaims)
+	assert.NoError(t, err)
+
+	r, _ = http.NewRequest("", "/c5773f41d17d27bd53b1e6794aedc32d7906e779_elixir-europe.org/foo", nil)
+	r.Host = "localhost"
+	r.Header.Set("X-Amz-Security-Token", token)
+	_, err = a.Authenticate(r)
+	assert.NoError(t, err)
+
+	r, _ = http.NewRequest("", "/dataset", nil)
+	r.Host = "localhost"
+	r.Header.Set("X-Amz-Security-Token", token)
+	_, err = a.Authenticate(r)
+	assert.Equal(t, "token supplied username c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org but URL had dataset", err.Error())
 
 	defer os.RemoveAll(demoKeysPath)
 }

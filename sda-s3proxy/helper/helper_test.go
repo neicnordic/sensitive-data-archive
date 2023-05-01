@@ -70,3 +70,23 @@ func TestCreateECToken(t *testing.T) {
 
 	defer os.RemoveAll("dummy-folder")
 }
+
+func TestFormatUploadFilePath(t *testing.T) {
+
+	unixPath := "a/b/c.c4gh"
+	testPath := "a\\b\\c.c4gh"
+	uploadPath, err := FormatUploadFilePath(testPath)
+	assert.NoError(t, err)
+	assert.Equal(t, unixPath, uploadPath)
+
+	// mixed "\" and "/"
+	weirdPath := `dq\sw:*?"<>|\t\s/df.c4gh`
+	_, err = FormatUploadFilePath(weirdPath)
+	assert.EqualError(t, err, "filepath contains mixed '\\' and '/' characters")
+
+	// no mixed "\" and "/" but not allowed
+	weirdPath = `dq\sw:*?"<>|\t\sdf.c4gh`
+	_, err = FormatUploadFilePath(weirdPath)
+	assert.EqualError(t, err, "filepath contains disallowed characters: :, *, ?, \", <, >, |")
+
+}

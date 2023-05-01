@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -73,15 +73,14 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 
 	log.Debugf("Looking for key for %s", strIss)
 
-	re := regexp.MustCompile(`//([^/]*)`)
-	keyMatch := re.FindStringSubmatch(strIss)
-	if len(keyMatch) < 2 || keyMatch[1] == "" {
-		return nil, fmt.Errorf("failed to get issuer from token iss (%v)", strIss)
+	iss, err := url.ParseRequestURI(strIss)
+	if err != nil || iss.Hostname() == "" {
+		return nil, fmt.Errorf("failed to get issuer from token (%v)", strIss)
 	}
 
 	switch token.Header["alg"] {
 	case "ES256":
-		key, err := jwt.ParseECPublicKeyFromPEM(u.pubkeys[keyMatch[1]])
+		key, err := jwt.ParseECPublicKeyFromPEM(u.pubkeys[iss.Hostname()])
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse EC public key (%v)", err)
 		}
@@ -90,7 +89,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 			return nil, fmt.Errorf("signed token (ES256) not valid: %v, (token was %s)", err, tokenStr)
 		}
 	case "RS256":
-		key, err := jwt.ParseRSAPublicKeyFromPEM(u.pubkeys[keyMatch[1]])
+		key, err := jwt.ParseRSAPublicKeyFromPEM(u.pubkeys[iss.Hostname()])
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse RSA256 public key (%v)", err)
 		}
@@ -103,12 +102,17 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 	}
 
 	// Check whether token username and filepath match
-	re = regexp.MustCompile("/([^/]+)/")
-	username := re.FindStringSubmatch(r.URL.Path)[1]
+	str, err := url.ParseRequestURI(r.URL.Path)
+	if err != nil || str.Path == "" {
+		return nil, fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
+	}
+
+	path := strings.Split(str.Path, "/")
+	username := path[1]
+
 	// Case for Elixir and CEGA usernames: Replace @ with _ character
 	if strings.Contains(fmt.Sprintf("%v", claims["sub"]), "@") {
-		claimString := fmt.Sprintf("%v", claims["sub"])
-		if strings.ReplaceAll(claimString, "@", "_") != username {
+		if strings.ReplaceAll(fmt.Sprintf("%v", claims["sub"]), "@", "_") != username {
 			return nil, fmt.Errorf("token supplied username %s but URL had %s", claims["sub"], username)
 		}
 	} else if claims["sub"] != username {
@@ -120,7 +124,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 
 // Function for reading the ega key in []byte
 func (u *ValidateFromToken) getjwtkey(jwtpubkeypath string) error {
-	re := regexp.MustCompile(`(.*)\.+`)
 	err := filepath.Walk(jwtpubkeypath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -132,13 +135,8 @@ func (u *ValidateFromToken) getjwtkey(jwtpubkeypath string) error {
 				if err != nil {
 					return fmt.Errorf("token file error: %v", err)
 				}
-				nameMatch := re.FindStringSubmatch(info.Name())
-
-				if nameMatch == nil || len(nameMatch) < 2 {
-					return fmt.Errorf("unexpected lack of substring match in filename %s", info.Name())
-				}
-
-				u.pubkeys[nameMatch[1]] = keyData
+				nameMatch := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
+				u.pubkeys[nameMatch] = keyData
 			}
 
 			return nil
@@ -152,18 +150,16 @@ func (u *ValidateFromToken) getjwtkey(jwtpubkeypath string) error {
 
 // Function for fetching the elixir key from the JWK and transform it to []byte
 func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
-	re := regexp.MustCompile("/([^/]+)/")
-	keyMatch := re.FindStringSubmatch(jwtpubkeyurl)
+	jwkURL, err := url.ParseRequestURI(jwtpubkeyurl)
+	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
+		if err != nil {
+			return err
+		}
 
-	if keyMatch == nil {
-		return fmt.Errorf("not valid link for key %s", jwtpubkeyurl)
+		return fmt.Errorf("jwtpubkeyurl is not a proper URL (%s)", jwkURL)
 	}
+	log.Debug("jwkURL: ", jwkURL.Scheme)
 
-	if len(keyMatch) < 2 {
-		return fmt.Errorf("unexpected lack of submatches in %s", jwtpubkeyurl)
-	}
-
-	key := keyMatch[1]
 	set, err := jwk.Fetch(jwtpubkeyurl)
 	if err != nil {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
@@ -198,8 +194,8 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 			Bytes: pkeyBytes,
 		},
 	)
-	u.pubkeys[key] = keyData
-	log.Debugf("Registered public key for %s", key)
+	u.pubkeys[jwkURL.Hostname()] = keyData
+	log.Debugf("Registered public key for %s", jwkURL.Hostname())
 
 	return nil
 }

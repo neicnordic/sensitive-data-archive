@@ -310,6 +310,16 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	proxy.ServeHTTP(w, r)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
+
+	// Filenames with platform incompatible characters are disallowed
+	// not checked in TestServeHTTP_allowed() because we look for a non 403 response
+	r.Method = "PUT"
+	r.URL, _ = url.Parse("/username/fi|le")
+	w = httptest.NewRecorder()
+	proxy.ServeHTTP(w, r)
+	assert.Equal(suite.T(), 406, w.Result().StatusCode)
+	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore())
+
 }
 
 func (suite *ProxyTests) TestMessageFormatting() {
