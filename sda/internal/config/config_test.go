@@ -107,7 +107,7 @@ func (suite *ConfigTestSuite) TestConfigS3Storage() {
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), config.S3)
-	assert.Equal(suite.T(), "testurl", config.S3.Url)
+	assert.Equal(suite.T(), "testurl", config.S3.URL)
 	assert.Equal(suite.T(), "testaccess", config.S3.AccessKey)
 	assert.Equal(suite.T(), "testsecret", config.S3.SecretKey)
 	assert.Equal(suite.T(), "testbucket", config.S3.Bucket)

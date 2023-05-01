@@ -26,7 +26,7 @@ var (
 
 // S3Config stores information about the S3 backend
 type S3Config struct {
-	Url       string
+	URL       string
 	Readypath string
 	AccessKey string
 	SecretKey string
@@ -118,7 +118,7 @@ func (c *Config) readConfig() error {
 	s3 := S3Config{}
 
 	// All these are required
-	s3.Url = viper.GetString("aws.url")
+	s3.URL = viper.GetString("aws.url")
 	s3.AccessKey = viper.GetString("aws.accessKey")
 	s3.SecretKey = viper.GetString("aws.secretKey")
 	s3.Bucket = viper.GetString("aws.bucket")

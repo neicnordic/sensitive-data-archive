@@ -41,7 +41,7 @@ func (suite *ProxyTests) SetupTest() {
 
 	// Create an s3config for the fake server
 	suite.S3conf = config.S3Config{
-		Url:       "http://127.0.0.1:9024",
+		URL:       "http://127.0.0.1:9024",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",
@@ -211,7 +211,7 @@ func (suite *ProxyTests) TestServeHTTP_disallowed() {
 
 func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 	s3conf := config.S3Config{
-		Url:       "http://localhost:40211",
+		URL:       "http://localhost:40211",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",

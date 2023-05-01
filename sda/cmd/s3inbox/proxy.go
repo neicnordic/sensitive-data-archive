@@ -245,10 +245,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
-	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, p.s3.Url)
+	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, p.s3.URL)
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3.Url+r.URL.String(), r.Body)
+	nr, err := http.NewRequest(r.Method, p.s3.URL+r.URL.String(), r.Body)
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -454,8 +454,8 @@ func (p *Proxy) newSession() (*session.Session, error) {
 			CustomCABundle: cacert,
 			Config: aws.Config{
 				Region:           aws.String(p.s3.Region),
-				Endpoint:         aws.String(p.s3.Url),
-				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.Url, "http:")),
+				Endpoint:         aws.String(p.s3.URL),
+				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 				S3ForcePathStyle: aws.Bool(true),
 				Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
 			}})
@@ -465,8 +465,8 @@ func (p *Proxy) newSession() (*session.Session, error) {
 	} else {
 		mySession, err = session.NewSession(&aws.Config{
 			Region:           aws.String(p.s3.Region),
-			Endpoint:         aws.String(p.s3.Url),
-			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.Url, "http:")),
+			Endpoint:         aws.String(p.s3.URL),
+			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 			S3ForcePathStyle: aws.Bool(true),
 			Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
 		})

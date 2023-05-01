@@ -25,11 +25,11 @@ func checkS3Bucket(config config.S3Config) error {
 	client := http.Client{Transport: s3Transport}
 	s3Session := session.Must(session.NewSession(
 		&aws.Config{
-			Endpoint:         aws.String(config.Url),
+			Endpoint:         aws.String(config.URL),
 			Region:           aws.String(config.Region),
 			HTTPClient:       &client,
 			S3ForcePathStyle: aws.Bool(true),
-			DisableSSL:       aws.Bool(strings.HasPrefix(config.Url, "http:")),
+			DisableSSL:       aws.Bool(strings.HasPrefix(config.URL, "http:")),
 			Credentials:      credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, ""),
 		},
 	))
