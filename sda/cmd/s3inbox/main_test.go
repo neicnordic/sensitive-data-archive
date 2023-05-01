@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -21,6 +23,9 @@ func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		m.Run()
 	}
+	_, b, _, _ := runtime.Caller(0)
+	rootDir := path.Join(path.Dir(b), "../../../")
+
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -35,10 +40,14 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
-		Tag:        "PR84-postgres",
+		Repository:  "postgres",
+		Tag:         "15.2-alpine3.17",
 		Env: []string{
 			"POSTGRES_PASSWORD=rootpasswd",
+			"POSTGRES_DB=sda",
+		},
+		Mounts: []string{
+			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
 		},
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
@@ -64,7 +73,9 @@ func TestMain(m *testing.M) {
 			return err
 		}
 
-		return db.Ping()
+		query := "SELECT MAX(version) FROM sda.dbschema_version"
+		var dbVersion int
+		return db.QueryRow(query).Scan(&dbVersion)
 	}); err != nil {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}

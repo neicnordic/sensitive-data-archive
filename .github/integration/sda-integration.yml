@@ -1,0 +1,133 @@
+services:
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "/scripts/make_sda_credentials.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: ubuntu:kinetic
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
+
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    container_name: rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    ports:
+      - "15672:15672"
+    restart: always
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio:latest
+    command: server /data  --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  s3inbox:
+    build:
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
+      context: ../../sda
+      target: debug
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-s3inbox ]
+    container_name: s3inbox
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=inbox
+      - BROKER_USER=inbox
+      - DB_PASSWORD=inbox
+      - DB_USER=inbox
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+    ports:
+      - "18000:8000"
+      - "18001:8001"
+
+  integration_test:
+    container_name: tester
+    command:
+      - "/bin/sh"
+      - "/tests/run_scripts.sh"
+      - "/tests/sda"
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      s3inbox:
+        condition: service_started
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.10-slim-bullseye
+    profiles:
+      - tests
+    volumes:
+      - shared:/shared
+      - ./tests:/tests
+
+volumes:
+  minio_data:
+  postgres_data:
+  rabbitmq_data:
+  shared:

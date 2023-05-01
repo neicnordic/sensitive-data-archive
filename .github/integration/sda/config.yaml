@@ -1,44 +1,36 @@
 log:
   format: "json"
 aws:
-  url: "https://localhost:9000"
+  url: "http://s3:9000"
   readypath: "/minio/health/ready"
-  accessKey: "ElixirID"
-  secretKey: "987654321"
-  bucket: "test"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "inbox"
   region: "us-east-1"
-  cacert: "/tmp/certs/ca.crt"
 
 broker:
-  host: "localhost"
-  port: "5671"
-  user: "test"
-  password: "test"
-  vhost: "/test"
-  exchange: "localega.v1"
-  routingKey: "files.inbox"
-  ssl: "true"
-  verifyPeer: "true"
-  cacert: "/tmp/certs/ca.crt"
-  clientCert: "/tmp/certs/client.crt"
-  clientKey: "/tmp/certs/client.key"
-# If the FQDN and hostname of the broker differ
-# serverName can be set to the SAN name in the certificate
-  #  serverName: ""
+  host: "rabbitmq"
+  port: "5672"
+  user: ""
+  password: ""
+  vhost: "/sda"
+  exchange: "sda"
+  routingKey: "inbox"
+  ssl: "false"
 
 db:
-  host: "localhost"
-  port: "2345"
-  user: "lega_in"
-  password: "lega_in"
-  database: "lega"
+  host: "postgres"
+  port: "5432"
+  user: ""
+  password: ""
+  database: "sda"
   sslmode: "disable"
 
 
 server:
-  cert: "/tmp/certs/proxy.crt"
-  key: "/tmp/certs/proxy.key"
-  jwtpubkeypath: "/tmp/certs/"
+  cert: ""
+  key: ""
+  jwtpubkeypath: "/shared/keys/pub/"
   jwtpubkeyurl: ""
 
 

@@ -225,3 +225,15 @@ jobs:
 
       - name: Test postgres 
         run: docker compose -f .github/integration/postgres.yml run tests
+
+  sda:
+    needs:
+      - build_go_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Test sensitive-data-archive
+        run: docker compose -f .github/integration/sda-integration.yml run integration_test

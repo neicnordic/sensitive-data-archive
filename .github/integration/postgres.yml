@@ -14,7 +14,7 @@ services:
     container_name: credentials
     command:
       - "/bin/sh"
-      - "/scripts/make_credentials.sh"
+      - "/scripts/make_db_credentials.sh"
     depends_on:
       postgres:
         condition: service_healthy
