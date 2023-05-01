@@ -12,7 +12,7 @@ import (
 	"os"
 	"testing"
 
-	common "github.com/neicnordic/sda-common/database"
+	"sensitive-data-archive/internal/database"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
@@ -22,10 +22,10 @@ import (
 type ProxyTests struct {
 	suite.Suite
 	S3conf     S3Config
-	DBConf     common.DBConf
+	DBConf     database.DBConf
 	fakeServer *FakeServer
 	messenger  *MockMessenger
-	database   *common.SDAdb
+	database   *database.SDAdb
 }
 
 func TestProxyTestSuite(t *testing.T) {
@@ -50,7 +50,7 @@ func (suite *ProxyTests) SetupTest() {
 	suite.messenger = NewMockMessenger()
 
 	// Create a database configuration for the fake database
-	suite.DBConf = common.DBConf{
+	suite.DBConf = database.DBConf{
 		Host:       "localhost",
 		Port:       2345,
 		User:       "lega_in",
@@ -70,7 +70,7 @@ func (suite *ProxyTests) SetupTest() {
 		suite.DBConf.Port = 5432
 	}
 
-	suite.database = &common.SDAdb{}
+	suite.database = &database.SDAdb{}
 }
 
 func (suite *ProxyTests) TearDownTest() {
@@ -231,7 +231,7 @@ func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 func (suite *ProxyTests) TestServeHTTP_allowed() {
 
 	// Start proxy that allows everything
-	database, err := common.NewSDAdb(suite.DBConf)
+	database, err := database.NewSDAdb(suite.DBConf)
 	if err != nil {
 		suite.T().Skip("skip TestShutdown since broker not present")
 	}
@@ -358,7 +358,7 @@ func (suite *ProxyTests) TestMessageFormatting() {
 }
 
 func (suite *ProxyTests) TestDatabaseConnection() {
-	database, err := common.NewSDAdb(suite.DBConf)
+	database, err := database.NewSDAdb(suite.DBConf)
 	if err != nil {
 		suite.T().Skip("skip TestShutdown since DB not present: ", err)
 	}

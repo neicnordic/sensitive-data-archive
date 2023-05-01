@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/NBISweden/S3-Upload-Proxy/helper"
+	helper "sensitive-data-archive/internal/helper"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/spf13/viper"

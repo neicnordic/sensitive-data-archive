@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/neicnordic/sda-common/database"
+	"sensitive-data-archive/internal/database"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"

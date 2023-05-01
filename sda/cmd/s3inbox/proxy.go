@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NBISweden/S3-Upload-Proxy/helper"
-	common "github.com/neicnordic/sda-common/database"
+	"sensitive-data-archive/internal/database"
+	"sensitive-data-archive/internal/helper"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -32,7 +32,7 @@ type Proxy struct {
 	s3        S3Config
 	auth      Authenticator
 	messenger Messenger
-	database  *common.SDAdb
+	database  *database.SDAdb
 	client    *http.Client
 	fileIds   map[string]string
 }
@@ -55,7 +55,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf S3Config, auth Authenticator, messenger Messenger, database *common.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf S3Config, auth Authenticator, messenger Messenger, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 

@@ -7,7 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	common "github.com/neicnordic/sda-common/database"
+	"sensitive-data-archive/internal/database"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +47,7 @@ func main() {
 		panic(err)
 	}
 
-	sdaDB, err := common.NewSDAdb(Conf.DB)
+	sdaDB, err := database.NewSDAdb(Conf.DB)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT

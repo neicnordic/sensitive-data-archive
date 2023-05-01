@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	helper "github.com/NBISweden/S3-Upload-Proxy/helper"
+	helper "sensitive-data-archive/internal/helper"
 
 	"github.com/minio/minio-go/v6/pkg/s3signer"
 	"github.com/stretchr/testify/assert"
