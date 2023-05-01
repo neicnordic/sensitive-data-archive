@@ -26,20 +26,18 @@ func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
 	return fileID, err
 }
 
-// MarkFileAsUploaded updates a file that is currently "registered" to
-// "uploaded" to show that a file has finished uploading. The message parameter
-// is the rabbitmq message sent on file upload.
-func (dbs *SDAdb) MarkFileAsUploaded(fileID, userID, message string) error {
+// UpdateFileEventLog updates the status in of the file in the database.
+// The message parameter is the rabbitmq message sent on file upload.
+func (dbs *SDAdb) UpdateFileEventLog(fileID, event, userID, message string) error {
 
 	dbs.checkAndReconnectIfNeeded()
 
 	if dbs.Version < 4 {
-		return errors.New("database schema v4 required for MarkFileAsUploaded()")
+		return errors.New("database schema v4 required for UpdateFileEventLog()")
 	}
 
-	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, 'uploaded', $2, $3)"
-
-	_, err := dbs.DB.Exec(query, fileID, userID, message)
+	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, $2, $3, $4)"
+	_, err := dbs.DB.Exec(query, fileID, event, userID, message)
 
 	return err
 }

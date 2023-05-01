@@ -41,7 +41,7 @@ func (suite *DatabaseTests) TestRegisterFile() {
 }
 
 // TestMarkFileAsUploaded tests that MarkFileAsUploaded() behaves as intended
-func (suite *DatabaseTests) TestMarkFileAsUploaded() {
+func (suite *DatabaseTests) UpdateFileEventLog() {
 
 	// create database connection
 	db, err := NewSDAdb(suite.dbConf)
@@ -57,16 +57,16 @@ func (suite *DatabaseTests) TestMarkFileAsUploaded() {
 	assert.Nil(suite.T(), err, "failed to register file in database")
 
 	// Attempt to mark a file that doesn't exist as uploaded
-	err = db.MarkFileAsUploaded("00000000-0000-0000-0000-000000000000", "testuser", "{}")
+	err = db.UpdateFileEventLog("00000000-0000-0000-0000-000000000000", "uploaded", "testuser", "{}")
 	assert.NotNil(suite.T(), err, "Unknown file could be marked as uploaded in database")
 
 	// mark file as uploaded
-	err = db.MarkFileAsUploaded(fileID, "testuser", "{}")
+	err = db.UpdateFileEventLog(fileID, "uploaded", "testuser", "{}")
 	assert.Nil(suite.T(), err, "failed to set file as uploaded in database")
 
 	exists := false
 	// check that there is an "uploaded" file event connected to the file
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='uploaded')", fileID).Scan(&exists)
 	assert.Nil(suite.T(), err, "Failed to check if uploaded file event exists")
-	assert.True(suite.T(), exists, "MarkFileAsUploaded() did not insert a row into sda.file_event_log with id: "+fileID)
+	assert.True(suite.T(), exists, "UpdateFileEventLog() did not insert a row into sda.file_event_log with id: "+fileID)
 }
