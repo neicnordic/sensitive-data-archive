@@ -1,18 +1,21 @@
-module github.com/NBISweden/S3-Upload-Proxy
+module sensitive-data-archive
 
-go 1.19
+go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.44.245
+	github.com/NBISweden/S3-Upload-Proxy v0.2.29
+	github.com/aws/aws-sdk-go v1.44.253
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
-	github.com/johannesboyne/gofakes3 v0.0.0-20220627085814-c3ac35da23b2
-	github.com/lestrrat/go-jwx v0.0.0-20180221005942-b7d4802280ae
+	github.com/johannesboyne/gofakes3 v0.0.0-20230310080033-c0edf658332b
+	github.com/lestrrat/go-jwx v0.9.1
+	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v6 v6.0.43
 	github.com/neicnordic/sda-common v0.0.8
 	github.com/pkg/errors v0.9.1
 	github.com/rabbitmq/amqp091-go v1.8.0
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.2
@@ -27,7 +30,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/lestrrat/go-pdebug v0.0.0-20180220043741-569c97477ae8 // indirect
-	github.com/lib/pq v1.10.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/minio/sha256-simd v0.1.1 // indirect
@@ -49,7 +51,6 @@ require (
 	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
-	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
