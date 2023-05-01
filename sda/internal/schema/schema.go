@@ -12,7 +12,7 @@ import (
 func ValidateJSON(reference string, body []byte) error {
 	dest := getStructName(reference)
 	if dest == "" {
-		return fmt.Errorf("Unknown reference schema")
+		return fmt.Errorf("unknown reference schema")
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft7
