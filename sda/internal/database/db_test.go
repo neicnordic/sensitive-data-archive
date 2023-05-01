@@ -1,9 +1,17 @@
 package database
 
 import (
+	"database/sql"
+	"fmt"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
+	log "github.com/sirupsen/logrus"
+
+	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -13,27 +21,84 @@ type DatabaseTests struct {
 	dbConf DBConf
 }
 
+var dbPort int
+
 func TestDatabaseTestSuite(t *testing.T) {
 	suite.Run(t, new(DatabaseTests))
 }
 
-func (suite *DatabaseTests) SetupTest() {
-
-	// check if we're in a docker container (the /.dockerenv file is available
-	// in all docker containers)
-	dbHost := "localhost"
-	_, err := os.Stat("/.dockerenv")
-	if err == nil {
-		dbHost = "db"
+func TestMain(m *testing.M) {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		m.Run()
 	}
 
+	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
+	pool, err := dockertest.NewPool("")
+	if err != nil {
+		log.Fatalf("Could not construct pool: %s", err)
+	}
+
+	// uses pool to try to connect to Docker
+	err = pool.Client.Ping()
+	if err != nil {
+		log.Fatalf("Could not connect to Docker: %s", err)
+	}
+
+	// pulls an image, creates a container based on it and runs it
+	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
+		Tag:        "PR84-postgres",
+		Env: []string{
+			"POSTGRES_PASSWORD=rootpasswd",
+		},
+	}, func(config *docker.HostConfig) {
+		// set AutoRemove to true so that stopped container goes away by itself
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{
+			Name: "no",
+		}
+	})
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+
+	dbHostAndPort := postgres.GetHostPort("5432/tcp")
+	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
+
+	pool.MaxWait = 120 * time.Second
+	if err = pool.Retry(func() error {
+		db, err := sql.Open("postgres", databaseURL)
+		if err != nil {
+			log.Println(err)
+
+			return err
+		}
+
+		return db.Ping()
+	}); err != nil {
+		if err := pool.Purge(postgres); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
+		log.Fatalf("Could not connect to postgres: %s", err)
+	}
+
+	_ = m.Run()
+
+	log.Println("tests completed")
+	if err := pool.Purge(postgres); err != nil {
+		log.Fatalf("Could not purge resource: %s", err)
+	}
+}
+
+func (suite *DatabaseTests) SetupTest() {
 	// Database connection variables
 	suite.dbConf = DBConf{
-		Host:       dbHost,
-		Port:       5432,
-		User:       "lega_in",
-		Password:   "lega_in",
-		Database:   "lega",
+		Host:       "127.0.0.1",
+		Port:       dbPort,
+		User:       "postgres",
+		Password:   "rootpasswd",
+		Database:   "sda",
 		CACert:     "",
 		SslMode:    "disable",
 		ClientCert: "",
@@ -57,7 +122,7 @@ func (suite *DatabaseTests) TestNewSDAdb() {
 	// test wrong credentials
 	wrongConf := DBConf{
 		Host:       "localhost",
-		Port:       5432,
+		Port:       dbPort,
 		User:       "hacker",
 		Password:   "password123",
 		Database:   "lega",
