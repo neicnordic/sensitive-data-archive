@@ -28,7 +28,7 @@ func NewHealthCheck(port int, db *sql.DB, conf *Config, tlsConfig *tls.Config) *
 		s3URL = conf.S3.url + conf.S3.readypath
 	}
 
-	brokerURL := conf.Broker.host + ":" + conf.Broker.port
+	brokerURL := fmt.Sprintf("%s:%d", conf.Broker.Host, conf.Broker.Port)
 
 	return &HealthCheck{port, db, s3URL, brokerURL, tlsConfig}
 }

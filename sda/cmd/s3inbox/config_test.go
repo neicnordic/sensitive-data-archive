@@ -118,8 +118,8 @@ func (suite *ConfigTestSuite) TestConfigBroker() {
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), config.S3)
-	assert.Equal(suite.T(), "/testvhost", config.Broker.vhost)
-	assert.Equal(suite.T(), false, config.Broker.ssl)
+	assert.Equal(suite.T(), "/testvhost", config.Broker.Vhost)
+	assert.Equal(suite.T(), false, config.Broker.Ssl)
 
 	viper.Set("broker.ssl", true)
 	viper.Set("broker.verifyPeer", true)
@@ -134,7 +134,7 @@ func (suite *ConfigTestSuite) TestConfigBroker() {
 	config, err = NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "/", config.Broker.vhost)
+	assert.Equal(suite.T(), "/", config.Broker.Vhost)
 }
 
 func (suite *ConfigTestSuite) TestTLSConfigBroker() {

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"sensitive-data-archive/internal/broker"
 	"sensitive-data-archive/internal/database"
 	"sensitive-data-archive/internal/helper"
 
@@ -31,10 +32,25 @@ import (
 type Proxy struct {
 	s3        S3Config
 	auth      Authenticator
-	messenger Messenger
+	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
 	fileIds   map[string]string
+}
+
+// The Event struct
+type Event struct {
+	Operation string        `json:"operation"`
+	Username  string        `json:"user"`
+	Filepath  string        `json:"filepath"`
+	Filesize  int64         `json:"filesize"`
+	Checksum  []interface{} `json:"encrypted_checksums"`
+}
+
+// Checksum used in the message
+type Checksum struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 // S3RequestType is the type of request that we are currently proxying to the
@@ -55,7 +71,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf S3Config, auth Authenticator, messenger Messenger, database *database.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf S3Config, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -70,6 +86,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.notAllowedResponse(w, r)
 	case Put, List, Other, AbortMultipart:
 		// Allowed
+		log.Debug("allowed known")
 		p.allowedResponse(w, r)
 	default:
 		log.Debugf("Unexpected request (%v) not allowed", r)
@@ -153,14 +170,13 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			log.Errorln("connection is closed")
 			w.WriteHeader(http.StatusServiceUnavailable)
 
-			tlsBroker, _ := TLSConfigBroker(Conf)
-			m, err := NewAMQPMessenger(Conf.Broker, tlsBroker)
+			m, err := broker.NewMQ(Conf.Broker)
 			if err == nil {
 				p.messenger = m
 			}
 
 		case false:
-			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], jsonMessage); err != nil {
+			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, true, jsonMessage); err != nil {
 				log.Debug("error when sending message")
 				log.Error(err)
 			}

@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"sensitive-data-archive/internal/broker"
 	"sensitive-data-archive/internal/database"
 
 	log "github.com/sirupsen/logrus"
@@ -34,12 +35,6 @@ func main() {
 	}
 	Conf = c
 
-	tlsBroker, err := TLSConfigBroker(Conf)
-	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
-	}
 	tlsProxy, err := TLSConfigProxy(Conf)
 	if err != nil {
 		log.Error(err)
@@ -68,7 +63,7 @@ func main() {
 		panic(err)
 	}
 
-	messenger, err := NewAMQPMessenger(Conf.Broker, tlsBroker)
+	messenger, err := broker.NewMQ(Conf.Broker)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -80,8 +75,8 @@ func main() {
 	go func() {
 		<-sigc
 		sdaDB.Close()
-		messenger.channel.Close()
-		messenger.connection.Close()
+		messenger.Channel.Close()
+		messenger.Connection.Close()
 		os.Exit(1)
 	}()
 	var pubkeys map[string][]byte

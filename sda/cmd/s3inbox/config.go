@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 
+	"sensitive-data-archive/internal/broker"
 	"sensitive-data-archive/internal/database"
 
 	"github.com/pkg/errors"
@@ -33,23 +35,6 @@ type S3Config struct {
 	cacert    string
 }
 
-// BrokerConfig stores information about the message broker
-type BrokerConfig struct {
-	host       string
-	port       string
-	user       string
-	password   string
-	vhost      string
-	exchange   string
-	routingKey string
-	ssl        bool
-	verifyPeer bool
-	cacert     string
-	clientCert string
-	clientKey  string
-	serverName string
-}
-
 // ServerConfig stores general server information
 type ServerConfig struct {
 	cert          string
@@ -61,7 +46,7 @@ type ServerConfig struct {
 // Config is a parent object for all the different configuration parts
 type Config struct {
 	S3     S3Config
-	Broker BrokerConfig
+	Broker broker.MQConf
 	Server ServerConfig
 	DB     database.DBConf
 }
@@ -154,42 +139,42 @@ func (c *Config) readConfig() error {
 	c.S3 = s3
 
 	// Setup broker
-	b := BrokerConfig{}
+	b := broker.MQConf{}
 
-	b.host = viper.GetString("broker.host")
-	b.port = viper.GetString("broker.port")
-	b.user = viper.GetString("broker.user")
-	b.password = viper.GetString("broker.password")
-	b.exchange = viper.GetString("broker.exchange")
-	b.routingKey = viper.GetString("broker.routingKey")
-	b.serverName = viper.GetString("broker.serverName")
+	b.Host = viper.GetString("broker.host")
+	b.Port, _ = strconv.Atoi(viper.GetString("broker.port"))
+	b.User = viper.GetString("broker.user")
+	b.Password = viper.GetString("broker.password")
+	b.Exchange = viper.GetString("broker.exchange")
+	b.RoutingKey = viper.GetString("broker.routingKey")
+	b.ServerName = viper.GetString("broker.serverName")
 
 	if viper.IsSet("broker.vhost") {
 		if strings.HasPrefix(viper.GetString("broker.vhost"), "/") {
-			b.vhost = viper.GetString("broker.vhost")
+			b.Vhost = viper.GetString("broker.vhost")
 		} else {
-			b.vhost = "/" + viper.GetString("broker.vhost")
+			b.Vhost = "/" + viper.GetString("broker.vhost")
 		}
 	} else {
-		b.vhost = "/"
+		b.Vhost = "/"
 	}
 
 	if viper.IsSet("broker.ssl") {
-		b.ssl = viper.GetBool("broker.ssl")
+		b.Ssl = viper.GetBool("broker.ssl")
 	}
 	if viper.IsSet("broker.verifyPeer") {
-		b.verifyPeer = viper.GetBool("broker.verifyPeer")
-		if b.verifyPeer {
+		b.VerifyPeer = viper.GetBool("broker.verifyPeer")
+		if b.VerifyPeer {
 			// Since verifyPeer is specified, these are required.
 			if !(viper.IsSet("broker.clientCert") && viper.IsSet("broker.clientKey")) {
 				return errors.New("when broker.verifyPeer is set both broker.clientCert and broker.clientKey is needed")
 			}
-			b.clientCert = viper.GetString("broker.clientCert")
-			b.clientKey = viper.GetString("broker.clientKey")
+			b.ClientCert = viper.GetString("broker.clientCert")
+			b.ClientKey = viper.GetString("broker.clientKey")
 		}
 	}
 	if viper.IsSet("broker.cacert") {
-		b.cacert = viper.GetString("broker.cacert")
+		b.CACert = viper.GetString("broker.cacert")
 	}
 
 	c.Broker = b
@@ -259,7 +244,7 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 	cfg.RootCAs = systemCAs
 
 	// Add CAs for broker and s3
-	for _, cacert := range []string{c.Broker.cacert, c.S3.cacert} {
+	for _, cacert := range []string{c.Broker.CACert, c.S3.cacert} {
 		if cacert == "" {
 			continue
 		}
@@ -274,18 +259,18 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 	}
 
 	// This might be a bad thing to do globally, but we'll see.
-	if c.Broker.serverName != "" {
-		cfg.ServerName = c.Broker.serverName
+	if c.Broker.ServerName != "" {
+		cfg.ServerName = c.Broker.ServerName
 	}
 
-	if c.Broker.verifyPeer {
-		cert, e := os.ReadFile(c.Broker.clientCert)
+	if c.Broker.VerifyPeer {
+		cert, e := os.ReadFile(c.Broker.ClientCert)
 		if e != nil {
-			return nil, fmt.Errorf("failed to read client cert %q, reason: %v", c.Broker.clientKey, e)
+			return nil, fmt.Errorf("failed to read client cert %q, reason: %v", c.Broker.ClientKey, e)
 		}
-		key, e := os.ReadFile(c.Broker.clientKey)
+		key, e := os.ReadFile(c.Broker.ClientKey)
 		if e != nil {
-			return nil, fmt.Errorf("failed to read client key %q, reason: %v", c.Broker.clientKey, e)
+			return nil, fmt.Errorf("failed to read client key %q, reason: %v", c.Broker.ClientKey, e)
 		}
 		if certs, e := tls.X509KeyPair(cert, key); e == nil {
 			cfg.Certificates = append(cfg.Certificates, certs)

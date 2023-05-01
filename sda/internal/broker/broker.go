@@ -231,3 +231,7 @@ func (broker *AMQPBroker) CreateNewChannel() error {
 
 	return nil
 }
+
+func (broker *AMQPBroker) IsConnClosed() bool {
+	return broker.Connection.IsClosed()
+}

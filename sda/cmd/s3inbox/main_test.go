@@ -71,6 +71,7 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Name:       "broker",
 		Repository: "rabbitmq",
 		Tag:        "3-management-alpine",
 	}, func(config *docker.HostConfig) {
@@ -110,6 +111,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to rabbitmq: %s", err)
 	}
 
+	log.Println("starting tests")
 	_ = m.Run()
 
 	log.Println("tests completed")
