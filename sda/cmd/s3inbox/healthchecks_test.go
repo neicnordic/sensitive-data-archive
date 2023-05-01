@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"sensitive-data-archive/internal/config"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +43,7 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 	db, _, _ := sqlmock.New()
-	conf, err := NewConfig()
+	conf, err := config.NewConfig()
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,
@@ -66,7 +68,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
 	mock.ExpectPing()
-	conf, err := NewConfig()
+	conf, err := config.NewConfig()
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,

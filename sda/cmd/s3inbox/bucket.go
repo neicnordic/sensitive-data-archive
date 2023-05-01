@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 
+	"sensitive-data-archive/internal/config"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -18,22 +20,22 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-func checkS3Bucket(config S3Config) error {
+func checkS3Bucket(config config.S3Config) error {
 	s3Transport := transportConfigS3(config)
 	client := http.Client{Transport: s3Transport}
 	s3Session := session.Must(session.NewSession(
 		&aws.Config{
-			Endpoint:         aws.String(config.url),
-			Region:           aws.String(config.region),
+			Endpoint:         aws.String(config.Url),
+			Region:           aws.String(config.Region),
 			HTTPClient:       &client,
 			S3ForcePathStyle: aws.Bool(true),
-			DisableSSL:       aws.Bool(strings.HasPrefix(config.url, "http:")),
-			Credentials:      credentials.NewStaticCredentials(config.accessKey, config.secretKey, ""),
+			DisableSSL:       aws.Bool(strings.HasPrefix(config.Url, "http:")),
+			Credentials:      credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, ""),
 		},
 	))
 
 	_, err := s3.New(s3Session).CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(config.bucket),
+		Bucket: aws.String(config.Bucket),
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
@@ -52,7 +54,7 @@ func checkS3Bucket(config S3Config) error {
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
-func transportConfigS3(config S3Config) http.RoundTripper {
+func transportConfigS3(config config.S3Config) http.RoundTripper {
 	cfg := new(tls.Config)
 
 	// Enforce TLS1.2 or higher
@@ -66,8 +68,8 @@ func transportConfigS3(config S3Config) http.RoundTripper {
 	}
 	cfg.RootCAs = systemCAs
 
-	if config.cacert != "" {
-		cacert, e := os.ReadFile(config.cacert) // #nosec this file comes from our config
+	if config.CAcert != "" {
+		cacert, e := os.ReadFile(config.CAcert) // #nosec this file comes from our config
 		if e != nil {
 			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e)
 		}

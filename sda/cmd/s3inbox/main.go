@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"sensitive-data-archive/internal/broker"
+	"sensitive-data-archive/internal/config"
 	"sensitive-data-archive/internal/database"
 
 	log "github.com/sirupsen/logrus"
 )
 
 // Export Conf so we can access it in the other modules
-var Conf *Config
+var Conf *config.Config
 
 func main() {
 	sigc := make(chan os.Signal, 5)
@@ -27,7 +28,7 @@ func main() {
 		}
 	}()
 
-	c, err := NewConfig()
+	c, err := config.NewConfig()
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -35,7 +36,7 @@ func main() {
 	}
 	Conf = c
 
-	tlsProxy, err := TLSConfigProxy(Conf)
+	tlsProxy, err := config.TLSConfigProxy(Conf)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -83,14 +84,14 @@ func main() {
 	auth := NewValidateFromToken(pubkeys)
 	auth.pubkeys = make(map[string][]byte)
 	// Load keys for JWT verification
-	if Conf.Server.jwtpubkeyurl != "" {
-		if err := auth.getjwtpubkey(Conf.Server.jwtpubkeyurl); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.jwtpubkeyurl, err)
+	if Conf.Server.Jwtpubkeyurl != "" {
+		if err := auth.getjwtpubkey(Conf.Server.Jwtpubkeyurl); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
 		}
 	}
-	if Conf.Server.jwtpubkeypath != "" {
-		if err := auth.getjwtkey(Conf.Server.jwtpubkeypath); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.jwtpubkeypath, err)
+	if Conf.Server.Jwtpubkeypath != "" {
+		if err := auth.getjwtkey(Conf.Server.Jwtpubkeypath); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
 	proxy := NewProxy(Conf.S3, auth, messenger, sdaDB, tlsProxy)
@@ -110,8 +111,8 @@ func main() {
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 
-	if Conf.Server.cert != "" && Conf.Server.key != "" {
-		if err := server.ListenAndServeTLS(Conf.Server.cert, Conf.Server.key); err != nil {
+	if Conf.Server.Cert != "" && Conf.Server.Key != "" {
+		if err := server.ListenAndServeTLS(Conf.Server.Cert, Conf.Server.Key); err != nil {
 			panic(err)
 		}
 	} else {

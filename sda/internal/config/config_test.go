@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -107,10 +107,10 @@ func (suite *ConfigTestSuite) TestConfigS3Storage() {
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), config.S3)
-	assert.Equal(suite.T(), "testurl", config.S3.url)
-	assert.Equal(suite.T(), "testaccess", config.S3.accessKey)
-	assert.Equal(suite.T(), "testsecret", config.S3.secretKey)
-	assert.Equal(suite.T(), "testbucket", config.S3.bucket)
+	assert.Equal(suite.T(), "testurl", config.S3.Url)
+	assert.Equal(suite.T(), "testaccess", config.S3.AccessKey)
+	assert.Equal(suite.T(), "testsecret", config.S3.SecretKey)
+	assert.Equal(suite.T(), "testbucket", config.S3.Bucket)
 }
 
 func (suite *ConfigTestSuite) TestConfigBroker() {

@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"sensitive-data-archive/internal/config"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/johannesboyne/gofakes3"
@@ -67,7 +69,7 @@ func TestBucketTestSuite(t *testing.T) {
 }
 
 func (suite *BucketTestSuite) TestBucketPass() {
-	config, err := NewConfig()
+	config, err := config.NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 
@@ -77,7 +79,7 @@ func (suite *BucketTestSuite) TestBucketPass() {
 
 func (suite *BucketTestSuite) TestBucketFail() {
 	viper.Set("aws.url", "http://localhost:12345")
-	config, err := NewConfig()
+	config, err := config.NewConfig()
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 

@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"crypto/tls"
@@ -26,21 +26,21 @@ var (
 
 // S3Config stores information about the S3 backend
 type S3Config struct {
-	url       string
-	readypath string
-	accessKey string
-	secretKey string
-	bucket    string
-	region    string
-	cacert    string
+	Url       string
+	Readypath string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Region    string
+	CAcert    string
 }
 
 // ServerConfig stores general server information
 type ServerConfig struct {
-	cert          string
-	key           string
-	jwtpubkeypath string
-	jwtpubkeyurl  string
+	Cert          string
+	Key           string
+	Jwtpubkeypath string
+	Jwtpubkeyurl  string
 }
 
 // Config is a parent object for all the different configuration parts
@@ -118,22 +118,22 @@ func (c *Config) readConfig() error {
 	s3 := S3Config{}
 
 	// All these are required
-	s3.url = viper.GetString("aws.url")
-	s3.accessKey = viper.GetString("aws.accessKey")
-	s3.secretKey = viper.GetString("aws.secretKey")
-	s3.bucket = viper.GetString("aws.bucket")
+	s3.Url = viper.GetString("aws.url")
+	s3.AccessKey = viper.GetString("aws.accessKey")
+	s3.SecretKey = viper.GetString("aws.secretKey")
+	s3.Bucket = viper.GetString("aws.bucket")
 
 	// Optional settings
 	if viper.IsSet("aws.readypath") {
-		s3.readypath = viper.GetString("aws.readypath")
+		s3.Readypath = viper.GetString("aws.readypath")
 	}
 	if viper.IsSet("aws.region") {
-		s3.region = viper.GetString("aws.region")
+		s3.Region = viper.GetString("aws.region")
 	} else {
-		s3.region = "us-east-1"
+		s3.Region = "us-east-1"
 	}
 	if viper.IsSet("aws.cacert") {
-		s3.cacert = viper.GetString("aws.cacert")
+		s3.CAcert = viper.GetString("aws.cacert")
 	}
 
 	c.S3 = s3
@@ -207,18 +207,18 @@ func (c *Config) readConfig() error {
 
 	// Token authentication
 	if viper.IsSet("server.jwtpubkeypath") {
-		s.jwtpubkeypath = viper.GetString("server.jwtpubkeypath")
+		s.Jwtpubkeypath = viper.GetString("server.jwtpubkeypath")
 	}
 
 	if viper.IsSet("server.jwtpubkeyurl") {
-		s.jwtpubkeyurl = viper.GetString("server.jwtpubkeyurl")
+		s.Jwtpubkeyurl = viper.GetString("server.jwtpubkeyurl")
 	}
 
 	if viper.IsSet("server.cert") {
-		s.cert = viper.GetString("server.cert")
+		s.Cert = viper.GetString("server.cert")
 	}
 	if viper.IsSet("server.key") {
-		s.key = viper.GetString("server.key")
+		s.Key = viper.GetString("server.key")
 	}
 
 	c.Server = s
@@ -244,7 +244,7 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 	cfg.RootCAs = systemCAs
 
 	// Add CAs for broker and s3
-	for _, cacert := range []string{c.Broker.CACert, c.S3.cacert} {
+	for _, cacert := range []string{c.Broker.CACert, c.S3.CAcert} {
 		if cacert == "" {
 			continue
 		}
@@ -297,8 +297,8 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 	}
 	cfg.RootCAs = systemCAs
 
-	if c.S3.cacert != "" {
-		cacert, e := os.ReadFile(c.S3.cacert) // #nosec this file comes from our configuration
+	if c.S3.CAcert != "" {
+		cacert, e := os.ReadFile(c.S3.CAcert) // #nosec this file comes from our configuration
 		if e != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
 		}

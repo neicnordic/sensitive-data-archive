@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"sensitive-data-archive/internal/config"
+
 	"github.com/heptiolabs/healthcheck"
 )
 
@@ -22,10 +24,10 @@ type HealthCheck struct {
 
 // NewHealthCheck creates a new healthchecker. It needs to know where to find
 // the backend S3 storage and the Message Broker so it can report readiness.
-func NewHealthCheck(port int, db *sql.DB, conf *Config, tlsConfig *tls.Config) *HealthCheck {
-	s3URL := conf.S3.url
-	if conf.S3.readypath != "" {
-		s3URL = conf.S3.url + conf.S3.readypath
+func NewHealthCheck(port int, db *sql.DB, conf *config.Config, tlsConfig *tls.Config) *HealthCheck {
+	s3URL := conf.S3.Url
+	if conf.S3.Readypath != "" {
+		s3URL = conf.S3.Url + conf.S3.Readypath
 	}
 
 	brokerURL := fmt.Sprintf("%s:%d", conf.Broker.Host, conf.Broker.Port)

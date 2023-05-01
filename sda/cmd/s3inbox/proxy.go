@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sensitive-data-archive/internal/broker"
+	"sensitive-data-archive/internal/config"
 	"sensitive-data-archive/internal/database"
 	"sensitive-data-archive/internal/helper"
 
@@ -30,7 +31,7 @@ import (
 
 // Proxy represents the toplevel object in this application
 type Proxy struct {
-	s3        S3Config
+	s3        config.S3Config
 	auth      Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
@@ -71,7 +72,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf S3Config, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf config.S3Config, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -122,7 +123,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	p.prependBucketToHostPath(r)
 
 	username := fmt.Sprintf("%v", claims["sub"])
-	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.bucket+"/", "", 1)
+	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
 	filepath, err := helper.FormatUploadFilePath(rawFilepath)
 	if err != nil {
@@ -244,10 +245,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
-	p.resignHeader(r, p.s3.accessKey, p.s3.secretKey, p.s3.url)
+	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, p.s3.Url)
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3.url+r.URL.String(), r.Body)
+	nr, err := http.NewRequest(r.Method, p.s3.Url+r.URL.String(), r.Body)
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -263,7 +264,7 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
 // Add bucket to host path
 func (p *Proxy) prependBucketToHostPath(r *http.Request) {
-	bucket := p.s3.bucket
+	bucket := p.s3.Bucket
 
 	// Extract username for request's url path
 	str, err := url.ParseRequestURI(r.URL.Path)
@@ -321,7 +322,7 @@ func (p *Proxy) resignHeader(r *http.Request, accessKey string, secretKey string
 		r.Host = host[1]
 	}
 
-	return s3signer.SignV4(*r, accessKey, secretKey, "", p.s3.region)
+	return s3signer.SignV4(*r, accessKey, secretKey, "", p.s3.Region)
 }
 
 // Not necessarily a function on the struct since it does not use any of the
@@ -396,7 +397,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.MapClaims) 
 
 	// Case for simple upload
 	event.Operation = "upload"
-	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.bucket+"/", "", 1)
+	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 	event.Username = fmt.Sprintf("%v", claims["sub"])
 	checksum.Type = "sha256"
 	event.Checksum = []interface{}{checksum}
@@ -408,14 +409,14 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.MapClaims) 
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
 func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
-	filePath := strings.Replace(fullPath, "/"+p.s3.bucket+"/", "", 1)
+	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
 	s, err := p.newSession()
 	if err != nil {
 		return "", 0, err
 	}
 	svc := s3.New(s)
 	input := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(p.s3.bucket),
+		Bucket:  aws.String(p.s3.Bucket),
 		MaxKeys: aws.Int64(1),
 		Prefix:  aws.String(filePath),
 	}
@@ -446,28 +447,28 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 func (p *Proxy) newSession() (*session.Session, error) {
 	var mySession *session.Session
 	var err error
-	if p.s3.cacert != "" {
-		cert, _ := os.ReadFile(p.s3.cacert)
+	if p.s3.CAcert != "" {
+		cert, _ := os.ReadFile(p.s3.CAcert)
 		cacert := bytes.NewReader(cert)
 		mySession, err = session.NewSessionWithOptions(session.Options{
 			CustomCABundle: cacert,
 			Config: aws.Config{
-				Region:           aws.String(p.s3.region),
-				Endpoint:         aws.String(p.s3.url),
-				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.url, "http:")),
+				Region:           aws.String(p.s3.Region),
+				Endpoint:         aws.String(p.s3.Url),
+				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.Url, "http:")),
 				S3ForcePathStyle: aws.Bool(true),
-				Credentials:      credentials.NewStaticCredentials(p.s3.accessKey, p.s3.secretKey, ""),
+				Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
 			}})
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		mySession, err = session.NewSession(&aws.Config{
-			Region:           aws.String(p.s3.region),
-			Endpoint:         aws.String(p.s3.url),
-			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.url, "http:")),
+			Region:           aws.String(p.s3.Region),
+			Endpoint:         aws.String(p.s3.Url),
+			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.Url, "http:")),
 			S3ForcePathStyle: aws.Bool(true),
-			Credentials:      credentials.NewStaticCredentials(p.s3.accessKey, p.s3.secretKey, ""),
+			Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
 		})
 		if err != nil {
 			return nil, err
