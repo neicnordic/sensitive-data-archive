@@ -163,7 +163,7 @@ func (suite *DatabaseTests) TestConnect() {
 
 	// test querying a closed connection
 	db.Close()
-	query := "SELECT MAX(version) FROM local_ega.dbschema_version"
+	query := "SELECT MAX(version) FROM sda.dbschema_version"
 	var dbVersion = -1
 	err = db.DB.QueryRow(query).Scan(&dbVersion)
 	assert.NotNil(suite.T(), err, "query possible on closed connection")
@@ -203,7 +203,7 @@ func (suite *DatabaseTests) TestClose() {
 	db.Close()
 
 	// check that we can't do queries on a closed connection
-	query := "SELECT MAX(version) FROM local_ega.dbschema_version"
+	query := "SELECT MAX(version) FROM sda.dbschema_version"
 	var dbVersion = -1
 	err = db.DB.QueryRow(query).Scan(&dbVersion)
 	assert.NotNil(suite.T(), err, "query possible on closed connection")

@@ -159,7 +159,7 @@ func (dbs *SDAdb) getVersion() (int, error) {
 
 	log.Debug("Fetching database schema version")
 
-	query := "SELECT MAX(version) FROM local_ega.dbschema_version"
+	query := "SELECT MAX(version) FROM sda.dbschema_version"
 
 	var dbVersion = -1
 	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
