@@ -1,11 +1,18 @@
 name: Publish version tag
 on:
   pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ".github/**"
+      - ".gitignore"
+      - "**/README.md"
     types: [ closed ]
 
 jobs:
   tag_release:
     if: github.event.pull_request.merged == true
+    continue-on-error: true
     name: tag version
     outputs:
       part: ${{ steps.bump_tag.outputs.part }}
@@ -15,7 +22,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        fetch-depth: '1'
+        fetch-depth: '0'
     - name: Bump version and push tag
       id: bump_tag
       uses: anothrNick/github-tag-action@1.62.0
@@ -26,7 +33,7 @@ jobs:
 
   push_to_registry:
     needs: tag_release
-    if: needs.tag.outputs.part != ''
+    if: needs.tag_release.outputs.part != ''
     name: Push Docker image to Github Container registry
     runs-on: ubuntu-latest
     permissions:
