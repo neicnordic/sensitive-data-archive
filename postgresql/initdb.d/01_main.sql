@@ -19,7 +19,8 @@ VALUES (0, now(), 'Created with version'),
        (2, now(), 'Added decrypted_checksum et al'),
        (3, now(), 'Reorganized out views/tables'),
        (4, now(), 'Refactored schema'),
-       (5, now(), 'Add field for correlation ids');
+       (5, now(), 'Add field for correlation ids'),
+       (6, now(), 'Add created_at field to datasets');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
