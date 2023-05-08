@@ -12,7 +12,7 @@ require (
 	github.com/minio/minio-go/v6 v6.0.43
 	github.com/neicnordic/sda-common v0.0.8
 	github.com/pkg/errors v0.9.1
-	github.com/rabbitmq/amqp091-go v1.8.0
+	github.com/rabbitmq/amqp091-go v1.8.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.2
