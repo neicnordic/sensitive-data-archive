@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -13,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/lestrrat-go/jwx/jwk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -160,18 +161,22 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 	}
 	log.Debug("jwkURL: ", jwkURL.Scheme)
 
-	set, err := jwk.Fetch(jwtpubkeyurl)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	set, err := jwk.Fetch(ctx, jwtpubkeyurl)
 	if err != nil {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
 	}
-	keyEl, err := set.Keys[0].Materialize()
-	if err != nil {
+	keyEl, ok := set.Get(0)
+	if ! ok {
 		return fmt.Errorf("failed to materialize public key (%v)", err)
 	}
 	pkeyBytes, err := x509.MarshalPKIXPublicKey(keyEl)
 	if err != nil {
 		return fmt.Errorf("failed to marshal public key (%v)", err)
 	}
+
 	log.Debugf("Getting key from %s", jwtpubkeyurl)
 	r, err := http.Get(jwtpubkeyurl)
 	if err != nil {
