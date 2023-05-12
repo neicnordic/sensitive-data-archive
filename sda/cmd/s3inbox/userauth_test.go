@@ -8,7 +8,7 @@ import (
 
 	helper "sensitive-data-archive/internal/helper"
 
-	"github.com/minio/minio-go/v6/pkg/s3signer"
+	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -110,14 +110,14 @@ func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {
 
 	// Test that a user can access their own bucket
 	r.URL.Path = "/dummy/"
-	s3signer.SignV4(*r, "username", "testpass", "", "us-east-1")
+	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	token, err := a.Authenticate(r)
 	assert.Nil(t, err)
 	assert.Equal(t, token["pilot"], helper.DefaultTokenClaims["pilot"])
 
 	// Test that a valid user can't access someone elses bucket
 	r.URL.Path = "/notvalid/"
-	s3signer.SignV4(*r, "username", "testpass", "", "us-east-1")
+	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	_, otherBucket := a.Authenticate(r)
 	assert.Equal(t, "token supplied username dummy but URL had notvalid", otherBucket.Error())
 
@@ -218,13 +218,13 @@ func TestUserTokenAuthenticator_ValidateSignature_EC(t *testing.T) {
 
 	// Test that a user can access their own bucket
 	r.URL.Path = "/dummy/"
-	s3signer.SignV4(*r, "username", "testpass", "", "us-east-1")
+	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	_, err = a.Authenticate(r)
 	assert.Nil(t, err)
 
 	// Test that a valid user can't access someone elses bucket
 	r.URL.Path = "/notvalid/"
-	s3signer.SignV4(*r, "username", "testpass", "", "us-east-1")
+	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	_, otherBucket := a.Authenticate(r)
 	assert.Equal(t, "token supplied username dummy but URL had notvalid", otherBucket.Error())
 

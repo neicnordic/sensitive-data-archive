@@ -25,7 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/minio/minio-go/v6/pkg/s3signer"
+	"github.com/minio/minio-go/v6/pkg/signer"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -322,7 +322,7 @@ func (p *Proxy) resignHeader(r *http.Request, accessKey string, secretKey string
 		r.Host = host[1]
 	}
 
-	return s3signer.SignV4(*r, accessKey, secretKey, "", p.s3.Region)
+	return signer.SignV4(*r, accessKey, secretKey, "", p.s3.Region)
 }
 
 // Not necessarily a function on the struct since it does not use any of the
