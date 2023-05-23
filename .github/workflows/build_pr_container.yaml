@@ -68,14 +68,14 @@ jobs:
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build container for sda-s3proxy
+      - name: Build container for sensitive-data-archive
         uses: docker/build-push-action@v4
         with:
-          context: ./sda-s3proxy
+          context: ./sda
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-s3proxy
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-s3proxy
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -225,3 +225,15 @@ jobs:
 
       - name: Test postgres 
         run: docker compose -f .github/integration/postgres.yml run tests
+
+  sda:
+    needs:
+      - build_go_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Test sensitive-data-archive
+        run: docker compose -f .github/integration/sda-integration.yml run integration_test

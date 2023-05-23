@@ -1,0 +1,36 @@
+log:
+  format: "json"
+aws:
+  url: "http://s3:9000"
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "inbox"
+  region: "us-east-1"
+
+broker:
+  host: "rabbitmq"
+  port: "5672"
+  user: ""
+  password: ""
+  vhost: "/sda"
+  exchange: "sda"
+  routingKey: "inbox"
+  ssl: "false"
+
+db:
+  host: "postgres"
+  port: "5432"
+  user: ""
+  password: ""
+  database: "sda"
+  sslmode: "disable"
+
+
+server:
+  cert: ""
+  key: ""
+  jwtpubkeypath: "/shared/keys/pub/"
+  jwtpubkeyurl: ""
+
+
