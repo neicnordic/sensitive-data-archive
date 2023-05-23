@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"

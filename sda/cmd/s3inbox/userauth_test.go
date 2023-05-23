@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	helper "sensitive-data-archive/internal/helper"
+	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
 
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/stretchr/testify/assert"

@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"testing"
 
-	"sensitive-data-archive/internal/broker"
-	"sensitive-data-archive/internal/config"
-	"sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"

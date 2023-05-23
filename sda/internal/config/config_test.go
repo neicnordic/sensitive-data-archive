@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	helper "sensitive-data-archive/internal/helper"
+	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
 
 	log "github.com/sirupsen/logrus"
 

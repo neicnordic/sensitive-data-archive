@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 
 	"github.com/heptiolabs/healthcheck"
 )

@@ -1,4 +1,4 @@
-module sensitive-data-archive
+module github.com/neicnordic/sensitive-data-archive
 
 go 1.20
 

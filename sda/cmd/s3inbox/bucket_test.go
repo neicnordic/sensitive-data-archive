@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 
 	log "github.com/sirupsen/logrus"
 

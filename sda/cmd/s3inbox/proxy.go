@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"sensitive-data-archive/internal/broker"
-	"sensitive-data-archive/internal/config"
-	"sensitive-data-archive/internal/database"
-	"sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/spf13/viper"

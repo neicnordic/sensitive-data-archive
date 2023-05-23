@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"sensitive-data-archive/internal/broker"
-	"sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"

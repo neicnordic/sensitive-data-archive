@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
