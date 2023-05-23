@@ -58,35 +58,35 @@ jobs:
 
       - name: Retag PR image for auth
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-auth
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-auth
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-auth
 
       - name: Retag PR image for download
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-download
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-download
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-download
 
       - name: Retag PR image for pipeline
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-pipeline
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-pipeline ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-pipeline
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-pipeline
 
       - name: Retag PR image for postgres
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-postgres
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-postgres
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-postgres
 
       - name: Retag PR image for rabbitmq
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-rabbitmq
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-rabbitmq
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-rabbitmq
 
       - name: Retag PR image for sftp-inbox
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}-sftp-inbox
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
 
       - name: Retag PR image for s3proxy
         run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
