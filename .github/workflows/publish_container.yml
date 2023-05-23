@@ -86,7 +86,7 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
 
-      - name: Retag PR image for s3proxy
+      - name: Retag PR image for sensitive-data-archive
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
