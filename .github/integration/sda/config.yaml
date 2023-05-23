@@ -31,6 +31,6 @@ server:
   cert: ""
   key: ""
   jwtpubkeypath: "/shared/keys/pub/"
-  jwtpubkeyurl: ""
+  jwtpubkeyurl: "http://oidc:8080/jwk"
 
 
