@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,8 @@ import (
 type TestSuite struct {
 	suite.Suite
 }
+
+const schemaPath = "../../schemas"
 
 func TestConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
@@ -33,7 +36,7 @@ func TestValidateJSONDatasetMapping(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/dataset-mapping.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/dataset-mapping.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := DatasetMapping{
@@ -45,7 +48,7 @@ func TestValidateJSONDatasetMapping(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/dataset-mapping.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/dataset-mapping.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -57,7 +60,7 @@ func TestValidateJSONInboxRemove(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/inbox-remove.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/inbox-remove.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := InboxRemove{
@@ -67,7 +70,7 @@ func TestValidateJSONInboxRemove(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/inbox-remove.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/inbox-remove.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -80,7 +83,7 @@ func TestValidateJSONInboxRename(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/inbox-rename.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/inbox-rename.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := InboxRename{
@@ -91,7 +94,7 @@ func TestValidateJSONInboxRename(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/inbox-rename.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/inbox-rename.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -103,7 +106,7 @@ func TestValidateJSONInboxUpload(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/inbox-upload.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/inbox-upload.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := InboxUpload{
@@ -113,7 +116,7 @@ func TestValidateJSONInboxUpload(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/inbox-upload.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/inbox-upload.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -125,7 +128,7 @@ func TestValidateJSONInfoError(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/info-error.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/info-error.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := InfoError{
@@ -135,7 +138,7 @@ func TestValidateJSONInfoError(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/info-error.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/info-error.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -150,7 +153,7 @@ func TestValidateJSONIngestionAccessionRequest(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-accession-request.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-accession-request.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionAccessionRequest{
@@ -162,7 +165,7 @@ func TestValidateJSONIngestionAccessionRequest(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-accession-request.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-accession-request.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -179,7 +182,7 @@ func TestValidateJSONIngestionAccession(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-accession.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-accession.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionAccession{
@@ -192,7 +195,7 @@ func TestValidateJSONIngestionAccession(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-accession.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-accession.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -208,7 +211,7 @@ func TestValidateJSONIngestionCompletion(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-completion.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-completion.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionCompletion{
@@ -221,7 +224,7 @@ func TestValidateJSONIngestionCompletion(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-completion.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-completion.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -236,7 +239,7 @@ func TestValidateJSONIngestionTrigger(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-trigger.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-trigger.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionTrigger{
@@ -248,7 +251,7 @@ func TestValidateJSONIngestionTrigger(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-trigger.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-trigger.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -260,7 +263,7 @@ func TestValidateJSONIngestionUserError(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-user-error.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-user-error.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionUserError{
@@ -270,7 +273,7 @@ func TestValidateJSONIngestionUserError(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-user-error.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-user-error.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -288,7 +291,7 @@ func TestValidateJSONIngestionVerification(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/federated/ingestion-verification.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/federated/ingestion-verification.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionVerification{
@@ -303,7 +306,7 @@ func TestValidateJSONIngestionVerification(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/federated/ingestion-verification.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/federated/ingestion-verification.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -320,7 +323,7 @@ func TestValidateJSONIsloatedDatasetMapping(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/isolated/dataset-mapping.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/isolated/dataset-mapping.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := DatasetMapping{
@@ -332,7 +335,7 @@ func TestValidateJSONIsloatedDatasetMapping(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/isolated/dataset-mapping.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/isolated/dataset-mapping.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -349,7 +352,7 @@ func TestValidateJSONIsloatedIngestionAccession(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/isolated/ingestion-accession.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/isolated/ingestion-accession.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionAccession{
@@ -362,7 +365,7 @@ func TestValidateJSONIsloatedIngestionAccession(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/isolated/ingestion-accession.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/isolated/ingestion-accession.json", schemaPath), msg)
 	assert.Error(t, err)
 }
 
@@ -378,7 +381,7 @@ func TestValidateJSONIsolatedIngestionCompletion(t *testing.T) {
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	err := ValidateJSON("../../schemas/isolated/ingestion-completion.json", msg)
+	err := ValidateJSON(fmt.Sprintf("%s/isolated/ingestion-completion.json", schemaPath), msg)
 	assert.Nil(t, err)
 
 	badMsg := IngestionCompletion{
@@ -391,6 +394,6 @@ func TestValidateJSONIsolatedIngestionCompletion(t *testing.T) {
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	err = ValidateJSON("../../schemas/isolated/ingestion-completion.json", msg)
+	err = ValidateJSON(fmt.Sprintf("%s/isolated/ingestion-completion.json", schemaPath), msg)
 	assert.Error(t, err)
 }
