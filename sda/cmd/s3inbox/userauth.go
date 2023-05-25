@@ -169,7 +169,7 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
 	}
 	keyEl, ok := set.Get(0)
-	if ! ok {
+	if !ok {
 		return fmt.Errorf("failed to materialize public key (%v)", err)
 	}
 	pkeyBytes, err := x509.MarshalPKIXPublicKey(keyEl)

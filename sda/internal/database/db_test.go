@@ -51,8 +51,8 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository:  "postgres",
-		Tag:         "15.2-alpine3.17",
+		Repository: "postgres",
+		Tag:        "15.2-alpine3.17",
 		Env: []string{
 			"POSTGRES_PASSWORD=rootpasswd",
 			"POSTGRES_DB=sda",
