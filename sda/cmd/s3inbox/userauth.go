@@ -178,7 +178,7 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 	}
 
 	log.Debugf("Getting key from %s", jwtpubkeyurl)
-	r, err := http.Get(jwtpubkeyurl)
+	r, err := http.Get(jwtpubkeyurl) // nolint G107
 	if err != nil {
 		return fmt.Errorf("failed to get JWK (%v)", err)
 	}
