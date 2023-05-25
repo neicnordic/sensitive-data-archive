@@ -2,6 +2,7 @@ name: Code tests
 
 on:
   push:
+    branches-ignore: [main]
 
 jobs:
 
