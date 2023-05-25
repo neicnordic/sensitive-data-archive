@@ -75,6 +75,7 @@ func TestMain(m *testing.M) {
 
 		query := "SELECT MAX(version) FROM sda.dbschema_version"
 		var dbVersion int
+
 		return db.QueryRow(query).Scan(&dbVersion)
 	}); err != nil {
 		log.Fatalf("Could not connect to postgres: %s", err)
