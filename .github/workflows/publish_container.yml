@@ -55,6 +55,7 @@ jobs:
           for t in -auth -download -pipeline -postgres -rabbitmq -sftp-inbox; do
             docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}$t
           done
+          docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
 
       - name: Retag PR image for auth
         run: |
