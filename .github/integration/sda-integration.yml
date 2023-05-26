@@ -89,6 +89,8 @@ services:
         condition: service_completed_successfully
       minio:
         condition: service_healthy
+      oidc:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -105,6 +107,31 @@ services:
     ports:
       - "18000:8000"
       - "18001:8001"
+
+  oidc:
+    container_name: oidc
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip
+        pip install aiohttp Authlib requests
+        python -u /oidc.py
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python3", "-c", 'import requests; print(requests.get(url = "http://localhost:8080/jwk").text)']
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: python:3.10-slim
+    ports:
+      - "8080:8080"
+    restart: always
+    volumes:
+      - ./sda/oidc.py:/oidc.py
+      - shared:/shared
 
   integration_test:
     container_name: tester

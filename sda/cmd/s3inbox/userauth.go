@@ -2,11 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -172,34 +168,12 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 	if !ok {
 		return fmt.Errorf("failed to materialize public key (%v)", err)
 	}
-	pkeyBytes, err := x509.MarshalPKIXPublicKey(keyEl)
+	pkeyBytes, err := jwk.Pem(keyEl)
 	if err != nil {
 		return fmt.Errorf("failed to marshal public key (%v)", err)
 	}
 
-	log.Debugf("Getting key from %s", jwtpubkeyurl)
-	r, err := http.Get(jwtpubkeyurl) // nolint G107
-	if err != nil {
-		return fmt.Errorf("failed to get JWK (%v)", err)
-	}
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read key response (%v)", err)
-	}
-	defer r.Body.Close()
-
-	var keytype map[string][]map[string]string
-	err = json.Unmarshal(b, &keytype)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal key response (%v, response was %s)", err, b)
-	}
-	keyData := pem.EncodeToMemory(
-		&pem.Block{
-			Type:  keytype["keys"][0]["kty"] + " PUBLIC KEY",
-			Bytes: pkeyBytes,
-		},
-	)
-	u.pubkeys[jwkURL.Hostname()] = keyData
+	u.pubkeys[jwkURL.Hostname()] = pkeyBytes
 	log.Debugf("Registered public key for %s", jwkURL.Hostname())
 
 	return nil

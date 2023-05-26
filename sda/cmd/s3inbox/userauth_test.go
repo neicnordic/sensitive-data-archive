@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -71,10 +72,10 @@ func TestUserTokenAuthenticator_GoodURL(t *testing.T) {
 	var pubkeys map[string][]byte
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	jwtpubkeyurl := "https://example.com/jwk/"
+	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
 
 	err := a.getjwtpubkey(jwtpubkeyurl)
-	assert.ErrorContains(t, err, "failed to fetch remote JWK")
+	assert.NoError(t, err, "failed to fetch remote JWK")
 }
 
 func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {

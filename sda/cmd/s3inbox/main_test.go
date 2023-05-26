@@ -13,11 +13,12 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var DBport, MQport int
+var DBport, MQport, OIDCport int
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -123,6 +124,64 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to rabbitmq: %s", err)
 	}
 
+	RSAPath, _ := os.MkdirTemp("", "RSA")
+	if err := helper.CreateRSAkeys(RSAPath, RSAPath); err != nil {
+		log.Panic("Failed to create RSA keys")
+	}
+	ECPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+		log.Panic("Failed to create EC keys")
+	}
+	// pulls an image, creates a container based on it and runs it
+	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Name:       "oidc",
+		Repository: "python",
+		Tag:        "3.10-slim",
+		Cmd: []string{
+			"/bin/sh",
+			"-c",
+			"pip install --upgrade pip && pip install aiohttp Authlib && python -u /oidc.py",
+		},
+		ExposedPorts: []string{"8080"},
+		Mounts: []string{
+			fmt.Sprintf("%s/.github/integration/sda/oidc.py:/oidc.py", rootDir),
+		},
+	}, func(config *docker.HostConfig) {
+		// set AutoRemove to true so that stopped container goes away by itself
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{
+			Name: "no",
+		}
+	})
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+
+	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
+	OIDCHostAndPort := oidc.GetHostPort("8080/tcp")
+
+	client = http.Client{Timeout: 5 * time.Second}
+	req, err = http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	if err := pool.Retry(func() error {
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+
+		return nil
+	}); err != nil {
+		if err := pool.Purge(oidc); err != nil {
+			log.Panicf("Could not purge oidc resource: %s", err)
+		}
+		log.Panicf("Could not connect to oidc: %s", err)
+	}
+
 	log.Println("starting tests")
 	_ = m.Run()
 
@@ -131,6 +190,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	if err := pool.Purge(rabbitmq); err != nil {
+		log.Fatalf("Could not purge resource: %s", err)
+	}
+	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 }
