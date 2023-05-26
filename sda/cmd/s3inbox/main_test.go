@@ -40,8 +40,8 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository:  "postgres",
-		Tag:         "15.2-alpine3.17",
+		Repository: "postgres",
+		Tag:        "15.2-alpine3.17",
 		Env: []string{
 			"POSTGRES_PASSWORD=rootpasswd",
 			"POSTGRES_DB=sda",
@@ -75,6 +75,7 @@ func TestMain(m *testing.M) {
 
 		query := "SELECT MAX(version) FROM sda.dbschema_version"
 		var dbVersion int
+
 		return db.QueryRow(query).Scan(&dbVersion)
 	}); err != nil {
 		log.Fatalf("Could not connect to postgres: %s", err)
