@@ -12,7 +12,7 @@ require (
 	github.com/lestrrat-go/jwx v1.2.25
 	github.com/lib/pq v1.10.7
 	github.com/neicnordic/crypt4gh v1.7.3
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.3
 )
