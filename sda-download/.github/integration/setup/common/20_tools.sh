@@ -1,4 +1,4 @@
 #!/bin/bash
 
 pip3 install crypt4gh
-sudo apt install -y jq
+sudo apt install -y jq s3cmd

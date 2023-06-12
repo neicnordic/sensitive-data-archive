@@ -55,7 +55,7 @@ fi
 
 echo "expected dataset found"
 
-## Test datasets/files endpoint 
+## Test datasets/files endpoint
 
 check_files=$(curl -H "Authorization: Bearer $token" "http://localhost:8080/metadata/datasets/https://doi.example/ty009.sfrrss/600.45asasga/files" | jq -r '.[0].fileId')
 
@@ -78,7 +78,7 @@ crypt4gh decrypt --sk c4gh.sec.pem < dummy_data.c4gh > old-file.txt
 curl -H "Authorization: Bearer $token" "http://localhost:8080/files/urn:neic:001-002" --output test-download.txt
 
 
-cmp --silent old-file.txt test-download.txt 
+cmp --silent old-file.txt test-download.txt
 status=$?
 if [[ $status = 0 ]]; then
     echo "Files are the same"
@@ -87,7 +87,7 @@ else
 fi
 
 # ------------------
-# Test bad token
+# Test get visas failed
 
 token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
 

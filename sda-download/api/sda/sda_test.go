@@ -255,12 +255,15 @@ func TestFiles_Success(t *testing.T) {
 			FileID:                    "file1",
 			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
+			FilePath:                  "dir/file1.txt",
 			FileName:                  "file1.txt",
 			FileSize:                  200,
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
 			Status:                    "READY",
+			CreatedAt:                 "a while ago",
+			LastModified:              "now",
 		}
 		files := []*database.FileInfo{}
 		files = append(files, &fileInfo)
@@ -279,9 +282,10 @@ func TestFiles_Success(t *testing.T) {
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 200
 	expectedBody := []byte(
-		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","fileName":` +
-			`"file1.txt","fileSize":200,"decryptedFileSize":100,"decryptedFileChecksum":"hash",` +
-			`"decryptedFileChecksumType":"sha256","fileStatus":"READY"}]`)
+		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
+			`"dir/file1.txt","fileName":"file1.txt","fileSize":200,"decryptedFileSize":100,` +
+			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256",` +
+			`"fileStatus":"READY","createdAt":"a while ago","lastModified":"now"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -656,9 +660,10 @@ func TestDownload_Fail_StreamFile(t *testing.T) {
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "../../README.md",
-			ArchiveSize: 0,
-			Header:      []byte{},
+			ArchivePath:   "../../README.md",
+			ArchiveSize:   0,
+			DecryptedSize: 0,
+			Header:        []byte{},
 		}
 
 		return fileDetails, nil
@@ -673,6 +678,7 @@ func TestDownload_Fail_StreamFile(t *testing.T) {
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/", nil)
 
 	// Test the outcomes of the handler
 	Download(c)
@@ -722,9 +728,10 @@ func TestDownload_Success(t *testing.T) {
 	}
 	database.GetFile = func(fileID string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "../../README.md",
-			ArchiveSize: 0,
-			Header:      []byte{},
+			ArchivePath:   "../../README.md",
+			ArchiveSize:   0,
+			DecryptedSize: 0,
+			Header:        []byte{},
 		}
 
 		return fileDetails, nil
@@ -743,6 +750,7 @@ func TestDownload_Success(t *testing.T) {
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/", nil)
 
 	// Test the outcomes of the handler
 	Download(c)

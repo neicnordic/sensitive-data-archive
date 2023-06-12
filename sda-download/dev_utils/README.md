@@ -33,13 +33,13 @@ sh run_integration_test_no_tls.sh
 To start all the backend services using docker compose.
 
 ```command
-docker-compose -f compose-sda.yml up -d db s3 mockauth
+docker compose up -d db s3 mockauth
 ```
 
 To start all the sda services using docker compose.
 
 ```command
-docker-compose -f compose-sda.yml up -d
+docker compose up -d
 ```
 
 To see brief real-time logs at the terminal remove the -d flag.

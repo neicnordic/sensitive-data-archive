@@ -1,7 +1,12 @@
----
-
 name: integration tests
-on: [pull_request]
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "**.go"
+      - "go.*"
+      - "schemas/**"
 
 jobs:
   integrationtests:
@@ -18,20 +23,22 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: "3.10"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
       - name: Run setup scripts
-        run: 'set -e;              
-              ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
-                 echo "Executing setup script $runscript";
-                 bash -x "$runscript";
-              done'
+        run: 'set -e;
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+          echo "Executing setup script $runscript";
+          bash -x "$runscript";
+          done'
 
       - name: Run tests
-        run: 'ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
-                echo "Executing test script $runscript";
-                bash -x "$runscript";
-              done'
+        run:
+          'ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+          echo "Executing test script $runscript";
+          export STORAGETYPE=${{ matrix.storagetype }};
+          bash -x "$runscript";
+          done'

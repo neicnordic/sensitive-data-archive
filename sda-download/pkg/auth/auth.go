@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -89,9 +90,21 @@ func VerifyJWT(o OIDCDetails, token string) (jwt.Token, error) {
 	return verifiedToken, nil
 }
 
-// GetToken parses the token string from header
-var GetToken = func(header string) (string, int, error) {
+// GetToken parses the token string from a `http.Header`. The token string can
+// come with either the S3 "X-Amz-Security-Token" header or the "Authorization"
+// header. The "X-Amz-Security-Token" header is checked first, since it requires
+// less formatting.
+var GetToken = func(headers http.Header) (string, int, error) {
 	log.Debug("parsing access token from header")
+
+	// Check "X-Amz-Security-Token" header first
+	header := headers.Get("X-Amz-Security-Token")
+	if len(header) != 0 {
+		return header, 0, nil
+	}
+
+	// Otherwise, check (and process) the Authorization header
+	header = headers.Get("Authorization")
 	if len(header) == 0 {
 		log.Debug("authorization check failed")
 
