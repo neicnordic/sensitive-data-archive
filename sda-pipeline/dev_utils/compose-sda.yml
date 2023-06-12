@@ -1,5 +1,4 @@
 services:
-
   certfixer:
     command:
       - /bin/sh
@@ -37,7 +36,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.3
+    image: ghcr.io/neicnordic/sda-db:v2.1.14
     ports:
       - "5432:5432"
     volumes:
@@ -221,6 +220,7 @@ services:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - certs:/dev_utils/certs
+      - inbox:/inbox
     mem_limit: 64m
     restart: always
 

@@ -103,6 +103,10 @@ curl -vvv -u test:test 'localhost:15672/api/exchanges/test/sda/publish' \
 -H 'Content-Type: application/json;charset=UTF-8' \
 --data-binary '{"vhost":"test","name":"sda","properties":{"delivery_mode":2,"correlation_id":"1","content_encoding":"UTF-8","content_type":"application/json"},"routing_key":"files","payload_encoding":"string","payload":"{\"type\":\"mapping\",\"dataset_id\":\"EGAD00123456789\",\"accession_ids\":[\"EGAF00123456789\"]}"}'
 
+curl -vvv -u test:test 'localhost:15672/api/exchanges/test/sda/publish' \
+-H 'Content-Type: application/json;charset=UTF-8' \
+--data-binary '{"vhost":"test","name":"sda","properties":{"delivery_mode":2,"correlation_id":"1","content_encoding":"UTF-8","content_type":"application/json"},"routing_key":"files","payload_encoding":"string","payload":"{\"type\":\"release\",\"dataset_id\":\"EGAD00123456789\"}"}'
+
 dataset=$(docker run --rm --name client --network dev_utils_default \
 neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
 -c "SELECT * from local_ega_ebi.file_dataset" | grep EGAD00123456789)

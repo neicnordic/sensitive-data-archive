@@ -7,22 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"sda-pipeline/internal/broker"
 	"sda-pipeline/internal/config"
 
 	uuid "github.com/google/uuid"
+	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
-)
-
-const (
-	queueVerify    string = "verified"
-	queueInbox     string = "inbox"
-	queueComplete  string = "completed"
-	queueBackup    string = "backup"
-	queueMapping   string = "mappings"
-	queueIngest    string = "ingest"
-	queueAccession string = "accessionIDs"
 )
 
 type upload struct {
@@ -79,7 +71,7 @@ func main() {
 	defer mq.Channel.Close()
 	defer mq.Connection.Close()
 
-	queues := []string{queueInbox, queueVerify, queueComplete}
+	queues := []string{conf.Orchestrator.QueueInbox, conf.Orchestrator.QueueVerify, conf.Orchestrator.QueueComplete}
 
 	go func() {
 		connError := mq.ConnectionWatcher()
@@ -88,9 +80,9 @@ func main() {
 	}()
 
 	routing := map[string]string{
-		queueVerify:   queueAccession,
-		queueInbox:    queueIngest,
-		queueComplete: queueMapping,
+		conf.Orchestrator.QueueVerify:   conf.Orchestrator.QueueAccession,
+		conf.Orchestrator.QueueInbox:    conf.Orchestrator.QueueIngest,
+		conf.Orchestrator.QueueComplete: conf.Orchestrator.QueueMapping,
 	}
 
 	forever := make(chan bool)
@@ -116,7 +108,7 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 	for delivered := range messages {
 		log.Debugf("Received a message: %s", delivered.Body)
 
-		schema, err := schemaNameFromQueue(queue, delivered.Body)
+		schema, err := schemaNameFromQueue(queue, delivered.Body, conf)
 
 		if err != nil {
 			log.Errorf(err.Error())
@@ -149,7 +141,7 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 		var publishMsg []byte
 		var publishType interface{}
 
-		routingSchema, err := schemaNameFromQueue(routingKey, nil)
+		routingSchema, err := schemaNameFromQueue(routingKey, nil, conf)
 
 		if err != nil {
 			log.Errorf("Don't know schema for routing key: %v", routingKey)
@@ -165,51 +157,71 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 		}
 
 		switch routingKey {
-		case queueAccession:
+		case conf.Orchestrator.QueueAccession:
 			publishMsg, publishType = finalizeMessage(delivered.Body, conf)
-		case queueIngest:
-			publishMsg, publishType = ingestMessage(delivered.Body)
-		case queueMapping:
-			publishMsg, publishType = mappingMessage(delivered.Body, conf)
-		}
+			err = validateMsg(&delivered, mq, routingKey, durable, routingSchema, publishMsg, publishType)
+			if err != nil {
+				log.Errorf("Validation of outgoing message failed, error: %v", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to nack message for reason: %v", err)
+				}
 
-		err = mq.ValidateJSON(&delivered, routingSchema, publishMsg, publishType)
-
-		if err != nil {
-			log.Errorf("Validation of outgoing message failed, error: %v", err)
-			if err := delivered.Nack(false, true); err != nil {
-				log.Errorf("failed to nack message for reason: %v", err)
+				continue
 			}
+		case conf.Orchestrator.QueueIngest:
+			publishMsg, publishType = ingestMessage(delivered.Body)
+			err = validateMsg(&delivered, mq, routingKey, durable, routingSchema, publishMsg, publishType)
+			if err != nil {
+				log.Errorf("Validation of outgoing message failed, error: %v", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to nack message for reason: %v", err)
+				}
 
-			continue
+				continue
+			}
+		case conf.Orchestrator.QueueMapping:
+			publishMsg, publishType = mappingMessage(delivered.Body, conf)
+			err = validateMsg(&delivered, mq, routingKey, durable, routingSchema, publishMsg, publishType)
+			if err != nil {
+				log.Errorf("Validation of outgoing message failed, error: %v", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to nack message for reason: %v", err)
+				}
+
+				continue
+			}
+			// let us wait a minute before sending the release message
+			time.Sleep(conf.Orchestrator.ReleaseDelay * time.Minute)
+			publishMsg, publishType = releaseMessage(delivered.Body, conf)
+			err = validateMsg(&delivered, mq, routingKey, durable, routingSchema, publishMsg, publishType)
+			if err != nil {
+				log.Errorf("Validation of outgoing message failed, error: %v", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to nack message for reason: %v", err)
+				}
+
+				continue
+			}
 		}
 
-		log.Debugf("Routing message (corr-id: %s, routingkey: %s, message: %s)",
-			delivered.CorrelationId, routingKey, publishMsg)
-
-		if err := mq.SendMessage(delivered.CorrelationId, mq.Conf.Exchange, routingKey, durable, publishMsg); err != nil {
-			// TODO fix resend mechanism
-			log.Errorln("We need to fix this resend stuff ...")
-		}
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to ack message for reason: %v", err)
-		}
 	}
 }
 
 // schemaNameFromQueue returns the schema to use for messages
 // determined by the queue
-func schemaNameFromQueue(queue string, body []byte) (string, error) {
-	if queue == queueInbox {
+func schemaNameFromQueue(queue string, body []byte, conf *config.Config) (string, error) {
+	if queue == conf.Orchestrator.QueueInbox {
 		return schemaFromInboxOperation(body)
 	}
+	if queue == conf.Orchestrator.QueueMapping {
+		return schemaFromDatasetOperation(body)
+	}
 	m := map[string]string{
-		queueVerify:    "ingestion-accession-request",
-		queueComplete:  "ingestion-completion",
-		queueIngest:    "ingestion-trigger",
-		queueMapping:   "dataset-mapping",
-		queueAccession: "ingestion-accession",
-		queueBackup:    "ingestion-completion",
+		conf.Orchestrator.QueueVerify:    "ingestion-accession-request",
+		conf.Orchestrator.QueueComplete:  "ingestion-completion",
+		conf.Orchestrator.QueueIngest:    "ingestion-trigger",
+		conf.Orchestrator.QueueAccession: "ingestion-accession",
+		conf.Orchestrator.QueueBackup:    "ingestion-completion",
 	}
 
 	if m[queue] != "" {
@@ -245,6 +257,38 @@ func schemaFromInboxOperation(body []byte) (string, error) {
 		return "inbox-rename", nil
 	case "remove":
 		return "inbox-remove", nil
+	default:
+		return "", errors.New("Could not recognize inbox operation")
+	}
+
+}
+
+// schemaFromDatasetOperation returns the operation done with dataset
+// supplied in body of the message
+func schemaFromDatasetOperation(body []byte) (string, error) {
+	message := make(map[string]interface{})
+	err := json.Unmarshal(body, &message)
+	if err != nil {
+		return "", err
+	}
+
+	datasetMessageType, ok := message["type"]
+	if !ok {
+		return "", errors.New("Malformed message, dataset message type is missing")
+	}
+
+	datasetOpsType, ok := datasetMessageType.(string)
+	if !ok {
+		return "", errors.New("Could not cast operation attribute to string")
+	}
+
+	switch datasetOpsType {
+	case "mapping":
+		return "dataset-mapping", nil
+	case "release":
+		return "dataset-release", nil
+	case "deprecate":
+		return "dataset-deprecate", nil
 	default:
 		return "", errors.New("Could not recognize inbox operation")
 	}
@@ -311,4 +355,43 @@ func mappingMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
 	publish, _ := json.Marshal(&msg)
 
 	return publish, new(mapping)
+}
+
+func releaseMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
+	var message finalize
+	if err := json.Unmarshal(body, &message); err != nil {
+		return nil, nil
+	}
+	datasetID := uuid.NewSHA1(
+		uuid.NewSHA1(uuid.NameSpaceDNS, []byte(conf.Orchestrator.ProjectFQDN)),
+		body).URN()
+
+	msg := mapping{
+		Type:      "release",
+		DatasetID: datasetID,
+	}
+
+	publish, _ := json.Marshal(&msg)
+
+	return publish, new(mapping)
+}
+
+func validateMsg(delivered *amqp091.Delivery, mq *broker.AMQPBroker, routingKey string, durable bool, routingSchema string, publishMsg []byte, publishType interface{}) error {
+	err := mq.ValidateJSON(delivered, routingSchema, publishMsg, publishType)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Routing message (corr-id: %s, routingkey: %s, message: %s)",
+		delivered.CorrelationId, routingKey, publishMsg)
+
+	if err := mq.SendMessage(delivered.CorrelationId, mq.Conf.Exchange, routingKey, durable, publishMsg); err != nil {
+		// TODO fix resend mechanism
+		log.Errorln("We need to fix this resend stuff ...")
+	}
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to ack message for reason: %v", err)
+	}
+
+	return nil
 }

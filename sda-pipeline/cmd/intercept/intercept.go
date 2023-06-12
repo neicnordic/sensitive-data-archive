@@ -18,6 +18,8 @@ const (
 	msgCancel    string = "cancel"
 	msgIngest    string = "ingest"
 	msgMapping   string = "mapping"
+	msgRelease   string = "release"
+	msgDeprecate string = "deprecate"
 )
 
 func main() {
@@ -123,8 +125,11 @@ func main() {
 
 			routing := map[string]string{
 				msgAccession: "accessionIDs",
+				msgCancel:    "ingest",
 				msgIngest:    "ingest",
 				msgMapping:   "mappings",
+				msgRelease:   "mappings",
+				msgDeprecate: "mappings",
 			}
 
 			routingKey := routing[msgType]
@@ -159,6 +164,8 @@ func schemaNameFromType(msgType string) (string, error) {
 		msgCancel:    "ingestion-trigger",
 		msgIngest:    "ingestion-trigger",
 		msgMapping:   "dataset-mapping",
+		msgRelease:   "dataset-release",
+		msgDeprecate: "dataset-deprecate",
 	}
 
 	if m[msgType] != "" {

@@ -117,7 +117,8 @@ func TestSendMessage(t *testing.T) {
 
 }
 
-var tMqconf = MQConf{"127.0.0.1",
+var tMqconf = MQConf{
+	"127.0.0.1",
 	6565,
 	"user",
 	"password",
@@ -134,7 +135,9 @@ var tMqconf = MQConf{"127.0.0.1",
 	"../../dev_utils/certs/client-key.pem",
 	"servername",
 	true,
-	"file://../../schemas/federated/"}
+	"file://../../schemas/federated/",
+	2,
+}
 
 func TestBuildMqURI(t *testing.T) {
 	amqps := buildMQURI("localhost", "user", "pass", "/vhost", 5555, true)

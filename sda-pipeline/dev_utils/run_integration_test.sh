@@ -105,6 +105,10 @@ curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchan
 -H 'Content-Type: application/json;charset=UTF-8' \
 --data-binary '{"vhost":"test","name":"sda","properties":{"delivery_mode":2,"correlation_id":"1","content_encoding":"UTF-8","content_type":"application/json"},"routing_key":"files","payload_encoding":"string","payload":"{\"type\":\"mapping\",\"dataset_id\":\"EGAD00123456789\",\"accession_ids\":[\"EGAF00123456789\"]}"}'
 
+curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
+-H 'Content-Type: application/json;charset=UTF-8' \
+--data-binary '{"vhost":"test","name":"sda","properties":{"delivery_mode":2,"correlation_id":"1","content_encoding":"UTF-8","content_type":"application/json"},"routing_key":"files","payload_encoding":"string","payload":"{\"type\":\"release\",\"dataset_id\":\"EGAD00123456789\"}"}'
+
 dataset=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
 	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \

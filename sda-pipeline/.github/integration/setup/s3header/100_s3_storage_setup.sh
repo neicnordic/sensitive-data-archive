@@ -16,3 +16,4 @@ s3cmd -c s3cmd.conf put truncated1.c4gh s3://inbox/truncated1.c4gh
 s3cmd -c s3cmd.conf put truncated2.c4gh s3://inbox/truncated2.c4gh
 s3cmd -c s3cmd.conf put wrongly_encrypted.c4gh s3://inbox/wrongly_encrypted.c4gh
 s3cmd -c s3cmd.conf put test_db_file.c4gh s3://inbox/test_db_file.c4gh
+s3cmd -c s3cmd.conf put test_finalize_file.c4gh s3://inbox/test_finalize_file.c4gh

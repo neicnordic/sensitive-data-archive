@@ -40,3 +40,9 @@ shred -n 1 -s "$RANDOM" test_db_file.raw
 
 crypt4gh encrypt --recipient_pk c4gh.pub.pem < test_db_file.raw > test_db_file.c4gh
 rm test_db_file.raw
+
+touch test_finalize_file.raw
+shred -n 1 -s "$RANDOM" test_finalize_file.raw
+
+crypt4gh encrypt --recipient_pk c4gh.pub.pem < test_finalize_file.raw > test_finalize_file.c4gh
+rm test_finalize_file.raw

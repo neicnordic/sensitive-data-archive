@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"hash"
 	"math"
-	"path/filepath"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -21,10 +19,14 @@ import (
 
 // Database defines methods to be implemented by SQLdb
 type Database interface {
-	GetHeader(fileID int) ([]byte, error)
+	GetArchived(user, filepath, checksum string) (string, int, error)
+	GetFileID(corrID string) (string, error)
+	GetHeader(fileID string) ([]byte, error)
 	MarkCompleted(checksum string, fileID int) error
 	MarkReady(accessionID, user, filepath, checksum string) error
-	GetArchived(user, filepath, checksum string) (string, int, error)
+	RegisterFile(filePath, user string) (string, error)
+	SetArchived(file FileInfo, id, corrID string) error
+	UpdateFileStatus(fileUUID, event, corrID, user, message string) error
 	Close()
 }
 
@@ -143,7 +145,7 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 }
 
 // GetHeader retrieves the file header
-func (dbs *SQLdb) GetHeader(fileID int) ([]byte, error) {
+func (dbs *SQLdb) GetHeader(fileID string) ([]byte, error) {
 	var (
 		r     []byte
 		err   error
@@ -159,11 +161,11 @@ func (dbs *SQLdb) GetHeader(fileID int) ([]byte, error) {
 }
 
 // getHeader is the actual function performing work for GetHeader
-func (dbs *SQLdb) getHeader(fileID int) ([]byte, error) {
+func (dbs *SQLdb) getHeader(fileID string) ([]byte, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT header from local_ega.files WHERE id = $1"
+	const query = "SELECT header from sda.files WHERE id = $1"
 
 	var hexString string
 	if err := db.QueryRow(query, fileID).Scan(&hexString); err != nil {
@@ -194,14 +196,14 @@ func (dbs *SQLdb) GetHeaderForStableID(stableID string) (string, error) {
 }
 
 // MarkCompleted marks the file as "COMPLETED"
-func (dbs *SQLdb) MarkCompleted(file FileInfo, fileID int) error {
+func (dbs *SQLdb) MarkCompleted(file FileInfo, fileID, corrID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
-		err = dbs.markCompleted(file, fileID)
+		err = dbs.markCompleted(file, fileID, corrID)
 		count++
 	}
 
@@ -209,26 +211,20 @@ func (dbs *SQLdb) MarkCompleted(file FileInfo, fileID int) error {
 }
 
 // markCompleted performs actual work for MarkCompleted
-func (dbs *SQLdb) markCompleted(file FileInfo, fileID int) error {
+func (dbs *SQLdb) markCompleted(file FileInfo, fileID, corrID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const completed = "UPDATE local_ega.files SET status = 'COMPLETED', " +
-		"archive_filesize = $2, " +
-		"archive_file_checksum = $3, " +
-		"archive_file_checksum_type = $4, " +
-		"decrypted_file_size = $5, " +
-		"decrypted_file_checksum = $6, " +
-		"decrypted_file_checksum_type = $7 " +
-		"WHERE id = $1;"
+	const completed = "SELECT sda.set_verified($1, $2, $3, $4, $5, $6, $7);"
 	result, err := db.Exec(completed,
 		fileID,
-		file.Size,
+		corrID,
 		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
 		hashType(file.Checksum),
 		file.DecryptedSize,
 		fmt.Sprintf("%x", file.DecryptedChecksum.Sum(nil)),
-		hashType(file.DecryptedChecksum))
+		hashType(file.DecryptedChecksum),
+	)
 	if err != nil {
 		return err
 	}
@@ -239,57 +235,65 @@ func (dbs *SQLdb) markCompleted(file FileInfo, fileID int) error {
 	return nil
 }
 
-// InsertFile inserts a file in the database
-func (dbs *SQLdb) InsertFile(filename, user string) (int64, error) {
+// RegisterFile inserts a file in the database
+func (dbs *SQLdb) RegisterFile(filePath, user string) (string, error) {
 	var (
 		err   error
-		r     int64
+		id    string
 		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
-		r, err = dbs.insertFile(filename, user)
+		id, err = dbs.registerFile(filePath, user)
 		count++
 	}
 
-	return r, err
+	return id, err
+}
+func (dbs *SQLdb) registerFile(filePath, user string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "SELECT sda.register_file($1, $2);"
+	var fileUUID string
+	err := db.QueryRow(query, filePath, user).Scan(&fileUUID)
+	if err != nil {
+		return "", err
+	}
+
+	return fileUUID, nil
 }
 
-// insertFile performs actual work for InsertFile
-func (dbs *SQLdb) insertFile(filename, user string) (int64, error) {
+func (dbs *SQLdb) GetFileID(corrID string) (string, error) {
+	var (
+		err   error
+		count int
+		ID    string
+	)
+
+	for count == 0 || (err != nil && count < dbRetryTimes) {
+		ID, err = dbs.getFileID(corrID)
+		count++
+	}
+
+	return ID, err
+}
+func (dbs *SQLdb) getFileID(corrID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
-
-	// Not really idempotent, but close enough for us
-
 	db := dbs.DB
-	const query = "INSERT INTO local_ega.main(submission_file_path, " +
-		"submission_file_extension, " +
-		"submission_user, " +
-		"status, " +
-		"encryption_method) " +
-		"VALUES($1, $2, $3,'INIT', 'CRYPT4GH') RETURNING id;"
+	const getFileID = "SELECT DISTINCT file_id FROM sda.file_event_log where correlation_id = $1;"
 
-	var fileID int64
-
-	err := db.QueryRow(query, filename, strings.ReplaceAll(filepath.Ext(filename), ".", ""), user).Scan(&fileID)
-	if err == nil {
-		return fileID, nil
-	}
-	// We can only handle the duplicate key error for now
-	if !strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-		return 0, err
-	}
-	const updateQuery = "UPDATE local_ega.main SET status = 'IN_INGESTION' WHERE local_ega.main.submission_file_path = $1 AND local_ega.main.submission_user = $2 AND local_ega.main.status = $3 RETURNING id;"
-	err = db.QueryRow(updateQuery, filename, user, "INIT").Scan(&fileID)
+	var fileID string
+	err := db.QueryRow(getFileID, corrID).Scan(&fileID)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
 	return fileID, nil
 }
 
 // StoreHeader stores the file header in the database
-func (dbs *SQLdb) StoreHeader(header []byte, id int64) error {
+func (dbs *SQLdb) StoreHeader(header []byte, id string) error {
 	var (
 		err   error
 		count int
@@ -304,11 +308,11 @@ func (dbs *SQLdb) StoreHeader(header []byte, id int64) error {
 }
 
 // storeHeader performs actual work for StoreHeader
-func (dbs *SQLdb) storeHeader(header []byte, id int64) error {
+func (dbs *SQLdb) storeHeader(header []byte, id string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "UPDATE local_ega.files SET header = $1 WHERE id = $2;"
+	const query = "UPDATE sda.files SET header = $1 WHERE id = $2;"
 	result, err := db.Exec(query, hex.EncodeToString(header), id)
 	if err != nil {
 		return err
@@ -321,14 +325,14 @@ func (dbs *SQLdb) storeHeader(header []byte, id int64) error {
 }
 
 // SetArchived marks the file as 'ARCHIVED'
-func (dbs *SQLdb) SetArchived(file FileInfo, id int64) error {
+func (dbs *SQLdb) SetArchived(file FileInfo, fileID, corrID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < dbRetryTimes) {
-		err = dbs.setArchived(file, id)
+		err = dbs.setArchived(file, fileID, corrID)
 		count++
 	}
 
@@ -336,22 +340,19 @@ func (dbs *SQLdb) SetArchived(file FileInfo, id int64) error {
 }
 
 // setArchived performs actual work for SetArchived
-func (dbs *SQLdb) setArchived(file FileInfo, id int64) error {
+func (dbs *SQLdb) setArchived(file FileInfo, fileID, corrID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "UPDATE local_ega.files SET status = 'ARCHIVED', " +
-		"archive_path = $1, " +
-		"archive_filesize = $2, " +
-		"inbox_file_checksum = $3, " +
-		"inbox_file_checksum_type = $4 " +
-		"WHERE id = $5;"
+	const query = "SELECT sda.set_archived($1, $2, $3, $4, $5, $6);"
 	result, err := db.Exec(query,
+		fileID,
+		corrID,
 		file.Path,
 		file.Size,
 		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
 		hashType(file.Checksum),
-		id)
+	)
 	if err != nil {
 		return err
 	}
@@ -362,14 +363,52 @@ func (dbs *SQLdb) setArchived(file FileInfo, id int64) error {
 	return nil
 }
 
-// MarkReady marks the file as "READY"
-func (dbs *SQLdb) MarkReady(accessionID, user, filepath, checksum string) error {
+// CheckAccessionIdExists validates if an accessionID exists in the db
+func (dbs *SQLdb) CheckAccessionIDExists(accessionID string) (bool, error) {
+
+	var err error
+	var exists bool
+
+	// 3, 9, 27, 81, 243 seconds between each retry event.
+	for count := 1; count <= dbRetryTimes; count++ {
+		exists, err = dbs.checkAccessionIDExists(accessionID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return exists, err
+}
+
+// checkAccessionIdExists validates if an accessionID exists in the db
+func (dbs *SQLdb) checkAccessionIDExists(accessionID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+
+	const checkIDExist = "SELECT COUNT(*) FROM sda.files WHERE stable_id = $1;"
+
+	var stableIDCount int
+	if err := db.QueryRow(checkIDExist, accessionID).Scan(&stableIDCount); err != nil {
+		return false, err
+	}
+	log.Debugf("existing accession id count is: %d", stableIDCount)
+	if stableIDCount >= 1 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// UpdateDatasetEvent marks the files in a dataset as "ready" or "disabled"
+func (dbs *SQLdb) UpdateDatasetEvent(datasetID, status, correlationID, user string) error {
 
 	var err error
 
 	// 3, 9, 27, 81, 243 seconds between each retry event.
 	for count := 1; count <= dbRetryTimes; count++ {
-		err = dbs.markReady(accessionID, user, filepath, checksum)
+		err = dbs.updateDatasetEvent(datasetID, status, correlationID, user)
 		if err == nil {
 			break
 		}
@@ -379,17 +418,66 @@ func (dbs *SQLdb) MarkReady(accessionID, user, filepath, checksum string) error 
 	return err
 }
 
-// MarkReady marks the file as "READY"
-func (dbs *SQLdb) markReady(accessionID, user, filepath, checksum string) error {
+// updateDatasetEvent marks the files in a dataset as "ready" or "disabled"
+func (dbs *SQLdb) updateDatasetEvent(datasetID, status, correlationID, user string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const ready = "UPDATE local_ega.files SET status = 'READY', stable_id = $1 WHERE " +
+	const dataset = "SELECT id FROM sda.datasets WHERE stable_id = $1;"
+	const markFile = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id) " +
+		"SELECT file_id, $2, $3, $4 from sda.file_dataset " +
+		"WHERE dataset_id = $1;"
+
+	var datasetInternalID int
+	if err := db.QueryRow(dataset, datasetID).Scan(&datasetInternalID); err != nil {
+		return err
+	}
+
+	result, err := db.Exec(markFile, datasetInternalID, status, correlationID, user)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+
+	return nil
+
+}
+
+// SetAccessionID adds a stable id to a file
+// identified by the user submitting it, inbox path and decrypted checksum
+func (dbs *SQLdb) SetAccessionID(accessionID, user, filepath, checksum string) error {
+
+	var err error
+
+	// 3, 9, 27, 81, 243 seconds between each retry event.
+	for count := 1; count <= dbRetryTimes; count++ {
+		err = dbs.setAccessionID(accessionID, user, filepath, checksum)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return err
+}
+
+// setAccessionID (actual operation) adds a stable id to a file
+// identified by the user submitting it, inbox path and decrypted checksum
+func (dbs *SQLdb) setAccessionID(accessionID, user, filepath, checksum string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+
+	const ready = "UPDATE local_ega.files SET stable_id = $1 WHERE " +
 		"elixir_id = $2 and inbox_path = $3 and decrypted_file_checksum = $4 and status = 'COMPLETED';"
 	result, err := db.Exec(ready, accessionID, user, filepath, checksum)
 	if err != nil {
 		return err
 	}
+
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")
 	}
@@ -418,12 +506,18 @@ func (dbs *SQLdb) MapFilesToDataset(datasetID string, accessionIDs []string) err
 func (dbs *SQLdb) mapFilesToDataset(datasetID string, accessionIDs []string) error {
 	dbs.checkAndReconnectIfNeeded()
 
-	const getID = "SELECT file_id FROM local_ega.archive_files WHERE stable_id = $1"
-	const mapping = "INSERT INTO local_ega_ebi.filedataset (file_id, dataset_stable_id) " +
-		"VALUES ($1, $2) ON CONFLICT " +
+	const getID = "SELECT id FROM sda.files WHERE stable_id = $1;"
+	const dataset = "INSERT INTO sda.datasets (stable_id) VALUES ($1) " +
+		"ON CONFLICT DO NOTHING;"
+	const mapping = "INSERT INTO sda.file_dataset (file_id, dataset_id) " +
+		"SELECT $1, id FROM sda.datasets WHERE stable_id = $2 ON CONFLICT " +
 		"DO NOTHING;"
 	db := dbs.DB
-	var fileID int64
+	var fileID string
+	_, err := db.Exec(dataset, datasetID)
+	if err != nil {
+		return err
+	}
 	transaction, _ := db.Begin()
 	for _, accessionID := range accessionIDs {
 		err := db.QueryRow(getID, accessionID).Scan(&fileID)
@@ -481,6 +575,103 @@ func (dbs *SQLdb) getArchived(user, filepath, checksum string) (string, int, err
 	}
 
 	return filePath, fileSize, nil
+}
+
+func (dbs *SQLdb) GetVersion() (int, error) {
+	dbs.checkAndReconnectIfNeeded()
+	log.Debug("Fetching database schema version")
+
+	query := "SELECT MAX(version) FROM sda.dbschema_version"
+	var dbVersion = -1
+	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
+
+	return dbVersion, err
+}
+
+func (dbs *SQLdb) UpdateFileStatus(fileUUID, event, corrID, user, message string) error {
+	var (
+		err   error
+		count int
+	)
+
+	for count == 0 || (err != nil && count < dbRetryTimes) {
+		err = dbs.updateFileStatus(fileUUID, event, corrID, user, message)
+		count++
+	}
+
+	return err
+}
+func (dbs *SQLdb) updateFileStatus(fileUUID, event, corrID, user, message string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const query = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES($1, $2, $3, $4, $5);"
+
+	result, err := db.Exec(query, fileUUID, event, corrID, user, message)
+	if err != nil {
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+
+	return nil
+}
+
+func (dbs *SQLdb) GetFileStatus(corrID string) (string, error) {
+	var (
+		err    error
+		count  int
+		status string
+	)
+
+	for count == 0 || (err != nil && count < dbRetryTimes) {
+		status, err = dbs.getFileStatus(corrID)
+		count++
+	}
+
+	return status, err
+}
+func (dbs *SQLdb) getFileStatus(corrID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT event from sda.file_event_log WHERE correlation_id = $1 ORDER BY id DESC LIMIT 1;"
+
+	var status string
+	err := db.QueryRow(getFileID, corrID).Scan(&status)
+	if err != nil {
+		return "", err
+	}
+
+	return status, nil
+}
+
+func (dbs *SQLdb) GetInboxPath(stableID string) (string, error) {
+	var (
+		err       error
+		count     int
+		inboxPath string
+	)
+
+	for count == 0 || (err != nil && count < dbRetryTimes) {
+		inboxPath, err = dbs.getInboxPath(stableID)
+		count++
+	}
+
+	return inboxPath, err
+}
+func (dbs *SQLdb) getInboxPath(stableID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT submission_file_path from sda.files WHERE stable_id = $1;"
+
+	var inboxPath string
+	err := db.QueryRow(getFileID, stableID).Scan(&inboxPath)
+	if err != nil {
+		return "", err
+	}
+
+	return inboxPath, nil
 }
 
 // Close terminates the connection to the database

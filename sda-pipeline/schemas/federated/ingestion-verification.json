@@ -107,11 +107,11 @@
         },
         "file_id": {
             "$id": "#/properties/file_id",
-            "type": "number",
-            "title": "The Accession identifier",
-            "description": "The Accession identifier",
+            "type": "string",
+            "title": "The database ID",
+            "description": "The database ID for the file (UUID)",
             "examples": [
-                "42"
+                "71bb2f05-2061-41ac-9f62-32322fde7e7d"
             ]
         },
         "archive_path": {

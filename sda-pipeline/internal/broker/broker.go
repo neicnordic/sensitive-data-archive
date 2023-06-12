@@ -57,6 +57,7 @@ type MQConf struct {
 	ServerName         string
 	Durable            bool
 	SchemasPath        string
+	PrefetchCount      int
 }
 
 // InfoError struct for sending detailed error messages to analysis.
@@ -115,6 +116,11 @@ func NewMQ(config MQConf) (*AMQPBroker, error) {
 		fmt.Printf("channel could not be put into confirm mode: %s", e)
 
 		return nil, fmt.Errorf("channel could not be put into confirm mode: %s", e)
+	}
+
+	// limit the number of messages retrieved from the queue
+	if err := Channel.Qos(config.PrefetchCount, 0, true); err != nil {
+		log.Errorf("failed to set Channel QoS to %d, reason: %v", config.PrefetchCount, err)
 	}
 
 	confirms := Channel.NotifyPublish(make(chan amqp.Confirmation, 1))
@@ -231,6 +237,9 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 		} else {
 			logFatalf("No certificates supplied")
 		}
+	}
+	if config.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	return &tlsConfig, nil

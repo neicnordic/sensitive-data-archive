@@ -14,8 +14,9 @@ function db_query() {
 echo "Checking archive files in s3"
 
 # Earlier tests verify that the file is in the database correctly
+# even though the files are disabled we can still get them from the db
 
-accessids=$(db_query "SELECT stable_id FROM local_ega.files where status='READY';")
+accessids=$(db_query "SELECT stable_id FROM local_ega.files where status='DISABLED';")
 
 if [ -z "$accessids" ]; then
 	echo "Failed to get accession ids"

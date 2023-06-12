@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ "$STORAGETYPE" = s3notls ] || [ "$STORAGETYPE" = s3notlsheader ]; then
+if [ "$STORAGETYPE" = s3notls ] || [ "$STORAGETYPE" = s3notlsheader ]|| [ "$STORAGETYPE" = cancel ]; then
     exit 0
 fi
 
@@ -53,6 +53,8 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	decryptedfilesize=$(sed -ne 's/^\([0-9][0-9]*\) bytes (.*) copied, .*$/\1/p' "$dcf")
 	rm -f "$dcf"
 
+	correlation_id=$(uuidgen -t)
+
 	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
 		-H 'Content-Type: application/json;charset=UTF-8' \
 		--data-binary "$(echo '{
@@ -81,7 +83,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 								}
 							]
 						}"
-						}' | sed -e "s/FILENAME/$file/" -e "s/MD5SUM/${md5sum}/" -e "s/SHA256SUM/${sha256sum}/" -e "s/CORRID/$count/" | tr -d '[:space:]' )"
+						}' | sed -e "s/FILENAME/$file/" -e "s/MD5SUM/${md5sum}/" -e "s/SHA256SUM/${sha256sum}/" -e "s/CORRID/$correlation_id/" | tr -d '[:space:]' )"
 
 	RETRY_TIMES=0
 	until docker logs ingest --since="$now" 2>&1 | grep "File marked as archived"; do
@@ -120,23 +122,6 @@ for file in dummy_data.c4gh largefile.c4gh; do
 			docker logs --since="$now" verify
 			exit 1
 
-		fi
-		sleep 10
-	done
-
-	RETRY_TIMES=0
-	until docker logs verify --since="$now" 2>&1 | grep "Removed file from inbox"; do
-		echo "waiting for verify to remove file from inbox"
-		RETRY_TIMES=$((RETRY_TIMES + 1))
-		if [ "$RETRY_TIMES" -eq 10 ]; then
-			echo "::error::Time out while waiting for verify to remove file, logs:"
-
-			echo
-			echo verify
-			echo
-
-			docker logs --since="$now" verify
-			exit 1
 		fi
 		sleep 10
 	done
@@ -181,7 +166,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 								}
 							]
 						}"
-						}' | sed -e "s/FILENAME/$filepath/" -e "s/DECMD5SUM/${decmd5sum}/" -e "s/DECSHA256SUM/${decsha256sum}/" -e "s/ACCESSIONID/${access}/" -e "s/CORRID/$count/" | tr -d '[:space:]' )"
+						}' | sed -e "s/FILENAME/$filepath/" -e "s/DECMD5SUM/${decmd5sum}/" -e "s/DECSHA256SUM/${decsha256sum}/" -e "s/ACCESSIONID/${access}/" -e "s/CORRID/$correlation_id/" | tr -d '[:space:]' )"
 
 	echo "Waiting for finalize/backup to complete"
 
@@ -237,25 +222,6 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 	dataset=$(printf "EGAD%011d" "$count")
 
-	# Check that it showed up in the database as well
-
-	RETRY_TIMES=0
-	statusindb=''
-
-	until [ -n "$statusindb" ]; do
-		statusindb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
-			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
-			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='READY';")
-		sleep 3
-		RETRY_TIMES=$((RETRY_TIMES + 1))
-
-		if [ "$RETRY_TIMES" -eq 150 ]; then
-			echo "Timed out waiting correct status in database, aborting"
-			exit 1
-		fi
-	done
-
 	# Map dataset ids
 	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
 		-H 'Content-Type: application/json;charset=UTF-8' \
@@ -274,7 +240,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 							\"type\":\"mapping\",
 							\"dataset_id\":\"DATASET\",
 							\"accession_ids\":[\"ACCESSIONID\"]}"
-						}' | sed -e "s/DATASET/$dataset/" -e "s/ACCESSIONID/$access/" -e "s/CORRID/$count/" | tr -d '[:space:]' )"
+						}' | sed -e "s/DATASET/$dataset/" -e "s/ACCESSIONID/$access/" -e "s/CORRID/$correlation_id/" | tr -d '[:space:]' )"
 
 	RETRY_TIMES=0
 	dbcheck=''
@@ -340,6 +306,44 @@ for file in dummy_data.c4gh largefile.c4gh; do
 		fi
 	done
 
+	# Release dataset
+	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
+		-H 'Content-Type: application/json;charset=UTF-8' \
+		--data-binary "$(echo '{
+						"vhost":"test",
+						"name":"sda",
+						"properties":{
+							"delivery_mode":2,
+							"correlation_id":"CORRID",
+							"content_encoding":"UTF-8",
+							"content_type":"application/json"
+						},
+						"routing_key":"files",
+						"payload_encoding":"string",
+						"payload":"{
+							\"type\":\"release\",
+							\"dataset_id\":\"DATASET\"}"
+						}' | sed -e "s/DATASET/$dataset/" -e "s/CORRID/$correlation_id/" | tr -d '[:space:]' )"
+
+	RETRY_TIMES=0
+	statusindb=''
+
+	# Check that it showed up in the database as well
+
+	until [ -n "$statusindb" ]; do
+		statusindb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
+			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
+			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='READY';")
+		sleep 3
+		RETRY_TIMES=$((RETRY_TIMES + 1))
+
+		if [ "$RETRY_TIMES" -eq 150 ]; then
+			echo "Timed out waiting correct status in database, aborting"
+			exit 1
+		fi
+	done
+
 	RETRY_TIMES=0
 	decryptedsizedb=''
 
@@ -389,6 +393,44 @@ for file in dummy_data.c4gh largefile.c4gh; do
 		echo "File passed through flow but decrypted checksum in DB did not match real decrypted checksum."
 		exit 1
 	fi
+
+	# Deprecate dataset
+	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
+		-H 'Content-Type: application/json;charset=UTF-8' \
+		--data-binary "$(echo '{
+						"vhost":"test",
+						"name":"sda",
+						"properties":{
+							"delivery_mode":2,
+							"correlation_id":"CORRID",
+							"content_encoding":"UTF-8",
+							"content_type":"application/json"
+						},
+						"routing_key":"files",
+						"payload_encoding":"string",
+						"payload":"{
+							\"type\":\"deprecate\",
+							\"dataset_id\":\"DATASET\"}"
+						}' | sed -e "s/DATASET/$dataset/" -e "s/CORRID/$correlation_id/" | tr -d '[:space:]' )"
+
+	RETRY_TIMES=0
+	statusindb=''
+
+	# Check that it showed up in the database as well
+
+	until [ -n "$statusindb" ]; do
+		statusindb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
+			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
+			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='DISABLED';")
+		sleep 3
+		RETRY_TIMES=$((RETRY_TIMES + 1))
+
+		if [ "$RETRY_TIMES" -eq 150 ]; then
+			echo "Timed out waiting correct status in database, aborting"
+			exit 1
+		fi
+	done
 
 	count=$((count + 1))
 done
