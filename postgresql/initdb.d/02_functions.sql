@@ -43,3 +43,32 @@ BEGIN
     RETURN file_uuid;
 END;
 $register_file$ LANGUAGE plpgsql;
+
+CREATE FUNCTION set_archived(file_uuid UUID, corr_id UUID, file_path TEXT, file_size BIGINT, inbox_checksum_value TEXT, inbox_checksum_type TEXT)
+RETURNS void AS $set_archived$
+BEGIN
+    UPDATE sda.files SET archive_file_path = file_path, archive_file_size = file_size WHERE id = file_uuid;
+
+    INSERT INTO sda.checksums(file_id, checksum, type, source)
+    VALUES(file_uuid, inbox_checksum_value, upper(inbox_checksum_type)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source);
+
+    INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES(file_uuid, 'archived', corr_id);
+END;
+
+$set_archived$ LANGUAGE plpgsql;
+
+CREATE FUNCTION set_verified(file_uuid UUID, corr_id UUID, archive_checksum TEXT, archive_checksum_type TEXT, descrypted_size BIGINT, decrypted_checksum TEXT, decrypted_checksum_type TEXT)
+RETURNS void AS $set_verified$
+BEGIN
+    UPDATE sda.files SET decrypted_file_size = descrypted_size WHERE id = file_uuid;
+
+    INSERT INTO sda.checksums(file_id, checksum, type, source)
+    VALUES(file_uuid, archive_checksum, upper(archive_checksum_type)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source);
+
+    INSERT INTO sda.checksums(file_id, checksum, type, source)
+    VALUES(file_uuid, decrypted_checksum, upper(decrypted_checksum_type)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source);
+
+    INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES(file_uuid, 'verified', corr_id);
+END;
+
+$set_verified$ LANGUAGE plpgsql;
