@@ -75,7 +75,11 @@ Parameter | Description | Default
 `global.auth.jwtAlg` | Key type to sign the JWT, available options are RS265 & ES256, Must match the key type |`"ES256"`
 `global.auth.jwtKey` | Private key used to sign the JWT. |`""`
 `global.auth.jwtPub` | Public key ues to verify the JWT. |`""`
+`global.auth.resignJWT` | Resign the LS-AAI JWTs. |`true`
 `global.auth.useTLS` | Run a TLS secured server. |`true`
+`global.auth.corsOrigins` | Domain name allowed for cross-domain requests. |`""`
+`global.auth.corsMethods` | Allowed cross-domain request methods. |`""`
+`global.auth.corsCreds` | Include credentials in cross-domain requests. |`false`
 `global.broker.host` | Domain name or IP address to the message broker. |`""`
 `global.broker.exchange` | Exchange to publish messages to. |`""`
 `global.broker.port` | Port for the message broker. |`5671`
@@ -84,6 +88,7 @@ Parameter | Description | Default
 `global.broker.password` | Shared password to the message broker. |`/`
 `global.broker.username` | Shared user to the message broker. |`/`
 `global.broker.backupRoutingKey` | routing key used to send messages to backup service |`""`
+`global.broker.prefetchCount` | Number of messages to retrieve from the broker at the time, setting this to `1` will create a round-robin behavior between consumers |`2`
 `global.cega.host` | Full URI to the EGA user authentication service. |`""`
 `global.cega.user` | Username for the EGA user authentication service. |`""`
 `global.cega.password` | Password for the EGA user authentication service. |`""`
@@ -117,7 +122,6 @@ Parameter | Description | Default
 `global.download.trusted.iss` | Array of trusted OIDC endpoints | ``
 `global.download.trusted.iss[iss]` | URI to the OIDC service | `https://login.elixir-czech.org/oidc/`
 `global.download.trusted.iss[jku]` | The URI to the OIDCs jwk endpoint | `https://login.elixir-czech.org/oidc/jwk`
-
 `global.elixir.oidcdHost` | URL to the OIDc service. | `"https://login.elixir-czech.org/oidc/"`
 `global.elixir.jwkPath` | Public key path on the OIDC host. | `jwk`
 `global.inbox.servicePort` | The port that the inbox is accessible via. | `2222`

@@ -137,9 +137,9 @@ global:
     copyHeader: false
 
   auth:
-    # @param elixirID, client ID to the Elixir OIDC for the service endpoint 
+    # @param elixirID, client ID to the Elixir OIDC for the service endpoint
     elixirID:
-    # @param elixirSecret, client secret to the Elixir OIDC for the service endpoint 
+    # @param elixirSecret, client secret to the Elixir OIDC for the service endpoint
     elixirSecret:
     # @param jwtSecret, name of the secret holding the jwt signing key
     jwtSecret:
@@ -149,6 +149,14 @@ global:
     jwtKey:
     # @param jwtPub, name of the public signing key
     jwtPub:
+    # @param resignJwt, if true (or empty) the jwt will be resigned with the jwtKey
+    resignJwt: true
+    # @param corsOrigins, domain name of allowed origin for cross-domain requests
+    corsOrigins: ""
+    # @param corsMethods, allowed methods for cross-domain requests
+    corsMethods: ""
+    # @param corsCreds, allow credentials in the request, cors is disabled if false
+    corsCreds: false
 
   broker:
     durable: true
@@ -162,9 +170,10 @@ global:
     username: ""
     verifyPeer: true
     vhost: "/"
+    prefetchCount: 2
 
   cega:
-    ## @param host, URI to CEGA NSS server users endpoint 
+    ## @param host, URI to CEGA NSS server users endpoint
     host: ""
     ## @param user, usernamen for accessing the CEGA NSS host
     user: ""
@@ -258,7 +267,7 @@ credentials:
   doa:
     dbUser: ""
     dbPassword: ""
-  
+
   download:
     dbUser: ""
     dbPassword: ""
@@ -310,7 +319,7 @@ auth:
   name: auth
   replicaCount: 2
   repository: ghcr.io/neicnordic/sda-auth
-  imageTag: v0.6.54
+  imageTag: v0.7.6
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -331,7 +340,7 @@ backup:
   deploy: false
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -350,7 +359,7 @@ backup:
 doa:
   name: doa
   repository: ghcr.io/neicnordic/sda-doa
-  imageTag: v1.6.46
+  imageTag: v1.6.62
   imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
@@ -374,7 +383,7 @@ download:
   name: download
   replicaCount: 2
   repository: ghcr.io/neicnordic/sda-download
-  imageTag: v1.6.117
+  imageTag: v1.9.14
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -394,7 +403,7 @@ finalize:
   name: finalize
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -414,7 +423,7 @@ ingest:
   name: ingest
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -435,7 +444,7 @@ intercept:
   name: ingest
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -454,7 +463,7 @@ intercept:
 mapper:
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
@@ -473,7 +482,7 @@ mapper:
 s3Inbox:
   name: s3Inbox
   repository: ghcr.io/neicnordic/sda-s3proxy
-  imageTag: v0.1.153
+  imageTag: v0.2.38
   imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
@@ -494,7 +503,7 @@ s3Inbox:
 sftpInbox:
   name: sftpInbox
   repository: ghcr.io/neicnordic/sda-inbox-sftp
-  imageTag: v1.10.4
+  imageTag: v1.12.16
   imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
@@ -527,7 +536,7 @@ releasetest:
 verify:
   replicaCount: 1
   repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.3.94
+  imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:
     requests:
