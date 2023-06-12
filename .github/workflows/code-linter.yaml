@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3.5.0
+        uses: golangci/golangci-lint-action@v3.6.0
         with:
           args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck --timeout 5m
           working-directory: sda-auth
@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3.5.0
+        uses: golangci/golangci-lint-action@v3.6.0
         with:
           args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck -e G401,G501,G107 --timeout 5m
           working-directory: sda-auth
@@ -71,7 +71,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3.5.0
+        uses: golangci/golangci-lint-action@v3.6.0
         with:
           args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck --timeout 5m
           working-directory: sda-pipeline
@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3.5.0
+        uses: golangci/golangci-lint-action@v3.6.0
         with:
           args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck --timeout 5m
           working-directory: sda
