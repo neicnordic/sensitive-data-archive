@@ -39,25 +39,24 @@ type AMQPBroker struct {
 
 // MQConf stores information about the message broker
 type MQConf struct {
-	Host               string
-	Port               int
-	User               string
-	Password           string
-	Vhost              string
-	Queue              string
-	Exchange           string
-	RoutingKey         string
-	RoutingError       string
-	Ssl                bool
-	InsecureSkipVerify bool
-	VerifyPeer         bool
-	CACert             string
-	ClientCert         string
-	ClientKey          string
-	ServerName         string
-	Durable            bool
-	SchemasPath        string
-	PrefetchCount      int
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	Vhost         string
+	Queue         string
+	Exchange      string
+	RoutingKey    string
+	RoutingError  string
+	Ssl           bool
+	VerifyPeer    bool
+	CACert        string
+	ClientCert    string
+	ClientKey     string
+	ServerName    string
+	Durable       bool
+	SchemasPath   string
+	PrefetchCount int
 }
 
 // InfoError struct for sending detailed error messages to analysis.
@@ -238,9 +237,6 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 			logFatalf("No certificates supplied")
 		}
 	}
-	if config.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
-	}
 
 	return &tlsConfig, nil
 }
@@ -337,7 +333,7 @@ func (broker *AMQPBroker) ValidateJSON(delivered *amqp.Delivery,
 		}
 		// Return error to restart on new message
 
-		return fmt.Errorf("Errors while validating JSON %s", errorString)
+		return fmt.Errorf("errors while validating JSON %s", errorString)
 	}
 
 	if dest == nil {

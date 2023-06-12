@@ -128,7 +128,6 @@ var tMqconf = MQConf{
 	"routingkey",
 	"routingError",
 	true,
-	false,
 	true,
 	"../../dev_utils/certs/ca.pem",
 	"../../dev_utils/certs/client.pem",
