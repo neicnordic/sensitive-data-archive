@@ -65,13 +65,13 @@ spec:
         resources:
 {{ toYaml .Values.resources | trim | indent 10 }}
         env:
-        - name: MQ_USER
-          value: {{ required "The admin username is required" .Values.global.adminUser | quote }}
-        - name: MQ_PASSWORD_HASH
+        - name: RABBITMQ_DEFAULT_USER
+          value: {{ .Values.global.adminUser | default "admin" }}
+        - name: RABBITMQ_DEFAULT_PASS
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}
-              key: password_hash
+              key: password
       {{- if and .Values.global.shovel.host (and .Values.global.shovel.user .Values.global.shovel.pass) }}
         - name: CEGA_CONNECTION
           valueFrom:
@@ -90,16 +90,13 @@ spec:
         - name: MQ_VERIFY
           value: {{ template "verifyPeer" . }}
         {{- end }}
-      {{- else }}
-        - name: NOTLS
-          value: "true"
       {{- end }}
       {{- if .Values.global.vhost }}
         - name: MQ_VHOST
           value: {{ .Values.global.vhost | quote }}
       {{- end }}
         ports:
-        - containerPort: 15672
+        - containerPort: {{ ternary 15671 15672 (.Values.global.tls.enabled )}}
           name: management
           protocol: TCP
         - containerPort: {{ ternary 5671 5672 (.Values.global.tls.enabled )}}
@@ -111,8 +108,8 @@ spec:
               - -ec
               - rabbitmq-diagnostics -q ping
           initialDelaySeconds: 20
-          periodSeconds: 5
-          timeoutSeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
         readinessProbe:
           exec:
             command:
@@ -121,7 +118,7 @@ spec:
               - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
           initialDelaySeconds: 30
           periodSeconds: 10
-          timeoutSeconds: 10
+          timeoutSeconds: 3
         volumeMounts:
         - name: data
           mountPath: "/var/lib/rabbitmq/"

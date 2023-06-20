@@ -99,3 +99,11 @@ Create chart name and version as used by the chart label.
         {{- end -}}
     {{- end -}}
 {{- end -}}
+
+{{- define "adminPass" -}}
+    {{- if .Values.global.adminPassword }}
+        {{- printf "%s" (.Values.global.adminPassword ) | b64enc }}
+    {{- else }}
+        {{- randAlphaNum 32 | b64enc }}
+    {{- end -}}
+{{- end -}}

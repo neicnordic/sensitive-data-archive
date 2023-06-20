@@ -1,6 +1,6 @@
 # SDA Message broker
 
-Source repository: [https://github.com/neicnordic/sda-mq](https://github.com/neicnordic/sda-mq)
+Source repository: [https://github.com/neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 
 ## Installing the Chart
 
@@ -8,11 +8,11 @@ Edit the values.yaml file and specify the relevant parts of the `config` section
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`image.repository` | sda-mq container image repository | `ghcr.io/neicnordic/sda-mq`
-`image.tag` | sda-mq  container image version | `v1.3.0`
+`image.repository` | sda-mq container image repository | `ghcr.io/neicnordic/sensitive-data-archive`
+`image.tag` | sda-mq  container image version | ``
 `image.pullPolicy` | sda-mq container image pull policy | `Always`
-`global.adminUser` | Username of admin user |`""`
-`global.adminPasswordHash` | Passwordhash for admin user. |`""`
+`global.adminUser` | Username of admin user |`admin`
+`global.adminPassword` | Password for admin user. |`Random if unset`
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
@@ -21,7 +21,7 @@ Parameter | Description | Default
 `global.tls.serverCert` | Name of the certificate file. |`""`
 `global.tls.caCert` | Name of the CA file. |`""`
 `global.tls.verifyPeer` | Require client certificates. |`true`
-`global.vhost` | default vhost is '/' unless specifically named |`""`
+`global.vhost` | default vhost is 'sda' unless specifically named |`""`
 `global.shovel.host` | Hostname of federated server |`""`
 `global.shovel.pass` | Password to federated server |`""`
 `global.shovel.port` | Port that federated server listens on |`5671`
@@ -33,7 +33,7 @@ Parameter | Description | Default
 `updateStrategyType` | Update strategy type. | `RollingUpdate`
 `networkPolicy.create` | Use network isolation. | `false`
 `networkPolicy.matchLabels` | App labels that are allowed to connect to the Message broker. | `app: sda-svc`
-`securityPolicy.create` | Use pod security policy. | `true`
+`securityPolicy.create` | Use pod security policy. | `false`
 `persistence.enabled` | Enable persistence. | `true`
 `persistence.storageSize` | Volume size. | `8Gi`
 `persistence.storageClass` | Use specific storage class, by default dynamic provisioning enabled. | `null`
@@ -41,10 +41,10 @@ Parameter | Description | Default
 `persistence.volumePermissions` | Change the owner of the persist volume mountpoint to `RunAsUser:fsGroup`. | `true`
 `service.type` | Message broker service type. |`ClusterIP`
 `service.port` | Message broker service port. |`5671`
-`resources.requests.memory` | Memory request for container. |`128Mi`
-`resources.requests.cpu` | CPU request for container. |`100m`
-`resources.limits.memory` | Memory limit for container. |`256Mi`
-`resources.limits.cpu` | CPU limit for container. |`200m`
+`resources.requests.memory` | Memory request for container. |`1Gi`
+`resources.requests.cpu` | CPU request for container. |`1`
+`resources.limits.memory` | Memory limit for container. |`2Gi`
+`resources.limits.cpu` | CPU limit for container. |`2`
 `testimage.tls.secretName` | Name of the testers secret that holds the certificates. |`""`
 `testimage.tls.serverKey` | Name of the testers certificate private key file. |`""`
 `testimage.tls.serverCert` | Name of testers the certificate file. |`""`
@@ -70,12 +70,4 @@ kubectl create secret generic tester-certs \
 --from-file=ca.crt\
 --from-file=tls.crt\
 --from-file=tls.key
-```
-
-## Password hash
-
-To create a password hash for the admin user run the followin command:
-
-```cmd
-sh ../dev_tools/scripts/mq-password-generator.sh ADMIN_PASSWORD
 ```
