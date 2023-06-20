@@ -30,14 +30,6 @@ Create chart name and version as used by the chart label.
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "pgInPassword" -}}
-    {{- ternary (randAlphaNum 12) .Values.global.pg_in_password (empty .Values.global.pg_in_password) -}}
-{{- end -}}
-
-{{- define "pgOutPassword" -}}
-    {{- ternary (randAlphaNum 12) .Values.global.pg_out_password (empty .Values.global.pg_out_password) -}}
-{{- end -}}
-
 {{- define "pgCert" -}}
     {{- if .Values.externalPkiService.tlsPath -}}
         {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/tls.crt" .Values.externalPkiService.tlsPath) "/") -}}
@@ -111,5 +103,13 @@ Create chart name and version as used by the chart label.
         {{ printf "%s/pgdata" .Values.persistence.mountPath }}
     {{- else }}
             {{- "/var/lib/postgresql/data/pgdata/" }}
+    {{- end -}}
+{{- end -}}
+
+{{- define "adminPass" -}}
+    {{- if .Values.global.postgresAdminPassword }}
+        {{- printf "%s" (.Values.global.postgresAdminPassword ) | b64enc }}
+    {{- else }}
+        {{- randAlphaNum 32 | b64enc }}
     {{- end -}}
 {{- end -}}
