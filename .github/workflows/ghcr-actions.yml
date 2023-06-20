@@ -21,6 +21,7 @@ jobs:
         with:
           image-names: sensitive-data-archive
           filter-tags: PR*,sha-*
+          skip-tags: v*
           cut-off: A week ago UTC
           account-type: org
           org-name: ${{ github.repository_owner }}
