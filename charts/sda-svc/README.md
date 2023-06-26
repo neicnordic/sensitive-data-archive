@@ -95,7 +95,7 @@ Parameter | Description | Default
 `global.cega.password` | Password for the EGA user authentication service. |`""`
 `global.c4gh.keyFile` | Private C4GH key. |`c4gh.key`
 `global.c4gh.passphrase` | Passphrase for the private C4GH key. |`""`
-`global.c4gh.publicFile` | Public key corresponding to the private key, neeeded for tests. |`""`
+`global.c4gh.publicFile` | Public key corresponding to the private key, provided in /info endpoint and neeeded for tests. |`""`
 `global.db.host` | Hostname for the database. |`""`
 `global.db.name` | Database to connect to. |`lega`
 `global.db.passIngest` | Password used for `data in` services. |`""`

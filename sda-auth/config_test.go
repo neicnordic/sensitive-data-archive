@@ -32,6 +32,7 @@ type ConfigTests struct {
 	ResignJwt         bool
 	InfoURL           string
 	InfoText          string
+	C4ghPubKeyFile    string
 }
 
 func TestConfigTestSuite(t *testing.T) {

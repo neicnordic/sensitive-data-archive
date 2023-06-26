@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ type AuthHandler struct {
 	OIDCProvider *oidc.Provider
 	htmlDir      string
 	staticDir    string
+	pubKey       string
 }
 
 func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
@@ -380,6 +382,7 @@ func main() {
 		OIDCProvider: provider,
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
+		pubKey:       "",
 	}
 
 	// Initialise web server
@@ -417,6 +420,16 @@ func main() {
 	app.Get("/elixir/login", authHandler.getElixirLogin)
 	app.Get("/elixir/cors_login", authHandler.getElixirCORSLogin)
 
+	publicKey, err := readPublicKeyFile(authHandler.Config.PublicFile)
+	if err != nil {
+		log.Info("Failure to get public key: ", err)
+	} else {
+		authHandler.pubKey = hex.EncodeToString(publicKey[:])
+	}
+
+	if publicKey != nil {
+		app.Get("/info", authHandler.getInfo)
+	}
 	app.UseGlobal(globalHeaders)
 
 	if config.Server.Cert != "" && config.Server.Key != "" {

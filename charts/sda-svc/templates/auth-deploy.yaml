@@ -137,6 +137,8 @@ spec:
       {{- end }}
         - name: RESIGNJWT
           value: {{ .Values.global.auth.resignJwt | quote }}
+        - name: PUBLICFILE
+          value: {{ .Values.global.c4gh.publicFile | quote }}
         {{- if .Values.global.tls.enabled}}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt

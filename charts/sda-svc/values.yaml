@@ -192,6 +192,7 @@ global:
     passphrase: ""
     backupPubKey: ""
 
+
   db:
     host: ""
     name: "sda"
