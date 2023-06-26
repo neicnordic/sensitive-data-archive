@@ -39,7 +39,7 @@ function check_move_to_error_queue() {
 	echo
 }
 
-for routingkey in files ingest archived accessionIDs backup mappings; do
+for routingkey in files ingest; do
 	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
 		-H 'Content-Type: application/json;charset=UTF-8' \
 		--data-binary '{
@@ -47,7 +47,7 @@ for routingkey in files ingest archived accessionIDs backup mappings; do
 						"name":"sda",
 						"properties":{
 							"delivery_mode":2,
-							"correlation_id":"1",
+							"correlation_id":"8bc6a0ef-2a64-4d50-ab09-59fc789f5186",
 							"content_encoding":"UTF-8",
 							"content_type":"application/json"
 						},
@@ -60,7 +60,7 @@ check_move_to_error_queue "I give you bad json"
 
 done
 
-for routingkey in files ingest archived accessionIDs backup mappings; do
+for routingkey in files ingest; do
 	curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchanges/test/sda/publish' \
 		-H 'Content-Type: application/json;charset=UTF-8' \
 		--data-binary '{
@@ -68,7 +68,7 @@ for routingkey in files ingest archived accessionIDs backup mappings; do
 						"name":"sda",
 						"properties":{
 							"delivery_mode":2,
-							"correlation_id":"1",
+							"correlation_id":"8bc6a0ef-2a64-4d50-ab09-59fc789f5186",
 							"content_encoding":"UTF-8",
 							"content_type":"application/json"
 						},
@@ -89,7 +89,7 @@ curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchan
 					"name":"sda",
 					"properties":{
 					"delivery_mode":2,
-						"correlation_id":"1",
+						"correlation_id":"8bc6a0ef-2a64-4d50-ab09-59fc789f5186",
 						"content_encoding":"UTF-8",
 						"content_type":"application/json"
 					},

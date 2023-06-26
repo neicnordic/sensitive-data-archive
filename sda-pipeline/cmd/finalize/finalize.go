@@ -107,6 +107,20 @@ func main() {
 				message.AccessionID,
 				message.DecryptedChecksums)
 
+			// If the file has been canceled by the uploader, don't spend time working on it.
+			status, err := db.GetFileStatus(delivered.CorrelationId)
+			if err != nil {
+				log.Errorf("failed to get file status, reason: %v", err.Error())
+			}
+			if status == "disabled" {
+				log.Infof("file with correlation ID: %s is disabled, stopping work", delivered.CorrelationId)
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: %v", err)
+				}
+
+				continue
+			}
+
 			// Extract the sha256 from the message and use it for the database
 			var checksumSha256 string
 			for _, checksum := range message.DecryptedChecksums {
@@ -146,8 +160,9 @@ func main() {
 				continue
 			}
 
-			if err := db.MarkReady(message.AccessionID, message.User, message.Filepath, checksumSha256); err != nil {
-				log.Errorf("MarkReady failed "+
+			accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID)
+			if err != nil {
+				log.Errorf("CheckAccessionIdExists failed "+
 					"(corr-id: %s, "+
 					"filepath: %s, "+
 					"user: %s, "+
@@ -160,9 +175,8 @@ func main() {
 					message.DecryptedChecksums,
 					err)
 
-				// Nack message so the server gets notified that something is wrong and requeue the message
 				if e := delivered.Nack(false, true); e != nil {
-					log.Errorf("Failed to NAck because of MarkReady failed "+
+					log.Errorf("Failed to NAck because of checking accession id exists failed "+
 						"(corr-id: %s, "+
 						"filepath: %s, "+
 						"user: %s, "+
@@ -174,6 +188,94 @@ func main() {
 						message.AccessionID,
 						message.DecryptedChecksums,
 						e)
+
+				}
+
+				continue
+			}
+
+			if accessionIDExists {
+
+				log.Infof("Seems accession ID already exists (corr-id: %s, "+
+					"filepath: %s, "+
+					"user: %s, "+
+					"accessionid: %s, "+
+					"decryptedChecksums: %v)",
+					delivered.CorrelationId,
+					message.Filepath,
+					message.User,
+					message.AccessionID,
+					message.DecryptedChecksums)
+
+				// Send the message to an error queue so it can be analyzed.
+				fileError := broker.InfoError{
+					Error:           "There is a conflict regarding the file accessionID",
+					Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
+					OriginalMessage: message,
+				}
+				body, _ := json.Marshal(fileError)
+
+				// Send the message to an error queue so it can be analyzed.
+				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingError, conf.Broker.Durable, body); e != nil {
+					log.Errorf("Failed to publish conflict in accessionID error message "+
+						"(corr-id: %s, user: %s, filepath: %s, accessionID: %s, decryptedchecksums: %v, reason: %v)",
+						delivered.CorrelationId,
+						message.User,
+						message.Filepath,
+						message.AccessionID,
+						message.DecryptedChecksums,
+						e)
+				}
+
+				// Nack message so the server gets notified that something is wrong and don't requeue the message
+				if e := delivered.Nack(false, false); e != nil {
+					log.Errorf("Failed to NAck because of sending error failed "+
+						"(corr-id: %s, "+
+						"filepath: %s, "+
+						"user: %s, "+
+						"accessionid: %s, "+
+						"decryptedChecksums: %v, error: %v)",
+						delivered.CorrelationId,
+						message.Filepath,
+						message.User,
+						message.AccessionID,
+						message.DecryptedChecksums,
+						e)
+
+				}
+
+				continue
+
+			}
+
+			if err := db.SetAccessionID(message.AccessionID, message.User, message.Filepath, checksumSha256); err != nil {
+				log.Errorf("SetAccessionID failed "+
+					"(corr-id: %s, "+
+					"filepath: %s, "+
+					"user: %s, "+
+					"accessionid: %s, "+
+					"decryptedChecksums: %v, error: %v)",
+					delivered.CorrelationId,
+					message.Filepath,
+					message.User,
+					message.AccessionID,
+					message.DecryptedChecksums,
+					err)
+
+				if e := delivered.Nack(false, true); e != nil {
+					log.Errorf("Failed to NAck because of SetAccessionID failed "+
+						"(corr-id: %s, "+
+						"filepath: %s, "+
+						"user: %s, "+
+						"accessionid: %s, "+
+						"decryptedChecksums: %v, error: %v)",
+						delivered.CorrelationId,
+						message.Filepath,
+						message.User,
+						message.AccessionID,
+						message.DecryptedChecksums,
+						e)
+
 				}
 
 				continue
@@ -190,8 +292,6 @@ func main() {
 				message.User,
 				message.AccessionID,
 				message.DecryptedChecksums)
-
-			log.Debug("Mark ready")
 
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, conf.Broker.Durable, completeMsg); err != nil {
 				// TODO fix resend mechanism
@@ -228,6 +328,7 @@ func main() {
 					err)
 
 			}
+
 		}
 	}()
 

@@ -36,6 +36,8 @@ These settings control how finalize connects to the RabbitMQ message broker.
 
  - `BROKER_PASSWORD`: password to connect to rabbitmq
 
+ - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
+
 ### PostgreSQL Database settings:
 
  - `DB_HOST`: hostname for the postgresql database
@@ -109,4 +111,4 @@ On error the service sleeps for up to 5 minutes to allow for database recovery, 
 
  - Finalize writes messages to one rabbitmq queue (default `backup`).
 
- - Finalize marks files as "ready" in the database using the `MarkReady` function.
+ - Finalize assigns the accesion ID to a file in the database using the `SetAccessionID` function.

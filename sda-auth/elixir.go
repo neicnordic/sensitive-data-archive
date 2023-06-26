@@ -55,24 +55,24 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 		return idStruct, err
 	}
 
-	// Extract the ID Token from OAuth2 token.
-	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
-	if !ok {
-		log.Error("Failed to extract a valid id token from OAuth2 token")
+	// Extract the Access Token from OAuth2 token.
+	rawAccessToken := oauth2Token.AccessToken
+	if rawAccessToken == "" {
+		log.Error("Failed to extract access token from OAuth2 token")
 
 		return idStruct, err
 	}
 
 	// Validate raw token signature and get expiration date
-	_, rawExpDate, err := validateToken(rawIDToken, jwkURL)
+	_, rawExpDate, err := validateToken(rawAccessToken, jwkURL)
 	if err != nil {
 		return idStruct, fmt.Errorf("could not validate raw jwt against pub key, reason: %v", err)
 	}
 
 	var verifier = provider.Verifier(&oidc.Config{ClientID: oauth2Config.ClientID})
 
-	// Parse and verify ID Token payload.
-	_, err = verifier.Verify(contx, rawIDToken)
+	// Parse and verify Access Token payload.
+	_, err = verifier.Verify(contx, rawAccessToken)
 	if err != nil {
 		log.Error("Failed to verify id token")
 
@@ -101,7 +101,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 	idStruct = ElixirIdentity{
 		User:     userInfo.Subject,
-		Token:    rawIDToken,
+		Token:    rawAccessToken,
 		Passport: claims.PassportClaim,
 		Profile:  claims.ProfileClaim,
 		Email:    claims.EmailClaim,

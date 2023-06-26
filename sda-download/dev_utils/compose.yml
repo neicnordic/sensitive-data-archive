@@ -1,0 +1,128 @@
+services:
+  certfixer:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /origcerts/* /certs
+        chown -R nobody.nobody /certs/*
+        chmod -R 644 /certs/*
+        chmod -R og-rw /certs/*-key.pem
+        chown -R 70.70 /certs/db*
+        ls -la /certs/
+
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./certs:/origcerts
+      - certs:/certs
+
+  db:
+    command: server /data
+    container_name: db
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - DB_LEGA_IN_PASSWORD=lega_in
+      - DB_LEGA_OUT_PASSWORD=lega_out
+      - PKI_VOLUME_PATH=/certs/
+      - PG_CA=/var/lib/postgresql/tls/ca.pem
+      - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
+      - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
+      - POSTGRES_PASSWORD=rootpassword
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sda-db:v2.1.4
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/data:/data
+      - certs:/var/lib/postgresql/tls/
+
+  s3:
+    command: server /data
+    container_name: s3
+    environment:
+      - MINIO_ACCESS_KEY=access
+      - MINIO_SECRET_KEY=secretkey
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio:RELEASE.2020-06-03T22-13-49Z
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
+      - ./certs/s3.pem:/root/.minio/certs/public.crt
+      - ./certs/s3-key.pem:/root/.minio/certs/private.key
+
+  createbucket:
+    container_name: buckets
+    image: minio/mc
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add s3 https://s3:9000 access secretkey;
+      /usr/bin/mc mb s3/archive;
+      exit 0;
+      "
+    volumes:
+      - ./certs/ca.pem:/etc/ssl/certs/public.crt
+    restart: on-failure
+
+  download:
+    command: sda-download
+    container_name: download
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      mockauth:
+        condition: service_started
+    env_file: ./env.download
+    image: neicnordic/sda-download:latest
+    build:
+      context: ..
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - ./iss.json:/iss.json
+      - certs:/dev_utils/certs
+      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+    mem_limit: 256m
+    ports:
+      - "8443:8443"
+    restart: always
+
+  mockauth:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip
+        pip install aiohttp Authlib
+        python -u /mockoidc.py
+    container_name: mockauth
+    image: python:3.8-slim
+    volumes:
+      - ./mockoidc/mockoidc.py:/mockoidc.py
+      - certs:/certs
+    mem_limit: 256m
+    ports:
+      - "8000:8000"
+    restart: always
+
+volumes:
+  archive:
+  certs:

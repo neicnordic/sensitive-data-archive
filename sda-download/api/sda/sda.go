@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -176,6 +177,27 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
+	c.Header("Content-Type", "application/octet-stream")
+	if c.GetBool("S3") {
+		lastModified, err := time.Parse(time.RFC3339, fileDetails.LastModified)
+		if err != nil {
+			log.Errorf("failed to parse last modified time: %v", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+
+			return
+		}
+
+		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
+		c.Header("ETag", fileDetails.DecryptedChecksum)
+		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
+	}
+
+	if c.Request.Method == http.MethodHead {
+
+		return
+	}
+
 	// Stitch file and prepare it for streaming
 	fileStream, err := stitchFile(fileDetails.Header, file, coordinates)
 	if err != nil {
@@ -251,7 +273,6 @@ var parseCoordinates = func(r *http.Request) (*headers.DataEditListHeaderPacket,
 var sendStream = func(w http.ResponseWriter, file io.Reader) {
 	log.Debug("begin data stream")
 
-	w.Header().Set("Content-Type", "application/octet-stream")
 	n, err := io.Copy(w, file)
 	log.Debug("end data stream")
 

@@ -24,7 +24,7 @@ import (
 type message struct {
 	FilePath           string      `json:"filepath"`
 	User               string      `json:"user"`
-	FileID             int         `json:"file_id"`
+	FileID             string      `json:"file_id"`
 	ArchivePath        string      `json:"archive_path"`
 	EncryptedChecksums []checksums `json:"encrypted_checksums"`
 	ReVerify           bool        `json:"re_verify"`
@@ -58,10 +58,6 @@ func main() {
 		log.Fatal(err)
 	}
 	archive, err := storage.NewBackend(conf.Archive)
-	if err != nil {
-		log.Fatal(err)
-	}
-	inbox, err := storage.NewBackend(conf.Inbox)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -117,7 +113,7 @@ func main() {
 			_ = json.Unmarshal(delivered.Body, &message)
 
 			log.Infof("Received work "+
-				"(corr-id: %s, user: %s, filepath: %s, fileid: %d, archivepath: %s, encryptedchecksums: %v, reverify: %t)",
+				"(corr-id: %s, user: %s, filepath: %s, fileid: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t)",
 				delivered.CorrelationId,
 				message.User,
 				message.FilePath,
@@ -126,10 +122,41 @@ func main() {
 				message.EncryptedChecksums,
 				message.ReVerify)
 
+			// If the file has been canceled by the uploader, don't spend time working on it.
+			status, err := db.GetFileStatus(delivered.CorrelationId)
+			if err != nil {
+				log.Errorf("failed to get file status, reason: %v", err.Error())
+				// Send the message to an error queue so it can be analyzed.
+				infoErrorMessage := broker.InfoError{
+					Error:           "Getheader failed",
+					Reason:          err.Error(),
+					OriginalMessage: message,
+				}
+
+				body, _ := json.Marshal(infoErrorMessage)
+				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingError, conf.Broker.Durable, body); e != nil {
+					log.Errorf("failed so publish message, reason: %v", err)
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: %v", err)
+				}
+
+				continue
+			}
+			if status == "disabled" {
+				log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: %v", err)
+				}
+
+				continue
+			}
+
 			header, err := db.GetHeader(message.FileID)
 			if err != nil {
 				log.Errorf("GetHeader failed "+
-					"(corr-id: %s, user: %s, filepath: %s, fileid: %d, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
+					"(corr-id: %s, user: %s, filepath: %s, fileid: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
 					delivered.CorrelationId,
 					message.User,
 					message.FilePath,
@@ -142,7 +169,7 @@ func main() {
 				// Nack message so the server gets notified that something is wrong but don't requeue the message
 				if e := delivered.Nack(false, false); e != nil {
 					log.Errorf("Failed to nack following getheader error message "+
-						"(corr-id: %s, user: %s, filepath: %s, fileid: %d, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
+						"(corr-id: %s, user: %s, filepath: %s, fileid: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
 						delivered.CorrelationId,
 						message.User,
 						message.FilePath,
@@ -165,7 +192,7 @@ func main() {
 				// Send the message to an error queue so it can be analyzed.
 				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingError, conf.Broker.Durable, body); e != nil {
 					log.Errorf("Failed to publish getheader error message "+
-						"(corr-id: %s, user: %s, filepath: %s, fileid: %d, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
+						"(corr-id: %s, user: %s, filepath: %s, fileid: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
 						delivered.CorrelationId,
 						message.User,
 						message.FilePath,
@@ -185,7 +212,7 @@ func main() {
 
 			if err != nil {
 				log.Errorf("Failed to get archived file size "+
-					"(corr-id: %s, user: %s, filepath: %s, fileid: %d, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
+					"(corr-id: %s, user: %s, filepath: %s, fileid: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
 					delivered.CorrelationId,
 					message.User,
 					message.FilePath,
@@ -347,9 +374,38 @@ func main() {
 					// Logging is in ValidateJSON so just restart on new message
 					continue
 				}
+				status, err := db.GetFileStatus(delivered.CorrelationId)
+				if err != nil {
+					log.Errorf("failed to get file status, reason: %v", err.Error())
+					// Send the message to an error queue so it can be analyzed.
+					infoErrorMessage := broker.InfoError{
+						Error:           "Getheader failed",
+						Reason:          err.Error(),
+						OriginalMessage: message,
+					}
+
+					body, _ := json.Marshal(infoErrorMessage)
+					if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingError, conf.Broker.Durable, body); e != nil {
+						log.Errorf("failed so publish message, reason: %v", err)
+					}
+
+					if err := delivered.Ack(false); err != nil {
+						log.Errorf("Failed acking canceled work, reason: %v", err)
+					}
+
+					continue
+				}
+				if status == "disabled" {
+					log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
+					if err := delivered.Ack(false); err != nil {
+						log.Errorf("Failed acking canceled work, reason: %v", err)
+					}
+
+					continue
+				}
 
 				// Mark file as "COMPLETED"
-				if e := db.MarkCompleted(file, message.FileID); e != nil {
+				if e := db.MarkCompleted(file, message.FileID, delivered.CorrelationId); e != nil {
 					log.Errorf("MarkCompleted failed "+
 						"(corr-id: %s, user: %s, filepath: %s, archivepath: %s, encryptedchecksums: %v, reverify: %t, reason: %v)",
 						delivered.CorrelationId,
@@ -407,41 +463,7 @@ func main() {
 						message.ReVerify,
 						err)
 				}
-
-				// At the end we try to remove file from inbox
-				// In case of error we send a message to error queue to track it
-				// we don't need to force removing the file
-				err = inbox.RemoveFile(message.FilePath)
-				if err != nil {
-					log.Errorf("Remove file from inbox failed "+
-						"(corr-id: %s, user: %s, filepath: %s, reason: %v)",
-						delivered.CorrelationId,
-						message.User,
-						message.FilePath,
-						err)
-
-					// Send the message to an error queue so it can be analyzed.
-					fileError := broker.InfoError{
-						Error:           "RemoveFile failed",
-						Reason:          err.Error(),
-						OriginalMessage: message,
-					}
-					body, _ := json.Marshal(fileError)
-					if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingError, conf.Broker.Durable, body); e != nil {
-						log.Errorf("Failed to publish message (remove file error), to error queue "+
-							"(corr-id: %s, user: %s, filepath: %s, reason: %v)",
-							delivered.CorrelationId,
-							message.User,
-							message.FilePath,
-							e)
-					}
-
-					continue
-				}
-				log.Debugf("Removed file from inbox: %s", message.FilePath)
-
 			}
-
 		}
 	}()
 

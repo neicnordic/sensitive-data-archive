@@ -48,10 +48,11 @@ else
 
     tostart="certfixer db mq"
 
-    if [ "$STORAGETYPE" = s3 ] || [ "$STORAGETYPE" = sftp ]; then
+    if ! expr "$STORAGETYPE" : "posix" 1>/dev/null; then
         tostart="certfixer db mq s3"
-    elif [ "$STORAGETYPE" = s3header ] || [ "$STORAGETYPE" = posixheader ] || [ "$STORAGETYPE" = sftpheader ]; then
-        tostart="certfixer db mq s3"
+    fi
+
+    if expr "$STORAGETYPE" : ".*header" 1>/dev/null; then
         sed -i 's/copyHeader: "false"/copyHeader: "true"/g' config.yaml
     fi
 

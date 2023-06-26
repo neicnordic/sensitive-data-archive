@@ -20,7 +20,9 @@ VALUES (0, now(), 'Created with version'),
        (3, now(), 'Reorganized out views/tables'),
        (4, now(), 'Refactored schema'),
        (5, now(), 'Add field for correlation ids'),
-       (6, now(), 'Add created_at field to datasets');
+       (6, now(), 'Add created_at field to datasets'),
+       (7, now(), 'Add permissions to mapper to files'),
+       (8, now(), 'Add ingestion functions');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level

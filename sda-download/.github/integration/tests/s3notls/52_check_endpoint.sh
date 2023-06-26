@@ -41,7 +41,7 @@ echo "got correct response when POST method used"
 # ------------------
 # Test good token
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
+token=$(curl "http://localhost:8000/tokens" | jq -r  '.[0]')
 
 ## Test datasets endpoint
 
@@ -55,7 +55,7 @@ fi
 
 echo "expected dataset found"
 
-## Test datasets/files endpoint 
+## Test datasets/files endpoint
 
 check_files=$(curl -H "Authorization: Bearer $token" "http://localhost:8080/metadata/datasets/https://doi.example/ty009.sfrrss/600.45asasga/files" | jq -r '.[0].fileId')
 
@@ -78,7 +78,7 @@ crypt4gh decrypt --sk c4gh.sec.pem < dummy_data.c4gh > old-file.txt
 curl -H "Authorization: Bearer $token" "http://localhost:8080/files/urn:neic:001-002" --output test-download.txt
 
 
-cmp --silent old-file.txt test-download.txt 
+cmp --silent old-file.txt test-download.txt
 status=$?
 if [[ $status = 0 ]]; then
     echo "Files are the same"
@@ -87,9 +87,9 @@ else
 fi
 
 # ------------------
-# Test bad token
+# Test get visas failed
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
+token=$(curl "http://localhost:8000/tokens" | jq -r  '.[1]')
 
 ## Test datasets endpoint
 
@@ -107,7 +107,7 @@ echo "got correct response when token has no permissions"
 # Test token with untrusted sources
 # for this test we don't attach a list of trusted sources
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[2]')
+token=$(curl "http://localhost:8000/tokens" | jq -r  '.[2]')
 
 ## Test datasets endpoint
 

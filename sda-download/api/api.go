@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/api/middleware"
+	"github.com/neicnordic/sda-download/api/s3"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	log "github.com/sirupsen/logrus"
@@ -31,6 +32,8 @@ func Setup() *http.Server {
 	router.GET("/metadata/datasets", middleware.TokenMiddleware(), sda.Datasets)
 	router.GET("/metadata/datasets/*dataset", middleware.TokenMiddleware(), sda.Files)
 	router.GET("/files/:fileid", middleware.TokenMiddleware(), sda.Download)
+	router.GET("/s3/*path", middleware.TokenMiddleware(), s3.Download)
+	router.HEAD("/s3/*path", middleware.TokenMiddleware(), s3.Download)
 	router.GET("/health", healthResponse)
 
 	// Configure TLS settings
@@ -53,7 +56,7 @@ func Setup() *http.Server {
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 		ReadHeaderTimeout: 20 * time.Second,
 		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      20 * time.Second,
+		WriteTimeout:      -1,
 	}
 
 	return srv

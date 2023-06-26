@@ -64,7 +64,15 @@ type SMTPConf struct {
 }
 
 type OrchestratorConf struct {
-	ProjectFQDN string
+	ProjectFQDN    string
+	QueueVerify    string
+	QueueInbox     string
+	QueueComplete  string
+	QueueBackup    string
+	QueueMapping   string
+	QueueIngest    string
+	QueueAccession string
+	ReleaseDelay   time.Duration
 }
 
 // NewConfig initializes and parses the config file and/or environment using
@@ -118,7 +126,6 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"broker.host", "broker.port",
 			"broker.user", "broker.password",
-			"broker.queue",
 			"project.fqdn",
 		}
 	default:
@@ -205,7 +212,6 @@ func NewConfig(app string) (*Config, error) {
 	case "intercept":
 		return c, nil
 	case "verify":
-		c.configInbox()
 		c.configArchive()
 
 		err = c.configDatabase()
@@ -232,6 +238,7 @@ func NewConfig(app string) (*Config, error) {
 
 		return c, nil
 	case "mapper":
+		c.configInbox()
 		err = c.configDatabase()
 		if err != nil {
 			return nil, err
@@ -407,6 +414,11 @@ func (c *Config) configBroker() error {
 		broker.CACert = viper.GetString("broker.cacert")
 	}
 
+	broker.PrefetchCount = 2
+	if viper.IsSet("broker.prefetchCount") {
+		broker.PrefetchCount = viper.GetInt("broker.prefetchCount")
+	}
+
 	c.Broker = broker
 
 	return nil
@@ -490,7 +502,54 @@ func (c *Config) configSMTP() {
 // configOrchestrator provides the configuration for the standalone orchestator.
 func (c *Config) configOrchestrator() {
 	c.Orchestrator = OrchestratorConf{}
+	if viper.IsSet("broker.dataset.releasedelay") {
+		c.Orchestrator.ReleaseDelay = time.Duration(viper.GetInt("broker.dataset.releasedelay"))
+	} else {
+		c.Orchestrator.ReleaseDelay = 1
+	}
 	c.Orchestrator.ProjectFQDN = viper.GetString("project.fqdn")
+	if viper.IsSet("broker.queue.verified") {
+		c.Orchestrator.QueueVerify = viper.GetString("broker.queue.verified")
+	} else {
+		c.Orchestrator.QueueVerify = "verified"
+	}
+
+	if viper.IsSet("broker.queue.inbox") {
+		c.Orchestrator.QueueInbox = viper.GetString("broker.queue.inbox")
+	} else {
+		c.Orchestrator.QueueInbox = "inbox"
+	}
+
+	if viper.IsSet("broker.queue.completed") {
+		c.Orchestrator.QueueComplete = viper.GetString("broker.queue.completed")
+	} else {
+		c.Orchestrator.QueueComplete = "completed"
+	}
+
+	if viper.IsSet("broker.queue.backup") {
+		c.Orchestrator.QueueBackup = viper.GetString("broker.queue.backup")
+	} else {
+		c.Orchestrator.QueueBackup = "backup"
+	}
+
+	if viper.IsSet("broker.queue.mappings") {
+		c.Orchestrator.QueueMapping = viper.GetString("broker.queue.mappings")
+	} else {
+		c.Orchestrator.QueueMapping = "mappings"
+	}
+
+	if viper.IsSet("broker.queue.ingest") {
+		c.Orchestrator.QueueIngest = viper.GetString("broker.queue.ingest")
+	} else {
+		c.Orchestrator.QueueIngest = "ingest"
+	}
+
+	if viper.IsSet("broker.queue.accessionIDs") {
+		c.Orchestrator.QueueAccession = viper.GetString("broker.queue.accessionIDs")
+	} else {
+		c.Orchestrator.QueueAccession = "accessionIDs"
+	}
+
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key

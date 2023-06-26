@@ -9,7 +9,7 @@ bash ./make_certs.sh
 
 if [ "$STORAGETYPE" = s3notls ]; then
 
-    docker-compose -f compose-no-tls.yml up -d
+    docker compose -f compose-no-tls.yml up -d
 
     RETRY_TIMES=0
     for p in db s3 download; do
@@ -34,7 +34,7 @@ else
 
     # We need to leave the $tostart variable unquoted here since we want it to split
     # shellcheck disable=SC2086
-    docker-compose -f compose-sda.yml up -d $tostart
+    docker compose -f compose.yml up -d $tostart
 
     for p in $tostart; do
         RETRY_TIMES=0
@@ -54,7 +54,7 @@ else
         done
     done
 
-    docker-compose -f compose-sda.yml up -d
+    docker compose -f compose.yml up -d
 
     RETRY_TIMES=0
     until docker ps -f name="download" --format "{{.Status}}" | grep "Up"

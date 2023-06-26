@@ -34,7 +34,7 @@ func TokenMiddleware() gin.HandlerFunc {
 			log.Debug("no session found, create new session")
 
 			// Check that a token is provided
-			token, code, err := auth.GetToken(c.Request.Header.Get("Authorization"))
+			token, code, err := auth.GetToken(c.Request.Header)
 			if err != nil {
 				c.String(code, err.Error())
 				c.AbortWithStatus(code)

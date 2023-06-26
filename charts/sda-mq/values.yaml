@@ -35,7 +35,7 @@ extraSecurityContext: {}
 
 image:
   repository: ghcr.io/neicnordic/sda-mq
-  tag: v1.4.20
+  tag: v1.4.38
   pullPolicy: Always
 
 # utilize network isolation

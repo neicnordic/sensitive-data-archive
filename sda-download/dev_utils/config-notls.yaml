@@ -30,4 +30,4 @@ oidc:
   cacert: "./dev_utils/certs/ca.pem"
   # oidc configuration API must have values for "userinfo_endpoint" and "jwks_uri"
   configuration:
-    url: "https://mockauth:8000/.well-known/openid-configuration"
+    url: "http://mockauth:8000/.well-known/openid-configuration"

@@ -39,24 +39,24 @@ type AMQPBroker struct {
 
 // MQConf stores information about the message broker
 type MQConf struct {
-	Host               string
-	Port               int
-	User               string
-	Password           string
-	Vhost              string
-	Queue              string
-	Exchange           string
-	RoutingKey         string
-	RoutingError       string
-	Ssl                bool
-	InsecureSkipVerify bool
-	VerifyPeer         bool
-	CACert             string
-	ClientCert         string
-	ClientKey          string
-	ServerName         string
-	Durable            bool
-	SchemasPath        string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	Vhost         string
+	Queue         string
+	Exchange      string
+	RoutingKey    string
+	RoutingError  string
+	Ssl           bool
+	VerifyPeer    bool
+	CACert        string
+	ClientCert    string
+	ClientKey     string
+	ServerName    string
+	Durable       bool
+	SchemasPath   string
+	PrefetchCount int
 }
 
 // InfoError struct for sending detailed error messages to analysis.
@@ -115,6 +115,11 @@ func NewMQ(config MQConf) (*AMQPBroker, error) {
 		fmt.Printf("channel could not be put into confirm mode: %s", e)
 
 		return nil, fmt.Errorf("channel could not be put into confirm mode: %s", e)
+	}
+
+	// limit the number of messages retrieved from the queue
+	if err := Channel.Qos(config.PrefetchCount, 0, true); err != nil {
+		log.Errorf("failed to set Channel QoS to %d, reason: %v", config.PrefetchCount, err)
 	}
 
 	confirms := Channel.NotifyPublish(make(chan amqp.Confirmation, 1))
@@ -328,7 +333,7 @@ func (broker *AMQPBroker) ValidateJSON(delivered *amqp.Delivery,
 		}
 		// Return error to restart on new message
 
-		return fmt.Errorf("Errors while validating JSON %s", errorString)
+		return fmt.Errorf("errors while validating JSON %s", errorString)
 	}
 
 	if dest == nil {

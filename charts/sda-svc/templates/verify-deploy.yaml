@@ -135,6 +135,8 @@ spec:
           value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
         - name: BROKER_PORT
           value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_PREFETCHCOUNT
+          value: {{ .Values.global.broker.prefetchCount | quote }}
         - name: BROKER_QUEUE
           value: "archived"
         - name: BROKER_ROUTINGERROR

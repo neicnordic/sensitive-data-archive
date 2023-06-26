@@ -59,7 +59,7 @@ fi
 
 echo "expected dataset found"
 
-## Test datasets/files endpoint 
+## Test datasets/files endpoint
 
 check_files=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/metadata/datasets/https://doi.example/ty009.sfrrss/600.45asasga/files" | jq -r '.[0].fileId')
 
@@ -91,7 +91,7 @@ else
 fi
 
 # ------------------
-# Test bad token
+# Test get visas failed
 
 token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
 

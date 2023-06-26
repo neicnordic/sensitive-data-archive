@@ -4,17 +4,17 @@ go 1.20
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.235
+	github.com/aws/aws-sdk-go v1.44.276
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.3.0
 	github.com/johannesboyne/gofakes3 v0.0.0-20230129080941-f6a8a9ae6fd3
 	github.com/lestrrat-go/jwx v1.2.25
-	github.com/lib/pq v1.10.7
-	github.com/neicnordic/crypt4gh v1.7.3
-	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/viper v1.15.0
-	github.com/stretchr/testify v1.8.3
+	github.com/lib/pq v1.10.9
+	github.com/neicnordic/crypt4gh v1.7.5
+	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/viper v1.16.0
+	github.com/stretchr/testify v1.8.4
 )
 
 require (
@@ -54,8 +54,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	github.com/shabbyrobe/gocovmerge v0.0.0-20180507124511-f6ea450bfb63 // indirect
-	github.com/spf13/afero v1.9.3 // indirect
-	github.com/spf13/cast v1.5.0 // indirect
+	github.com/spf13/afero v1.9.5 // indirect
+	github.com/spf13/cast v1.5.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect

@@ -27,6 +27,7 @@ GRANT UPDATE ON sda.files TO ingest;
 GRANT INSERT ON sda.checksums TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO ingest;
 GRANT INSERT ON sda.file_event_log TO ingest;
+GRANT SELECT ON sda.file_event_log TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO ingest;
 
 -- legacy schema
@@ -53,6 +54,7 @@ GRANT UPDATE ON sda.files TO verify;
 GRANT INSERT ON sda.checksums TO verify;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO verify;
 GRANT INSERT ON sda.file_event_log TO verify;
+GRANT SELECT ON sda.file_event_log TO verify;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO verify;
 
 -- legacy schema
@@ -75,6 +77,7 @@ GRANT UPDATE ON sda.files TO finalize;
 GRANT SELECT ON sda.files TO finalize;
 GRANT SELECT ON sda.checksums TO finalize;
 GRANT INSERT ON sda.file_event_log TO finalize;
+GRANT SELECT ON sda.file_event_log TO finalize;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO finalize;
 
 -- legacy schema
@@ -96,9 +99,11 @@ GRANT INSERT ON sda.datasets TO mapper;
 GRANT SELECT ON sda.datasets TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.datasets_id_seq TO mapper;
 GRANT SELECT ON sda.files TO mapper;
+GRANT INSERT ON sda.file_event_log TO mapper;
 GRANT INSERT ON sda.file_dataset TO mapper;
 GRANT SELECT ON local_ega.main_to_files TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_dataset_id_seq TO mapper;
+GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO mapper;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO mapper;
@@ -106,6 +111,7 @@ GRANT USAGE ON SCHEMA local_ega_ebi TO mapper;
 
 GRANT SELECT ON local_ega.archive_files TO mapper;
 GRANT INSERT ON local_ega_ebi.filedataset TO mapper;
+GRANT UPDATE ON local_ega.files TO mapper;
 
 --------------------------------------------------------------------------------
 

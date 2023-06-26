@@ -107,6 +107,16 @@ spec:
           value: "{{ .Values.global.elixir.provider }}"
         - name: ELIXIR_SCOPE
           value: "ga4gh_passport_v1"
+        - name: ELIXIR_JWKPATH
+          value: {{ .Values.global.elixir.jwkPath | quote }}
+        {{- if .Values.global.auth.corsOrigins }}
+        - name: CORS_ORIGINS
+          value: {{ .Values.global.auth.corsOrigins | quote }}
+        - name: CORS_METHODS
+          value: {{ .Values.global.auth.corsMethods | quote }}
+        - name: CORS_CREDENTIALS
+          value: {{ .Values.global.auth.corsCreds | quote }}
+        {{- end }}
         {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
         - name: CEGA_AUTHURL
           value: {{ .Values.global.cega.host | quote }}
@@ -121,6 +131,8 @@ spec:
           value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
         - name: JWTSIGNATUREALG
           value: {{ .Values.global.auth.jwtAlg }}
+        - name: RESIGNJWT
+          value: {{ .Values.global.auth.resignJwt | quote }}
         {{- if .Values.global.tls.enabled}}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt

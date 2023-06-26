@@ -33,6 +33,8 @@ These settings control how mapper connects to the RabbitMQ message broker.
 
  - `BROKER_PASSWORD`: password to connect to rabbitmq
 
+ - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
+
 ### PostgreSQL Database settings:
 
  - `DB_HOST`: hostname for the postgresql database
@@ -84,16 +86,19 @@ These settings control how mapper connects to the RabbitMQ message broker.
 
 The mapper service maps file accessionIDs to datasetIDs.
 
-When running, mapper reads messages from the configured RabbitMQ queue (default: "mappings").
+When running, mapper reads messages from the configured RabbitMQ queue (default: "mappings").  
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
-1. The message is validated as valid JSON that matches the "dataset-mapping" schema (defined in sda-common).
+1. The message is validated as valid JSON that matches the "dataset-mapping" schema (defined in sda-common).  
 If the message can’t be validated it is discarded with an error message in the logs.
 
-1. AccessionIDs from the message are mapped to a datasetID (also in the message) in the database.
+1. AccessionIDs from the message are mapped to a datasetID (also in the message) in the database.  
 On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
 
-1. The RabbitMQ message is Ack'ed.
+1. The uploaded files for each AccessionID is removed from the inbox  
+If this fails an error will be written to the logs.
+
+2. The RabbitMQ message is Ack'ed.
 
 
 ## Communication
