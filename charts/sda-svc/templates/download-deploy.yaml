@@ -75,8 +75,8 @@ spec:
     {{- end }}
       containers:
       - name: download
-        image: "{{ .Values.download.repository }}:{{ .Values.download.imageTag }}"
-        imagePullPolicy: {{ .Values.download.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-download"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
         command: ["sda-download"]
@@ -106,7 +106,7 @@ spec:
           value: "{{ .Values.global.archive.volumePath }}"
       {{- end }}
         - name: OIDC_CONFIGURATION_URL
-          value: "{{ .Values.global.elixir.oidcConfig }}/.well-known/openid-configuration"
+          value: "{{ .Values.global.oidc.provider }}/.well-known/openid-configuration"
       {{- if .Values.global.download.trusted.iss }}
         - name: OIDC_TRUSTED_ISS
           value: {{ include "trustedIssPath" . }}/{{ default "iss.json" .Values.global.download.trusted.configFile }}
@@ -212,6 +212,16 @@ spec:
             - name: Host
               value: {{ .Values.global.ingress.hostName.download }}
           initialDelaySeconds: 20
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            path: /health
+            port: download
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
+            httpHeaders:
+            - name: Host
+              value: {{ .Values.global.ingress.hostName.download }}
+          failureThreshold: 30
           periodSeconds: 10
         resources:
 {{ toYaml .Values.download.resources | trim | indent 10 }}

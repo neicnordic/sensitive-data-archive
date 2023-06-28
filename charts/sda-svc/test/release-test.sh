@@ -5,7 +5,7 @@ if [ "$INBOX_STORAGE_TYPE" == "s3" ]; then
 		cat >> "/tmp/s3cfg" <<-EOF
 		host_base = $INBOX_SERVICE_NAME
 		host_bucket = $INBOX_SERVICE_NAME
-		access_key = dummy
+		access_key = test_dummy.org
 		access_token = $INBOX_ACCESS_TOKEN
 		use_https = True
 		ca_certs_file = /tls/ca.crt
@@ -14,7 +14,7 @@ if [ "$INBOX_STORAGE_TYPE" == "s3" ]; then
 		cat >> "/tmp/s3cfg" <<-EOF
 		host_base = $INBOX_SERVICE_NAME
 		host_bucket = $INBOX_SERVICE_NAME
-		access_key = dummy
+		access_key = test_dummy.org
 		access_token = $INBOX_ACCESS_TOKEN
 		use_https = False
 		EOF
@@ -34,7 +34,7 @@ if [ "${DEPLOYMENT_TYPE}" = all ] || [ "${DEPLOYMENT_TYPE}" = external ]; then
 	elif [ "$INBOX_STORAGE_TYPE" == "s3" ]; then
 		if [ "$TLS" == true ]; then
 			echo "Will try connecting to https://$INBOX_SERVICE_NAME/"
-			if ! s3cmd -c "/tmp/s3cfg" ls s3://dummy ; then
+			if ! s3cmd -c "/tmp/s3cfg" ls s3://test_dummy.org ; then
 				echo "expected 403 got: $responsecode"
 				echo "Failed inbox verification, bailing out"
 				exit 1
@@ -49,7 +49,7 @@ if [ "${DEPLOYMENT_TYPE}" = all ] || [ "${DEPLOYMENT_TYPE}" = external ]; then
 			fi
 		else
 			echo "Will try connecting to http://$INBOX_SERVICE_NAME/"
-			if ! s3cmd -c "/tmp/s3cfg" ls s3://dummy ; then
+			if ! s3cmd -c "/tmp/s3cfg" ls s3://test_dummy.org ; then
 				echo "Failed inbox verification, bailing out"
 				exit 1
 			fi

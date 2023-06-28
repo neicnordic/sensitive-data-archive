@@ -61,8 +61,8 @@ spec:
   {{- end }}
       containers:
       - name: backup
-        image: "{{ .Values.backup.repository }}:{{ .Values.backup.imageTag }}"
-        imagePullPolicy: {{ .Values.backup.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-backup"]
         securityContext:
           allowPrivilegeEscalation: false

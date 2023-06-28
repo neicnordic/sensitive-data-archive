@@ -94,8 +94,8 @@ spec:
       {{- end }}
       containers:
       - name: inbox
-        image: "{{ .Values.sftpInbox.repository }}:{{ .Values.sftpInbox.imageTag }}"
-        imagePullPolicy: {{ .Values.sftpInbox.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-sftp-inbox"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["java", "-jar", "inbox-0.0.3-SNAPSHOT.jar"]
         securityContext:
           allowPrivilegeEscalation: false

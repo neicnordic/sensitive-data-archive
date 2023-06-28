@@ -1,3 +1,4 @@
+{{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -33,4 +34,5 @@ spec:
     # This is optional since cert-manager will default to this value however
     # if you are using an external issuer, change this to that issuer group.
     group: cert-manager.io
+{{- end -}}
 {{- end -}}

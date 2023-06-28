@@ -53,13 +53,13 @@ spec:
       serviceAccountName: {{ .Release.Name }}
     {{- end }}
       securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
       containers:
       - name: auth
-        image: "{{ .Values.auth.repository }}:{{ .Values.auth.imageTag }}"
-        imagePullPolicy: {{ .Values.auth.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-auth"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
 {{- if .Values.global.extraSecurityContext }}
@@ -79,12 +79,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
-              key: elixirID
+              key: oidcID
         - name: ELIXIR_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
-              key: elixirSecret
+              key: oidcSecret
         {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
         - name: CEGA_ID
           valueFrom:
@@ -104,11 +104,11 @@ spec:
         - name: ELIXIR_REDIRECTURL
           value: {{ template "authRedirect" .}}
         - name: ELIXIR_PROVIDER
-          value: "{{ .Values.global.elixir.provider }}"
+          value: "{{ .Values.global.oidc.provider }}"
         - name: ELIXIR_SCOPE
           value: "ga4gh_passport_v1"
         - name: ELIXIR_JWKPATH
-          value: {{ .Values.global.elixir.jwkPath | quote }}
+          value: {{ .Values.global.oidc.jwkPath | quote }}
         {{- if .Values.global.auth.corsOrigins }}
         - name: CORS_ORIGINS
           value: {{ .Values.global.auth.corsOrigins | quote }}

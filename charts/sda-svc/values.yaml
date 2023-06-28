@@ -1,8 +1,11 @@
 # Default values for SDA services.
-# This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
-global:
+image:
+  repository: "ghcr.io/neicnordic/sensitive-data-archive"
+  tag: "v0.0.44"
+  pullPolicy: "Always"
 
+global:
 # Path where the sensitive files can be found, default is "/.secrets".
 # TLS certificates or C4GH key locations can be set using global.tlsPath or global.c4ghPath respectively,
 # this path will be a subpath to the secretsPath.
@@ -85,7 +88,7 @@ global:
   rbacEnabled: true
 
   podSecurityPolicy:
-    create: true
+    create: false
 
 # Extra security context to apply to all pods
 # This should be a multi-line string mapping directly to the a map of
@@ -137,10 +140,6 @@ global:
     copyHeader: false
 
   auth:
-    # @param elixirID, client ID to the Elixir OIDC for the service endpoint
-    elixirID:
-    # @param elixirSecret, client secret to the Elixir OIDC for the service endpoint
-    elixirSecret:
     # @param jwtSecret, name of the secret holding the jwt signing key
     jwtSecret:
     # @param jwtAlg, cipher type of the signing key
@@ -169,7 +168,7 @@ global:
     ssl: true
     username: ""
     verifyPeer: true
-    vhost: "/"
+    vhost: "sda"
     prefetchCount: 2
 
   cega:
@@ -191,9 +190,9 @@ global:
 
   db:
     host: ""
-    name: "lega"
-    passIngest: ""
-    passOutgest: ""
+    name: "sda"
+    user: ""
+    password: ""
     port: 5432
     sslMode: "verify-full"
 
@@ -230,13 +229,14 @@ global:
       configPath: "iss"
       configFile: "iss.json"
       iss:
-        - iss: " https://profile.aai.lifescience-ri.eu/"
-          jku: " https://profile.aai.lifescience-ri.eu/jwk"
+        - iss: "https://proxy.aai.lifescience-ri.eu"
+          jku: "https://proxy.aai.lifescience-ri.eu/OIDC/jwks"
 
-  elixir:
-    oidcConfig: "https://proxy.aai.lifescience-ri.eu"
-    provider:  "https://profile.aai.lifescience-ri.eu/"
-    jwkPath: "jwk"
+  oidc:
+    provider:  "https://proxy.aai.lifescience-ri.eu"
+    jwkPath: "/OIDC/jwks"
+    id: ""
+    secret: ""
 
   inbox:
     servicePort: 2222
@@ -318,9 +318,6 @@ credentials:
 auth:
   name: auth
   replicaCount: 2
-  repository: ghcr.io/neicnordic/sda-auth
-  imageTag: v0.7.6
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -339,9 +336,6 @@ backup:
   name: backup
   deploy: false
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.4.27
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -382,9 +376,6 @@ doa:
 download:
   name: download
   replicaCount: 2
-  repository: ghcr.io/neicnordic/sda-download
-  imageTag: v1.9.14
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "256Mi"
@@ -402,9 +393,6 @@ download:
 finalize:
   name: finalize
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.4.27
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -422,9 +410,6 @@ finalize:
 ingest:
   name: ingest
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.4.27
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -443,9 +428,6 @@ intercept:
   deploy: true
   name: ingest
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.4.27
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -462,9 +444,6 @@ intercept:
 
 mapper:
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
-  imageTag: v0.4.27
-  imagePullPolicy: IfNotPresent
   resources:
     requests:
       memory: "128Mi"
@@ -481,9 +460,6 @@ mapper:
 
 s3Inbox:
   name: s3Inbox
-  repository: ghcr.io/neicnordic/sda-s3proxy
-  imageTag: v0.2.38
-  imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
     requests:
@@ -502,9 +478,6 @@ s3Inbox:
 
 sftpInbox:
   name: sftpInbox
-  repository: ghcr.io/neicnordic/sda-inbox-sftp
-  imageTag: v1.12.16
-  imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
     requests:

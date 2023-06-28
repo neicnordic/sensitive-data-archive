@@ -181,9 +181,9 @@ spec:
         - name: ARCHIVE_PATH
           value: {{ .Values.global.archive.volumePath | quote }}
       {{- end }}
-      {{- if .Values.global.elixir.pubKey }}
+      {{- if .Values.global.oidc.pubKey }}
         - name: PASSPORT_PUBLIC_KEY_PATH
-          value: "{{ include "secretsPath" . }}/{{ .Values.global.elixir.pubKey }}"
+          value: "{{ include "secretsPath" . }}/{{ .Values.global.oidc.pubKey }}"
       {{- end }}
         - name: KEYSTORE_PATH
           value: {{ ternary (print "/etc/ssl/certs/java/doa.p12") (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.keyStore) (empty .Values.global.pkiService) }}
@@ -200,7 +200,7 @@ spec:
         - name: CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH
           value: "{{ template "c4ghPath" . }}/passphrase"
         - name: OPENID_CONFIGURATION_URL
-          value: "{{ .Values.global.elixir.oidcdHost }}.well-known/openid-configuration"
+          value: "{{ .Values.global.oidc.provider }}/.well-known/openid-configuration"
         - name: OUTBOX_ENABLED
           value: {{ .Values.global.doa.outbox.enabled | quote }}
       {{- if .Values.global.doa.outbox.enabled }}
@@ -266,7 +266,7 @@ spec:
           mountPath: "/etc/ssl/certs/java"
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
-      {{- if .Values.global.elixir.pubKey }}
+      {{- if .Values.global.oidc.pubKey }}
         - name: jwt-token
           mountPath: {{ include "secretsPath" . }}
       {{- end }}
@@ -293,7 +293,7 @@ spec:
           {{- end }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
-      {{- if .Values.global.elixir.pubKey }}
+      {{- if .Values.global.oidc.pubKey }}
         - name: jwt-token
           projected:
             defaultMode: 0440
@@ -301,8 +301,8 @@ spec:
             - secret:
                 name: {{ template "sda.fullname" . }}-doa
                 items:
-                  - key: {{ .Values.global.elixir.pubKey }}
-                    path: {{ .Values.global.elixir.pubKey }}
+                  - key: {{ .Values.global.oidc.pubKey }}
+                    path: {{ .Values.global.oidc.pubKey }}
       {{- end }}
         - name: c4gh-key
           secret:

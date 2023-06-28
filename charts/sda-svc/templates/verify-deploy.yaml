@@ -61,8 +61,8 @@ spec:
     {{- end }}
       containers:
       - name: verify
-        image: "{{ .Values.verify.repository }}:{{ .Values.verify.imageTag }}"
-        imagePullPolicy: {{ .Values.verify.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-verify"]
         securityContext:
           allowPrivilegeEscalation: false

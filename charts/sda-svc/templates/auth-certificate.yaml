@@ -1,3 +1,4 @@
+{{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 {{- if eq "s3" .Values.global.inbox.storageType }}
 apiVersion: cert-manager.io/v1
@@ -34,5 +35,6 @@ spec:
     # This is optional since cert-manager will default to this value however
     # if you are using an external issuer, change this to that issuer group.
     group: cert-manager.io
+{{- end -}}
 {{- end -}}
 {{- end -}}

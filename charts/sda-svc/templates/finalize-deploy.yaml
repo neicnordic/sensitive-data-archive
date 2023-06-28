@@ -60,8 +60,8 @@ spec:
     {{- end }}
       containers:
       - name: finalize
-        image: "{{ .Values.finalize.repository }}:{{ .Values.finalize.imageTag }}"
-        imagePullPolicy: {{ .Values.finalize.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-finalize"]
         securityContext:
           allowPrivilegeEscalation: false
@@ -71,7 +71,7 @@ spec:
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE
-          value: "accessionIDs"
+          value: "accession"
         - name: BROKER_HOST
           value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
         - name: BROKER_PORT

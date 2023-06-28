@@ -60,8 +60,8 @@ spec:
     {{- end }}
       containers:
       - name: mapper
-        image: "{{ .Values.mapper.repository }}:{{ .Values.mapper.imageTag }}"
-        imagePullPolicy: {{ .Values.mapper.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-mapper"]
         securityContext:
           allowPrivilegeEscalation: false
@@ -116,6 +116,28 @@ spec:
           value: {{ .Values.global.db.port | quote }}
         - name: DB_SSLMODE
           value: {{ template "dbSSLmode" . }}
+        - name: INBOX_TYPE
+      {{- if eq "s3" .Values.global.inbox.storageType }}
+          value: "s3"
+        - name: INBOX_BUCKET
+          value: {{ required "S3 inbox bucket missing" .Values.global.inbox.s3Bucket }}
+      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
+        - name: INBOX_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+      {{- end }}
+        - name: INBOX_REGION
+          value: {{ default "us-east-1" .Values.global.inbox.s3Region }}
+        - name: INBOX_URL
+          value: {{ required "S3 inbox URL missing" .Values.global.inbox.s3Url }}
+      {{- if .Values.global.inbox.s3Port }}
+        - name: INBOX_PORT
+          value: {{ .Values.global.inbox.s3Port | quote }}
+      {{- end }}
+      {{- else }}
+          value: "posix"
+        - name: INBOX_LOCATION
+          value: "{{ .Values.global.inbox.path }}/"
+      {{- end }}
       {{- if .Values.global.log.format }}
         - name: LOG_FORMAT
           value: {{ .Values.global.log.format | quote }}
@@ -147,6 +169,18 @@ spec:
               secretKeyRef:
                 name: {{ template "sda.fullname" . }}-mapper
                 key: dbUser
+      {{- if eq "s3" .Values.global.inbox.storageType }}
+        - name: INBOX_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3inbox-keys
+              key: s3InboxAccessKey
+        - name: INBOX_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3inbox-keys
+              key: s3InboxSecretKey
+      {{- end }}
       {{- else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
