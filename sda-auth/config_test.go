@@ -202,5 +202,14 @@ func (suite *ConfigTests) TestConfig() {
 
 	// re-read the config
 	_, err = NewConfig()
-	assert.ErrorContains(suite.T(), err, "Missing private key file")
+	assert.ErrorContains(suite.T(), err, "missing private key file")
+
+	// Repeat check with CEGA login and JWT resigning disabled
+	os.Setenv("CEGA_ID", "")
+	os.Setenv("CEGA_SECRET", "")
+	os.Setenv("RESIGNJWT", fmt.Sprintf("%t", false))
+
+	// re-read the config
+	_, err = NewConfig()
+	assert.NoError(suite.T(), err)
 }
