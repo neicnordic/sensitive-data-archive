@@ -50,7 +50,7 @@ func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
 	}
 	s3cfmap := s3conf.(map[string]string)
 	ctx.ResponseWriter().Header().Set("Content-Disposition", "attachment; filename=s3cmd.conf")
-	var s3c string
+	s3c := "[default]\n"
 
 	for k, v := range s3cfmap {
 		entry := fmt.Sprintf("%s = %s\n", k, v)
@@ -239,7 +239,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	code := ctx.Request().URL.Query().Get("code")
 	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.Elixir.jwkURL)
 	if err != nil {
-		log.WithFields(log.Fields{"authType": "elixir"}).Errorf("Auhentication failed: %s", err)
+		log.WithFields(log.Fields{"authType": "elixir"}).Errorf("authentication failed: %s", err)
 		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
 		if err != nil {
 			log.Error("Failed to write response: ", err)

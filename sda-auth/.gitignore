@@ -11,6 +11,9 @@
 *.so
 *.dylib
 
+# Service binaries
+auth
+
 # Test binary, build with `go test -c`
 *.test
 

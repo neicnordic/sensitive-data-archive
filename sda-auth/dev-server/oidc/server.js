@@ -22,7 +22,7 @@ const oidcConfig = {
     revocation: true,
     sessionManagement: false
   },
-  format: {
+  formats: {
     default: 'jwt',
     AccessToken: 'jwt',
     RefreshToken: 'jwt'
