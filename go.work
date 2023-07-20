@@ -1,0 +1,8 @@
+go 1.20
+
+use (
+	./sda-download
+	./sda-pipeline
+	./sda-auth
+	./sda
+)
