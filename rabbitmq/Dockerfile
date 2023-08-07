@@ -10,6 +10,7 @@ LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 ENV RABBITMQ_CONFIG_FILE=/var/lib/rabbitmq/rabbitmq.conf
+ENV RABBITMQ_ADVANCED_CONFIG_FILE=/var/lib/rabbitmq/advanced.config
 
 COPY *.json /etc/rabbitmq/
 

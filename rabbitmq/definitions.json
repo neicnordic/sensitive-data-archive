@@ -24,9 +24,51 @@
             "read": ".*"
         }
     ],
-    "parameters": [],
+    "parameters": [
+        {
+            "component": "shovel",
+            "name": "completed",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-queue": "completed",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "completed_stream",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "mappings",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-queue": "mappings",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "mapping_stream",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        }
+    ],
     "global_parameters": [],
-    "policies": [],
+    "policies": [
+        {
+            "vhost": "sda",
+            "name": "AE",
+            "pattern": "^sda$",
+            "apply-to": "exchanges",
+            "priority": 0,
+            "definition": {
+                "alternate-exchange": "sda.dead"
+            }
+        }
+    ],
     "queues": [
         {
             "name": "accession",
@@ -43,17 +85,24 @@
             "arguments": {}
         },
         {
-            "name": "completed",
+            "name": "backup",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "completed_stream",
             "vhost": "sda",
             "durable": true,
             "auto_delete": false,
             "arguments": {
-                "x-max-age": "7D",
+                "x-max-age": "1M",
                 "x-queue-type": "stream"
             }
         },
         {
-            "name": "error",
+            "name": "error_stream",
             "vhost": "sda",
             "durable": true,
             "auto_delete": false,
@@ -78,6 +127,13 @@
         },
         {
             "name": "mappings",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "mapping_stream",
             "vhost": "sda",
             "durable": true,
             "auto_delete": false,
@@ -108,10 +164,7 @@
             "type": "topic",
             "durable": true,
             "auto_delete": false,
-            "internal": false,
-            "arguments": {
-                "alternate-exchange": "sda.dead"
-            }
+            "internal": false
         },
         {
             "name": "sda.dead",
@@ -145,7 +198,15 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "completed",
+            "destination": "backup",
+            "routing_key": "backup"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "completed_stream",
             "routing_key": "completed"
         },
         {
@@ -153,7 +214,7 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "error",
+            "destination": "error_stream",
             "routing_key": "error"
         },
         {
@@ -185,7 +246,7 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "mappings",
+            "destination": "mapping_stream",
             "routing_key": "mappings"
         },
         {
