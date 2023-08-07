@@ -1,0 +1,92 @@
+global:
+  schemaType: "isolated"
+  ingress:
+    deploy: false
+    hostName:
+      auth: pipeline-sda-svc-auth
+      download: pipeline-sda-svc-download
+      s3Inbox: pipeline-sda-svc-inbox
+  log:
+    level: "debug"
+  tls:
+    enabled: false
+    issuer: "cert-issuer"
+    clusterIssuer: ""
+  archive:
+    s3Url: "http://minio.minio"
+    s3Bucket: "archive"
+    s3Port: 9000
+  backupArchive:
+    storageType: "s3"
+    s3Url: "http://minio.minio"
+    s3Bucket: "backup"
+    s3Port: 9000
+  auth:
+    jwtSecret: jwk
+    jwtAlg: ES256
+    jwtKey: jwt.key
+    jwtPub: jwt.pub
+    resignJwt: true
+  broker:
+    durable: true
+    host: "broker-sda-mq"
+    port: 5672
+    routingError: "error"
+    backupRoutingKey: "backup"
+    ssl: false
+    username: "admin"
+  c4gh:
+    secretName: c4gh
+    keyFile: c4gh.sec.pem
+    publicFile: c4gh.pub.pem
+  db:
+    host: "postgres-sda-db"
+    user: "postgres"
+  doa:
+    enabled: false
+  download:
+    enabled: true
+    trusted:
+      configPath: "iss"
+      configFile: "iss.json"
+      iss:
+        - iss: "http://oidc-server:8080"
+          jku: "http://oidc-server:8080/jwks"
+  oidc:
+    provider: "http://oidc-server:8080"
+    jwkPath: "/jwks"
+    id: DfCieZLuBU
+    secret: DfCieZLuBU
+  inbox:
+    storageType: s3
+    s3Url: http://minio.minio
+    s3Port: 9000
+    s3Bucket: "inbox"
+    s3ReadyPath: "/minio/health/ready"
+
+auth:
+  replicaCount: 1
+  resources: null
+backup:
+  deploy: true
+  resources: null
+doa:
+  deploy: false
+download:
+  resources: null
+  replicaCount: 1
+finalize:
+  resources: null
+ingest:
+  resources: null
+intercept:
+  deploy: false
+mapper:
+  resources: null
+releasetest:
+  run: false
+s3Inbox:
+  resources: null
+  replicaCount: 1
+verify:
+  resources: null
