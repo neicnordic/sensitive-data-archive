@@ -111,4 +111,4 @@ On error the service sleeps for up to 5 minutes to allow for database recovery, 
 
  - Finalize writes messages to one rabbitmq queue (default `backup`).
 
- - Finalize assigns the accesion ID to a file in the database using the `SetAccessionID` function.
+ - Finalize assigns the accession ID to a file in the database using the `SetAccessionID` function.
