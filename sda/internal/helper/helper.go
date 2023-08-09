@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/ssh"
 )
 
 // Global variables for test token creation
@@ -146,6 +147,50 @@ func CreateRSAkeys(prPath, pubPath string) error {
 		return err
 	}
 	err = pem.Encode(publicPem, publicKeyBlock)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CreateSSHKey(path string) error {
+	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+	pk := &privatekey.PublicKey
+
+	// dump private key to file
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privatekey)
+	privateKeyBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	}
+	encPrivateKeyBlock, err := x509.EncryptPEMBlock(rand.Reader, privateKeyBlock.Type, privateKeyBlock.Bytes, []byte("password"), x509.PEMCipherAES256) //nolint:staticcheck
+	if err != nil {
+		return err
+	}
+	privatePem, err := os.Create(path + "/id_rsa")
+	if err != nil {
+		return err
+	}
+	err = pem.Encode(privatePem, encPrivateKeyBlock)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chmod(path+"/id_rsa", 0600)
+	if err != nil {
+		return err
+	}
+
+	publicKey, err := ssh.NewPublicKey(pk)
+	if err != nil {
+		return err
+	}
+	pubKeyBytes := ssh.MarshalAuthorizedKey(publicKey)
+	err = os.WriteFile(path+"/id_rsa.pub", pubKeyBytes, 0600)
 	if err != nil {
 		return err
 	}
