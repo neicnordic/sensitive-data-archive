@@ -129,6 +129,7 @@ func (suite *BrokerTestSuite) SetupTest() {
 		"mq",
 		true,
 		"",
+		2,
 	}
 }
 

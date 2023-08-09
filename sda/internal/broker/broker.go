@@ -22,23 +22,24 @@ type AMQPBroker struct {
 
 // MQConf stores information about the message broker
 type MQConf struct {
-	Host         string
-	Port         int
-	User         string
-	Password     string
-	Vhost        string
-	Queue        string
-	Exchange     string
-	RoutingKey   string
-	RoutingError string
-	Ssl          bool
-	VerifyPeer   bool
-	CACert       string
-	ClientCert   string
-	ClientKey    string
-	ServerName   string
-	Durable      bool
-	SchemasPath  string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	Vhost         string
+	Queue         string
+	Exchange      string
+	RoutingKey    string
+	RoutingError  string
+	Ssl           bool
+	VerifyPeer    bool
+	CACert        string
+	ClientCert    string
+	ClientKey     string
+	ServerName    string
+	Durable       bool
+	SchemasPath   string
+	PrefetchCount int
 }
 
 // buildMQURI builds the MQ connection URI
@@ -129,25 +130,19 @@ func NewMQ(config MQConf) (*AMQPBroker, error) {
 	if err != nil {
 		return nil, err
 	}
-	if config.Queue != "" {
-		// The queues already exists so we can safely do a passive declaration
-		_, err = channel.QueueDeclarePassive(
-			config.Queue, // name
-			true,         // durable
-			false,        // auto-deleted
-			false,        // internal
-			false,        // noWait
-			nil,          // arguments
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	if e := channel.Confirm(false); e != nil {
 		fmt.Printf("channel could not be put into confirm mode: %s", e)
 
 		return nil, fmt.Errorf("channel could not be put into confirm mode: %s", e)
+	}
+
+	if config.PrefetchCount > 0 {
+		// limit the number of messages retrieved from the queue
+		log.Debugf("prefetch count: %v", config.PrefetchCount)
+		if err := channel.Qos(config.PrefetchCount, 0, false); err != nil {
+			log.Errorf("failed to set Channel QoS to %d, reason: %v", config.PrefetchCount, err)
+		}
 	}
 
 	confirms := channel.NotifyPublish(make(chan amqp.Confirmation, 1))
@@ -158,6 +153,12 @@ func NewMQ(config MQConf) (*AMQPBroker, error) {
 // ConnectionWatcher listens to events from the server
 func (broker *AMQPBroker) ConnectionWatcher() *amqp.Error {
 	amqpError := <-broker.Connection.NotifyClose(make(chan *amqp.Error))
+
+	return amqpError
+}
+
+func (broker *AMQPBroker) ChannelWatcher() *amqp.Error {
+	amqpError := <-broker.Channel.NotifyClose(make(chan *amqp.Error))
 
 	return amqpError
 }
