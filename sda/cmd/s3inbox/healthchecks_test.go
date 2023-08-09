@@ -34,16 +34,16 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 	viper.Set("broker.routingkey", "ingest")
 	viper.Set("broker.exchange", "sda")
 	viper.Set("broker.vhost", "sda")
-	viper.Set("aws.url", "http://localhost:8080")
-	viper.Set("aws.accesskey", "testaccess")
-	viper.Set("aws.secretkey", "testsecret")
-	viper.Set("aws.bucket", "testbucket")
+	viper.Set("inbox.url", "http://localhost:8080")
+	viper.Set("inbox.accesskey", "testaccess")
+	viper.Set("inbox.secretkey", "testsecret")
+	viper.Set("inbox.bucket", "testbucket")
 	viper.Set("server.jwtpubkeypath", "testpath")
 }
 
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 	db, _, _ := sqlmock.New()
-	conf, err := config.NewConfig()
+	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,
@@ -68,7 +68,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
 	mock.ExpectPing()
-	conf, err := config.NewConfig()
+	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
 	h := NewHealthCheck(8888,

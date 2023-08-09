@@ -29,6 +29,7 @@ func (suite *BucketTestSuite) SetupTest() {
 		os.Exit(1)
 	}
 
+	viper.Set("log.level", "debug")
 	viper.Set("broker.host", "localhost")
 	viper.Set("broker.port", "1234")
 	viper.Set("broker.user", "guest")
@@ -36,10 +37,10 @@ func (suite *BucketTestSuite) SetupTest() {
 	viper.Set("broker.routingkey", "ingest")
 	viper.Set("broker.exchange", "amq.topic")
 	viper.Set("broker.vhost", "/")
-	viper.Set("aws.url", ts.URL)
-	viper.Set("aws.accesskey", "testaccess")
-	viper.Set("aws.secretkey", "testsecret")
-	viper.Set("aws.bucket", "testbucket")
+	viper.Set("inbox.url", ts.URL)
+	viper.Set("inbox.accesskey", "testaccess")
+	viper.Set("inbox.secretkey", "testsecret")
+	viper.Set("inbox.bucket", "testbucket")
 	viper.Set("server.jwtpubkeypath", "testpath")
 }
 
@@ -69,20 +70,20 @@ func TestBucketTestSuite(t *testing.T) {
 }
 
 func (suite *BucketTestSuite) TestBucketPass() {
-	config, err := config.NewConfig()
+	config, err := config.NewConfig("s3inbox")
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 
-	err = checkS3Bucket(config.S3)
+	err = checkS3Bucket(config.Inbox.S3)
 	assert.NoError(suite.T(), err)
 }
 
 func (suite *BucketTestSuite) TestBucketFail() {
-	viper.Set("aws.url", "http://localhost:12345")
-	config, err := config.NewConfig()
+	viper.Set("inbox.url", "http://localhost:12345")
+	config, err := config.NewConfig("s3inbox")
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
 
-	err = checkS3Bucket(config.S3)
+	err = checkS3Bucket(config.Inbox.S3)
 	assert.Error(suite.T(), err)
 }

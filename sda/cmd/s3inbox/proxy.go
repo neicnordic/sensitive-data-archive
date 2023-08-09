@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -31,7 +31,7 @@ import (
 
 // Proxy represents the toplevel object in this application
 type Proxy struct {
-	s3        config.S3Config
+	s3        storage.S3Conf
 	auth      Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
@@ -72,7 +72,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf config.S3Config, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf storage.S3Conf, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -245,10 +245,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
-	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, p.s3.URL)
+	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3.URL+r.URL.String(), r.Body)
+	nr, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)+r.URL.String(), r.Body)
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -454,7 +454,7 @@ func (p *Proxy) newSession() (*session.Session, error) {
 			CustomCABundle: cacert,
 			Config: aws.Config{
 				Region:           aws.String(p.s3.Region),
-				Endpoint:         aws.String(p.s3.URL),
+				Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
 				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 				S3ForcePathStyle: aws.Bool(true),
 				Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
@@ -465,7 +465,7 @@ func (p *Proxy) newSession() (*session.Session, error) {
 	} else {
 		mySession, err = session.NewSession(&aws.Config{
 			Region:           aws.String(p.s3.Region),
-			Endpoint:         aws.String(p.s3.URL),
+			Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
 			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 			S3ForcePathStyle: aws.Bool(true),
 			Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
