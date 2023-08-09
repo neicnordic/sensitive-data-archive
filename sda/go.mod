@@ -5,30 +5,37 @@ go 1.20
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/aws/aws-sdk-go v1.44.253
+	github.com/gliderlabs/ssh v0.3.5
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
 	github.com/johannesboyne/gofakes3 v0.0.0-20230310080033-c0edf658332b
 	github.com/lestrrat-go/jwx v1.2.26
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v6 v6.0.57
+	github.com/neicnordic/crypt4gh v1.7.6
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/pkg/errors v0.9.1
+	github.com/pkg/sftp v1.13.1
 	github.com/rabbitmq/amqp091-go v1.8.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.4
+	golang.org/x/crypto v0.11.0
 )
 
 require (
+	filippo.io/edwards25519 v1.0.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dchest/bcrypt_pbkdf v0.0.0-20150205184540-83f37f9c154a // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/cli v20.10.17+incompatible // indirect
 	github.com/docker/docker v20.10.24+incompatible // indirect
@@ -42,6 +49,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.1 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
@@ -71,10 +79,9 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
-	golang.org/x/crypto v0.9.0 // indirect
 	golang.org/x/mod v0.9.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/tools v0.7.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect

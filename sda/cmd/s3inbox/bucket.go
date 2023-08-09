@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -20,7 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-func checkS3Bucket(config config.S3Config) error {
+func checkS3Bucket(config storage.S3Conf) error {
 	s3Transport := transportConfigS3(config)
 	client := http.Client{Transport: s3Transport}
 	s3Session := session.Must(session.NewSession(
@@ -54,7 +54,7 @@ func checkS3Bucket(config config.S3Config) error {
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
-func transportConfigS3(config config.S3Config) http.RoundTripper {
+func transportConfigS3(config storage.S3Conf) http.RoundTripper {
 	cfg := new(tls.Config)
 
 	// Enforce TLS1.2 or higher
