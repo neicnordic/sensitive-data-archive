@@ -166,33 +166,9 @@ type S3Conf struct {
 }
 
 func newS3Backend(config S3Conf) (*s3Backend, error) {
-	s3Transport := transportConfigS3(config)
-	client := http.Client{Transport: s3Transport}
-	s3Session := session.Must(session.NewSession(
-		&aws.Config{
-			Endpoint:         aws.String(fmt.Sprintf("%s:%d", config.URL, config.Port)),
-			Region:           aws.String(config.Region),
-			HTTPClient:       &client,
-			S3ForcePathStyle: aws.Bool(true),
-			DisableSSL:       aws.Bool(strings.HasPrefix(config.URL, "http:")),
-			Credentials:      credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, ""),
-		},
-	))
-
-	// Attempt to create a bucket, but we really expect an error here
-	// (BucketAlreadyOwnedByYou)
-	_, err := s3.New(s3Session).CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(config.Bucket),
-	})
-
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-
-			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
-				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
-				log.Error("unexpected issue while creating bucket", err)
-			}
-		}
+	s3Session := CreateS3Session(config)
+	if err := CheckS3Bucket(config.Bucket, s3Session); err != nil {
+		return nil, err
 	}
 
 	sb := &s3Backend{
@@ -205,8 +181,7 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 		Client: s3.New(s3Session),
 		Conf:   &config}
 
-	_, err = sb.Client.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: &config.Bucket})
-
+	_, err := sb.Client.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: &config.Bucket})
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +189,7 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 	return sb, nil
 }
 
-func CheckS3Bucket(config S3Conf) error {
+func CreateS3Session(config S3Conf) *session.Session {
 	s3Transport := transportConfigS3(config)
 	client := http.Client{Transport: s3Transport}
 	s3Session := session.Must(session.NewSession(
@@ -228,8 +203,12 @@ func CheckS3Bucket(config S3Conf) error {
 		},
 	))
 
+	return s3Session
+}
+
+func CheckS3Bucket(bucket string, s3Session *session.Session) error {
 	_, err := s3.New(s3Session).CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(config.Bucket),
+		Bucket: aws.String(bucket),
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
