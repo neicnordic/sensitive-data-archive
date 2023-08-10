@@ -10,6 +10,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -57,7 +58,7 @@ func main() {
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 
-	err = checkS3Bucket(Conf.Inbox.S3)
+	err = storage.CheckS3Bucket(Conf.Inbox.S3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
