@@ -201,6 +201,15 @@ func (suite *StorageTestSuite) TestNewBackend() {
 	assert.IsType(suite.T(), s, &s3Backend{}, "Wrong type from NewBackend with S3")
 }
 
+func (suite *StorageTestSuite) TestCheckS3Bucket() {
+	err := CheckS3Bucket(testConf.S3)
+	assert.NoError(suite.T(), err)
+
+	testConf.S3.URL = "file://tmp/"
+	err = CheckS3Bucket(testConf.S3)
+	assert.Error(suite.T(), err)
+}
+
 func (suite *StorageTestSuite) TestPosixBackend() {
 	posixPath, _ := os.MkdirTemp("", "posix")
 	defer os.RemoveAll(posixPath)
@@ -392,7 +401,7 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 	assert.Nil(suite.T(), err, "sftp RemoveFile failed when it should work")
 
 	err = sftpBack.RemoveFile(sftpDoesNotExist)
-	assert.EqualError(suite.T(), err, "Failed to remove file with sftp, file does not exist")
+	assert.EqualError(suite.T(), err, "failed to remove file with sftp, file does not exist")
 
 	var readBackBuffer [4096]byte
 	readBack, err := reader.Read(readBackBuffer[0:4096])
@@ -405,35 +414,35 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 	}
 
 	_, err = sftpBack.GetFileSize(sftpDoesNotExist)
-	assert.EqualError(suite.T(), err, "Failed to get file size with sftp, file does not exist")
+	assert.EqualError(suite.T(), err, "failed to get file size with sftp, file does not exist")
 	reader, err = sftpBack.NewFileReader(sftpDoesNotExist)
-	assert.EqualError(suite.T(), err, "Failed to open file with sftp, file does not exist")
+	assert.EqualError(suite.T(), err, "failed to open file with sftp, file does not exist")
 	assert.Nil(suite.T(), reader, "Got a non-nil reader for sftp")
 
 	// wrong host key
 	testConf.SFTP.HostKey = "wronghostkey"
 	_, err = NewBackend(testConf)
-	assert.ErrorContains(suite.T(), err, "Failed to start ssh connection, ssh: handshake failed: host key verification expected")
+	assert.ErrorContains(suite.T(), err, "failed to start ssh connection, ssh: handshake failed: host key verification expected")
 
 	// wrong key password
 	testConf.SFTP.PemKeyPass = "wrongkey"
 	_, err = NewBackend(testConf)
-	assert.EqualError(suite.T(), err, "Failed to parse private key, x509: decryption password incorrect")
+	assert.EqualError(suite.T(), err, "failed to parse private key, x509: decryption password incorrect")
 
 	// missing key password
 	testConf.SFTP.PemKeyPass = ""
 	_, err = NewBackend(testConf)
-	assert.EqualError(suite.T(), err, "Failed to parse private key, ssh: this private key is passphrase protected")
+	assert.EqualError(suite.T(), err, "failed to parse private key, ssh: this private key is passphrase protected")
 
 	// wrong key
 	testConf.SFTP.PemKeyPath = "nonexistentkey"
 	_, err = NewBackend(testConf)
-	assert.EqualError(suite.T(), err, "Failed to read from key file, open nonexistentkey: no such file or directory")
+	assert.EqualError(suite.T(), err, "failed to read from key file, open nonexistentkey: no such file or directory")
 
 	f, _ := os.CreateTemp(sshPath, "dummy")
 	testConf.SFTP.PemKeyPath = f.Name()
 	_, err = NewBackend(testConf)
-	assert.EqualError(suite.T(), err, "Failed to parse private key, ssh: no key found")
+	assert.EqualError(suite.T(), err, "failed to parse private key, ssh: no key found")
 
 	testConf.SFTP.Host = "nonexistenthost"
 	_, err = NewBackend(testConf)
@@ -453,5 +462,5 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 
 	err = dummyBackend.RemoveFile("/")
 	assert.NotNil(suite.T(), err, "RemoveFile worked when it should not")
-	assert.EqualError(suite.T(), err, "Invalid sftpBackend")
+	assert.EqualError(suite.T(), err, "invalid sftpBackend")
 }

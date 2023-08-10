@@ -82,7 +82,7 @@ func newPosixBackend(config posixConf) (*posixBackend, error) {
 // NewFileReader returns an io.Reader instance
 func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("Invalid posixBackend")
+		return nil, fmt.Errorf("invalid posixBackend")
 	}
 
 	file, err := os.Open(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -98,7 +98,7 @@ func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // NewFileWriter returns an io.Writer instance
 func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("Invalid posixBackend")
+		return nil, fmt.Errorf("invalid posixBackend")
 	}
 
 	file, err := os.OpenFile(filepath.Join(filepath.Clean(pb.Location), filePath), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0640)
@@ -114,7 +114,7 @@ func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of the file
 func (pb *posixBackend) GetFileSize(filePath string) (int64, error) {
 	if pb == nil {
-		return 0, fmt.Errorf("Invalid posixBackend")
+		return 0, fmt.Errorf("invalid posixBackend")
 	}
 
 	stat, err := os.Stat(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -130,7 +130,7 @@ func (pb *posixBackend) GetFileSize(filePath string) (int64, error) {
 // RemoveFile removes a file from a given path
 func (pb *posixBackend) RemoveFile(filePath string) error {
 	if pb == nil {
-		return fmt.Errorf("Invalid posixBackend")
+		return fmt.Errorf("invalid posixBackend")
 	}
 
 	err := os.Remove(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -190,7 +190,7 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 
 			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
 				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
-				log.Error("Unexpected issue while creating bucket", err)
+				log.Error("unexpected issue while creating bucket", err)
 			}
 		}
 	}
@@ -214,10 +214,43 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 	return sb, nil
 }
 
+func CheckS3Bucket(config S3Conf) error {
+	s3Transport := transportConfigS3(config)
+	client := http.Client{Transport: s3Transport}
+	s3Session := session.Must(session.NewSession(
+		&aws.Config{
+			Endpoint:         aws.String(fmt.Sprintf("%s:%d", config.URL, config.Port)),
+			Region:           aws.String(config.Region),
+			HTTPClient:       &client,
+			S3ForcePathStyle: aws.Bool(true),
+			DisableSSL:       aws.Bool(strings.HasPrefix(config.URL, "http:")),
+			Credentials:      credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, ""),
+		},
+	))
+
+	_, err := s3.New(s3Session).CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(config.Bucket),
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
+				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
+				return fmt.Errorf("unexpected issue while creating bucket: %v", err)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("verifying bucket failed, check S3 configuration")
+	}
+
+	return nil
+}
+
 // NewFileReader returns an io.Reader instance
 func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if sb == nil {
-		return nil, fmt.Errorf("Invalid s3Backend")
+		return nil, fmt.Errorf("invalid s3Backend")
 	}
 
 	r, err := sb.Client.GetObject(&s3.GetObjectInput{
@@ -251,7 +284,7 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // NewFileWriter uploads the contents of an io.Reader to a S3 bucket
 func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if sb == nil {
-		return nil, fmt.Errorf("Invalid s3Backend")
+		return nil, fmt.Errorf("invalid s3Backend")
 	}
 
 	reader, writer := io.Pipe()
@@ -275,7 +308,7 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of a specific object
 func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 	if sb == nil {
-		return 0, fmt.Errorf("Invalid s3Backend")
+		return 0, fmt.Errorf("invalid s3Backend")
 	}
 
 	r, err := sb.Client.HeadObject(&s3.HeadObjectInput{
@@ -312,7 +345,7 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 // RemoveFile removes an object from a bucket
 func (sb *s3Backend) RemoveFile(filePath string) error {
 	if sb == nil {
-		return fmt.Errorf("Invalid s3Backend")
+		return fmt.Errorf("invalid s3Backend")
 	}
 
 	_, err := sb.Client.DeleteObject(&s3.DeleteObjectInput{
@@ -386,7 +419,7 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 	// read in and parse pem key
 	key, err := os.ReadFile(config.PemKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read from key file, %v", err)
+		return nil, fmt.Errorf("failed to read from key file, %v", err)
 	}
 
 	var signer ssh.Signer
@@ -396,7 +429,7 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(config.PemKeyPass))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse private key, %v", err)
+		return nil, fmt.Errorf("failed to parse private key, %v", err)
 	}
 
 	// connect
@@ -408,13 +441,13 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start ssh connection, %v", err)
+		return nil, fmt.Errorf("failed to start ssh connection, %v", err)
 	}
 
 	// create new SFTP client
 	client, err := sftp.NewClient(conn)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start sftp client, %v", err)
+		return nil, fmt.Errorf("failed to start sftp client, %v", err)
 	}
 
 	sfb := &sftpBackend{
@@ -426,7 +459,7 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 	_, err = client.ReadDir("./")
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to list files with sftp, %v", err)
+		return nil, fmt.Errorf("failed to list files with sftp, %v", err)
 	}
 
 	return sfb, nil
@@ -435,18 +468,18 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 // NewFileWriter returns an io.Writer instance for the sftp remote
 func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if sfb == nil {
-		return nil, fmt.Errorf("Invalid sftpBackend")
+		return nil, fmt.Errorf("invalid sftpBackend")
 	}
 	// Make remote directories
 	parent := filepath.Dir(filePath)
 	err := sfb.Client.MkdirAll(parent)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create dir with sftp, %v", err)
+		return nil, fmt.Errorf("failed to create dir with sftp, %v", err)
 	}
 
 	file, err := sfb.Client.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_RDWR)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create file with sftp, %v", err)
+		return nil, fmt.Errorf("failed to create file with sftp, %v", err)
 	}
 
 	return file, nil
@@ -455,12 +488,12 @@ func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of the file
 func (sfb *sftpBackend) GetFileSize(filePath string) (int64, error) {
 	if sfb == nil {
-		return 0, fmt.Errorf("Invalid sftpBackend")
+		return 0, fmt.Errorf("invalid sftpBackend")
 	}
 
 	stat, err := sfb.Client.Lstat(filePath)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to get file size with sftp, %v", err)
+		return 0, fmt.Errorf("failed to get file size with sftp, %v", err)
 	}
 
 	return stat.Size(), nil
@@ -469,12 +502,12 @@ func (sfb *sftpBackend) GetFileSize(filePath string) (int64, error) {
 // NewFileReader returns an io.Reader instance
 func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if sfb == nil {
-		return nil, fmt.Errorf("Invalid sftpBackend")
+		return nil, fmt.Errorf("invalid sftpBackend")
 	}
 
 	file, err := sfb.Client.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open file with sftp, %v", err)
+		return nil, fmt.Errorf("failed to open file with sftp, %v", err)
 	}
 
 	return file, nil
@@ -483,12 +516,12 @@ func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // RemoveFile removes a file or an empty directory.
 func (sfb *sftpBackend) RemoveFile(filePath string) error {
 	if sfb == nil {
-		return fmt.Errorf("Invalid sftpBackend")
+		return fmt.Errorf("invalid sftpBackend")
 	}
 
 	err := sfb.Client.Remove(filePath)
 	if err != nil {
-		return fmt.Errorf("Failed to remove file with sftp, %v", err)
+		return fmt.Errorf("failed to remove file with sftp, %v", err)
 	}
 
 	return nil
