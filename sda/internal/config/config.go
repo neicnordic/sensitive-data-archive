@@ -540,9 +540,6 @@ func (c *Config) configBroker() error {
 		broker.Exchange = viper.GetString("broker.exchange")
 	}
 
-	if viper.IsSet("broker.routingerror") {
-		broker.RoutingError = viper.GetString("broker.routingerror")
-	}
 	if viper.IsSet("broker.vhost") {
 		if strings.HasPrefix(viper.GetString("broker.vhost"), "/") {
 			broker.Vhost = viper.GetString("broker.vhost")
