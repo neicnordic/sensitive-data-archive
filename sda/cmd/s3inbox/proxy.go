@@ -177,7 +177,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case false:
-			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, true, jsonMessage); err != nil {
+			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 				log.Debug("error when sending message")
 				log.Error(err)
 			}

@@ -540,9 +540,6 @@ func (c *Config) configBroker() error {
 		broker.Exchange = viper.GetString("broker.exchange")
 	}
 
-	if viper.IsSet("broker.durable") {
-		broker.Durable = viper.GetBool("broker.durable")
-	}
 	if viper.IsSet("broker.routingerror") {
 		broker.RoutingError = viper.GetString("broker.routingerror")
 	}
