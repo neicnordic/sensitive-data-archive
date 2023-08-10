@@ -120,7 +120,6 @@ func (suite *BrokerTestSuite) SetupTest() {
 		"ingest",
 		"amq.default",
 		"ingest",
-		"error",
 		false,
 		false,
 		certPath + "/ca.crt",
