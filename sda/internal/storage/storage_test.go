@@ -202,11 +202,11 @@ func (suite *StorageTestSuite) TestNewBackend() {
 }
 
 func (suite *StorageTestSuite) TestCheckS3Bucket() {
-	err := CheckS3Bucket(testConf.S3)
+	err := CheckS3Bucket(testConf.S3.Bucket, CreateS3Session(testConf.S3))
 	assert.NoError(suite.T(), err)
 
 	testConf.S3.URL = "file://tmp/"
-	err = CheckS3Bucket(testConf.S3)
+	err = CheckS3Bucket(testConf.S3.Bucket, CreateS3Session(testConf.S3))
 	assert.Error(suite.T(), err)
 }
 
