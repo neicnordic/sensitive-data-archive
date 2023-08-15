@@ -62,6 +62,15 @@ var FastConnectRate = 5 * time.Second
 // database during the after FastConnectTimeout.
 var SlowConnectRate = 1 * time.Minute
 
+// dbRetryTimes is the number of times to retry the same function if it fails
+var RetryTimes = 5
+
+// hashType returns the identification string for the hash type
+func hashType(_ hash.Hash) string {
+	// TODO: Support/check type
+	return "SHA256"
+}
+
 // NewSDAdb creates a new DB connection from the given DBConf variables.
 // Currently, only postgresql connections are supported.
 func NewSDAdb(config DBConf) (*SDAdb, error) {
@@ -101,8 +110,7 @@ func (dbs *SDAdb) Connect() error {
 	err := fmt.Errorf("failed to connect within reconnect time")
 
 	log.Infoln("Connecting to database")
-	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host,
-		dbs.Config.Port, dbs.Config.Database, dbs.Config.User)
+	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host, dbs.Config.Port, dbs.Config.Database, dbs.Config.User)
 
 	for ConnectTimeout <= 0 || ConnectTimeout > time.Since(start) {
 		dbs.DB, err = sql.Open(dbs.Config.PgDataSource())
