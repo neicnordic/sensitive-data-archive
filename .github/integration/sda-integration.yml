@@ -47,7 +47,7 @@ services:
           "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
         ]
       interval: 10s
-      timeout: 2s
+      timeout: 5s
       retries: 6
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
@@ -98,6 +98,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
+      - BROKER_ROUTINGKEY=inbox
       - DB_PASSWORD=inbox
       - DB_USER=inbox
     restart: always
@@ -107,6 +108,56 @@ services:
     ports:
       - "18000:8000"
       - "18001:8001"
+
+  ingest:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-ingest ]
+    container_name: ingest
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=ingest
+      - BROKER_USER=ingest
+      - BROKER_QUEUE=ingest
+      - BROKER_ROUTINGKEY=archived
+      - DB_PASSWORD=ingest
+      - DB_USER=ingest
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  verify:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-verify ]
+    container_name: verify
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=verify
+      - BROKER_USER=verify
+      - BROKER_QUEUE=archived
+      - BROKER_ROUTINGKEY=verified
+      - DB_PASSWORD=verify
+      - DB_USER=verify
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
 
   oidc:
     container_name: oidc
@@ -142,7 +193,11 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
+      ingest:
+        condition: service_started
       s3inbox:
+        condition: service_started
+      verify:
         condition: service_started
     environment:
       - PGPASSWORD=rootpasswd

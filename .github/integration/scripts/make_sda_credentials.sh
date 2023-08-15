@@ -10,12 +10,14 @@ for n in download finalize inbox ingest mapper sync verify; do
     if [ "$n" = inbox ]; then
         psql -U postgres -h postgres -d sda -c "DROP ROLE IF EXISTS inbox;"
         psql -U postgres -h postgres -d sda -c "CREATE ROLE inbox;"
-        psql -U postgres -h postgres -d sda -c "GRANT base, ingest TO inbox;"
+        psql -U postgres -h postgres -d sda -c "GRANT ingest TO inbox;"
     fi
 
     if [ "$n" = ingest ]; then
         psql -U postgres -h postgres -d sda -c "GRANT UPDATE ON local_ega.main TO ingest;"
     fi
+
+    psql -U postgres -h postgres -d sda -c "GRANT base TO $n;"
 
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
 

@@ -14,6 +14,7 @@ for t in curl jq postgresql-client; do
     fi
 done
 
+pip -q install --upgrade pip
 pip -q install s3cmd
 
 cd shared || true
@@ -21,7 +22,7 @@ cd shared || true
 for file in NA12878.bam NA12878_20k_b37.bam; do
     curl -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
     if [ ! -f "$file.c4gh" ]; then
-        /shared/crypt4gh encrypt -p c4gh.pub.pem -f "$file"
+        yes | /shared/crypt4gh encrypt -p c4gh.pub.pem -f "$file"
     fi
     s3cmd -c s3cfg put "$file.c4gh" s3://test_dummy.org/
 done
