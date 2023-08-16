@@ -12,7 +12,7 @@ require (
 	github.com/mocktools/go-smtp-mock v1.10.0
 	github.com/neicnordic/crypt4gh v1.7.6
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/sftp v1.13.5
+	github.com/pkg/sftp v1.13.6
 	github.com/rabbitmq/amqp091-go v1.8.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.16.0
