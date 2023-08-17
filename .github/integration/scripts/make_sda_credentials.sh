@@ -4,13 +4,13 @@ set -e
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
 apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssl postgresql-client >/dev/null
 
-for n in download finalize inbox ingest mapper sync verify; do
+for n in backup download finalize inbox ingest mapper sync verify; do
     echo "creating credentials for: $n"
 
-    if [ "$n" = inbox ]; then
-        psql -U postgres -h postgres -d sda -c "DROP ROLE IF EXISTS inbox;"
-        psql -U postgres -h postgres -d sda -c "CREATE ROLE inbox;"
-        psql -U postgres -h postgres -d sda -c "GRANT ingest TO inbox;"
+    if [ "$n" = inbox ] || [ "$n" = backup ]; then
+        psql -U postgres -h postgres -d sda -c "DROP ROLE IF EXISTS $n;"
+        psql -U postgres -h postgres -d sda -c "CREATE ROLE $n;"
+        psql -U postgres -h postgres -d sda -c "GRANT ingest TO $n;"
     fi
 
     if [ "$n" = ingest ]; then

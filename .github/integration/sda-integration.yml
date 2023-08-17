@@ -159,6 +159,31 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  backup:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-backup ]
+    container_name: backup
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=backup
+      - BROKER_USER=backup
+      - BROKER_QUEUE=accession
+      - BROKER_ROUTINGKEY=completed
+      - DB_PASSWORD=backup
+      - DB_USER=backup
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
   oidc:
     container_name: oidc
     command:
@@ -193,6 +218,8 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
+      backup:
+        condition: service_started
       ingest:
         condition: service_started
       s3inbox:

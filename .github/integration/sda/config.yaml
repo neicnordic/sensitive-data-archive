@@ -10,6 +10,15 @@ archive:
   secretKey: "secretKey"
   bucket: "archive"
   region: "us-east-1"
+backup:
+  type: s3
+  url: "http://s3"
+  port: 9000
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "backup"
+  region: "us-east-1"
 inbox:
   type: s3
   url: "http://s3"
