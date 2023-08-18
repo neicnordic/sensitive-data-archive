@@ -159,10 +159,10 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
-  backup:
+  finalize:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-backup ]
-    container_name: backup
+    command: [ sda-finalize ]
+    container_name: finalize
     depends_on:
       credentials:
         condition: service_completed_successfully
@@ -173,12 +173,12 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - BROKER_PASSWORD=backup
-      - BROKER_USER=backup
+      - BROKER_PASSWORD=finalize
+      - BROKER_USER=finalize
       - BROKER_QUEUE=accession
       - BROKER_ROUTINGKEY=completed
-      - DB_PASSWORD=backup
-      - DB_USER=backup
+      - DB_PASSWORD=finalize
+      - DB_USER=finalize
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -218,7 +218,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      backup:
+      finalize:
         condition: service_started
       ingest:
         condition: service_started

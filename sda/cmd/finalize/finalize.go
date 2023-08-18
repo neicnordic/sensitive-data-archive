@@ -5,18 +5,29 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"golang.org/x/crypto/chacha20poly1305"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
+var db *database.SDAdb
+var archive, backup storage.Backend
+var conf *config.Config
+var err error
+var message schema.IngestionAccession
+
 func main() {
 	forever := make(chan bool)
-	conf, err := config.NewConfig("finalize")
+	conf, err = config.NewConfig("finalize")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,9 +35,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := database.NewSDAdb(conf.Database)
+	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if conf.Backup.Type != "" && conf.Archive.Type != "" {
+		log.Debugln("initiating storage backends")
+		backup, err = storage.NewBackend(conf.Backup)
+		if err != nil {
+			log.Fatal(err)
+		}
+		archive, err = storage.NewBackend(conf.Archive)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	defer mq.Channel.Close()
@@ -46,8 +69,6 @@ func main() {
 	}()
 
 	log.Info("Starting finalize service")
-	var message schema.IngestionAccession
-
 	go func() {
 		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
@@ -77,20 +98,6 @@ func main() {
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
-
-				continue
-			}
-
-			c := schema.IngestionCompletion{
-				User:               message.User,
-				FilePath:           message.FilePath,
-				AccessionID:        message.AccessionID,
-				DecryptedChecksums: message.DecryptedChecksums,
-			}
-			completeMsg, _ := json.Marshal(&c)
-			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), completeMsg)
-			if err != nil {
-				log.Errorf("Validation of outgoing message failed, reason: (%v)", err)
 
 				continue
 			}
@@ -125,6 +132,17 @@ func main() {
 				}
 
 				continue
+			}
+
+			if conf.Backup.Type != "" && conf.Archive.Type != "" {
+				if err = backupFile(delivered); err != nil {
+					log.Errorf("Failed to backup file with corrID: %v, reason: %v", delivered.CorrelationId, err)
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%v)", err)
+					}
+
+					continue
+				}
 			}
 
 			fileID, err := db.GetFileID(delivered.CorrelationId)
@@ -184,4 +202,106 @@ func main() {
 	}()
 
 	<-forever
+}
+
+func backupFile(delivered amqp.Delivery) error {
+	log.Debug("Backup initiated")
+	var checksumSha256 string
+	var key *[32]byte
+	var publicKey *[32]byte
+
+	for _, checksum := range message.DecryptedChecksums {
+		if checksum.Type == "sha256" {
+			checksumSha256 = checksum.Value
+		}
+	}
+
+	filePath, fileSize, err := db.GetArchived(message.User, message.FilePath, checksumSha256)
+	if err != nil {
+		return fmt.Errorf("failed to get file archive information, reason: %v", err)
+	}
+
+	// If the copy header is enabled, use the actual filepath to make backup
+	// This will be used in the BigPicture backup, enabling for ingestion of the file
+	if config.CopyHeader() {
+		key, err = config.GetC4GHKey()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		publicKey, err = config.GetC4GHPublicKey()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		filePath = message.FilePath
+	}
+
+	// Get size on disk, will also give some time for the file to
+	// appear if it has not already
+	diskFileSize, err := archive.GetFileSize(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
+	}
+
+	if diskFileSize != int64(fileSize) {
+		return fmt.Errorf("file size in archive does not match database for archive file")
+	}
+
+	file, err := archive.NewFileReader(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open archived file, reason: %v", err)
+	}
+
+	dest, err := backup.NewFileWriter(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
+	}
+
+	fileID, err := db.GetFileID(delivered.CorrelationId)
+	if err != nil {
+		return fmt.Errorf("failed to get ID for file, reason: %v", err)
+	}
+
+	// Check if the header is needed
+	if config.CopyHeader() {
+		// Get the header from db
+		header, err := db.GetHeader(fileID)
+		if err != nil {
+			return fmt.Errorf("failed to get header for archived file, reason: %v", err)
+		}
+
+		// Reencrypt header
+		log.Debug("Reencrypt header")
+		pubkeyList := [][chacha20poly1305.KeySize]byte{}
+		pubkeyList = append(pubkeyList, *publicKey)
+		newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
+		if err != nil {
+			return fmt.Errorf("failed to reencrypt the header, reason: %v)", err)
+		}
+
+		// write header to destination file
+		_, err = dest.Write(newHeader)
+		if err != nil {
+			log.Errorf("failed to write header to file, reason: %v)", err)
+		}
+	}
+
+	// Copy the file and check is sizes match
+	copiedSize, err := io.Copy(dest, file)
+	if err != nil || copiedSize != int64(fileSize) {
+		log.Errorf("failed to copy file, reason: %v)", err)
+	}
+
+	file.Close()
+	dest.Close()
+
+	// Mark file as "backed up"
+	if err := db.UpdateFileStatus(fileID, "backed up", delivered.CorrelationId, message.User, string(delivered.Body)); err != nil {
+		return fmt.Errorf("MarkCompleted failed, reason: (%v)", err)
+	}
+
+	log.Debug("Backup completed")
+
+	return nil
 }

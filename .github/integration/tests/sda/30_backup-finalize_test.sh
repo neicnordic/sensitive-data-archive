@@ -33,7 +33,7 @@ while [ $i -le "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/veri
             --arg type accession \
             --arg user "$user" \
             --arg filepath "$filepath" \
-            --arg accession_id "EGAF7490000000$I" \
+            --arg accession_id "EGAF7490000000$i" \
             --argjson decrypted_checksums "$decrypted_checksums" \
             '$ARGS.named|@base64'
     )

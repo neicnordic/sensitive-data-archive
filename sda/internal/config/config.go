@@ -131,40 +131,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.password",
 			"db.database",
 		}
-	case "backup":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, fmt.Errorf("archive.type not set")
-		}
-
-		switch viper.GetString("backup.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"backup.url", "backup.accesskey", "backup.secretkey", "backup.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
-		case SFTP:
-			requiredConfVars = append(requiredConfVars, []string{"backup.sftp.host", "backup.sftp.port", "backup.sftp.userName", "backup.sftp.pemKeyPath", "backup.sftp.pemKeyPass"}...)
-		default:
-			return nil, fmt.Errorf("backup.type not set")
-		}
 	case "ingest":
 		requiredConfVars = []string{
 			"broker.host",
@@ -211,8 +177,23 @@ func NewConfig(app string) (*Config, error) {
 			"db.password",
 			"db.database",
 		}
+
+		switch viper.GetString("archive.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
+		}
+
+		switch viper.GetString("backup.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"backup.url", "backup.accesskey", "backup.secretkey", "backup.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
+		case SFTP:
+			requiredConfVars = append(requiredConfVars, []string{"backup.sftp.host", "backup.sftp.port", "backup.sftp.userName", "backup.sftp.pemKeyPath", "backup.sftp.pemKeyPass"}...)
+		}
 	case "intercept":
-		// Intercept does not require these extra settings
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -354,22 +335,12 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-	case "backup":
-		c.configArchive()
-		c.configBackup()
-
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
-		c.configSchemas()
 	case "finalize":
+		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
+			c.configArchive()
+			c.configBackup()
+		}
+
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
