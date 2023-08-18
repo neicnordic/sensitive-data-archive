@@ -223,7 +223,7 @@ func (suite *DatabaseTests) TestSetAccessionID() {
 	err = db.MarkCompleted(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
 	stableID := "TEST:000-1234-4567"
-	err = db.SetAccessionID(stableID, "testuser", "/testuser/TestSetAccessionID.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)))
+	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 }
 
@@ -242,7 +242,7 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	err = db.MarkCompleted(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
 	stableID := "TEST:111-1234-4567"
-	err = db.SetAccessionID(stableID, "testuser", "/testuser/TestCheckAccessionIDExists.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)))
+	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
 	ok, err := db.CheckAccessionIDExists(stableID)

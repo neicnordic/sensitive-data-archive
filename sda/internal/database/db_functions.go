@@ -324,11 +324,11 @@ func (dbs *SDAdb) checkAccessionIDExists(accessionID string) (bool, error) {
 
 // SetAccessionID adds a stable id to a file
 // identified by the user submitting it, inbox path and decrypted checksum
-func (dbs *SDAdb) SetAccessionID(accessionID, user, filepath, checksum string) error {
+func (dbs *SDAdb) SetAccessionID(accessionID, fileID string) error {
 	var err error
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.setAccessionID(accessionID, user, filepath, checksum)
+		err = dbs.setAccessionID(accessionID, fileID)
 		if err == nil {
 			break
 		}
@@ -337,11 +337,11 @@ func (dbs *SDAdb) SetAccessionID(accessionID, user, filepath, checksum string) e
 
 	return err
 }
-func (dbs *SDAdb) setAccessionID(accessionID, user, filepath, checksum string) error {
+func (dbs *SDAdb) setAccessionID(accessionID, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const ready = "UPDATE local_ega.files SET stable_id = $1 WHERE elixir_id = $2 and inbox_path = $3 and decrypted_file_checksum = $4 and status = 'COMPLETED';"
-	result, err := db.Exec(ready, accessionID, user, filepath, checksum)
+	const setStableID = "UPDATE sda.files SET stable_id = $1 WHERE id = $2;"
+	result, err := db.Exec(setStableID, accessionID, fileID)
 	if err != nil {
 		return err
 	}
