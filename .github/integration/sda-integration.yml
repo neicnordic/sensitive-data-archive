@@ -184,6 +184,30 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  mapper:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-mapper ]
+    container_name: mapper
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=mapper
+      - BROKER_USER=mapper
+      - BROKER_QUEUE=mappings
+      - DB_PASSWORD=mapper
+      - DB_USER=mapper
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
   oidc:
     container_name: oidc
     command:
@@ -221,6 +245,8 @@ services:
       finalize:
         condition: service_started
       ingest:
+        condition: service_started
+      mapper:
         condition: service_started
       s3inbox:
         condition: service_started

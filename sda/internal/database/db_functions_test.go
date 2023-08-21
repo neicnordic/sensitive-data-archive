@@ -249,3 +249,86 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 	assert.True(suite.T(), ok, "CheckAccessionIDExists returned false when true was expected")
 }
+
+func (suite *DatabaseTests) TestMapFilesToDataset() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	accessions := []string{}
+	for i := 1; i < 12; i++ {
+		fileID, err := db.RegisterFile(fmt.Sprintf("/testuser/TestMapFilesToDataset-%d.c4gh", i), "testuser")
+		assert.NoError(suite.T(), err, "failed to register file in database")
+
+		err = db.SetAccessionID(fmt.Sprintf("acession-%d", i), fileID)
+		assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fmt.Sprintf("acession-%d", i))
+	}
+
+	diSet := map[string][]string{
+		"dataset1": accessions[0:3],
+		"dataset2": accessions[3:5],
+		"dataset3": accessions[5:8],
+		"dataset4": accessions[8:9],
+	}
+
+	for di, acs := range diSet {
+		err := db.MapFilesToDataset(di, acs)
+		assert.NoError(suite.T(), err, "failed to map file to dataset")
+	}
+}
+
+func (suite *DatabaseTests) TestGetInboxPath() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	accessions := []string{}
+	for i := 0; i < 5; i++ {
+		fileID, err := db.RegisterFile(fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
+		assert.NoError(suite.T(), err, "failed to register file in database")
+
+		err = db.SetAccessionID(fmt.Sprintf("acession-00%d", i), fileID)
+		assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fmt.Sprintf("acession-00%d", i))
+	}
+
+	for _, acc := range accessions {
+		path, err := db.getInboxPath(acc)
+		assert.NoError(suite.T(), err, "getInboxPath failed")
+		assert.Contains(suite.T(), path, "/testuser/TestGetInboxPath")
+	}
+}
+
+func (suite *DatabaseTests) TestUpdateDatasetEvent() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	accessions := []string{}
+	for i := 0; i < 5; i++ {
+		fileID, err := db.RegisterFile(fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
+		assert.NoError(suite.T(), err, "failed to register file in database")
+
+		err = db.SetAccessionID(fmt.Sprintf("acession-00%d", i), fileID)
+		assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fmt.Sprintf("acession-00%d", i))
+	}
+
+	diSet := map[string][]string{"DATASET:TEST-0001": accessions}
+
+	for di, acs := range diSet {
+		err := db.MapFilesToDataset(di, acs)
+		assert.NoError(suite.T(), err, "failed to map file to dataset")
+	}
+
+	dID := "DATASET:TEST-0001"
+	err = db.UpdateDatasetEvent(dID, "registered", "{\"type\": \"mapping\"}")
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	err = db.UpdateDatasetEvent(dID, "released", "{\"type\": \"release\"}")
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	err = db.UpdateDatasetEvent(dID, "deprecated", "{\"type\": \"deprecate\"}")
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+}
