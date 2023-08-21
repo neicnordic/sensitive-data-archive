@@ -101,14 +101,15 @@ GRANT USAGE, SELECT ON SEQUENCE sda.datasets_id_seq TO mapper;
 GRANT SELECT ON sda.files TO mapper;
 GRANT INSERT ON sda.file_event_log TO mapper;
 GRANT INSERT ON sda.file_dataset TO mapper;
-GRANT SELECT ON local_ega.main_to_files TO mapper;
+GRANT INSERT ON sda.dataset_event_log TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_dataset_id_seq TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO mapper;
+GRANT USAGE, SELECT ON SEQUENCE sda.dataset_event_log_id_seq TO mapper;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO mapper;
 GRANT USAGE ON SCHEMA local_ega_ebi TO mapper;
-
+GRANT SELECT ON local_ega.main_to_files TO mapper;
 GRANT SELECT ON local_ega.archive_files TO mapper;
 GRANT INSERT ON local_ega_ebi.filedataset TO mapper;
 GRANT UPDATE ON local_ega.files TO mapper;
