@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.323
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/gin-gonic/gin v1.9.1
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.1
 	github.com/johannesboyne/gofakes3 v0.0.0-20230129080941-f6a8a9ae6fd3
 	github.com/lestrrat-go/jwx v1.2.25
 	github.com/lib/pq v1.10.9
