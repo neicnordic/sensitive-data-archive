@@ -12,6 +12,9 @@ jobs:
   deploy:
     name: deployment test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ["1.26", "1.27"]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -22,7 +25,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Initialise k3d
-        run: bash .github/integration/scripts/charts/k3d.sh
+        run: bash .github/integration/scripts/charts/k3d.sh ${{matrix.version}}
+        shell: bash
+
+      - name: debug
+        if: failure()
+        run: k3d version list k3s | grep ${{matrix.version}}
         shell: bash
 
       - name: build postgres
