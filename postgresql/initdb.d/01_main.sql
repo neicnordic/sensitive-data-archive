@@ -22,7 +22,8 @@ VALUES (0, now(), 'Created with version'),
        (5, now(), 'Add field for correlation ids'),
        (6, now(), 'Add created_at field to datasets'),
        (7, now(), 'Add permissions to mapper to files'),
-       (8, now(), 'Add ingestion functions');
+       (8, now(), 'Add ingestion functions'),
+       (9, now(), 'Add dataset event log');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -139,4 +140,27 @@ CREATE TABLE file_event_log (
     finished_at         TIMESTAMP,
     success             BOOLEAN,
     error               TEXT
+);
+
+-- This table is used to define events for dataset event logging.
+CREATE TABLE dataset_events (
+    id          SERIAL PRIMARY KEY,
+    title       VARCHAR(64) UNIQUE, -- short name of the action
+    description TEXT
+);
+
+-- These are the default dataset events to log.
+INSERT INTO dataset_events(id,title,description)
+VALUES (10, 'registered', 'Register a dataset to recieve file accession IDs mappings.'),
+       (20, 'released'  , 'The dataset is released on this date'),
+       (30, 'deprecated', 'The dataset is deprecated on this date');
+
+
+-- Keeps track of all events for the datasets, with timestamps.
+CREATE TABLE dataset_event_log (
+    id         SERIAL PRIMARY KEY,
+    dataset_id TEXT REFERENCES datasets(stable_id),
+    event      TEXT REFERENCES dataset_events(title),
+    message    JSONB, -- The rabbitMQ message that initiated the dataset event
+    event_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
 );
