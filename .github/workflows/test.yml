@@ -29,56 +29,6 @@ jobs:
       - name: Test
         run: cd sda-sftp-inbox && mvn test -B
 
-  test_pipeline:
-    name: Test ingestion pipeline
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.20']
-    steps:
-
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
-        id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Get dependencies
-        run: |
-          cd sda-pipeline
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
-
-      - name: Create certificates
-        run: |
-          cd sda-pipeline/dev_utils
-          bash ./make_certs.sh
-          cd ..
-
-      - name: Start MQ and DB
-        run: |
-          cd sda-pipeline
-          docker-compose -f dev_utils/compose-no-tls.yml up -d db mq
-
-      - name: Test
-        run: |
-          cd sda-pipeline
-          go test --tags=integration -v -coverprofile=coverage.txt -covermode=atomic ./...
-
-      - name: Codecov
-        uses: codecov/codecov-action@v3.1.4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./sda-pipeline/coverage.txt
-          flags: unittests
-          fail_ci_if_error: false
-
   test_download:
     name: Test Download
     runs-on: ubuntu-latest
