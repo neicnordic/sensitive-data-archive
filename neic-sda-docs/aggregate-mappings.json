@@ -1,0 +1,12 @@
+{
+    "neicnordic/sda-pipeline": {
+        "cmd/backup/backup.md": "docs/services/backup.md",
+        "cmd/finalize/finalize.md": "docs/services/finalize.md",
+        "cmd/ingest/ingest.md": "docs/services/ingest.md",
+        "cmd/intercept/intercept.md": "docs/services/intercept.md",
+        "cmd/mapper/mapper.md": "docs/services/mapper.md",
+        "cmd/notify/notify.md": "docs/services/notify.md",
+        "cmd/verify/verify.md": "docs/services/verify.md",
+        "cmd/pipeline.md": "docs/services/pipeline.md"
+    }
+}

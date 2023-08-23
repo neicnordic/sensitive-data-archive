@@ -1,0 +1,36 @@
+body { overflow-x: initial !important; } /* Fix readthedocs bug */
+
+.wy-nav-content {max-width: 1000px;}
+
+.bolditalic { font-weight: bold; font-style:italic; }
+
+#ega { margin-bottom: 1.5em; }
+
+
+#ega tr td { font-size: 0.85em; margin: 0; padding: 0.5em 1em; border: 1px solid #e1e4e5; text-align:left; white-space: initial; vertical-align:middle; }
+#ega tr td:first-child { text-align:right; border:none; font-weight:bold; font-variant: small-caps; width: 15%;}
+#ega tr td:nth-child(4) { text-align:center; border:none; }
+
+
+.ega-stable { color: green; }
+.ega-dev { color: orange; }
+.ega-unstable { color: red; }
+
+
+#ega thead { text-align:left; }
+#ega thead tr th { padding: 0.5em; border: 1px solid #e1e4e5; background-color: #cfd0d0;}
+
+
+/* override table width restrictions */
+@media screen and (min-width: 767px) {
+
+    .wy-table-responsive table td {
+       /* !important prevents the common CSS stylesheets from overriding
+          this as on RTD they are loaded after this stylesheet */
+       white-space: normal !important;
+    }
+ 
+    .wy-table-responsive {
+       overflow: visible !important;
+    }
+ }

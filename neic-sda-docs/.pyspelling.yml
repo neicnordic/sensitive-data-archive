@@ -1,0 +1,21 @@
+matrix:
+- name: markdown
+  aspell:
+    lang: en
+    ignore-case: true
+  dictionary:
+    wordlists:
+    - docs/dictionary/wordlist.txt
+    encoding: utf-8
+  pipeline:
+  - pyspelling.filters.markdown:
+  - pyspelling.filters.context:
+      context_visible_first: true
+      escapes: '\\[\\`~]'
+      delimiters:
+      # Ignore text between inline back ticks as this is code or hightlight words
+      - open: '(?P<open>`+)'
+        close: '(?P=open)'
+  sources:
+  - '**/*.md'
+  default_encoding: utf-8

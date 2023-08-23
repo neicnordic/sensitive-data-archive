@@ -1,0 +1,102 @@
+openapi: 3.0.0
+info:
+  description: SDA Data Out API Documentation derived from EGA Data API
+  version: "1.0"
+  title: SDA Data Out API Documentation 
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0
+tags:
+  - name: file
+    description: File Streaming
+  - name: metadata
+    description: Metadata Controller
+paths:
+  "/files/{fileId}":
+    get:
+      tags:
+        - file
+      summary: getFile
+      operationId: getFileUsingGET
+      parameters:
+        - name: fileId
+          in: path
+          description: fileId
+          required: true
+          schema:
+            type: string
+        - name: destinationFormat
+          in: query
+          description: destinationFormat
+          required: false
+          schema:
+            type: string
+            default: plain
+        - name: startCoordinate
+          in: query
+          description: startCoordinate
+          required: false
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: endCoordinate
+          in: query
+          description: endCoordinate
+          required: false
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: Public-Key
+          in: header
+          description: Public Encryption key
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+  "/metadata/datasets":
+    get:
+      tags:
+        - metadata
+      summary: list
+      operationId: listUsingGET
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+  "/metadata/datasets/{datasetId}/files":
+    get:
+      tags:
+        - metadata
+      summary: getDatasetFiles
+      operationId: getDatasetFilesUsingGET
+      parameters:
+        - name: datasetId
+          in: path
+          description: datasetId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
