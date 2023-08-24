@@ -14,6 +14,8 @@ spec:
       port: 4369
     - name: rabbitmq-dist
       port: 25672
+    - name: management
+      port: {{ ternary 15671 15672 (.Values.global.tls.enabled )}}
   selector:
     app: {{ template "sda.fullname" . }}
 
