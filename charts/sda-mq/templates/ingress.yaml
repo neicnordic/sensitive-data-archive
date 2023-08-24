@@ -1,0 +1,45 @@
+{{- if .Values.global.ingress.hostname }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "sda.fullname" . }}-ingress
+  labels:
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
+    nginx.ingress.kubernetes.io/rewrite-target: "/"
+    nginx.ingress.kubernetes.io/backend-protocol: "{{ ternary "HTTPS" "HTTP" .Values.global.tls.enabled }}"
+    {{- end }}
+    {{- if .Values.global.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
+    {{- else if .Values.global.ingress.issuer }}
+    cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
+    {{- end }}
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.global.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.global.ingress.ingressClassName }}
+{{- end }}
+  rules:
+  - host: {{ required "An ingress hostname is required!" .Values.global.ingress.hostName }}
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: {{ template "sda.fullname" . }}
+            port:
+              number:  {{ ternary 15671 15672 .Values.global.tls.enabled }}
+{{- if .Values.global.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ required "An ingress hostname is required!" .Values.global.ingress.hostName }}
+    secretName: {{ if .Values.global.ingress.secretName }}{{ .Values.global.ingress.secretName }}{{- else }}"{{ template "sda.fullname" . }}-ingress"{{- end }}
+{{- end }}
+{{- end }}

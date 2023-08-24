@@ -13,6 +13,12 @@ Parameter | Description | Default
 `image.pullPolicy` | sda-mq container image pull policy | `Always`
 `global.adminUser` | Username of admin user |`admin`
 `global.adminPassword` | Password for admin user. |`Random if unset`
+`global.ingress.annotations` | extra annotations for the ingress objects | `""`
+`global.ingress.ingressClassName` | class of the ingress controller | `"nginx"`
+`global.ingress.clusterIssuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured clusterIssuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
+`global.ingress.hostName` | hostname for the ingress endpoint | `""`
+`global.ingress.issuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured issuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
+`global.ingress.secretName` | The name of a manually created secret holding the certificates for the ingress enpoint. | `""`
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
