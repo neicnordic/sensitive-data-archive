@@ -44,7 +44,7 @@ extraSecurityContext: {}
 
 image:
   repository: ghcr.io/neicnordic/sensitive-data-archive
-  tag: v0.0.44-rabbitmq
+  tag: v0.0.65-rabbitmq
   pullPolicy: Always
 
 # utilize network isolation
