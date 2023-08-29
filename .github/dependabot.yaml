@@ -17,7 +17,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
   - package-ecosystem: docker
-    directory: "/postgres"
+    directory: "/postgresql"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
