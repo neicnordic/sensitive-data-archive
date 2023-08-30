@@ -8,7 +8,7 @@ COPY . .
 SHELL ["bash", "-c"]
 RUN set -ex; for p in cmd/*; do go build -buildvcs=false -o "${p/cmd\//sda-}" "./$p"; done
 
-FROM debian:11-slim AS Debug
+FROM debian:bullseye-slim AS Debug
 
 ARG SOURCE_COMMIT
 

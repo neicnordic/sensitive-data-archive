@@ -44,8 +44,8 @@ spec:
         fsGroup: 65534
       containers:
       - name: intercept
-        image: "{{ .Values.intercept.repository }}:{{ .Values.intercept.imageTag }}"
-        imagePullPolicy: {{ .Values.intercept.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-intercept"]
         securityContext:
           allowPrivilegeEscalation: false

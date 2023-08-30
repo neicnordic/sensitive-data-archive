@@ -10,10 +10,8 @@ if [[ "$1" == rabbitmq* ]] && [ "$(id -u)" = '0' ]; then
 	exec su-exec rabbitmq "${BASH_SOURCE[0]}" "$@"
 fi
 
-if [ -z "$RABBITMQ_DEFAULT_USER" ] || [ -z "$RABBITMQ_DEFAULT_PASS" ]; then
-	RABBITMQ_DEFAULT_USER="guest"
-	RABBITMQ_DEFAULT_PASS="guest"
-fi
+RABBITMQ_DEFAULT_USER="${RABBITMQ_DEFAULT_USER:-guest}"
+RABBITMQ_DEFAULT_PASS="${RABBITMQ_DEFAULT_PASS:-guest}"
 
 sed -e "s/RABBITMQ_DEFAULT_USER/$RABBITMQ_DEFAULT_USER/" -e "s/RABBITMQ_DEFAULT_PASS/$RABBITMQ_DEFAULT_PASS/" \
 	/etc/rabbitmq/definitions.json >/var/lib/rabbitmq/definitions.json
@@ -50,6 +48,17 @@ if [ -n "$CEGA_CONNECTION" ]; then
 	chmod 600 "/var/lib/rabbitmq/federation.json" 
 fi
 
+# This is needed for the streams to work properly
+cat >/var/lib/rabbitmq/advanced.config<<-EOF
+[
+	{rabbit, [
+		{default_consumer_prefetch, {false,100}}
+		]
+	}
+].
+EOF
+
+chmod 600 "/var/lib/rabbitmq/advanced.config"
 chmod 600 "/var/lib/rabbitmq/rabbitmq.conf"
 chmod 600 "/var/lib/rabbitmq/definitions.json"
 

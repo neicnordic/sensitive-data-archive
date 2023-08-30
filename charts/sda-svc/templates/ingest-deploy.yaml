@@ -61,8 +61,8 @@ spec:
     {{- end }}
       containers:
       - name: ingest
-        image: "{{ .Values.ingest.repository }}:{{ .Values.ingest.imageTag }}"
-        imagePullPolicy: {{ .Values.ingest.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-ingest"]
         securityContext:
           allowPrivilegeEscalation: false

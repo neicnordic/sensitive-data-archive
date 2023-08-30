@@ -237,3 +237,58 @@ jobs:
 
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-integration.yml run integration_test
+
+  chart:
+    needs:
+      - build_go_images
+      - build_server_images
+      - build_java_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ["1.26", "1.27"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Initialise k3d
+        run: bash .github/integration/scripts/charts/k3d.sh ${{matrix.version}}
+        shell: bash
+
+      - name: debug
+        if: failure()
+        run: k3d version list k3s | grep ${{matrix.version}}
+        shell: bash
+
+      - name: Deploy external services
+        run: bash .github/integration/scripts/charts/dependencies.sh
+        shell: bash
+
+      - name: Deploy DB
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }}
+
+      - name: Deploy MQ
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }}
+        shell: bash
+
+      - name: Deploy pipeline
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }}
+        shell: bash
+
+      - name: test
+        if: always()
+        run: |
+          kubectl get secret broker-sda-mq -o json
+          kubectl get secret pipeline-sda-svc-mapper -o json
+          kubectl get pods
+          echo "describe mapper" && kubectl describe pod -l role=mapper
+          sleep 1
+          echo "logs mapper" && kubectl logs -l role=mapper
+          sleep 1
+          echo "describe broker" && kubectl logs -l role=broker
+        shell: bash

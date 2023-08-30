@@ -1,6 +1,5 @@
 global:
-  pg_in_password: ""
-  pg_out_password: ""
+  postgresAdminPassword: ""
   tls:
     enabled: true
     issuer: ""
@@ -25,8 +24,8 @@ externalPkiService:
 extraSecurityContext: {}
 
 image:
-  repository: ghcr.io/neicnordic/sda-db
-  tag: v2.1.10
+  repository: ghcr.io/neicnordic/sensitive-data-archive
+  tag: v0.0.65-postgres
   pullPolicy: IfNotPresent
 
 # utilize network isolation
@@ -61,13 +60,6 @@ persistence:
 # podAnnotations: |
   #  "key": "value"
 
-# if a port other than the default 5432 is used in the pod set the value here.
-# port: 5432
-
-# if an admin user is to be created during the first setup, set the password below
-# This can only be done during the first setup
-# postgresAdminPassword:
-
 # RBAC is assumed to be enabled in the cluster
 rbacEnabled: true
 
@@ -84,15 +76,15 @@ resources:
 ##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
 # revisionHistory: 3
 
+## This is only available on clusters running k8s < v1.25.0
 securityPolicy:
-  create: true
+  create: false
 
 service:
   type: ClusterIP
   port: 5432
 
 updateStrategyType: RollingUpdate
-
 
 # secret containing the TLS certificates for the release tester
 # if no certificate issuer is used

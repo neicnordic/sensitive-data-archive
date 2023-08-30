@@ -2,9 +2,8 @@
 
 Source repositories:
 
-- [https://github.com/neicnordic/sda-pipeline](https://github.com/neicnordic/sda-pipeline)
+- [https://github.com/neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 - [https://github.com/neicnordic/sda-doa](https://github.com/neicnordic/sda-doa)
-- [https://github.com/neicnordic/sda-download](https://github.com/neicnordic/sda-download)
 
 ## Installing the Chart
 
@@ -17,6 +16,9 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 
 Parameter | Description | Default
 --------- | ----------- | -------
+`global.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
+`global.imageTag` | Tag version to deploy | ``
+`global.imagePullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
 `global.secretsPath` | Path where the sensitive files can be found | `/.secrets`
 `global.c4ghPath` | This path will be a subpath to the secretsPath | `c4gh`
 `global.tlsPath` | This path will be a subpath to the secretsPath | `tls`
@@ -120,10 +122,12 @@ Parameter | Description | Default
 `global.download.trusted.configPath` | Path to the ISS config file | `$secrets/iss`
 `global.download.trusted.configFile` | Name of ISS config file | `iss.json`
 `global.download.trusted.iss` | Array of trusted OIDC endpoints | ``
-`global.download.trusted.iss[iss]` | URI to the OIDC service | `https://login.elixir-czech.org/oidc/`
-`global.download.trusted.iss[jku]` | The URI to the OIDCs jwk endpoint | `https://login.elixir-czech.org/oidc/jwk`
-`global.elixir.oidcdHost` | URL to the OIDc service. | `"https://login.elixir-czech.org/oidc/"`
-`global.elixir.jwkPath` | Public key path on the OIDC host. | `jwk`
+`global.download.trusted.iss[iss]` | URI to the OIDC service | `https://proxy.aai.lifescience-ri.eu`
+`global.download.trusted.iss[jku]` | The URI to the OIDCs jwk endpoint | `https://proxy.aai.lifescience-ri.eu/OIDC/jwks`
+`global.oidc.provider` | URL to the OIDc service. | `"https://proxy.aai.lifescience-ri.eu"`
+`global.oidc.jwkPath` | Public key path on the OIDC host. | `/OIDC/jwks`
+`global.oidc.id` | User ID to the OIDC host. | ``
+`global.oidc.secret` | User credentials to the OIDC host. | ``
 `global.inbox.servicePort` | The port that the inbox is accessible via. | `2222`
 `global.inbox.storageType` | Storage type for the inbox, available options are `s3` and `posix`. |`posix`
 `global.inbox.path` | Path to the mounted `posix` volume. |`/inbox`
@@ -182,25 +186,19 @@ Parameter | Description | Default
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`auth.replicaCount` | desired number of replicas | `1`
-`auth.repository` | auth container image repository | `neicnordic/sda-auth`
-`auth.imageTag` | auth container image version | `"latest"`
-`auth.imagePullPolicy` | auth container image pull policy | `Always`
+`auth.replicaCount` | desired number of replicas | `2`
 `auth.annotations` | Specific annotation for the auth pod | `{}`
 `auth.resources.requests.memory` | Memory request for container. |`128Mi`
 `auth.resources.requests.cpu` | CPU request for container. |`100m`
 `auth.resources.limits.memory` | Memory limit for container. |`256Mi`
 `auth.resources.limits.cpu` | CPU limit for container. |`250m`
-`backup.repository` | inbox container image repository | `neicnordic/sda-pipeline`
-`backup.imageTag` | inbox container image version | `latest`
-`backup.imagePullPolicy` | inbox container image pull policy | `Always`
 `backup.annotations` | Specific annotation for the backup pod | `{}`
 `backup.resources.requests.memory` | Memory request for backup container. |`128Mi`
 `backup.resources.requests.cpu` | CPU request for backup container. |`100m`
 `backup.resources.limits.memory` | Memory limit for backup container. |`256Mi`
 `backup.resources.limits.cpu` | CPU limit for backup container. |`250m`
 `backup.deploy` | Set to true if the backup service should be active | `false`
-`doa.replicaCount` | desired number of replicas | `1`
+`doa.replicaCount` | desired number of replicas | `2`
 `doa.repository` | dataedge container image repository | `neicnordic/sda-doa`
 `doa.imageTag` | dataedge container image version | `"latest"`
 `doa.imagePullPolicy` | dataedge container image pull policy | `Always`
@@ -210,36 +208,24 @@ Parameter | Description | Default
 `doa.resources.requests.cpu` | CPU request for dataedge container. |`100m`
 `doa.resources.limits.memory` | Memory limit for dataedge container. |`1024Mi`
 `doa.resources.limits.cpu` | CPU limit for dataedge container. |`2000m`
-`download.replicaCount` | desired number of replicas | `1`
-`download.repository` | dataedge container image repository | `neicnordic/sda-doa`
-`download.imageTag` | dataedge container image version | `"latest"`
-`download.imagePullPolicy` | dataedge container image pull policy | `Always`
+`download.replicaCount` | desired number of replicas | `2`
 `download.keystorePass` | keystore password | `changeit`
 `download.annotations` | Specific annotation for the dataedge pod | `{}`
 `download.resources.requests.memory` | Memory request for dataedge container. |`256Mi`
 `download.resources.requests.cpu` | CPU request for dataedge container. |`100m`
 `download.resources.limits.memory` | Memory limit for dataedge container. |`512Mi`
 `download.resources.limits.cpu` | CPU limit for dataedge container. |`1000m`
-`finalize.repository` | inbox container image repository | `neicnordic/sda-pipeline`
-`finalize.imageTag` | inbox container image version | `latest`
-`finalize.imagePullPolicy` | inbox container image pull policy | `Always`
 `finalize.annotations` | Specific annotation for the finalize pod | `{}`
 `finalize.resources.requests.memory` | Memory request for finalize container. |`128Mi`
 `finalize.resources.requests.cpu` | CPU request for finalize container. |`100m`
 `finalize.resources.limits.memory` | Memory limit for finalize container. |`256Mi`
 `finalize.resources.limits.cpu` | CPU limit for finalize container. |`250m`
-`ingest.repository` | inbox container image repository | `neicnordic/sda-pipeline`
-`ingest.imageTag` | inbox container image version | `latest`
-`ingest.imagePullPolicy` | inbox container image pull policy | `Always`
 `ingest.replicaCount` | desired number of ingest workers | `1`
 `ingest.annotations` | Specific annotation for the ingest pod | `{}`
 `ingest.resources.requests.memory` | Memory request for ingest container. |`128Mi`
 `ingest.resources.requests.cpu` | CPU request for ingest container. |`100m`
 `ingest.resources.limits.memory` | Memory limit for ingest container. |`512Mi`
 `ingest.resources.limits.cpu` | CPU limit for ingest container. |`2000m`
-`intercept.repository` | intercept container image repository | `neicnordic/sda-pipeline`
-`intercept.imageTag` | intercept container image version | `latest`
-`intercept.imagePullPolicy` | intercept container image pull policy | `Always`
 `intercept.replicaCount` | desired number of intercept workers | `1`
 `intercept.annotations` | Specific annotation for the intercept pod | `{}`
 `intercept.deploy` | Set to false in a non federated deployment | `true`
@@ -247,19 +233,13 @@ Parameter | Description | Default
 `intercept.resources.requests.cpu` | CPU request for intercept container. |`100m`
 `intercept.resources.limits.memory` | Memory limit for intercept container. |`128Mi`
 `intercept.resources.limits.cpu` | CPU limit for intercept container. |`2000m`
-`s3Inbox.repository` | S3inbox container image repository | `neicnordic/sda-s3proxy`
-`s3Inbox.imageTag` | S3inbox container image version | `latest`
-`s3Inbox.imagePullPolicy` | S3inbox container image pull policy | `Always`
-`s3Inbox.replicaCount`| desired number of S3inbox containers | `1`
+`s3Inbox.replicaCount`| desired number of S3inbox containers | `2`
 `s3Inbox.annotations` | Specific annotation for the S3inbox pod | `{}`
 `s3Inbox.resources.requests.memory` | Memory request for s3Inbox container. |`128Mi`
 `s3Inbox.resources.requests.cpu` | CPU request for s3Inbox container. |`100m`
 `s3Inbox.resources.limits.memory` | Memory limit for s3Inbox container. |`1024Mi`
 `s3Inbox.resources.limits.cpu` | CPU limit for s3Inbox container. |`1000m`
-`sftpInbox.repository` | sftp inbox container image repository | `neicnordic/sda-inbox-sftp`
-`sftpInbox.imageTag` | sftp inbox container image version | `latest`
-`sftpInbox.imagePullPolicy` | sftp inbox container image pull policy | `Always`
-`sftpInbox.replicaCount`| desired number of sftp inbox containers | `1`
+`sftpInbox.replicaCount`| desired number of sftp inbox containers | `2`
 `sftpInbox.keystorePass` | sftp inbox keystore password | `changeit`
 `sftpInbox.nodeHostname` | Node name if the sftp inbox  needs to be deployed on a specific node | `""`
 `sftpInbox.annotations` | Specific annotation for the sftp inbox pod | `{}`
@@ -267,9 +247,6 @@ Parameter | Description | Default
 `sftpInbox.resources.requests.cpu` | CPU request for sftpInbox container. |`100m`
 `sftpInbox.resources.limits.memory` | Memory limit for sftpInbox container. |`256Mi`
 `sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. |`250m`
-`verify.repository` | inbox container image repository | `neicnordic/sda-pipeline`
-`verify.imageTag` | inbox container image version | `latest`
-`verify.imagePullPolicy` | inbox container image pull policy | `Always`
 `verify.replicaCount`| desired number of verify containers | `1`
 `verify.annotations` | Specific annotation for the verify pod | `{}`
 `verify.resources.requests.memory` | Memory request for verify container. |`128Mi`

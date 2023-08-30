@@ -51,7 +51,7 @@
                 "dest-uri": "amqp:///sda",
                 "src-delete-after": "never",
                 "src-protocol": "amqp091",
-                "src-queue": "completed",
+                "src-queue": "completed_stream",
                 "src-uri": "amqp:///sda"
             },
             "vhost": "sda"
@@ -67,7 +67,7 @@
                 "dest-uri": "amqp:///sda",
                 "src-delete-after": "never",
                 "src-protocol": "amqp091",
-                "src-queue": "error",
+                "src-queue": "error_stream",
                 "src-uri": "amqp:///sda"
             },
             "vhost": "sda"

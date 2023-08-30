@@ -1,6 +1,6 @@
 # SDA Database
 
-Source repository: [https://github.com/neicnordic/sda-db](https://github.com/neicnordic/sda-db)
+Source repository: [https://github.com/neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 
 ## Installing the Chart
 
@@ -8,8 +8,7 @@ Edit the values.yaml file and specify the relevant parts of the `global` section
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`global.pg_in_password` | Password for `lega_in` user, used for `data in` services. |`""`
-`global.pg_out_password` | Password for `lega_out` user, used for `data out` services. |`""`
+`global.postgresAdminPassword` | PostgreSQL admin password (Random if empty) | `""`
 `global.tls.enabled` | Enable TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
@@ -19,8 +18,8 @@ Parameter | Description | Default
 `global.tls.CAFile` | CA root certificate. |`ca.crt`
 `global.tls.verifyPeer` | Require client certificates. |`verify-ca`
 `externalPkiService.tlsPath` | If an external PKI service is used, this is the path where the certifiates are placed | `""`
-`image.repository` | sda-db container image repository | `ghcr.io/neicnordic/sda-db`
-`image.tag` | sda-db  container image version | `v1.4.0`
+`image.repository` | sda-db container image repository | `ghcr.io/neicnordic/sensitive-data-archive`
+`image.tag` | sda-db container image version | ``
 `image.pullPolicy` | sda-db container image pull policy | `IfNotPresent`
 `networkPolicy.create` | Use network isolation. | `false`
 `networkPolicy.matchLabels` | App labels that are allowed to connect to the database. | `app: sda-svc`
@@ -31,8 +30,6 @@ Parameter | Description | Default
 `persistence.existingClaim` | Use existing claim. | `null`
 `persistence.volumePermissions` | Change the owner of the persist volume mountpoint to `RunAsUser:fsGroup`. | `true`
 `podAnnotations` | `"key": "value"` list of annotations for the pod (optional) | `{}`
-`port` | Port the application will listen to (optional) | `5432`
-`postgresAdminPassword` | PostgreSQL admin password (optional) | `""`
 `rbacEnabled` | Use role based access control. |`true`
 `resources.requests.memory` | Memory request for container. |`128Mi`
 `resources.requests.cpu` | CPU request for container. |`100m`
@@ -40,7 +37,7 @@ Parameter | Description | Default
 `resources.limits.cpu` | CPU limit for container. |`200m`
 `revisionHistory` | Number of revisions to keep for the option to rollback a deployment | `3`
 `updateStrategyType` | Update strategy type. | `RollingUpdate`
-`securityPolicy.create` | Use pod security policy. | `true`
+`securityPolicy.create` | Use pod security policy. | `false`
 `service.type` | Database service type. |`ClusterIP`
 `service.port` | Database service port. |`5432`
 

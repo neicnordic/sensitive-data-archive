@@ -76,8 +76,9 @@ spec:
     {{- end }}
       containers:
       - name: s3inbox
-        image: "{{ .Values.s3Inbox.repository }}:{{ .Values.s3Inbox.imageTag }}"
-        imagePullPolicy: {{ .Values.s3Inbox.imagePullPolicy | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        command: ["sda-s3inbox"]
         securityContext:
           allowPrivilegeEscalation: false
 {{- if .Values.global.extraSecurityContext }}
@@ -139,7 +140,7 @@ spec:
         - name: BROKER_VHOST
           value: {{ include "brokerVhost" . | quote }}
         - name: BROKER_EXCHANGE
-          value: {{ .Values.global.broker.exchange | quote }}
+          value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_ROUTINGKEY
           value: "inbox"
         - name: BROKER_SSL
