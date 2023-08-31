@@ -297,14 +297,6 @@ Create chart name and version as used by the chart label.
   {{- end }}
 {{- end -}}
 
-{{- define "S3ArchiveURL" -}}
-  {{- if .Values.global.inbox.s3Port }}
-    {{- printf "%s:%v" .Values.global.inbox.s3Url .Values.global.inbox.s3Port }}
-  {{- else }}
-    {{- printf "%s" .Values.global.inbox.s3Url }}
-  {{- end }}
-{{- end -}}
-
 {{- define "TLSissuer" -}}
     {{- if and .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
         {{- fail "Only one of global.tls.issuer or global.tls.clusterIssuer should be set" }}
