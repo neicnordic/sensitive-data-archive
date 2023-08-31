@@ -2,7 +2,7 @@ FROM node:16.2.0-slim
 
 WORKDIR /app
 
-RUN apt update && apt upgrade -qy
+RUN apt update && apt upgrade -qy && apt install -qy curl
 
 COPY package.json ./
 
