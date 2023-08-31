@@ -669,7 +669,6 @@ func configS3Storage(prefix string) storage.S3Conf {
 
 	// Defaults (move to viper?)
 
-	s3.Port = 443
 	s3.Region = "us-east-1"
 	s3.NonExistRetryTime = 2 * time.Minute
 
