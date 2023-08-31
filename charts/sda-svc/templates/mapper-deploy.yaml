@@ -60,7 +60,7 @@ spec:
     {{- end }}
       containers:
       - name: mapper
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-mapper"]
         securityContext:

@@ -75,7 +75,7 @@ spec:
     {{- end }}
       containers:
       - name: download
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-download"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-download"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false

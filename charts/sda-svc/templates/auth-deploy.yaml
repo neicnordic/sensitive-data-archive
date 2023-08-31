@@ -58,7 +58,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: auth
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-auth"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-auth"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
