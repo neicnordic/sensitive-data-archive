@@ -134,20 +134,6 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/**/}}
-{{- define "dbUserBackup" -}}
-{{- ternary .Values.global.db.user .Values.credentials.backup.dbUser (empty .Values.credentials.backup.dbUser) -}}
-{{- end -}}
-{{- define "dbPassBackup" -}}
-{{- ternary .Values.global.db.password .Values.credentials.backup.dbPassword (empty .Values.credentials.backup.dbPassword) -}}
-{{- end -}}
-{{- define "mqUserBackup" -}}
-{{- ternary .Values.global.broker.username .Values.credentials.backup.mqUser (empty .Values.credentials.backup.mqUser) -}}
-{{- end -}}
-{{- define "mqPassBackup" -}}
-{{- ternary .Values.global.broker.password .Values.credentials.backup.mqPassword (empty .Values.credentials.backup.mqPassword) -}}
-{{- end -}}
-
-{{/**/}}
 {{- define "dbUserDoa" -}}
 {{- ternary .Values.global.db.user .Values.credentials.doa.dbUser (empty .Values.credentials.doa.dbUser) -}}
 {{- end -}}

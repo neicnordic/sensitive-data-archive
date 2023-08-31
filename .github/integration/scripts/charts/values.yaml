@@ -67,9 +67,6 @@ global:
 auth:
   replicaCount: 1
   resources: null
-backup:
-  deploy: true
-  resources: null
 doa:
   deploy: false
 download:
