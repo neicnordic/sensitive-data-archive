@@ -1,13 +1,13 @@
 module auth
 
-go 1.19
+go 1.20
 
 require (
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.0
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.1
 	github.com/iris-contrib/middleware/cors v0.0.0-20230311205048-b568fe9b470f
-	github.com/kataras/iris/v12 v12.2.4
+	github.com/kataras/iris/v12 v12.2.5
 	github.com/lestrrat/go-jwx v0.9.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282
 	github.com/sirupsen/logrus v1.9.3

@@ -19,6 +19,11 @@ services:
       - USERINFO_ROUTE=/userinfo
     ports:
       - 9090:9090
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 10s
+      retries: 4
   cega:
     container_name: cega
     image: egarchive/lega-base:release.v0.2.0
@@ -43,11 +48,11 @@ services:
     build:
       context: ../
       args:
-        GOLANG_VERSION: ${GOLANG_VERSION-1.18}
+        GOLANG_VERSION: ${GOLANG_VERSION-1.20}
       dockerfile: Dockerfile
     depends_on:
       oidc:
-        condition: service_started
+        condition: service_healthy
       cega:
         condition: service_started
     environment:
