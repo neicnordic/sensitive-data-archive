@@ -22,7 +22,7 @@ jobs:
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.7.0
@@ -45,7 +45,7 @@ jobs:
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.7.0
@@ -68,7 +68,7 @@ jobs:
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.7.0
@@ -91,7 +91,7 @@ jobs:
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3.7.0

@@ -20,7 +20,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v2
@@ -90,7 +90,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v2
@@ -164,7 +164,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v2
@@ -209,7 +209,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Test rabbitmq federation
         run: docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
@@ -221,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Test postgres 
         run: docker compose -f .github/integration/postgres.yml run tests
@@ -233,7 +233,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-integration.yml run integration_test
@@ -249,7 +249,7 @@ jobs:
         version: ["1.26", "1.27"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Helm
         uses: azure/setup-helm@v3.5
