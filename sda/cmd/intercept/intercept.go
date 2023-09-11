@@ -5,6 +5,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -23,13 +26,32 @@ const (
 
 func main() {
 	forever := make(chan bool)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	// Create a function to handle panic and exit gracefully
+	defer func() {
+		if err := recover(); err != nil {
+			log.Errorln("Could not recover, exiting")
+			forever <- false
+		}
+	}()
+
+	go func() {
+		<-sigc
+		forever <- false
+	}()
+
 	conf, err := config.NewConfig("intercept")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		sigc <- syscall.SIGINT
+		panic(err)
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		sigc <- syscall.SIGINT
+		panic(err)
 	}
 
 	defer mq.Channel.Close()
@@ -52,7 +74,9 @@ func main() {
 	go func() {
 		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			sigc <- syscall.SIGINT
+			panic(err)
 		}
 		for delivered := range messages {
 			log.Debugf("Received a message: %s", delivered.Body)

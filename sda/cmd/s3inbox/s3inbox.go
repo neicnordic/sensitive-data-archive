@@ -19,13 +19,14 @@ import (
 var Conf *config.Config
 
 func main() {
-	sigc := make(chan os.Signal, 5)
+	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Create a function to handle panic and exit gracefully
 	defer func() {
 		if err := recover(); err != nil {
-			log.Fatal("Could not recover, exiting")
+			log.Errorln("Could not recover, exiting")
+			os.Exit(1)
 		}
 	}()
 
