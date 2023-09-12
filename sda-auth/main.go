@@ -390,6 +390,15 @@ func main() {
 	app.Get("/elixir/login", authHandler.getElixirLogin)
 	app.Get("/elixir/cors_login", authHandler.getElixirCORSLogin)
 
+	// Info endpoint
+	publicKey, err := readPublicKeyFile(authHandler.Config.C4ghPubKey)
+	if err != nil {
+		log.Error("Failure to get public key: ", err)
+	}
+	if publicKey != nil {
+		app.Get("/info", authHandler.getInfo)
+	}
+
 	app.UseGlobal(globalHeaders)
 
 	if config.Server.Cert != "" && config.Server.Key != "" {

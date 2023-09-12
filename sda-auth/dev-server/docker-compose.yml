@@ -43,6 +43,19 @@ services:
       - CEGA_USERS_USER=dummy
     ports:
       - 8443:8443
+  keygen:
+    image: golang:alpine3.16
+    container_name: keygen
+    command:
+      - "/bin/sh"
+      - "-c"
+      - if [ ! -f "/out/c4gh_key.sec.pem" ]; then git --help >/dev/null 2>&1; [[ "$$?" != "0" ]] && apk add git;
+        [ ! -d "crypt4gh" ] && git clone https://github.com/neicnordic/crypt4gh.git;
+        cd crypt4gh;
+        [ ! -f "crypt4gh" ] && go build .;
+        ./crypt4gh generate -n c4gh_key -p privatekeypass && mv *.pem /out/; fi
+    volumes:
+      - ../keys:/out
   auth:
     container_name: auth
     build:
@@ -55,6 +68,8 @@ services:
         condition: service_healthy
       cega:
         condition: service_started
+      keygen:
+        condition: service_completed_successfully
     environment:
       - ELIXIR_ID=XC56EL11xx
       - ELIXIR_PROVIDER=http://oidc:9090
@@ -71,6 +86,7 @@ services:
       - JWTISSUER=http://auth:8080
       - JWTPRIVATEKEY=keys/sign-jwt.key
       - JWTSIGNATUREALG=ES256
+      - C4GHPUBKEY=keys/c4gh_key.pub.pem
     volumes:
       - ../keys:/keys
       - ../:/sda-auth

@@ -26,6 +26,7 @@ Parameter | Description | Defined value
 `JWTPRIVATEKEY` | Path to private key for signing the JWT token | `keys/sign-jwt.key`
 `JWTSIGNATUREALG` | Algorithm used to sign the JWT token. ES256 (ECDSA) or RS256 (RSA) are supported | `RS256`
 `RESIGNJWT` | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it | `""`
+`C4GHPUBKEY` | c4gh key to be served to the info endpoint | `keys/c4gh_key.pub.pem`
 
 ## Running the development setup
 

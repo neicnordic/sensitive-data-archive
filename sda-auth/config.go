@@ -53,6 +53,7 @@ type Config struct {
 	Server          ServerConfig
 	S3Inbox         string
 	ResignJwt       bool
+	C4ghPubKey      string
 }
 
 // NewConfig initializes and parses the config file and/or environment using
@@ -90,6 +91,7 @@ func (c *Config) readConfig() error {
 	c.JwtPrivateKey = viper.GetString("JwtPrivateKey")
 	c.JwtSignatureAlg = viper.GetString("JwtSignatureAlg")
 	c.JwtIssuer = viper.GetString("jwtIssuer")
+	c.C4ghPubKey = viper.GetString("c4ghPubKey")
 
 	viper.SetDefault("ResignJwt", true)
 	c.ResignJwt = viper.GetBool("resignJwt")
@@ -172,7 +174,11 @@ func (c *Config) readConfig() error {
 		return nil
 	}
 
-	for _, s := range []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg"} {
+	if viper.GetString("s3Inbox") == "" {
+		return fmt.Errorf("%s not set", "s3Inbox")
+	}
+
+	for _, s := range []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg", "c4ghPubKey"} {
 		if viper.GetString(s) == "" {
 			return fmt.Errorf("%s not set", s)
 		}
