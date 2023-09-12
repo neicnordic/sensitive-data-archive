@@ -107,7 +107,7 @@ spec:
               - /bin/bash
               - -ec
               - rabbitmq-diagnostics -q ping
-          initialDelaySeconds: 20
+          initialDelaySeconds: 60
           periodSeconds: 10
           timeoutSeconds: 3
         readinessProbe:
@@ -117,7 +117,7 @@ spec:
               - -ec
               - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
           initialDelaySeconds: 30
-          periodSeconds: 10
+          periodSeconds: 5
           timeoutSeconds: 3
         volumeMounts:
         - name: data

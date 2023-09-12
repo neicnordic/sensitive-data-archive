@@ -145,7 +145,7 @@ spec:
           value: {{ .Values.global.broker.host | quote }}
         - name: BROKER_SSL
           value: {{ .Values.global.tls.enabled | quote }}
-    {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+    {{- if .Values.global.tls.enabled }}
         - name: BROKER_VERIFYPEER
           value: {{ .Values.global.broker.verifyPeer | quote }}
         - name: BROKER_CACERT
