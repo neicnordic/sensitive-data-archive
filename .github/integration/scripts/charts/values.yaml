@@ -10,8 +10,8 @@ global:
     level: "debug"
   tls:
     enabled: false
-    issuer: "cert-issuer"
-    clusterIssuer: ""
+    issuer: ""
+    clusterIssuer: "cert-issuer"
   archive:
     s3Url: "http://minio.minio"
     s3Bucket: "archive"

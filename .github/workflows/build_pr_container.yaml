@@ -247,6 +247,7 @@ jobs:
     strategy:
       matrix:
         version: ["1.26", "1.27"]
+        tls: ["true", "false"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -270,14 +271,14 @@ jobs:
         shell: bash
 
       - name: Deploy DB
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }} ${{matrix.tls}}
 
       - name: Deploy MQ
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}}
         shell: bash
 
       - name: Deploy pipeline
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}}
         shell: bash
 
       - name: test
