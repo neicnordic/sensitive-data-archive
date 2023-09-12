@@ -80,14 +80,14 @@ spec:
               key: shovel_connection
       {{- end }}
       {{- if .Values.global.tls.enabled }}
-        - name: MQ_SERVER_CERT
+        - name: RABBITMQ_SERVER_CERT
           value: {{ template "mqCert" . }}
-        - name: MQ_SERVER_KEY
+        - name: RABBITMQ_SERVER_KEY
           value: {{ template "mqKey" . }}
         {{- if .Values.global.tls.verifyPeer }}
-        - name: MQ_CA
+        - name: RABBITMQ_SERVER_CACERT
           value: {{ template "caCert" . }}
-        - name: MQ_VERIFY
+        - name: RABBITMQ_SERVER_VERIFY
           value: {{ template "verifyPeer" . }}
         {{- end }}
       {{- end }}
