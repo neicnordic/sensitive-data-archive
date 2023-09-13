@@ -191,6 +191,10 @@ spec:
         volumeMounts:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
+        {{- if eq "posix" .Values.global.inbox.storageType }}
+        - name: inbox
+          mountPath: {{ .Values.global.inbox.path | quote }}
+        {{- end }}
       volumes:
         - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
           projected:
@@ -209,5 +213,16 @@ spec:
             sizeLimit: 10Mi
       {{- end }}
     {{- end }}
+      {{- if eq "posix" .Values.global.inbox.storageType }}
+        - name: inbox
+        {{- if .Values.global.inbox.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.inbox.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
+            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
       restartPolicy: Always
 {{- end }}
