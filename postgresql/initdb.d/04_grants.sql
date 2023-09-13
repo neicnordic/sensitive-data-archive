@@ -17,14 +17,29 @@ GRANT USAGE ON SCHEMA local_ega TO base;
 GRANT SELECT ON sda.dbschema_version TO base;
 GRANT SELECT ON local_ega.dbschema_version TO base;
 
+CREATE ROLE inbox;
+-- uses: db.InsertFile
+GRANT USAGE ON SCHEMA sda TO inbox;
+GRANT SELECT, INSERT, UPDATE ON sda.files TO inbox;
+GRANT SELECT, INSERT ON sda.file_event_log TO inbox;
+GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO inbox;
+
+-- legacy schema
+GRANT USAGE ON SCHEMA local_ega TO inbox;
+GRANT INSERT, SELECT ON local_ega.main_to_files TO inbox;
+GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO inbox;
+
 CREATE ROLE ingest;
 -- uses: db.InsertFile, db.StoreHeader, and db.SetArchived
 GRANT USAGE ON SCHEMA sda TO ingest;
 GRANT INSERT ON sda.files TO ingest;
 GRANT SELECT ON sda.files TO ingest;
-GRANT INSERT ON sda.file_events TO ingest;
+GRANT UPDATE ON sda.files TO ingest;
 GRANT UPDATE ON sda.files TO ingest;
 GRANT INSERT ON sda.checksums TO ingest;
+GRANT UPDATE ON sda.checksums TO ingest;
+GRANT SELECT ON sda.checksums TO ingest;
+GRANT INSERT ON sda.file_events TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO ingest;
 GRANT INSERT ON sda.file_event_log TO ingest;
 GRANT SELECT ON sda.file_event_log TO ingest;
@@ -38,11 +53,7 @@ GRANT INSERT, SELECT ON local_ega.main_to_files TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO ingest;
 GRANT SELECT ON local_ega.files TO ingest;
 GRANT UPDATE ON local_ega.files TO ingest;
-GRANT UPDATE ON sda.files TO ingest;
-GRANT INSERT ON sda.checksums TO ingest;
-GRANT UPDATE ON sda.checksums TO ingest;
-GRANT SELECT ON sda.checksums TO ingest;
-GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO ingest;
+GRANT UPDATE ON local_ega.main TO ingest;
 
 --------------------------------------------------------------------------------
 
@@ -154,3 +165,5 @@ GRANT base, ingest, verify, finalize, sync TO lega_in;
 
 -- lega_out permissions
 GRANT mapper, download TO lega_out;
+
+GRANT base TO download, inbox, ingest, finalize, mapper, verify
