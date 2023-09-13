@@ -91,7 +91,7 @@ spec:
         - name: BROKER_PORT
           value: {{ .Values.global.broker.port | quote }}
         - name: BROKER_QUEUE
-          value: "files"
+          value: "from_cega"
         - name: BROKER_ROUTINGERROR
           value: {{ .Values.global.broker.routingError | quote }}
         - name: BROKER_VHOST
