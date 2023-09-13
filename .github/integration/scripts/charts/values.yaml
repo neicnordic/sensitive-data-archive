@@ -16,11 +16,13 @@ global:
     s3Url: "http://minio.minio"
     s3Bucket: "archive"
     s3Port: 9000
+    existingClaim: archive-pvc
   backupArchive:
     storageType: "s3"
     s3Url: "http://minio.minio"
     s3Bucket: "backup"
     s3Port: 9000
+    existingClaim: backup-pvc
   auth:
     jwtSecret: jwk
     jwtAlg: ES256
@@ -63,6 +65,7 @@ global:
     s3Port: 9000
     s3Bucket: "inbox"
     s3ReadyPath: "/minio/health/ready"
+    existingClaim: inbox-pvc
 
 auth:
   replicaCount: 1
@@ -86,6 +89,9 @@ mapper:
 releasetest:
   run: false
 s3Inbox:
+  resources: null
+  replicaCount: 1
+sftpInbox:
   resources: null
   replicaCount: 1
 verify:
