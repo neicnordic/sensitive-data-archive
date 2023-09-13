@@ -2,7 +2,7 @@
 # Declare variables to be passed into your templates.
 image:
   repository: "ghcr.io/neicnordic/sensitive-data-archive"
-  tag: "v0.0.65"
+  tag: "v0.0.83"
   pullPolicy: "Always"
 
 global:
