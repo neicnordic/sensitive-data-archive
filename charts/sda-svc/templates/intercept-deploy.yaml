@@ -70,7 +70,7 @@ spec:
       {{- end }}
         - name: BROKER_SSL
           value: {{ .Values.global.tls.enabled | quote }}
-      {{- if and .Values.global.broker.ssl .Values.global.tls.enabled }}
+      {{- if .Values.global.tls.enabled }}
         - name: BROKER_CACERT
           value: {{ template "tlsPath" . }}/ca.crt
         {{- if .Values.global.broker.verifyPeer }}

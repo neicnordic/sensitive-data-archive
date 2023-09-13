@@ -1,9 +1,14 @@
 #!/bin/bash
 set -ex
 
-if [ -z "$2" ];then
+if [ -z "$2" ]; then
     echo "PR number missing"
     exit 1
+fi
+
+MQ_PORT=5672
+if [ "$3" == "true" ]; then
+    MQ_PORT=5671
 fi
 
 if [ "$1" == "sda-db" ]; then
@@ -12,7 +17,8 @@ if [ "$1" == "sda-db" ]; then
         --set image.tag="PR$2-postgres" \
         --set image.pullPolicy=IfNotPresent \
         --set global.postgresAdminPassword="$ROOTPASS" \
-        --set global.tls.enabled=false \
+        --set global.tls.clusterIssuer=cert-issuer \
+        --set global.tls.enabled="$3" \
         --set persistence.enabled=false \
         --set resources=null \
         --wait
@@ -25,7 +31,8 @@ if [ "$1" == "sda-mq" ]; then
         --set image.pullPolicy=IfNotPresent \
         --set global.adminPassword="$ADMINPASS" \
         --set global.adminUser=admin \
-        --set global.tls.enabled=false \
+        --set global.tls.enabled="$3" \
+        --set global.tls.clusterIssuer=cert-issuer \
         --set persistence.enabled=false \
         --set resources=null \
         --wait
@@ -35,6 +42,8 @@ if [ "$1" == "sda-svc" ]; then
     helm install pipeline charts/sda-svc \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
+        --set global.tls.enabled="$3" \
+        --set global.broker.port="$MQ_PORT" \
         -f .github/integration/scripts/charts/values.yaml \
         --wait
 fi

@@ -22,7 +22,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:kinetic
+    image: ubuntu:jammy
     volumes:
       - ./scripts:/scripts
 
@@ -82,7 +82,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:kinetic
+    image: ubuntu:jammy
     profiles:
       - tests
     volumes:
