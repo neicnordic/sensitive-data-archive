@@ -249,6 +249,13 @@ jobs:
         version: ["1.26", "1.27"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
+        exclude:
+          - version: "1.26"
+            tls: "false"
+            storage: "posix"
+          - version: "1.27"
+            tls: "false"
+            storage: "posix"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
