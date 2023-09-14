@@ -1,4 +1,5 @@
 global:
+  databaseName: ""
   postgresAdminPassword: ""
   tls:
     enabled: true
