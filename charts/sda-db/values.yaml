@@ -26,7 +26,7 @@ extraSecurityContext: {}
 
 image:
   repository: ghcr.io/neicnordic/sensitive-data-archive
-  tag: v0.0.83-postgres
+  tag: v0.0.85-postgres
   pullPolicy: IfNotPresent
 
 # utilize network isolation
