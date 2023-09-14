@@ -93,6 +93,10 @@ spec:
         - name: POSTGRES_VERIFY_PEER
           value: {{ .Values.global.tls.verifyPeer }}
         {{- end }}
+        {{- if .Values.global.databaseName }}
+        - name: POSTGRES_DB
+          value: {{ .Values.global.databaseName }}
+        {{- end }}
       {{- end }}
         - name: PGDATA
           value: {{ template "pgData" }}
