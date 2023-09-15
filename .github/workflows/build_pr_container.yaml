@@ -248,6 +248,14 @@ jobs:
       matrix:
         version: ["1.26", "1.27"]
         tls: ["true", "false"]
+        storage: ["posix", "s3"]
+        exclude:
+          - version: "1.26"
+            tls: "false"
+            storage: "posix"
+          - version: "1.27"
+            tls: "false"
+            storage: "posix"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -278,8 +286,18 @@ jobs:
         shell: bash
 
       - name: Deploy pipeline
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}}
         shell: bash
+
+      - name: Check deployment
+        run: |
+          sleep 30
+          for n in download finalize inbox ingest mapper verify; do
+            if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
+              echo "$n is not ready after 30s, exiting"
+              exit 1
+            fi
+          done
 
       - name: test
         if: always()

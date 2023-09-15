@@ -44,6 +44,8 @@ if [ "$1" == "sda-svc" ]; then
         --set image.pullPolicy=IfNotPresent \
         --set global.tls.enabled="$3" \
         --set global.broker.port="$MQ_PORT" \
+        --set global.archive.storageType="$4" \
+        --set global.inbox.storageType="$4" \
         -f .github/integration/scripts/charts/values.yaml \
         --wait
 fi
