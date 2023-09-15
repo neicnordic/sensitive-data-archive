@@ -136,7 +136,7 @@ type IngestionUserError struct {
 type IngestionVerification struct {
 	User               string      `json:"user"`
 	FilePath           string      `json:"filepath"`
-	FileID             int64       `json:"file_id"`
+	FileID             string      `json:"file_id"`
 	ArchivePath        string      `json:"archive_path"`
 	EncryptedChecksums []Checksums `json:"encrypted_checksums"`
 	ReVerify           bool        `json:"re_verify"`
