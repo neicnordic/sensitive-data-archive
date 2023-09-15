@@ -7,7 +7,31 @@ env:
   svc_list: 'finalize inbox ingest mapper verify'
 
 jobs:
+  check_changes:
+    outputs:
+      sda-auth: ${{ steps.changes.outputs.sda-auth }}
+      sda-download: ${{ steps.changes.outputs.sda-download }}
+      sda-pipeline: ${{ steps.changes.outputs.sda-pipeline }}
+      sftp-inbox: ${{ steps.changes.outputs.sftp-inbox }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            sda-auth:
+              - 'sda-auth/**'
+            sda-download:
+              - 'sda-download/**'
+            sda-pipeline:
+              - 'sda-pipeline/**'
+            sftp-inbox:
+            - 'sftp-inbox/**'
+
   sda-auth:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda-auth == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -38,6 +62,8 @@ jobs:
         run: tox -e unit_tests -c sda-auth/tests/tox.ini
 
   sda-download:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda-download == 'true'
     name: sda-download-integration-${{ matrix.storagetype }}
     runs-on: ubuntu-latest
     env:
@@ -73,6 +99,8 @@ jobs:
           done
 
   sda-pipeline:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda-pipeline == 'true'
     name: sda-pipeline-integration-${{ matrix.storagetype }}
     runs-on: ubuntu-latest
     env:
@@ -108,6 +136,8 @@ jobs:
           done
 
   sftp-inbox:
+    needs: check_changes
+    if: needs.check_changes.outputs.sftp-inbox == 'true'
     runs-on: ubuntu-latest
 
     steps:
