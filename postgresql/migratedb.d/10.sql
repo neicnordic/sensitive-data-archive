@@ -43,6 +43,9 @@ BEGIN
 
     GRANT base TO download, inbox, ingest, finalize, mapper, verify;
 
+    -- Drop temporary user creation function
+    DROP FUNCTION create_role_if_not_exists;
+
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;
