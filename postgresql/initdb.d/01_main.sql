@@ -23,7 +23,8 @@ VALUES (0, now(), 'Created with version'),
        (6, now(), 'Add created_at field to datasets'),
        (7, now(), 'Add permissions to mapper to files'),
        (8, now(), 'Add ingestion functions'),
-       (9, now(), 'Add dataset event log');
+       (9, now(), 'Add dataset event log'),
+       (10, now(), 'Create Inbox user');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level

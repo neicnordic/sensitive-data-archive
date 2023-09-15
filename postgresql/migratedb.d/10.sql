@@ -41,7 +41,10 @@ BEGIN
     GRANT INSERT, SELECT ON local_ega.main_to_files TO inbox;
     GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO inbox;
 
-    GRANT base TO download, inbox, ingest, finalize, mapper, verify
+    GRANT base TO download, inbox, ingest, finalize, mapper, verify;
+
+    -- Drop temporary user creation function
+    DROP FUNCTION create_role_if_not_exists;
 
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
