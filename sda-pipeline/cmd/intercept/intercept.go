@@ -124,7 +124,7 @@ func main() {
 			}
 
 			routing := map[string]string{
-				msgAccession: "accessionIDs",
+				msgAccession: "accession",
 				msgCancel:    "ingest",
 				msgIngest:    "ingest",
 				msgMapping:   "mappings",

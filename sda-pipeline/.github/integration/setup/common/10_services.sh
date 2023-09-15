@@ -8,6 +8,10 @@ cd dev_utils || exit 1
 if [ "$STORAGETYPE" = s3notls ]; then
     docker-compose -f compose-no-tls.yml up -d
 
+    curl -u test:test -H "content-type:application/json" \
+    -X POST -d'{"routing_key":"accession","arguments":{}}' \
+    http://localhost:15672/api/bindings/test/e/sda/q/accessionIDs
+
     RETRY_TIMES=0
     for p in db mq s3 ingest verify finalize mapper intercept; do
         until docker ps -f name="$p" --format "{{.Status}}" | grep "Up"
@@ -26,6 +30,10 @@ elif [ "$STORAGETYPE" = s3notlsheader ]; then
     sed -i 's/copyHeader: "false"/copyHeader: "true"/g' config-notls.yaml
 
     docker-compose -f compose-no-tls.yml up -d
+
+    curl -u test:test -H "content-type:application/json" \
+    -X POST -d'{"routing_key":"accession","arguments":{}}' \
+    http://localhost:15672/api/bindings/test/e/sda/q/accessionIDs
 
     RETRY_TIMES=0
     for p in db mq s3 ingest verify finalize mapper intercept; do
@@ -77,6 +85,10 @@ else
             sleep 10
         done
     done
+
+    curl -k -u test:test -H "content-type:application/json" \
+    -X POST -d'{"routing_key":"accession","arguments":{}}' \
+    https://localhost:15672/api/bindings/test/e/sda/q/accessionIDs
 
     docker-compose -f compose-sda.yml up -d
 
