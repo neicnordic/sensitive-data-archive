@@ -5,18 +5,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
+var db *database.SDAdb
+var archive, backup storage.Backend
+var conf *config.Config
+var err error
+var message schema.IngestionAccession
+
 func main() {
 	forever := make(chan bool)
-	conf, err := config.NewConfig("finalize")
+	conf, err = config.NewConfig("finalize")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,9 +33,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := database.NewSDAdb(conf.Database)
+	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if conf.Backup.Type != "" && conf.Archive.Type != "" {
+		log.Debugln("initiating storage backends")
+		backup, err = storage.NewBackend(conf.Backup)
+		if err != nil {
+			log.Fatal(err)
+		}
+		archive, err = storage.NewBackend(conf.Archive)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	defer mq.Channel.Close()
@@ -46,8 +67,6 @@ func main() {
 	}()
 
 	log.Info("Starting finalize service")
-	var message schema.IngestionAccession
-
 	go func() {
 		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
@@ -113,6 +132,17 @@ func main() {
 				continue
 			}
 
+			if conf.Backup.Type != "" && conf.Archive.Type != "" {
+				if err = backupFile(delivered); err != nil {
+					log.Errorf("Failed to backup file with corrID: %v, reason: %v", delivered.CorrelationId, err)
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%v)", err)
+					}
+
+					continue
+				}
+			}
+
 			fileID, err := db.GetFileID(delivered.CorrelationId)
 			if err != nil {
 				log.Errorf("failed to get ID for file, reason: %v", err)
@@ -170,4 +200,62 @@ func main() {
 	}()
 
 	<-forever
+}
+
+func backupFile(delivered amqp.Delivery) error {
+	log.Debug("Backup initiated")
+	var checksumSha256 string
+
+	for _, checksum := range message.DecryptedChecksums {
+		if checksum.Type == "sha256" {
+			checksumSha256 = checksum.Value
+		}
+	}
+
+	filePath, fileSize, err := db.GetArchived(message.User, message.FilePath, checksumSha256)
+	if err != nil {
+		return fmt.Errorf("failed to get file archive information, reason: %v", err)
+	}
+
+	// Get size on disk, will also give some time for the file to appear if it has not already
+	diskFileSize, err := archive.GetFileSize(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
+	}
+
+	if diskFileSize != int64(fileSize) {
+		return fmt.Errorf("file size in archive does not match database for archive file")
+	}
+
+	file, err := archive.NewFileReader(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open archived file, reason: %v", err)
+	}
+	defer file.Close()
+
+	dest, err := backup.NewFileWriter(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
+	}
+	defer dest.Close()
+
+	// Copy the file and check is sizes match
+	copiedSize, err := io.Copy(dest, file)
+	if err != nil || copiedSize != int64(fileSize) {
+		log.Errorf("failed to copy file, reason: %v)", err)
+	}
+
+	fileID, err := db.GetFileID(delivered.CorrelationId)
+	if err != nil {
+		return fmt.Errorf("failed to get ID for file, reason: %v", err)
+	}
+
+	// Mark file as "backed up"
+	if err := db.UpdateFileStatus(fileID, "backed up", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
+		return fmt.Errorf("MarkCompleted failed, reason: (%v)", err)
+	}
+
+	log.Debug("Backup completed")
+
+	return nil
 }
