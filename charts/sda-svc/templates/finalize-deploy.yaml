@@ -66,6 +66,56 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
         env:
+{{- if .Values.global.backupArchive.storageType }}
+        - name: ARCHIVE_TYPE
+  {{- if eq "s3" .Values.global.archive.storageType }}
+          value: "s3"
+        - name: ARCHIVE_URL
+          value: {{ required "S3 archive URL missing" .Values.global.archive.s3Url }}
+    {{- if .Values.global.archive.s3Port }}
+        - name: ARCHIVE_PORT
+          value: {{ .Values.global.archive.s3Port | quote }}
+    {{- end }}
+        - name: ARCHIVE_BUCKET
+          value: {{ required "S3 archive bucket missing" .Values.global.archive.s3Bucket }}
+        - name: ARCHIVE_REGION
+          value: {{ default "us-east-1" .Values.global.archive.s3Region }}
+        - name: ARCHIVE_CHUNKSIZE
+          value: {{ .Values.global.archive.s3ChunkSize | quote }}
+    {{- if and .Values.global.archive.s3CaFile .Values.global.tls.enabled }}
+        - name: ARCHIVE_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+    {{- end }}
+  {{- else }}
+          value: "posix"
+        - name: ARCHIVE_LOCATION
+          value: "{{ .Values.global.archive.volumePath }}"
+  {{- end }}
+        - name: BACKUP_TYPE
+  {{- if eq "s3" .Values.global.backupArchive.storageType }}
+          value: "s3"
+        - name: BACKUP_URL
+          value: {{ required "S3 backup archive URL missing" .Values.global.backupArchive.s3Url }}
+      {{- if .Values.global.backupArchive.s3Port }}
+        - name: BACKUP_PORT
+          value: {{ .Values.global.backupArchive.s3Port | quote }}
+      {{- end }}
+        - name: BACKUP_BUCKET
+          value: {{ required "S3 backup archive bucket missing" .Values.global.backupArchive.s3Bucket }}
+        - name: BACKUP_REGION
+          value: {{ default "us-east-1" .Values.global.backupArchive.s3Region }}
+        - name: BACKUP_CHUNKSIZE
+          value: {{ .Values.global.backupArchive.s3ChunkSize | quote }}
+    {{- if and .Values.global.backupArchive.s3CaFile .Values.global.tls.enabled }}
+        - name: BACKUP_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+    {{- end }}
+  {{- else }}
+          value: "posix"
+        - name: BACKUP_LOCATION
+          value: "{{ .Values.global.backupArchive.volumePath }}"
+  {{- end }}
+{{- end }}
         - name: BROKER_DURABLE
           value: {{ .Values.global.broker.durable | quote }}
         - name: BROKER_EXCHANGE
@@ -81,14 +131,14 @@ spec:
         - name: BROKER_ROUTINGERROR
           value: {{ .Values.global.broker.routingError }}
         - name: BROKER_ROUTINGKEY
-          value: {{ ternary .Values.global.broker.backupRoutingKey "completed" (.Values.backup.deploy) }}
+          value: "completed"
         - name: BROKER_VHOST
           value: {{ .Values.global.broker.vhost | quote }}
         - name: BROKER_SERVERNAME
           value: {{ .Values.global.broker.host | quote }}
         - name: BROKER_SSL
           value: {{ .Values.global.tls.enabled | quote }}
-        {{- if .Values.global.tls.enabled }}
+      {{- if .Values.global.tls.enabled }}
         - name: BROKER_VERIFYPEER
           value: {{ .Values.global.broker.verifyPeer | quote }}
         - name: BROKER_CACERT
@@ -111,7 +161,7 @@ spec:
         {{- end }}
       {{- end }}
         - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
+          value: {{ default "sda" .Values.global.db.name | quote }}
         - name: DB_HOST
           value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
         - name: DB_PORT
@@ -128,7 +178,31 @@ spec:
       {{- end }}
         - name: SCHEMA_TYPE
           value: {{ default "federated" .Values.global.schemaType }}
-      {{- if not .Values.global.vaultSecrets }}
+    {{- if not .Values.global.vaultSecrets }}
+      {{- if eq "s3" .Values.global.archive.storageType }}
+        - name: ARCHIVE_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveAccessKey
+        - name: ARCHIVE_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveSecretKey
+      {{- end }}
+      {{- if eq "s3" .Values.global.backupArchive.storageType }}
+        - name: BACKUP_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3backup-keys
+              key: s3BackupAccessKey
+        - name: BACKUP_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3backup-keys
+              key: s3BackupSecretKey
+      {{- end }}
         - name: BROKER_PASSWORD
           valueFrom:
               secretKeyRef:
@@ -149,17 +223,27 @@ spec:
               secretKeyRef:
                 name: {{ template "sda.fullname" . }}-finalize
                 key: dbUser
-      {{ else }}
+    {{ else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
+    {{- end }}
         resources:
 {{ toYaml .Values.finalize.resources | trim | indent 10 }}
-  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         volumeMounts:
+    {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
           mountPath: {{ template "tlsPath" . }}
+    {{- end }}
+    {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+          mountPath: {{ .Values.global.archive.volumePath | quote }}
+    {{- end }}
+    {{- if eq "posix" .Values.global.backupArchive.storageType }}
+        - name: backup
+          mountPath: {{ .Values.global.backupArchive.volumePath | quote }}
+    {{- end }}
       volumes:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
           projected:
             sources:
@@ -170,12 +254,34 @@ spec:
             - secret:
                 name: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
             {{- end }}
-      {{- if .Values.global.pkiPermissions }}
+        {{- if .Values.global.pkiPermissions }}
         - name: tls
           emptyDir:
             medium: Memory
             sizeLimit: 10Mi
+        {{- end }}
       {{- end }}
-    {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+        {{- if .Values.global.archive.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.archive.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
+            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.backupArchive.storageType }}
+        - name: backup
+        {{- if .Values.global.backupArchive.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.backupArchive.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An backup NFS server is required" .Values.global.backupArchive.nfsServer | quote }}
+            path: {{ if .Values.global.backupArchive.nfsPath }}{{ .Values.global.backupArchive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
       restartPolicy: Always
 {{- end }}
