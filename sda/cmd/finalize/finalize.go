@@ -81,14 +81,6 @@ func main() {
 				continue
 			}
 
-			// Extract the sha256 from the message and use it for the database
-			var checksumSha256 string
-			for _, checksum := range message.DecryptedChecksums {
-				if checksum.Type == "sha256" {
-					checksumSha256 = checksum.Value
-				}
-			}
-
 			accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID)
 			if err != nil {
 				log.Errorf("CheckAccessionIdExists failed, reason: %v ", err)
@@ -119,7 +111,6 @@ func main() {
 				}
 
 				continue
-
 			}
 
 			fileID, err := db.GetFileID(delivered.CorrelationId)
@@ -132,7 +123,7 @@ func main() {
 				continue
 			}
 
-			if err := db.SetAccessionID(message.AccessionID, message.User, message.FilePath, checksumSha256); err != nil {
+			if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
 				log.Errorf("Failed to set accessionID for file with corrID: %v, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
