@@ -124,6 +124,19 @@ entries:
     version: 0.4.6
   sda-svc:
   - apiVersion: v2
+    created: "2023-09-18T07:54:07.921000409Z"
+    description: Components for Sensitive Data Archive (SDA) installation
+    digest: a41964e251a2707d93eb4c295ae050f1d08ead975466a803a93e861c786723ff
+    home: https://neic-sda.readthedocs.io
+    icon: https://neic.no/assets/images/logo.png
+    kubeVersion: '>= 1.19.0-0'
+    name: sda-svc
+    sources:
+    - https://github.com/neicnordic/sensitive-data-archive
+    urls:
+    - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-svc-0.20.6/sda-svc-0.20.6.tgz
+    version: 0.20.6
+  - apiVersion: v2
     created: "2023-09-15T12:56:25.013458081Z"
     description: Components for Sensitive Data Archive (SDA) installation
     digest: ce1f1ce0a3d30aa5a18a8f75b47830ddcd6e15d7b8c5756e7a4ce596aa7163e7
@@ -214,4 +227,4 @@ entries:
     urls:
     - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-svc-0.18.9/sda-svc-0.18.9.tgz
     version: 0.18.9
-generated: "2023-09-15T12:56:25.013553183Z"
+generated: "2023-09-18T07:54:07.921208912Z"
