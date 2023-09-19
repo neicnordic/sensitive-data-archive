@@ -30,7 +30,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for sda-auth
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./sda-auth
           push: true
@@ -43,7 +43,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for sda-download
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./sda-download
           push: true
@@ -56,7 +56,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for sda-pipeline
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./sda-pipeline
           push: true
@@ -69,7 +69,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for sensitive-data-archive
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./sda
           push: true
@@ -100,7 +100,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for postgres
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./postgresql
           push: true
@@ -113,7 +113,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for rabbitmq
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./rabbitmq
           push: true
@@ -174,7 +174,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for sda-sftp-inbox
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./sda-sftp-inbox
           push: true
