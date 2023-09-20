@@ -21,9 +21,16 @@ if [ "$status" -eq 0 ]; then
     exit 1
 fi
 
+## verify that migrations worked
+migratedb=$(find /migratedb.d/ -name "*.sql" -printf '%f\n' |  sort -n | tail -1 | cut -d '.' -f1)
+version=$(psql -U postgres -h migrate -d sda -At -c "select max(version) from sda.dbschema_version;")
+if [ "$version" -ne "$migratedb" ]; then
+    echo "Migration scripts failed"
+    exit 1
+fi
+
 ## verify all users can connect
 for u in download finalize inbox ingest mapper sync verify; do
     export PGPASSWORD="$u"
     psql -U "$u" -h postgres -d sda -At -c "SELECT version();" 1>/dev/null
 done
-
