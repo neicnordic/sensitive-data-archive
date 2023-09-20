@@ -231,12 +231,15 @@ jobs:
       - build_go_images
       - build_server_images
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        storage: ["posix", "s3"]
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
       - name: Test sensitive-data-archive
-        run: docker compose -f .github/integration/sda-integration.yml run integration_test
+        run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
 
   chart:
     needs:

@@ -146,6 +146,7 @@ services:
         condition: service_started
     environment:
       - PGPASSWORD=rootpasswd
+      - STORAGETYPE=s3
     image: python:3.10-slim-bullseye
     profiles:
       - tests
