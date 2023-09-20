@@ -110,7 +110,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 	}
 
 	path := strings.Split(str.Path, "/")
-
 	if len(path) < 2 {
 		return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
 	}
