@@ -107,6 +107,13 @@ func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {
 
 	r, _ := http.NewRequest("", "/", nil)
 	r.Host = "localhost"
+
+	// Test error from non-JWT token
+	r.Header.Set("X-Amz-Security-Token", "notJWT")
+	r.URL.Path = "/dummy/"
+	_, err = a.Authenticate(r)
+	assert.Error(t, err)
+
 	r.Header.Set("X-Amz-Security-Token", defaultToken)
 
 	// Test that a user can access their own bucket
@@ -115,6 +122,12 @@ func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {
 	token, err := a.Authenticate(r)
 	assert.Nil(t, err)
 	assert.Equal(t, token["pilot"], helper.DefaultTokenClaims["pilot"])
+
+	// Test that an unexpected path gives an error
+	r.URL.Path = "error"
+	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
+	_, err = a.Authenticate(r)
+	assert.Error(t, err)
 
 	// Test that a valid user can't access someone elses bucket
 	r.URL.Path = "/notvalid/"

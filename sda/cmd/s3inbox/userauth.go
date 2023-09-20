@@ -59,6 +59,11 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 	}
 
 	token, err := jwt.Parse(tokenStr, func(tokenStr *jwt.Token) (interface{}, error) { return nil, nil })
+	if token == nil {
+		// We see errors unexpectedly at times, so regard token instead
+		return nil, fmt.Errorf("failed to parse token, not JWT? error: %s", err)
+	}
+
 	// Return error if token is broken (without claims)
 	if claims, ok = token.Claims.(jwt.MapClaims); !ok {
 		return nil, fmt.Errorf("broken token (claims are empty): %v\nerror: %s", claims, err)
@@ -105,6 +110,11 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 	}
 
 	path := strings.Split(str.Path, "/")
+
+	if len(path) < 2 {
+		return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
+	}
+
 	username := path[1]
 
 	// Case for Elixir and CEGA usernames: Replace @ with _ character
