@@ -38,10 +38,10 @@ BEGIN
         UPDATE sda.files SET decrypted_file_size = descrypted_size WHERE id = file_uuid;
 
         INSERT INTO sda.checksums(file_id, checksum, type, source)
-        VALUES(fid, archive_checksum, upper(archive_checksum_type)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source);
+        VALUES(file_uuid, archive_checksum, upper(archive_checksum_type)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source);
 
         INSERT INTO sda.checksums(file_id, checksum, type, source)
-        VALUES(fid, decrypted_checksum, upper(decrypted_checksum_type)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source);
+        VALUES(file_uuid, decrypted_checksum, upper(decrypted_checksum_type)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source);
 
         INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES(file_uuid, 'verified', corr_id);
     END;
