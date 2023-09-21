@@ -157,9 +157,9 @@ global:
     # @param corsCreds, allow credentials in the request, cors is disabled if false
     corsCreds: false
     # @param infoText, name of the project
-    infoText:
+    infoText: "Example project"
     # @param inforURL, URL of the project
-    inforURL:
+    inforURL: " https://example.com/project"
 
   broker:
     durable: true
