@@ -22,5 +22,5 @@ jwtIssuer: "http://auth:8080"
 jwtPrivateKey: "keys/sign-jwt.key"
 jwtSignatureAlg: "ES256"
 resignJwt: true
-infoText: "About LEGA"
-infoUrl: "https://elixir-europe.org/internal-projects/staff-exchange-programme/localfederated-ega"
+infoText: "About Federated EGA"
+infoUrl: "https://ega-archive.org/about/projects-and-funders/federated-ega/"
