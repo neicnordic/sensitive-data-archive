@@ -156,6 +156,10 @@ global:
     corsMethods: ""
     # @param corsCreds, allow credentials in the request, cors is disabled if false
     corsCreds: false
+    # @param infoText, name of the project
+    infoText:
+    # @param inforURL, URL of the project
+    inforURL:
 
   broker:
     durable: true

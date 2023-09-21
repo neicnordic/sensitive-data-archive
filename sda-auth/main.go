@@ -68,6 +68,8 @@ func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
 // getMain returns the index.html page
 func (auth AuthHandler) getMain(ctx iris.Context) {
 
+	ctx.ViewData("infoUrl", auth.Config.InfoURL)
+	ctx.ViewData("infoText", auth.Config.InfoText)
 	err := ctx.View("index.html")
 	if err != nil {
 		log.Error("Failed to view index page: ", err)

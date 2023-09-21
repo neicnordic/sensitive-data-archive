@@ -141,6 +141,10 @@ spec:
         {{- end }}
         - name: S3INBOX
           value: {{ .Values.global.ingress.hostName.s3Inbox }}
+        - name: INFOTEXT
+          value: {{ .Values.global.auth.infoText }}
+        - name: INFOURL
+          value: {{ .Values.global.auth.inforURL }}
         ports:
         - name: auth
           containerPort: 8080
