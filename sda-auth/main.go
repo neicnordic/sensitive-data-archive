@@ -68,6 +68,8 @@ func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
 // getMain returns the index.html page
 func (auth AuthHandler) getMain(ctx iris.Context) {
 
+	ctx.ViewData("infoUrl", auth.Config.InfoURL)
+	ctx.ViewData("infoText", auth.Config.InfoText)
 	err := ctx.View("index.html")
 	if err != nil {
 		log.Error("Failed to view index page: ", err)
@@ -150,6 +152,8 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
 			idStruct := EGAIdentity{User: username, Token: token, ExpDate: expDate}
 			s.SetFlash("ega", s3conf)
+			ctx.ViewData("infoUrl", auth.Config.InfoURL)
+			ctx.ViewData("infoText", auth.Config.InfoText)
 			err = ctx.View("ega.html", idStruct)
 			if err != nil {
 				log.Error("Failed to parse response: ", err)
@@ -181,6 +185,8 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 	s := sessions.Get(ctx)
 	message := s.GetFlashString("message")
 	if message == "" {
+		ctx.ViewData("infoUrl", auth.Config.InfoURL)
+		ctx.ViewData("infoText", auth.Config.InfoText)
 		err := ctx.View("loginform.html")
 		if err != nil {
 			log.Error("Failed to return to login form: ", err)
@@ -190,6 +196,8 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 
 		return
 	}
+	ctx.ViewData("infoUrl", auth.Config.InfoURL)
+	ctx.ViewData("infoText", auth.Config.InfoText)
 	err := ctx.View("loginform.html", EGALoginError{Reason: message})
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
@@ -284,6 +292,8 @@ func (auth AuthHandler) getElixirLogin(ctx iris.Context) {
 
 	s := sessions.Get(ctx)
 	s.SetFlash("elixir", oidcData.S3Conf)
+	ctx.ViewData("infoUrl", auth.Config.InfoURL)
+	ctx.ViewData("infoText", auth.Config.InfoText)
 	err := ctx.View("elixir.html", oidcData.ElixirID)
 	if err != nil {
 		log.Error("Failed to view login form: ", err)

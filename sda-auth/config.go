@@ -53,6 +53,8 @@ type Config struct {
 	Server          ServerConfig
 	S3Inbox         string
 	ResignJwt       bool
+	InfoURL         string
+	InfoText        string
 }
 
 // NewConfig initializes and parses the config file and/or environment using
@@ -90,6 +92,8 @@ func (c *Config) readConfig() error {
 	c.JwtPrivateKey = viper.GetString("JwtPrivateKey")
 	c.JwtSignatureAlg = viper.GetString("JwtSignatureAlg")
 	c.JwtIssuer = viper.GetString("jwtIssuer")
+	c.InfoURL = viper.GetString("infoUrl")
+	c.InfoText = viper.GetString("infoText")
 
 	viper.SetDefault("ResignJwt", true)
 	c.ResignJwt = viper.GetBool("resignJwt")
