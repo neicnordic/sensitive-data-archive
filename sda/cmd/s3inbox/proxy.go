@@ -10,13 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -125,7 +125,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	username := fmt.Sprintf("%v", claims["sub"])
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
-	filepath, err := helper.FormatUploadFilePath(rawFilepath)
+	filepath, err := formatUploadFilePath(rawFilepath)
 	if err != nil {
 		log.Debugf(err.Error())
 		w.WriteHeader(http.StatusNotAcceptable)
@@ -476,4 +476,28 @@ func (p *Proxy) newSession() (*session.Session, error) {
 	}
 
 	return mySession, nil
+}
+
+// FormatUploadFilePath ensures that path separators are "/", and returns error if the
+// filepath contains a disallowed character matched with regex
+func formatUploadFilePath(filePath string) (string, error) {
+
+	// Check for mixed "\" and "/" in filepath. Stop and throw an error if true so that
+	// we do not end up with unintended folder structure when applying ReplaceAll below
+	if strings.Contains(filePath, "\\") && strings.Contains(filePath, "/") {
+		return filePath, fmt.Errorf("filepath contains mixed '\\' and '/' characters")
+	}
+
+	// make any windows path separators linux compatible
+	outPath := strings.ReplaceAll(filePath, "\\", "/")
+
+	// [\x00-\x1F\x7F] is the control character set
+	re := regexp.MustCompile(`[\\:\*\?"<>\|\x00-\x1F\x7F]`)
+
+	dissallowedChars := re.FindAllString(outPath, -1)
+	if dissallowedChars != nil {
+		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(dissallowedChars, ", "))
+	}
+
+	return outPath, nil
 }

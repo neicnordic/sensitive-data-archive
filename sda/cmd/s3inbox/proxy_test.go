@@ -402,3 +402,21 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 		assert.Equal(suite.T(), exists, 1, "File '%v' event does not exist", status)
 	}
 }
+
+func (suite *ProxyTests) TestFormatUploadFilePath() {
+	unixPath := "a/b/c.c4gh"
+	testPath := "a\\b\\c.c4gh"
+	uploadPath, err := formatUploadFilePath(testPath)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), unixPath, uploadPath)
+
+	// mixed "\" and "/"
+	weirdPath := `dq\sw:*?"<>|\t\s/df.c4gh`
+	_, err = formatUploadFilePath(weirdPath)
+	assert.EqualError(suite.T(), err, "filepath contains mixed '\\' and '/' characters")
+
+	// no mixed "\" and "/" but not allowed
+	weirdPath = `dq\sw:*?"<>|\t\sdf.c4gh`
+	_, err = formatUploadFilePath(weirdPath)
+	assert.EqualError(suite.T(), err, "filepath contains disallowed characters: :, *, ?, \", <, >, |")
+}
