@@ -3,7 +3,7 @@ name: Build PR container
 on:
   pull_request:
     paths-ignore:
-      - ".github/**"
+      - ".github/workflows/**"
       - ".gitignore"
       - "**/README.md"
 
