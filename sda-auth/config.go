@@ -174,10 +174,6 @@ func (c *Config) readConfig() error {
 		log.Printf("Setting log level to '%s'", stringLevel)
 	}
 
-	if viper.GetString("s3Inbox") == "" {
-		return fmt.Errorf("%s not set", "s3Inbox")
-	}
-
 	// no need to check the variables for JWT generation if we won't use it
 	if (cega.ID == "" && cega.Secret == "") && !c.ResignJwt {
 		return nil

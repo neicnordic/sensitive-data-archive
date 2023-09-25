@@ -427,6 +427,7 @@ func main() {
 		authHandler.pubKey = hex.EncodeToString(publicKey[:])
 	}
 
+	// Endpoint for client login info
 	if publicKey != nil {
 		app.Get("/info", authHandler.getInfo)
 	}
