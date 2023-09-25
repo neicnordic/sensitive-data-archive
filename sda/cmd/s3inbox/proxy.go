@@ -10,14 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -31,7 +31,7 @@ import (
 
 // Proxy represents the toplevel object in this application
 type Proxy struct {
-	s3        config.S3Config
+	s3        storage.S3Conf
 	auth      Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
@@ -72,7 +72,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf config.S3Config, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf storage.S3Conf, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -125,7 +125,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	username := fmt.Sprintf("%v", claims["sub"])
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
-	filepath, err := helper.FormatUploadFilePath(rawFilepath)
+	filepath, err := formatUploadFilePath(rawFilepath)
 	if err != nil {
 		log.Debugf(err.Error())
 		w.WriteHeader(http.StatusNotAcceptable)
@@ -177,7 +177,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case false:
-			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, true, jsonMessage); err != nil {
+			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 				log.Debug("error when sending message")
 				log.Error(err)
 			}
@@ -245,10 +245,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
-	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, p.s3.URL)
+	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3.URL+r.URL.String(), r.Body)
+	nr, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)+r.URL.String(), r.Body)
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -454,7 +454,7 @@ func (p *Proxy) newSession() (*session.Session, error) {
 			CustomCABundle: cacert,
 			Config: aws.Config{
 				Region:           aws.String(p.s3.Region),
-				Endpoint:         aws.String(p.s3.URL),
+				Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
 				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 				S3ForcePathStyle: aws.Bool(true),
 				Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
@@ -465,7 +465,7 @@ func (p *Proxy) newSession() (*session.Session, error) {
 	} else {
 		mySession, err = session.NewSession(&aws.Config{
 			Region:           aws.String(p.s3.Region),
-			Endpoint:         aws.String(p.s3.URL),
+			Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
 			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
 			S3ForcePathStyle: aws.Bool(true),
 			Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
@@ -476,4 +476,28 @@ func (p *Proxy) newSession() (*session.Session, error) {
 	}
 
 	return mySession, nil
+}
+
+// FormatUploadFilePath ensures that path separators are "/", and returns error if the
+// filepath contains a disallowed character matched with regex
+func formatUploadFilePath(filePath string) (string, error) {
+
+	// Check for mixed "\" and "/" in filepath. Stop and throw an error if true so that
+	// we do not end up with unintended folder structure when applying ReplaceAll below
+	if strings.Contains(filePath, "\\") && strings.Contains(filePath, "/") {
+		return filePath, fmt.Errorf("filepath contains mixed '\\' and '/' characters")
+	}
+
+	// make any windows path separators linux compatible
+	outPath := strings.ReplaceAll(filePath, "\\", "/")
+
+	// [\x00-\x1F\x7F] is the control character set
+	re := regexp.MustCompile(`[\\:\*\?"<>\|\x00-\x1F\x7F]`)
+
+	dissallowedChars := re.FindAllString(outPath, -1)
+	if dissallowedChars != nil {
+		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(dissallowedChars, ", "))
+	}
+
+	return outPath, nil
 }

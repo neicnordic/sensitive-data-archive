@@ -10,6 +10,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -28,13 +29,12 @@ func main() {
 		}
 	}()
 
-	c, err := config.NewConfig()
+	Conf, err := config.NewConfig("s3inbox")
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
-	Conf = c
 
 	tlsProxy, err := config.TLSConfigProxy(Conf)
 	if err != nil {
@@ -43,7 +43,7 @@ func main() {
 		panic(err)
 	}
 
-	sdaDB, err := database.NewSDAdb(Conf.DB)
+	sdaDB, err := database.NewSDAdb(Conf.Database)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -57,7 +57,7 @@ func main() {
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 
-	err = checkS3Bucket(Conf.S3)
+	err = storage.CheckS3Bucket(Conf.Inbox.S3.Bucket, storage.CreateS3Session(Conf.Inbox.S3))
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -94,7 +94,7 @@ func main() {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
-	proxy := NewProxy(Conf.S3, auth, messenger, sdaDB, tlsProxy)
+	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
 
 	log.Debug("got the proxy ", proxy)
 

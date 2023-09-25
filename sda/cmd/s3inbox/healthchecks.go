@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
-
 	"github.com/heptiolabs/healthcheck"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 )
 
 // HealthCheck registers and endpoint for healthchecking the service
@@ -25,9 +24,12 @@ type HealthCheck struct {
 // NewHealthCheck creates a new healthchecker. It needs to know where to find
 // the backend S3 storage and the Message Broker so it can report readiness.
 func NewHealthCheck(port int, db *sql.DB, conf *config.Config, tlsConfig *tls.Config) *HealthCheck {
-	s3URL := conf.S3.URL
-	if conf.S3.Readypath != "" {
-		s3URL = conf.S3.URL + conf.S3.Readypath
+	s3URL := conf.Inbox.S3.URL
+	if conf.Inbox.S3.Port != 0 {
+		s3URL = fmt.Sprintf("%s:%d", s3URL, conf.Inbox.S3.Port)
+	}
+	if conf.Inbox.S3.Readypath != "" {
+		s3URL += conf.Inbox.S3.Readypath
 	}
 
 	brokerURL := fmt.Sprintf("%s:%d", conf.Broker.Host, conf.Broker.Port)

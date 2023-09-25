@@ -289,14 +289,6 @@ Create chart name and version as used by the chart label.
   {{- end -}}
 {{- end -}}
 
-{{- define "S3InboxURL" -}}
-  {{- if .Values.global.inbox.s3Port }}
-    {{- printf "%s:%v" .Values.global.inbox.s3Url .Values.global.inbox.s3Port }}
-  {{- else }}
-    {{- printf "%s" .Values.global.inbox.s3Url }}
-  {{- end }}
-{{- end -}}
-
 {{- define "S3ArchiveURL" -}}
   {{- if .Values.global.inbox.s3Port }}
     {{- printf "%s:%v" .Values.global.inbox.s3Url .Values.global.inbox.s3Port }}

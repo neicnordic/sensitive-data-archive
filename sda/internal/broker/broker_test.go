@@ -120,15 +120,14 @@ func (suite *BrokerTestSuite) SetupTest() {
 		"ingest",
 		"amq.default",
 		"ingest",
-		"error",
 		false,
 		false,
 		certPath + "/ca.crt",
 		certPath + "/tls.crt",
 		certPath + "/tls.key",
 		"mq",
-		true,
 		"",
+		2,
 	}
 }
 
@@ -231,7 +230,7 @@ func (suite *BrokerTestSuite) TestSendMessage() {
 	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(suite.T(), b.Connection.IsClosed())
 
-	err = b.SendMessage("1", "", "ingest", true, []byte("test message"))
+	err = b.SendMessage("1", "", "ingest", []byte("test message"))
 	assert.NoError(suite.T(), err)
 
 	b.Channel.Close()

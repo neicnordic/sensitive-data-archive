@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +22,7 @@ import (
 
 type ProxyTests struct {
 	suite.Suite
-	S3conf     config.S3Config
+	S3conf     storage.S3Conf
 	DBConf     database.DBConf
 	fakeServer *FakeServer
 	MQConf     broker.MQConf
@@ -40,8 +40,9 @@ func (suite *ProxyTests) SetupTest() {
 	suite.fakeServer = startFakeServer("9024")
 
 	// Create an s3config for the fake server
-	suite.S3conf = config.S3Config{
-		URL:       "http://127.0.0.1:9024",
+	suite.S3conf = storage.S3Conf{
+		URL:       "http://127.0.0.1",
+		Port:      9024,
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",
@@ -210,7 +211,7 @@ func (suite *ProxyTests) TestServeHTTP_disallowed() {
 }
 
 func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
-	s3conf := config.S3Config{
+	s3conf := storage.S3Conf{
 		URL:       "http://localhost:40211",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
@@ -400,4 +401,22 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 		assert.Nil(suite.T(), err, "Failed to find '%v' event in database", status)
 		assert.Equal(suite.T(), exists, 1, "File '%v' event does not exist", status)
 	}
+}
+
+func (suite *ProxyTests) TestFormatUploadFilePath() {
+	unixPath := "a/b/c.c4gh"
+	testPath := "a\\b\\c.c4gh"
+	uploadPath, err := formatUploadFilePath(testPath)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), unixPath, uploadPath)
+
+	// mixed "\" and "/"
+	weirdPath := `dq\sw:*?"<>|\t\s/df.c4gh`
+	_, err = formatUploadFilePath(weirdPath)
+	assert.EqualError(suite.T(), err, "filepath contains mixed '\\' and '/' characters")
+
+	// no mixed "\" and "/" but not allowed
+	weirdPath = `dq\sw:*?"<>|\t\sdf.c4gh`
+	_, err = formatUploadFilePath(weirdPath)
+	assert.EqualError(suite.T(), err, "filepath contains disallowed characters: :, *, ?, \", <, >, |")
 }

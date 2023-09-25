@@ -1,7 +1,8 @@
 log:
   format: "json"
-aws:
-  url: "http://s3:9000"
+inbox:
+  url: "http://s3"
+  port: 9000
   readypath: "/minio/health/ready"
   accessKey: "access"
   secretKey: "secretKey"
