@@ -6,23 +6,24 @@ DECLARE
   sourcever INTEGER := 8;
   changes VARCHAR := 'Add dataset event log';
 BEGIN
+  SET search_path TO sda;
   IF (select max(version) from sda.dbschema_version) = sourcever then
     RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;
     RAISE NOTICE 'Changes: %', changes;
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
-    CREATE TABLE dataset_events (
+    CREATE TABLE sda.dataset_events (
         id          SERIAL PRIMARY KEY,
         title       VARCHAR(64) UNIQUE, -- short name of the action
         description TEXT
     );
 
-    INSERT INTO dataset_events(id,title,description)
+    INSERT INTO sda.dataset_events(id,title,description)
     VALUES (10, 'registered', 'Register a dataset to recieve file accession IDs mappings.'),
            (20, 'released'  , 'The dataset is released on this date'),
            (30, 'deprecated', 'The dataset is deprecated on this date');
 
-    CREATE TABLE dataset_event_log (
+    CREATE TABLE sda.dataset_event_log (
         id         SERIAL PRIMARY KEY,
         dataset_id TEXT REFERENCES datasets(stable_id),
         event      TEXT REFERENCES dataset_events(title),

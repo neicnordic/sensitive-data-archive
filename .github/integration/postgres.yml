@@ -26,6 +26,39 @@ services:
     volumes:
       - ./scripts:/scripts
 
+  migration_helper:
+    container_name: helper
+    command:
+      - /usr/bin/tar
+      - -zxf
+      - /pgdata.tgz
+      - -C
+      - /pgdata/
+    image: ubuntu:jammy
+    user: 70:70
+    volumes:
+      - pgmigrate:/pgdata
+      - ./tests/postgres/pgdata.tgz:/pgdata.tgz
+
+  migrate:
+    container_name: migrate
+    depends_on:
+      migration_helper:
+        condition: service_completed_successfully
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "35432:5432"
+    restart: always
+    volumes:
+      - pgmigrate:/var/lib/postgresql/data
+
   postgres:
     build:
       context: ../../postgresql
@@ -80,6 +113,8 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
     image: ubuntu:jammy
@@ -88,9 +123,11 @@ services:
     volumes:
       - ./tests:/tests
       - client_certs:/certs
+      - ../../postgresql/migratedb.d:/migratedb.d
 
 volumes:
   certs:
   client_certs:
   pgdata:
+  pgmigrate:
   pgtlsdata:

@@ -8,10 +8,10 @@ DECLARE
 BEGIN
 -- No explicit transaction handling here, this all happens in a transaction
 -- automatically
-  IF (select max(version) from local_ega.dbschema_version) = sourcever then
+  IF (select max(version) from sda.dbschema_version) = sourcever then
     RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;
     RAISE NOTICE 'Changes: %', changes;
-    INSERT INTO local_ega.dbschema_version VALUES(sourcever+1, now(), changes);
+    INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
     -- Temporary function for creating roles if they do not already exist.
     CREATE FUNCTION create_role_if_not_exists(role_name NAME) RETURNS void AS $created$
@@ -32,7 +32,6 @@ BEGIN
     $created$ LANGUAGE plpgsql;
 
     PERFORM create_role_if_not_exists('inbox');
-    CREATE ROLE inbox;
     GRANT USAGE ON SCHEMA sda TO inbox;
     GRANT SELECT, INSERT, UPDATE ON sda.files TO inbox;
     GRANT SELECT, INSERT ON sda.file_event_log TO inbox;
