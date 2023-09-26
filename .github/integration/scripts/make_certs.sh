@@ -36,14 +36,15 @@ openssl x509 -req -in "$out_dir/mq.csr" -days 1200 -CA "$out_dir/ca.crt" -CAkey 
 openssl req -config "$script_dir/ssl.cnf" -new -nodes -newkey rsa:4096 -keyout "$out_dir/client.key" -out "$out_dir/client.csr" -extensions client_cert -subj "/CN=admin"
 openssl x509 -req -in "$out_dir/client.csr" -days 1200 -CA "$out_dir/ca.crt" -CAkey "$out_dir/ca-key.pem" -set_serial 01 -out "$out_dir/client.crt" -extensions client_cert -extfile "$script_dir/ssl.cnf"
 
-# Create Java keystore
-mkdir -p /certs/java
-if [ -f /certs/java/cacerts ]; then
-    rm /certs/java/cacerts
+if [ -n "$KEYSTORE_PASSWORD" ]; then
+    # Create Java keystore
+    mkdir -p /certs/java
+    if [ -f /certs/java/cacerts ]; then
+        rm /certs/java/cacerts
+    fi
+    keytool -import -trustcacerts -file "$out_dir/ca.crt" -alias CegaCA -storetype JKS -keystore /certs/java/cacerts -storepass "$KEYSTORE_PASSWORD" -noprompt
+    openssl pkcs12 -export -out /certs/java/keystore.p12 -inkey "$out_dir/server.key" -in "$out_dir/server.crt" -passout pass:"$KEYSTORE_PASSWORD"
 fi
-keytool -import -trustcacerts -file "$out_dir/ca.crt" -alias CegaCA -storetype JKS -keystore /certs/java/cacerts -storepass "$KEYSTORE_PASSWORD" -noprompt
-openssl pkcs12 -export -out /certs/java/keystore.p12 -inkey "$out_dir/server.key" -in "$out_dir/server.crt" -passout pass:"$KEYSTORE_PASSWORD"
-
 # fix permissions
 chmod 644 "$out_dir"/*
 
