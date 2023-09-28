@@ -54,12 +54,14 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_NoFile() {
 }
 
 func (suite *UserAuthTest) TestUserTokenAuthenticator_GetFile() {
-	// Create temp demo rsa key pair
-	demoKeysPath := "temp-rsa-keys"
+	demoKeysPath := "temp-keys"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
 	assert.NoError(suite.T(), err)
 
 	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
+	assert.NoError(suite.T(), err)
+
+	err = helper.CreateECkeys(prKeyPath, pubKeyPath)
 	assert.NoError(suite.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
@@ -67,6 +69,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_GetFile() {
 	a := NewValidateFromToken(jwk.NewSet())
 	err = a.readJwtPubKeyPath(jwtpubkeypath)
 	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), 2, a.keyset.Len())
 
 	defer os.RemoveAll(demoKeysPath)
 }
