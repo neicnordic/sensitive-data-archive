@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"math/big"
 	"net"
@@ -15,7 +16,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -92,16 +95,20 @@ func MakeFolder(path string) (string, string, error) {
 }
 
 // ParsePrivateRSAKey reads and parses the RSA private key
-func ParsePrivateRSAKey(path, keyName string) (*rsa.PrivateKey, error) {
+func ParsePrivateRSAKey(path, keyName string) (jwk.Key, error) {
 	keyPath := path + keyName
 	prKey, err := os.ReadFile(filepath.Clean(keyPath))
 	if err != nil {
 		return nil, err
 	}
 
-	prKeyParsed, err := jwt.ParseRSAPrivateKeyFromPEM(prKey)
+	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
 	if err != nil {
 		return nil, err
+	}
+
+	if prKeyParsed.KeyType() != "RSA" {
+		return nil, fmt.Errorf("bad key format, expected RSA got %v", prKeyParsed.KeyType())
 	}
 
 	return prKeyParsed, nil
@@ -116,37 +123,18 @@ func CreateRSAkeys(prPath, pubPath string) error {
 	publickey := &privatekey.PublicKey
 
 	// dump private key to file
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privatekey)
-	privateKeyBlock := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
-	privatePem, err := os.Create(prPath + "/dummy.ega.nbis.se")
+	privateKeyBytes, err := jwk.EncodePEM(privatekey)
 	if err != nil {
 		return err
 	}
-	err = pem.Encode(privatePem, privateKeyBlock)
-	if err != nil {
-		return err
-	}
+	os.WriteFile(prPath + "/dummy.ega.nbis.se", privateKeyBytes, 0644)
 
 	// dump public key to file
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publickey)
+	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	publicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	}
-	publicPem, err := os.Create(pubPath + "/dummy.ega.nbis.se.pub")
-	if err != nil {
-		return err
-	}
-	err = pem.Encode(publicPem, publicKeyBlock)
-	if err != nil {
-		return err
-	}
+	os.WriteFile(pubPath + "/dummy.ega.nbis.se.pub", publicKeyBytes, 0644)
 
 	return nil
 }
@@ -196,70 +184,86 @@ func CreateSSHKey(path string) error {
 }
 
 // CreateRSAToken creates an RSA token
-func CreateRSAToken(key *rsa.PrivateKey, headerAlg, headerType string, tokenClaims map[string]interface{}) (string, error) {
-	token := jwt.New(jwt.SigningMethodRS256)
-	token.Header["alg"] = headerAlg
-	token.Header["typ"] = headerType
-	claims := make(jwt.MapClaims)
-	for key, value := range tokenClaims {
-		claims[key] = value
+func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+		return "AssignKeyID failed", err
 	}
-	token.Claims = claims
-	tokenString, err := token.SignedString(key)
+	if err:= jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+		return "Set algorithm failed", err
+	}
+
+	token := jwt.New()
+	for key, value := range tokenClaims {
+		token.Set(key, value)
+	}
+
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
 
-	return tokenString, nil
+	return string(tokenString), nil
 }
 
 // CreateECToken creates an EC token
-func CreateECToken(key *ecdsa.PrivateKey, headerAlg, headerType string, tokenClaims map[string]interface{}) (string, error) {
-	token := jwt.New(jwt.SigningMethodES256)
-	token.Header["alg"] = headerAlg
-	token.Header["typ"] = headerType
-	claims := make(jwt.MapClaims)
-	for key, value := range tokenClaims {
-		claims[key] = value
+func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+		return "AssignKeyID failed", err
 	}
-	token.Claims = claims
-	tokenString, err := token.SignedString(key)
+	if err:= jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+		return "Set algorithm failed", err
+	}
+
+	token := jwt.New()
+	for key, value := range tokenClaims {
+		token.Set(key, value)
+	}
+
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
 
-	return tokenString, nil
+	return string(tokenString), nil
 }
 
 // CreateHSToken creates an HS token
-func CreateHSToken(key []byte, headerAlg, headerType string, tokenClaims map[string]interface{}) (string, error) {
-	token := jwt.New(jwt.SigningMethodHS256)
-	token.Header["alg"] = headerAlg
-	token.Header["typ"] = headerType
-	claims := make(jwt.MapClaims)
+func CreateHSToken(key []byte, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+	token := jwt.New()
 	for key, value := range tokenClaims {
-		claims[key] = value
+		token.Set(key, value)
 	}
-	token.Claims = claims
-	tokenString, err := token.SignedString(key)
+
+	jwtKey, err := jwk.FromRaw(key)
+	if err != nil {
+		return "Create key failed", err
+	}
+	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+		return "AssignKeyID failed", err
+	}
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
 
-	return tokenString, nil
+	return string(tokenString), nil
 }
 
 // ParsePrivateECKey reads and parses the EC private key
-func ParsePrivateECKey(path, keyName string) (*ecdsa.PrivateKey, error) {
+func ParsePrivateECKey(path, keyName string) (jwk.Key, error) {
 	keyPath := path + keyName
 	prKey, err := os.ReadFile(filepath.Clean(keyPath))
 	if err != nil {
 		return nil, err
 	}
 
-	prKeyParsed, err := jwt.ParseECPrivateKeyFromPEM(prKey)
+	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
 	if err != nil {
 		return nil, err
+	}
+
+	if prKeyParsed.KeyType() != "EC" {
+		return nil, fmt.Errorf("bad key format, expected EC got %v", prKeyParsed.KeyType())
 	}
 
 	return prKeyParsed, nil
@@ -274,43 +278,23 @@ func CreateECkeys(prPath, pubPath string) error {
 	publickey := &privatekey.PublicKey
 
 	// dump private key to file
-	privateKeyBytes, _ := x509.MarshalECPrivateKey(privatekey)
-	privateKeyBlock := &pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
-	privatePem, err := os.Create(prPath + "/dummy.ega.nbis.se")
+	privateKeyBytes, err := jwk.EncodePEM(privatekey)
 	if err != nil {
 		return err
 	}
-	err = pem.Encode(privatePem, privateKeyBlock)
-	if err != nil {
-		return err
-	}
+	os.WriteFile(prPath + "/dummy.ega.nbis.se", privateKeyBytes, 0644)
 
 	// dump public key to file
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publickey)
+	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	publicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	}
-	publicPem, err := os.Create(pubPath + "/dummy.ega.nbis.se.pub")
-	if err != nil {
-		return err
-	}
-	err = pem.Encode(publicPem, publicKeyBlock)
-	if err != nil {
-		return err
-	}
+	os.WriteFile(pubPath + "/dummy.ega.nbis.se.pub", publicKeyBytes, 0644)
 
 	return nil
 }
 
 func MakeCerts(outDir string) {
-
 	// set up our CA certificate
 	caTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(2000),

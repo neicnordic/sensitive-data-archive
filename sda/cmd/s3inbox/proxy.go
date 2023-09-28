@@ -15,17 +15,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -122,7 +121,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	log.Debug("prepend")
 	p.prependBucketToHostPath(r)
 
-	username := fmt.Sprintf("%v", claims["sub"])
+	username := claims.Subject()
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
 	filepath, err := formatUploadFilePath(rawFilepath)
@@ -385,7 +384,7 @@ func (p *Proxy) detectRequestType(r *http.Request) S3RequestType {
 
 // CreateMessageFromRequest is a function that can take a http request and
 // figure out the correct rabbitmq message to send from it.
-func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.MapClaims) (Event, error) {
+func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Event, error) {
 	event := Event{}
 	checksum := Checksum{}
 	var err error
@@ -398,10 +397,11 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.MapClaims) 
 	// Case for simple upload
 	event.Operation = "upload"
 	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
-	event.Username = fmt.Sprintf("%v", claims["sub"])
+	event.Username = claims.Subject()
 	checksum.Type = "sha256"
 	event.Checksum = []interface{}{checksum}
-	log.Info("user ", event.Username, " with pilot ", claims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
+	privateClaims := claims.PrivateClaims()
+	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
 
 	return event, nil
 }

@@ -11,11 +11,10 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
-
-	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -143,7 +142,7 @@ func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 type AlwaysDeny struct{}
 
 // Authenticate does not authenticate anyone.
-func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.MapClaims, error) {
+func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.Token, error) {
 	return nil, fmt.Errorf("denied")
 }
 
@@ -240,7 +239,8 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	proxy := NewProxy(suite.S3conf, NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// List files works
-	r, _ := http.NewRequest("GET", "/username/file", nil)
+	r, err := http.NewRequest("GET", "/username/file", nil)
+	assert.NoError(suite.T(), err)
 	w := httptest.NewRecorder()
 	proxy.ServeHTTP(w, r)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
@@ -332,8 +332,9 @@ func (suite *ProxyTests) TestMessageFormatting() {
 	r.Header.Set("content-length", "1234")
 	r.Header.Set("x-amz-content-sha256", "checksum")
 
-	claims := jwt.MapClaims{}
-	claims["sub"] = "user@host.domain"
+	claims := jwt.New()
+	assert.NoError(suite.T(), claims.Set("sub", "user@host.domain"))
+
 
 	// start proxy that denies everything
 	proxy := NewProxy(suite.S3conf, &AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
@@ -354,7 +355,7 @@ func (suite *ProxyTests) TestMessageFormatting() {
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r, nil)
+	msg, err = proxy.CreateMessageFromRequest(r, jwt.New())
 	assert.Nil(suite.T(), err)
 	assert.IsType(suite.T(), Event{}, msg)
 	assert.Equal(suite.T(), "upload", msg.Operation)
