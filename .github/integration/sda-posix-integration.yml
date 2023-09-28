@@ -1,0 +1,187 @@
+services:
+  certfixer:
+    command:
+      - /bin/sh
+      - /scripts/make_certs.sh
+    container_name: certfixer
+    environment:
+      - KEYSTORE_PASSWORD=testingthis
+    image: alpine:latest
+    volumes:
+      - ./scripts:/scripts
+      - certs:/certs
+      - client_certs:/client_certs
+      - /tmp:/temp
+
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "/scripts/make_sda_credentials.sh"
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+      - PGSSLROOTCERT=/certs/ca.crt
+      - PGSSLCERT=/certs/client.crt
+      - PGSSLKEY=/certs/client.key
+    image: ubuntu:jammy
+    volumes:
+      - ./scripts:/scripts
+      - client_certs:/certs
+      - shared:/shared
+
+  cega-nss:
+    container_name: cega-nss
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      credentials:
+        condition: service_completed_successfully
+    command:
+      [
+        "python",
+        "/cega/users.py",
+        "0.0.0.0",
+        "8443",
+        "/shared/users.json"
+      ]
+    environment:
+      - CEGA_USERS_PASSWORD=test
+      - CEGA_USERS_USER=test
+    image: "egarchive/lega-base:release.v0.2.0"
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./sda/users.py:/cega/users.py
+      - certs:/certs
+      - shared:/shared
+
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: postgres
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+      - POSTGRES_SERVER_CACERT=/certs/ca.crt
+      - POSTGRES_SERVER_CERT=/certs/db.crt
+      - POSTGRES_SERVER_KEY=/certs/db.key
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - certs:/certs
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    container_name: rabbitmq
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - RABBITMQ_SERVER_CACERT=/etc/rabbitmq/ssl/ca.crt
+      - RABBITMQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.crt
+      - RABBITMQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
+      - RABBITMQ_SERVER_VERIFY=verify_none
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    ports:
+      - "25671:15671"
+    restart: always
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  inbox:
+    build:
+      context: ../../sda-sftp-inbox
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-sftp-inbox
+    container_name: inbox
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      credentials:
+        condition: service_completed_successfully
+      cega-nss:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_HOST=rabbitmq
+      - BROKER_PASSWORD=inbox
+      - BROKER_PORT=5671
+      - BROKER_ROUTING_KEY=inbox
+      - BROKER_USERNAME=inbox
+      - BROKER_VHOST=sda
+      - CEGA_ENDPOINT=https://cega-nss:8443/username/%s
+      - CEGA_ENDPOINT_CREDS=test:test
+      - KEYSTORE_PATH=/etc/ssl/certs/java/keystore.p12
+      - KEYSTORE_PASSWORD=testingthis
+      - KEYSTORE_TYPE=PKCS12
+      - USE_SSL=true
+    restart: always
+    volumes:
+      - certs:/etc/ssl/certs/:ro
+      - inbox_data:/ega/inbox
+      - shared:/shared
+    ports:
+      - "2222:2222"
+
+  integration_test:
+    container_name: tester
+    command:
+      - "bash"
+      - "/tests/sda/10_upload_test.sh"
+    depends_on:
+      inbox:
+        condition: service_started
+    environment:
+      - PGPASSWORD=rootpasswd
+      - PGSSLROOTCERT=/certs/ca.crt
+      - PGSSLCERT=/certs/client.crt
+      - PGSSLKEY=/certs/client.key
+      - PGSSLMODE=verify-ca
+      - STORAGETYPE=posix
+    image: python:3.10-slim-bullseye
+    profiles:
+      - tests
+    volumes:
+      - client_certs:/certs
+      - shared:/shared
+      - ./tests:/tests
+
+volumes:
+  certs:
+  client_certs:
+  inbox_data:
+  postgres_data:
+  rabbitmq_data:
+  shared:

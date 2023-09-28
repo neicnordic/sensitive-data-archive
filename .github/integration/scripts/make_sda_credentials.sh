@@ -1,8 +1,15 @@
 #!/bin/sh
 set -e
 
+URI=http://rabbitmq:15672
+
+# Postgres requires a client certificate, so this is a simple way of detecting if TLS is enabled or not.
+if [ -n "$PGSSLCERT" ]; then
+    URI=https://rabbitmq:15671
+fi
+
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
-apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssl postgresql-client >/dev/null
+apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client >/dev/null
 
 for n in download finalize inbox ingest mapper sync verify; do
     echo "creating credentials for: $n"
@@ -10,19 +17,20 @@ for n in download finalize inbox ingest mapper sync verify; do
 
     ## password and permissions for MQ
     body_data=$(jq -n -c --arg password "$n" --arg tags none '$ARGS.named')
-    curl -s -u guest:guest -X PUT "http://rabbitmq:15672/api/users/$n" -H "content-type:application/json" -d "${body_data}"
-    curl -s -u guest:guest -X PUT "http://rabbitmq:15672/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":"","write":"sda","read":".*"}'
-
+    curl -s -u guest:guest -X PUT -k "$URI/api/users/$n" -H "content-type:application/json" -d "${body_data}"
+    curl -s -u guest:guest -X PUT -k "$URI/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":"","write":"sda","read":".*"}'
 done
 
 # create EC256 key for signing the JWT tokens
 mkdir -p /shared/keys/pub
 if [ ! -f "/shared/keys/jwt.key" ]; then
+    echo "creating jwt key"
     openssl ecparam -genkey -name prime256v1 -noout -out /shared/keys/jwt.key
     openssl ec -in /shared/keys/jwt.key -outform PEM -pubout >/shared/keys/pub/jwt.pub
     chmod 644 /shared/keys/pub/jwt.pub /shared/keys/jwt.key
 fi
 
+echo "creating token"
 token="$(bash /scripts/sign_jwt.sh ES256 /shared/keys/jwt.key)"
 
 cat >/shared/s3cfg <<EOD
@@ -45,6 +53,24 @@ EOD
 
 ## create crypt4gh key
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
+    echo "creating crypth4gh key"
     curl -s -L https://github.com/neicnordic/crypt4gh/releases/download/v1.7.4/crypt4gh_linux_x86_64.tar.gz | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
     /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
+fi
+
+if [ ! -f "/shared/keys/ssh" ]; then
+    ssh-keygen -o -a 256 -t ed25519 -f /shared/keys/ssh -N ""
+    pubKey="$(cat /shared/keys/ssh.pub)"
+    cat >/shared/users.json <<EOD
+[
+    {
+        "username": "dummy@example.com",
+        "uid": 1,
+        "passwordHash": "\$2b\$12\$1gyKIjBc9/cT0MYkXX24xe1LjEUjNwgL4rEk8fDoO.vDQZzWkqrn.",
+        "gecos": "dummy user",
+        "sshPublicKey": ["$pubKey"],
+        "enabled": null
+    }
+]
+EOD
 fi
