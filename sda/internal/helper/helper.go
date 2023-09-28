@@ -127,14 +127,14 @@ func CreateRSAkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath + "/rsa", privateKeyBytes, 0644)
+	os.WriteFile(prPath+"/rsa", privateKeyBytes, 0644)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath + "/rsa.pub", publicKeyBytes, 0644)
+	os.WriteFile(pubPath+"/rsa.pub", publicKeyBytes, 0644)
 
 	return nil
 }
@@ -185,10 +185,10 @@ func CreateSSHKey(path string) error {
 
 // CreateRSAToken creates an RSA token
 func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
-	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
-	if err:= jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+	if err := jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
 		return "Set algorithm failed", err
 	}
 
@@ -207,10 +207,10 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]int
 
 // CreateECToken creates an EC token
 func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
-	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
-	if err:= jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+	if err := jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
 		return "Set algorithm failed", err
 	}
 
@@ -238,7 +238,7 @@ func CreateHSToken(key []byte, headerAlg string, tokenClaims map[string]interfac
 	if err != nil {
 		return "Create key failed", err
 	}
-	if err:= jwk.AssignKeyID(jwtKey); err != nil {
+	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
 	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, jwtKey))
@@ -282,14 +282,14 @@ func CreateECkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath + "/ec", privateKeyBytes, 0644)
+	os.WriteFile(prPath+"/ec", privateKeyBytes, 0644)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath + "/ec.pub", publicKeyBytes, 0644)
+	os.WriteFile(pubPath+"/ec.pub", publicKeyBytes, 0644)
 
 	return nil
 }

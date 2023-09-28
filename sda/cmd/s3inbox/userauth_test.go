@@ -19,6 +19,7 @@ import (
 type UserAuthTest struct {
 	suite.Suite
 }
+
 func TestUserAuthTestSuite(t *testing.T) {
 	suite.Run(t, new(UserAuthTest))
 }

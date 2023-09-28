@@ -96,7 +96,7 @@ func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
 					return fmt.Errorf("ParseKey failed: %v", err)
 				}
 
-				if err:= jwk.AssignKeyID(key); err != nil {
+				if err := jwk.AssignKeyID(key); err != nil {
 					return fmt.Errorf("AssignKeyID failed: %v", err)
 				}
 
@@ -135,7 +135,7 @@ func (u *ValidateFromToken) fetchJwtPubKeyURL(jwtpubkeyurl string) error {
 	for it := u.keyset.Keys(context.Background()); it.Next(context.Background()); {
 		pair := it.Pair()
 		key := pair.Value.(jwk.Key)
-		if err:= jwk.AssignKeyID(key); err != nil {
+		if err := jwk.AssignKeyID(key); err != nil {
 			return fmt.Errorf("AssignKeyID failed: %v", err)
 		}
 	}
