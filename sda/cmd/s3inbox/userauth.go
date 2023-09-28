@@ -142,7 +142,7 @@ func (u *ValidateFromToken) getjwtkey(jwtpubkeypath string) error {
 }
 
 // Function for fetching the elixir key from the JWK and transform it to []byte
-func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
+func (u *ValidateFromToken) fetchJwtPubKeyURL(jwtpubkeyurl string) error {
 	jwkURL, err := url.ParseRequestURI(jwtpubkeyurl)
 	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
 		if err != nil {

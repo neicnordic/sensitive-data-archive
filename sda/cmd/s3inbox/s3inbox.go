@@ -85,7 +85,7 @@ func main() {
 	auth.pubkeys = make(map[string][]byte)
 	// Load keys for JWT verification
 	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.getjwtpubkey(Conf.Server.Jwtpubkeyurl); err != nil {
+		if err := auth.fetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
 		}
 	}

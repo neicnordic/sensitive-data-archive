@@ -69,7 +69,7 @@ func TestUserTokenAuthenticator_WrongURL(t *testing.T) {
 	a.pubkeys = make(map[string][]byte)
 	jwtpubkeyurl := "/dummy/"
 
-	err := a.getjwtpubkey(jwtpubkeyurl)
+	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.Equal(t, "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
 }
 
@@ -79,7 +79,7 @@ func TestUserTokenAuthenticator_BadURL(t *testing.T) {
 	a.pubkeys = make(map[string][]byte)
 	jwtpubkeyurl := "dummy.com/jwk"
 
-	err := a.getjwtpubkey(jwtpubkeyurl)
+	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.Equal(t, "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
 }
 
@@ -89,7 +89,7 @@ func TestUserTokenAuthenticator_GoodURL(t *testing.T) {
 	a.pubkeys = make(map[string][]byte)
 	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
 
-	err := a.getjwtpubkey(jwtpubkeyurl)
+	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.NoError(t, err, "failed to fetch remote JWK")
 }
 
