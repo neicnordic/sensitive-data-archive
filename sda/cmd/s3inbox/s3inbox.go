@@ -90,7 +90,7 @@ func main() {
 		}
 	}
 	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.getjwtkey(Conf.Server.Jwtpubkeypath); err != nil {
+		if err := auth.readJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}

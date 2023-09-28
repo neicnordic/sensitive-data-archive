@@ -116,7 +116,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (claims jwt.MapClaims,
 }
 
 // Function for reading the ega key in []byte
-func (u *ValidateFromToken) getjwtkey(jwtpubkeypath string) error {
+func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
 	err := filepath.Walk(jwtpubkeypath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {

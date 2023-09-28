@@ -39,7 +39,7 @@ func TestUserTokenAuthenticator_NoFile(t *testing.T) {
 	var pubkeys map[string][]byte
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	err := a.getjwtkey("")
+	err := a.readJwtPubKeyPath("")
 	assert.Error(t, err)
 }
 
@@ -57,7 +57,7 @@ func TestUserTokenAuthenticator_GetFile(t *testing.T) {
 
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	err = a.getjwtkey(jwtpubkeypath)
+	err = a.readJwtPubKeyPath(jwtpubkeypath)
 	assert.NoError(t, err)
 
 	defer os.RemoveAll(demoKeysPath)
@@ -110,7 +110,7 @@ func TestUserTokenAuthenticator_ValidateSignature_RSA(t *testing.T) {
 
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	_ = a.getjwtkey(jwtpubkeypath)
+	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, demoPrKeyName)
@@ -231,7 +231,7 @@ func TestUserTokenAuthenticator_ValidateSignature_EC(t *testing.T) {
 
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	_ = a.getjwtkey(jwtpubkeypath)
+	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateECKey(prKeyPath, demoPrKeyName)
@@ -351,7 +351,7 @@ func TestWrongKeyType_RSA(t *testing.T) {
 
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	_ = a.getjwtkey(jwtpubkeypath)
+	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateRSAKey(prKeyPath, demoPrKeyName)
@@ -375,7 +375,7 @@ func TestWrongKeyType_EC(t *testing.T) {
 
 	a := NewValidateFromToken(pubkeys)
 	a.pubkeys = make(map[string][]byte)
-	_ = a.getjwtkey(jwtpubkeypath)
+	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateECKey(prKeyPath, demoPrKeyName)
