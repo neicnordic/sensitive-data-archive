@@ -2,6 +2,8 @@
 set -e
 
 URI=http://rabbitmq:15672
+
+# Postgres requires a client certificate, so this is a simple way of detecting if TLS is enabled or not.
 if [ -n "$PGSSLCERT" ]; then
     URI=https://rabbitmq:15671
 fi
