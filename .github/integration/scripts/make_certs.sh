@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# install requirements if it's missing
+# install requirements if they are missing
 for r in openssl openjdk8-jre-base; do
     if [ ! "$(command -v "$r")" ]; then
         if [ "$(id -u)" != 0 ]; then
