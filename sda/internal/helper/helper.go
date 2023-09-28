@@ -127,14 +127,14 @@ func CreateRSAkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath + "/dummy.ega.nbis.se", privateKeyBytes, 0644)
+	os.WriteFile(prPath + "/rsa", privateKeyBytes, 0644)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath + "/dummy.ega.nbis.se.pub", publicKeyBytes, 0644)
+	os.WriteFile(pubPath + "/rsa.pub", publicKeyBytes, 0644)
 
 	return nil
 }
@@ -282,14 +282,14 @@ func CreateECkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath + "/dummy.ega.nbis.se", privateKeyBytes, 0644)
+	os.WriteFile(prPath + "/ec", privateKeyBytes, 0644)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath + "/dummy.ega.nbis.se.pub", publicKeyBytes, 0644)
+	os.WriteFile(pubPath + "/ec.pub", publicKeyBytes, 0644)
 
 	return nil
 }

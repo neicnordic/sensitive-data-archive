@@ -44,7 +44,7 @@ func (suite *HelperTest) TestParsePrivateRSAKey() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateRSAkeys(privateK, publicK)
 	assert.Nil(suite.T(), e)
-	_, err := ParsePrivateRSAKey(privateK, "/dummy.ega.nbis.se")
+	_, err := ParsePrivateRSAKey(privateK, "/rsa")
 	assert.Nil(suite.T(), err)
 
 	defer os.RemoveAll("dummy-folder")
@@ -54,12 +54,12 @@ func (suite *HelperTest) TestCreateRSAToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateRSAkeys(privateK, publicK)
 	assert.Nil(suite.T(), e)
-	ParsedPrKey, _ := ParsePrivateRSAKey(privateK, "/dummy.ega.nbis.se")
+	ParsedPrKey, _ := ParsePrivateRSAKey(privateK, "/rsa")
 	tok, err := CreateRSAToken(ParsedPrKey, "RS256", DefaultTokenClaims)
 	assert.Nil(suite.T(), err)
 
 	set := jwk.NewSet()
-	keyData, err := os.ReadFile(filepath.Join(filepath.Clean(publicK), "/dummy.ega.nbis.se.pub"))
+	keyData, err := os.ReadFile(filepath.Join(filepath.Clean(publicK), "/rsa.pub"))
 	assert.NoError(suite.T(), err)
 	key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
 	assert.NoError(suite.T(), err)
@@ -86,7 +86,7 @@ func (suite *HelperTest) TestParsePrivateECKey() {
 	e := CreateECkeys(privateK, publicK)
 	assert.Nil(suite.T(), e)
 
-	k, err := ParsePrivateECKey(privateK, "/dummy.ega.nbis.se")
+	k, err := ParsePrivateECKey(privateK, "/ec")
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), "EC", fmt.Sprintf("%v", k.KeyType()))
 
@@ -97,7 +97,7 @@ func (suite *HelperTest) TestCreateECToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateECkeys(privateK, publicK)
 	assert.Nil(suite.T(), e)
-	ParsedPrKey, err := ParsePrivateECKey(privateK, "/dummy.ega.nbis.se")
+	ParsedPrKey, err := ParsePrivateECKey(privateK, "/ec")
 	assert.NoError(suite.T(), err)
 	_, err = CreateECToken(ParsedPrKey, "ES256", DefaultTokenClaims)
 	assert.Nil(suite.T(), err)

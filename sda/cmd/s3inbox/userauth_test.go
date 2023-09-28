@@ -100,7 +100,6 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 
 	// Create temp demo rsa key pair
 	demoKeysPath := "demo-rsa-keys"
-	demoPrKeyName := "/dummy.ega.nbis.se"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
 	assert.NoError(suite.T(), err)
 
@@ -112,7 +111,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
-	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, demoPrKeyName)
+	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, "/rsa")
 	assert.NoError(suite.T(), err)
 
 	// Create token and set up request defaults
@@ -219,7 +218,6 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-ec-keys"
-	demoPrKeyName := "/dummy.ega.nbis.se"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
 	assert.NoError(suite.T(), err)
 
@@ -232,7 +230,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	_ = a.readJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
-	prKeyParsed, err := helper.ParsePrivateECKey(prKeyPath, demoPrKeyName)
+	prKeyParsed, err := helper.ParsePrivateECKey(prKeyPath, "/ec")
 	assert.NoError(suite.T(), err)
 
 	// Create token and set up request defaults
@@ -337,7 +335,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 func (suite *UserAuthTest) TestWrongKeyType_RSA() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-ec-keys"
-	demoPrKeyName := "/dummy.ega.nbis.se"
+	demoPrKeyName := "/ec"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
 	assert.NoError(suite.T(), err)
 
@@ -359,7 +357,7 @@ func (suite *UserAuthTest) TestWrongKeyType_RSA() {
 func (suite *UserAuthTest) TestWrongKeyType_EC() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-rsa-keys"
-	demoPrKeyName := "/dummy.ega.nbis.se"
+	demoPrKeyName := "/rsa"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
 	assert.NoError(suite.T(), err)
 
