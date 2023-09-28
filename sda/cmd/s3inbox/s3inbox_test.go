@@ -84,7 +84,6 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Name:       "broker",
 		Repository: "rabbitmq",
 		Tag:        "3-management-alpine",
 	}, func(config *docker.HostConfig) {
@@ -134,7 +133,6 @@ func TestMain(m *testing.M) {
 	}
 	// pulls an image, creates a container based on it and runs it
 	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Name:       "oidc",
 		Repository: "python",
 		Tag:        "3.10-slim",
 		Cmd: []string{
