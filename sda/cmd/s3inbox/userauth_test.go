@@ -96,6 +96,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_GoodURL() {
 
 	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.NoError(suite.T(), err, "failed to fetch remote JWK")
+	assert.Equal(suite.T(), 3, a.keyset.Len())
 }
 
 func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {

@@ -140,7 +140,7 @@ func TestMain(m *testing.M) {
 		Cmd: []string{
 			"/bin/sh",
 			"-c",
-			"pip install --upgrade pip && pip install aiohttp Authlib && python -u /oidc.py",
+			"pip install --upgrade pip && pip install aiohttp Authlib joserfc requests && python -u /oidc.py",
 		},
 		ExposedPorts: []string{"8080"},
 		Mounts: []string{
