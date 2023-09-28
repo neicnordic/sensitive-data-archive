@@ -93,14 +93,16 @@ func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
 
 				key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
 				if err != nil {
-					return fmt.Errorf("ParseKey failed: %v", err)
+					return fmt.Errorf("parseKey failed: %v", err)
 				}
 
 				if err := jwk.AssignKeyID(key); err != nil {
-					return fmt.Errorf("AssignKeyID failed: %v", err)
+					return fmt.Errorf("assignKeyID failed: %v", err)
 				}
 
-				u.keyset.AddKey(key)
+				if err := u.keyset.AddKey(key); err != nil {
+					return fmt.Errorf("failed to add key to set: %v", err)
+				}
 			}
 
 			return nil

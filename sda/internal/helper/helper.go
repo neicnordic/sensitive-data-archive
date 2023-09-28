@@ -127,14 +127,14 @@ func CreateRSAkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath+"/rsa", privateKeyBytes, 0644)
+	_ = os.WriteFile(prPath+"/rsa", privateKeyBytes, 0600)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath+"/rsa.pub", publicKeyBytes, 0644)
+	_ = os.WriteFile(pubPath+"/rsa.pub", publicKeyBytes, 0600)
 
 	return nil
 }
@@ -194,7 +194,9 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]int
 
 	token := jwt.New()
 	for key, value := range tokenClaims {
-		token.Set(key, value)
+		if err := token.Set(key, value); err != nil {
+			return "failed to set claim", err
+		}
 	}
 
 	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, jwtKey))
@@ -216,7 +218,9 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]inte
 
 	token := jwt.New()
 	for key, value := range tokenClaims {
-		token.Set(key, value)
+		if err := token.Set(key, value); err != nil {
+			return "failed to set claim", err
+		}
 	}
 
 	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtKey))
@@ -228,10 +232,13 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]inte
 }
 
 // CreateHSToken creates an HS token
-func CreateHSToken(key []byte, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+func CreateHSToken(key []byte, tokenClaims map[string]interface{}) (string, error) {
 	token := jwt.New()
 	for key, value := range tokenClaims {
-		token.Set(key, value)
+		if err := token.Set(key, value); err != nil {
+			return "failed to set claim", err
+		}
+
 	}
 
 	jwtKey, err := jwk.FromRaw(key)
@@ -282,14 +289,14 @@ func CreateECkeys(prPath, pubPath string) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile(prPath+"/ec", privateKeyBytes, 0644)
+	_ = os.WriteFile(prPath+"/ec", privateKeyBytes, 0600)
 
 	// dump public key to file
 	publicKeyBytes, err := jwk.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
-	os.WriteFile(pubPath+"/ec.pub", publicKeyBytes, 0644)
+	_ = os.WriteFile(pubPath+"/ec.pub", publicKeyBytes, 0600)
 
 	return nil
 }

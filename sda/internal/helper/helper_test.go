@@ -65,7 +65,7 @@ func (suite *HelperTest) TestCreateRSAToken() {
 	assert.NoError(suite.T(), err)
 	err = jwk.AssignKeyID(key)
 	assert.NoError(suite.T(), err)
-	set.AddKey(key)
+	assert.NoError(suite.T(), set.AddKey(key))
 
 	fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
@@ -107,7 +107,7 @@ func (suite *HelperTest) TestCreateECToken() {
 
 func (suite *HelperTest) TestCreateHSToken() {
 	key := make([]byte, 256)
-	tok, err := CreateHSToken(key, "HS256", DefaultTokenClaims)
+	tok, err := CreateHSToken(key, DefaultTokenClaims)
 	assert.Nil(suite.T(), err)
 
 	set := jwk.NewSet()
@@ -117,7 +117,7 @@ func (suite *HelperTest) TestCreateHSToken() {
 	err = jwk.AssignKeyID(jwtKey)
 	assert.NoError(suite.T(), err)
 
-	set.AddKey(jwtKey)
+	assert.NoError(suite.T(), set.AddKey(jwtKey))
 
 	fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))

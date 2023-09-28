@@ -388,7 +388,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	assert.NoError(suite.T(), err)
 
 	// Create HS256 token
-	wrongAlgToken, err := helper.CreateHSToken(key, "HS256", helper.DefaultTokenClaims)
+	wrongAlgToken, err := helper.CreateHSToken(key, helper.DefaultTokenClaims)
 	assert.NoError(suite.T(), err)
 
 	a := NewValidateFromToken(jwk.NewSet())
