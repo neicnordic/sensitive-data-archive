@@ -9,9 +9,24 @@ import (
 
 	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/stretchr/testify/assert"
 )
+
+
+// AlwaysAllow is an Authenticator that always authenticates
+type AlwaysAllow struct{}
+
+// NewAlwaysAllow returns a new AlwaysAllow authenticator.
+func NewAlwaysAllow() *AlwaysAllow {
+	return &AlwaysAllow{}
+}
+
+// Authenticate authenticates everyone.
+func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.MapClaims, error) {
+	return nil, nil
+}
 
 func TestAlwaysAuthenticator(t *testing.T) {
 	a := NewAlwaysAllow()

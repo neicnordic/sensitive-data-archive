@@ -22,19 +22,6 @@ type Authenticator interface {
 	Authenticate(r *http.Request) (jwt.MapClaims, error)
 }
 
-// AlwaysAllow is an Authenticator that always authenticates
-type AlwaysAllow struct{}
-
-// NewAlwaysAllow returns a new AlwaysAllow authenticator.
-func NewAlwaysAllow() *AlwaysAllow {
-	return &AlwaysAllow{}
-}
-
-// Authenticate authenticates everyone.
-func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.MapClaims, error) {
-	return nil, nil
-}
-
 // ValidateFromToken is an Authenticator that reads the public key from
 // supplied file
 type ValidateFromToken struct {
