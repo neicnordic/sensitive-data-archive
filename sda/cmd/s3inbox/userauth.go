@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -173,7 +173,7 @@ func (u *ValidateFromToken) getjwtpubkey(jwtpubkeyurl string) error {
 	if err != nil {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
 	}
-	keyEl, ok := set.Get(0)
+	keyEl, ok := set.Key(0)
 	if !ok {
 		return fmt.Errorf("failed to materialize public key (%v)", err)
 	}
