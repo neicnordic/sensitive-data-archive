@@ -123,7 +123,7 @@ The ingest service copies files from the file inbox to the archive, and register
 When running, ingest reads messages from the configured RabbitMQ queue (default: "ingest").
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
-1.  The message is validated as valid JSON that matches the "ingestion-trigger" schema (defined in sda-common).
+1. The message is validated as valid JSON that matches the "ingestion-trigger" schema.
 If the message can’t be validated it is discarded with an error message in the logs.
 
 1. A file reader is created for the filepath in the message.

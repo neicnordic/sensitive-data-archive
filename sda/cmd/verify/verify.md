@@ -112,7 +112,7 @@ When running, verify reads messages from the configured RabbitMQ queue (default:
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message.
 Unless explicitly stated, error messages are *not* written to the RabbitMQ error queue, and messages are not NACK or ACKed.):
 
-1. The message is validated as valid JSON that matches the "ingestion-verification" schema (defined in sda-common).
+1. The message is validated as valid JSON that matches the "ingestion-verification" schema.
 If the message can’t be validated it is discarded with an error message in the logs.
 
 1. The service attempts to fetch the header for the file id in the message from the database.
