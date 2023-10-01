@@ -95,7 +95,7 @@ Note that if `DB_SSLMODE` is set to anything but `disable`, then `DB_CACERT` nee
 
 The s3inbox proxies uploads to an S3 compatible storage backend.
 
-1. Parses and validates the JWT token (`access_token` in the S3 config file) against teh public keys, either local files on sidk or OIDC JWK endpoints.
+1. Parses and validates the JWT token (`access_token` in the S3 config file) against the public keys, either locally provisioned or from OIDC JWK endpoints.
 2. If the token is valid the file is passed on to the S3 backend
 3. The file is registered in the database
 4. The `inbox-upload` message is sent to the `inbox` queue, with the `sub` field from the token as the `user` in the message. If this fails an error will be written to the logs.
