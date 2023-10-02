@@ -279,7 +279,9 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	// Restructure request to query the users folder instead of the general bucket
 	switch r.Method {
 	case http.MethodGet:
-		if strings.Contains(r.URL.String(), "?delimiter") {
+		if strings.Contains(r.URL.String(), "?uploadId") {
+			r.URL.Path = "/" + bucket + r.URL.Path
+		} else if strings.Contains(r.URL.String(), "?delimiter") {
 			r.URL.Path = "/" + bucket + "/"
 			if strings.Contains(r.URL.RawQuery, "&prefix") {
 				params := strings.Split(r.URL.RawQuery, "&prefix=")
