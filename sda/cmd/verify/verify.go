@@ -81,7 +81,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed so publish message, reason: %v", err.Error())
 				}
 				if err := delivered.Ack(false); err != nil {
@@ -112,7 +112,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed so publish message, reason: %v", err.Error())
 				}
 
@@ -136,7 +136,7 @@ func main() {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
 
 				// Nack message so the server gets notified that something is wrong but don't requeue the message
-				if e := delivered.Nack(false, false); e != nil {
+				if err := delivered.Nack(false, false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
 
 				}
@@ -150,7 +150,7 @@ func main() {
 				body, _ := json.Marshal(infoErrorMessage)
 
 				// Send the message to an error queue so it can be analyzed.
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed so publish message, reason: %v", err.Error())
 				}
 
@@ -212,8 +212,8 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
-					log.Errorf("Failed to publish error message: %v", e)
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("Failed to publish error message: %v", err.Error())
 				}
 
 				if err := delivered.Ack(false); err != nil {
@@ -256,7 +256,7 @@ func main() {
 					}
 
 					body, _ := json.Marshal(infoErrorMessage)
-					if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 						log.Errorf("failed so publish message, reason: %v", err.Error())
 					}
 

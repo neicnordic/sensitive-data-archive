@@ -115,7 +115,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed so publish message, reason: (%v)", err.Error())
 				}
 				if err := delivered.Ack(false); err != nil {
@@ -172,7 +172,7 @@ func main() {
 						OriginalMessage: message,
 					}
 					body, _ := json.Marshal(fileError)
-					if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 						log.Errorf("failed so publish message, reason: (%v)", err.Error())
 					}
 					if err = delivered.Ack(false); err != nil {
@@ -277,7 +277,7 @@ func main() {
 								OriginalMessage: message,
 							}
 							body, _ := json.Marshal(fileError)
-							if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+							if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 								log.Errorf("failed so publish message, reason: (%v)", err.Error())
 							}
 
