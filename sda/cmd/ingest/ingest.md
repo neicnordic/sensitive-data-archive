@@ -126,6 +126,8 @@ For each message, these steps are taken (if not otherwise noted, errors halt pro
 1. The message is validated as valid JSON that matches the "ingestion-trigger" schema.
 If the message can’t be validated it is discarded with an error message in the logs.
 
+1. If the message is of type `cancel`, the file will be marked as `disabled` and the next message in the queue will be read.
+
 1. A file reader is created for the filepath in the message.
 If the file reader can’t be created an error is written to the logs, the message is Nacked and forwarded to the error queue.
 
