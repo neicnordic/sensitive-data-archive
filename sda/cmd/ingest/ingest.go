@@ -116,7 +116,7 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed so publish message, reason: (%v)", err.Error())
+					log.Errorf("failed to publish message, reason: (%v)", err.Error())
 				}
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: (%v)", err.Error())
@@ -173,7 +173,7 @@ func main() {
 					}
 					body, _ := json.Marshal(fileError)
 					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed so publish message, reason: (%v)", err.Error())
+						log.Errorf("failed to publish message, reason: (%v)", err.Error())
 					}
 					if err = delivered.Ack(false); err != nil {
 						log.Errorf("Failed to Ack message, reason: (%v)", err.Error())
@@ -199,7 +199,7 @@ func main() {
 					}
 					body, _ := json.Marshal(fileError)
 					if err = mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed so publish message, reason: (%v)", err.Error())
+						log.Errorf("failed to publish message, reason: (%v)", err.Error())
 					}
 
 					// Restart on new message
@@ -278,7 +278,7 @@ func main() {
 							}
 							body, _ := json.Marshal(fileError)
 							if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-								log.Errorf("failed so publish message, reason: (%v)", err.Error())
+								log.Errorf("failed to publish message, reason: (%v)", err.Error())
 							}
 
 							continue mainWorkLoop
