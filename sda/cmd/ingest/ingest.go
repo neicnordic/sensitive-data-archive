@@ -106,7 +106,7 @@ func main() {
 			log.Debugf("received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-trigger) failed, reason: %v", err.Error())
+				log.Errorf("validation of incoming message (ingestion-trigger) failed, reason: (%s)", err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Message validation failed",
@@ -116,10 +116,10 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%v)", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: (%v)", err.Error())
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
 
 				// Restart on new message
@@ -141,7 +141,7 @@ func main() {
 					log.Errorf("failed to get ID for file from message: %v", delivered.CorrelationId)
 
 					if err = delivered.Nack(false, false); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -150,21 +150,21 @@ func main() {
 				if err := db.UpdateFileStatus(fileUUID, "disabled", delivered.CorrelationId, message.User, string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 					if err = delivered.Nack(false, false); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to ack message for reason: (%v)", err.Error())
+					log.Errorf("failed to ack message for reason: (%s)", err.Error())
 				}
 
 				continue
 			case "ingest":
 				file, err := inbox.NewFileReader(message.FilePath)
 				if err != nil {
-					log.Errorf("Failed to open file to ingest reason: (%v)", err.Error())
+					log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
 					// Send the message to an error queue so it can be analyzed.
 					fileError := broker.InfoError{
 						Error:           "Failed to open file to ingest",
@@ -173,10 +173,10 @@ func main() {
 					}
 					body, _ := json.Marshal(fileError)
 					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: (%v)", err.Error())
+						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 					}
 					if err = delivered.Ack(false); err != nil {
-						log.Errorf("Failed to Ack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
 					}
 
 					// Restart on new message
@@ -185,11 +185,11 @@ func main() {
 
 				fileSize, err := inbox.GetFileSize(message.FilePath)
 				if err != nil {
-					log.Errorf("Failed to get file size of file to ingest, reason: %v", err.Error())
+					log.Errorf("Failed to get file size of file to ingest, reason: (%s)", err.Error())
 					// Nack message so the server gets notified that something is wrong and requeue the message.
 					// Since reading the file worked, this should eventually succeed so it is ok to requeue.
 					if err = delivered.Nack(false, true); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 					// Send the message to an error queue so it can be analyzed.
 					fileError := broker.InfoError{
@@ -199,7 +199,7 @@ func main() {
 					}
 					body, _ := json.Marshal(fileError)
 					if err = mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: (%v)", err.Error())
+						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 					}
 
 					// Restart on new message
@@ -208,7 +208,7 @@ func main() {
 
 				fileID, err := db.RegisterFile(message.FilePath, message.User)
 				if err != nil {
-					log.Errorf("InsertFile failed, reason: (%v)", err.Error())
+					log.Errorf("InsertFile failed, reason: (%s)", err.Error())
 				}
 				err = db.UpdateFileStatus(fileID, "submitted", delivered.CorrelationId, message.User, string(delivered.Body))
 				if err != nil {
@@ -217,11 +217,11 @@ func main() {
 
 				dest, err := archive.NewFileWriter(fileID)
 				if err != nil {
-					log.Errorf("Failed to create archive file, reason: (%v)", err.Error())
+					log.Errorf("Failed to create archive file, reason: (%s)", err.Error())
 					// Nack message so the server gets notified that something is wrong and requeue the message.
 					// NewFileWriter returns an error when the backend itself fails so this is reasonable to requeue.
 					if err = delivered.Nack(false, true); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -251,9 +251,9 @@ func main() {
 
 					h := bytes.NewReader(readBuffer)
 					if _, err = io.Copy(hash, h); err != nil {
-						log.Errorf("Copy to hash failed while reading file, reason: (%v)", err.Error())
+						log.Errorf("Copy to hash failed while reading file, reason: (%s)", err.Error())
 						if err = delivered.Nack(false, true); err != nil {
-							log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+							log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 						}
 
 						continue mainWorkLoop
@@ -263,11 +263,11 @@ func main() {
 					if bytesRead <= int64(len(readBuffer)) {
 						header, err := tryDecrypt(key, readBuffer)
 						if err != nil {
-							log.Errorf("Trying to decrypt start of file failed, reason: (%v)", err.Error())
+							log.Errorf("Trying to decrypt start of file failed, reason: (%s)", err.Error())
 
 							// Nack message so the server gets notified that something is wrong. Do not requeue the message.
 							if err = delivered.Nack(false, false); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							// Send the message to an error queue so it can be analyzed.
@@ -278,7 +278,7 @@ func main() {
 							}
 							body, _ := json.Marshal(fileError)
 							if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-								log.Errorf("failed to publish message, reason: (%v)", err.Error())
+								log.Errorf("failed to publish message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
@@ -286,9 +286,9 @@ func main() {
 
 						log.Debugln("store header")
 						if err := db.StoreHeader(header, fileID); err != nil {
-							log.Errorf("StoreHeader failed, reason: (%v)", err.Error())
+							log.Errorf("StoreHeader failed, reason: (%s)", err.Error())
 							if err = delivered.Nack(false, true); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
@@ -297,7 +297,7 @@ func main() {
 						if _, err = byteBuf.Write(readBuffer); err != nil {
 							log.Errorf("Failed to write to read buffer for header read, reason: %v)", err.Error())
 							if err = delivered.Nack(false, true); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
@@ -306,9 +306,9 @@ func main() {
 						// Strip header from buffer
 						h := make([]byte, len(header))
 						if _, err = byteBuf.Read(h); err != nil {
-							log.Errorf("Failed to strip header from buffer, reason: (%v)", err.Error())
+							log.Errorf("Failed to strip header from buffer, reason: (%s)", err.Error())
 							if err = delivered.Nack(false, true); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
@@ -318,9 +318,9 @@ func main() {
 							readBuffer = readBuffer[:i]
 						}
 						if _, err = byteBuf.Write(readBuffer); err != nil {
-							log.Errorf("Failed to write to read buffer for full read, reason: (%v)", err.Error())
+							log.Errorf("Failed to write to read buffer for full read, reason: (%s)", err.Error())
 							if err = delivered.Nack(false, true); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
@@ -329,7 +329,7 @@ func main() {
 
 					// Write data to file
 					if _, err = byteBuf.WriteTo(dest); err != nil {
-						log.Errorf("Failed to write to archive file, reason: (%v)", err.Error())
+						log.Errorf("Failed to write to archive file, reason: (%s)", err.Error())
 
 						continue mainWorkLoop
 					}
@@ -345,7 +345,7 @@ func main() {
 				if err != nil {
 					log.Errorf("Couldn't get file size from archive, reason: %v)", err.Error())
 					if err = delivered.Nack(false, true); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -356,22 +356,22 @@ func main() {
 
 				status, err := db.GetFileStatus(delivered.CorrelationId)
 				if err != nil {
-					log.Errorf("failed to get file status, reason: %v", err.Error())
+					log.Errorf("failed to get file status, reason: (%s)", err.Error())
 					if err = delivered.Nack(false, true); err != nil {
-						log.Errorf("Failed to Nack message, reason: (%v)", err.Error())
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 				}
 				if status == "disabled" {
 					log.Infof("file with correlation ID: %s is disabled, stopping ingestion", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed acking canceled work, reason: %v", err.Error())
+						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
 				}
 
 				if err := db.SetArchived(fileInfo, fileID, delivered.CorrelationId); err != nil {
-					log.Errorf("SetArchived failed, reason: (%v)", err.Error())
+					log.Errorf("SetArchived failed, reason: (%s)", err.Error())
 				}
 
 				log.Debugf("File marked as archived (corr-id: %s, user: %s, filepath: %s, archivepath: %s)",
@@ -391,20 +391,20 @@ func main() {
 
 				err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), archivedMsg)
 				if err != nil {
-					log.Errorf("Validation of outgoing message failed, reason: (%v)", err.Error())
+					log.Errorf("Validation of outgoing message failed, reason: (%s)", err.Error())
 
 					continue
 				}
 
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, archivedMsg); err != nil {
 					// TODO fix resend mechanism
-					log.Errorf("failed to publish message, reason: (%v)", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
 					// Do not try to ACK message to make sure we have another go
 					continue
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%v)", err.Error())
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 				}
 			}
 		}

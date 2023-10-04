@@ -72,7 +72,7 @@ func main() {
 			log.Debugf("received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-verifiation) failed, reason: %v", err.Error())
+				log.Errorf("validation of incoming message (ingestion-verifiation) failed, reason: (%s)", err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Message validation failed",
@@ -82,10 +82,10 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: %v", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to Ack message, reason: %v", err.Error())
+					log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
 				}
 
 				// Restart on new message
@@ -103,7 +103,7 @@ func main() {
 			// If the file has been canceled by the uploader, don't spend time working on it.
 			status, err := db.GetFileStatus(delivered.CorrelationId)
 			if err != nil {
-				log.Errorf("failed to get file status, reason: %v", err.Error())
+				log.Errorf("failed to get file status, reason: (%s)", err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Getheader failed",
@@ -113,11 +113,11 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: %v", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: %v", err.Error())
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -125,7 +125,7 @@ func main() {
 			if status == "disabled" {
 				log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: %v", err.Error())
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -151,7 +151,7 @@ func main() {
 
 				// Send the message to an error queue so it can be analyzed.
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: %v", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -160,7 +160,7 @@ func main() {
 			var file database.FileInfo
 			file.Size, err = archive.GetFileSize(message.ArchivePath)
 			if err != nil {
-				log.Errorf("Failed to get archived file size, reson: %v", err.Error())
+				log.Errorf("Failed to get archived file size, reson: (%s)", err.Error())
 
 				continue
 			}
@@ -179,7 +179,7 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%v)", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				// Restart on new message
@@ -192,7 +192,7 @@ func main() {
 
 			c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
 			if err != nil {
-				log.Errorf("Failed to open c4gh decryptor stream, reson: %v", err.Error())
+				log.Errorf("Failed to open c4gh decryptor stream, reson: (%s)", err.Error())
 
 				continue
 			}
@@ -202,7 +202,7 @@ func main() {
 			stream := io.TeeReader(c4ghr, md5hash)
 
 			if file.DecryptedSize, err = io.Copy(sha256hash, stream); err != nil {
-				log.Errorf("failed to copy decrypted data, reson: %v", err.Error())
+				log.Errorf("failed to copy decrypted data, reson: (%s)", err.Error())
 
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
@@ -213,11 +213,11 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("Failed to publish error message: %v", err.Error())
+					log.Errorf("Failed to publish error message: (%s)", err.Error())
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to ack message: %v", err.Error())
+					log.Errorf("Failed to ack message: (%s)", err.Error())
 				}
 
 				continue
@@ -240,14 +240,14 @@ func main() {
 				verifiedMessage, _ := json.Marshal(&c)
 				err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession-request.json", conf.Broker.SchemasPath), verifiedMessage)
 				if err != nil {
-					log.Errorf("Validation of outgoing (ingestion-accession-request) failed, reason: %v", err.Error())
+					log.Errorf("Validation of outgoing (ingestion-accession-request) failed, reason: (%s)", err.Error())
 
 					// Logging is in ValidateJSON so just restart on new message
 					continue
 				}
 				status, err := db.GetFileStatus(delivered.CorrelationId)
 				if err != nil {
-					log.Errorf("failed to get file status, reason: %v", err.Error())
+					log.Errorf("failed to get file status, reason: (%s)", err.Error())
 					// Send the message to an error queue so it can be analyzed.
 					infoErrorMessage := broker.InfoError{
 						Error:           "Getheader failed",
@@ -257,11 +257,11 @@ func main() {
 
 					body, _ := json.Marshal(infoErrorMessage)
 					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: %v", err.Error())
+						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 					}
 
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed acking canceled work, reason: %v", err.Error())
+						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -269,7 +269,7 @@ func main() {
 				if status == "disabled" {
 					log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed acking canceled work, reason: %v", err.Error())
+						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -277,7 +277,7 @@ func main() {
 
 				// Mark file as "COMPLETED"
 				if err := db.MarkCompleted(file, message.FileID, delivered.CorrelationId); err != nil {
-					log.Errorf("MarkCompleted failed, reason: (%v)", err.Error())
+					log.Errorf("MarkCompleted failed, reason: (%s)", err.Error())
 
 					continue
 					// this should really be hadled by the DB retry mechanism
@@ -286,13 +286,13 @@ func main() {
 				// Send message to verified queue
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
 					// TODO fix resend mechanism
-					log.Errorf("failed to publish message, reason: (%v)", err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
 					continue
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%v)", err.Error())
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 				}
 			}
 		}
