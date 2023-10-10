@@ -281,6 +281,9 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	case http.MethodGet:
 		if strings.Contains(r.URL.String(), "?uploadId") {
 			r.URL.Path = "/" + bucket + r.URL.Path
+		} else if strings.Contains(r.URL.String(), "?uploads") {
+			r.URL.Path = "/" + bucket
+			r.URL.RawQuery = "uploads&prefix=" + username + "%2F"
 		} else if strings.Contains(r.URL.String(), "?delimiter") {
 			r.URL.Path = "/" + bucket + "/"
 			if strings.Contains(r.URL.RawQuery, "&prefix") {
