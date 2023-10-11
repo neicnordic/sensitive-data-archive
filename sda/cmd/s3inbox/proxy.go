@@ -280,8 +280,10 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if strings.Contains(r.URL.String(), "?uploadId") {
+			// resume multipart upload
 			r.URL.Path = "/" + bucket + r.URL.Path
 		} else if strings.Contains(r.URL.String(), "?uploads") {
+			// list multipart upload
 			r.URL.Path = "/" + bucket
 			r.URL.RawQuery = "uploads&prefix=" + username + "%2F"
 		} else if strings.Contains(r.URL.String(), "?delimiter") {
@@ -303,6 +305,11 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	case http.MethodPut:
 		r.URL.Path = "/" + bucket + r.URL.Path
 		log.Debug("new Path: ", r.URL.Path)
+	case http.MethodDelete:
+		if strings.Contains(r.URL.String(), "?uploadId") {
+			// abort multipart upload
+			r.URL.Path = "/" + bucket + r.URL.Path
+		}
 	}
 	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
 }
