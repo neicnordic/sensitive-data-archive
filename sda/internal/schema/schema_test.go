@@ -281,7 +281,7 @@ func TestValidateJSONIngestionVerification(t *testing.T) {
 	okMsg := IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to/file",
-		FileID:      123456789,
+		FileID:      "074803cc-718e-4dc4-a48d-a4770aa9f93b",
 		ArchivePath: "filename",
 		EncryptedChecksums: []Checksums{
 			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
@@ -297,7 +297,7 @@ func TestValidateJSONIngestionVerification(t *testing.T) {
 	badMsg := IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to/file",
-		FileID:      123456789,
+		FileID:      "074803cc-718e-4dc4-a48d-a4770aa9f93b",
 		ArchivePath: "filename",
 		EncryptedChecksums: []Checksums{
 			{Type: "sha256", Value: "68b329da9893e34099c7d8ad5cb9c940"},

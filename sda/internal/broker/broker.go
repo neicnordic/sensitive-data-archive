@@ -40,6 +40,15 @@ type MQConf struct {
 	PrefetchCount int
 }
 
+// InfoError struct for sending detailed error messages to analysis.
+// The empty interface allows for appending various json msgs but also broken json msgs as strings.
+// It is ok as long as we do not need to access fields in the msg, which we don't.
+type InfoError struct {
+	Error           string      `json:"error"`
+	Reason          string      `json:"reason"`
+	OriginalMessage interface{} `json:"original-message"`
+}
+
 // buildMQURI builds the MQ connection URI
 func buildMQURI(mqHost, mqUser, mqPassword, mqVhost string, mqPort int, ssl bool) string {
 	protocol := "amqp"

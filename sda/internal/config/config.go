@@ -19,9 +19,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-const POSIX = "posix"
-const S3 = "s3"
-const SFTP = "sftp"
+const (
+	POSIX = "posix"
+	S3    = "s3"
+	SFTP  = "sftp"
+)
 
 var requiredConfVars []string
 

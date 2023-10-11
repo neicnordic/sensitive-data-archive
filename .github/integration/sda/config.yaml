@@ -1,6 +1,17 @@
 log:
   format: "json"
+  level: "debug"
+archive:
+  type: s3
+  url: "http://s3"
+  port: 9000
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "archive"
+  region: "us-east-1"
 inbox:
+  type: s3
   url: "http://s3"
   port: 9000
   readypath: "/minio/health/ready"
@@ -16,7 +27,7 @@ broker:
   password: ""
   vhost: "/sda"
   exchange: "sda"
-  routingKey: "inbox"
+  routingKey: ""
   ssl: "false"
 
 db:
@@ -27,6 +38,9 @@ db:
   database: "sda"
   sslmode: "disable"
 
+c4gh:
+  filePath: /shared/c4gh.sec.pem
+  passphrase: "c4ghpass"
 
 server:
   cert: ""

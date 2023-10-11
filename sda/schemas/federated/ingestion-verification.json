@@ -107,7 +107,7 @@
         },
         "file_id": {
             "$id": "#/properties/file_id",
-            "type": "number",
+            "type": "string",
             "title": "The Accession identifier",
             "description": "The Accession identifier",
             "examples": [
