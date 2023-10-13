@@ -73,15 +73,6 @@ These settings control how finalize connects to the RabbitMQ message broker.
   - `fatal`
   - `panic`
 
-#### Keyfile settings
-
-These settings control which crypt4gh keyfile is loaded.
-These settings are only needed is `copyheader` is `true`.
-
-- `C4GH_FILEPATH`: path to the crypt4gh keyfile
-- `C4GH_PASSPHRASE`: pass phrase to unlock the keyfile
-- `C4GH_BACKUPPUBKEY`: path to the crypt4gh public key to use for reencrypting file headers.
-
 ### Storage settings
 
 Storage backend is defined by the `ARCHIVE_TYPE`, and `BACKUP_TYPE` variables.
@@ -89,7 +80,7 @@ Valid values for these options are `S3` or `POSIX`
 (Defaults to `POSIX` on unknown values).
 
 The value of these variables define what other variables are read.
-The same variables are available for all storage types, differing by prefix (`ARCHIVE_`, or  `BACKUP_`)
+The same variables are available for all storage types, differing by prefix (`ARCHIVE_`, or `BACKUP_`)
 
 if `*_TYPE` is `S3` then the following variables are available:
 
@@ -115,14 +106,13 @@ If a backup location is configured it will perform backup of a file.
 When running, finalize reads messages from the configured RabbitMQ queue (default "accessionIDs").
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
-1. The message is validated as valid JSON that matches the "ingestion-accession" schema.
-If the message can’t be validated it is discarded with an error message in the logs.
-2. If the service is configured to perform backups the file path and file size is fetched from the database.
+1. The message is validated as valid JSON that matches the "ingestion-accession" schema. If the message can’t be validated it is discarded with an error message in the logs.
+2. If the service is configured to perform backups i.e. the `ARCHIVE_` and `BACKUP_` storage backends is set. Archived files will be copied to the backup location.
    1. The file size on disk is requested from the storage system.
    2. The database file size is compared against the disk file size.
    3. A file reader is created for the archive storage file, and a file writer is created for the backup storage file..
 3. The file data is copied from the archive file reader to the backup file writer.
-4. if the type of the `DecryptedChecksums` field in the message is `sha256`, the value is stored.
+4. If the type of the `DecryptedChecksums` field in the message is `sha256`, the value is stored.
 5. A new RabbitMQ "complete" message is created and validated against the "ingestion-completion" schema. If the validation fails, an error message is written to the logs.
 6. The file accession ID in the message is marked as "ready" in the database. On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
 7. The complete message is sent to RabbitMQ. On error, a message is written to the logs.
