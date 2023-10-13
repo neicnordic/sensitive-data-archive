@@ -2,7 +2,6 @@ package database
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"regexp"
 
 	"github.com/google/uuid"
@@ -202,7 +201,7 @@ func (suite *DatabaseTests) TestGetArchived() {
 	err = db.MarkCompleted(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
 
-	filePath, fileSize, err := db.GetArchived("testuser", "/testuser/TestGetArchived.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)))
+	filePath, fileSize, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 	assert.Equal(suite.T(), 1000, fileSize)
 	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)

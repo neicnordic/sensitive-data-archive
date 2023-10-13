@@ -204,15 +204,12 @@ func main() {
 
 func backupFile(delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
-	var checksumSha256 string
-
-	for _, checksum := range message.DecryptedChecksums {
-		if checksum.Type == "sha256" {
-			checksumSha256 = checksum.Value
-		}
+	fileUUID, err := db.GetFileID(delivered.CorrelationId)
+	if err != nil {
+		return fmt.Errorf("failed to get ID for file, reason: %s", err.Error())
 	}
 
-	filePath, fileSize, err := db.GetArchived(message.User, message.FilePath, checksumSha256)
+	filePath, fileSize, err := db.GetArchived(fileUUID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
@@ -245,14 +242,9 @@ func backupFile(delivered amqp.Delivery) error {
 		log.Errorf("failed to copy file, reason: %v)", err)
 	}
 
-	fileID, err := db.GetFileID(delivered.CorrelationId)
-	if err != nil {
-		return fmt.Errorf("failed to get ID for file, reason: %v", err)
-	}
-
 	// Mark file as "backed up"
-	if err := db.UpdateFileStatus(fileID, "backed up", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
-		return fmt.Errorf("MarkCompleted failed, reason: (%v)", err)
+	if err := db.UpdateFileStatus(fileUUID, "backed up", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
+		return fmt.Errorf("UpdateFileStatus failed, reason: (%v)", err)
 	}
 
 	log.Debug("Backup completed")

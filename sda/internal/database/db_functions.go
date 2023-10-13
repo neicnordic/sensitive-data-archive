@@ -260,7 +260,7 @@ func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(user, filepath, checksum string) (string, int, error) {
+func (dbs *SDAdb) GetArchived(corrID string) (string, int, error) {
 	var (
 		filePath string
 		fileSize int
@@ -269,22 +269,21 @@ func (dbs *SDAdb) GetArchived(user, filepath, checksum string) (string, int, err
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, fileSize, err = dbs.getArchived(user, filepath, checksum)
+		filePath, fileSize, err = dbs.getArchived(corrID)
 		count++
 	}
 
 	return filePath, fileSize, err
 }
-func (dbs *SDAdb) getArchived(user, filepath, checksum string) (string, int, error) {
+func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT archive_path, archive_filesize from local_ega.files WHERE " +
-		"elixir_id = $1 and inbox_path = $2 and decrypted_file_checksum = $3 and status in ('COMPLETED', 'READY');"
+	const query = "SELECT archive_file_path, archive_file_size from sda.files WHERE id = $1;"
 
 	var filePath string
 	var fileSize int
-	if err := db.QueryRow(query, user, filepath, checksum).Scan(&filePath, &fileSize); err != nil {
+	if err := db.QueryRow(query, corrID).Scan(&filePath, &fileSize); err != nil {
 		return "", 0, err
 	}
 
