@@ -16,13 +16,12 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Delete 'PR' containers older than a week
+      - name: Delete 'PR' containers older than one month
         uses: snok/container-retention-policy@v2.1.2
         with:
           image-names: sensitive-data-archive
-          filter-tags: PR*,sha-*
           skip-tags: v*
-          cut-off: A week ago UTC
+          cut-off: One month ago UTC
           account-type: org
           org-name: ${{ github.repository_owner }}
           keep-at-least: 1
