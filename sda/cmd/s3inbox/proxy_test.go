@@ -298,6 +298,14 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
+	// Show multiparts uploads
+	r.Method = "GET"
+	r.URL, _ = url.Parse("/username/file?uploads")
+	w = httptest.NewRecorder()
+	proxy.ServeHTTP(w, r)
+	assert.Equal(suite.T(), 200, w.Result().StatusCode)
+	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
+
 	// Delimiter alone together with prefix
 	r.Method = "GET"
 	r.URL, _ = url.Parse("/username/file?delimiter=puppe&prefix=asdf")
