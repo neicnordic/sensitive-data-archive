@@ -14,8 +14,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -206,7 +206,7 @@ func CreateRSAToken(privateKey *rsa.PrivateKey, headerAlg string, tokenClaims ma
 }
 
 func TestDatabasePingCheck(t *testing.T) {
-	database := database.SQLdb{}
+	database := database.SDAdb{}
 	assert.Error(t, checkDB(&database, 1*time.Second), "nil DB should fail")
 
 	database.DB, _, err = sqlmock.New()

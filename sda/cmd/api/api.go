@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -135,14 +135,14 @@ func readinessResponse(c *gin.Context) {
 
 	if DBRes := checkDB(Conf.API.DB, 5*time.Millisecond); DBRes != nil {
 		log.Debugf("DB connection error :%v", DBRes)
-		Conf.API.DB.Reconnect()
+		Conf.APIConf.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
 	}
 
 	c.JSON(statusCode, "")
 }
 
-func checkDB(database *database.SQLdb, timeout time.Duration) error {
+func checkDB(database *database.SDAdb, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if database.DB == nil {

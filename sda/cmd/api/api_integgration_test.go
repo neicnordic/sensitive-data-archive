@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -164,7 +164,7 @@ func TestShutdown(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	assert.NoError(t, err)
 
 	// make sure all conections are alive
@@ -207,7 +207,7 @@ func TestReadinessResponse(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	assert.NoError(t, err)
 
 	res, err := http.Get(ts.URL + "/ready")
