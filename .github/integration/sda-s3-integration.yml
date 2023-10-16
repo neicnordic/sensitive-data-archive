@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:jammy
+    image: python:3.10-slim
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -166,7 +166,7 @@ services:
       - -c
       - |
         pip install --upgrade pip
-        pip install aiohttp Authlib requests
+        pip install aiohttp Authlib joserfc requests
         python -u /oidc.py
     depends_on:
       credentials:

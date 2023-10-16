@@ -30,7 +30,7 @@ services:
       - PGSSLROOTCERT=/certs/ca.crt
       - PGSSLCERT=/certs/client.crt
       - PGSSLKEY=/certs/client.key
-    image: ubuntu:jammy
+    image: python:3.10-slim
     volumes:
       - ./scripts:/scripts
       - client_certs:/certs

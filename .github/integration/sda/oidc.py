@@ -1,8 +1,10 @@
 """Mock OAUTH2 aiohttp.web server."""
 
 from aiohttp import web
-from authlib.jose import jwt, JsonWebKey
+from joserfc import jwt
+from joserfc.jwk import ECKey, RSAKey, KeySet
 from typing import Tuple, Union
+import json
 import ssl
 import sys
 from pathlib import Path
@@ -34,19 +36,25 @@ def _generate_token() -> Tuple:
     key_data = ""
     if key_file.is_file():
         key_data = key_file.read_text()
-        key = JsonWebKey.import_key(key_data, {'kty': 'EC'})
+        ec_key1 = ECKey.import_key(key_data)
+        ec_key2 = ECKey.generate_key("P-384")
+        print("create RSA key")
+        rsa_key1 = RSAKey.generate_key(2048)
     else:
         print("create EC key")
-        key = JsonWebKey.generate_key('EC', 'P-256', 'options=None', 'is_private=True')
+        ec_key1 = ECKey.generate_key("P-256")
+        ec_key2 = ECKey.generate_key("P-384")
+        print("create RSA key")
+        rsa_key1 = RSAKey.generate_key(2048)
 
     # we set no `exp` and other claims as they are optional in a real scenario these should be set
     # See available claims here: http://www.iana.org/assignments/jwt/jwt.xhtml
     # the important claim is the "authorities"
     header = {
         "jku": f"{HTTP_PROTOCOL}://oidc:8080/jwk",
-        "kid": "EC1",
         "alg": "ES256",
         "typ": "JWT",
+        "kid": ec_key1.thumbprint()
     }
     trusted_payload = {
         "sub": "requester@demo.org",
@@ -121,31 +129,30 @@ def _generate_token() -> Tuple:
         "jti": "9fa600d6-4148-47c1-b708-36c4ba2e980e",
     }
 
-    public_jwk = key.as_dict(is_private=False)
-    private_jwk = dict(key)
-
+    public_jwk = KeySet([rsa_key1, ec_key1, ec_key2])
+    private_jwk = KeySet([rsa_key1, ec_key1])
 
 
     # token that contains demo dataset and trusted visas
-    trusted_token = jwt.encode(header, trusted_payload, private_jwk).decode("utf-8")
+    trusted_token = jwt.encode(header, trusted_payload, ec_key1)
 
     # token that contains demo dataset and untrusted visas
-    untrusted_token = jwt.encode(header, untrusted_payload, private_jwk).decode("utf-8")
+    untrusted_token = jwt.encode(header, untrusted_payload, ec_key1)
 
     # empty token
-    empty_userinfo = jwt.encode(header, empty_payload, private_jwk).decode("utf-8")
+    empty_userinfo = jwt.encode(header, empty_payload, ec_key1)
 
     # general terms that illustrates another visatype: AcceptedTermsAndPolicies
-    visa_terms_encoded = jwt.encode(header, passport_terms, private_jwk).decode("utf-8")
+    visa_terms_encoded = jwt.encode(header, passport_terms, ec_key1)
 
     # visa that contains demo dataset
-    visa_dataset1_encoded = jwt.encode(header, passport_dataset1, private_jwk).decode("utf-8")
+    visa_dataset1_encoded = jwt.encode(header, passport_dataset1, ec_key1)
 
     # visa that contains demo dataset but issue that is not trusted
-    visa_dataset2_encoded = jwt.encode(header, passport_dataset2, private_jwk).decode("utf-8")
+    visa_dataset2_encoded = jwt.encode(header, passport_dataset2, ec_key1)
 
     return (
-        public_jwk,
+        public_jwk.as_dict(private=False),
         trusted_token,
         empty_userinfo,
         untrusted_token,
@@ -263,10 +270,7 @@ async def fixed_response(request: web.Request) -> web.Response:
 
 async def jwk_response(request: web.Request) -> web.Response:
     """Mock JSON Web Key server."""
-    keys = [DATA[0]]
-    keys[0]["kid"] = "EC1"
-    data = {"keys": keys}
-    return web.json_response(data)
+    return web.json_response(DATA[0])
 
 
 async def tokens_response(request: web.Request) -> web.Response:

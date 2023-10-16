@@ -11,6 +11,9 @@ fi
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
 apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client >/dev/null
 
+pip install --upgrade pip > /dev/null
+pip install aiohttp Authlib joserfc requests > /dev/null
+
 for n in download finalize inbox ingest mapper sync verify; do
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
@@ -31,7 +34,7 @@ if [ ! -f "/shared/keys/jwt.key" ]; then
 fi
 
 echo "creating token"
-token="$(bash /scripts/sign_jwt.sh ES256 /shared/keys/jwt.key)"
+token="$(python /scripts/sign_jwt.py)"
 
 cat >/shared/s3cfg <<EOD
 [default]

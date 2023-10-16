@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -80,17 +81,15 @@ func main() {
 		messenger.Connection.Close()
 		os.Exit(1)
 	}()
-	var pubkeys map[string][]byte
-	auth := NewValidateFromToken(pubkeys)
-	auth.pubkeys = make(map[string][]byte)
+	auth := NewValidateFromToken(jwk.NewSet())
 	// Load keys for JWT verification
 	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.getjwtpubkey(Conf.Server.Jwtpubkeyurl); err != nil {
+		if err := auth.fetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
 		}
 	}
 	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.getjwtkey(Conf.Server.Jwtpubkeypath); err != nil {
+		if err := auth.readJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
