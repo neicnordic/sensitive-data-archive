@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -67,14 +68,16 @@ type SyncAPIConf struct {
 }
 
 type APIConf struct {
-	CACert     string
-	ServerCert string
-	ServerKey  string
-	Host       string
-	Port       int
-	Session    SessionConfig
-	DB         *database.SDAdb
-	MQ         *broker.AMQPBroker
+	CACert        string
+	ServerCert    string
+	ServerKey     string
+	Host          string
+	Port          int
+	Session       SessionConfig
+	DB            *database.SDAdb
+	MQ            *broker.AMQPBroker
+	JwtPubKeyPath string
+	JtwKeys       map[string][]byte
 }
 
 type SessionConfig struct {
@@ -999,4 +1002,30 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// TODO add extra endpoint for this? /.well-known/jwks.json ?
+// Function for reading the ega key in []byte
+func GetJwtKey(jwtpubkeypath string, jwtKeys map[string][]byte) error {
+	err := filepath.Walk(jwtpubkeypath,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.Mode().IsRegular() {
+				log.Debug("Reading file: ", filepath.Join(filepath.Clean(jwtpubkeypath), info.Name()))
+				keyData, err := os.ReadFile(filepath.Join(filepath.Clean(jwtpubkeypath), info.Name()))
+				if err != nil {
+					return fmt.Errorf("token file error: %v", err)
+				}
+				jwtKeys[strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))] = keyData
+			}
+
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("failed to get public key files (%v)", err)
+	}
+
+	return nil
 }

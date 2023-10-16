@@ -48,6 +48,12 @@ type SyncData struct {
 	Checksum string
 }
 
+type SubmissionFileInfo struct {
+	InboxPath string `json:"inboxPath"`
+	Status    string `json:"fileStatus"`
+	CreateAt  string `json:"createAt"`
+}
+
 // SchemaName is the name of the remote database schema to query
 var SchemaName = "sda"
 
@@ -182,6 +188,11 @@ func (dbs *SDAdb) checkAndReconnectIfNeeded() {
 		log.Errorf("Database connection problem: %v", err)
 		_ = dbs.Connect()
 	}
+}
+
+func (dbs *SDAdb) Reconnect() {
+	dbs.DB.Close()
+	dbs.DB, _ = sql.Open(dbs.Config.PgDataSource())
 }
 
 // Close terminates the connection to the database
