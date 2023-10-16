@@ -32,10 +32,10 @@ BEGIN
 
     $set_archived$ LANGUAGE plpgsql;
 
-    CREATE FUNCTION sda.set_verified(file_uuid UUID, corr_id UUID, archive_checksum TEXT, archive_checksum_type TEXT, decrypted_checksum TEXT, decrypted_checksum_type TEXT, descrypted_size BIGINT)
+    CREATE FUNCTION sda.set_verified(file_uuid UUID, corr_id UUID, archive_checksum TEXT, archive_checksum_type TEXT, decrypted_size BIGINT, decrypted_checksum TEXT, decrypted_checksum_type TEXT)
     RETURNS void AS $set_verified$
     BEGIN
-        UPDATE sda.files SET decrypted_file_size = descrypted_size WHERE id = file_uuid;
+        UPDATE sda.files SET decrypted_file_size = decrypted_size WHERE id = file_uuid;
 
         INSERT INTO sda.checksums(file_id, checksum, type, source)
         VALUES(file_uuid, archive_checksum, upper(archive_checksum_type)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source);
