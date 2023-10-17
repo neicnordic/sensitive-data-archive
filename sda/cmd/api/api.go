@@ -17,9 +17,11 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 
 	log "github.com/sirupsen/logrus"
@@ -42,10 +44,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	Conf.API.JtwKeys = make(map[string][]byte)
-	if Conf.API.JwtPubKeyPath != "" {
-		if err := config.GetJwtKey(Conf.API.JwtPubKeyPath, Conf.API.JtwKeys); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.API.JwtPubKeyPath, err)
+	auth := userauth.NewValidateFromToken(jwk.NewSet())
+	if Conf.Server.Jwtpubkeyurl != "" {
+		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
+		}
+	}
+	if Conf.Server.Jwtpubkeypath != "" {
+		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
 
@@ -135,7 +142,7 @@ func readinessResponse(c *gin.Context) {
 
 	if DBRes := checkDB(Conf.API.DB, 5*time.Millisecond); DBRes != nil {
 		log.Debugf("DB connection error :%v", DBRes)
-		Conf.APIConf.DB.Reconnect()
+		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
 	}
 

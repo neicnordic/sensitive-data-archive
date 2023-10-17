@@ -1,20 +1,28 @@
-package main
+package userauth
 
 import (
 	"crypto/rand"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"path"
+	"runtime"
+	"strconv"
 	"testing"
+	"time"
 
 	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/docker"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
+
+var OIDCport int
 
 type UserAuthTest struct {
 	suite.Suite
@@ -25,9 +33,78 @@ func TestUserAuthTestSuite(t *testing.T) {
 }
 
 func (suite *UserAuthTest) SetupTest() {
+}
+func TestMain(m *testing.M) {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		m.Run()
+	}
+	_, b, _, _ := runtime.Caller(0)
+	rootDir := path.Join(path.Dir(b), "../../../")
+
+	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
+	pool, err := dockertest.NewPool("")
+	if err != nil {
+		log.Fatalf("Could not construct pool: %s", err)
+	}
+
+	// uses pool to try to connect to Docker
+	err = pool.Client.Ping()
+	if err != nil {
+		log.Fatalf("Could not connect to Docker: %s", err)
+	}
+
+	// pulls an image, creates a container based on it and runs it
+	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "python",
+		Tag:        "3.10-slim",
+		Cmd: []string{
+			"/bin/sh",
+			"-c",
+			"pip install --upgrade pip && pip install aiohttp Authlib joserfc requests && python -u /oidc.py",
+		},
+		ExposedPorts: []string{"8080"},
+		Mounts: []string{
+			fmt.Sprintf("%s/.github/integration/sda/oidc.py:/oidc.py", rootDir),
+		},
+	}, func(config *docker.HostConfig) {
+		// set AutoRemove to true so that stopped container goes away by itself
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{
+			Name: "no",
+		}
+	})
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+
+	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
+	OIDCHostAndPort := oidc.GetHostPort("8080/tcp")
+
+	client := http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	if err := pool.Retry(func() error {
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+
+		return nil
+	}); err != nil {
+		if err := pool.Purge(oidc); err != nil {
+			log.Panicf("Could not purge oidc resource: %s", err)
+		}
+		log.Panicf("Could not connect to oidc: %s", err)
+	}
 
 }
 
+/*
 // AlwaysAllow is an Authenticator that always authenticates
 type AlwaysAllow struct{}
 
@@ -40,6 +117,7 @@ func NewAlwaysAllow() *AlwaysAllow {
 func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.Token, error) {
 	return jwt.New(), nil
 }
+*/
 
 func (suite *UserAuthTest) TestAlwaysAuthenticator() {
 	a := NewAlwaysAllow()
@@ -50,7 +128,7 @@ func (suite *UserAuthTest) TestAlwaysAuthenticator() {
 
 func (suite *UserAuthTest) TestUserTokenAuthenticator_NoFile() {
 	a := NewValidateFromToken(jwk.NewSet())
-	err := a.readJwtPubKeyPath("")
+	err := a.ReadJwtPubKeyPath("")
 	assert.Error(suite.T(), err)
 }
 
@@ -68,9 +146,9 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_GetFile() {
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
 	a := NewValidateFromToken(jwk.NewSet())
-	err = a.readJwtPubKeyPath(jwtpubkeypath)
+	err = a.ReadJwtPubKeyPath(jwtpubkeypath)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), 2, a.keyset.Len())
+	assert.Equal(suite.T(), 2, a.Keyset.Len())
 
 	defer os.RemoveAll(demoKeysPath)
 }
@@ -79,7 +157,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_WrongURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "/dummy/"
 
-	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.Equal(suite.T(), "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
 }
 
@@ -87,7 +165,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_BadURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "dummy.com/jwk"
 
-	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.Equal(suite.T(), "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
 }
 
@@ -95,9 +173,9 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_GoodURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
 
-	err := a.fetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
 	assert.NoError(suite.T(), err, "failed to fetch remote JWK")
-	assert.Equal(suite.T(), 3, a.keyset.Len())
+	assert.Equal(suite.T(), 3, a.Keyset.Len())
 }
 
 func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
@@ -113,7 +191,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 	a := NewValidateFromToken(jwk.NewSet())
-	_ = a.readJwtPubKeyPath(jwtpubkeypath)
+	_ = a.ReadJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, "/rsa")
@@ -232,7 +310,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
 	a := NewValidateFromToken(jwk.NewSet())
-	_ = a.readJwtPubKeyPath(jwtpubkeypath)
+	_ = a.ReadJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateECKey(prKeyPath, "/ec")
@@ -350,7 +428,7 @@ func (suite *UserAuthTest) TestWrongKeyType_RSA() {
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
 	a := NewValidateFromToken(jwk.NewSet())
-	_ = a.readJwtPubKeyPath(jwtpubkeypath)
+	_ = a.ReadJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateRSAKey(prKeyPath, demoPrKeyName)
@@ -372,7 +450,7 @@ func (suite *UserAuthTest) TestWrongKeyType_EC() {
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
 	a := NewValidateFromToken(jwk.NewSet())
-	_ = a.readJwtPubKeyPath(jwtpubkeypath)
+	_ = a.ReadJwtPubKeyPath(jwtpubkeypath)
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateECKey(prKeyPath, demoPrKeyName)

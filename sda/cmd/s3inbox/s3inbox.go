@@ -12,6 +12,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -81,15 +82,15 @@ func main() {
 		messenger.Connection.Close()
 		os.Exit(1)
 	}()
-	auth := NewValidateFromToken(jwk.NewSet())
+	auth := userauth.NewValidateFromToken(jwk.NewSet())
 	// Load keys for JWT verification
 	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.fetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
+		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
 		}
 	}
 	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.readJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
+		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}

@@ -626,8 +626,8 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 // GetUserFiles retrieves all the files a user submitted
 func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	var (
-		err   error = nil
-		count int   = 0
+		err   error
+		count int
 	)
 
 	files := []*SubmissionFileInfo{}

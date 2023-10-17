@@ -1,4 +1,4 @@
-package main
+package userauth
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type Authenticator interface {
 // ValidateFromToken is an Authenticator that reads the public key from
 // supplied file
 type ValidateFromToken struct {
-	keyset jwk.Set
+	Keyset jwk.Set
 }
 
 // NewValidateFromToken returns a new ValidateFromToken, reading the key from
@@ -43,7 +43,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 		return nil, fmt.Errorf("no access token supplied")
 	}
 
-	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 	if err != nil {
 		return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
 	}
@@ -78,7 +78,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 }
 
 // Function for reading the ega key in []byte
-func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
+func (u *ValidateFromToken) ReadJwtPubKeyPath(jwtpubkeypath string) error {
 	err := filepath.Walk(jwtpubkeypath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -100,7 +100,7 @@ func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
 					return fmt.Errorf("assignKeyID failed: %v", err)
 				}
 
-				if err := u.keyset.AddKey(key); err != nil {
+				if err := u.Keyset.AddKey(key); err != nil {
 					return fmt.Errorf("failed to add key to set: %v", err)
 				}
 			}
@@ -115,7 +115,7 @@ func (u *ValidateFromToken) readJwtPubKeyPath(jwtpubkeypath string) error {
 }
 
 // Function for fetching the elixir key from the JWK and transform it to []byte
-func (u *ValidateFromToken) fetchJwtPubKeyURL(jwtpubkeyurl string) error {
+func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 	jwkURL, err := url.ParseRequestURI(jwtpubkeyurl)
 	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
 		if err != nil {
@@ -129,12 +129,12 @@ func (u *ValidateFromToken) fetchJwtPubKeyURL(jwtpubkeyurl string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	u.keyset, err = jwk.Fetch(ctx, jwtpubkeyurl)
+	u.Keyset, err = jwk.Fetch(ctx, jwtpubkeyurl)
 	if err != nil {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
 	}
 
-	for it := u.keyset.Keys(context.Background()); it.Next(context.Background()); {
+	for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
 		pair := it.Pair()
 		key := pair.Value.(jwk.Key)
 		if err := jwk.AssignKeyID(key); err != nil {
