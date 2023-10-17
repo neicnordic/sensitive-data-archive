@@ -16,3 +16,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "20_inbox_queries completed successfully"

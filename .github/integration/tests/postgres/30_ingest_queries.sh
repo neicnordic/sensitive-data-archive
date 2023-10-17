@@ -36,3 +36,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "30_ingest_queries completed successfully"

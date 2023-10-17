@@ -34,3 +34,5 @@ for u in download finalize inbox ingest mapper sync verify; do
     export PGPASSWORD="$u"
     psql -U "$u" -h postgres -d sda -At -c "SELECT version();" 1>/dev/null
 done
+
+echo "10_sanity_check completed successfully"

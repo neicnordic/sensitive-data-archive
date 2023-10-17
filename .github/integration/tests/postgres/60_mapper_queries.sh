@@ -44,3 +44,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "60_mapper_queries completed successfully"

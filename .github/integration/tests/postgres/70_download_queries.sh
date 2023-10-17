@@ -35,3 +35,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "70_download_queries completed successfully"

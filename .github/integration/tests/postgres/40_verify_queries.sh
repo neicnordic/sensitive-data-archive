@@ -32,3 +32,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "40_verify_queries completed successfully"

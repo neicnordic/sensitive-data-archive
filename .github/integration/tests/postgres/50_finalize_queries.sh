@@ -15,3 +15,5 @@ for host in migrate postgres; do
         exit 1
     fi
 done
+
+echo "50_finalize_queries completed successfully"
