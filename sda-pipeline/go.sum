@@ -166,8 +166,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mocktools/go-smtp-mock v1.10.0 h1:glrRmjNqASyy+jf1IJ2nCWgEbJScD3Amf2IGcXgdEVg=
 github.com/mocktools/go-smtp-mock v1.10.0/go.mod h1:mmvlBVX6MTOBHtROX+tor9YZF5JENN8d8wrToD1vvg4=
-github.com/neicnordic/crypt4gh v1.7.6 h1:Vqcb8Yb950oaBBJFepDK1oLeu9rZzpywYWVHLmO0oI8=
-github.com/neicnordic/crypt4gh v1.7.6/go.mod h1:rqmVXsprDFBRRLJkm1cK9kLETBPGEZmft9lHD/V40wk=
+github.com/neicnordic/crypt4gh v1.8.3 h1:MQyvZE4DYeEgEXkNi8P0CVNa5XN5F5DkoR/pu1KDeeI=
+github.com/neicnordic/crypt4gh v1.8.3/go.mod h1:8bRSkaYlFx4i+0dID5CpUvfuY5B1/0qvh4X+6FsQpcM=
 github.com/pelletier/go-toml/v2 v2.1.0 h1:FnwAJ4oYMvbT/34k9zzHuZNrhlz48GB3/s6at6/MHO4=
 github.com/pelletier/go-toml/v2 v2.1.0/go.mod h1:tJU2Z3ZkXwnxa4DPO899bsyIoywizdUvyaeZurnPPDc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
