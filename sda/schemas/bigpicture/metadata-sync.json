@@ -1,0 +1,32 @@
+{
+    "title": "JSON schema for file syncing message interface.",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/bigpicture/metadata-sync.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "dataset_id",
+        "metadata"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "dataset_id": {
+            "$id": "#/properties/dataset_id",
+            "type": "string",
+            "title": "The Accession identifier for the dataset",
+            "description": "The Accession identifier for the dataset",
+            "minLength": 11,
+            "pattern": "^\\S+$",
+            "examples": [
+                "anyidentifier"
+            ]
+        },
+        "metadata": {
+            "$id": "#/properties/metadata",
+            "type": "object",
+            "title": "Metadata for the dataset",
+            "description": "Metadata for the dataset",
+            "minProperties": 1,
+            "pattern": "^\\S+$"
+        }
+    }
+}
