@@ -364,3 +364,23 @@ func (suite *DatabaseTests) TestUpdateDatasetEvent() {
 	err = db.UpdateDatasetEvent(dID, "deprecated", "{\"type\": \"deprecate\"}")
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 }
+
+func (suite *DatabaseTests) TestGetHeaderForStableID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestGetHeaderForStableID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	err = db.StoreHeader([]byte("HEADER"), fileID)
+	assert.NoError(suite.T(), err, "failed to store file header")
+
+	stableID := "TEST:010-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when setting stable ID: %s, %s", err, stableID, fileID)
+
+	header, err := db.GetHeaderForStableID("TEST:010-1234-4567")
+	assert.NoError(suite.T(), err, "failed to get header for stable ID: %v", err)
+	assert.Equal(suite.T(), header, "484541444552", "did not get expected header")
+}

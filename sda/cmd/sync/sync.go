@@ -5,37 +5,23 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
-	"sda-pipeline/internal/storage"
-
 	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-// Backup struct that holds the json message data
-type backup struct {
-	Type               string      `json:"type,omitempty"`
-	User               string      `json:"user"`
-	Filepath           string      `json:"filepath"`
-	AccessionID        string      `json:"accession_id"`
-	DecryptedChecksums []checksums `json:"decrypted_checksums"`
-}
-
-// Checksums is struct for the checksum type and value
-type checksums struct {
-	Type  string `json:"type"`
-	Value string `json:"value"`
-}
-
 func main() {
 	forever := make(chan bool)
-	conf, err := config.NewConfig("backup")
+	conf, err := config.NewConfig("sync")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,11 +29,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := database.NewDB(conf.Database)
+	db, err := database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
-	backupStorage, err := storage.NewBackend(conf.Backup)
+	syncDestination, err := storage.NewBackend(conf.Sync)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,13 +73,8 @@ func main() {
 		forever <- false
 	}()
 
-	log.Info("Starting backup service")
-	var message backup
-	jsonSchema := "ingestion-completion"
-
-	if conf.Broker.Queue == "accessionIDs" {
-		jsonSchema = "ingestion-accession"
-	}
+	log.Info("Starting sync service")
+	var message schema.IngestionCompletion
 
 	go func() {
 		messages, err := mq.GetMessages(conf.Broker.Queue)
@@ -105,10 +86,7 @@ func main() {
 				delivered.CorrelationId,
 				delivered.Body)
 
-			err := mq.ValidateJSON(&delivered,
-				jsonSchema,
-				delivered.Body,
-				&message)
+			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), delivered.Body)
 
 			if err != nil {
 				log.Errorf("Validation of incoming message failed "+
@@ -128,22 +106,14 @@ func main() {
 				"accessionid: %s, "+
 				"decryptedChecksums: %v)",
 				delivered.CorrelationId,
-				message.Filepath,
+				message.FilePath,
 				message.User,
 				message.AccessionID,
 				message.DecryptedChecksums)
 
-			// Extract the sha256 from the message and use it for the database
-			var checksumSha256 string
-			for _, checksum := range message.DecryptedChecksums {
-				if checksum.Type == "sha256" {
-					checksumSha256 = checksum.Value
-				}
-			}
-
 			var filePath string
 			var fileSize int
-			if filePath, fileSize, err = db.GetArchived(message.User, message.Filepath, checksumSha256); err != nil {
+			if filePath, fileSize, err = db.GetArchived(delivered.CorrelationId); err != nil {
 				log.Errorf("GetArchived failed "+
 					"(corr-id: %s, "+
 					"filepath: %s, "+
@@ -151,7 +121,7 @@ func main() {
 					"accessionid: %s, "+
 					"decryptedChecksums: %v, error: %v)",
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -166,7 +136,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -192,7 +162,7 @@ func main() {
 					"decryptedChecksums: %v, error: %v)",
 					filePath,
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -206,7 +176,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -228,7 +198,7 @@ func main() {
 					diskFileSize,
 					fileSize,
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -242,7 +212,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -262,7 +232,7 @@ func main() {
 					"decryptedChecksums: %v, error: %v)",
 					filePath,
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -277,7 +247,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -290,10 +260,10 @@ func main() {
 			// If the copy header is enabled, use the actual filepath to make backup
 			// This will be used in the BigPicture backup, enabling for ingestion of the file
 			if config.CopyHeader() {
-				filePath = message.Filepath
+				filePath = message.FilePath
 			}
 
-			dest, err := backupStorage.NewFileWriter(filePath)
+			dest, err := syncDestination.NewFileWriter(filePath)
 			if err != nil {
 				log.Errorf("Failed to open backup file %s for writing "+
 					"(corr-id: %s, "+
@@ -303,7 +273,7 @@ func main() {
 					"decryptedChecksums: %v, error: %v)",
 					filePath,
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -318,7 +288,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -341,7 +311,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -360,7 +330,7 @@ func main() {
 						"decryptedChecksums: %v, error: %v)",
 						filePath,
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -374,7 +344,7 @@ func main() {
 							"accessionid: %s, "+
 							"decryptedChecksums: %v, error: %v)",
 							delivered.CorrelationId,
-							message.Filepath,
+							message.FilePath,
 							message.User,
 							message.AccessionID,
 							message.DecryptedChecksums,
@@ -396,7 +366,7 @@ func main() {
 						"decryptedChecksums: %v, error: %v)",
 						filePath,
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -410,7 +380,7 @@ func main() {
 							"accessionid: %s, "+
 							"decryptedChecksums: %v, error: %v)",
 							delivered.CorrelationId,
-							message.Filepath,
+							message.FilePath,
 							message.User,
 							message.AccessionID,
 							message.DecryptedChecksums,
@@ -429,7 +399,7 @@ func main() {
 						"decryptedChecksums: %v, error: %v)",
 						filePath,
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -447,7 +417,7 @@ func main() {
 					"accessionid: %s, "+
 					"decryptedChecksums: %v, error: %v)",
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -462,7 +432,7 @@ func main() {
 						"accessionid: %s, "+
 						"decryptedChecksums: %v, error: %v)",
 						delivered.CorrelationId,
-						message.Filepath,
+						message.FilePath,
 						message.User,
 						message.AccessionID,
 						message.DecryptedChecksums,
@@ -484,12 +454,12 @@ func main() {
 				filePath,
 				fileSize,
 				delivered.CorrelationId,
-				message.Filepath,
+				message.FilePath,
 				message.User,
 				message.AccessionID,
 				message.DecryptedChecksums)
 
-			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, conf.Broker.Durable, delivered.Body); err != nil {
+			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, delivered.Body); err != nil {
 				// TODO fix resend mechanism
 				log.Errorf("Failed to send message for completed "+
 					"(corr-id: %s, "+
@@ -498,7 +468,7 @@ func main() {
 					"accessionid: %s, "+
 					"decryptedChecksums: %v, error: %v)",
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
@@ -517,7 +487,7 @@ func main() {
 					"accessionid: %s, "+
 					"decryptedChecksums: %v, error: %v)",
 					delivered.CorrelationId,
-					message.Filepath,
+					message.FilePath,
 					message.User,
 					message.AccessionID,
 					message.DecryptedChecksums,
