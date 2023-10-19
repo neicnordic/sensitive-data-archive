@@ -324,3 +324,22 @@ func (suite *ConfigTestSuite) TestGetC4GHPublicKey() {
 
 	defer os.RemoveAll(pubKeyPath)
 }
+func (suite *ConfigTestSuite) TestGetC4GHKey() {
+	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
+	keyPath, _ := os.MkdirTemp("", "key")
+	err := os.WriteFile(keyPath+"/c4gh.key", []byte(key), 0600)
+	assert.NoError(suite.T(), err)
+
+	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	pkBytes, err := GetC4GHKey()
+	assert.EqualError(suite.T(), err, "chacha20poly1305: message authentication failed")
+	assert.Nil(suite.T(), pkBytes)
+
+	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	viper.Set("c4gh.passphrase", "test")
+	pkBytes, err = GetC4GHKey()
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), pkBytes)
+
+	defer os.RemoveAll(keyPath)
+}
