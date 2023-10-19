@@ -3,20 +3,20 @@
 cd dev_utils || exit 1
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.file_dataset"
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"
 
 # "Disable" old files to not confuse later tests.
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -A -c "UPDATE local_ega.files SET status='DISABLED' where status='READY';"
 
 count=1
@@ -239,7 +239,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	until [ "${#dbcheck}" -ne 0 ]; do
 
 		dbcheck=$(docker run --rm --name client --network dev_utils_default \
-			neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -c "SELECT * from local_ega_ebi.file_dataset where dataset_id='$dataset' and file_id='$access'")
 
 		if [ "${#dbcheck}" -eq 0 ]; then
@@ -251,15 +251,15 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 				echo "Mappings failed"
 				docker run --rm --name client --network dev_utils_default \
-					neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT * from local_ega_ebi.file_dataset ORDER BY id DESC"
 
 				docker run --rm --name client --network dev_utils_default \
-					neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 				docker run --rm --name client --network dev_utils_default \
-					neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"
 
 				echo "::error::Timed out waiting for mapper to complete, logs:"
@@ -319,7 +319,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 	until [ -n "$statusindb" ]; do
 		statusindb=$(docker run --rm --name client --network dev_utils_default \
-			neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='READY';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
@@ -335,7 +335,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 	until [ -n "$decryptedsizedb" ]; do
 		decryptedsizedb=$(docker run --rm --name client --network dev_utils_default \
-			neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "SELECT decrypted_file_size from local_ega.files where stable_id='$access';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
@@ -359,7 +359,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 	until [ -n "$decryptedchecksum" ]; do
 		decryptedchecksum=$(docker run --rm --name client --network dev_utils_default \
-			neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "SELECT decrypted_file_checksum from local_ega.files where stable_id='$access';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
@@ -382,13 +382,13 @@ for file in dummy_data.c4gh largefile.c4gh; do
 done
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.file_dataset"
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"

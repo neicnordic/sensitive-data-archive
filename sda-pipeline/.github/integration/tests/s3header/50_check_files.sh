@@ -7,7 +7,7 @@ chmod 600 certs/client-key.pem
 function db_query() {
 	docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -A -c "$1"
 }
 
@@ -15,7 +15,7 @@ echo "Checking archive files in s3"
 
 # Earlier tests verify that the file is in the database correctly
 # even though the files are disabled we can still get them from the db
-accessids=$(db_query "SELECT stable_id FROM local_ega.files where status='DISABLED';")
+accessids=$(db_query "SELECT stable_id FROM local_ega.files where status='READY';")
 
 if [ -z "$accessids" ]; then
 	echo "Failed to get accession ids"

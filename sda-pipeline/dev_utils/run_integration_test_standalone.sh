@@ -103,7 +103,7 @@ if printf '%s\n' \
     --env PGSSLKEY=/certs/client-key.pem \
     --env PGSSLROOTCERT=/certs/ca.pem \
     neicnordic/pg-client:latest \
-    postgresql://lega_out:lega_out@db:5432/lega -t \
+    postgresql://postgres:rootpasswd@db:5432/sda -t \
         --variable=id="$datasetID" | grep .
 then
     echo 'Success'
