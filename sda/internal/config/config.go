@@ -266,6 +266,9 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"broker.queue",
 			"broker.routingkey",
+			"c4gh.backupPubKey",
+			"c4gh.filepath",
+			"c4gh.passphrase",
 			"db.host",
 			"db.port",
 			"db.user",
@@ -931,13 +934,4 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// CopyHeader reads the config and returns if the header will be copied
-func CopyHeader() bool {
-	if viper.IsSet("sync.copyHeader") {
-		return viper.GetBool("sync.copyHeader")
-	}
-
-	return false
 }

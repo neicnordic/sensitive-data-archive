@@ -267,8 +267,3 @@ func (suite *ConfigTestSuite) TestNotifyConfiguration() {
 	assert.NotNil(suite.T(), config)
 }
 
-func (suite *ConfigTestSuite) TestCopyHeader() {
-	viper.Set("sync.copyHeader", "true")
-	cHeader := CopyHeader()
-	assert.Equal(suite.T(), cHeader, true, "The CopyHeader does not work")
-}
