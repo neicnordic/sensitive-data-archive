@@ -266,9 +266,9 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"broker.queue",
 			"broker.routingkey",
-			"c4gh.backupPubKey",
 			"c4gh.filepath",
 			"c4gh.passphrase",
+			"c4gh.syncPubKeyPath",
 			"db.host",
 			"db.port",
 			"db.user",
@@ -811,8 +811,7 @@ func GetC4GHKey() (*[32]byte, error) {
 
 // GetC4GHPublicKey reads the c4gh public key
 func GetC4GHPublicKey() (*[32]byte, error) {
-	keyPath := viper.GetString("c4gh.backupPubKey")
-
+	keyPath := viper.GetString("c4gh.syncPubKeyPath")
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)
 	if err != nil {
