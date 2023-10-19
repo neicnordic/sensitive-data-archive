@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -304,4 +305,22 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(suite.T(), config.Sync)
 	assert.NotNil(suite.T(), config.Sync.Posix)
 	assert.Equal(suite.T(), "test", config.Sync.Posix.Location)
+}
+func (suite *ConfigTestSuite) TestGetC4GHPublicKey() {
+	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
+	pubKeyPath, _ := os.MkdirTemp("", "pubkey")
+	err := os.WriteFile(pubKeyPath+"/c4gh.pub", []byte(pubKey), 0600)
+	assert.NoError(suite.T(), err)
+
+	var kb [32]byte
+	k, _ := base64.StdEncoding.DecodeString("uQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=")
+	copy(kb[:], k)
+
+	viper.Set("c4gh.syncPubKeyPath", pubKeyPath+"/c4gh.pub")
+	pkBytes, err := GetC4GHPublicKey()
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), pkBytes)
+	assert.Equal(suite.T(), pkBytes, &kb, "GetC4GHPublicKey didn't return correct pubKey")
+
+	defer os.RemoveAll(pubKeyPath)
 }
