@@ -31,9 +31,9 @@ func TestShutdown(t *testing.T) {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     5432,
-		User:     "lega_in",
-		Password: "lega_in",
-		Database: "lega",
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewDB(Conf.Database)
@@ -73,9 +73,9 @@ func TestReadinessResponse(t *testing.T) {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     5432,
-		User:     "lega_in",
-		Password: "lega_in",
-		Database: "lega",
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewDB(Conf.Database)

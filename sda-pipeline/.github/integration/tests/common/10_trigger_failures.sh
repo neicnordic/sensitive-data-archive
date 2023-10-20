@@ -504,7 +504,7 @@ echo "Waiting for ingest to confirm delivery."
 chmod 600 certs/client-key.pem
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "update sda.file_event_log set correlation_id = 'ad8df344-19cc-4452-8331-4c12d47b9804' where correlation_id = '8bc6a0ef-2a64-4d50-ab09-59fc789f5186'"
 
 docker unpause verify &> /dev/null

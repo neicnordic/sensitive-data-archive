@@ -4,7 +4,7 @@ cd dev_utils || exit 1
 
 function db_query() {
 	docker run --rm --name client --network dev_utils_default \
-	neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -A -c "$1"
 }
 

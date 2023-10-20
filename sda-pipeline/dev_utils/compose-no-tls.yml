@@ -1,18 +1,14 @@
 services:
   db:
-    command: server /data
     container_name: db
     environment:
-      - DB_LEGA_IN_PASSWORD=lega_in
-      - DB_LEGA_OUT_PASSWORD=lega_out
-      - NOTLS=true
-      - POSTGRES_PASSWORD=rootpassword
+      - POSTGRES_PASSWORD=rootpasswd
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.14
+    image: ghcr.io/neicnordic/sensitive-data-archive:v0.0.128-postgres
     ports:
       - "5432:5432"
     volumes:
@@ -180,8 +176,6 @@ services:
       - BROKER_QUEUE=mappings
       - BROKER_ROUTINGERROR=error
       - DB_HOST=db
-      - DB_USER=lega_out
-      - DB_PASSWORD=lega_out
     image: neicnordic/sda-pipeline:latest
     volumes:
       - ./config-notls.yaml:/config.yaml

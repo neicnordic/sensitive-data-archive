@@ -18,25 +18,21 @@ services:
       - certs:/certs
 
   db:
-    command: server /data
     container_name: db
     depends_on:
       certfixer:
         condition: service_completed_successfully
     environment:
-      - DB_LEGA_IN_PASSWORD=lega_in
-      - DB_LEGA_OUT_PASSWORD=lega_out
-      - PKI_VOLUME_PATH=/certs/
-      - PG_CA=/var/lib/postgresql/tls/ca.pem
-      - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
-      - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
-      - POSTGRES_PASSWORD=rootpassword
+      - POSTGRES_SERVER_CACERT=/var/lib/postgresql/tls/ca.pem
+      - POSTGRES_SERVER_CERT=/var/lib/postgresql/tls/db.pem
+      - POSTGRES_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
+      - POSTGRES_PASSWORD=rootpasswd
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.14
+    image: ghcr.io/neicnordic/sensitive-data-archive:v0.0.128-postgres
     ports:
       - "5432:5432"
     volumes:

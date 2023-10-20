@@ -65,9 +65,9 @@ c4gh:
 db:
   host: "localhost"
   port: 5432
-  user: "lega_in"
-  password: "lega_in"
-  database: "lega"
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
   cacert: "./dev_utils/certs/ca.pem"
   clientCert: "./dev_utils/certs/client.pem"
   clientKey: "./dev_utils/certs/client-key.pem"

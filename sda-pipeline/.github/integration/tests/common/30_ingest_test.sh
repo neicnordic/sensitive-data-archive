@@ -10,23 +10,23 @@ chmod 600 certs/client-key.pem
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.file_dataset"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"
 
 # "Disable" old files to not confuse later tests.
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -A -c "UPDATE local_ega.files SET status='DISABLED' where status='READY';"
 
 count=1
@@ -249,7 +249,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 
 		dbcheck=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -c "SELECT * from local_ega_ebi.file_dataset where dataset_id='$dataset' and file_id='$access'")
 
 		if [ "${#dbcheck}" -eq 0 ]; then
@@ -262,17 +262,17 @@ for file in dummy_data.c4gh largefile.c4gh; do
 				echo "Mappings failed"
 				docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 					-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-					neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT * from local_ega_ebi.file_dataset ORDER BY id DESC"
 
 				docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 					-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-					neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 				docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 					-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-					neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+					neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 					-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"
 
 				echo "::error::Timed out waiting for mapper to complete, logs:"
@@ -333,8 +333,8 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	until [ -n "$statusindb" ]; do
 		statusindb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
-			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='READY';")
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
+			-t -A -c "SELECT id FROM sda.dataset_event_log where dataset_id='$dataset' AND event='released';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
 
@@ -350,7 +350,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	until [ -n "$decryptedsizedb" ]; do
 		decryptedsizedb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "SELECT decrypted_file_size from local_ega.files where stable_id='$access';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
@@ -375,7 +375,7 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	until [ -n "$decryptedchecksum" ]; do
 		decryptedchecksum=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 			-t -A -c "SELECT decrypted_file_checksum from local_ega.files where stable_id='$access';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
@@ -421,8 +421,8 @@ for file in dummy_data.c4gh largefile.c4gh; do
 	until [ -n "$statusindb" ]; do
 		statusindb=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 			-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-			neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
-			-t -A -c "SELECT id FROM local_ega.files where stable_id='$access' AND status='DISABLED';")
+			neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
+			-t -A -c "SELECT id FROM sda.dataset_event_log where dataset_id='$dataset' AND event='deprecated';")
 		sleep 3
 		RETRY_TIMES=$((RETRY_TIMES + 1))
 
@@ -437,15 +437,15 @@ done
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.file_dataset"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT * from local_ega_ebi.filedataset ORDER BY id DESC"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://postgres:rootpassword@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 	-t -c "SELECT id, status, stable_id, archive_path FROM local_ega.files ORDER BY id DESC"

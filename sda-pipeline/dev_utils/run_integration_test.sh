@@ -111,7 +111,7 @@ curl --cacert certs/ca.pem -vvv -u test:test 'https://localhost:15672/api/exchan
 
 dataset=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
 	-e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-	neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+	neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 -c "SELECT * from local_ega_ebi.file_dataset" | grep EGAD00123456789)
 if [ ${#dataset} -eq 0 ]; then
     echo "Mappings failed"
