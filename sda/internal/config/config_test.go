@@ -291,8 +291,6 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.Equal(suite.T(), "testuser", config.Broker.User)
 	assert.Equal(suite.T(), "testpassword", config.Broker.Password)
 	assert.Equal(suite.T(), "testqueue", config.Broker.Queue)
-	assert.Equal(suite.T(), "routingtest", config.Broker.RoutingKey)
-	assert.Equal(suite.T(), "testexchange", config.Broker.Exchange)
 	assert.NotNil(suite.T(), config.Database)
 	assert.Equal(suite.T(), "test", config.Database.Host)
 	assert.Equal(suite.T(), 123, config.Database.Port)

@@ -265,7 +265,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.user",
 			"broker.password",
 			"broker.queue",
-			"broker.routingkey",
 			"c4gh.filepath",
 			"c4gh.passphrase",
 			"c4gh.syncPubKeyPath",

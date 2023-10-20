@@ -196,12 +196,6 @@ func main() {
 			file.Close()
 			dest.Close()
 
-			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, delivered.Body); err != nil {
-				log.Errorf("failed to publish message, reason: (%s)", err.Error())
-
-				continue
-			}
-
 			if err := delivered.Ack(false); err != nil {
 				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 			}
