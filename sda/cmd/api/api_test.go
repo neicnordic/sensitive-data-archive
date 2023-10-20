@@ -1,14 +1,11 @@
 package main
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,51 +13,27 @@ import (
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
-var (
-	CorrectToken = map[string]interface{}{
-		"sub":   "requester@demo.org",
-		"azp":   "azp",
-		"scope": "openid ga4gh_passport_v1",
-		"iss":   "http://example.demo",
-		"exp":   time.Now().Add(time.Hour * 2).Unix(),
-		"iat":   time.Now().Unix(),
-		"jti":   "6ad7aa42-3e9c-4833-bd16-765cb80c2102",
-	}
-
-	NoIssuer = map[string]interface{}{
-		"sub":   "requester@demo.org",
-		"azp":   "azp",
-		"scope": "openid ga4gh_passport_v1",
-		"exp":   time.Now().Add(time.Hour * 2).Unix(),
-		"iat":   time.Now().Unix(),
-		"jti":   "6ad7aa42-3e9c-4833-bd16-765cb80c2102",
-	}
-)
-
 type TestSuite struct {
 	suite.Suite
-	PrivateKey *rsa.PrivateKey
-	Path       string
-	KeyName    string
+	PrivateKey  *rsa.PrivateKey
+	Path        string
+	PublicPath  string
+	PrivatePath string
+	KeyName     string
 }
 
 func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
-}
-
-// Remove the created keys after all tests are run
-func (suite *TestSuite) TearDownTest() {
-	os.Remove(suite.Path + suite.KeyName + ".pem")
-	os.Remove(suite.Path + suite.KeyName + ".pub")
 }
 
 // Initialise configuration and create jwt keys
@@ -91,118 +64,13 @@ func (suite *TestSuite) SetupTest() {
 	suite.KeyName = "example.demo"
 
 	log.Print("Creating JWT keys for testing")
-	suite.CreateKeys(suite.Path, suite.KeyName)
+	privpath, pubpath, err := helper.MakeFolder(suite.Path)
+	assert.NoError(suite.T(), err)
+	suite.PrivatePath = privpath
+	suite.PublicPath = pubpath
+	err = helper.CreateRSAkeys(privpath, pubpath)
+	assert.NoError(suite.T(), err)
 
-}
-
-// CreateKeys creates an RSA key pair for testing
-func (suite *TestSuite) CreateKeys(path string, keyName string) {
-	err := CreateFolder(path)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	err = CreateRSAkeys(path, keyName)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	suite.PrivateKey, err = ParsePrivateRSAKey(path, keyName+".pem")
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-}
-
-// CreateFolder where the keys will be stored
-func CreateFolder(path string) error {
-	err := os.MkdirAll(path, 0750)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ParsePrivateRSAKey reads and parses the RSA private key
-func ParsePrivateRSAKey(path, keyName string) (*rsa.PrivateKey, error) {
-	keyPath := path + keyName
-	prKey, err := os.ReadFile(filepath.Clean(keyPath))
-	if err != nil {
-		return nil, err
-	}
-
-	block, _ := pem.Decode(prKey)
-	prKeyParsed, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return prKeyParsed, nil
-}
-
-// CreateRSAkeys creates the RSA key pair
-func CreateRSAkeys(keyPath string, keyName string) error {
-	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-	publickey := &privatekey.PublicKey
-
-	// dump private key to file
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privatekey)
-	privateKeyBlock := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
-	privatePem, err := os.Create(keyPath + keyName + ".pem")
-	if err != nil {
-		return err
-	}
-	err = pem.Encode(privatePem, privateKeyBlock)
-	if err != nil {
-		return err
-	}
-
-	// dump public key to file
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publickey)
-	if err != nil {
-		return err
-	}
-	publicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	}
-	publicPem, err := os.Create(keyPath + keyName + ".pub")
-	if err != nil {
-		return err
-	}
-	err = pem.Encode(publicPem, publicKeyBlock)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// CreateRSAToken creates an RSA token
-func CreateRSAToken(privateKey *rsa.PrivateKey, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
-	var tok jwt.Token
-	tok, err := jwt.NewBuilder().Issuer(fmt.Sprintf("%v", tokenClaims["iss"])).Build()
-	if err != nil {
-		log.Error(err)
-	}
-
-	for key, element := range tokenClaims {
-		err = tok.Set(key, element)
-		if err != nil {
-			log.Error(err)
-		}
-	}
-
-	serialized, err := jwt.Sign(tok, jwt.WithKey(jwa.SignatureAlgorithm(headerAlg), privateKey))
-	if err != nil {
-		return "no-token", err
-	}
-
-	return string(serialized), nil
 }
 
 func TestDatabasePingCheck(t *testing.T) {
@@ -214,75 +82,93 @@ func TestDatabasePingCheck(t *testing.T) {
 	assert.NoError(t, checkDB(&database, 1*time.Second), "ping should succeed")
 }
 
-func TestGetToken(t *testing.T) {
-	authHeader := "Bearer sometoken"
-	_, err := getToken(authHeader)
-	assert.NoError(t, err)
+func (suite *TestSuite) TestGetUserFromURLToken() {
+	// Get key set from oidc
+	auth := userauth.NewValidateFromToken(jwk.NewSet())
+	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
+	err := auth.FetchJwtPubKeyURL(jwtpubkeyurl)
+	assert.NoError(suite.T(), err, "failed to fetch remote JWK")
+	assert.Equal(suite.T(), 3, auth.Keyset.Len())
 
-	authHeader = "Bearer "
-	_, err = getToken(authHeader)
-	log.Print(err)
-	assert.EqualError(t, err, "token string is missing from authorization header")
+	// Get token from oidc
+	token_url := fmt.Sprintf("http://localhost:%d/tokens", OIDCport)
+	resp, err := http.Get(token_url)
+	assert.NoError(suite.T(), err, "Error getting token from oidc")
+	defer resp.Body.Close()
 
-	authHeader = "Beare"
-	_, err = getToken(authHeader)
-	assert.EqualError(t, err, "authorization scheme must be bearer")
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(suite.T(), err, "Error reading token from oidc")
 
-	authHeader = ""
-	_, err = getToken(authHeader)
-	assert.EqualError(t, err, "access token must be provided")
+	var tokens []string
+	err = json.Unmarshal(body, &tokens)
+	assert.NoError(suite.T(), err, "Error unmarshalling token")
+	assert.GreaterOrEqual(suite.T(), len(tokens), 1)
+
+	rawkey := tokens[0]
+
+	// Call get files api
+	url := "localhost:8080/files"
+	method := "GET"
+	r, err := http.NewRequest(method, url, nil)
+
+	assert.NoError(suite.T(), err)
+
+	r.Header.Add("Authorization", fmt.Sprintf("Bearer %v", rawkey))
+
+	user, err := getUserFromToken(r, auth)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "requester@demo.org", user)
+
 }
 
-func (suite *TestSuite) TestGetUserFromToken() {
+func (suite *TestSuite) TestGetUserFromPathToken() {
 	c := &config.Config{}
-	APIConf := config.APIConf{}
-	APIConf.JwtPubKeyPath = "/tmp/keys"
-	c.API = APIConf
+	ServerConf := config.ServerConfig{}
+	ServerConf.Jwtpubkeypath = suite.PublicPath
+	c.Server = ServerConf
 
 	Conf = c
-	Conf.API.JtwKeys = make(map[string][]byte)
 
-	err := config.GetJwtKey(Conf.API.JwtPubKeyPath, Conf.API.JtwKeys)
-	if err != nil {
-		log.Fatalf("error in GetJwtKey: %v", err)
-	}
+	auth := userauth.NewValidateFromToken(jwk.NewSet())
+	err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath)
+	assert.NoError(suite.T(), err, "Error while getting key "+Conf.Server.Jwtpubkeypath)
 
 	url := "localhost:8080/files"
 	method := "GET"
 	r, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		log.Fatalf("error: %v", err)
+	assert.NoError(suite.T(), err)
 
-		return
-	}
-
-	// Functional token
-	token, err := CreateRSAToken(suite.PrivateKey, "RS256", CorrectToken)
-	if err != nil {
-		log.Fatalf("error in createToken: %v", err)
-	}
+	// Valid token
+	prKeyParsed, err := helper.ParsePrivateRSAKey(suite.PrivatePath, "/rsa")
+	assert.NoError(suite.T(), err)
+	token, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.DefaultTokenClaims)
+	assert.NoError(suite.T(), err)
 	r.Header.Add("Authorization", "Bearer "+token)
 
-	user, err := getUserFromToken(r)
+	user, err := getUserFromToken(r, auth)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "requester@demo.org", user)
+	assert.Equal(suite.T(), "dummy", user)
 
 	// Token without authorization header
 	r.Header.Del("Authorization")
 
-	user, err = getUserFromToken(r)
-	assert.EqualError(suite.T(), err, "could not get token from header: access token must be provided")
+	user, err = getUserFromToken(r, auth)
+	assert.EqualError(suite.T(), err, "failed to get parse token: no access token supplied")
+
 	assert.Equal(suite.T(), "", user)
 
 	// Token without issuer
-	token, err = CreateRSAToken(suite.PrivateKey, "RS256", NoIssuer)
+	NoIssuer := helper.DefaultTokenClaims
+	NoIssuer["iss"] = ""
+	log.Printf("Noissuer %v with iss %v", NoIssuer, NoIssuer["iss"])
+	token, err = helper.CreateRSAToken(prKeyParsed, "RS256", NoIssuer)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 	r.Header.Add("Authorization", "Bearer "+token)
 
-	user, err = getUserFromToken(r)
-	assert.EqualError(suite.T(), err, "failed to get issuer from token (<nil>)")
+	user, err = getUserFromToken(r, auth)
+	assert.EqualError(suite.T(), err, "failed to get parse token: failed to get issuer from token (<nil>)")
 	assert.Equal(suite.T(), "", user)
 
 }

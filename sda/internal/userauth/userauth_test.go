@@ -478,3 +478,21 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	_, WrongAlg := a.Authenticate(r)
 	assert.Contains(suite.T(), WrongAlg.Error(), "signed token not valid:")
 }
+
+func TestGetBearerToken(t *testing.T) {
+	authHeader := "Bearer sometoken"
+	_, err := readTokenFromHeader(authHeader)
+	assert.NoError(t, err)
+
+	authHeader = "Bearer "
+	_, err = readTokenFromHeader(authHeader)
+	assert.EqualError(t, err, "token string is missing from authorization header")
+
+	authHeader = "Beare"
+	_, err = readTokenFromHeader(authHeader)
+	assert.EqualError(t, err, "authorization scheme must be bearer")
+
+	authHeader = ""
+	_, err = readTokenFromHeader(authHeader)
+	assert.EqualError(t, err, "authorization scheme must be bearer")
+}

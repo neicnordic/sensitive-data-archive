@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -23,12 +26,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var dbPort, mqPort int
+var dbPort, mqPort, OIDCport int
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		m.Run()
 	}
+
+	_, b, _, _ := runtime.Caller(0)
+	rootDir := path.Join(path.Dir(b), "../../../")
+
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -42,6 +49,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
+	// TODO use sda-db or postgres repo?
 	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "ghcr.io/neicnordic/sda-db",
 		Tag:        "v2.1.3",
@@ -64,6 +72,7 @@ func TestMain(m *testing.M) {
 
 	dbHostAndPort := postgres.GetHostPort("5432/tcp")
 	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	// TODO this url or postgres://postgres:rootpasswd@%s/sda?sslmode=disable"
 	databaseURL := fmt.Sprintf("postgres://lega_in:lega_in@%s/lega?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
@@ -80,6 +89,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}
 
+	// TODO use sda-mq or rabbitmq?
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "ghcr.io/neicnordic/sda-mq",
@@ -130,6 +140,65 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to rabbitmq: %s", err)
 	}
 
+	RSAPath, _ := os.MkdirTemp("", "RSA")
+	if err := helper.CreateRSAkeys(RSAPath, RSAPath); err != nil {
+		log.Panic("Failed to create RSA keys")
+	}
+	ECPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+		log.Panic("Failed to create EC keys")
+	}
+
+	// OIDC container
+	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "python",
+		Tag:        "3.10-slim",
+		Cmd: []string{
+			"/bin/sh",
+			"-c",
+			"pip install --upgrade pip && pip install aiohttp Authlib joserfc requests && python -u /oidc.py",
+		},
+		ExposedPorts: []string{"8080"},
+		Mounts: []string{
+			fmt.Sprintf("%s/.github/integration/sda/oidc.py:/oidc.py", rootDir),
+		},
+	}, func(config *docker.HostConfig) {
+		// set AutoRemove to true so that stopped container goes away by itself
+		config.AutoRemove = true
+		config.RestartPolicy = docker.RestartPolicy{
+			Name: "no",
+		}
+	})
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err)
+	}
+
+	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
+	OIDCHostAndPort := oidc.GetHostPort("8080/tcp")
+
+	client = http.Client{Timeout: 5 * time.Second}
+	req, err = http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	if err := pool.Retry(func() error {
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+
+		return nil
+	}); err != nil {
+		if err := pool.Purge(oidc); err != nil {
+			log.Panicf("Could not purge oidc resource: %s", err)
+		}
+		log.Panicf("Could not connect to oidc: %s", err)
+	}
+
+	log.Println("starting tests")
 	_ = m.Run()
 
 	log.Println("tests completed")
@@ -137,6 +206,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	if err := pool.Purge(rabbitmq); err != nil {
+		log.Fatalf("Could not purge resource: %s", err)
+	}
+	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 }

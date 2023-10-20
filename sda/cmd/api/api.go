@@ -157,38 +157,25 @@ func checkDB(database *database.SDAdb, timeout time.Duration) error {
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
 
-	log.Debugf("request files in project")
 	c.Writer.Header().Set("Content-Type", "application/json")
 	// Get user ID to extract all files
-	userID, err := getUserFromToken(c.Request)
+	// userID, err := getUserFromToken(c.Request)
+	token, err := auth.Authenticate(c.Request)
 	if err != nil {
 		// something went wrong with user token
-		c.JSON(500, err.Error())
+		c.JSON(401, err.Error())
 
 		return
 	}
 
-	files, err := Conf.API.DB.GetUserFiles(userID)
+	files, err := Conf.API.DB.GetUserFiles(token.Subject())
 	if err != nil {
 		// something went wrong with querying or parsing rows
-		c.JSON(500, err.Error())
+		c.JSON(502, err.Error())
 
 		return
 	}
 
 	// Return response
 	c.JSON(200, files)
-}
-
-// getUserFromToken parses the token, validates it against the key and returns the key
-func getUserFromToken(r *http.Request) (string, error) {
-	// Check that a token is provided
-
-	token, err := auth.Authenticate(r)
-	if err != nil {
-		return "", fmt.Errorf("failed to get parse token: %v", err)
-	}
-	log.Debugf("Got token %v \n\n", token)
-	return token.Subject(), nil
-
 }
