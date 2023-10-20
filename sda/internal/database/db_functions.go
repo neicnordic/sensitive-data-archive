@@ -511,15 +511,17 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 }
 
 // GetHeaderForStableID retrieves the file header by using stable id
-func (dbs *SDAdb) GetHeaderForStableID(stableID string) (string, error) {
+func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 	dbs.checkAndReconnectIfNeeded()
-
-	db := dbs.DB
 	const query = "SELECT header from sda.files WHERE stable_id = $1"
+	var hexString string
+	if err := dbs.DB.QueryRow(query, stableID).Scan(&hexString); err != nil {
+		return nil, err
+	}
 
-	var header string
-	if err := db.QueryRow(query, stableID).Scan(&header); err != nil {
-		return "", err
+	header, err := hex.DecodeString(hexString)
+	if err != nil {
+		return nil, err
 	}
 
 	return header, nil

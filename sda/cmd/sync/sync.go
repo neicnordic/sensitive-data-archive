@@ -3,11 +3,9 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -306,45 +304,11 @@ func main() {
 					err)
 			}
 
-			// Decrypt header
-			log.Debug("Decrypt header")
-			DecHeader, err := FormatHexHeader(header)
-			if err != nil {
-				log.Errorf("Failed to decode the header %s "+
-					"(corr-id: %s, "+
-					"filepath: %s, "+
-					"user: %s, "+
-					"accessionid: %s, "+
-					"decryptedChecksums: %v, error: %v)",
-					filePath,
-					delivered.CorrelationId,
-					message.FilePath,
-					message.User,
-					message.AccessionID,
-					message.DecryptedChecksums,
-					err)
-
-				if e := delivered.Nack(false, true); e != nil {
-					log.Errorf("Failed to NAck because of decode header failed "+
-						"(corr-id: %s, "+
-						"filepath: %s, "+
-						"user: %s, "+
-						"accessionid: %s, "+
-						"decryptedChecksums: %v, error: %v)",
-						delivered.CorrelationId,
-						message.FilePath,
-						message.User,
-						message.AccessionID,
-						message.DecryptedChecksums,
-						e)
-				}
-			}
-
 			// Reencrypt header
 			log.Debug("Reencrypt header")
 			pubkeyList := [][chacha20poly1305.KeySize]byte{}
 			pubkeyList = append(pubkeyList, *publicKey)
-			newHeader, err := headers.ReEncryptHeader(DecHeader, *key, pubkeyList)
+			newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
 			if err != nil {
 				log.Errorf("Failed to reencrypt the header %s "+
 					"(corr-id: %s, "+
@@ -486,19 +450,4 @@ func main() {
 	}()
 
 	<-forever
-}
-
-// FormatHexHeader decodes a hex formatted file header, and returns the data as a binary
-func FormatHexHeader(hexData string) ([]byte, error) {
-
-	// Trim whitespace that might otherwise confuse the hex parse
-	headerHexStr := strings.TrimSpace(hexData)
-
-	// Decode the hex
-	binaryHeader, err := hex.DecodeString(headerHexStr)
-	if err != nil {
-		return nil, err
-	}
-
-	return binaryHeader, nil
 }

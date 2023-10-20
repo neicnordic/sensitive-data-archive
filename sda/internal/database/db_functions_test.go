@@ -382,5 +382,5 @@ func (suite *DatabaseTests) TestGetHeaderForStableID() {
 
 	header, err := db.GetHeaderForStableID("TEST:010-1234-4567")
 	assert.NoError(suite.T(), err, "failed to get header for stable ID: %v", err)
-	assert.Equal(suite.T(), header, "484541444552", "did not get expected header")
+	assert.Equal(suite.T(), header, []byte("HEADER"), "did not get expected header")
 }
