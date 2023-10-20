@@ -279,7 +279,15 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	// Restructure request to query the users folder instead of the general bucket
 	switch r.Method {
 	case http.MethodGet:
-		if strings.Contains(r.URL.String(), "?delimiter") {
+		switch {
+		case strings.Contains(r.URL.String(), "?uploadId"):
+			// resume multipart upload
+			r.URL.Path = "/" + bucket + r.URL.Path
+		case strings.Contains(r.URL.String(), "?uploads"):
+			// list multipart upload
+			r.URL.Path = "/" + bucket
+			r.URL.RawQuery = "uploads&prefix=" + username + "%2F"
+		case strings.Contains(r.URL.String(), "?delimiter"):
 			r.URL.Path = "/" + bucket + "/"
 			if strings.Contains(r.URL.RawQuery, "&prefix") {
 				params := strings.Split(r.URL.RawQuery, "&prefix=")
@@ -288,7 +296,7 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 				r.URL.RawQuery = r.URL.RawQuery + "&prefix=" + username + "%2F"
 			}
 			log.Debug("new Raw Query: ", r.URL.RawQuery)
-		} else if strings.Contains(r.URL.String(), "?location") || strings.Contains(r.URL.String(), "&prefix") {
+		case strings.Contains(r.URL.String(), "?location") || strings.Contains(r.URL.String(), "&prefix"):
 			r.URL.Path = "/" + bucket + "/"
 			log.Debug("new Path: ", r.URL.Path)
 		}
@@ -298,6 +306,11 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 	case http.MethodPut:
 		r.URL.Path = "/" + bucket + r.URL.Path
 		log.Debug("new Path: ", r.URL.Path)
+	case http.MethodDelete:
+		if strings.Contains(r.URL.String(), "?uploadId") {
+			// abort multipart upload
+			r.URL.Path = "/" + bucket + r.URL.Path
+		}
 	}
 	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
 }
