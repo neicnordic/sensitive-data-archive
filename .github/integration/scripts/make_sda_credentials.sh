@@ -17,6 +17,7 @@ pip install aiohttp Authlib joserfc requests > /dev/null
 for n in download finalize inbox ingest mapper sync verify; do
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
+    psql -U postgres -h postgres -d sda -c "GRANT base TO $n;"
 
     ## password and permissions for MQ
     body_data=$(jq -n -c --arg password "$n" --arg tags none '$ARGS.named')
@@ -59,6 +60,11 @@ if [ ! -f "/shared/c4gh.sec.pem" ]; then
     echo "creating crypth4gh key"
     curl -s -L https://github.com/neicnordic/crypt4gh/releases/download/v1.7.4/crypt4gh_linux_x86_64.tar.gz | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
     /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
+fi
+if [ ! -f "/shared/sync.sec.pem" ]; then
+    echo "creating crypth4gh key"
+    curl -s -L https://github.com/neicnordic/crypt4gh/releases/download/v1.7.4/crypt4gh_linux_x86_64.tar.gz | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    /shared/crypt4gh generate -n /shared/sync -p syncPass
 fi
 
 if [ ! -f "/shared/keys/ssh" ]; then

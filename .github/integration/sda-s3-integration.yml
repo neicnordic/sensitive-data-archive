@@ -208,6 +208,30 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  sync:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-sync ]
+    container_name: sync
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_QUEUE=completed_stream
+      - DB_PASSWORD=sync
+      - DB_USER=sync
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
   oidc:
     container_name: oidc
     command:
@@ -249,6 +273,8 @@ services:
       mapper:
         condition: service_started
       s3inbox:
+        condition: service_started
+      sync:
         condition: service_started
       verify:
         condition: service_started
