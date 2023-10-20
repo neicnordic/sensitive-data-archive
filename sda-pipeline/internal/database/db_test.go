@@ -369,21 +369,12 @@ func TestSetArchived(t *testing.T) {
 func TestUpdateDatasetEvent(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
 		success := sqlmock.NewResult(1, 1)
-		r := sqlmock.NewRows([]string{"id"})
 
-		r.AddRow(1)
-
-		mock.ExpectQuery("SELECT id FROM sda.datasets WHERE stable_id = \\$1;").
-			WithArgs("datesetId").WillReturnRows(r)
-
-		mock.ExpectExec("INSERT INTO "+
-			"sda.file_event_log\\(file_id, event, correlation_id, user_id\\) "+
-			"SELECT file_id, \\$2, \\$3, \\$4 from sda.file_dataset "+
-			"WHERE dataset_id = \\$1;").
-			WithArgs(1, "ready", "somecorrelationid", "mapper").
+		mock.ExpectExec("INSERT INTO sda.dataset_event_log\\(dataset_id, event, message\\) VALUES\\(\\$1, \\$2, \\$3\\);").
+			WithArgs("datesetId", "released", "{\"user\":\"mapper\"}").
 			WillReturnResult(success)
 
-		return testDb.UpdateDatasetEvent("datesetId", "ready", "somecorrelationid", "mapper")
+		return testDb.UpdateDatasetEvent("datesetId", "released", "{\"user\":\"mapper\"}")
 	})
 
 	assert.Nil(t, r, "UpdateDatasetEvent failed unexpectedly")
@@ -392,20 +383,11 @@ func TestUpdateDatasetEvent(t *testing.T) {
 	log.SetOutput(&buf)
 
 	r = sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-		r := sqlmock.NewRows([]string{"id"})
-
-		r.AddRow(1)
-
-		mock.ExpectQuery("SELECT id FROM sda.datasets WHERE stable_id = \\$1;").
-			WithArgs("datesetId").WillReturnRows(r)
-
-		mock.ExpectExec("INSERT INTO " +
-			"sda.file_event_log\\(file_id, event, correlation_id, user_id\\) " +
-			"SELECT file_id, \\$2, \\$3, \\$4 from sda.file_dataset " +
-			"WHERE dataset_id = \\$1;").
+		mock.ExpectExec("INSERT INTO sda.dataset_event_log\\(dataset_id, event, message\\) VALUES\\(\\$1, \\$2, \\$3\\);").
+			WithArgs("datesetId", "released", "{\"user\":\"mapper\"}").
 			WillReturnError(fmt.Errorf("error for testing"))
 
-		return testDb.UpdateDatasetEvent("datesetId", "ready", "somecorrelationid", "mapper")
+		return testDb.UpdateDatasetEvent("datesetId", "released", "{\"user\":\"mapper\"}")
 	})
 
 	assert.NotNil(t, r, "UpdateDatasetEvent did not fail as expected")
@@ -498,6 +480,10 @@ func TestMapFilesToDataset(t *testing.T) {
 					"ON CONFLICT DO NOTHING;").
 					WithArgs(aID, di).WillReturnResult(success)
 
+				mock.ExpectExec("INSERT INTO sda.file_event_log\\(file_id, event, user_id\\) VALUES\\(\\$1, \\$2, \\$3\\);").
+					WithArgs(aID, "ready", "mapper").
+					WillReturnResult(success)
+
 			}
 			mock.ExpectCommit()
 			err := testDb.MapFilesToDataset(di, acs)
@@ -528,14 +514,14 @@ func TestMapFilesToDataset(t *testing.T) {
 
 		buf.Reset()
 
-		mock.ExpectExec("INSERT INTO sda.datasets \\(stable_id\\) VALUES \\(\\$1\\) " +
-			"ON CONFLICT DO NOTHING;").
+		mock.ExpectExec("INSERT INTO sda.datasets \\(stable_id\\) VALUES \\(\\$1\\) ON CONFLICT DO NOTHING;").
 			WithArgs("dataset").
 			WillReturnResult(success)
 
 		mock.ExpectBegin()
 		mock.ExpectQuery("SELECT id FROM sda.files WHERE stable_id = \\$1;").
-			WithArgs("aid1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("9484d348-ce14-4a6b-a2b9-f73923f95fa0"))
+			WithArgs("aid1").
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("9484d348-ce14-4a6b-a2b9-f73923f95fa0"))
 
 		mock.ExpectExec("INSERT INTO sda.file_dataset "+
 			"\\(file_id, dataset_id\\) SELECT \\$1, id FROM sda.datasets WHERE stable_id = \\$2 "+

@@ -102,7 +102,7 @@ curl -s -k -u test:test "https://localhost:15672/api/exchanges/test/sda/publish"
 
 status=$(docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "SELECT status from local_ega.files where inbox_path='case1/file.c4gh' and elixir_id='case1';")
 
 if [ "$status" != "DISABLED" ]; then
@@ -293,12 +293,12 @@ done
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES((SELECT DISTINCT file_id from sda.file_event_log WHERE correlation_id = '$CORRID'), 'disabled', '$CORRID');"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "SELECT id, event, correlation_id from sda.file_event_log ORDER BY id;"
 
 decrypted_checksums=$(
@@ -352,12 +352,12 @@ s3cmd -c s3cmd.conf put largefile.c4gh s3://inbox/case4/file.c4gh
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "SELECT sda.register_file('case4/file.c4gh' 'case4');"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "UPATE local_ega.files set status = 'DISABLED' where inbox_path='case4/file.c4gh' and elixir_id='case4';"
 
 CORRID="$(uuidgen)"
@@ -464,7 +464,7 @@ curl -s -k -u test:test "https://localhost:15672/api/exchanges/test/sda/publish"
 
 docker run --rm --name client --network dev_utils_default -v "$PWD/certs:/certs" \
     -e PGSSLCERT=/certs/client.pem -e PGSSLKEY=/certs/client-key.pem -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest postgresql://lega_in:lega_in@db:5432/lega \
+    neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
     -t -A -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES((SELECT DISTINCT file_id from sda.file_event_log WHERE correlation_id = '$CORRID'), 'disabled', '$CORRID');"
 
 RETRY_TIMES=0

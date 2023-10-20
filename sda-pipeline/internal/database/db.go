@@ -402,13 +402,13 @@ func (dbs *SQLdb) checkAccessionIDExists(accessionID string) (bool, error) {
 }
 
 // UpdateDatasetEvent marks the files in a dataset as "ready" or "disabled"
-func (dbs *SQLdb) UpdateDatasetEvent(datasetID, status, correlationID, user string) error {
+func (dbs *SQLdb) UpdateDatasetEvent(datasetID, status, message string) error {
 
 	var err error
 
 	// 3, 9, 27, 81, 243 seconds between each retry event.
 	for count := 1; count <= dbRetryTimes; count++ {
-		err = dbs.updateDatasetEvent(datasetID, status, correlationID, user)
+		err = dbs.updateDatasetEvent(datasetID, status, message)
 		if err == nil {
 			break
 		}
@@ -418,22 +418,14 @@ func (dbs *SQLdb) UpdateDatasetEvent(datasetID, status, correlationID, user stri
 	return err
 }
 
-// updateDatasetEvent marks the files in a dataset as "ready" or "disabled"
-func (dbs *SQLdb) updateDatasetEvent(datasetID, status, correlationID, user string) error {
+// updateDatasetEvent marks the files in a dataset as "released" or "disabled"
+func (dbs *SQLdb) updateDatasetEvent(datasetID, status, message string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const dataset = "SELECT id FROM sda.datasets WHERE stable_id = $1;"
-	const markFile = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id) " +
-		"SELECT file_id, $2, $3, $4 from sda.file_dataset " +
-		"WHERE dataset_id = $1;"
+	const markFile = "INSERT INTO sda.dataset_event_log(dataset_id, event, message) VALUES($1, $2, $3);"
 
-	var datasetInternalID int
-	if err := db.QueryRow(dataset, datasetID).Scan(&datasetInternalID); err != nil {
-		return err
-	}
-
-	result, err := db.Exec(markFile, datasetInternalID, status, correlationID, user)
+	result, err := db.Exec(markFile, datasetID, status, message)
 	if err != nil {
 		return err
 	}
@@ -512,6 +504,7 @@ func (dbs *SQLdb) mapFilesToDataset(datasetID string, accessionIDs []string) err
 	const mapping = "INSERT INTO sda.file_dataset (file_id, dataset_id) " +
 		"SELECT $1, id FROM sda.datasets WHERE stable_id = $2 ON CONFLICT " +
 		"DO NOTHING;"
+	const fileReady = "INSERT INTO sda.file_event_log(file_id, event, user_id) VALUES($1, $2, $3);"
 	db := dbs.DB
 	var fileID string
 	_, err := db.Exec(dataset, datasetID)
@@ -530,6 +523,15 @@ func (dbs *SQLdb) mapFilesToDataset(datasetID string, accessionIDs []string) err
 			return err
 		}
 		_, err = transaction.Exec(mapping, fileID, datasetID)
+		if err != nil {
+			log.Errorf("something went wrong with the DB transaction: %s", err)
+			if e := transaction.Rollback(); e != nil {
+				log.Errorf("failed to rollback the transaction: %s", e)
+			}
+
+			return err
+		}
+		_, err = transaction.Exec(fileReady, fileID, "ready", "mapper")
 		if err != nil {
 			log.Errorf("something went wrong with the DB transaction: %s", err)
 			if e := transaction.Rollback(); e != nil {

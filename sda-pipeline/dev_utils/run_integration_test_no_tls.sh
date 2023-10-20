@@ -108,7 +108,7 @@ curl -vvv -u test:test 'localhost:15672/api/exchanges/test/sda/publish' \
 --data-binary '{"vhost":"test","name":"sda","properties":{"delivery_mode":2,"correlation_id":"1","content_encoding":"UTF-8","content_type":"application/json"},"routing_key":"files","payload_encoding":"string","payload":"{\"type\":\"release\",\"dataset_id\":\"EGAD00123456789\"}"}'
 
 dataset=$(docker run --rm --name client --network dev_utils_default \
-neicnordic/pg-client:latest postgresql://lega_out:lega_out@db:5432/lega \
+neicnordic/pg-client:latest postgresql://postgres:rootpasswd@db:5432/sda \
 -c "SELECT * from local_ega_ebi.file_dataset" | grep EGAD00123456789)
 if [ ${#dataset} -eq 0 ]; then
     echo "Mappings failed"
