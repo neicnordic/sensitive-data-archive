@@ -47,6 +47,16 @@ type Config struct {
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
 	Sync         storage.Conf
+	SyncAPI      SyncAPIConf
+}
+
+type SyncAPIConf struct {
+	APIPassword    string
+	APIUser        string
+	RemoteHost     string
+	RemotePassword string
+	RemotePort     int
+	RemoteUser     string
 }
 
 type APIConf struct {
@@ -294,6 +304,17 @@ func NewConfig(app string) (*Config, error) {
 		default:
 			return nil, fmt.Errorf("sync.destination.type not set")
 		}
+	case "sync-api":
+		requiredConfVars = []string{
+			"broker.exchange",
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"sync.api.user",
+			"sync.api.password",
+		}
 	case "verify":
 		requiredConfVars = []string{
 			"broker.host",
@@ -460,6 +481,28 @@ func NewConfig(app string) (*Config, error) {
 		c.configSyncDestination()
 		c.configSchemas()
 
+	case "sync-api":
+		if viper.IsSet("db.host") {
+			if err := c.configDatabase(); err != nil {
+				return nil, err
+			}
+		}
+
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		if err := c.configAPI(); err != nil {
+			return nil, err
+		}
+
+		if viper.IsSet("sync.api.remote.host") {
+			c.configSyncAPI()
+		}
+
+		c.configSchemas()
+
+		return c, nil
 	case "verify":
 		c.configArchive()
 
@@ -785,6 +828,20 @@ func (c *Config) configSyncDestination() {
 		c.Sync.Type = POSIX
 		c.Sync.Posix.Location = viper.GetString("sync.destination.location")
 	}
+}
+
+// configSync provides configuration for the outgoing sync settings
+func (c *Config) configSyncAPI() {
+	c.SyncAPI = SyncAPIConf{}
+	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
+	c.SyncAPI.APIUser = viper.GetString("sync.api.user")
+
+	c.SyncAPI.RemoteHost = viper.GetString("sync.api.remote.host")
+	if viper.IsSet("sync.api.remote.port") {
+		c.SyncAPI.RemotePort = viper.GetInt("sync.api.remote.port")
+	}
+	c.SyncAPI.RemotePassword = viper.GetString("sync.api.remote.pass")
+	c.SyncAPI.RemoteUser = viper.GetString("sync.api.remote.user")
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key

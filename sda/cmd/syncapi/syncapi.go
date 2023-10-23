@@ -16,12 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/common"
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
-
 	"github.com/gorilla/mux"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -42,7 +41,7 @@ type datasetFiles struct {
 }
 
 func main() {
-	Conf, err = config.NewConfig("sync")
+	Conf, err = config.NewConfig("sync-api")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,7 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,25 +70,27 @@ func main() {
 		}
 		for m := range messages {
 			log.Debugf("Received a message (corr-id: %s, message: %s)", m.CorrelationId, m.Body)
-			res, err := common.ValidateJSON(Conf.Broker.SchemasPath+"dataset-mapping.json", m.Body)
+			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), m.Body)
 			if err != nil {
-				if err := m.Nack(false, false); err != nil {
-					log.Errorf("Failed to nack message, reason: %v", err)
+				log.Errorf("validation of incoming message (dataset-mapping) failed, reason: (%s)", err.Error())
+				// Send the message to an error queue so it can be analyzed.
+				infoErrorMessage := broker.InfoError{
+					Error:           "Message validation failed",
+					Reason:          err.Error(),
+					OriginalMessage: m,
+				}
+
+				body, _ := json.Marshal(infoErrorMessage)
+				if err := Conf.API.MQ.SendMessage(m.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
+				if err := m.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 				}
 
 				continue
 			}
-			if !res.Valid() {
-				errorString := ""
-				for _, validErr := range res.Errors() {
-					errorString += validErr.String() + "\n\n"
-				}
-				if err := m.Nack(false, false); err != nil {
-					log.Errorf("Failed to nack message, reason: %v", err)
-				}
 
-				continue
-			}
 			log.Infoln("buildSyncDatasetJSON")
 			blob, err := buildSyncDatasetJSON(m.Body)
 			if err != nil {
@@ -185,14 +186,14 @@ func readinessResponse(w http.ResponseWriter, r *http.Request) {
 
 	if DBRes := checkDB(Conf.API.DB, 5*time.Millisecond); DBRes != nil {
 		log.Debugf("DB connection error :%v", DBRes)
-		Conf.API.DB.Reconnect()
+		Conf.API.DB.Connect()
 		statusCocde = http.StatusServiceUnavailable
 	}
 
 	w.WriteHeader(statusCocde)
 }
 
-func checkDB(database *database.SQLdb, timeout time.Duration) error {
+func checkDB(database *database.SDAdb, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if database.DB == nil {
@@ -211,19 +212,8 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// the filepath looks funkt for now, it will sort itself out when we switch to sda-common
-	res, err := common.ValidateJSON(Conf.Broker.SchemasPath+"../bigpicture/file-sync.json", b)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "eror on JSON validation: "+err.Error())
-
-		return
-	}
-	if !res.Valid() {
-		errorString := ""
-		for _, validErr := range res.Errors() {
-			errorString += validErr.String() + "\n\n"
-		}
-		respondWithError(w, http.StatusBadRequest, "JSON validation failed, reason: "+errorString)
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/../bigpicture/file-sync.json", Conf.Broker.SchemasPath), b); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
 
 		return
 	}
@@ -254,7 +244,7 @@ func parseDatasetMessage(msg []byte) error {
 
 	var accessionIDs []string
 	for _, files := range blob.DatasetFiles {
-		ingest := common.Ingest{
+		ingest := schema.IngestionTrigger{
 			Type:     "ingest",
 			User:     blob.User,
 			FilePath: files.FilePath,
@@ -263,30 +253,30 @@ func parseDatasetMessage(msg []byte) error {
 		if err != nil {
 			return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
 		}
-		err = Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "ingest", true, ingestMsg)
-		if err != nil {
+
+		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "ingest", ingestMsg); err != nil {
 			return fmt.Errorf("Failed to send ingest messge: Reason %v", err)
 		}
 
 		accessionIDs = append(accessionIDs, files.FileID)
-		finalize := common.Finalize{
+		finalize := schema.IngestionAccession{
 			Type:               "accession",
 			User:               blob.User,
-			Filepath:           files.FilePath,
+			FilePath:           files.FilePath,
 			AccessionID:        files.FileID,
-			DecryptedChecksums: []common.Checksums{{Type: "sha256", Value: files.ShaSum}},
+			DecryptedChecksums: []schema.Checksums{{Type: "sha256", Value: files.ShaSum}},
 		}
 		finalizeMsg, err := json.Marshal(finalize)
 		if err != nil {
 			return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
 		}
-		err = Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "accessionIDs", true, finalizeMsg)
-		if err != nil {
+
+		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "accession", finalizeMsg); err != nil {
 			return fmt.Errorf("Failed to send mapping messge: Reason %v", err)
 		}
 	}
 
-	mappings := common.Mappings{
+	mappings := schema.DatasetMapping{
 		Type:         "mapping",
 		DatasetID:    blob.DatasetID,
 		AccessionIDs: accessionIDs,
@@ -296,8 +286,7 @@ func parseDatasetMessage(msg []byte) error {
 		return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
 	}
 
-	err = Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "mappings", true, mappingMsg)
-	if err != nil {
+	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "mappings", mappingMsg); err != nil {
 		return fmt.Errorf("Failed to send mapping messge: Reason %v", err)
 	}
 
@@ -328,19 +317,9 @@ func metadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	// the filepath looks funkt for now, it will sort itself out when we switch to sda-common
-	res, err := common.ValidateJSON(Conf.Broker.SchemasPath+"bigpicture/metadata-sync.json", b)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "eror on JSON validation: "+err.Error())
 
-		return
-	}
-	if !res.Valid() {
-		errorString := ""
-		for _, validErr := range res.Errors() {
-			errorString += validErr.String() + "\n\n"
-		}
-		respondWithError(w, http.StatusBadRequest, "JSON validation failed, reason: "+errorString)
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/bigpicture/metadata-sync.json", Conf.Broker.SchemasPath), b); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
 
 		return
 	}
@@ -349,7 +328,7 @@ func metadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildSyncDatasetJSON(b []byte) ([]byte, error) {
-	var msg common.Mappings
+	var msg schema.DatasetMapping
 	_ = json.Unmarshal(b, &msg)
 
 	var dataset = syncDataset{
@@ -357,10 +336,6 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 	}
 
 	for _, ID := range msg.AccessionIDs {
-		if DBRes := checkDB(Conf.API.DB, 20*time.Millisecond); DBRes != nil {
-			log.Infof("DB connection error :%v", DBRes)
-			Conf.API.DB.Reconnect()
-		}
 		data, err := Conf.API.DB.GetSyncData(ID)
 		if err != nil {
 			return nil, err
@@ -384,7 +359,7 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 
 func sendPOST(payload []byte) error {
 	client := &http.Client{}
-	URL, err := createHostURL(Conf.Sync.Host, Conf.Sync.Port)
+	URL, err := createHostURL(Conf.SyncAPI.RemoteHost, Conf.SyncAPI.RemotePort)
 	if err != nil {
 		return err
 	}
@@ -393,7 +368,7 @@ func sendPOST(payload []byte) error {
 	if err != nil {
 		return err
 	}
-	req.SetBasicAuth(Conf.Sync.User, Conf.Sync.Password)
+	req.SetBasicAuth(Conf.SyncAPI.RemoteUser, Conf.SyncAPI.RemotePassword)
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return err
@@ -422,8 +397,8 @@ func basicAuth(auth http.HandlerFunc) http.HandlerFunc {
 		if ok {
 			usernameHash := sha256.Sum256([]byte(username))
 			passwordHash := sha256.Sum256([]byte(password))
-			expectedUsernameHash := sha256.Sum256([]byte(Conf.API.User))
-			expectedPasswordHash := sha256.Sum256([]byte(Conf.API.Password))
+			expectedUsernameHash := sha256.Sum256([]byte(Conf.SyncAPI.APIUser))
+			expectedPasswordHash := sha256.Sum256([]byte(Conf.SyncAPI.APIPassword))
 
 			usernameMatch := (subtle.ConstantTimeCompare(usernameHash[:], expectedUsernameHash[:]) == 1)
 			passwordMatch := (subtle.ConstantTimeCompare(passwordHash[:], expectedPasswordHash[:]) == 1)

@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/config"
-	"sda-pipeline/internal/database"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gorilla/mux"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -84,7 +83,7 @@ func TestShutdown(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
 		t.Skip("skip TestShutdown since broker not present")
 	}
@@ -132,7 +131,7 @@ func TestReadinessResponse(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	assert.NoError(t, err)
 
 	res, err := http.Get(ts.URL + "/ready")
@@ -181,7 +180,7 @@ func TestReadinessResponse(t *testing.T) {
 }
 
 func TestDatabasePingCheck(t *testing.T) {
-	database := database.SQLdb{}
+	database := database.SDAdb{}
 	assert.Error(t, checkDB(&database, 1*time.Second), "nil DB should fail")
 
 	database.DB, _, err = sqlmock.New()
@@ -214,7 +213,7 @@ func TestDatasetRoute(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
 		t.Skip("skip TestShutdown since broker not present")
 	}
@@ -239,7 +238,7 @@ func TestDatasetRoute(t *testing.T) {
 
 func TestMetadataRoute(t *testing.T) {
 	Conf = &config.Config{}
-	Conf.Broker.SchemasPath = "file://../../schemas/"
+	Conf.Broker.SchemasPath = "../../schemas"
 
 	r := mux.NewRouter()
 	r.HandleFunc("/metadata", metadata)
@@ -269,7 +268,7 @@ func TestBuildJSON(t *testing.T) {
 		Database: "lega",
 		SslMode:  "disable",
 	}
-	Conf.API.DB, err = database.NewDB(Conf.Database)
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
 		t.Skip("skip TestShutdown since broker not present")
 	}
@@ -310,10 +309,10 @@ func TestSendPOST(t *testing.T) {
 	defer ts.Close()
 
 	Conf = &config.Config{}
-	Conf.Sync = config.SyncConf{
-		Host:     ts.URL,
-		User:     "test",
-		Password: "test",
+	Conf.SyncAPI = config.SyncAPIConf{
+		RemoteHost:     ts.URL,
+		RemoteUser:     "test",
+		RemotePassword: "test",
 	}
 	syncJSON := []byte(`{"user":"test.user@example.com", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": [{"filepath": "inbox/user/file1.c4gh","file_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "sha256": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}, {"filepath": "inbox/user/file2.c4gh","file_id": "ed6af454-d910-49e3-8cda-488a6f246e76", "sha256": "c967d96e56dec0f0cfee8f661846238b7f15771796ee1c345cae73cd812acc2b"}]}`)
 	err := sendPOST(syncJSON)
@@ -322,22 +321,22 @@ func TestSendPOST(t *testing.T) {
 
 func TestCreateHostURL(t *testing.T) {
 	Conf = &config.Config{}
-	Conf.Sync = config.SyncConf{
-		Host: "http://localhost",
-		Port: 443,
+	Conf.SyncAPI = config.SyncAPIConf{
+		RemoteHost: "http://localhost",
+		RemotePort: 443,
 	}
 
-	s, err := createHostURL(Conf.Sync.Host, Conf.Sync.Port)
+	s, err := createHostURL(Conf.SyncAPI.RemoteHost, Conf.SyncAPI.RemotePort)
 	assert.NoError(t, err)
 	assert.Equal(t, "http://localhost:443/dataset", s)
 }
 
 func TestBasicAuth(t *testing.T) {
 	Conf = &config.Config{}
-	Conf.Broker.SchemasPath = "file://../../schemas/"
-	Conf.API = config.APIConf{
-		User:     "dummy",
-		Password: "test",
+	Conf.Broker.SchemasPath = "../../schemas"
+	Conf.SyncAPI = config.SyncAPIConf{
+		APIUser:     "dummy",
+		APIPassword: "test",
 	}
 
 	r := mux.NewRouter()
@@ -348,13 +347,13 @@ func TestBasicAuth(t *testing.T) {
 	goodJSON := []byte(`{"dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "metadata": {"dummy":"data"}}`)
 	req, err := http.NewRequest("POST", ts.URL+"/metadata", bytes.NewBuffer(goodJSON))
 	assert.NoError(t, err)
-	req.SetBasicAuth(Conf.API.User, Conf.API.Password)
+	req.SetBasicAuth(Conf.SyncAPI.APIUser, Conf.SyncAPI.APIPassword)
 	good, err := ts.Client().Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, good.StatusCode)
 	defer good.Body.Close()
 
-	req.SetBasicAuth(Conf.API.User, "wrongpass")
+	req.SetBasicAuth(Conf.SyncAPI.APIUser, "wrongpass")
 	bad, err := ts.Client().Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, bad.StatusCode)

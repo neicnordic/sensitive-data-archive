@@ -526,3 +526,70 @@ func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 
 	return header, nil
 }
+
+// GetSyncData retrieves the file information needed to sync a dataset
+func (dbs *SDAdb) GetSyncData(accessionID string) (SyncData, error) {
+	var (
+		s   SyncData
+		err error
+	)
+
+	for count := 1; count <= RetryTimes; count++ {
+		s, err = dbs.getSyncData(accessionID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return s, err
+}
+
+// getSyncData is the actual function performing work for GetSyncData
+func (dbs *SDAdb) getSyncData(accessionID string) (SyncData, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT submission_user, submission_file_path from sda.files WHERE stable_id = $1;"
+	var data SyncData
+	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.User, &data.FilePath); err != nil {
+		return SyncData{}, err
+	}
+
+	const checksum = "SELECT checksum from sda.checksums WHERE source = 'UNENCRYPTED' and file_id = (SELECT id FROM sda.files WHERE stable_id = $1);"
+	if err := dbs.DB.QueryRow(checksum, accessionID).Scan(&data.Checksum); err != nil {
+		return SyncData{}, err
+	}
+
+	return data, nil
+}
+
+// CheckIfDatasetExists checks if a dataset already is registered
+func (dbs *SDAdb) CheckIfDatasetExists(datasetID string) (bool, error) {
+	var (
+		ds  bool
+		err error
+	)
+
+	for count := 1; count <= RetryTimes; count++ {
+		ds, err = dbs.checkIfDatasetExists(datasetID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return ds, err
+}
+
+// getSyncData is the actual function performing work for GetSyncData
+func (dbs *SDAdb) checkIfDatasetExists(datasetID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT EXISTS(SELECT id from sda.datasets WHERE stable_id = $1);"
+	var yesNo bool
+	if err := dbs.DB.QueryRow(query, datasetID).Scan(&yesNo); err != nil {
+		return yesNo, err
+	}
+
+	return yesNo, nil
+}

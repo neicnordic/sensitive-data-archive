@@ -384,3 +384,64 @@ func (suite *DatabaseTests) TestGetHeaderForStableID() {
 	assert.NoError(suite.T(), err, "failed to get header for stable ID: %v", err)
 	assert.Equal(suite.T(), header, []byte("HEADER"), "did not get expected header")
 }
+
+func (suite *DatabaseTests) TestGetSyncData() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestGetGetSyncData.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	checksum := sha256.New()
+	fileInfo := FileInfo{sha256.New(), 1234, "/tmp/TestGetGetSyncData.c4gh", checksum, 999}
+	corrID := uuid.New().String()
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = db.markCompleted(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "failed to mark file as Verified")
+
+	stableID := "TEST:000-1111-2222"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when setting stable ID: %s, %s", err, stableID, fileID)
+
+	fileData, err := db.getSyncData("TEST:000-1111-2222")
+	assert.NoError(suite.T(), err, "failed to get sync data for file")
+	assert.Equal(suite.T(), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", fileData.Checksum, "did not get expected file checksum")
+	assert.Equal(suite.T(), "/testuser/TestGetGetSyncData.c4gh", fileData.FilePath, "did not get expected file path")
+	assert.Equal(suite.T(), "testuser", fileData.User, "did not get expected user")
+}
+
+func (suite *DatabaseTests) TestCheckIfDatasetExists() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+
+	accessions := []string{}
+	for i := 0; i <= 3; i++ {
+		fileID, err := db.RegisterFile(fmt.Sprintf("/testuser/TestCheckIfDatasetExists-%d.c4gh", i), "testuser")
+		assert.NoError(suite.T(), err, "failed to register file in database")
+
+		err = db.SetAccessionID(fmt.Sprintf("accession-%d", i), fileID)
+		assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fmt.Sprintf("accession-%d", i))
+	}
+
+	diSet := map[string][]string{
+		"dataset": accessions[0:3],
+	}
+
+	for di, acs := range diSet {
+		err := db.MapFilesToDataset(di, acs)
+		assert.NoError(suite.T(), err, "failed to map file to dataset")
+	}
+
+	ok, err := db.checkIfDatasetExists("dataset")
+	assert.NoError(suite.T(), err, "check if dataset exists failed")
+	assert.Equal(suite.T(), ok, true)
+
+	ok, err = db.checkIfDatasetExists("missing dataset")
+	assert.NoError(suite.T(), err, "check if dataset exists failed")
+	assert.Equal(suite.T(), ok, false)
+}

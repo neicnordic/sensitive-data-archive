@@ -341,3 +341,25 @@ func (suite *ConfigTestSuite) TestGetC4GHKey() {
 
 	defer os.RemoveAll(keyPath)
 }
+
+func (suite *ConfigTestSuite) TestConfigSyncAPI() {
+	suite.SetupTest()
+	noConfig, err := NewConfig("sync-api")
+	assert.Error(suite.T(), err)
+	assert.Nil(suite.T(), noConfig)
+
+	viper.Set("sync.api.user", "user")
+	viper.Set("sync.api.password", "password")
+	viper.Set("sync.api.remote.host", "remote-host")
+	viper.Set("sync.api.remote.port", 1234)
+	viper.Set("sync.api.remote.user", "remote-user")
+	viper.Set("sync.api.remote.pass", "remote-pass")
+	config, err := NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "remote-host", config.SyncAPI.RemoteHost)
+	assert.Equal(suite.T(), 1234, config.SyncAPI.RemotePort)
+	assert.Equal(suite.T(), "remote-user", config.SyncAPI.RemoteUser)
+	assert.Equal(suite.T(), "remote-pass", config.SyncAPI.RemotePassword)
+	assert.Equal(suite.T(), "user", config.SyncAPI.APIUser)
+	assert.Equal(suite.T(), "password", config.SyncAPI.APIPassword)
+}
