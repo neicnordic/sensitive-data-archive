@@ -30,6 +30,10 @@ BEGIN
         message    JSONB, -- The rabbitMQ message that initiated the dataset event
         event_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
     );
+
+    -- add new permissions
+    GRANT INSERT ON sda.dataset_event_log TO mapper;
+    GRANT USAGE, SELECT ON SEQUENCE sda.dataset_event_log_id_seq TO mapper;
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;
