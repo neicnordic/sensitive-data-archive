@@ -2,7 +2,6 @@ package database
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"regexp"
 
 	"github.com/google/uuid"
@@ -202,8 +201,50 @@ func (suite *DatabaseTests) TestGetArchived() {
 	err = db.MarkCompleted(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
 
-	filePath, fileSize, err := db.GetArchived("testuser", "/testuser/TestGetArchived.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)))
+	filePath, fileSize, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 	assert.Equal(suite.T(), 1000, fileSize)
 	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)
+}
+
+func (suite *DatabaseTests) TestSetAccessionID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	decSha := sha256.New()
+	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestSetAccessionID.c4gh", decSha, 987}
+	corrID := uuid.New().String()
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.MarkCompleted(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	stableID := "TEST:000-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+}
+
+func (suite *DatabaseTests) TestCheckAccessionIDExists() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestCheckAccessionIDExists.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	decSha := sha256.New()
+	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestCheckAccessionIDExists.c4gh", decSha, 987}
+	corrID := uuid.New().String()
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.MarkCompleted(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	stableID := "TEST:111-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	ok, err := db.CheckAccessionIDExists(stableID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+	assert.True(suite.T(), ok, "CheckAccessionIDExists returned false when true was expected")
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 )
 
 // RegisterFile inserts a file in the database, along with a "registered" log
@@ -258,7 +260,7 @@ func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(user, filepath, checksum string) (string, int, error) {
+func (dbs *SDAdb) GetArchived(corrID string) (string, int, error) {
 	var (
 		filePath string
 		fileSize int
@@ -267,24 +269,85 @@ func (dbs *SDAdb) GetArchived(user, filepath, checksum string) (string, int, err
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, fileSize, err = dbs.getArchived(user, filepath, checksum)
+		filePath, fileSize, err = dbs.getArchived(corrID)
 		count++
 	}
 
 	return filePath, fileSize, err
 }
-func (dbs *SDAdb) getArchived(user, filepath, checksum string) (string, int, error) {
+func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT archive_path, archive_filesize from local_ega.files WHERE " +
-		"elixir_id = $1 and inbox_path = $2 and decrypted_file_checksum = $3 and status in ('COMPLETED', 'READY');"
+	const query = "SELECT archive_file_path, archive_file_size from sda.files WHERE id = $1;"
 
 	var filePath string
 	var fileSize int
-	if err := db.QueryRow(query, user, filepath, checksum).Scan(&filePath, &fileSize); err != nil {
+	if err := db.QueryRow(query, corrID).Scan(&filePath, &fileSize); err != nil {
 		return "", 0, err
 	}
 
 	return filePath, fileSize, nil
+}
+
+// CheckAccessionIdExists validates if an accessionID exists in the db
+func (dbs *SDAdb) CheckAccessionIDExists(accessionID string) (bool, error) {
+	var err error
+	var exists bool
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		exists, err = dbs.checkAccessionIDExists(accessionID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return exists, err
+}
+func (dbs *SDAdb) checkAccessionIDExists(accessionID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const checkIDExist = "SELECT COUNT(*) FROM sda.files WHERE stable_id = $1;"
+	var stableIDCount int
+	if err := db.QueryRow(checkIDExist, accessionID).Scan(&stableIDCount); err != nil {
+		return false, err
+	}
+
+	if stableIDCount >= 1 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// SetAccessionID adds a stable id to a file
+// identified by the user submitting it, inbox path and decrypted checksum
+func (dbs *SDAdb) SetAccessionID(accessionID, fileID string) error {
+	var err error
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.setAccessionID(accessionID, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+func (dbs *SDAdb) setAccessionID(accessionID, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const setStableID = "UPDATE sda.files SET stable_id = $1 WHERE id = $2;"
+	result, err := db.Exec(setStableID, accessionID, fileID)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+
+	return nil
 }
