@@ -36,8 +36,12 @@ func ValidateJSON(reference string, body []byte) error {
 
 func getStructName(path string) interface{} {
 	switch strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)) {
+	case "dataset-deprecate":
+		return new(DatasetDeprecate)
 	case "dataset-mapping":
 		return new(DatasetMapping)
+	case "dataset-release":
+		return new(DatasetRelease)
 	case "inbox-remove":
 		return new(InboxRemove)
 	case "inbox-rename":
@@ -68,10 +72,20 @@ type Checksums struct {
 	Value string `json:"value"`
 }
 
+type DatasetDeprecate struct {
+	Type      string `json:"type"`
+	DatasetID string `json:"dataset_id"`
+}
+
 type DatasetMapping struct {
 	Type         string   `json:"type"`
 	DatasetID    string   `json:"dataset_id"`
 	AccessionIDs []string `json:"accession_ids"`
+}
+
+type DatasetRelease struct {
+	Type      string `json:"type"`
+	DatasetID string `json:"dataset_id"`
 }
 
 type InfoError struct {

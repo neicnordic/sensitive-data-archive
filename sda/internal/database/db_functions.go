@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // RegisterFile inserts a file in the database, along with a "registered" log
@@ -350,4 +352,118 @@ func (dbs *SDAdb) setAccessionID(accessionID, fileID string) error {
 	}
 
 	return nil
+}
+
+// MapFilesToDataset maps a set of files to a dataset in the database
+func (dbs *SDAdb) MapFilesToDataset(datasetID string, accessionIDs []string) error {
+	var err error
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.mapFilesToDataset(datasetID, accessionIDs)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+func (dbs *SDAdb) mapFilesToDataset(datasetID string, accessionIDs []string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	const getID = "SELECT id FROM sda.files WHERE stable_id = $1;"
+	const dataset = "INSERT INTO sda.datasets (stable_id) VALUES ($1) ON CONFLICT DO NOTHING;"
+	const mapping = "INSERT INTO sda.file_dataset (file_id, dataset_id) SELECT $1, id FROM sda.datasets WHERE stable_id = $2 ON CONFLICT DO NOTHING;"
+	var fileID string
+
+	db := dbs.DB
+	_, err := db.Exec(dataset, datasetID)
+	if err != nil {
+		return err
+	}
+
+	transaction, _ := db.Begin()
+	for _, accessionID := range accessionIDs {
+		err := db.QueryRow(getID, accessionID).Scan(&fileID)
+		if err != nil {
+			log.Errorf("something went wrong with the DB query: %s", err.Error())
+			if err := transaction.Rollback(); err != nil {
+				log.Errorf("failed to rollback the transaction: %s", err.Error())
+			}
+
+			return err
+		}
+		_, err = transaction.Exec(mapping, fileID, datasetID)
+		if err != nil {
+			log.Errorf("something went wrong with the DB transaction: %s", err.Error())
+			if err := transaction.Rollback(); err != nil {
+				log.Errorf("failed to rollback the transaction: %s", err.Error())
+			}
+
+			return err
+		}
+	}
+
+	return transaction.Commit()
+}
+
+// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
+func (dbs *SDAdb) GetInboxPath(stableID string) (string, error) {
+	var (
+		err       error
+		count     int
+		inboxPath string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		inboxPath, err = dbs.getInboxPath(stableID)
+		count++
+	}
+
+	return inboxPath, err
+}
+func (dbs *SDAdb) getInboxPath(stableID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT submission_file_path from sda.files WHERE stable_id = $1;"
+
+	var inboxPath string
+	err := db.QueryRow(getFileID, stableID).Scan(&inboxPath)
+	if err != nil {
+		return "", err
+	}
+
+	return inboxPath, nil
+}
+
+// UpdateDatasetEvent marks the files in a dataset as "registered","released" or "deprecated"
+func (dbs *SDAdb) UpdateDatasetEvent(datasetID, status, message string) error {
+	var err error
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.updateDatasetEvent(datasetID, status, message)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+func (dbs *SDAdb) updateDatasetEvent(datasetID, status, message string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const setStatus = "INSERT INTO sda.dataset_event_log(dataset_id, event, message) VALUES($1, $2, $3);"
+	result, err := db.Exec(setStatus, datasetID, status, message)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+
+	return nil
+
 }

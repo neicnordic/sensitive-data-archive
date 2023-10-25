@@ -25,6 +25,24 @@ func TestDefaultResponse(t *testing.T) {
 	assert.Equal(t, "unknown reference schema", err.Error())
 }
 
+func TestValidateJSONDatasetDeprecate(t *testing.T) {
+	okMsg := DatasetMapping{
+		Type:      "deprecate",
+		DatasetID: "EGAD00123456789",
+	}
+
+	msg, _ := json.Marshal(okMsg)
+	assert.Nil(t, ValidateJSON(fmt.Sprintf("%s/federated/dataset-deprecate.json", schemaPath), msg))
+
+	badMsg := DatasetMapping{
+		Type:      "mapping",
+		DatasetID: "ABCD00123456789",
+	}
+
+	msg, _ = json.Marshal(badMsg)
+	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/federated/dataset-deprecate.json", schemaPath), msg))
+}
+
 func TestValidateJSONDatasetMapping(t *testing.T) {
 	okMsg := DatasetMapping{
 		Type:      "mapping",
@@ -48,6 +66,27 @@ func TestValidateJSONDatasetMapping(t *testing.T) {
 
 	msg, _ = json.Marshal(badMsg)
 	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/federated/dataset-mapping.json", schemaPath), msg))
+}
+
+func TestValidateJSONDatasetRelease(t *testing.T) {
+	okMsg := DatasetMapping{
+		Type:      "release",
+		DatasetID: "EGAD00123456789",
+	}
+
+	msg, _ := json.Marshal(okMsg)
+	assert.Nil(t, ValidateJSON(fmt.Sprintf("%s/federated/dataset-release.json", schemaPath), msg))
+
+	badMsg := DatasetMapping{
+		Type:      "release",
+		DatasetID: "ABCD00123456789",
+		AccessionIDs: []string{
+			"c177c69c-dcc6-4174-8740-919b8f994122",
+		},
+	}
+
+	msg, _ = json.Marshal(badMsg)
+	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/federated/dataset-release.json", schemaPath), msg))
 }
 
 func TestValidateJSONInboxRemove(t *testing.T) {
