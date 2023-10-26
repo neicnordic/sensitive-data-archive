@@ -38,43 +38,100 @@ func NewValidateFromToken(keyset jwk.Set) *ValidateFromToken {
 // Authenticate verifies that the token included in the http.Request is valid
 func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 	// Verify signature by parsing the token with the given key
-	tokenStr := r.Header.Get("X-Amz-Security-Token")
-	if tokenStr == "" {
-		return nil, fmt.Errorf("no access token supplied")
-	}
+	switch {
+	case r.Header.Get("Authorization") != "":
+		authStr := r.Header.Get("Authorization")
+		headerParts := strings.Split(authStr, " ")
+		if headerParts[0] != "Bearer" {
+			log.Error("authorization check failed, no Bearer on header")
 
-	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-	if err != nil {
-		return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
-	}
+			return nil, fmt.Errorf("authorization scheme must be bearer")
+		}
+		tokenStr := headerParts[1]
+		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		if err != nil {
+			return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
+		}
+		return token, nil
+	case r.Header.Get("X-Amz-Security-Token") != "":
+		tokenStr := r.Header.Get("X-Amz-Security-Token")
+		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		if err != nil {
+			return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
+		}
 
-	iss, err := url.ParseRequestURI(token.Issuer())
-	if err != nil || iss.Hostname() == "" {
-		return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
-	}
+		iss, err := url.ParseRequestURI(token.Issuer())
+		if err != nil || iss.Hostname() == "" {
+			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
+		}
 
-	// Check whether token username and filepath match
-	str, err := url.ParseRequestURI(r.URL.Path)
-	if err != nil || str.Path == "" {
-		return nil, fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
-	}
+		// Check whether token username and filepath match
+		str, err := url.ParseRequestURI(r.URL.Path)
+		if err != nil || str.Path == "" {
+			return nil, fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
+		}
 
-	path := strings.Split(str.Path, "/")
-	if len(path) < 2 {
-		return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
-	}
-	username := path[1]
+		path := strings.Split(str.Path, "/")
+		if len(path) < 2 {
+			return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
+		}
+		username := path[1]
 
-	// Case for Elixir and CEGA usernames: Replace @ with _ character
-	if strings.Contains(token.Subject(), "@") {
-		if strings.ReplaceAll(token.Subject(), "@", "_") != username {
+		// Case for Elixir and CEGA usernames: Replace @ with _ character
+		if strings.Contains(token.Subject(), "@") {
+			if strings.ReplaceAll(token.Subject(), "@", "_") != username {
+				return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
+			}
+		} else if token.Subject() != username {
 			return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
 		}
-	} else if token.Subject() != username {
-		return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
-	}
 
-	return token, nil
+		return token, nil
+
+	default:
+		return nil, fmt.Errorf("no access token supplied")
+
+	}
+	/*
+		tokenStr := r.Header.Get("X-Amz-Security-Token") // switch fall header http auth header
+		if tokenStr == "" {
+			return nil, fmt.Errorf("no access token supplied")
+		}
+
+		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		if err != nil {
+			return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
+		}
+		// resten bara för s3inbox
+
+		iss, err := url.ParseRequestURI(token.Issuer())
+		if err != nil || iss.Hostname() == "" {
+			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
+		}
+
+		// Check whether token username and filepath match
+		str, err := url.ParseRequestURI(r.URL.Path)
+		if err != nil || str.Path == "" {
+			return nil, fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
+		}
+
+		path := strings.Split(str.Path, "/")
+		if len(path) < 2 {
+			return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
+		}
+		username := path[1]
+
+		// Case for Elixir and CEGA usernames: Replace @ with _ character
+		if strings.Contains(token.Subject(), "@") {
+			if strings.ReplaceAll(token.Subject(), "@", "_") != username {
+				return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
+			}
+		} else if token.Subject() != username {
+			return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
+		}
+
+		return token, nil
+	*/
 }
 
 // Function for reading the ega key in []byte

@@ -3,14 +3,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,15 +16,14 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var Conf *config.Config
 var err error
+var auth *userauth.ValidateFromToken
 
 func main() {
 	Conf, err = config.NewConfig("api")
@@ -44,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	auth := userauth.NewValidateFromToken(jwk.NewSet())
+	auth = userauth.NewValidateFromToken(jwk.NewSet())
 	if Conf.Server.Jwtpubkeyurl != "" {
 		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
@@ -188,84 +183,12 @@ func getFiles(c *gin.Context) {
 // getUserFromToken parses the token, validates it against the key and returns the key
 func getUserFromToken(r *http.Request) (string, error) {
 	// Check that a token is provided
-	tokenStr, err := getToken(r.Header.Get("Authorization"))
-	if err != nil {
-		log.Error("authorization header missing from request")
 
-		return "", fmt.Errorf("could not get token from header: %v", err)
-	}
-
-	token, err := jwt.Parse([]byte(tokenStr), jwt.WithVerify(false))
+	token, err := auth.Authenticate(r)
 	if err != nil {
 		return "", fmt.Errorf("failed to get parse token: %v", err)
 	}
-	strIss := token.Issuer()
+	log.Debugf("Got token %v \n\n", token)
+	return token.Subject(), nil
 
-	// Poor string unescaper for elixir
-	strIss = strings.ReplaceAll(strIss, "\\", "")
-
-	log.Debugf("Looking for key for %s", strIss)
-
-	iss, err := url.ParseRequestURI(strIss)
-	if err != nil || iss.Hostname() == "" {
-		return "", fmt.Errorf("failed to get issuer from token (%v)", strIss)
-	}
-
-	block, _ := pem.Decode(Conf.API.JtwKeys[iss.Hostname()])
-	key, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse key (%v)", err)
-	}
-
-	verifiedToken, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
-	if err != nil {
-		log.Debugf("failed to verify token as RS256 signature of token %s", err)
-		verifiedToken, err = jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.ES256, key))
-		if err != nil {
-			log.Errorf("failed to verify token as ES256 signature of token %s", err)
-
-			return "", fmt.Errorf("failed to verify token as RSA256 or ES256 signature of token %s", err)
-		}
-	}
-
-	return verifiedToken.Subject(), nil
-}
-
-// getToken parses the token string from header
-func getToken(header string) (string, error) {
-	log.Debug("parsing access token from header")
-
-	if len(header) == 0 {
-		log.Error("authorization check failed, empty header")
-
-		return "", fmt.Errorf("access token must be provided")
-	}
-
-	// Check that Bearer scheme is used
-	headerParts := strings.Split(header, " ")
-	if headerParts[0] != "Bearer" {
-		log.Error("authorization check failed, no Bearer on header")
-
-		return "", fmt.Errorf("authorization scheme must be bearer")
-	}
-
-	// Check that header contains a token string
-	var token string
-	if len(headerParts) == 2 {
-		token = headerParts[1]
-	} else {
-		log.Error("authorization check failed, no token on header")
-
-		return "", fmt.Errorf("token string is missing from authorization header")
-	}
-
-	if len(token) < 2 {
-		log.Error("authorization check failed, too small token")
-
-		return "", fmt.Errorf("token string is missing from authorization header")
-	}
-
-	log.Debug("access token found")
-
-	return token, nil
 }
