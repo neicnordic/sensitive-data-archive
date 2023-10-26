@@ -223,8 +223,8 @@ func main() {
 				continue
 			}
 
-			file.Checksum = archiveFileHash
-			file.DecryptedChecksum = sha256hash
+			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
+			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
 			//nolint:nestif
 			if !message.ReVerify {

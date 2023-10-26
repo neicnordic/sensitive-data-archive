@@ -36,10 +36,10 @@ type SDAdb struct {
 
 // FileInfo is used by ingest for file metadata (path, size, checksum)
 type FileInfo struct {
-	Checksum          hash.Hash
+	Checksum          string
 	Size              int64
 	Path              string
-	DecryptedChecksum hash.Hash
+	DecryptedChecksum string
 	DecryptedSize     int64
 }
 

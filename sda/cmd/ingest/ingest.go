@@ -340,7 +340,7 @@ func main() {
 
 				fileInfo := database.FileInfo{}
 				fileInfo.Path = fileID
-				fileInfo.Checksum = hash
+				fileInfo.Checksum = fmt.Sprintf("%x", hash.Sum(nil))
 				fileInfo.Size, err = archive.GetFileSize(fileID)
 				if err != nil {
 					log.Errorf("Couldn't get file size from archive, reason: %v)", err.Error())

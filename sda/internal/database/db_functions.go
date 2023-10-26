@@ -5,7 +5,6 @@ package database
 import (
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math"
 	"time"
 
@@ -160,8 +159,8 @@ func (dbs *SDAdb) setArchived(file FileInfo, fileID, corrID string) error {
 		corrID,
 		file.Path,
 		file.Size,
-		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
-		hashType(file.Checksum),
+		file.Checksum,
+		"SHA256",
 	)
 
 	return err
@@ -251,11 +250,11 @@ func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
 	_, err := db.Exec(completed,
 		fileID,
 		corrID,
-		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
-		hashType(file.Checksum),
+		file.Checksum,
+		"SHA256",
 		file.DecryptedSize,
-		fmt.Sprintf("%x", file.DecryptedChecksum.Sum(nil)),
-		hashType(file.DecryptedChecksum),
+		file.DecryptedChecksum,
+		"SHA256",
 	)
 
 	return err
