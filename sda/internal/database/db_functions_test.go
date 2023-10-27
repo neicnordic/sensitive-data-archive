@@ -243,8 +243,37 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
 	ok, err := db.CheckAccessionIDExists(stableID)
+}
+
+func (suite *DatabaseTests) TestGetFileInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestGetFileInfo.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/tmp/TestGetFileInfo.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987}
+	corrID := uuid.New().String()
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.MarkCompleted(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+
+	info, err := db.GetFileInfo(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.True(suite.T(), ok, "CheckAccessionIDExists returned false when true was expected")
+	assert.Equal(suite.T(), int64(2000), info.Size)
+	assert.Equal(suite.T(), "/tmp/TestGetFileInfo.c4gh", info.Path)
+	assert.Equal(suite.T(), "11c94bc7fb13afeb2b3fb16c1dbe9206dc09560f1b31420f2d46210ca4ded0a8", info.Checksum)
+	assert.Equal(suite.T(), "a671218c2418aa51adf97e33c5c91a720289ba3c9fd0d36f6f4bf9610730749f", info.DecryptedChecksum)
 }
 
 func (suite *DatabaseTests) TestMapFilesToDataset() {

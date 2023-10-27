@@ -466,3 +466,35 @@ func (dbs *SDAdb) updateDatasetEvent(datasetID, status, message string) error {
 	return nil
 
 }
+
+// GetFileInfo returns info on a ingested file
+func (dbs *SDAdb) GetFileInfo(id string) (FileInfo, error) {
+	var (
+		err   error
+		count int
+		info  FileInfo
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		info, err = dbs.getFileInfo(id)
+		count++
+	}
+
+	return info, err
+}
+func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT archive_file_path, archive_file_size from sda.files where id = $1;"
+	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted from sda.checksums where file_id = $1;"
+	var info FileInfo
+	if err := db.QueryRow(getFileID, id).Scan(&info.Path, &info.Size); err != nil {
+		return FileInfo{}, err
+	}
+
+	if err := db.QueryRow(checkSum, id).Scan(&info.Checksum, &info.DecryptedChecksum); err != nil {
+		return FileInfo{}, err
+	}
+
+	return info, nil
+}
