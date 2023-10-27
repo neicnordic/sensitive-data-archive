@@ -266,21 +266,51 @@ func main() {
 
 					continue
 				}
-				if status == "disabled" {
+				switch status {
+				case "disabled":
 					log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
 						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
+				case "enabled":
+					fileInfo, err := db.GetFileInfo(message.FileID)
+					if err != nil {
+						log.Errorf("failed to get info for file: %s", message.FileID)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+
+					if fileInfo.DecryptedChecksum != "" {
+						log.Debugln("file already verified")
+						if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
+							log.Errorf("failed to publish message, reason: (%s)", err.Error())
+							if err := delivered.Nack(false, true); err != nil {
+								log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+							}
+
+							continue
+						}
+
+						if err := delivered.Ack(false); err != nil {
+							log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
 				}
 
-				// Mark file as "COMPLETED"
 				if err := db.MarkCompleted(file, message.FileID, delivered.CorrelationId); err != nil {
 					log.Errorf("MarkCompleted failed, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
 
 					continue
-					// this should really be hadled by the DB retry mechanism
 				}
 
 				// Send message to verified queue
