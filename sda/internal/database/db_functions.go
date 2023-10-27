@@ -292,12 +292,12 @@ func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
 }
 
 // CheckAccessionIdExists validates if an accessionID exists in the db
-func (dbs *SDAdb) CheckAccessionIDExists(accessionID string) (bool, error) {
+func (dbs *SDAdb) CheckAccessionIDExists(accessionID, fileID string) (string, error) {
 	var err error
-	var exists bool
+	var exists string
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		exists, err = dbs.checkAccessionIDExists(accessionID)
+		exists, err = dbs.checkAccessionIDExists(accessionID, fileID)
 		if err == nil {
 			break
 		}
@@ -306,20 +306,31 @@ func (dbs *SDAdb) CheckAccessionIDExists(accessionID string) (bool, error) {
 
 	return exists, err
 }
-func (dbs *SDAdb) checkAccessionIDExists(accessionID string) (bool, error) {
+func (dbs *SDAdb) checkAccessionIDExists(accessionID, fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const checkIDExist = "SELECT COUNT(*) FROM sda.files WHERE stable_id = $1;"
+
+	const sameID = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1 and id = $2"
+	var same int
+	if err := db.QueryRow(sameID, accessionID, fileID).Scan(&same); err != nil {
+		return "", err
+	}
+
+	if same > 0 {
+		return "same", nil
+	}
+
+	const checkIDExist = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1;"
 	var stableIDCount int
 	if err := db.QueryRow(checkIDExist, accessionID).Scan(&stableIDCount); err != nil {
-		return false, err
+		return "", err
 	}
 
-	if stableIDCount >= 1 {
-		return true, nil
+	if stableIDCount > 0 {
+		return "duplicate", nil
 	}
 
-	return false, nil
+	return "", nil
 }
 
 // SetAccessionID adds a stable id to a file

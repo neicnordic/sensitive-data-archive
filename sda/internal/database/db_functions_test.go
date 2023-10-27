@@ -242,7 +242,13 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
-	ok, err := db.CheckAccessionIDExists(stableID)
+	exists, err := db.CheckAccessionIDExists(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+	assert.Equal(suite.T(), "same", exists)
+
+	duplicate, err := db.CheckAccessionIDExists(stableID, uuid.New().String())
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+	assert.Equal(suite.T(), "duplicate", duplicate)
 }
 
 func (suite *DatabaseTests) TestGetFileInfo() {
