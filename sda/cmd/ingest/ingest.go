@@ -147,7 +147,7 @@ func main() {
 					continue
 				}
 
-				if err := db.UpdateFileStatus(fileUUID, "disabled", delivered.CorrelationId, message.User, string(delivered.Body)); err != nil {
+				if err := db.UpdateFileStatus(fileUUID, "disabled", delivered.CorrelationId, "ingest", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 					if err = delivered.Nack(false, false); err != nil {
 						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
@@ -162,6 +162,100 @@ func main() {
 
 				continue
 			case "ingest":
+				var fileID string
+				status, err := db.GetFileStatus(delivered.CorrelationId)
+				if err != nil && err.Error() != "sql: no rows in result set" {
+					log.Errorf("failed to get status for file, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				switch status {
+				case "disabled":
+					fileID, err := db.GetFileID(delivered.CorrelationId)
+					if err != nil {
+						log.Errorf("failed to get ID for file, reason: %s", err.Error())
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+
+					fileInfo, err := db.GetFileInfo(fileID)
+					if err != nil {
+						log.Errorf("failed to get info for file: %s", fileID)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+
+					if err = db.UpdateFileStatus(fileInfo.Path, "enabled", delivered.CorrelationId, "ingest", string(delivered.Body)); err != nil {
+						log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+
+					if fileInfo.Checksum != "" {
+						msg := schema.IngestionVerification{
+							User:        message.User,
+							FilePath:    message.FilePath,
+							FileID:      fileID,
+							ArchivePath: fileInfo.Path,
+							EncryptedChecksums: []schema.Checksums{
+								{Type: "sha256", Value: fileInfo.Checksum},
+							},
+						}
+						archivedMsg, _ := json.Marshal(&msg)
+						err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), archivedMsg)
+						if err != nil {
+							log.Errorf("Validation of outgoing message failed, reason: (%s)", err.Error())
+
+							continue
+						}
+						if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, archivedMsg); err != nil {
+							log.Errorf("failed to publish message, reason: (%s)", err.Error())
+
+							continue
+						}
+
+						if err := delivered.Ack(false); err != nil {
+							log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+				case "":
+					// Catch all for inboxes that doesn't update the DB
+					fileID, err = db.RegisterFile(message.FilePath, message.User)
+					if err != nil {
+						log.Errorf("InsertFile failed, reason: (%s)", err.Error())
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+				default:
+					fileID, err = db.GetFileID(delivered.CorrelationId)
+					if err != nil {
+						log.Errorf("failed to get ID for file, reason: %s", err.Error())
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+				}
+
 				file, err := inbox.NewFileReader(message.FilePath)
 				if err != nil {
 					log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
@@ -206,10 +300,6 @@ func main() {
 					continue
 				}
 
-				fileID, err := db.RegisterFile(message.FilePath, message.User)
-				if err != nil {
-					log.Errorf("InsertFile failed, reason: (%s)", err.Error())
-				}
 				err = db.UpdateFileStatus(fileID, "submitted", delivered.CorrelationId, message.User, string(delivered.Body))
 				if err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
@@ -354,7 +444,7 @@ func main() {
 				log.Debugf("Wrote archived file (corr-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)",
 					delivered.CorrelationId, message.User, message.FilePath, fileID, fileInfo.Size)
 
-				status, err := db.GetFileStatus(delivered.CorrelationId)
+				status, err = db.GetFileStatus(delivered.CorrelationId)
 				if err != nil {
 					log.Errorf("failed to get file status, reason: (%s)", err.Error())
 					if err = delivered.Nack(false, true); err != nil {
