@@ -85,13 +85,12 @@ curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$ingest_body"
 
-# check database to verify file status
 RETRY_TIMES=0
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where correlation_id = '$CORRID' order by id DESC LIMIT 1")" = "verified" ]; do
-    echo "waiting for re-ingestion to complete"
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 3 ]; do
+    echo "waiting for verify to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for re-ingestion to complete"
+        echo "::error::Time out while waiting for verify to complete"
         exit 1
     fi
     sleep 2

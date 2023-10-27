@@ -4,7 +4,7 @@ set -e
 cd shared || true
 
 i=1
-while [ $i -le "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" ]; do
+while [ $i -le 2 ]; do
     ## get correlation id from upload message
     MSG=$(
         curl -s -X POST \
