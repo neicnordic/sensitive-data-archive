@@ -100,71 +100,9 @@ func main() {
 				continue
 			}
 
-			accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID)
-			if err != nil {
-				log.Errorf("CheckAccessionIdExists failed, reason: %v ", err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				continue
-			}
-
-			if accessionIDExists {
-				log.Debugf("Seems accession ID already exists (corr-id: %s, accessionid: %s", delivered.CorrelationId, message.AccessionID)
-				// Send the message to an error queue so it can be analyzed.
-				fileError := broker.InfoError{
-					Error:           "There is a conflict regarding the file accessionID",
-					Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
-					OriginalMessage: message,
-				}
-				body, _ := json.Marshal(fileError)
-
-				// Send the message to an error queue so it can be analyzed.
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
-					log.Errorf("failed to publish message, reason: (%v)", err)
-				}
-
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%v)", err)
-				}
-
-				continue
-			}
-
-			if conf.Backup.Type != "" && conf.Archive.Type != "" {
-				if err = backupFile(delivered); err != nil {
-					log.Errorf("Failed to backup file with corrID: %v, reason: %v", delivered.CorrelationId, err)
-					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, reason: (%v)", err)
-					}
-
-					continue
-				}
-			}
-
 			fileID, err := db.GetFileID(delivered.CorrelationId)
 			if err != nil {
 				log.Errorf("failed to get ID for file, reason: %v", err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				continue
-			}
-
-			if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
-				log.Errorf("Failed to set accessionID for file with corrID: %v, reason: %v", delivered.CorrelationId, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				continue
-			}
-
-			// Mark file as "ready"
-			if err := db.UpdateFileStatus(fileID, "ready", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
-				log.Errorf("set status ready failed, reason: (%v)", err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
 				}
@@ -186,9 +124,76 @@ func main() {
 				continue
 			}
 
+			accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID, fileID)
+			if err != nil {
+				log.Errorf("CheckAccessionIdExists failed, reason: %v ", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
+
+				continue
+			}
+
+			switch accessionIDExists {
+			case "duplicate":
+				log.Debugf("Seems accession ID already exists (corr-id: %s, accessionid: %s", delivered.CorrelationId, message.AccessionID)
+				// Send the message to an error queue so it can be analyzed.
+				fileError := broker.InfoError{
+					Error:           "There is a conflict regarding the file accessionID",
+					Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
+					OriginalMessage: message,
+				}
+				body, _ := json.Marshal(fileError)
+
+				// Send the message to an error queue so it can be analyzed.
+				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+					log.Errorf("failed to publish message, reason: (%v)", err)
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%v)", err)
+				}
+
+				continue
+			case "same":
+				log.Infoln("file already has a stable ID, marking it as ready")
+			default:
+				if conf.Backup.Type != "" && conf.Archive.Type != "" {
+					if err = backupFile(delivered); err != nil {
+						log.Errorf("Failed to backup file with corrID: %v, reason: %v", delivered.CorrelationId, err)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%v)", err)
+						}
+
+						continue
+					}
+				}
+
+				if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
+					log.Errorf("Failed to set accessionID for file with corrID: %v, reason: %v", delivered.CorrelationId, err)
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%v)", err)
+					}
+
+					continue
+				}
+			}
+
+			// Mark file as "ready"
+			if err := db.UpdateFileStatus(fileID, "ready", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
+				log.Errorf("set status ready failed, reason: (%v)", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
+
+				continue
+			}
+
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
-				// TODO fix resend mechanism
 				log.Errorf("failed to publish message, reason: (%v)", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
 
 				continue
 			}
