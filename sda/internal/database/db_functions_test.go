@@ -172,18 +172,18 @@ func (suite *DatabaseTests) TestGetHeader() {
 	assert.Equal(suite.T(), []byte{15, 45, 20, 40, 48}, header)
 }
 
-func (suite *DatabaseTests) TestMarkCompleted() {
+func (suite *DatabaseTests) TestSetVerified() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile("/testuser/TestMarkCompleted.c4gh", "testuser")
+	fileID, err := db.RegisterFile("/testuser/TestSetVerified.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/testuser/TestMarkCompleted.c4gh", fmt.Sprintf("%x", sha256.New()), 948}
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/testuser/TestSetVerified.c4gh", fmt.Sprintf("%x", sha256.New()), 948}
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 }
 
 func (suite *DatabaseTests) TestGetArchived() {
@@ -198,8 +198,8 @@ func (suite *DatabaseTests) TestGetArchived() {
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	filePath, fileSize, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
@@ -218,8 +218,8 @@ func (suite *DatabaseTests) TestSetAccessionID() {
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 	stableID := "TEST:000-1234-4567"
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
@@ -236,8 +236,8 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 	stableID := "TEST:111-1234-4567"
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
@@ -271,8 +271,8 @@ func (suite *DatabaseTests) TestGetFileInfo() {
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	info, err := db.GetFileInfo(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)

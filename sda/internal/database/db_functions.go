@@ -229,20 +229,20 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 }
 
 // MarkCompleted marks the file as "COMPLETED"
-func (dbs *SDAdb) MarkCompleted(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) SetVerified(file FileInfo, fileID, corrID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.markCompleted(file, fileID, corrID)
+		err = dbs.setVerified(file, fileID, corrID)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setVerified(file FileInfo, fileID, corrID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB

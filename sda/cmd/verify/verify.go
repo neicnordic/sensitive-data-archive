@@ -304,8 +304,8 @@ func main() {
 					}
 				}
 
-				if err := db.MarkCompleted(file, message.FileID, delivered.CorrelationId); err != nil {
-					log.Errorf("MarkCompleted failed, reason: (%s)", err.Error())
+				if err := db.SetVerified(file, message.FileID, delivered.CorrelationId); err != nil {
+					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
