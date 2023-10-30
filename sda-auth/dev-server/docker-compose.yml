@@ -71,6 +71,8 @@ services:
       - JWTISSUER=http://auth:8080
       - JWTPRIVATEKEY=keys/sign-jwt.key
       - JWTSIGNATUREALG=ES256
+      - INFOTEXT=About Federated EGA
+      - INFOURL=https://ega-archive.org/about/projects-and-funders/federated-ega/
     volumes:
       - ../keys:/keys
       - ../:/sda-auth

@@ -150,11 +150,14 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 			}
 
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
-			idStruct := EGAIdentity{User: username, Token: token, ExpDate: expDate}
 			s.SetFlash("ega", s3conf)
 			ctx.ViewData("infoUrl", auth.Config.InfoURL)
 			ctx.ViewData("infoText", auth.Config.InfoText)
-			err = ctx.View("ega.html", idStruct)
+			ctx.ViewData("User", username)
+			ctx.ViewData("Token", token)
+			ctx.ViewData("ExpDate", expDate)
+
+			err = ctx.View("ega.html")
 			if err != nil {
 				log.Error("Failed to parse response: ", err)
 
@@ -294,7 +297,12 @@ func (auth AuthHandler) getElixirLogin(ctx iris.Context) {
 	s.SetFlash("elixir", oidcData.S3Conf)
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	err := ctx.View("elixir.html", oidcData.ElixirID)
+	ctx.ViewData("User", oidcData.ElixirID.User)
+	ctx.ViewData("Passport", oidcData.ElixirID.Passport)
+	ctx.ViewData("Token", oidcData.ElixirID.Token)
+	ctx.ViewData("ExpDate", oidcData.ElixirID.ExpDate)
+
+	err := ctx.View("elixir.html")
 	if err != nil {
 		log.Error("Failed to view login form: ", err)
 
