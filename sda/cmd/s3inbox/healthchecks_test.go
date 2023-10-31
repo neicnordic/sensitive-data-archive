@@ -51,7 +51,7 @@ func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 		conf,
 		new(tls.Config))
 
-	assert.NoError(suite.T(), h.httpsGetCheck("https://www.nbis.se", 10*time.Second)())
+	assert.NoError(suite.T(), h.httpsGetCheck("https://www.google.com", 10*time.Second)())
 	assert.Error(suite.T(), h.httpsGetCheck("https://www.nbis.se/nonexistent", 5*time.Second)(), "404 should fail")
 }
 
