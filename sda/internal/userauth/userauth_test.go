@@ -1,7 +1,6 @@
 package userauth
 
 import (
-	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,14 +11,16 @@ import (
 	"testing"
 	"time"
 
-	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
+	"github.com/stretchr/testify/suite"
+
+	"crypto/rand"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/minio/minio-go/v6/pkg/signer"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 )
 
 var OIDCport int
@@ -34,6 +35,7 @@ func TestUserAuthTestSuite(t *testing.T) {
 
 func (suite *UserAuthTest) SetupTest() {
 }
+
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		m.Run()
@@ -102,22 +104,14 @@ func TestMain(m *testing.M) {
 		log.Panicf("Could not connect to oidc: %s", err)
 	}
 
-}
+	log.Println("starting tests")
+	_ = m.Run()
 
-/*
-// AlwaysAllow is an Authenticator that always authenticates
-type AlwaysAllow struct{}
-
-// NewAlwaysAllow returns a new AlwaysAllow authenticator.
-func NewAlwaysAllow() *AlwaysAllow {
-	return &AlwaysAllow{}
+	log.Println("tests completed")
+	if err := pool.Purge(oidc); err != nil {
+		log.Fatalf("Could not purge resource: %s", err)
+	}
 }
-
-// Authenticate authenticates everyone.
-func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.Token, error) {
-	return jwt.New(), nil
-}
-*/
 
 func (suite *UserAuthTest) TestAlwaysAuthenticator() {
 	a := NewAlwaysAllow()
