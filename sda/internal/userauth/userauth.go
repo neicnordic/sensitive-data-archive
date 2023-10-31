@@ -38,6 +38,9 @@ func NewValidateFromToken(keyset jwk.Set) *ValidateFromToken {
 // Authenticate verifies that the token included in the http.Request is valid
 func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 	// Verify signature by parsing the token with the given key
+	if u == nil {
+		return nil, fmt.Errorf("error validating token keyset")
+	}
 	switch {
 	case r.Header.Get("Authorization") != "":
 		authStr := r.Header.Get("Authorization")
