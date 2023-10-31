@@ -625,16 +625,17 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 
 // GetUserFiles retrieves all the files a user submitted
 func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
-	var (
-		err   error
-		count int
-	)
+	var err error
 
 	files := []*SubmissionFileInfo{}
 
-	for count == 0 || (err != nil && count < RetryTimes) {
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
 		files, err = dbs.getUserFiles(userID)
-		count++
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
 	return files, err
@@ -647,11 +648,15 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 
-	const query = "SELECT f.submission_file_path, e.event, f.created_at FROM sda.files f " +
-		"LEFT JOIN (SELECT file_id, (ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event " +
-		"FROM sda.file_event_log GROUP BY file_id) e " +
-		"ON f.id = e.file_id " +
-		"WHERE f.submission_user = $1;"
+	// select all files of the user, each one annotated with its latest event
+	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
+		"FROM sda.files f " +
+		"LEFT JOIN ( " +
+		"SELECT event, started_at, file_id " +
+		"FROM sda.file_event_log " +
+		") e ON f.id = e.file_id " +
+		"WHERE f.submission_user = $1 " +
+		"ORDER BY e.started_at DESC LIMIT 1; "
 
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
