@@ -42,6 +42,15 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 }
 
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
+	l, err := net.Listen("tcp", "127.0.0.1:9999")
+	if err != nil {
+		log.Fatal(err)
+	}
+	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	ts := httptest.NewUnstartedServer(foo)
+	ts.Listener.Close()
+	ts.Listener = l
+	ts.Start()
 	db, _, _ := sqlmock.New()
 	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
@@ -51,8 +60,8 @@ func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 		conf,
 		new(tls.Config))
 
-	assert.NoError(suite.T(), h.httpsGetCheck("https://www.nbis.se", 10*time.Second)())
-	assert.Error(suite.T(), h.httpsGetCheck("https://www.nbis.se/nonexistent", 5*time.Second)(), "404 should fail")
+	assert.NoError(suite.T(), h.httpsGetCheck("http://127.0.0.1:9999", 10*time.Second)())
+	assert.Error(suite.T(), h.httpsGetCheck("http://127.0.0.1:8888/nonexistent", 5*time.Second)(), "404 should fail")
 }
 
 func (suite *HealthcheckTestSuite) TestHealthchecks() {
