@@ -81,8 +81,12 @@ func (auth AuthHandler) getMain(ctx iris.Context) {
 // getLoginOptions returns the available login providers as JSON
 func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 
-	// Elixir is always available
-	response := []LoginOption{{Name: "Elixir", URL: "/elixir"}}
+	var response []LoginOption
+	// Only add the Elixir option if it has both id and secret
+	if auth.Config.Elixir.ID != "" && auth.Config.Elixir.Secret != "" {
+		response = append(response, LoginOption{Name: "Elixir", URL: "/elixir"})
+	}
+
 	// Only add the CEGA option if it has both id and secret
 	if auth.Config.Cega.ID != "" && auth.Config.Cega.Secret != "" {
 		response = append(response, LoginOption{Name: "EGA", URL: "/ega/login"})
@@ -361,8 +365,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialise OIDC client
-	oauth2Config, provider := getOidcClient(config.Elixir)
+	var oauth2Config oauth2.Config
+	var provider *oidc.Provider
+
+	if config.Elixir.ID != "" && config.Elixir.Secret != "" {
+		// Initialise OIDC client
+		oauth2Config, provider = getOidcClient(config.Elixir)
+	}
 
 	// Create handler struct for the web server
 	authHandler := AuthHandler{
