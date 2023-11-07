@@ -3,9 +3,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -18,14 +21,16 @@ import (
 )
 
 var (
+	err                      error
 	key, publicKey           *[32]byte
 	db                       *database.SDAdb
+	conf                     *config.Config
 	archive, syncDestination storage.Backend
 )
 
 func main() {
 	forever := make(chan bool)
-	conf, err := config.NewConfig("sync")
+	conf, err = config.NewConfig("sync")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,7 +42,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	syncDestination, err = storage.NewBackend(conf.Sync)
+
+	syncDestination, err = storage.NewBackend(conf.Sync.Destination)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,6 +126,15 @@ func main() {
 				}
 			}
 
+			log.Infoln("buildSyncDatasetJSON")
+			blob, err := buildSyncDatasetJSON(delivered.Body)
+			if err != nil {
+				log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
+			}
+			if err := sendPOST(blob); err != nil {
+				log.Errorf("failed to send POST, Reason: %v", err)
+			}
+
 			if err := delivered.Ack(false); err != nil {
 				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 			}
@@ -187,4 +202,68 @@ func syncFiles(stableID string) error {
 	}
 
 	return nil
+}
+
+func buildSyncDatasetJSON(b []byte) ([]byte, error) {
+	var msg schema.DatasetMapping
+	_ = json.Unmarshal(b, &msg)
+
+	var dataset = schema.SyncDataset{
+		DatasetID: msg.DatasetID,
+	}
+
+	for _, ID := range msg.AccessionIDs {
+		data, err := db.GetSyncData(ID)
+		if err != nil {
+			return nil, err
+		}
+		datasetFile := schema.DatasetFiles{
+			FilePath: data.FilePath,
+			FileID:   ID,
+			ShaSum:   data.Checksum,
+		}
+		dataset.DatasetFiles = append(dataset.DatasetFiles, datasetFile)
+		dataset.User = data.User
+	}
+
+	json, err := json.Marshal(dataset)
+	if err != nil {
+		return nil, err
+	}
+
+	return json, nil
+}
+
+func sendPOST(payload []byte) error {
+	client := &http.Client{}
+	URL, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(conf.Sync.RemoteUser, conf.Sync.RemotePassword)
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func createHostURL(host string, port int) (string, error) {
+	url, err := url.ParseRequestURI(host)
+	if err != nil {
+		return "", err
+	}
+	if url.Port() == "" && port != 0 {
+		url.Host += fmt.Sprintf(":%d", port)
+	}
+	url.Path = "/dataset"
+
+	return url.String(), nil
 }

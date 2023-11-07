@@ -46,8 +46,16 @@ type Config struct {
 	API          APIConf
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
-	Sync         storage.Conf
+	Sync         Sync
 	SyncAPI      SyncAPIConf
+}
+
+type Sync struct {
+	Destination    storage.Conf
+	RemoteHost     string
+	RemotePassword string
+	RemotePort     int
+	RemoteUser     string
 }
 
 type SyncAPIConf struct {
@@ -270,6 +278,7 @@ func NewConfig(app string) (*Config, error) {
 		viper.Set("inbox.type", S3)
 	case "sync":
 		requiredConfVars = []string{
+			"archive.type",
 			"broker.host",
 			"broker.port",
 			"broker.user",
@@ -283,6 +292,7 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+			"sync.destination.type",
 		}
 
 		switch viper.GetString("archive.type") {
@@ -478,7 +488,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configArchive()
-		c.configSyncDestination()
+		c.configSync()
 		c.configSchemas()
 
 	case "sync-api":
@@ -816,18 +826,25 @@ func (c *Config) configSMTP() {
 }
 
 // configSync provides configuration for the sync destination storage
-func (c *Config) configSyncDestination() {
+func (c *Config) configSync() {
 	switch viper.GetString("sync.destination.type") {
 	case S3:
-		c.Sync.Type = S3
-		c.Sync.S3 = configS3Storage("sync.destination")
+		c.Sync.Destination.Type = S3
+		c.Sync.Destination.S3 = configS3Storage("sync.destination")
 	case SFTP:
-		c.Sync.Type = SFTP
-		c.Sync.SFTP = configSFTP("sync.destination")
+		c.Sync.Destination.Type = SFTP
+		c.Sync.Destination.SFTP = configSFTP("sync.destination")
 	case POSIX:
-		c.Sync.Type = POSIX
-		c.Sync.Posix.Location = viper.GetString("sync.destination.location")
+		c.Sync.Destination.Type = POSIX
+		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
 	}
+
+	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
+	if viper.IsSet("sync.remote.port") {
+		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
+	}
+	c.Sync.RemotePassword = viper.GetString("sync.remote.pass")
+	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
 }
 
 // configSync provides configuration for the outgoing sync settings

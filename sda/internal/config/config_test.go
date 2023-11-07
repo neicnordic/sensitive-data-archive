@@ -301,8 +301,8 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(suite.T(), config.Archive.Posix)
 	assert.Equal(suite.T(), "test", config.Archive.Posix.Location)
 	assert.NotNil(suite.T(), config.Sync)
-	assert.NotNil(suite.T(), config.Sync.Posix)
-	assert.Equal(suite.T(), "test", config.Sync.Posix.Location)
+	assert.NotNil(suite.T(), config.Sync.Destination.Posix)
+	assert.Equal(suite.T(), "test", config.Sync.Destination.Posix.Location)
 }
 func (suite *ConfigTestSuite) TestGetC4GHPublicKey() {
 	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
