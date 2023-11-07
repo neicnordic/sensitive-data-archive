@@ -51,6 +51,7 @@ type Config struct {
 }
 
 type Sync struct {
+	CenterPrefix   string
 	Destination    storage.Conf
 	RemoteHost     string
 	RemotePassword string
@@ -278,12 +279,12 @@ func NewConfig(app string) (*Config, error) {
 		viper.Set("inbox.type", S3)
 	case "sync":
 		requiredConfVars = []string{
-			"archive.type",
 			"broker.host",
 			"broker.port",
 			"broker.user",
 			"broker.password",
 			"broker.queue",
+			"centerPrefix",
 			"c4gh.filepath",
 			"c4gh.passphrase",
 			"c4gh.syncPubKeyPath",
@@ -292,7 +293,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
-			"sync.destination.type",
 		}
 
 		switch viper.GetString("archive.type") {
@@ -845,6 +845,8 @@ func (c *Config) configSync() {
 	}
 	c.Sync.RemotePassword = viper.GetString("sync.remote.pass")
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
+
+	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
 }
 
 // configSync provides configuration for the outgoing sync settings

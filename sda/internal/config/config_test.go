@@ -275,6 +275,7 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), config)
 
+	viper.Set("centerPrefix", "prefix")
 	viper.Set("archive.type", "posix")
 	viper.Set("archive.location", "test")
 	viper.Set("sync.destination.type", "posix")

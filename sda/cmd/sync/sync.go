@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -115,6 +117,15 @@ func main() {
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 
+			if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
+				log.Infoln("external dataset")
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
+
+				continue
+			}
+
 			for _, aID := range message.AccessionIDs {
 				if err := syncFiles(aID); err != nil {
 					log.Errorf("failed to sync archived file %s, reason: (%s)", aID, err.Error())
@@ -133,6 +144,11 @@ func main() {
 			}
 			if err := sendPOST(blob); err != nil {
 				log.Errorf("failed to send POST, Reason: %v", err)
+				if err := delivered.Nack(false, false); err != nil {
+					log.Errorf("failed to nack following sendPOST error message")
+				}
+
+				continue
 			}
 
 			if err := delivered.Ack(false); err != nil {
@@ -235,20 +251,27 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 }
 
 func sendPOST(payload []byte) error {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
 	URL, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(payload))
+	req, err := http.NewRequest(http.MethodPost, URL, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(conf.Sync.RemoteUser, conf.Sync.RemotePassword)
 	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s", resp.Status)
 	}
 	defer resp.Body.Close()
 
