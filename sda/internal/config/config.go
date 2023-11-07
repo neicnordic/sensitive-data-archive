@@ -492,12 +492,6 @@ func NewConfig(app string) (*Config, error) {
 		c.configSchemas()
 
 	case "sync-api":
-		if viper.IsSet("db.host") {
-			if err := c.configDatabase(); err != nil {
-				return nil, err
-			}
-		}
-
 		if err := c.configBroker(); err != nil {
 			return nil, err
 		}
@@ -506,10 +500,7 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		if viper.IsSet("sync.api.remote.host") {
-			c.configSyncAPI()
-		}
-
+		c.configSyncAPI()
 		c.configSchemas()
 
 		return c, nil
