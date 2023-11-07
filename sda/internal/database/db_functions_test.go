@@ -445,3 +445,24 @@ func (suite *DatabaseTests) TestCheckIfDatasetExists() {
 	assert.NoError(suite.T(), err, "check if dataset exists failed")
 	assert.Equal(suite.T(), ok, false)
 }
+
+func (suite *DatabaseTests) TestGetArchivePath() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	fileID, err := db.RegisterFile("/testuser/TestGetArchivePath-001.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	checksum := sha256.New()
+	corrID := uuid.New().String()
+	fileInfo := FileInfo{sha256.New(), 1234, corrID, checksum, 999}
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = db.SetAccessionID("acession-0001", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	path, err := db.getArchivePath("acession-0001")
+	assert.NoError(suite.T(), err, "getArchivePath failed")
+	assert.Equal(suite.T(), path, corrID)
+}

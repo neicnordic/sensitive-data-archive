@@ -17,6 +17,12 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
+var (
+	key, publicKey           *[32]byte
+	db                       *database.SDAdb
+	archive, syncDestination storage.Backend
+)
+
 func main() {
 	forever := make(chan bool)
 	conf, err := config.NewConfig("sync")
@@ -27,21 +33,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := database.NewSDAdb(conf.Database)
+	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
-	syncDestination, err := storage.NewBackend(conf.Sync)
+	syncDestination, err = storage.NewBackend(conf.Sync)
 	if err != nil {
 		log.Fatal(err)
 	}
-	archive, err := storage.NewBackend(conf.Archive)
+	archive, err = storage.NewBackend(conf.Archive)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var key *[32]byte
-	var publicKey *[32]byte
 	key, err = config.GetC4GHKey()
 	if err != nil {
 		log.Fatal(err)
@@ -69,7 +73,7 @@ func main() {
 	}()
 
 	log.Info("Starting sync service")
-	var message schema.IngestionCompletion
+	var message schema.DatasetMapping
 
 	go func() {
 		messages, err := mq.GetMessages(conf.Broker.Queue)
@@ -81,14 +85,14 @@ func main() {
 				delivered.CorrelationId,
 				delivered.Body)
 
-			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), delivered.Body)
+			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-completion) failed, reason: (%s)", err.Error())
+				log.Errorf("validation of incoming message (dataset-mapping) failed, reason: (%s)", err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed",
+					Error:           "Message validation failed in sync service",
 					Reason:          err.Error(),
-					OriginalMessage: message,
+					OriginalMessage: string(delivered.Body),
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
@@ -104,97 +108,17 @@ func main() {
 
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
-			filePath, fileSize, err := db.GetArchived(delivered.CorrelationId)
-			if err != nil {
-				log.Errorf("GetArchived failed, reason: %s", err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetArchived error message")
-				}
 
-				continue
-			}
+			for _, aID := range message.AccessionIDs {
+				if err := syncFiles(aID); err != nil {
+					log.Errorf("failed to sync archived file %s, reason: (%s)", aID, err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following GetFileSize error message")
+					}
 
-			diskFileSize, err := archive.GetFileSize(filePath)
-			if err != nil {
-				log.Errorf("failed to get size info for archived file %s, reason: (%s)", filePath, err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetFileSize error message")
-				}
-
-				continue
-			}
-
-			if diskFileSize != int64(fileSize) {
-				log.Errorf("File size in archive does not match database for archive file %s - archive size is %d, database has %d ",
-					filePath, diskFileSize, fileSize,
-				)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetFileSize error message")
-				}
-
-				continue
-			}
-
-			file, err := archive.NewFileReader(filePath)
-			if err != nil {
-				log.Errorf("failed to open archived file %s, reason: (%s)", filePath, err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following open archived file error message")
-				}
-
-				continue
-			}
-
-			dest, err := syncDestination.NewFileWriter(message.FilePath)
-			if err != nil {
-				log.Errorf("failed to open destination file %s for writing, reason: (%s)", filePath, err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following open destination file error message")
-				}
-
-				continue
-			}
-
-			header, err := db.GetHeaderForStableID(message.AccessionID)
-			if err != nil {
-				log.Errorf("GetHeaderForStableID %s failed, reason: (%s)", message.AccessionID, err.Error())
-			}
-
-			log.Debug("Reencrypt header")
-			pubkeyList := [][chacha20poly1305.KeySize]byte{}
-			pubkeyList = append(pubkeyList, *publicKey)
-			newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
-			if err != nil {
-				log.Errorf("failed to reencrypt the header, reason(%s)", err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following reencrypt header error message")
+					continue
 				}
 			}
-
-			_, err = dest.Write(newHeader)
-			if err != nil {
-				log.Errorf("failed to write the header to destination %s, reason(%s)", message.FilePath, err.Error())
-			}
-
-			// Copy the file and check is sizes match
-			copiedSize, err := io.Copy(dest, file)
-			if err != nil || copiedSize != int64(fileSize) {
-				switch {
-				case err != nil:
-					log.Errorf("failed to copy the file, reason (%s)", err.Error())
-				case copiedSize != int64(fileSize):
-					log.Errorf("copied size does not match file size")
-				}
-
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following reencrypt header error message")
-				}
-
-				continue
-			}
-
-			file.Close()
-			dest.Close()
 
 			if err := delivered.Ack(false); err != nil {
 				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
@@ -203,4 +127,64 @@ func main() {
 	}()
 
 	<-forever
+}
+
+func syncFiles(stableID string) error {
+	log.Debugf("syncing file %s", stableID)
+	inboxPath, err := db.GetInboxPath(stableID)
+	if err != nil {
+		return fmt.Errorf("failed to get inbox path for file with stable ID: %s", stableID)
+	}
+
+	archivePath, err := db.GetArchivePath(stableID)
+	if err != nil {
+		return fmt.Errorf("failed to get archive path for file with stable ID: %s", stableID)
+	}
+
+	fileSize, err := archive.GetFileSize(archivePath)
+	if err != nil {
+		return err
+	}
+
+	file, err := archive.NewFileReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	dest, err := syncDestination.NewFileWriter(inboxPath)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	header, err := db.GetHeaderForStableID(stableID)
+	if err != nil {
+		return err
+	}
+
+	pubkeyList := [][chacha20poly1305.KeySize]byte{}
+	pubkeyList = append(pubkeyList, *publicKey)
+	newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
+	if err != nil {
+		return err
+	}
+
+	_, err = dest.Write(newHeader)
+	if err != nil {
+		return err
+	}
+
+	// Copy the file and check is sizes match
+	copiedSize, err := io.Copy(dest, file)
+	if err != nil || copiedSize != int64(fileSize) {
+		switch {
+		case copiedSize != int64(fileSize):
+			return fmt.Errorf("copied size does not match file size")
+		default:
+			return err
+		}
+	}
+
+	return nil
 }

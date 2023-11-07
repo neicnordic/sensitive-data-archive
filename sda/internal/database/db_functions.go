@@ -593,3 +593,32 @@ func (dbs *SDAdb) checkIfDatasetExists(datasetID string) (bool, error) {
 
 	return yesNo, nil
 }
+
+// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
+func (dbs *SDAdb) GetArchivePath(stableID string) (string, error) {
+	var (
+		err         error
+		count       int
+		archivePath string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		archivePath, err = dbs.getArchivePath(stableID)
+		count++
+	}
+
+	return archivePath, err
+}
+func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT archive_file_path from sda.files WHERE stable_id = $1;"
+
+	var archivePath string
+	err := db.QueryRow(getFileID, stableID).Scan(&archivePath)
+	if err != nil {
+		return "", err
+	}
+
+	return archivePath, nil
+}

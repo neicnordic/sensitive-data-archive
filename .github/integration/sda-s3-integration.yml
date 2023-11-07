@@ -224,7 +224,7 @@ services:
     environment:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=completed_stream
+      - BROKER_QUEUE=mapping_stream
       - DB_PASSWORD=sync
       - DB_USER=sync
     restart: always
