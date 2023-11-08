@@ -75,6 +75,7 @@ spec:
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
+      {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
         - name: ELIXIR_ID
           valueFrom:
             secretKeyRef:
@@ -85,6 +86,7 @@ spec:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
               key: oidcSecret
+      {{- end }}
         {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
         - name: CEGA_ID
           valueFrom:
