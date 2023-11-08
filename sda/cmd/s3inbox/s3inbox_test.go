@@ -160,6 +160,7 @@ func TestMain(m *testing.M) {
 
 	client = http.Client{Timeout: 5 * time.Second}
 	req, err = http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+
 	if err != nil {
 		log.Panic(err)
 	}
