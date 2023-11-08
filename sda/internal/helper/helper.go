@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -74,6 +75,28 @@ var (
 		"jti":       "cc847f9c-7608-4b4f-9c6f-6e734813355f",
 	}
 )
+
+// Authenticating functionality for testing
+// AlwaysAllow is an Authenticator that always authenticates
+type AlwaysAllow struct{}
+
+// NewAlwaysAllow returns a new AlwaysAllow authenticator.
+func NewAlwaysAllow() *AlwaysAllow {
+	return &AlwaysAllow{}
+}
+
+// Authenticate authenticates everyone.
+func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.Token, error) {
+	return jwt.New(), nil
+}
+
+// AlwaysAllow is an Authenticator that always authenticates
+type AlwaysDeny struct{}
+
+// Authenticate does not authenticate anyone.
+func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.Token, error) {
+	return nil, fmt.Errorf("denied")
+}
 
 // MakeFolder creates a folder and subfolders for the keys pair
 // Returns the two paths

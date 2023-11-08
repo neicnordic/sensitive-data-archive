@@ -114,7 +114,7 @@ func TestMain(m *testing.M) {
 }
 
 func (suite *UserAuthTest) TestAlwaysAuthenticator() {
-	a := NewAlwaysAllow()
+	a := helper.NewAlwaysAllow()
 	r, _ := http.NewRequest("Get", "/", nil)
 	_, err := a.Authenticate(r)
 	assert.Nil(suite.T(), err)
