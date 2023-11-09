@@ -275,11 +275,14 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), config)
 
-	viper.Set("centerPrefix", "prefix")
 	viper.Set("archive.type", "posix")
 	viper.Set("archive.location", "test")
+	viper.Set("sync.centerPrefix", "prefix")
 	viper.Set("sync.destination.type", "posix")
 	viper.Set("sync.destination.location", "test")
+	viper.Set("sync.remote.host", "https://test.org")
+	viper.Set("sync.remote.user", "test")
+	viper.Set("sync.remote.password", "test")
 	viper.Set("c4gh.filepath", "/keys/key")
 	viper.Set("c4gh.passphrase", "pass")
 	viper.Set("c4gh.syncPubKeyPath", "/keys/recipient")
@@ -355,4 +358,9 @@ func (suite *ConfigTestSuite) TestConfigSyncAPI() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), "user", config.SyncAPI.APIUser)
 	assert.Equal(suite.T(), "password", config.SyncAPI.APIPassword)
+
+	viper.Set("sync.api.AccessionRouting", "wrong")
+	config, err = NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "wrong", config.SyncAPI.AccessionRouting)
 }

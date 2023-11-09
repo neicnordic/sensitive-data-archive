@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
-
-	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -60,12 +59,11 @@ type Sync struct {
 }
 
 type SyncAPIConf struct {
-	APIPassword    string
-	APIUser        string
-	RemoteHost     string
-	RemotePassword string
-	RemotePort     int
-	RemoteUser     string
+	APIPassword      string
+	APIUser          string
+	AccessionRouting string `default:"accession"`
+	IngestRouting    string `default:"ingest"`
+	MappingRouting   string `default:"mappings"`
 }
 
 type APIConf struct {
@@ -284,7 +282,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.user",
 			"broker.password",
 			"broker.queue",
-			"centerPrefix",
 			"c4gh.filepath",
 			"c4gh.passphrase",
 			"c4gh.syncPubKeyPath",
@@ -293,6 +290,10 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+			"sync.centerPrefix",
+			"sync.remote.host",
+			"sync.remote.user",
+			"sync.remote.password",
 		}
 
 		switch viper.GetString("archive.type") {
@@ -321,7 +322,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.port",
 			"broker.user",
 			"broker.password",
-			"broker.queue",
 			"sync.api.user",
 			"sync.api.password",
 		}
@@ -490,7 +490,6 @@ func NewConfig(app string) (*Config, error) {
 		c.configArchive()
 		c.configSync()
 		c.configSchemas()
-
 	case "sync-api":
 		if err := c.configBroker(); err != nil {
 			return nil, err
@@ -502,8 +501,6 @@ func NewConfig(app string) (*Config, error) {
 
 		c.configSyncAPI()
 		c.configSchemas()
-
-		return c, nil
 	case "verify":
 		c.configArchive()
 
@@ -834,9 +831,8 @@ func (c *Config) configSync() {
 	if viper.IsSet("sync.remote.port") {
 		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
 	}
-	c.Sync.RemotePassword = viper.GetString("sync.remote.pass")
+	c.Sync.RemotePassword = viper.GetString("sync.remote.password")
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
-
 	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
 }
 
@@ -846,12 +842,16 @@ func (c *Config) configSyncAPI() {
 	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
 	c.SyncAPI.APIUser = viper.GetString("sync.api.user")
 
-	c.SyncAPI.RemoteHost = viper.GetString("sync.api.remote.host")
-	if viper.IsSet("sync.api.remote.port") {
-		c.SyncAPI.RemotePort = viper.GetInt("sync.api.remote.port")
+	if viper.IsSet("sync.api.AccessionRouting") {
+		c.SyncAPI.AccessionRouting = viper.GetString("sync.api.AccessionRouting")
 	}
-	c.SyncAPI.RemotePassword = viper.GetString("sync.api.remote.pass")
-	c.SyncAPI.RemoteUser = viper.GetString("sync.api.remote.user")
+	if viper.IsSet("sync.api.IngestRouting") {
+		c.SyncAPI.IngestRouting = viper.GetString("sync.api.IngestRouting")
+	}
+	if viper.IsSet("sync.api.MappingRouting") {
+		c.SyncAPI.MappingRouting = viper.GetString("sync.api.MappingRouting")
+	}
+
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key
