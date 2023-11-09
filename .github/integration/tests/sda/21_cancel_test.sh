@@ -86,11 +86,11 @@ curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -d "$ingest_body"
 
 RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 3 ]; do
-    echo "waiting for verify to complete"
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 5 ]; do
+    echo "waiting for verify to complete after re-ingestion"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for verify to complete"
+        echo "::error::Time out while waiting for verify to complete after re-ingestion"
         exit 1
     fi
     sleep 2

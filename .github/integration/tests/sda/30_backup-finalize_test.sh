@@ -4,7 +4,7 @@ set -e
 cd shared || true
 
 i=1
-while [ $i -le 2 ]; do
+while [ $i -le 4 ]; do
     ## get correlation id from upload message
     MSG=$(
         curl -s -X POST \
