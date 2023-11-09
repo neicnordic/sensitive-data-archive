@@ -35,7 +35,6 @@ GRANT USAGE ON SCHEMA sda TO ingest;
 GRANT INSERT ON sda.files TO ingest;
 GRANT SELECT ON sda.files TO ingest;
 GRANT UPDATE ON sda.files TO ingest;
-GRANT UPDATE ON sda.files TO ingest;
 GRANT INSERT ON sda.checksums TO ingest;
 GRANT UPDATE ON sda.checksums TO ingest;
 GRANT SELECT ON sda.checksums TO ingest;
@@ -75,7 +74,6 @@ GRANT UPDATE ON local_ega.files TO verify;
 GRANT SELECT ON local_ega.main_to_files TO verify;
 GRANT SELECT ON local_ega.status_translation TO verify;
 GRANT UPDATE ON local_ega.main TO verify;
-GRANT UPDATE ON sda.files TO verify;
 GRANT INSERT, SELECT, UPDATE ON sda.checksums TO verify;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO verify;
 
@@ -97,7 +95,6 @@ GRANT SELECT ON local_ega.main_to_files TO finalize;
 GRANT SELECT ON local_ega.status_translation TO finalize;
 GRANT UPDATE ON local_ega.files TO finalize;
 GRANT SELECT ON local_ega.files TO finalize;
-GRANT UPDATE ON sda.files TO finalize;
 GRANT INSERT, SELECT, UPDATE ON sda.checksums TO finalize;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO finalize;
 
