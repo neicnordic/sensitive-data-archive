@@ -393,13 +393,13 @@ func (suite *DatabaseTests) TestGetSyncData() {
 	fileID, err := db.RegisterFile("/testuser/TestGetGetSyncData.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	checksum := sha256.New()
-	fileInfo := FileInfo{sha256.New(), 1234, "/tmp/TestGetGetSyncData.c4gh", checksum, 999}
+	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, "/tmp/TestGetGetSyncData.c4gh", checksum, 999}
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = db.markCompleted(fileInfo, fileID, corrID)
+	err = db.SetVerified(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Verified")
 
 	stableID := "TEST:000-1111-2222"
@@ -453,9 +453,9 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	fileID, err := db.RegisterFile("/testuser/TestGetArchivePath-001.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	checksum := sha256.New()
+	checksum := fmt.Sprintf("%x", sha256.New())
 	corrID := uuid.New().String()
-	fileInfo := FileInfo{sha256.New(), 1234, corrID, checksum, 999}
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1234, corrID, checksum, 999}
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 

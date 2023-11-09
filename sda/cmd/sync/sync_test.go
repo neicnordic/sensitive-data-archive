@@ -128,7 +128,10 @@ func (suite *SyncTest) SetupTest() {
 	viper.Set("db.password", "rootpasswd")
 	viper.Set("db.database", "sda")
 	viper.Set("db.sslmode", "disable")
-	viper.Set("centerPrefix", "prefix")
+	viper.Set("sync.centerPrefix", "prefix")
+	viper.Set("sync.remote.host", "http://remote.example")
+	viper.Set("sync.remote.user", "user")
+	viper.Set("sync.remote.password", "pass")
 
 	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
 	keyPath, _ := os.MkdirTemp("", "key")
@@ -159,13 +162,13 @@ func (suite *SyncTest) TestBuildSyncDatasetJSON() {
 	err = db.SetAccessionID("ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(suite.T(), err)
 
-	checksum := sha256.New()
-	fileInfo := database.FileInfo{Checksum: sha256.New(), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
+	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+	fileInfo := database.FileInfo{Checksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 	corrID := uuid.New().String()
 
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
+	err = db.SetVerified(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Verified")
 
 	accessions := []string{"ed6af454-d910-49e3-8cda-488a6f246e67"}
@@ -175,7 +178,7 @@ func (suite *SyncTest) TestBuildSyncDatasetJSON() {
 	jsonData, err := buildSyncDatasetJSON(m)
 	assert.NoError(suite.T(), err)
 	dataset := []byte(`{"dataset_id":"cd532362-e06e-4461-8490-b9ce64b8d9e7","dataset_files":[{"filepath":"dummy.user/test/file1.c4gh","file_id":"ed6af454-d910-49e3-8cda-488a6f246e67","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}],"user":"dummy.user"}`)
-	assert.Equal(suite.T(), dataset, jsonData)
+	assert.Equal(suite.T(), string(dataset), string(jsonData))
 }
 
 func (suite *SyncTest) TestCreateHostURL() {
