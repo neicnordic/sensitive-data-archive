@@ -1,5 +1,7 @@
 # Sync
 
+The sync service is used in the [Bigpicture](https://bigpicture.eu/) project.
+
 Copies files from the archive to the sync destination, including the header so that the files can be ingested at the remote site.
 
 ## Configuration
@@ -22,6 +24,14 @@ export LOG_LEVEL="debug"
 export LOG_FORMAT="json"
 ```
 
+### Service settings
+
+- `SYNC_CENTERPREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not
+- `SYNC_REMOTE_HOST`: URL to the remote API host
+- `SYNC_REMOTE_POST`: Port for the remote API host, if other than the standard HTTP(S) ports
+- `SYNC_REMOTE_USER`: Username for connecting to the remote API
+- `SYNC_REMOTE_PASSWORD`: Password for the API user
+
 ### Keyfile settings
 
 These settings control which crypt4gh keyfile is loaded.
@@ -36,7 +46,7 @@ These settings control how sync connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
 - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queueor stream to read messages from (commonly `completed_stream`)
+- `BROKER_QUEUE`: message queue or stream to read messages from (commonly `mapping_stream`)
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
@@ -112,23 +122,27 @@ and if `*_TYPE` is `SFTP`:
 
 The sync service copies files from the archive storage to sync storage.
 
-When running, sync reads messages from the "completed" RabbitMQ queue.  
+When running, sync reads messages from the "mapping_stream" RabbitMQ queue.  
 For each message, these steps are taken (if not otherwise noted, errors halts progress, the message is Nack'ed, and the service moves on to the next message):
 
-1. The message is validated as valid JSON that matches the "ingestion-completion" schema. If the message can’t be validated it is sent to the error queue for later analysis.
-2. The archive file path and file size is fetched from the database.
-3. The file size on disk is requested from the storage system.
-4. The archive file size from the database is compared against the disk file size.
-5. A file reader is created for the archive storage file, and a file writer is created for the sync storage file.
-   1. The header is read from the database.
-   2. The header is decrypted.
-   3. The header is reencrypted with the destinations public key.
-   4. The header is written to the sync file writer.
-6. The file data is copied from the archive file reader to the sync file writer.
-7. The message is Ack'ed.
+1. The message is validated as valid JSON that matches the "dataset-mapping" schema. If the message can’t be validated it is sent to the error queue for later analysis.
+2. Checks where the dataset is created by comparing the center prefix on the dataset ID, if it is a remote ID processing stops.
+3. For each stable ID in the dataset the following is performed:
+   1. The archive file path and file size is fetched from the database.
+   2. The file size on disk is requested from the storage system.
+   3. A file reader is created for the archive storage file, and a file writer is created for the sync storage file.
+      1. The header is read from the database.
+      2. The header is decrypted.
+      3. The header is reencrypted with the destinations public key.
+      4. The header is written to the sync file writer.
+   4. The file data is copied from the archive file reader to the sync file writer.
+4. Once all files have been copied to the destination a JSON struct is created acording to `file-sync` schema.
+5. A POST message is sent to the remote api host with the JSON data.
+6. The message is Ack'ed.
 
 ## Communication
 
-- Sync reads messages from one rabbitmq stream (`completed_stream`)
-- Sync reads file information and headers from the database and can not be started without a database connection. This is done using the `GetArchived`, and `GetHeaderForStableID` functions.
-- Sync reads data from archive storage and writes data to sync destination storage.
+- Sync reads messages from one rabbitmq stream (`mapping_stream`)
+- Sync reads file information and headers from the database and can not be started without a database connection.
+- Sync re-encrypts the header with the receiving end's public key.
+- Sync reads data from archive storage and writes data to sync destination storage with the re-encrypted headers attached.
