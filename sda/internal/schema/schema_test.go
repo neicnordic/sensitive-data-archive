@@ -261,9 +261,6 @@ func TestValidateJSONIngestionTrigger(t *testing.T) {
 		Type:     "ingest",
 		User:     "JohnDoe",
 		FilePath: "path/to/file",
-		EncryptedChecksums: []Checksums{
-			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
-		},
 	}
 
 	msg, _ := json.Marshal(okMsg)
@@ -273,9 +270,6 @@ func TestValidateJSONIngestionTrigger(t *testing.T) {
 	badMsg := IngestionTrigger{
 		User:     "JohnDoe",
 		FilePath: "path/to file",
-		EncryptedChecksums: []Checksums{
-			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
-		},
 	}
 
 	msg, _ = json.Marshal(badMsg)

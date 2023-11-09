@@ -139,10 +139,9 @@ type IngestionCompletion struct {
 }
 
 type IngestionTrigger struct {
-	Type               string      `json:"type"`
-	User               string      `json:"user"`
-	FilePath           string      `json:"filepath"`
-	EncryptedChecksums []Checksums `json:"encrypted_checksums"`
+	Type     string `json:"type"`
+	User     string `json:"user"`
+	FilePath string `json:"filepath"`
 }
 
 type IngestionUserError struct {
