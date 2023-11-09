@@ -5,7 +5,6 @@ package database
 import (
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math"
 	"time"
 
@@ -160,8 +159,8 @@ func (dbs *SDAdb) setArchived(file FileInfo, fileID, corrID string) error {
 		corrID,
 		file.Path,
 		file.Size,
-		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
-		hashType(file.Checksum),
+		file.Checksum,
+		"SHA256",
 	)
 
 	return err
@@ -230,20 +229,20 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 }
 
 // MarkCompleted marks the file as "COMPLETED"
-func (dbs *SDAdb) MarkCompleted(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) SetVerified(file FileInfo, fileID, corrID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.markCompleted(file, fileID, corrID)
+		err = dbs.setVerified(file, fileID, corrID)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setVerified(file FileInfo, fileID, corrID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -251,11 +250,11 @@ func (dbs *SDAdb) markCompleted(file FileInfo, fileID, corrID string) error {
 	_, err := db.Exec(completed,
 		fileID,
 		corrID,
-		fmt.Sprintf("%x", file.Checksum.Sum(nil)),
-		hashType(file.Checksum),
+		file.Checksum,
+		"SHA256",
 		file.DecryptedSize,
-		fmt.Sprintf("%x", file.DecryptedChecksum.Sum(nil)),
-		hashType(file.DecryptedChecksum),
+		file.DecryptedChecksum,
+		"SHA256",
 	)
 
 	return err
@@ -293,12 +292,12 @@ func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
 }
 
 // CheckAccessionIdExists validates if an accessionID exists in the db
-func (dbs *SDAdb) CheckAccessionIDExists(accessionID string) (bool, error) {
+func (dbs *SDAdb) CheckAccessionIDExists(accessionID, fileID string) (string, error) {
 	var err error
-	var exists bool
+	var exists string
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		exists, err = dbs.checkAccessionIDExists(accessionID)
+		exists, err = dbs.checkAccessionIDExists(accessionID, fileID)
 		if err == nil {
 			break
 		}
@@ -307,20 +306,31 @@ func (dbs *SDAdb) CheckAccessionIDExists(accessionID string) (bool, error) {
 
 	return exists, err
 }
-func (dbs *SDAdb) checkAccessionIDExists(accessionID string) (bool, error) {
+func (dbs *SDAdb) checkAccessionIDExists(accessionID, fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const checkIDExist = "SELECT COUNT(*) FROM sda.files WHERE stable_id = $1;"
+
+	const sameID = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1 and id = $2"
+	var same int
+	if err := db.QueryRow(sameID, accessionID, fileID).Scan(&same); err != nil {
+		return "", err
+	}
+
+	if same > 0 {
+		return "same", nil
+	}
+
+	const checkIDExist = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1;"
 	var stableIDCount int
 	if err := db.QueryRow(checkIDExist, accessionID).Scan(&stableIDCount); err != nil {
-		return false, err
+		return "", err
 	}
 
-	if stableIDCount >= 1 {
-		return true, nil
+	if stableIDCount > 0 {
+		return "duplicate", nil
 	}
 
-	return false, nil
+	return "", nil
 }
 
 // SetAccessionID adds a stable id to a file
@@ -466,4 +476,36 @@ func (dbs *SDAdb) updateDatasetEvent(datasetID, status, message string) error {
 
 	return nil
 
+}
+
+// GetFileInfo returns info on a ingested file
+func (dbs *SDAdb) GetFileInfo(id string) (FileInfo, error) {
+	var (
+		err   error
+		count int
+		info  FileInfo
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		info, err = dbs.getFileInfo(id)
+		count++
+	}
+
+	return info, err
+}
+func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT archive_file_path, archive_file_size from sda.files where id = $1;"
+	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted from sda.checksums where file_id = $1;"
+	var info FileInfo
+	if err := db.QueryRow(getFileID, id).Scan(&info.Path, &info.Size); err != nil {
+		return FileInfo{}, err
+	}
+
+	if err := db.QueryRow(checkSum, id).Scan(&info.Checksum, &info.DecryptedChecksum); err != nil {
+		return FileInfo{}, err
+	}
+
+	return info, nil
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -ex
 
-if [ -z "$STORAGETYPE" ];then
+if [ -z "$STORAGETYPE" ]; then
     echo "STORAGETYPE not set, exiting"
     exit 1
 fi
@@ -20,6 +20,18 @@ for t in curl expect jq openssh-client postgresql-client; do
 done
 
 cd shared || true
+
+## verify that messages exists in MQ
+URI=http://rabbitmq:15672
+if [ -n "$PGSSLCERT" ]; then
+    URI=https://rabbitmq:15671
+fi
+## empty all queues ##
+for q in completed inbox verified; do
+    curl -s -k -u guest:guest -X DELETE "$URI/api/queues/sda/$q/contents"
+done
+## truncate database
+psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
 
 if [ "$STORAGETYPE" = "posix" ]; then
     for file in NA12878.bam NA12878_20k_b37.bam; do
@@ -71,12 +83,6 @@ if [ "$STORAGETYPE" = "s3" ]; then
 
     ## reupload a file with the same name
     s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/
-fi
-
-## verify that messages exists in MQ
-URI=http://rabbitmq:15672
-if [ -n "$PGSSLCERT" ]; then
-    URI=https://rabbitmq:15671
 fi
 
 echo "waiting for upload to complete"
