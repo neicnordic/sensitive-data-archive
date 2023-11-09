@@ -120,6 +120,11 @@ func (c *Config) readConfig() error {
 
 	c.Cega = cega
 
+	// Check the either cega or Elixir config exists
+	if (elixir.ID == "" || elixir.Secret == "") && (cega.ID == "" || cega.Secret == "") {
+		return fmt.Errorf("neither cega or elixir login configured")
+	}
+
 	// Read CORS settings
 	cors := CORSConfig{AllowCredentials: false}
 	if viper.IsSet("cors.origins") {

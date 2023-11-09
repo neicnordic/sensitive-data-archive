@@ -60,3 +60,7 @@ Using the provided Dockerfile, you may build a Docker image:
 ```bash
 docker build -t neicnordic/sda-auth:mytag <path-to-Dockerfile-folder>
 ```
+
+## Choosing provider login
+
+The `sda-auth` allows for two different type of login providers: `EGA` and `Elixir` (LS-AAI). It is possible, however, to run the `sda-auth` using only one of the providers. In order to remove the `EGA` option, remove the `CEGA_ID` and `CEGA_SECRET` options for the configuration, while for removing the `Elixir` option, remove the `ELIXIR_ID` and `ELIXIR_SECRET` variables.

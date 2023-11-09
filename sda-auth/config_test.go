@@ -228,4 +228,27 @@ func (suite *ConfigTests) TestConfig() {
 	// re-read the config
 	_, err = NewConfig()
 	assert.NoError(suite.T(), err)
+
+	// Repeat with Elixir secret but no ID
+	os.Setenv("ELIXIR_ID", "")
+
+	// re-read the config
+	_, err = NewConfig()
+	assert.Equal(suite.T(), err.Error(), "neither cega or elixir login configured")
+
+	// Repeat test without CEGA or Elixir login
+	os.Setenv("ELIXIR_ID", "")
+	os.Setenv("ELIXIR_SECRET", "")
+
+	// re-read the config
+	_, err = NewConfig()
+	assert.Equal(suite.T(), err.Error(), "neither cega or elixir login configured")
+
+	os.Setenv("CEGA_ID", fmt.Sprintf("env_%v", suite.CegaConfig.ID))
+	os.Setenv("CEGA_SECRET", fmt.Sprintf("env_%v", suite.CegaConfig.Secret))
+	os.Setenv("JWTPRIVATEKEY", fmt.Sprintf("%v_env", suite.JwtPrivateKey))
+
+	// re-read the config
+	_, err = NewConfig()
+	assert.NoError(suite.T(), err)
 }
