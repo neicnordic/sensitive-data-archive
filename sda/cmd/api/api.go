@@ -39,18 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	auth = userauth.NewValidateFromToken(jwk.NewSet())
-	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
-		}
-	}
-	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
-		}
-	}
-
+	setupJwtAuth()
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
@@ -60,7 +49,6 @@ func main() {
 	}()
 
 	srv := setup(Conf)
-
 	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
 		log.Infof("Web server is ready to receive connections at https://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
@@ -74,6 +62,7 @@ func main() {
 			log.Fatalln(err)
 		}
 	}
+
 }
 
 func setup(config *config.Config) *http.Server {
@@ -103,6 +92,21 @@ func setup(config *config.Config) *http.Server {
 	}
 
 	return srv
+}
+
+func setupJwtAuth() {
+
+	auth = userauth.NewValidateFromToken(jwk.NewSet())
+	if Conf.Server.Jwtpubkeyurl != "" {
+		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
+		}
+	}
+	if Conf.Server.Jwtpubkeypath != "" {
+		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
+			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
+		}
+	}
 }
 
 func shutdown() {
