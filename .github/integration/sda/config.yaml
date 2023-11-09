@@ -59,6 +59,9 @@ server:
   jwtpubkeyurl: "http://oidc:8080/jwk"
 
 sync:
+  api:
+    password: "pass"
+    user: "user"
   centerPrefix: "SYNC"
   destination:
     type: "s3"

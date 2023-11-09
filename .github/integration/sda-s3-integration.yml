@@ -232,6 +232,25 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  sync-api:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-syncapi ]
+    container_name: sync-api
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_EXCHANGE=sda.dead
+    ports:
+      - "18080:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+
   oidc:
     container_name: oidc
     command:
@@ -275,6 +294,8 @@ services:
       s3inbox:
         condition: service_started
       sync:
+        condition: service_started
+      sync-api:
         condition: service_started
       verify:
         condition: service_started

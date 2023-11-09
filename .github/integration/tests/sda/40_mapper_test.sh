@@ -44,7 +44,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 
 # check DB for dataset contents
 RETRY_TIMES=0
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'EGAD74900000101')")" -eq 2 ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'EGAD74900000101');")" -eq 2 ]; do
     echo "waiting for mapper to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -63,7 +63,7 @@ for file in NA12878.bam.c4gh NA12878_20k_b37.bam.c4gh; do
     fi
 done
 
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where file_id = (select id from sda.files where stable_id = 'EGAF74900000002') order by started_at DESC LIMIT 1")" = "ready" ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where file_id = (select id from sda.files where stable_id = 'EGAF74900000002') order by started_at DESC LIMIT 1;")" = "ready" ]; do
     echo "waiting for files be ready"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -73,7 +73,7 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.fil
     sleep 2
 done
 
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1")" = "registered" ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1;")" = "registered" ]; do
     echo "waiting for dataset be registered"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -108,7 +108,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$release_body"
 
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1")" = "released" ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1;")" = "released" ]; do
     echo "waiting for dataset be released"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
