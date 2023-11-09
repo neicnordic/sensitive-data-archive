@@ -87,4 +87,4 @@ If this fails an error will be written to the logs.
 - Mapper reads messages from one rabbitmq queue (default `mappings`).
 - Mapper maps files to datasets in the database using the `MapFilesToDataset` function.
 - Mapper retrieves the inbox filepath from the database for each file using the `GetInboxPath` function.
-- Mapper sets the status of a dataset in the database usig the `UpdateDatasetEvent` function.
+- Mapper sets the status of a dataset in the database using the `UpdateDatasetEvent` function.
