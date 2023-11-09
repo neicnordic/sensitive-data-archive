@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"runtime"
@@ -415,8 +416,15 @@ func (suite *TestSuite) TestAPIAuthenticate() {
 
 	setupJwtAuth()
 
+	requestURL, err := url.Parse(filesURL)
+	if err != nil {
+		fmt.Println("Error parsing URL:", err)
+
+		return
+	}
+
 	// No credentials
-	resp, err := http.Get(filesURL)
+	resp, err := http.Get(requestURL.String())
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusUnauthorized, resp.StatusCode)
 	defer resp.Body.Close()
