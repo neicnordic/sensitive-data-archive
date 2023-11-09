@@ -149,11 +149,7 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := parseDatasetMessage(b); err != nil {
-		if err.Error() == "Dataset exists" {
-			w.WriteHeader(http.StatusAlreadyReported)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -161,6 +157,7 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 
 // parsemessage parses the JSON blob and sends the relevant messages
 func parseDatasetMessage(msg []byte) error {
+	log.Debugf("incoming blob %s", msg)
 	blob := syncDataset{}
 	_ = json.Unmarshal(msg, &blob)
 
@@ -173,11 +170,11 @@ func parseDatasetMessage(msg []byte) error {
 		}
 		ingestMsg, err := json.Marshal(ingest)
 		if err != nil {
-			return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
+			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
 
-		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "ingest", ingestMsg); err != nil {
-			return fmt.Errorf("Failed to send ingest messge: Reason %v", err)
+		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
+			return fmt.Errorf("failed to send ingest messge: Reason %v", err)
 		}
 
 		accessionIDs = append(accessionIDs, files.FileID)
@@ -190,11 +187,11 @@ func parseDatasetMessage(msg []byte) error {
 		}
 		finalizeMsg, err := json.Marshal(finalize)
 		if err != nil {
-			return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
+			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
 
-		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "accession", finalizeMsg); err != nil {
-			return fmt.Errorf("Failed to send mapping messge: Reason %v", err)
+		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
+			return fmt.Errorf("failed to send mapping messge: Reason %v", err)
 		}
 	}
 
@@ -205,11 +202,11 @@ func parseDatasetMessage(msg []byte) error {
 	}
 	mappingMsg, err := json.Marshal(mappings)
 	if err != nil {
-		return fmt.Errorf("Failed to marshal json messge: Reason %v", err)
+		return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 	}
 
-	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, "mappings", mappingMsg); err != nil {
-		return fmt.Errorf("Failed to send mapping messge: Reason %v", err)
+	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.MappingRouting, mappingMsg); err != nil {
+		return fmt.Errorf("failed to send mapping messge: Reason %v", err)
 	}
 
 	return nil
