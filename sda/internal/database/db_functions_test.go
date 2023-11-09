@@ -127,7 +127,7 @@ func (suite *DatabaseTests) TestSetArchived() {
 	fileID, err := db.RegisterFile("/testuser/TestSetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestSetArchived.c4gh", sha256.New(), -1}
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), -1}
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
@@ -172,18 +172,18 @@ func (suite *DatabaseTests) TestGetHeader() {
 	assert.Equal(suite.T(), []byte{15, 45, 20, 40, 48}, header)
 }
 
-func (suite *DatabaseTests) TestMarkCompleted() {
+func (suite *DatabaseTests) TestSetVerified() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile("/testuser/TestMarkCompleted.c4gh", "testuser")
+	fileID, err := db.RegisterFile("/testuser/TestSetVerified.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	fileInfo := FileInfo{sha256.New(), 1000, "/testuser/TestMarkCompleted.c4gh", sha256.New(), 948}
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/testuser/TestSetVerified.c4gh", fmt.Sprintf("%x", sha256.New()), 948}
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 }
 
 func (suite *DatabaseTests) TestGetArchived() {
@@ -194,13 +194,12 @@ func (suite *DatabaseTests) TestGetArchived() {
 	fileID, err := db.RegisterFile("/testuser/TestGetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	decSha := sha256.New()
-	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestGetArchived.c4gh", decSha, 987}
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestGetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), 987}
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	filePath, fileSize, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
@@ -215,13 +214,12 @@ func (suite *DatabaseTests) TestSetAccessionID() {
 	// register a file in the database
 	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
-	decSha := sha256.New()
-	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestSetAccessionID.c4gh", decSha, 987}
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987}
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 	stableID := "TEST:000-1234-4567"
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
@@ -234,20 +232,54 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	// register a file in the database
 	fileID, err := db.RegisterFile("/testuser/TestCheckAccessionIDExists.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
-	decSha := sha256.New()
-	fileInfo := FileInfo{sha256.New(), 1000, "/tmp/TestCheckAccessionIDExists.c4gh", decSha, 987}
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestCheckAccessionIDExists.c4gh", fmt.Sprintf("%x", sha256.New()), 987}
 	corrID := uuid.New().String()
 	err = db.SetArchived(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
-	err = db.MarkCompleted(fileInfo, fileID, corrID)
-	assert.NoError(suite.T(), err, "got (%v) when marking file as completed", err)
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 	stableID := "TEST:111-1234-4567"
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
-	ok, err := db.CheckAccessionIDExists(stableID)
+	exists, err := db.CheckAccessionIDExists(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.True(suite.T(), ok, "CheckAccessionIDExists returned false when true was expected")
+	assert.Equal(suite.T(), "same", exists)
+
+	duplicate, err := db.CheckAccessionIDExists(stableID, uuid.New().String())
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+	assert.Equal(suite.T(), "duplicate", duplicate)
+}
+
+func (suite *DatabaseTests) TestGetFileInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestGetFileInfo.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/tmp/TestGetFileInfo.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987}
+	corrID := uuid.New().String()
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	info, err := db.GetFileInfo(fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+	assert.Equal(suite.T(), int64(2000), info.Size)
+	assert.Equal(suite.T(), "/tmp/TestGetFileInfo.c4gh", info.Path)
+	assert.Equal(suite.T(), "11c94bc7fb13afeb2b3fb16c1dbe9206dc09560f1b31420f2d46210ca4ded0a8", info.Checksum)
+	assert.Equal(suite.T(), "a671218c2418aa51adf97e33c5c91a720289ba3c9fd0d36f6f4bf9610730749f", info.DecryptedChecksum)
 }
 
 func (suite *DatabaseTests) TestMapFilesToDataset() {
