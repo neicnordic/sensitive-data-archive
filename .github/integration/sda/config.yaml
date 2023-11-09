@@ -58,12 +58,21 @@ server:
   jwtpubkeypath: "/shared/keys/pub/"
   jwtpubkeyurl: "http://oidc:8080/jwk"
 
-sync.destination:
-  type: "s3"
-  url: "http://s3"
-  port: 9000
-  readypath: "/minio/health/ready"
-  accessKey: "access"
-  secretKey: "secretKey"
-  bucket: "sync"
-  region: "us-east-1"
+sync:
+  centerPrefix: "SYNC"
+  destination:
+    type: "s3"
+    url: "http://s3"
+    port: 9000
+    readypath: "/minio/health/ready"
+    accessKey: "access"
+    secretKey: "secretKey"
+    bucket: "sync"
+    region: "us-east-1"
+  remote:
+    host: "http://sync-api"
+    port: "8080"
+    password: "pass"
+    user: "user"
+
+schema.type: "isolated"

@@ -154,3 +154,45 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dat
 done
 
 echo "dataset deprecated successfully"
+
+mappings=$(
+    jq -c -n \
+        '$ARGS.positional' \
+        --args "SYNC-123-00003" \
+        --args "SYNC-123-00004"
+)
+
+mapping_payload=$(
+    jq -r -c -n \
+        --arg type mapping \
+        --arg dataset_id SYNC-001-12345 \
+        --argjson accession_ids "$mappings" \
+        '$ARGS.named|@base64'
+)
+
+mapping_body=$(
+    jq -c -n \
+        --arg vhost test \
+        --arg name sda \
+        --argjson properties "$properties" \
+        --arg routing_key "mappings" \
+        --arg payload_encoding base64 \
+        --arg payload "$mapping_payload" \
+        '$ARGS.named'
+)
+
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$mapping_body"
+
+# check DB for dataset contents
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'SYNC-001-12345')")" -eq 2 ]; do
+    echo "waiting for mapper to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset to be mapped"
+        exit 1
+    fi
+    sleep 2
+done
