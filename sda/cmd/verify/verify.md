@@ -33,12 +33,12 @@ These settings control which crypt4gh keyfile is loaded.
 
 These settings control how verify connects to the RabbitMQ message broker.
 
-- `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+- `BROKER_HOST`: hostname of the RabbitMQ server
+- `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 - `BROKER_QUEUE`: message queue to read messages from (commonly `archived`)
 - `BROKER_ROUTINGKEY`: message queue to write success messages to (commonly `verified`)
-- `BROKER_USER`: username to connect to rabbitmq
-- `BROKER_PASSWORD`: password to connect to rabbitmq
+- `BROKER_USER`: username to connect to RabbitMQ
+- `BROKER_PASSWORD`: password to connect to RabbitMQ
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
 ### PostgreSQL Database settings
@@ -147,8 +147,8 @@ Otherwise the processing continues with verification:
 
 ## Communication
 
-- Verify reads messages from one rabbitmq queue (commonly `archived`).
-- Verify writes messages to one rabbitmq queue (commonly `verified`).
+- Verify reads messages from one RabbitMQ queue (commonly `archived`).
+- Verify writes messages to one RabbitMQ queue (commonly `verified`).
 - Verify gets the file encryption header from the database using `GetHeader`,
 and marks the files as `verified` (`COMPLETED` in db version <= 2.0) using `MarkCompleted`.
 - Verify reads file data from archive storage and removes data from inbox storage.

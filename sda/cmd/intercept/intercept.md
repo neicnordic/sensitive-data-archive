@@ -26,11 +26,11 @@ export LOG_FORMAT="json"
 
 These settings control how intercept connects to the RabbitMQ message broker.
 
-- `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+- `BROKER_HOST`: hostname of the RabbitMQ server
+- `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 - `BROKER_QUEUE`: message queue to read messages from (commonly `from_cega`)
-- `BROKER_USER`: username to connect to rabbitmq
-- `BROKER_PASSWORD`: password to connect to rabbitmq
+- `BROKER_USER`: username to connect to RabbitMQ
+- `BROKER_PASSWORD`: password to connect to RabbitMQ
 
 ### Logging settings
 

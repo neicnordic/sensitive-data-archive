@@ -31,17 +31,17 @@ These settings control which crypt4gh keyfile is loaded.
 
 These settings control how ingest connects to the RabbitMQ message broker.
 
- - `BROKER_HOST`: hostname of the rabbitmq server
+ - `BROKER_HOST`: hostname of the RabbitMQ server
 
- - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+ - `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 
  - `BROKER_QUEUE`: message queue to read messages from (commonly `ingest`)
 
  - `BROKER_ROUTINGKEY`: message queue to write success messages to (commonly `archived`)
 
- - `BROKER_USER`: username to connect to rabbitmq
+ - `BROKER_USER`: username to connect to RabbitMQ
 
- - `BROKER_PASSWORD`: password to connect to rabbitmq
+ - `BROKER_PASSWORD`: password to connect to RabbitMQ
 
  - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
@@ -161,9 +161,9 @@ This error does not halt ingestion.
 
 ## Communication
 
- - Ingest reads messages from one rabbitmq queue (commonly `ingest`).
+ - Ingest reads messages from one RabbitMQ queue (commonly `ingest`).
 
- - Ingest writes messages to one rabbitmq queue (commonly `archived`).
+ - Ingest writes messages to one RabbitMQ queue (commonly `archived`).
 
  - Ingest inserts file information in the database using three database functions, `InsertFile`, `StoreHeader`, and `SetArchived`.
 
