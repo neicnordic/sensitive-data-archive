@@ -42,7 +42,7 @@ The current setup also requires that `127.0.0.1  oidc` is added to `/etc/hosts`,
 This service can be run as a backend only, and in the case where the frontend
 is running somewhere else, CORS is needed.
 
-Recommended cors settings for a given host are:
+Recommended CORS settings for a given host are:
 
 ```txt
 export CORS_ORIGINS="https://<frontend-url>"

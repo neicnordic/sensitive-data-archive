@@ -35,12 +35,12 @@ These settings control the TLS status and where the service gets the public keys
 
 These settings control how verify connects to the RabbitMQ message broker.
 
-- `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+- `BROKER_HOST`: hostname of the RabbitMQ server
+- `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 - `BROKER_QUEUE`: message queue to read messages from (commonly `archived`)
 - `BROKER_ROUTINGKEY`: message queue to write success messages to (commonly `verified`)
-- `BROKER_USER`: username to connect to rabbitmq
-- `BROKER_PASSWORD`: password to connect to rabbitmq
+- `BROKER_USER`: username to connect to RabbitMQ
+- `BROKER_PASSWORD`: password to connect to RabbitMQ
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
 ### PostgreSQL Database settings
@@ -104,4 +104,4 @@ The s3inbox proxies uploads to an S3 compatible storage backend.
 
 - s3inbox proxies uploads to inbox storage.
 - s3inbox inserts file information in the database using the `RegisterFile` database function and marks it as uploaded in the `file_event_log`
-- s3inbox writes messages to one rabbitmq queue (commonly `inbox`).
+- s3inbox writes messages to one RabbitMQ queue (commonly `inbox`).

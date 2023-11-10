@@ -36,17 +36,17 @@ These settings are only needed is `copyheader` is `true`.
 
 These settings control how backup connects to the RabbitMQ message broker.
 
- - `BROKER_HOST`: hostname of the rabbitmq server
+ - `BROKER_HOST`: hostname of the RabbitMQ server
 
- - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+ - `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 
  - `BROKER_QUEUE`: message queue to read messages from (commonly `backup`)
 
  - `BROKER_ROUTINGKEY`: message queue to write success messages to (commonly `completed`)
 
- - `BROKER_USER`: username to connect to rabbitmq
+ - `BROKER_USER`: username to connect to RabbitMQ
 
- - `BROKER_PASSWORD`: password to connect to rabbitmq
+ - `BROKER_PASSWORD`: password to connect to RabbitMQ
 
  - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
@@ -162,9 +162,9 @@ If the message can’t be validated it is discarded with an error message in the
 
 ## Communication
 
- - Backup reads messages from one rabbitmq queue (default `backup`)
+ - Backup reads messages from one RabbitMQ queue (default `backup`)
 
- - Backup writes messages to one rabbitmq queue (default `completed`)
+ - Backup writes messages to one RabbitMQ queue (default `completed`)
 
  - Backup optionally reads encryption headers from the database and can not be started without a database connection.
    This is done using the `GetArchived`, and `GetHeaderForStableID` functions.

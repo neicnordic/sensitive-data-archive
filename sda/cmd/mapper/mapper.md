@@ -26,11 +26,11 @@ export LOG_FORMAT="json"
 
 These settings control how mapper connects to the RabbitMQ message broker.
 
-- `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+- `BROKER_HOST`: hostname of the RabbitMQ server
+- `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 - `BROKER_QUEUE`: message queue to read messages from (commonly `mapper`)
-- `BROKER_USER`: username to connect to rabbitmq
-- `BROKER_PASSWORD`: password to connect to rabbitmq
+- `BROKER_USER`: username to connect to RabbitMQ
+- `BROKER_PASSWORD`: password to connect to RabbitMQ
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
 ### PostgreSQL Database settings
@@ -84,7 +84,7 @@ If this fails an error will be written to the logs.
 
 ## Communication
 
-- Mapper reads messages from one rabbitmq queue (default `mappings`).
+- Mapper reads messages from one RabbitMQ queue (default `mappings`).
 - Mapper maps files to datasets in the database using the `MapFilesToDataset` function.
 - Mapper retrieves the inbox filepath from the database for each file using the `GetInboxPath` function.
-- Mapper sets the status of a dataset in the database usig the `UpdateDatasetEvent` function.
+- Mapper sets the status of a dataset in the database using the `UpdateDatasetEvent` function.

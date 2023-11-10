@@ -23,15 +23,15 @@ export LOG_FORMAT="json"
 
 These settings control how intercept connects to the RabbitMQ message broker.
 
- - `BROKER_HOST`: hostname of the rabbitmq server
+ - `BROKER_HOST`: hostname of the RabbitMQ server
 
- - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+ - `BROKER_PORT`: RabbitMQ broker port (commonly `5671` with TLS and `5672` without)
 
  - `BROKER_QUEUE`: message queue to read messages from (commonly `files`)
 
- - `BROKER_USER`: username to connect to rabbitmq
+ - `BROKER_USER`: username to connect to RabbitMQ
 
- - `BROKER_PASSWORD`: password to connect to rabbitmq
+ - `BROKER_PASSWORD`: password to connect to RabbitMQ
 
 ### PostgreSQL Database settings:
 
@@ -103,6 +103,6 @@ This has no error handling as the resend-mechanism hasn't been finished.
 
 ## Communication
 
- - Intercept reads messages from one rabbitmq queue (default `files`).
+ - Intercept reads messages from one RabbitMQ queue (default `files`).
 
- - Intercept writes messages to three rabbitmq queues, `accessionIDs`, `ingest`, and `mappings`.
+ - Intercept writes messages to three RabbitMQ queues, `accessionIDs`, `ingest`, and `mappings`.
