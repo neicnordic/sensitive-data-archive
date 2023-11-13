@@ -3,15 +3,11 @@ name: Functionality tests
 on:
   pull_request:
 
-env:
-  svc_list: 'finalize inbox ingest mapper verify'
-
 jobs:
   check_changes:
     outputs:
       sda-auth: ${{ steps.changes.outputs.sda-auth }}
       sda-download: ${{ steps.changes.outputs.sda-download }}
-      sda-pipeline: ${{ steps.changes.outputs.sda-pipeline }}
       sftp-inbox: ${{ steps.changes.outputs.sftp-inbox }}
     runs-on: ubuntu-latest
     steps:
@@ -24,8 +20,6 @@ jobs:
               - 'sda-auth/**'
             sda-download:
               - 'sda-download/**'
-            sda-pipeline:
-              - 'sda-pipeline/**'
             sftp-inbox:
             - 'sftp-inbox/**'
 
@@ -93,43 +87,6 @@ jobs:
       - name: Run tests
         run: |
           cd sda-download
-          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
-            echo "Executing test script $runscript";
-            bash -x "$runscript";
-          done
-
-  sda-pipeline:
-    needs: check_changes
-    if: needs.check_changes.outputs.sda-pipeline == 'true'
-    name: sda-pipeline-integration-${{ matrix.storagetype }}
-    runs-on: ubuntu-latest
-    env:
-      STORAGETYPE: ${{ matrix.storagetype }}
-
-    strategy:
-      matrix:
-        storagetype: [s3, posix, s3notls, s3header, s3notlsheader, posixheader, sftp, sftpheader]
-      fail-fast: false
-    steps:
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Run setup scripts
-        run: |
-          cd sda-pipeline
-          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
-            echo "Executing setup script $runscript";
-            bash -x "$runscript";
-          done
-
-      - name: Run tests
-        run: |
-          cd sda-pipeline
           ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
             echo "Executing test script $runscript";
             bash -x "$runscript";
