@@ -172,7 +172,7 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 10
         resources:
-{{ toYaml .Values.s3Inbox.resources | trim | indent 10 }}
+{{ toYaml .Values.auth.resources | trim | indent 10 }}
         volumeMounts:
       {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
         - name: tls
