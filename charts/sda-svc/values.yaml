@@ -235,12 +235,12 @@ global:
       configPath: "iss"
       configFile: "iss.json"
       iss:
-        - iss: "https://proxy.aai.lifescience-ri.eu"
-          jku: "https://proxy.aai.lifescience-ri.eu/OIDC/jwks"
+        - iss: "https://login.elixir-czech.org/oidc"
+          jku: "https://login.elixir-czech.org/oidc//oidc/jwks"
 
   oidc:
-    provider:  "https://proxy.aai.lifescience-ri.eu"
-    jwkPath: "/OIDC/jwks"
+    provider:  "https://login.elixir-czech.org/oidc/"
+    jwkPath: "/oidc/jwks"
     id: ""
     secret: ""
 
