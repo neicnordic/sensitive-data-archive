@@ -1,4 +1,4 @@
-# sda-pipeline: verify
+# verify Service
 
 Uses a crypt4gh secret key, this service can decrypt the stored files and checksum them against the embedded checksum for the unencrypted file.
 

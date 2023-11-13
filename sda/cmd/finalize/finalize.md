@@ -1,4 +1,4 @@
-# sda-pipeline: finalize
+# finalize Service
 
 Handles the so-called _Accession ID (stable ID)_ to filename mappings from Central EGA.
 At the same time the service fulfills the replication requirement of having distinct backup copies.

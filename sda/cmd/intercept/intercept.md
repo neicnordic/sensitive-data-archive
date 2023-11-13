@@ -1,4 +1,4 @@
-# sda-pipeline: intercept
+# intercept Service
 
 The `intercept` service relays messages between Central EGA and Federated EGA nodes.
 

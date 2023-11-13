@@ -1,4 +1,4 @@
-# sda-pipeline: mapper
+# mapper Service
 
 The mapper service registers mapping of accessionIDs (stable ids for files) to datasetIDs.
 Once the file accession ID has been mapped to a dataset ID, the file is removed from the inbox.

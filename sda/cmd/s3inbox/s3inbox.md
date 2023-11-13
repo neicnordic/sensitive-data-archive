@@ -1,4 +1,4 @@
-# sda-pipeline: s3inbox
+# s3inbox Service
 
 The `s3inbox` proxies uploads to the an S3 compatible storage backend. Users are authenticated with a JWT instead of `access_key` and `secret_key` used normally for `S3`.
 
