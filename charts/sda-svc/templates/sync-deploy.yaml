@@ -1,14 +1,14 @@
-{{- if .Values.backup.deploy}}
+{{- if ne "" .Values.global.sync.remote.host }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "sda.fullname" . }}-backup
+  name: {{ template "sda.fullname" . }}-sync
   labels:
-    role: backup
+    role: sync
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-backup
+    component: {{ .Release.Name }}-sync
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -16,23 +16,23 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-backup
+      app: {{ template "sda.name" . }}-sync
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-backup
-        role: backup
+        app: {{ template "sda.name" . }}-sync
+        role: sync
         release: {{ .Release.Name }}
       annotations:
   {{- if not .Values.global.vaultSecrets }}
-        checksum/config: {{ include (print $.Template.BasePath "/backup-secrets.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/sync-secrets.yaml") . | sha256sum }}
   {{- end }}
   {{- if .Values.global.podAnnotations }}
 {{- toYaml .Values.global.podAnnotations | nindent 8 -}}
   {{- end }}
-  {{- if .Values.backup.annotations }}
-{{- toYaml .Values.backup.annotations | nindent 8 -}}
+  {{- if .Values.sync.annotations }}
+{{- toYaml .Values.sync.annotations | nindent 8 -}}
   {{- end }}
     spec:
   {{- if .Values.global.rbacEnabled}}
@@ -60,10 +60,10 @@ spec:
           mountPath: /tls
   {{- end }}
       containers:
-      - name: backup
-        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-pipeline"
+      - name: sync
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
-        command: ["sda-backup"]
+        command: ["sda-sync"]
         securityContext:
           allowPrivilegeEscalation: false
         env:
@@ -91,44 +91,36 @@ spec:
         - name: ARCHIVE_LOCATION
           value: "{{ .Values.global.archive.volumePath }}"
   {{- end }}
-        - name: BACKUP_TYPE
-  {{- if eq "s3" .Values.global.backupArchive.storageType }}
+        - name: SYNC_DESTINATION_TYPE
+  {{- if eq "s3" .Values.global.sync.destination.storageType }}
           value: "s3"
-        - name: BACKUP_URL
-          value: {{ required "S3 backup archive URL missing" .Values.global.backupArchive.s3Url }}
-      {{- if .Values.global.backupArchive.s3Port }}
-        - name: BACKUP_PORT
-          value: {{ .Values.global.backupArchive.s3Port | quote }}
+        - name: SYNC_DESTINATION_URL
+          value: {{ required "S3 sync archive URL missing" .Values.global.sync.destination.s3Url }}
+      {{- if .Values.global.sync.destination.s3Port }}
+        - name: SYNC_DESTINATION_PORT
+          value: {{ .Values.global.sync.destination.s3Port | quote }}
       {{- end }}
-        - name: BACKUP_BUCKET
-          value: {{ required "S3 backup archive bucket missing" .Values.global.backupArchive.s3Bucket }}
-        - name: BACKUP_REGION
-          value: {{ default "us-east-1" .Values.global.backupArchive.s3Region }}
-        - name: BACKUP_CHUNKSIZE
-          value: {{ .Values.global.backupArchive.s3ChunkSize | quote }}
-    {{- if and .Values.global.backupArchive.s3CaFile .Values.global.tls.enabled }}
-        - name: BACKUP_CACERT
+        - name: SYNC_DESTINATION_BUCKET
+          value: {{ required "S3 sync archive bucket missing" .Values.global.sync.destination.s3Bucket }}
+        - name: SYNC_DESTINATION_REGION
+          value: {{ default "us-east-1" .Values.global.sync.destination.s3Region }}
+        - name: SYNC_DESTINATION_CHUNKSIZE
+          value: {{ .Values.global.sync.destination.s3ChunkSize | quote }}
+    {{- if and .Values.global.sync.destination.s3CaFile .Values.global.tls.enabled }}
+        - name: SYNC_DESTINATION_CACERT
           value: {{ template "tlsPath" . }}/ca.crt
     {{- end }}
-  {{- else }}
-          value: "posix"
-        - name: BACKUP_LOCATION
-          value: "{{ .Values.global.backupArchive.volumePath }}"
   {{- end }}
-        - name: BACKUP_COPYHEADER
-          value: "{{ .Values.global.backupArchive.copyHeader }}"
-    {{- if .Values.global.backupArchive.copyHeader}}
         - name: C4GH_FILEPATH
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
-        - name: C4GH_BACKUPPUBKEY
-          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.backupPubKey }}"
-    {{- end }}
+        - name: C4GH_SYNCPUBKEY
+          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.syncPubKey }}"
         - name: BROKER_DURABLE
           value: {{ .Values.global.broker.durable | quote }}
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE
-          value: {{ .Values.global.broker.backupRoutingKey }}
+          value: {{ .Values.global.broker.syncRoutingKey }}
         - name: BROKER_HOST
           value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
         - name: BROKER_PORT
@@ -184,7 +176,7 @@ spec:
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
         - name: SCHEMA_TYPE
-          value: {{ default "federated" .Values.global.schemaType }}
+          value: {{ default "isolated" .Values.global.schemaType }}
   {{- if not .Values.global.vaultSecrets }}
     {{- if eq "s3" .Values.global.archive.storageType }}
         - name: ARCHIVE_ACCESSKEY
@@ -198,56 +190,62 @@ spec:
               name: {{ template "sda.fullname" . }}-s3archive-keys
               key: s3ArchiveSecretKey
     {{- end }}
-    {{- if eq "s3" .Values.global.backupArchive.storageType }}
-        - name: BACKUP_ACCESSKEY
+    {{- if eq "s3" .Values.global.sync.destination.storageType }}
+        - name: SYNC_DESTINATION_ACCESSKEY
           valueFrom:
             secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3backup-keys
-              key: s3BackupAccessKey
-        - name: BACKUP_SECRETKEY
+              name: {{ template "sda.fullname" . }}-keys
+              key: s3AccessKey
+        - name: SYNC_DESTINATION_SECRETKEY
           valueFrom:
             secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3backup-keys
-              key: s3BackupSecretKey
+              name: {{ template "sda.fullname" . }}-keys
+              key: s3SecretKey
     {{- end }}
         - name: BROKER_PASSWORD
           valueFrom:
               secretKeyRef:
-                name: {{ template "sda.fullname" . }}-backup
+                name: {{ template "sda.fullname" . }}-sync
                 key: mqPassword
         - name: BROKER_USER
           valueFrom:
               secretKeyRef:
-                name: {{ template "sda.fullname" . }}-backup
+                name: {{ template "sda.fullname" . }}-sync
                 key: mqUser
         - name: DB_PASSWORD
           valueFrom:
               secretKeyRef:
-                name: {{ template "sda.fullname" . }}-backup
+                name: {{ template "sda.fullname" . }}-sync
                 key: dbPassword
         - name: DB_USER
           valueFrom:
               secretKeyRef:
-                name: {{ template "sda.fullname" . }}-backup
+                name: {{ template "sda.fullname" . }}-sync
                 key: dbUser
+        - name: SYNC_REMOTE_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-sync
+              key: restUser
+        - name: SYNC_REMOTE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-sync
+              key: restPassword
   {{ else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
   {{- end }}
         resources:
-{{ toYaml .Values.backup.resources | trim | indent 10 }}
+{{ toYaml .Values.sync.resources | trim | indent 10 }}
         volumeMounts:
+      {{- if not .Values.global.vaultSecrets }}
+          - name: c4gh
+            mountPath: {{ template "c4ghPath" . }}
+      {{- end }}
   {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
           mountPath: {{ .Values.global.archive.volumePath | quote }}
-  {{- end }}
-  {{- if .Values.global.backupArchive.copyHeader}}
-        - name: c4gh
-          mountPath: {{ template "c4ghPath" . }}
-  {{- end }}
-  {{- if eq "posix" .Values.global.backupArchive.storageType }}
-        - name: backup
-          mountPath: {{ .Values.global.backupArchive.volumePath | quote }}
   {{- end }}
   {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
@@ -260,10 +258,10 @@ spec:
             sources:
             {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
             - secret:
-                name: {{ template "sda.fullname" . }}-backup-certs
+                name: {{ template "sda.fullname" . }}-sync-certs
             {{- else }}
               - secret:
-                  name: {{ required "An certificate issuer or a TLS secret name is required for backup" .Values.backup.tls.secretName }}
+                  name: {{ required "An certificate issuer or a TLS secret name is required for sync" .Values.sync.tls.secretName }}
             {{- end }}
     {{- if .Values.global.pkiPermissions }}
         - name: tls
@@ -271,7 +269,8 @@ spec:
             medium: Memory
             sizeLimit: 10Mi
     {{- end }}
-    {{- if and (not .Values.global.vaultSecrets) .Values.global.backupArchive.copyHeader }}
+  {{- end }}
+    {{- if not .Values.global.vaultSecrets }}
         - name: c4gh
           secret:
             defaultMode: 0440
@@ -279,10 +278,9 @@ spec:
             items:
             - key: {{ .Values.global.c4gh.keyFile }}
               path: {{ .Values.global.c4gh.keyFile }}
-            - key: {{ .Values.global.c4gh.backupPubKey }}
-              path: {{ .Values.global.c4gh.backupPubKey }}
+            - key: {{ .Values.global.c4gh.syncPubKey }}
+              path: {{ .Values.global.c4gh.syncPubKey }}
     {{- end }}
-  {{- end }}
   {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
     {{- if .Values.global.archive.existingClaim }}
@@ -292,17 +290,6 @@ spec:
           nfs:
             server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
             path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-    {{- end }}
-  {{- end }}
-  {{- if eq "posix" .Values.global.backupArchive.storageType }}
-        - name: backup
-    {{- if .Values.global.backupArchive.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.backupArchive.existingClaim }}
-    {{- else }}
-          nfs:
-            server: {{ required "An backup NFS server is required" .Values.global.backupArchive.nfsServer | quote }}
-            path: {{ if .Values.global.backupArchive.nfsPath }}{{ .Values.global.backupArchive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
     {{- end }}
   {{- end }}
       restartPolicy: Always
