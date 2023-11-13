@@ -30,7 +30,7 @@ services:
       - PGSSLROOTCERT=/certs/ca.crt
       - PGSSLCERT=/certs/client.crt
       - PGSSLKEY=/certs/client.key
-    image: python:3.10-slim
+    image: python:3.11-slim
     volumes:
       - ./scripts:/scripts
       - client_certs:/certs
@@ -170,7 +170,7 @@ services:
       - PGSSLKEY=/certs/client.key
       - PGSSLMODE=verify-ca
       - STORAGETYPE=posix
-    image: python:3.10-slim-bullseye
+    image: python:3.11-slim-bullseye
     profiles:
       - tests
     volumes:
