@@ -15,7 +15,7 @@ ARG SOURCE_COMMIT
 LABEL org.opencontainers.image.authors="NeIC System Developers"
 LABEL org.label-schema.schema-version="1.0"
 LABEL org.label-schema.build-date=now()
-LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda-pipeline"
+LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-archive"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 COPY --from=Build /go/sda-* /usr/local/bin/
@@ -30,7 +30,7 @@ ARG SOURCE_COMMIT
 LABEL org.opencontainers.image.authors="NeIC System Developers"
 LABEL org.label-schema.schema-version="1.0"
 LABEL org.label-schema.build-date=now()
-LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sda-pipeline"
+LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-archive"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 COPY --from=Build /go/sda-* /usr/local/bin/
