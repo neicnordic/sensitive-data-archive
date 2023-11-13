@@ -126,7 +126,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on postgres
-        uses: aquasecurity/trivy-action@0.13.1
+        uses: aquasecurity/trivy-action@0.14.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-postgres
           format: "sarif"
@@ -141,7 +141,7 @@ jobs:
           category: postgres
 
       - name: Run Trivy vulnerability scanner on rabbitmq
-        uses: aquasecurity/trivy-action@0.13.1
+        uses: aquasecurity/trivy-action@0.14.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
           format: "sarif"
@@ -187,7 +187,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on sftp-inbox
-        uses: aquasecurity/trivy-action@0.13.1
+        uses: aquasecurity/trivy-action@0.14.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-sftp-inbox
           format: "sarif"
