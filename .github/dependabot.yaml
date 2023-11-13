@@ -38,14 +38,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
   - package-ecosystem: docker
-    directory: "/sda-pipeline"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: docker
-    directory: "/sda-s3proxy"
+    directory: "/sda"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
@@ -93,20 +86,6 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: weekly
-  - package-ecosystem: gomod
-    directory: "/sda-pipeline"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: gomod
-    directory: "/sda-s3proxy"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: maven
