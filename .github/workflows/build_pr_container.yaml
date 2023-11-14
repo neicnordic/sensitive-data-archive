@@ -7,6 +7,7 @@ on:
       - ".gitignore"
       - "**/*.md"
       - ".github/dependabot.yaml"
+      - "charts/**"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
