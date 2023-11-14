@@ -6,6 +6,7 @@ on:
       - ".github/workflows/**"
       - ".gitignore"
       - "**/*.md"
+      - ".github/dependabot.yaml"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
