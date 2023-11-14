@@ -113,7 +113,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.SetBasicAuth("test", "test")
+	req.SetBasicAuth("guest", "guest")
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
 	if err := pool.Retry(func() error {
@@ -210,14 +210,11 @@ func TestMain(m *testing.M) {
 func TestShutdown(t *testing.T) {
 	Conf = &config.Config{}
 	Conf.Broker = broker.MQConf{
-		Host:       "localhost",
-		Port:       mqPort,
-		User:       "test",
-		Password:   "test",
-		RoutingKey: "test",
-		Exchange:   "sda",
-		Ssl:        false,
-		Vhost:      "/test",
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "amq.default",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(t, err)
@@ -253,14 +250,11 @@ func TestReadinessResponse(t *testing.T) {
 
 	Conf = &config.Config{}
 	Conf.Broker = broker.MQConf{
-		Host:       "localhost",
-		Port:       mqPort,
-		User:       "test",
-		Password:   "test",
-		RoutingKey: "test",
-		Exchange:   "sda",
-		Ssl:        false,
-		Vhost:      "/test",
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "amq.default",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(t, err)
