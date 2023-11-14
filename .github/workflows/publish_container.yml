@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - ".github/**"
       - ".gitignore"
-      - "**/README.md"
+      - "**/*.md"
     types: [ closed ]
 
 jobs:

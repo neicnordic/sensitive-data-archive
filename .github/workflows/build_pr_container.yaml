@@ -5,7 +5,7 @@ on:
     paths-ignore:
       - ".github/workflows/**"
       - ".gitignore"
-      - "**/README.md"
+      - "**/*.md"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
