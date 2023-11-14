@@ -14,7 +14,6 @@ on:
 jobs:
   tag_release:
     if: github.event.pull_request.merged == true
-    continue-on-error: true
     name: tag version
     outputs:
       part: ${{ steps.bump_tag.outputs.part }}
@@ -35,7 +34,7 @@ jobs:
 
   push_to_registry:
     needs: tag_release
-    if: needs.tag_release.outputs.part != ''
+    if: needs.tag_release.outputs.tag != ''
     name: Push Docker image to Github Container registry
     runs-on: ubuntu-latest
     permissions:
@@ -88,3 +87,52 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
+
+  bump_chart_version:
+    needs: [tag_release, push_to_registry]
+    if: ${{ needs.tag_release.outputs.tag != '' && needs.push_to_registry.result == 'success' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+
+      - name: Install PyBump
+        run: |
+          python3 -m pip install pybump
+        shell: bash
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git switch main
+        shell: bash
+
+      - name: Automated Version Bump
+        id: version-bump
+        run: |
+          for name in sda-db sda-mq sda-svc; do
+            pybump set --file charts/"$name"/Chart.yaml --set-version ${{ needs.tag_release.outputs.tag }} --app-version
+            pybump bump --file charts/"$name"/Chart.yaml --level patch
+          done
+        shell: bash
+
+      - name: Commit latest tags
+        run: |
+          git add -A
+          git status
+          git commit -m "Bump chart version and set appVersion to: ${{ needs.tag_release.outputs.tag }}"
+          git push
+        shell: bash
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3.5
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
