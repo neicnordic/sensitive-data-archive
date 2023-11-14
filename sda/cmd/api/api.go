@@ -68,7 +68,6 @@ func main() {
 
 func setup(config *config.Config) *http.Server {
 	r := gin.Default()
-
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", getFiles)
 
