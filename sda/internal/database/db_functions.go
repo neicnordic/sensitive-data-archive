@@ -661,21 +661,16 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
 	if err != nil {
-		log.Error(err)
-
 		return nil, err
 	}
 	defer rows.Close()
 
 	// Iterate rows
 	for rows.Next() {
-
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		err := rows.Scan(&fi.InboxPath, &fi.Status, &fi.CreateAt)
 		if err != nil {
-			log.Error(err)
-
 			return nil, err
 		}
 

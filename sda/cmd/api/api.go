@@ -37,7 +37,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	setupJwtAuth()
+	if err := setupJwtAuth(); err != nil {
+		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
+
+	}
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
@@ -64,7 +67,6 @@ func main() {
 }
 
 func setup(config *config.Config) *http.Server {
-
 	r := gin.Default()
 
 	r.GET("/ready", readinessResponse)
@@ -92,19 +94,20 @@ func setup(config *config.Config) *http.Server {
 	return srv
 }
 
-func setupJwtAuth() {
-
+func setupJwtAuth() error {
 	auth = userauth.NewValidateFromToken(jwk.NewSet())
 	if Conf.Server.Jwtpubkeyurl != "" {
 		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
+			return err
 		}
 	}
 	if Conf.Server.Jwtpubkeypath != "" {
 		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 func shutdown() {
@@ -158,10 +161,8 @@ func checkDB(database *database.SDAdb, timeout time.Duration) error {
 
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
-
 	c.Writer.Header().Set("Content-Type", "application/json")
 	// Get user ID to extract all files
-	// userID, err := getUserFromToken(c.Request)
 	token, err := auth.Authenticate(c.Request)
 	if err != nil {
 		// something went wrong with user token

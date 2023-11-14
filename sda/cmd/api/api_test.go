@@ -1,10 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
-
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,22 +14,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
-
+	_ "github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
-
-	_ "github.com/lib/pq"
-	log "github.com/sirupsen/logrus"
-
-	"github.com/gin-gonic/gin"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
 var dbPort, mqPort, OIDCport int
@@ -56,15 +51,15 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	// TODO use sda-db or postgres repo?
 	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sda-db",
-		Tag:        "v2.1.3",
+		Repository: "postgres",
+		Tag:        "15.2-alpine3.17",
 		Env: []string{
-			"DB_LEGA_IN_PASSWORD=lega_in",
-			"DB_LEGA_OUT_PASSWORD=lega_out",
-			"NOTLS=true",
-			"POSTGRES_PASSWORD=rootpassword",
+			"POSTGRES_PASSWORD=rootpasswd",
+			"POSTGRES_DB=sda",
+		},
+		Mounts: []string{
+			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
 		},
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
@@ -79,8 +74,7 @@ func TestMain(m *testing.M) {
 
 	dbHostAndPort := postgres.GetHostPort("5432/tcp")
 	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
-	// TODO this url or postgres://postgres:rootpasswd@%s/sda?sslmode=disable"
-	databaseURL := fmt.Sprintf("postgres://lega_in:lega_in@%s/lega?sslmode=disable", dbHostAndPort)
+	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
 	if err = pool.Retry(func() error {
@@ -96,17 +90,10 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}
 
-	// TODO use sda-mq or rabbitmq?
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sda-mq",
-		Tag:        "v1.4.30",
-		Env: []string{
-			"MQ_USER=test",
-			"MQ_PASSWORD_HASH=C5ufXbYlww6ZBcEqDUB04YdUptO81s+ozI3Ll5GCHTnv8NAm",
-			"MQ_VHOST=test",
-			"NOTLS=true",
-		},
+		Repository: "rabbitmq",
+		Tag:        "3-management-alpine",
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
@@ -238,9 +225,9 @@ func TestShutdown(t *testing.T) {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     dbPort,
-		User:     "lega_in",
-		Password: "lega_in",
-		Database: "lega",
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
@@ -281,9 +268,9 @@ func TestReadinessResponse(t *testing.T) {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     dbPort,
-		User:     "lega_in",
-		Password: "lega_in",
-		Database: "lega",
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
@@ -383,9 +370,9 @@ func (suite *TestSuite) SetupTest() {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     dbPort,
-		User:     "lega_in",
-		Password: "lega_in",
-		Database: "lega",
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
@@ -394,16 +381,15 @@ func (suite *TestSuite) SetupTest() {
 }
 
 func TestDatabasePingCheck(t *testing.T) {
-	database := database.SDAdb{}
-	assert.Error(t, checkDB(&database, 1*time.Second), "nil DB should fail")
+	emptyDB := database.SDAdb{}
+	assert.Error(t, checkDB(&emptyDB, 1*time.Second), "nil DB should fail")
 
-	database.DB, _, err = sqlmock.New()
+	db, err := database.NewSDAdb(Conf.Database)
 	assert.NoError(t, err)
-	assert.NoError(t, checkDB(&database, 1*time.Second), "ping should succeed")
+	assert.NoError(t, checkDB(db, 1*time.Second), "ping should succeed")
 }
 
 func (suite *TestSuite) TestAPIAuthenticate() {
-
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.GET("/files", func(c *gin.Context) {
@@ -414,14 +400,10 @@ func (suite *TestSuite) TestAPIAuthenticate() {
 	filesURL := ts.URL + "/files"
 	client := &http.Client{}
 
-	setupJwtAuth()
+	assert.NoError(suite.T(), setupJwtAuth())
 
 	requestURL, err := url.Parse(filesURL)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-
-		return
-	}
+	assert.NoError(suite.T(), err)
 
 	// No credentials
 	resp, err := http.Get(requestURL.String())
@@ -441,7 +423,6 @@ func (suite *TestSuite) TestAPIAuthenticate() {
 }
 
 func (suite *TestSuite) TestAPIGetFiles() {
-
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.GET("/files", func(c *gin.Context) {
@@ -452,7 +433,7 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	filesURL := ts.URL + "/files"
 	client := &http.Client{}
 
-	setupJwtAuth()
+	assert.NoError(suite.T(), setupJwtAuth())
 
 	req, err := http.NewRequest("GET", filesURL, nil)
 	assert.NoError(suite.T(), err)
