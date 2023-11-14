@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.10-slim
+    image: python:3.11-slim
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -225,7 +225,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: python:3.10-slim
+    image: python:3.11-slim
     ports:
       - "8080:8080"
     restart: always
@@ -255,7 +255,7 @@ services:
     environment:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
-    image: python:3.10-slim-bullseye
+    image: python:3.11-slim-bullseye
     profiles:
       - tests
     volumes:

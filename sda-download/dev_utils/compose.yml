@@ -114,7 +114,7 @@ services:
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.8-slim
+    image: python:3.11-slim
     volumes:
       - ./mockoidc/mockoidc.py:/mockoidc.py
       - certs:/certs
