@@ -10,14 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-
-	"github.com/gin-gonic/gin"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-
 	log "github.com/sirupsen/logrus"
 )
 
