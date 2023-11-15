@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -172,8 +173,8 @@ func parseDatasetMessage(msg []byte) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
-
-		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
+		corrID := uuid.New().String()
+		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
 			return fmt.Errorf("failed to send ingest messge: Reason %v", err)
 		}
 
@@ -190,7 +191,7 @@ func parseDatasetMessage(msg []byte) error {
 			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
 
-		if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
+		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
 			return fmt.Errorf("failed to send mapping messge: Reason %v", err)
 		}
 	}
