@@ -46,7 +46,7 @@ These settings control how `intercept` connects to the RabbitMQ message broker.
 
 ## Service Description
 
-When running, `intercept` reads messages from the configured RabbitMQ queue (commnly `from_cega`).
+When running, `intercept` reads messages from the configured RabbitMQ queue (commonly: `from_cega`).
 For each message, these steps are taken:
 
 1. The message type is read from the message `type` field.
