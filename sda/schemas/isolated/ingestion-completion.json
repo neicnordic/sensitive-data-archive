@@ -117,7 +117,7 @@
             "$id": "#/properties/decrypted_checksums",
             "type": "array",
             "title": "The checksums of the original file",
-            "description": "The checksums of the original file. The md5 one is required",
+            "description": "The checksums of the original file.",
             "examples": [
                 [
                     {
@@ -134,7 +134,7 @@
                 "type": "object",
                 "properties": {
                     "type": {
-                        "const": "md5"
+                        "const": "sha256"
                     }
                 },
                 "required": [
