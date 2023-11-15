@@ -156,7 +156,7 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// parsemessage parses the JSON blob and sends the relevant messages
+// parseDatasetMessage parses the JSON blob and sends the relevant messages
 func parseDatasetMessage(msg []byte) error {
 	log.Debugf("incoming blob %s", msg)
 	blob := syncDataset{}
