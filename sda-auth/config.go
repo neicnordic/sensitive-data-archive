@@ -174,12 +174,18 @@ func (c *Config) readConfig() error {
 		log.Printf("Setting log level to '%s'", stringLevel)
 	}
 
+	for _, s := range []string{"s3Inbox", "publicFile"} {
+		if viper.GetString(s) == "" {
+			return fmt.Errorf("%s not set", s)
+		}
+	}
+
 	// no need to check the variables for JWT generation if we won't use it
 	if (cega.ID == "" && cega.Secret == "") && !c.ResignJwt {
 		return nil
 	}
 
-	for _, s := range []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg", "s3Inbox", "publicFile"} {
+	for _, s := range []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg"} {
 		if viper.GetString(s) == "" {
 			return fmt.Errorf("%s not set", s)
 		}

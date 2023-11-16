@@ -52,7 +52,7 @@ services:
       - if [ ! -f "/out/c4gh.sec.pem" ]; then wget -qO- "https://github.com/neicnordic/crypt4gh/releases/latest/download/crypt4gh_linux_x86_64.tar.gz" | tar zxf -;
         ./crypt4gh generate -n c4gh -p privatekeypass && mv *.pem /out/; fi
     volumes:
-      - ../keys:/out
+      - /tmp:/out
   auth:
     container_name: auth
     build:
@@ -85,11 +85,11 @@ services:
       - JWTSIGNATUREALG=ES256
       - INFOTEXT=About Federated EGA
       - INFOURL=https://ega-archive.org/about/projects-and-funders/federated-ega/
-      - PUBLICFILE=keys/c4gh.pub.pem
+      - PUBLICFILE=/c4gh.pub.pem
     volumes:
       - ../keys:/keys
       - ../:/sda-auth
-      - ./keys/c4gh.pub.pem:/c4gh.pub.pem
+      - /tmp/c4gh.pub.pem:/c4gh.pub.pem
     image: sda-auth
     ports:
       - 8080:8080

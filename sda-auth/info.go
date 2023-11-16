@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -27,7 +26,7 @@ func readPublicKeyFile(filename string) (key *[32]byte, err error) {
 	defer file.Close()
 	publicKey, err := keys.ReadPublicKey(file)
 	if err != nil {
-		return nil, fmt.Errorf("error while reading public key file %s: %v", filename, err)
+		return nil, err
 	}
 
 	return &publicKey, err

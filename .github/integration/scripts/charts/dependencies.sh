@@ -19,7 +19,6 @@ C4GHPASSPHRASE="$(random-string)"
 export C4GHPASSPHRASE
 crypt4gh generate -n c4gh -p "$C4GHPASSPHRASE"
 kubectl create secret generic c4gh --from-file="c4gh.sec.pem" --from-file="c4gh.pub.pem" --from-literal=passphrase="${C4GHPASSPHRASE}"
-
 # secret for the OIDC keypair
 openssl ecparam -name prime256v1 -genkey -noout -out "jwt.key"
 openssl ec -in "jwt.key" -pubout -out "jwt.pub"

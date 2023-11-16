@@ -32,7 +32,6 @@ type ConfigTests struct {
 	ResignJwt         bool
 	InfoURL           string
 	InfoText          string
-	C4ghPubKeyFile    string
 	PublicFile        string
 }
 

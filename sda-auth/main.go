@@ -422,15 +422,13 @@ func main() {
 
 	publicKey, err := readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
-		log.Info("Failure to get public key: ", err)
-	} else {
-		authHandler.pubKey = hex.EncodeToString(publicKey[:])
+		log.Fatalf("Failed to get public key: %s", err.Error())
 	}
+	authHandler.pubKey = hex.EncodeToString(publicKey[:])
 
 	// Endpoint for client login info
-	if publicKey != nil {
-		app.Get("/info", authHandler.getInfo)
-	}
+	app.Get("/info", authHandler.getInfo)
+
 	app.UseGlobal(globalHeaders)
 
 	if config.Server.Cert != "" && config.Server.Key != "" {
