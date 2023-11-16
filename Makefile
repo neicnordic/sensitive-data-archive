@@ -8,7 +8,7 @@ help:
 	@echo 'This Makefile is designed to make the development work go smoothly.'
 	@echo 'Indepth description of how to use this Makefile can be fould in the README.md'
 
-bootstrap:
+bootstrap: go-version-check
 		@for dir in sda sda-auth sda-download; do \
 			cd $$dir; \
 			go get ./...; \
@@ -32,6 +32,22 @@ build-sda-download:
 	@cd sda-download && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-download .
 build-sda-sftp-inbox:
 	@cd sda-sftp-inbox && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-sftp-inbox .
+
+
+go-version-check: SHELL:=/bin/bash
+go-version-check:
+	@GO_VERSION_MIN=$$(cat $(CURDIR)/.go-version); \
+	GO_VERSION=$$(go version | grep -o 'go[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | tr -d 'go'); \
+	IFS="." read -r -a GO_VERSION_ARR <<< "$${GO_VERSION}"; \
+	IFS="." read -r -a GO_VERSION_REQ <<< "$${GO_VERSION_MIN}"; \
+	if [[ $${GO_VERSION_ARR[0]} -lt $${GO_VERSION_REQ[0]} ||\
+		( $${GO_VERSION_ARR[0]} -eq $${GO_VERSION_REQ[0]} &&\
+		( $${GO_VERSION_ARR[1]} -lt $${GO_VERSION_REQ[1]} ||\
+		( $${GO_VERSION_ARR[1]} -eq $${GO_VERSION_REQ[1]} && $${GO_VERSION_ARR[2]} -lt $${GO_VERSION_REQ[2]} )))\
+	]]; then\
+		echo "SDA requires go $${GO_VERSION_MIN} to build; found $${GO_VERSION}.";\
+		exit 1;\
+	fi;
 
 
 # run intrgration tests, same as being run in Github Actions during a PR

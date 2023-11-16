@@ -6,7 +6,12 @@ For more information about the different components see the readme files in the 
 
 ## Developing components of the SDA stack
 
-If you wish to work on the SDA stack itself you'll first need [Go](https://www.golang.org/) installed on your machine.
+If you wish to work on the SDA stack itself you'll first need [Go](https://www.golang.org/) installed on your machine. The recommended version can be found in the `.go-version` file. This can be checked by running:
+
+```sh
+$ make go-version-check
+...
+```
 
 For local dev first make sure Go is properly installed, including setting up a [GOPATH](https://golang.org/doc/code.html#GOPATH). Ensure that $GOPATH/bin is in your path as some distributions bundle the old version of build tools. Next, clone this repository. SDA uses [Go Modules](https://github.com/golang/go/wiki/Modules), so it is recommended that you clone the repository outside of the GOPATH. You can then download any required build tools by bootstrapping your environment:
 
