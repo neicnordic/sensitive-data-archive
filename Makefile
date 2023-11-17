@@ -36,7 +36,7 @@ build-sda-sftp-inbox:
 
 go-version-check: SHELL:=/bin/bash
 go-version-check:
-	@GO_VERSION_MIN=$$(cat $(CURDIR)/.go-version); \
+	@GO_VERSION_MIN=$$(grep GOLANG_VERSION $(CURDIR)/sda/Dockerfile | cut -d '-' -f2 | tr -d '}'); \
 	GO_VERSION=$$(go version | grep -o 'go[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?' | tr -d 'go'); \
 	IFS="." read -r -a GO_VERSION_ARR <<< "$${GO_VERSION}"; \
 	IFS="." read -r -a GO_VERSION_REQ <<< "$${GO_VERSION_MIN}"; \

@@ -6,7 +6,7 @@ For more information about the different components see the readme files in the 
 
 ## Developing components of the SDA stack
 
-If you wish to work on the SDA stack itself you'll first need [Go](https://www.golang.org/) installed on your machine. The recommended version can be found in the `.go-version` file. This can be checked by running:
+If you wish to work on the SDA stack itself you'll first need [Go](https://www.golang.org/) installed on your machine. The recommended version can be checked by running:
 
 ```sh
 $ make go-version-check
