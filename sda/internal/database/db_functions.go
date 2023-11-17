@@ -509,3 +509,116 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 
 	return info, nil
 }
+
+// GetHeaderForStableID retrieves the file header by using stable id
+func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
+	dbs.checkAndReconnectIfNeeded()
+	const query = "SELECT header from sda.files WHERE stable_id = $1"
+	var hexString string
+	if err := dbs.DB.QueryRow(query, stableID).Scan(&hexString); err != nil {
+		return nil, err
+	}
+
+	header, err := hex.DecodeString(hexString)
+	if err != nil {
+		return nil, err
+	}
+
+	return header, nil
+}
+
+// GetSyncData retrieves the file information needed to sync a dataset
+func (dbs *SDAdb) GetSyncData(accessionID string) (SyncData, error) {
+	var (
+		s   SyncData
+		err error
+	)
+
+	for count := 1; count <= RetryTimes; count++ {
+		s, err = dbs.getSyncData(accessionID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return s, err
+}
+
+// getSyncData is the actual function performing work for GetSyncData
+func (dbs *SDAdb) getSyncData(accessionID string) (SyncData, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT submission_user, submission_file_path from sda.files WHERE stable_id = $1;"
+	var data SyncData
+	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.User, &data.FilePath); err != nil {
+		return SyncData{}, err
+	}
+
+	const checksum = "SELECT checksum from sda.checksums WHERE source = 'UNENCRYPTED' and file_id = (SELECT id FROM sda.files WHERE stable_id = $1);"
+	if err := dbs.DB.QueryRow(checksum, accessionID).Scan(&data.Checksum); err != nil {
+		return SyncData{}, err
+	}
+
+	return data, nil
+}
+
+// CheckIfDatasetExists checks if a dataset already is registered
+func (dbs *SDAdb) CheckIfDatasetExists(datasetID string) (bool, error) {
+	var (
+		ds  bool
+		err error
+	)
+
+	for count := 1; count <= RetryTimes; count++ {
+		ds, err = dbs.checkIfDatasetExists(datasetID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
+	}
+
+	return ds, err
+}
+
+// getSyncData is the actual function performing work for GetSyncData
+func (dbs *SDAdb) checkIfDatasetExists(datasetID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT EXISTS(SELECT id from sda.datasets WHERE stable_id = $1);"
+	var yesNo bool
+	if err := dbs.DB.QueryRow(query, datasetID).Scan(&yesNo); err != nil {
+		return yesNo, err
+	}
+
+	return yesNo, nil
+}
+
+// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
+func (dbs *SDAdb) GetArchivePath(stableID string) (string, error) {
+	var (
+		err         error
+		count       int
+		archivePath string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		archivePath, err = dbs.getArchivePath(stableID)
+		count++
+	}
+
+	return archivePath, err
+}
+func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT archive_file_path from sda.files WHERE stable_id = $1;"
+
+	var archivePath string
+	err := db.QueryRow(getFileID, stableID).Scan(&archivePath)
+	if err != nil {
+		return "", err
+	}
+
+	return archivePath, nil
+}

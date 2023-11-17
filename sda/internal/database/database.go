@@ -42,6 +42,12 @@ type FileInfo struct {
 	DecryptedSize     int64
 }
 
+type SyncData struct {
+	User     string
+	FilePath string
+	Checksum string
+}
+
 // SchemaName is the name of the remote database schema to query
 var SchemaName = "sda"
 

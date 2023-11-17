@@ -1,6 +1,6 @@
 {
     "title": "JSON schema for Local EGA dataset mapping message interface",
-    "$id": "https://github.com/EGA-archive/LocalEGA/tree/master/schemas/dataset-mapping.json",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/federated/dataset-mapping.json",
     "$schema": "http://json-schema.org/draft-07/schema",
     "type": "object",
     "required": [

@@ -34,7 +34,7 @@ done
 psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
 
 if [ "$STORAGETYPE" = "posix" ]; then
-    for file in NA12878.bam NA12878_20k_b37.bam; do
+    for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
         echo "downloading $file"
         curl -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
         if [ ! -f "$file.c4gh" ]; then
@@ -70,7 +70,7 @@ fi
 if [ "$STORAGETYPE" = "s3" ]; then
     pip -q install s3cmd
 
-    for file in NA12878.bam NA12878_20k_b37.bam; do
+    for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
         curl -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
         if [ ! -f "$file.c4gh" ]; then
             yes | /shared/crypt4gh encrypt -p c4gh.pub.pem -f "$file"
@@ -87,7 +87,7 @@ fi
 
 echo "waiting for upload to complete"
 RETRY_TIMES=0
-until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 4 ]; do
+until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 6 ]; do
     echo "waiting for upload to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -99,14 +99,14 @@ done
 
 if [ "$STORAGETYPE" = "s3" ]; then
     num_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.files;")
-    if [ "$num_rows" -ne 3 ]; then
-        echo "database queries for register_files failed, expected 3 got $num_rows"
+    if [ "$num_rows" -ne 5 ]; then
+        echo "database queries for register_files failed, expected 5 got $num_rows"
         exit 1
     fi
 
     num_log_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.file_event_log;")
-    if [ "$num_log_rows" -ne 8 ]; then
-        echo "database queries for file_event_logs failed, expected 8 got $num_log_rows"
+    if [ "$num_log_rows" -ne 12 ]; then
+        echo "database queries for file_event_logs failed, expected 12 got $num_log_rows"
         exit 1
     fi
 
@@ -120,7 +120,7 @@ if [ "$STORAGETYPE" = "s3" ]; then
     ## verify that messages exists in MQ
     echo "waiting for upload to complete"
     RETRY_TIMES=0
-    until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 5 ]; do
+    until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 7 ]; do
         echo "waiting for upload to complete"
         RETRY_TIMES=$((RETRY_TIMES + 1))
         if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -131,14 +131,14 @@ if [ "$STORAGETYPE" = "s3" ]; then
     done
 
     num_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.files;")
-    if [ "$num_rows" -ne 4 ]; then
-        echo "database queries for register_files failed, expected 4 got $num_rows"
+    if [ "$num_rows" -ne 6 ]; then
+        echo "database queries for register_files failed, expected 6 got $num_rows"
         exit 1
     fi
 
     num_log_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.file_event_log;")
-    if [ "$num_log_rows" -ne 10 ]; then
-        echo "database queries for file_event_logs failed, expected 10 got $num_log_rows"
+    if [ "$num_log_rows" -ne 14 ]; then
+        echo "database queries for file_event_logs failed, expected 14 got $num_log_rows"
         exit 1
     fi
 fi

@@ -3,7 +3,7 @@ set -e
 
 cd shared || true
 
-for file in NA12878.bam NA12878_20k_b37.bam; do
+for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
     ENC_SHA=$(sha256sum "$file.c4gh" | cut -d' ' -f 1)
     ENC_MD5=$(md5sum "$file.c4gh" | cut -d' ' -f 1)
 
@@ -59,7 +59,7 @@ done
 
 echo "waiting for verify to complete"
 RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 2 ]; do
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 4 ]; do
     echo "waiting for verify to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then

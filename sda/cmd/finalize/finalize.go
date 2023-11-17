@@ -90,6 +90,11 @@ func main() {
 			status, err := db.GetFileStatus(delivered.CorrelationId)
 			if err != nil {
 				log.Errorf("failed to get file status, reason: %v", err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
+
+				continue
 			}
 			if status == "disabled" {
 				log.Infof("file with correlation ID: %s is disabled, stopping work", delivered.CorrelationId)

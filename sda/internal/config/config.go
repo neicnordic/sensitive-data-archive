@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
-
-	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -46,6 +45,25 @@ type Config struct {
 	API          APIConf
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
+	Sync         Sync
+	SyncAPI      SyncAPIConf
+}
+
+type Sync struct {
+	CenterPrefix   string
+	Destination    storage.Conf
+	RemoteHost     string
+	RemotePassword string
+	RemotePort     int
+	RemoteUser     string
+}
+
+type SyncAPIConf struct {
+	APIPassword      string
+	APIUser          string
+	AccessionRouting string `default:"accession"`
+	IngestRouting    string `default:"ingest"`
+	MappingRouting   string `default:"mappings"`
 }
 
 type APIConf struct {
@@ -257,6 +275,56 @@ func NewConfig(app string) (*Config, error) {
 			"inbox.bucket",
 		}
 		viper.Set("inbox.type", S3)
+	case "sync":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"c4gh.filepath",
+			"c4gh.passphrase",
+			"c4gh.syncPubKeyPath",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+			"sync.centerPrefix",
+			"sync.remote.host",
+			"sync.remote.user",
+			"sync.remote.password",
+		}
+
+		switch viper.GetString("archive.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
+		default:
+			return nil, fmt.Errorf("archive.type not set")
+		}
+
+		switch viper.GetString("sync.destination.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"sync.destination.url", "sync.destination.accesskey", "sync.destination.secretkey", "sync.destination.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"sync.destination.location"}...)
+		case SFTP:
+			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
+		default:
+			return nil, fmt.Errorf("sync.destination.type not set")
+		}
+	case "sync-api":
+		requiredConfVars = []string{
+			"broker.exchange",
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"sync.api.user",
+			"sync.api.password",
+		}
 	case "verify":
 		requiredConfVars = []string{
 			"broker.host",
@@ -410,6 +478,29 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "sync":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		if err := c.configDatabase(); err != nil {
+			return nil, err
+		}
+
+		c.configArchive()
+		c.configSync()
+		c.configSchemas()
+	case "sync-api":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		if err := c.configAPI(); err != nil {
+			return nil, err
+		}
+
+		c.configSyncAPI()
+		c.configSchemas()
 	case "verify":
 		c.configArchive()
 
@@ -722,6 +813,47 @@ func (c *Config) configSMTP() {
 	c.Notify.FromAddr = viper.GetString("smtp.from")
 }
 
+// configSync provides configuration for the sync destination storage
+func (c *Config) configSync() {
+	switch viper.GetString("sync.destination.type") {
+	case S3:
+		c.Sync.Destination.Type = S3
+		c.Sync.Destination.S3 = configS3Storage("sync.destination")
+	case SFTP:
+		c.Sync.Destination.Type = SFTP
+		c.Sync.Destination.SFTP = configSFTP("sync.destination")
+	case POSIX:
+		c.Sync.Destination.Type = POSIX
+		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
+	}
+
+	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
+	if viper.IsSet("sync.remote.port") {
+		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
+	}
+	c.Sync.RemotePassword = viper.GetString("sync.remote.password")
+	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
+	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
+}
+
+// configSync provides configuration for the outgoing sync settings
+func (c *Config) configSyncAPI() {
+	c.SyncAPI = SyncAPIConf{}
+	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
+	c.SyncAPI.APIUser = viper.GetString("sync.api.user")
+
+	if viper.IsSet("sync.api.AccessionRouting") {
+		c.SyncAPI.AccessionRouting = viper.GetString("sync.api.AccessionRouting")
+	}
+	if viper.IsSet("sync.api.IngestRouting") {
+		c.SyncAPI.IngestRouting = viper.GetString("sync.api.IngestRouting")
+	}
+	if viper.IsSet("sync.api.MappingRouting") {
+		c.SyncAPI.MappingRouting = viper.GetString("sync.api.MappingRouting")
+	}
+
+}
+
 // GetC4GHKey reads and decrypts and returns the c4gh key
 func GetC4GHKey() (*[32]byte, error) {
 	keyPath := viper.GetString("c4gh.filepath")
@@ -745,8 +877,7 @@ func GetC4GHKey() (*[32]byte, error) {
 
 // GetC4GHPublicKey reads the c4gh public key
 func GetC4GHPublicKey() (*[32]byte, error) {
-	keyPath := viper.GetString("c4gh.backupPubKey")
-
+	keyPath := viper.GetString("c4gh.syncPubKeyPath")
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)
 	if err != nil {
@@ -868,13 +999,4 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// CopyHeader reads the config and returns if the header will be copied
-func CopyHeader() bool {
-	if viper.IsSet("backup.copyHeader") {
-		return viper.GetBool("backup.copyHeader")
-	}
-
-	return false
 }

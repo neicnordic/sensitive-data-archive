@@ -1,6 +1,6 @@
 {
     "title": "JSON schema for sending message for ingestion completion. Derived from Federated EGA schemas.",
-    "$id": "https://github.com/EGA-archive/LocalEGA/tree/master/schemas/ingestion-completion.json",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/isolated/ingestion-completion.json",
     "$schema": "http://json-schema.org/draft-07/schema",
     "type": "object",
     "required": [
@@ -117,7 +117,7 @@
             "$id": "#/properties/decrypted_checksums",
             "type": "array",
             "title": "The checksums of the original file",
-            "description": "The checksums of the original file. The md5 one is required",
+            "description": "The checksums of the original file.",
             "examples": [
                 [
                     {
@@ -134,7 +134,7 @@
                 "type": "object",
                 "properties": {
                     "type": {
-                        "const": "md5"
+                        "const": "sha256"
                     }
                 },
                 "required": [

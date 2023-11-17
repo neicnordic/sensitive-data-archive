@@ -50,6 +50,7 @@ db:
 c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
+  syncPubKeyPath: /shared/sync.pub.pem
 
 server:
   cert: ""
@@ -57,4 +58,24 @@ server:
   jwtpubkeypath: "/shared/keys/pub/"
   jwtpubkeyurl: "http://oidc:8080/jwk"
 
+sync:
+  api:
+    password: "pass"
+    user: "user"
+  centerPrefix: "SYNC"
+  destination:
+    type: "s3"
+    url: "http://s3"
+    port: 9000
+    readypath: "/minio/health/ready"
+    accessKey: "access"
+    secretKey: "secretKey"
+    bucket: "sync"
+    region: "us-east-1"
+  remote:
+    host: "http://sync-api"
+    port: "8080"
+    password: "pass"
+    user: "user"
 
+schema.type: "isolated"

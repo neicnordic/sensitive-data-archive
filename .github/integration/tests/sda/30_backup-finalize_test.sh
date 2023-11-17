@@ -4,7 +4,7 @@ set -e
 cd shared || true
 
 i=1
-while [ $i -le 2 ]; do
+while [ $i -le 4 ]; do
     ## get correlation id from upload message
     MSG=$(
         curl -s -X POST \
@@ -28,12 +28,17 @@ while [ $i -le 2 ]; do
             '$ARGS.named'
     )
 
+    accession_id=EGAF7490000000$i
+    if [[ "$filepath" == *.bai.c4gh ]]; then
+        accession_id="SYNC-123-0000$i"
+    fi
+
     accession_payload=$(
         jq -r -c -n \
             --arg type accession \
             --arg user "$user" \
             --arg filepath "$filepath" \
-            --arg accession_id "EGAF7490000000$i" \
+            --arg accession_id "$accession_id" \
             --argjson decrypted_checksums "$decrypted_checksums" \
             '$ARGS.named|@base64'
     )
@@ -58,7 +63,7 @@ done
 
 echo "waiting for finalize to complete"
 
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/completed/ | jq -r '.messages_ready')" -eq 2 ]; do
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/completed/ | jq -r '.messages_ready')" -eq 4 ]; do
     echo "waiting for finalize to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -88,7 +93,7 @@ socket_timeout = 30
 EOD
 
 # check DB for archive file names
-for file in NA12878.bam.c4gh NA12878_20k_b37.bam.c4gh; do
+for file in NA12878.bam.c4gh NA12878.bai.c4gh NA12878_20k_b37.bam.c4gh NA12878_20k_b37.bai.c4gh; do
     archiveName=$(psql -U postgres -h postgres -d sda -At -c "SELECT archive_file_path from sda.files where submission_file_path = 'test_dummy.org/$file';")
     size=$(s3cmd -c direct ls s3://backup/"$archiveName" | tr -s ' ' | cut -d ' ' -f 3)
     if [ "$size" -eq 0 ]; then
