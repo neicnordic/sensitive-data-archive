@@ -42,13 +42,19 @@ global:
     backupRoutingKey: "backup"
     ssl: false
     username: "admin"
+    password: PLACEHOLDER_VALUE
+  cega:
+    password: PLACEHOLDER_VALUE
+    user: PLACEHOLDER_VALUE
   c4gh:
     secretName: c4gh
     keyFile: c4gh.sec.pem
     publicFile: c4gh.pub.pem
+    passphrase:  PLACEHOLDER_VALUE
   db:
     host: "postgres-sda-db"
     user: "postgres"
+    password: PLACEHOLDER_VALUE
   doa:
     enabled: false
   download:
