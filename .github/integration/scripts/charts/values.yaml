@@ -13,12 +13,17 @@ global:
     issuer: ""
     clusterIssuer: "cert-issuer"
   archive:
+    storageType: s3
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: "http://minio.minio"
     s3Bucket: "archive"
     s3Port: 9000
     existingClaim: archive-pvc
   backupArchive:
     storageType: "s3"
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: "http://minio.minio"
     s3Bucket: "backup"
     s3Port: 9000
@@ -61,6 +66,8 @@ global:
     secret: DfCieZLuBU
   inbox:
     storageType: s3
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: http://minio.minio
     s3Port: 9000
     s3Bucket: "inbox"
