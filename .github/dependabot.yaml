@@ -38,14 +38,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
   - package-ecosystem: docker
-    directory: "/sda-pipeline"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: docker
-    directory: "/sda-s3proxy"
+    directory: "/sda"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
@@ -62,45 +55,47 @@ updates:
 # Each subfolder needs to be checked separately
   - package-ecosystem: gomod
     directory: "/sda-auth"
-    schedule:
-      interval: weekly
+    groups:
+      all-modules:
+        patterns:
+          - "*"
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: weekly
   - package-ecosystem: gomod
-    directory: "/sda-common"
-    schedule:
-      interval: weekly
+    directory: "/sda"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: weekly
   - package-ecosystem: gomod
     directory: "/sda-download"
-    schedule:
-      interval: weekly
+    groups:
+      all-modules:
+        patterns:
+          - "*"
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: gomod
-    directory: "/sda-pipeline"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: gomod
-    directory: "/sda-s3proxy"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: maven
     directory: "/sda-sftp-inbox"
-    schedule:
-      interval: weekly
+    groups:
+      all-modules:
+        patterns:
+          - "*"
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: weekly
