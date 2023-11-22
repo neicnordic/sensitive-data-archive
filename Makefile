@@ -6,7 +6,7 @@ help:
 	@echo 'Welcome!'
 	@echo ''
 	@echo 'This Makefile is designed to make the development work go smoothly.'
-	@echo 'Indepth description of how to use this Makefile can be fould in the README.md'
+	@echo 'In-depth description of how to use this Makefile can be found in the README.md'
 
 bootstrap: go-version-check
 		@for dir in sda sda-auth sda-download; do \

@@ -22,7 +22,7 @@ $ make bootstrap
 
 ### Makefile options
 
-The Makefile is primarily designd to be an aid during development work.
+The Makefile is primarily designed to be an aid during development work.
 
 #### Building the containers
 
@@ -42,21 +42,21 @@ $ make build-<folder-name>
 
 #### Running the integration tests
 
-This will build the container and run the integration test for the postgresql container. The same test will run on every PR in github:
+This will build the container and run the integration test for the PostgreSQL container. The same test will run on every PR in github:
 
 ```sh
 $ make integrationtest-postgres
 ...
 ```
 
-This will build the rabbitmq and sda containers and run the integration test for the rabbitmq container. The same test will run on every PR in github:
+This will build the RabbitMQ and SDA containers and run the integration test for the RabbitMQ container. The same test will run on every PR in github:
 
 ```sh
 $ make integrationtest-rabbitmq
 ...
 ```
 
-This will build all containers and run the integration tests for the sda stack. The same test will run on every PR in github:
+This will build all containers and run the integration tests for the SDA stack. The same test will run on every PR in github:
 
 ```sh
 $ make integrationtest-sda
@@ -72,7 +72,7 @@ $ make lint-all
 ...
 ```
 
-To run golangci-lint for a speciffic component replace `all` with the folder name (sda, sda-auth, sda-download):
+To run golangci-lint for a speciffic component replace `all` with the folder name (`sda`, `sda-auth`, `sda-download`):
 
 ```sh
 $ make lint-<folder-name>
@@ -90,7 +90,7 @@ $ make test-all
 ...
 ```
 
-To run the static code tests for a speciffic component replace `all` with the folder name (sda, sda-auth, sda-download, sda-sftp-inbox):
+To run the static code tests for a speciffic component replace `all` with the folder name (`sda`, `sda-auth`, `sda-download`, `sda-sftp-inbox`):
 
 ```sh
 $ make test-<folder-name>
