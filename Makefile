@@ -14,6 +14,10 @@ bootstrap: go-version-check
 			go get ./...; \
 			cd ..; \
 		done
+		if ! command -v curl >/dev/null; then \
+			echo "Can't install golangci-lint because curl is missing."; \
+			exit 1; \
+		fi
 		@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
 		sh -s -- -b $$(go env GOPATH)/bin
 		GO111MODULE=off go get golang.org/x/tools/cmd/goimports
