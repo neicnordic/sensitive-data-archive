@@ -94,8 +94,6 @@ spec:
           value: {{ .Values.global.broker.port | quote }}
         - name: BROKER_QUEUE
           value: "from_cega"
-        - name: BROKER_ROUTINGERROR
-          value: {{ .Values.global.broker.routingError | quote }}
         - name: BROKER_VHOST
           value: {{ .Values.global.broker.vhost | quote }}
       {{- if .Values.global.log.format }}

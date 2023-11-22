@@ -169,7 +169,6 @@ global:
     host: ""
     password: ""
     port: 5671
-    routingError: ""
     backupRoutingKey: ""
     ssl: true
     username: ""

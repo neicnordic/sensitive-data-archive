@@ -139,8 +139,6 @@ spec:
           value: {{ .Values.global.broker.prefetchCount | quote }}
         - name: BROKER_QUEUE
           value: "archived"
-        - name: BROKER_ROUTINGERROR
-          value: {{ .Values.global.broker.routingError }}
         - name: BROKER_ROUTINGKEY
           value: "verified"
       {{- if .Values.global.broker.serverName }}

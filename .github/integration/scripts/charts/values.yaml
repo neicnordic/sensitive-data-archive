@@ -38,8 +38,6 @@ global:
     durable: true
     host: "broker-sda-mq"
     port: 5672
-    routingError: "error"
-    backupRoutingKey: "backup"
     ssl: false
     username: "admin"
     password: PLACEHOLDER_VALUE
