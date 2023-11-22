@@ -8,6 +8,7 @@ on:
       - "**/*.md"
       - ".github/dependabot.yaml"
       - "charts/**"
+      - "Makefile"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
