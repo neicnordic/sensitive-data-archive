@@ -1,5 +1,5 @@
 # API
-The API service provides data submitters with functionality to controll
+The API service provides data submitters with functionality to control
 their submissions. Users are authenticated with a JWT. 
 
 ## Service Description
