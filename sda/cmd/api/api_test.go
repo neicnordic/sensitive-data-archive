@@ -443,11 +443,11 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	err = json.NewDecoder(resp.Body).Decode(&filesData)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), len(filesData), 0)
-	log.Printf("it is %v", filesData)
 	assert.NoError(suite.T(), err)
 
 	// Insert a file and make sure it is listed
-	fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestAPIGetFiles.c4gh", suite.User), suite.User)
+	file1 := fmt.Sprintf("/%v/TestAPIGetFiles.c4gh", suite.User)
+	fileID, err := Conf.API.DB.RegisterFile(file1, suite.User)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
@@ -482,5 +482,28 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	assert.Equal(suite.T(), len(filesData), 1)
 	assert.Equal(suite.T(), filesData[0].Status, latestStatus)
 
+	assert.NoError(suite.T(), err)
+
+	// Insert a second file and make sure it is listed
+	file2 := fmt.Sprintf("/%v/TestAPIGetFiles2.c4gh", suite.User)
+	_, err = Conf.API.DB.RegisterFile(file2, suite.User)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	resp, err = client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
+
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&filesData)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), len(filesData), 2)
+	for _, fileInfo := range filesData {
+		switch fileInfo.InboxPath {
+		case file1:
+			assert.Equal(suite.T(), fileInfo.Status, latestStatus)
+		case file2:
+			assert.Equal(suite.T(), fileInfo.Status, "registered")
+		}
+	}
 	assert.NoError(suite.T(), err)
 }

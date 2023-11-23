@@ -652,11 +652,11 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
 		"FROM sda.files f " +
 		"LEFT JOIN ( " +
-		"SELECT event, started_at, file_id " +
+		"SELECT DISTINCT ON (file_id) file_id, started_at, event " +
 		"FROM sda.file_event_log " +
+		"ORDER BY file_id, started_at DESC" +
 		") e ON f.id = e.file_id " +
-		"WHERE f.submission_user = $1 " +
-		"ORDER BY e.started_at DESC LIMIT 1; "
+		"WHERE f.submission_user = $1; "
 
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
