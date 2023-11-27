@@ -213,7 +213,17 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func TestShutdown(t *testing.T) {
+type TestSuite struct {
+	suite.Suite
+	Path        string
+	PublicPath  string
+	PrivatePath string
+	KeyName     string
+	Token       string
+	User        string
+}
+
+func (suite *TestSuite) TestShutdown() {
 	Conf = &config.Config{}
 	Conf.Broker = broker.MQConf{
 		Host:     "localhost",
@@ -223,7 +233,7 @@ func TestShutdown(t *testing.T) {
 		Exchange: "amq.default",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
@@ -234,20 +244,20 @@ func TestShutdown(t *testing.T) {
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	// make sure all conections are alive
-	assert.Equal(t, false, Conf.API.MQ.Channel.IsClosed())
-	assert.Equal(t, false, Conf.API.MQ.Connection.IsClosed())
-	assert.Equal(t, nil, Conf.API.DB.DB.Ping())
+	assert.Equal(suite.T(), false, Conf.API.MQ.Channel.IsClosed())
+	assert.Equal(suite.T(), false, Conf.API.MQ.Connection.IsClosed())
+	assert.Equal(suite.T(), nil, Conf.API.DB.DB.Ping())
 
 	shutdown()
-	assert.Equal(t, true, Conf.API.MQ.Channel.IsClosed())
-	assert.Equal(t, true, Conf.API.MQ.Connection.IsClosed())
-	assert.Equal(t, "sql: database is closed", Conf.API.DB.DB.Ping().Error())
+	assert.Equal(suite.T(), true, Conf.API.MQ.Channel.IsClosed())
+	assert.Equal(suite.T(), true, Conf.API.MQ.Connection.IsClosed())
+	assert.Equal(suite.T(), "sql: database is closed", Conf.API.DB.DB.Ping().Error())
 }
 
-func TestReadinessResponse(t *testing.T) {
+func (suite *TestSuite) TestReadinessResponse() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.GET("/ready", readinessResponse)
@@ -263,7 +273,7 @@ func TestReadinessResponse(t *testing.T) {
 		Exchange: "amq.default",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
@@ -274,65 +284,51 @@ func TestReadinessResponse(t *testing.T) {
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
-	assert.NoError(t, err)
+	assert.NoError(suite.T(), err)
 
 	res, err := http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, res.StatusCode)
 	defer res.Body.Close()
 
 	// close the connection to force a reconnection
 	Conf.API.MQ.Connection.Close()
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusServiceUnavailable, res.StatusCode)
 	defer res.Body.Close()
 
 	// reconnect should be fast so now this should pass
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, res.StatusCode)
 	defer res.Body.Close()
 
 	// close the channel to force a reconneciton
 	Conf.API.MQ.Channel.Close()
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusServiceUnavailable, res.StatusCode)
 	defer res.Body.Close()
 
 	// reconnect should be fast so now this should pass
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, res.StatusCode)
 	defer res.Body.Close()
 
 	// close DB connection to force a reconnection
 	Conf.API.DB.Close()
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusServiceUnavailable, res.StatusCode)
 	defer res.Body.Close()
 
 	// reconnect should be fast so now this should pass
 	res, err = http.Get(ts.URL + "/ready")
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, res.StatusCode)
 	defer res.Body.Close()
-}
-
-type TestSuite struct {
-	suite.Suite
-	Path        string
-	PublicPath  string
-	PrivatePath string
-	KeyName     string
-	Token       string
-	User        string
-}
-
-func TestApiTestSuite(t *testing.T) {
-	suite.Run(t, new(TestSuite))
 }
 
 // Initialise configuration and create jwt keys
@@ -380,13 +376,13 @@ func (suite *TestSuite) SetupTest() {
 
 }
 
-func TestDatabasePingCheck(t *testing.T) {
+func (suite *TestSuite) TestDatabasePingCheck() {
 	emptyDB := database.SDAdb{}
-	assert.Error(t, checkDB(&emptyDB, 1*time.Second), "nil DB should fail")
+	assert.Error(suite.T(), checkDB(&emptyDB, 1*time.Second), "nil DB should fail")
 
 	db, err := database.NewSDAdb(Conf.Database)
-	assert.NoError(t, err)
-	assert.NoError(t, checkDB(db, 1*time.Second), "ping should succeed")
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), checkDB(db, 1*time.Second), "ping should succeed")
 }
 
 func (suite *TestSuite) TestAPIAuthenticate() {
@@ -512,4 +508,8 @@ func (suite *TestSuite) TestAPIGetFiles() {
 		}
 	}
 	assert.NoError(suite.T(), err)
+}
+
+func TestApiTestSuite(t *testing.T) {
+	suite.Run(t, new(TestSuite))
 }
