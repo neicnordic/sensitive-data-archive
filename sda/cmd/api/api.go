@@ -51,7 +51,7 @@ func main() {
 
 	srv := setup(Conf)
 	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
-		log.Infof("Web server is ready to receive connections at https://%s:%d", Conf.API.Host, Conf.API.Port)
+		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
 			shutdown()
 			log.Fatalln(err)
