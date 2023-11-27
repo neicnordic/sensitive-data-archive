@@ -8,6 +8,7 @@ on:
       - ".gitignore"
       - "**/*.md"
       - "charts/**"
+      - "Makefile"
     types: [ closed ]
 
 jobs:
