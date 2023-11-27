@@ -3,6 +3,29 @@
 The mapper service registers mapping of accessionIDs (stable ids for files) to datasetIDs.
 Once the file accession ID has been mapped to a dataset ID, the file is removed from the inbox.
 
+## Service Description
+
+The `mapper` service maps file `accessionIDs` to `datasetIDs`.
+
+When running, `mapper` reads messages from the configured RabbitMQ queue (commonly: `mappings`).  
+For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
+
+1. The message is validated as valid JSON that matches the `dataset-mapping` schema.  
+If the message can’t be validated it is discarded with an error message is logged.
+2. AccessionIDs from the message are mapped to a datasetID (also in the message) in the database.  
+On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
+3. The uploaded files related to each AccessionID is removed from the inbox  
+If this fails an error will be written to the logs.
+4. The RabbitMQ message is Ack'ed.
+
+## Communication
+
+- `Mapper` reads messages from one RabbitMQ queue (commonly: `mappings`).
+- `Mapper` maps files to datasets in the database using the `MapFilesToDataset` function.
+- `Mapper` retrieves the inbox filepath from the database for each file using the `GetInboxPath` function.
+- `Mapper` sets the status of a dataset in the database using the `UpdateDatasetEvent` function.
+- `Mapper` removes data from inbox storage.
+
 ## Configuration
 
 There are a number of options that can be set for the `mapper` service.
@@ -93,26 +116,3 @@ and if `*_TYPE` is `POSIX`:
   - `error`
   - `fatal`
   - `panic`
-
-## Service Description
-
-The `mapper` service maps file `accessionIDs` to `datasetIDs`.
-
-When running, `mapper` reads messages from the configured RabbitMQ queue (commonly: `mappings`).  
-For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
-
-1. The message is validated as valid JSON that matches the `dataset-mapping` schema.  
-If the message can’t be validated it is discarded with an error message is logged.
-2. AccessionIDs from the message are mapped to a datasetID (also in the message) in the database.  
-On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
-3. The uploaded files related to each AccessionID is removed from the inbox  
-If this fails an error will be written to the logs.
-4. The RabbitMQ message is Ack'ed.
-
-## Communication
-
-- `Mapper` reads messages from one RabbitMQ queue (commonly: `mappings`).
-- `Mapper` maps files to datasets in the database using the `MapFilesToDataset` function.
-- `Mapper` retrieves the inbox filepath from the database for each file using the `GetInboxPath` function.
-- `Mapper` sets the status of a dataset in the database using the `UpdateDatasetEvent` function.
-- `Mapper` removes data from inbox storage.

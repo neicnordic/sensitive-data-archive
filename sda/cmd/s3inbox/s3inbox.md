@@ -2,6 +2,21 @@
 
 The `s3inbox` proxies uploads to the an S3 compatible storage backend. Users are authenticated with a JWT instead of `access_key` and `secret_key` used normally for `S3`.
 
+## Service Description
+
+The `s3inbox` proxies uploads to an S3 compatible storage backend.
+
+1. Parses and validates the JWT token (`access_token` in the S3 config file) against the public keys, either locally provisioned or from OIDC JWK endpoints.
+2. If the token is valid the file is passed on to the S3 backend
+3. The file is registered in the database
+4. The `inbox-upload` message is sent to the `inbox` queue, with the `sub` field from the token as the `user` in the message. If this fails an error will be written to the logs.
+
+## Communication
+
+- `s3inbox` proxies uploads to inbox storage.
+- `s3inbox` inserts file information in the database using the `RegisterFile` database function and marks it as uploaded in the `file_event_log`
+- `s3inbox` writes messages to one RabbitMQ queue (commonly: `inbox`).
+
 ## Configuration
 
 There are a number of options that can be set for the `s3inbox` service.
@@ -91,18 +106,3 @@ These settings control how verify connects to the RabbitMQ message broker.
   - `error`
   - `fatal`
   - `panic`
-
-## Service Description
-
-The `s3inbox` proxies uploads to an S3 compatible storage backend.
-
-1. Parses and validates the JWT token (`access_token` in the S3 config file) against the public keys, either locally provisioned or from OIDC JWK endpoints.
-2. If the token is valid the file is passed on to the S3 backend
-3. The file is registered in the database
-4. The `inbox-upload` message is sent to the `inbox` queue, with the `sub` field from the token as the `user` in the message. If this fails an error will be written to the logs.
-
-## Communication
-
-- `s3inbox` proxies uploads to inbox storage.
-- `s3inbox` inserts file information in the database using the `RegisterFile` database function and marks it as uploaded in the `file_event_log`
-- `s3inbox` writes messages to one RabbitMQ queue (commonly: `inbox`).

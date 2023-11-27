@@ -2,6 +2,18 @@
 
 The sync-api service is used in the [Bigpicture](https://bigpicture.eu/) project.
 
+## Service Description
+
+The sync service facilitates replication of data and metadata between the nodes in the consortium.
+
+When enabled the service will perform the following tasks:
+
+1. Upon recieving a POST request with JSON data to the `/dataset` route.
+   1. Parse the JSON blob and validate it against the `file-sync` schema.
+   2. Build and send messages to start ingestion of files.
+   3. Build and send messages to assign stableIDs to files.
+   4. Build and send messages to map files to a dataset.
+
 ## Configuration
 
 There are a number of options that can be set for the sync service.
@@ -55,15 +67,3 @@ The default routing keys for sending ingestion, accession and maping messages ca
   - `error`
   - `fatal`
   - `panic`
-
-## Service Description
-
-The sync service facilitates replication of data and metadata between the nodes in the consortium.
-
-When enabled the service will perform the following tasks:
-
-1. Upon recieving a POST request with JSON data to the `/dataset` route.
-   1. Parse the JSON blob and validate it against the `file-sync` schema.
-   2. Build and send messages to start ingestion of files.
-   3. Build and send messages to assign stableIDs to files.
-   4. Build and send messages to map files to a dataset.
