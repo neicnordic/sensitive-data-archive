@@ -466,3 +466,30 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	assert.NoError(suite.T(), err, "getArchivePath failed")
 	assert.Equal(suite.T(), path, corrID)
 }
+
+func (suite *DatabaseTests) TestGetUserFiles() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	testCases := 5
+	testUser := "GetFilesUser"
+
+	for i := 0; i < testCases; i++ {
+		fileID, err := db.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", testUser, i), testUser)
+		assert.NoError(suite.T(), err, "failed to register file in database")
+		err = db.UpdateFileEventLog(fileID, "uploaded", testUser, "{}")
+		assert.NoError(suite.T(), err, "failed to update satus of file in database")
+		err = db.UpdateFileEventLog(fileID, "ready", testUser, "{}")
+		assert.NoError(suite.T(), err, "failed to update satus of file in database")
+	}
+	filelist, err := db.GetUserFiles("unknownuser")
+	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
+	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
+
+	filelist, err = db.GetUserFiles(testUser)
+	assert.NoError(suite.T(), err, "failed to get file list")
+	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
+
+	for _, fileInfo := range filelist {
+		assert.Equal(suite.T(), "ready", fileInfo.Status, "incorrect file status")
+	}
+}
