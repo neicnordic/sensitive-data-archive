@@ -57,7 +57,7 @@ func main() {
 			log.Fatalln(err)
 		}
 	} else {
-		log.Infof("Web server is ready to receive connections at http://%s:%d", Conf.API.Host, Conf.API.Port)
+		log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServe(); err != nil {
 			shutdown()
 			log.Fatalln(err)
