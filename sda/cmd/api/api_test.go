@@ -189,6 +189,12 @@ func TestMain(m *testing.M) {
 		if err := pool.Purge(oidc); err != nil {
 			log.Panicf("Could not purge oidc resource: %s", err)
 		}
+		if err := pool.Purge(postgres); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
+		if err := pool.Purge(rabbitmq); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
 		log.Panicf("Could not connect to oidc: %s", err)
 	}
 
