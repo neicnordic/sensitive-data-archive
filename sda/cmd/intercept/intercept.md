@@ -10,7 +10,8 @@ For each message, these steps are taken:
 1. The message type is read from the message `type` field.
    1. If the message `type` is not known, an error is logged and the message is Ack'ed.
 2. The correct queue for the message is decided based on message type.
-3. The message is sent to the queue. This has no error handling as the resend-mechanism hasn't been finished.
+3. The message is sent to the queue. 
+   - This has no error handling as the resend-mechanism hasn't been finished.
 4. The message is Ack'ed.
 
 ## Communication
