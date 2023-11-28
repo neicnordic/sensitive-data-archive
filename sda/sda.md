@@ -17,5 +17,5 @@ The SDA submission pipeline has four main steps:
 
 There are also three additional support services:
 
-1. [Intercept](cmd/intercept/intercept.md) relays messages from Central EGA to the system.
+1. [Intercept](cmd/intercept/intercept.md) relays messages from `CentralEGA` to the system.
 2. [s3inbox](cmd/s3inbox/s3inbox.md) proxies uploads to the an S3 compatible storage backend.

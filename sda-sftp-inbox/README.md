@@ -4,7 +4,7 @@
 
 ## Federated EGA/LocalEGA login system
 
-Central EGA contains a database of users, with IDs and passwords.
+`CentralEGA` contains a database of users, with IDs and passwords.
 
 We have developed a solution based on [Apache Mina SSHD](https://mina.apache.org/sshd-project/)
 to allow user authentication via

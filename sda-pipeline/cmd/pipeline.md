@@ -18,6 +18,6 @@ The SDA pipeline has four main steps:
 There are also three additional support services:
 
 1. [Backup](backup.md) copies data from archive storage to backup storage, optionally re-encrypting and re-attaching the headers.
-1. [Intercept](intercept.md) relays messages from Central EGA to the system.
+1. [Intercept](intercept.md) relays messages from `CentralEGA` to the system.
 1. [Notify](notify.md) sends e-mail messages to users.
 

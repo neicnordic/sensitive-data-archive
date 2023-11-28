@@ -1,6 +1,6 @@
 # finalize Service
 
-Handles the so-called _Accession ID (stable ID)_ to filename mappings from Central EGA.
+Handles the so-called _Accession ID (stable ID)_ to filename mappings from `CentralEGA`.
 At the same time the service fulfills the replication requirement of having distinct backup copies.
 For more information see [Federated EGA Node Operations v2](https://ega-archive.org/assets/files/EGA-Node-Operations-v2.pdf) document.
 
