@@ -403,6 +403,11 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		err = c.configServer()
+		if err != nil {
+			return nil, err
+		}
 	case "finalize":
 		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
 			c.configArchive()

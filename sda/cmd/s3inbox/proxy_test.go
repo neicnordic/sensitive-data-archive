@@ -14,6 +14,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -138,18 +139,10 @@ func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 	return nil
 }
 
-// AlwaysAllow is an Authenticator that always authenticates
-type AlwaysDeny struct{}
-
-// Authenticate does not authenticate anyone.
-func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.Token, error) {
-	return nil, fmt.Errorf("denied")
-}
-
 // nolint:bodyclose
 func (suite *ProxyTests) TestServeHTTP_disallowed() {
 	// Start mock messenger that denies everything
-	proxy := NewProxy(suite.S3conf, &AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
 
 	r, _ := http.NewRequest("", "", nil)
 	w := httptest.NewRecorder()
@@ -217,7 +210,7 @@ func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 		Bucket:    "buckbuck",
 		Region:    "us-east-1",
 	}
-	proxy := NewProxy(s3conf, &AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(s3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
 	r, _ := http.NewRequest("", "", nil)
 	w := httptest.NewRecorder()
@@ -236,7 +229,7 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
-	proxy := NewProxy(suite.S3conf, NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// List files works
 	r, err := http.NewRequest("GET", "/username/file", nil)
@@ -344,7 +337,7 @@ func (suite *ProxyTests) TestMessageFormatting() {
 	assert.NoError(suite.T(), claims.Set("sub", "user@host.domain"))
 
 	// start proxy that denies everything
-	proxy := NewProxy(suite.S3conf, &AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	msg, err := proxy.CreateMessageFromRequest(r, claims)
 	assert.Nil(suite.T(), err)
@@ -376,7 +369,7 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 	assert.NoError(suite.T(), err)
 	defer messenger.Connection.Close()
 	// Start proxy that allows everything
-	proxy := NewProxy(suite.S3conf, NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// PUT a file into the system
 	filename := "/username/db-test-file"

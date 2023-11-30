@@ -25,13 +25,14 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 )
 
 // Proxy represents the toplevel object in this application
 type Proxy struct {
 	s3        storage.S3Conf
-	auth      Authenticator
+	auth      userauth.Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
@@ -71,7 +72,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf storage.S3Conf, auth Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
+func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tls}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 

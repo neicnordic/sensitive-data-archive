@@ -622,3 +622,61 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 
 	return archivePath, nil
 }
+
+// GetUserFiles retrieves all the files a user submitted
+func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+	var err error
+
+	files := []*SubmissionFileInfo{}
+
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		files, err = dbs.getUserFiles(userID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return files, err
+}
+
+// getUserFiles is the actual function performing work for GetUserFiles
+func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	files := []*SubmissionFileInfo{}
+	db := dbs.DB
+
+	// select all files of the user, each one annotated with its latest event
+	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
+		"FROM sda.files f " +
+		"LEFT JOIN ( " +
+		"SELECT DISTINCT ON (file_id) file_id, started_at, event " +
+		"FROM sda.file_event_log " +
+		"ORDER BY file_id, started_at DESC" +
+		") e ON f.id = e.file_id " +
+		"WHERE f.submission_user = $1; "
+
+	// nolint:rowserrcheck
+	rows, err := db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Iterate rows
+	for rows.Next() {
+		// Read rows into struct
+		fi := &SubmissionFileInfo{}
+		err := rows.Scan(&fi.InboxPath, &fi.Status, &fi.CreateAt)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add instance of struct (file) to array
+		files = append(files, fi)
+	}
+
+	return files, nil
+}
