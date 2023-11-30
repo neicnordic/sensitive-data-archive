@@ -49,10 +49,9 @@ type SyncData struct {
 }
 
 type SubmissionFileInfo struct {
-	InboxPath string        `json:"inboxPath"`
-	Status    string        `json:"fileStatus"`
-	CreateAt  string        `json:"createAt"`
-	FileSize  sql.NullInt64 `json:"submission_file_size"`
+	InboxPath string `json:"inboxPath"`
+	Status    string `json:"fileStatus"`
+	CreateAt  string `json:"createAt"`
 }
 
 // SchemaName is the name of the remote database schema to query

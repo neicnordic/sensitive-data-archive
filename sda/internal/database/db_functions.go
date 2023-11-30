@@ -649,7 +649,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	db := dbs.DB
 
 	// select all files of the user, each one annotated with its latest event
-	const query = "SELECT f.submission_file_path, e.event, f.created_at, f.submission_file_size " +
+	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
 		"FROM sda.files f " +
 		"LEFT JOIN ( " +
 		"SELECT DISTINCT ON (file_id) file_id, started_at, event " +
@@ -669,7 +669,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	for rows.Next() {
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
-		err := rows.Scan(&fi.InboxPath, &fi.Status, &fi.CreateAt, &fi.FileSize)
+		err := rows.Scan(&fi.InboxPath, &fi.Status, &fi.CreateAt)
 		if err != nil {
 			return nil, err
 		}
