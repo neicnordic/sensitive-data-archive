@@ -1,0 +1,128 @@
+{{- if and (ne "" .Values.global.sync.api.pass) (ne "" .Values.global.sync.api.user) }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-syncapi
+  labels:
+    role: syncapi
+    app: {{ template "sda.fullname" . }}-syncapi
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: "{{ .Values.syncapi.name }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.syncapi.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-syncapi
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-syncapi
+        role: syncapi
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/syncapi-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.syncapi.annotations }}
+{{- toYaml .Values.syncapi.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-syncapi
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: syncapi
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        env:
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: SYNC_API_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-syncapi
+              key: password
+        - name: SYNC_API_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-syncapi
+              key: user
+      {{- else }}
+        - name: CONFIGFILE
+          value: {{ include "confFile" . }}
+      {{- end }}
+        {{- if .Values.global.tls.enabled}}
+        - name: SERVER_CERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: SERVER_KEY
+          value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+        ports:
+        - name: syncapi
+          containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: syncapi
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.syncapi.resources | trim | indent 10 }}
+        volumeMounts:
+      {{- if .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+      {{- end }}
+      volumes:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          projected:
+            sources:
+          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-syncapi-certs
+          {{- else }}
+            - secret:
+                name: {{ required "An certificate issuer or a TLS secret name is required for syncapi" .Values.syncapi.tls.secretName }}
+          {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

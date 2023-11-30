@@ -13,12 +13,17 @@ global:
     issuer: ""
     clusterIssuer: "cert-issuer"
   archive:
+    storageType: s3
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: "http://minio.minio"
     s3Bucket: "archive"
     s3Port: 9000
     existingClaim: archive-pvc
   backupArchive:
     storageType: "s3"
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: "http://minio.minio"
     s3Bucket: "backup"
     s3Port: 9000
@@ -33,17 +38,21 @@ global:
     durable: true
     host: "broker-sda-mq"
     port: 5672
-    routingError: "error"
-    backupRoutingKey: "backup"
     ssl: false
     username: "admin"
+    password: PLACEHOLDER_VALUE
+  cega:
+    password: PLACEHOLDER_VALUE
+    user: PLACEHOLDER_VALUE
   c4gh:
     secretName: c4gh
     keyFile: c4gh.sec.pem
     publicFile: c4gh.pub.pem
+    passphrase:  PLACEHOLDER_VALUE
   db:
     host: "postgres-sda-db"
     user: "postgres"
+    password: PLACEHOLDER_VALUE
   doa:
     enabled: false
   download:
@@ -61,6 +70,8 @@ global:
     secret: DfCieZLuBU
   inbox:
     storageType: s3
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
     s3Url: http://minio.minio
     s3Port: 9000
     s3Bucket: "inbox"

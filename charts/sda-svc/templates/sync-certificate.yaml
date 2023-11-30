@@ -1,19 +1,19 @@
+{{- if ne "" .Values.global.sync.remote.host }}
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-{{- if .Values.backup.deploy}}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ template "sda.fullname" . }}-backup-certs
+  name: {{ template "sda.fullname" . }}-sync-certs
 spec:
   # Secret names are always required.
-  secretName: {{ template "sda.fullname" . }}-backup-certs
+  secretName: {{ template "sda.fullname" . }}-sync-certs
 
   duration: 2160h # 90d
 
   # The use of the common name field has been deprecated since 2000 and is
   # discouraged from being used.
-  commonName: {{ template "sda.fullname" . }}-backup
+  commonName: {{ template "sda.fullname" . }}-sync
   isCA: false
   privateKey:
     algorithm: ECDSA
@@ -22,8 +22,8 @@ spec:
     - client auth
   # At least one of a DNS Name, URI, or IP address is required.
   dnsNames:
-    - {{ template "sda.fullname" . }}-backup
-    - {{ template "sda.fullname" . }}-backup.{{ .Release.Namespace }}.svc
+    - {{ template "sda.fullname" . }}-sync
+    - {{ template "sda.fullname" . }}-sync.{{ .Release.Namespace }}.svc
   ipAddresses:
     - 127.0.0.1
   # Issuer references are always required.

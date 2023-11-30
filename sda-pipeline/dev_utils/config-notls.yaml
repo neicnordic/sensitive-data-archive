@@ -32,7 +32,6 @@ broker:
   queue: "error"
   exchange: "sda"
   routingKey: ""
-  routingError: ""
   ssl: "false"
 
 c4gh:

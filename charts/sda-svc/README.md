@@ -89,7 +89,6 @@ Parameter | Description | Default
 `global.broker.vhost` | Virtual host to connect to. |`/`
 `global.broker.password` | Shared password to the message broker. |`/`
 `global.broker.username` | Shared user to the message broker. |`/`
-`global.broker.backupRoutingKey` | routing key used to send messages to backup service |`""`
 `global.broker.prefetchCount` | Number of messages to retrieve from the broker at the time, setting this to `1` will create a round-robin behavior between consumers |`2`
 `global.cega.host` | Full URI to the EGA user authentication service. |`""`
 `global.cega.user` | Username for the EGA user authentication service. |`""`
@@ -153,10 +152,10 @@ If no shared credentials for the message broker and database are used these shou
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`credentials.backup.dbUser` | Databse user for backup | `""`
-`credentials.backup.dbPassword` | Database password for backup | `""`
-`credentials.backup.mqUser` | Broker user for backup | `""`
-`credentials.backup.mqPassword` | Broker password for backup | `""`
+`credentials.sync.dbUser` | Databse user for sync | `""`
+`credentials.sync.dbPassword` | Database password for sync | `""`
+`credentials.sync.mqUser` | Broker user for sync | `""`
+`credentials.sync.mqPassword` | Broker password for sync | `""`
 `credentials.doa.dbUser` | Databse user for doa | `""`
 `credentials.doa.dbPassword` | Database password for doa| `""`
 `credentials.download.dbUser` | Databse user for download | `""`
@@ -192,12 +191,12 @@ Parameter | Description | Default
 `auth.resources.requests.cpu` | CPU request for container. |`100m`
 `auth.resources.limits.memory` | Memory limit for container. |`256Mi`
 `auth.resources.limits.cpu` | CPU limit for container. |`250m`
-`backup.annotations` | Specific annotation for the backup pod | `{}`
-`backup.resources.requests.memory` | Memory request for backup container. |`128Mi`
-`backup.resources.requests.cpu` | CPU request for backup container. |`100m`
-`backup.resources.limits.memory` | Memory limit for backup container. |`256Mi`
-`backup.resources.limits.cpu` | CPU limit for backup container. |`250m`
-`backup.deploy` | Set to true if the backup service should be active | `false`
+`sync.annotations` | Specific annotation for the sync pod | `{}`
+`sync.resources.requests.memory` | Memory request for sync container. |`128Mi`
+`sync.resources.requests.cpu` | CPU request for sync container. |`100m`
+`sync.resources.limits.memory` | Memory limit for sync container. |`256Mi`
+`sync.resources.limits.cpu` | CPU limit for sync container. |`250m`
+`sync.deploy` | Set to true if the sync service should be active | `false`
 `doa.replicaCount` | desired number of replicas | `2`
 `doa.repository` | dataedge container image repository | `neicnordic/sda-doa`
 `doa.imageTag` | dataedge container image version | `"latest"`

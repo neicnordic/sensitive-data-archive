@@ -44,7 +44,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: intercept
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-intercept"]
         securityContext:
@@ -94,8 +94,6 @@ spec:
           value: {{ .Values.global.broker.port | quote }}
         - name: BROKER_QUEUE
           value: "from_cega"
-        - name: BROKER_ROUTINGERROR
-          value: {{ .Values.global.broker.routingError | quote }}
         - name: BROKER_VHOST
           value: {{ .Values.global.broker.vhost | quote }}
       {{- if .Values.global.log.format }}

@@ -47,7 +47,6 @@ broker:
   queue: ""
   exchange: "sda"
   routingKey: ""
-  routingError: ""
   ssl: "true"
   verifyPeer: "true"
   cacert: "./dev_utils/certs/ca.pem"

@@ -14,7 +14,7 @@ fi
 if [ "$1" == "sda-db" ]; then
     ROOTPASS=$(yq e '.global.db.password' .github/integration/scripts/charts/values.yaml)
     helm install postgres charts/sda-db \
-        --set image.tag="PR$2-postgres" \
+        --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
         --set global.postgresAdminPassword="$ROOTPASS" \
         --set global.tls.clusterIssuer=cert-issuer \
@@ -27,7 +27,7 @@ fi
 if [ "$1" == "sda-mq" ]; then
     ADMINPASS=$(yq e '.global.broker.password' .github/integration/scripts/charts/values.yaml)
     helm install broker charts/sda-mq \
-        --set image.tag="PR$2-rabbitmq" \
+        --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
         --set global.adminPassword="$ADMINPASS" \
         --set global.adminUser=admin \
@@ -45,6 +45,7 @@ if [ "$1" == "sda-svc" ]; then
         --set global.tls.enabled="$3" \
         --set global.broker.port="$MQ_PORT" \
         --set global.archive.storageType="$4" \
+        --set global.backupArchive.storageType="$4" \
         --set global.inbox.storageType="$4" \
         -f .github/integration/scripts/charts/values.yaml \
         --wait

@@ -55,7 +55,7 @@ spec:
     {{- end }}
       containers:
       - name: broker
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-rabbitmq"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false

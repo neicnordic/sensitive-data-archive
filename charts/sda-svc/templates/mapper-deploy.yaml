@@ -60,7 +60,7 @@ spec:
     {{- end }}
       containers:
       - name: mapper
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-mapper"]
         securityContext:
@@ -78,8 +78,6 @@ spec:
           value: {{ .Values.global.broker.port | quote }}
         - name: BROKER_PREFETCHCOUNT
           value: {{ .Values.global.broker.prefetchCount | quote }}
-        - name: BROKER_ROUTINGERROR
-          value: {{ .Values.global.broker.routingError }}
         - name: BROKER_VHOST
           value: {{ .Values.global.broker.vhost | quote }}
         - name: BROKER_SERVERNAME
@@ -101,12 +99,12 @@ spec:
       {{- if .Values.global.tls.enabled }}
         - name: DB_CACERT
           value: {{ template "tlsPath" . }}/ca.crt
-      {{- if ne "verify-none" .Values.global.db.sslMode }}
+        {{- if ne "verify-none" .Values.global.db.sslMode }}
         - name: DB_CLIENTCERT
           value: {{ template "tlsPath" . }}/tls.crt
         - name: DB_CLIENTKEY
           value: {{ template "tlsPath" . }}/tls.key
-      {{- end }}
+        {{- end }}
       {{- end }}
         - name: DB_DATABASE
           value: {{ default "lega" .Values.global.db.name | quote }}
@@ -187,14 +185,15 @@ spec:
       {{- end }}
         resources:
 {{ toYaml .Values.mapper.resources | trim | indent 10 }}
-  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         volumeMounts:
-        - name: tls
-          mountPath: {{ template "tlsPath" . }}
-        {{- if eq "posix" .Values.global.inbox.storageType }}
-        - name: inbox
-          mountPath: {{ .Values.global.inbox.path | quote }}
-        {{- end }}
+  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+          - name: tls
+            mountPath: {{ template "tlsPath" . }}
+          {{- if eq "posix" .Values.global.inbox.storageType }}
+          - name: inbox
+            mountPath: {{ .Values.global.inbox.path | quote }}
+          {{- end }}
+  {{- end }}
       volumes:
         - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
           projected:
@@ -212,7 +211,6 @@ spec:
             medium: Memory
             sizeLimit: 10Mi
       {{- end }}
-    {{- end }}
       {{- if eq "posix" .Values.global.inbox.storageType }}
         - name: inbox
         {{- if .Values.global.inbox.existingClaim }}

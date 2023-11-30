@@ -61,7 +61,7 @@ spec:
     {{- end }}
       containers:
       - name: verify
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-pipeline"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         command: ["sda-verify"]
         securityContext:
@@ -139,8 +139,6 @@ spec:
           value: {{ .Values.global.broker.prefetchCount | quote }}
         - name: BROKER_QUEUE
           value: "archived"
-        - name: BROKER_ROUTINGERROR
-          value: {{ .Values.global.broker.routingError }}
         - name: BROKER_ROUTINGKEY
           value: "verified"
       {{- if .Values.global.broker.serverName }}

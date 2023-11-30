@@ -259,11 +259,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Initialise k3d
+        id: initK3D
         run: bash .github/integration/scripts/charts/k3d.sh ${{matrix.version}}
         shell: bash
-
       - name: debug
-        if: failure()
+        if: steps.initK3D.outcome == 'failure'
         run: k3d version list k3s | grep ${{matrix.version}}
         shell: bash
 
@@ -272,11 +272,25 @@ jobs:
         shell: bash
 
       - name: Deploy DB
+        id: deployDB
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }} ${{matrix.tls}}
+      - name: debug
+        if: steps.deployDB.outcome == 'failure'
+        run: |
+          kubectl describe pod postgres-sda-db-0
+          sleep 1
+          kubectl logs postgres-sda-db-0
 
       - name: Deploy MQ
+        id: deployMQ
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}}
         shell: bash
+      - name: debug
+        if: steps.deployMQ.outcome == 'failure'
+        run: |
+          kubectl describe pod broker-sda-mq-0
+          sleep 1
+          kubectl logs broker-sda-mq-0
 
       - name: Deploy pipeline
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}}
@@ -295,12 +309,12 @@ jobs:
       - name: test
         if: always()
         run: |
-          kubectl get secret broker-sda-mq -o json
-          kubectl get secret pipeline-sda-svc-mapper -o json
           kubectl get pods
-          echo "describe mapper" && kubectl describe pod -l role=mapper
           sleep 1
-          echo "logs mapper" && kubectl logs -l role=mapper
-          sleep 1
-          echo "describe broker" && kubectl logs -l role=broker
+          for svc in auth finalize inbox ingest mapper verify; do
+            echo "## describe $svc" && kubectl describe pod -l role="$svc"
+            sleep 1
+            echo "## logs $svc" && kubectl logs -l role="$svc"
+            sleep 1
+          done
         shell: bash
