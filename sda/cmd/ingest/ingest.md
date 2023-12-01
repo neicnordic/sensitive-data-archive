@@ -11,28 +11,28 @@ When running, `ingest` reads messages from the configured RabbitMQ queue (common
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
 1. The message is validated as valid JSON that matches the `ingestion-trigger` schema.
-If the message can’t be validated it is discarded with an error message in the logs.
+    - If the message can’t be validated it is discarded with an error message in the logs.
 2. If the message is of type `cancel`, the file will be marked as `disabled` and the next message in the queue will be read.
 3. A file reader is created for the filepath in the message.
-If the file reader can’t be created an error is written to the logs, the message is Nacked and forwarded to the error queue.
+    - If the file reader can’t be created an error is written to the logs, the message is Nacked and forwarded to the error queue.
 4. The file size is read from the file reader.
-On error, the error is written to the logs, the message is Nacked and forwarded to the error queue.
+    - On error, the error is written to the logs, the message is Nacked and forwarded to the error queue.
 5. A uuid is generated, and a file writer is created in the archive using the uuid as filename.
-On error the error is written to the logs and the message is Nacked and then re-queued.
+    - On error the error is written to the logs and the message is Nacked and then re-queued.
 6. The filename is inserted into the database along with the user id of the uploading user. In case the file is already existing in the database, the status is updated.
-Errors are written to the error log.
-Errors writing the filename to the database do not halt ingestion progress.
+    - Errors are written to the error log.
+    - Errors writing the filename to the database do not halt ingestion progress.
 7. The header is read from the file, and decrypted to ensure that it’s encrypted with the correct key.
-If the decryption fails, an error is written to the error log, the message is Nacked, and the message is forwarded to the error queue.
+    - If the decryption fails, an error is written to the error log, the message is Nacked, and the message is forwarded to the error queue.
 8. The header is written to the database.
-Errors are written to the error log.
+    - Errors are written to the error log.
 9. The header is stripped from the file data, and the remaining file data is written to the archive.
-Errors are written to the error log.
+    - Errors are written to the error log.
 10. The size of the archived file is read.
-Errors are written to the error log.
+    - Errors are written to the error log.
 11. The database is updated with the file size, archive path, and archive checksum, and the file is set as *archived*.
-Errors are written to the error log.
-This error does not halt ingestion.
+    - Errors are written to the error log.
+    - This error does not halt ingestion.
 12. A message is sent back to the original RabbitMQ broker containing the upload user, upload file path, database file id, archive file path and checksum of the archived file.
 
 ## Communication

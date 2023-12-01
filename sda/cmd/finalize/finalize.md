@@ -1,6 +1,6 @@
 # finalize Service
 
-Handles the so-called _Accession ID (stable ID)_ to filename mappings from Central EGA.
+Handles the so-called _Accession ID (stable ID)_ to filename mappings from `CentralEGA`.
 At the same time the service fulfills the replication requirement of having distinct backup copies.
 For more information see [Federated EGA Node Operations v2](https://ega-archive.org/assets/files/EGA-Node-Operations-v2.pdf) document.
 
@@ -11,15 +11,18 @@ If a backup location is configured it will perform backup of a file.
 When running, `finalize` reads messages from the configured RabbitMQ queue (commonly: `accession`).
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
-1. The message is validated as valid JSON that matches the `ingestion-accession` schema. If the message can’t be validated it is discarded with an error message in the logs.
+1. The message is validated as valid JSON that matches the `ingestion-accession` schema. 
+    - If the message can’t be validated it is discarded with an error message in the logs.
 2. If the service is configured to perform backups i.e. the `ARCHIVE_` and `BACKUP_` storage backend are set. Archived files will be copied to the backup location.
    1. The file size on disk is requested from the storage system.
    2. The database file size is compared against the disk file size.
    3. A file reader is created for the archive storage file, and a file writer is created for the backup storage file.
 3. The file data is copied from the archive file reader to the backup file writer.
 4. If the type of the `DecryptedChecksums` field in the message is `sha256`, the value is stored.
-5. A new RabbitMQ `complete` message is created and validated against the `ingestion-completion` schema. If the validation fails, an error message is written to the logs.
-6. The file accession ID in the message is marked as *ready* in the database. On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
+5. A new RabbitMQ `complete` message is created and validated against the `ingestion-completion` schema. 
+    - If the validation fails, an error message is written to the logs.
+6. The file accession ID in the message is marked as *ready* in the database. 
+    - On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
 7. The complete message is sent to RabbitMQ. On error, a message is written to the logs.
 8. The original RabbitMQ message is Ack'ed.
 

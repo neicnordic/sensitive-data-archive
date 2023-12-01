@@ -11,11 +11,11 @@ When running, `mapper` reads messages from the configured RabbitMQ queue (common
 For each message, these steps are taken (if not otherwise noted, errors halt progress and the service moves on to the next message):
 
 1. The message is validated as valid JSON that matches the `dataset-mapping` schema.  
-If the message can’t be validated it is discarded with an error message is logged.
+    - If the message can’t be validated it is discarded with an error message is logged.
 2. AccessionIDs from the message are mapped to a datasetID (also in the message) in the database.  
-On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
+    - On error the service sleeps for up to 5 minutes to allow for database recovery, after 5 minutes the message is Nacked, re-queued and an error message is written to the logs.
 3. The uploaded files related to each AccessionID is removed from the inbox  
-If this fails an error will be written to the logs.
+    - If this fails an error will be written to the logs.
 4. The RabbitMQ message is Ack'ed.
 
 ## Communication
