@@ -1,4 +1,4 @@
-FROM rabbitmq:3.12-management-alpine
+FROM rabbitmq:3.12.10-management-alpine
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
