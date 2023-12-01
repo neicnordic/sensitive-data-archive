@@ -93,6 +93,7 @@ jobs:
     if: ${{ needs.tag_release.outputs.tag != '' && needs.push_to_registry.result == 'success' }}
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -105,13 +106,6 @@ jobs:
           python3 -m pip install pybump
         shell: bash
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git switch main
-        shell: bash
-
       - name: Automated Version Bump
         id: version-bump
         run: |
@@ -121,18 +115,21 @@ jobs:
           done
         shell: bash
 
-      - name: Commit latest tags
-        run: |
-          git add -A
-          git status
-          git commit -m "Bump chart version and set appVersion to: ${{ needs.tag_release.outputs.tag }}"
-          git push
-        shell: bash
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3.5
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Bump chart version
+          committer: GitHub <noreply@github.com>
+          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          signoff: false
+          base: main
+          branch: bump
+          delete-branch: true
+          title: '[charts] Bump version'
+          body: |
+            Bump the appVersion to: ${{ needs.tag_release.outputs.tag }}
+          labels: |
+            automated pr
+          team-reviewers: sensitive-data-development-collaboration
+          draft: false
