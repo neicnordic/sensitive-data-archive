@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 			return err
 		}
 
-		query := "SELECT MAX(version) FROM sda.dbschema_version"
+		query := "SELECT MAX(version) FROM sda.dbschema_version;"
 		var dbVersion int
 
 		return db.QueryRow(query).Scan(&dbVersion)

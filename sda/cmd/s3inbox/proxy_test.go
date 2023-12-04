@@ -389,7 +389,7 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 
 	// Check that the file is in the database
 	var fileID string
-	query := "SELECT id FROM sda.files WHERE submission_file_path = $1"
+	query := "SELECT id FROM sda.files WHERE submission_file_path = $1;"
 	err = db.QueryRow(query, filename[1:]).Scan(&fileID)
 	assert.Nil(suite.T(), err, "Failed to query database")
 	assert.NotNil(suite.T(), fileID, "File not found in database")
@@ -397,7 +397,7 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 	// Check that the "registered" status is in the database for this file
 	for _, status := range []string{"registered", "uploaded"} {
 		var exists int
-		query = "SELECT 1 FROM sda.file_event_log WHERE event = $1 AND file_id = $2"
+		query = "SELECT 1 FROM sda.file_event_log WHERE event = $1 AND file_id = $2;"
 		err = db.QueryRow(query, status, fileID).Scan(&exists)
 		assert.Nil(suite.T(), err, "Failed to find '%v' event in database", status)
 		assert.Equal(suite.T(), exists, 1, "File '%v' event does not exist", status)
