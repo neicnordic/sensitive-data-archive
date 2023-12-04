@@ -97,7 +97,7 @@ spec:
         {{- end }}
         ports:
         - name: syncapi
-          containerPort: 8080
+          containerPort: {{ ternary 443 8080  .Values.global.tls.enabled }}
           protocol: TCP
         readinessProbe:
           tcpSocket:
