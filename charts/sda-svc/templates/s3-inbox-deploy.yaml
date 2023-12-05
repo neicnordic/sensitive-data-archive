@@ -188,8 +188,10 @@ spec:
         {{- if.Values.global.auth.jwtPub }}
         - name: SERVER_JWTPUBKEYPATH
           value: {{ include "jwtPath" . }}
-        {{- else }}
-          {{ fail "The global.auth.jwtPub is required for s3Inbox" }}
+        {{- end }}
+        {{- if not .Values.global.auth.resignJwt }}
+        - name: SERVER_JWTPUBKEYURL
+          value: {{ .Values.global.oidc.provider }}{{ .Values.global.oidc.jwkPath }}
         {{- end }}
       {{- if .Values.global.log.format }}
         - name: LOG_FORMAT
