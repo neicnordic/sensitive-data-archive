@@ -86,12 +86,12 @@ These settings control how `ingest` connects to the RabbitMQ message broker.
 - `DB_PASSWORD`: password for the database
 - `DB_DATABASE`: database name
 - `DB_SSLMODE`: The TLS encryption policy to use for database connections, valid options are:
-  - `disable`
-  - `allow`
-  - `prefer`
-  - `require`
-  - `verify-ca`
-  - `verify-full`
+    - `disable`
+    - `allow`
+    - `prefer`
+    - `require`
+    - `verify-ca`
+    - `verify-full`
 
   More information is available
   [in the postgresql documentation](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION)
@@ -113,16 +113,17 @@ The value of these variables define what other variables are read.
 The same variables are available for all storage types, differing by prefix (`ARCHIVE_`, or  `INBOX_`)
 
 if `*_TYPE` is `S3` then the following variables are available:
- - `*_URL`: URL to the S3 system
- - `*_ACCESSKEY`: The S3 access and secret key are used to authenticate to S3,
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
- - `*_SECRETKEY`: The S3 access and secret key are used to authenticate to S3,
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
- - `*_BUCKET`: The S3 bucket to use as the storage root
- - `*_PORT`: S3 connection port (default: `443`)
- - `*_REGION`: S3 region (default: `us-east-1`)
- - `*_CHUNKSIZE`: S3 chunk size for multipart uploads.
- - `*_CACERT`: Certificate Authority (CA) certificate for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
+
+- `*_URL`: URL to the S3 system
+- `*_ACCESSKEY`: The S3 access and secret key are used to authenticate to S3,
+[more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
+- `*_SECRETKEY`: The S3 access and secret key are used to authenticate to S3,
+[more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
+- `*_BUCKET`: The S3 bucket to use as the storage root
+- `*_PORT`: S3 connection port (default: `443`)
+- `*_REGION`: S3 region (default: `us-east-1`)
+- `*_CHUNKSIZE`: S3 chunk size for multipart uploads.
+- `*_CACERT`: Certificate Authority (CA) certificate for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
 
 and if `*_TYPE` is `POSIX`:
  - `*_LOCATION`: POSIX path to use as storage root
@@ -131,10 +132,10 @@ and if `*_TYPE` is `POSIX`:
 
 - `LOG_FORMAT` can be set to `json` to get logs in JSON format. All other values result in text logging.
 - `LOG_LEVEL` can be set to one of the following, in increasing order of severity:
-  - `trace`
-  - `debug`
-  - `info`
-  - `warn` (or `warning`)
-  - `error`
-  - `fatal`
-  - `panic`
+    - `trace`
+    - `debug`
+    - `info`
+    - `warn` (or `warning`)
+    - `error`
+    - `fatal`
+    - `panic`

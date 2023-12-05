@@ -53,10 +53,10 @@ These settings control how `intercept` connects to the RabbitMQ message broker.
 
 - `LOG_FORMAT` can be set to “json” to get logs in json format, all other values result in text logging.
 - `LOG_LEVEL` can be set to one of the following, in increasing order of severity:
-  - `trace`
-  - `debug`
-  - `info`
-  - `warn` (or `warning`)
-  - `error`
-  - `fatal`
-  - `panic`
+    - `trace`
+    - `debug`
+    - `info`
+    - `warn` (or `warning`)
+    - `error`
+    - `fatal`
+    - `panic`
