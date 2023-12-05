@@ -22,7 +22,7 @@ func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
 		return "", errors.New("database schema v4 required for RegisterFile()")
 	}
 
-	query := "SELECT sda.register_file($1, $2)"
+	query := "SELECT sda.register_file($1, $2);"
 
 	var fileID string
 
@@ -41,7 +41,7 @@ func (dbs *SDAdb) UpdateFileEventLog(fileID, event, userID, message string) erro
 		return errors.New("database schema v4 required for UpdateFileEventLog()")
 	}
 
-	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, $2, $3, $4)"
+	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, $2, $3, $4);"
 	_, err := dbs.DB.Exec(query, fileID, event, userID, message)
 
 	return err
@@ -213,7 +213,7 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT header from sda.files WHERE id = $1"
+	const query = "SELECT header from sda.files WHERE id = $1;"
 
 	var hexString string
 	if err := db.QueryRow(query, fileID).Scan(&hexString); err != nil {
@@ -310,7 +310,7 @@ func (dbs *SDAdb) checkAccessionIDExists(accessionID, fileID string) (string, er
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	const sameID = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1 and id = $2"
+	const sameID = "SELECT COUNT(id) FROM sda.files WHERE stable_id = $1 and id = $2;"
 	var same int
 	if err := db.QueryRow(sameID, accessionID, fileID).Scan(&same); err != nil {
 		return "", err
@@ -513,7 +513,7 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 // GetHeaderForStableID retrieves the file header by using stable id
 func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 	dbs.checkAndReconnectIfNeeded()
-	const query = "SELECT header from sda.files WHERE stable_id = $1"
+	const query = "SELECT header from sda.files WHERE stable_id = $1;"
 	var hexString string
 	if err := dbs.DB.QueryRow(query, stableID).Scan(&hexString); err != nil {
 		return nil, err
