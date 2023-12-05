@@ -19,3 +19,4 @@ There are also three additional support services:
 
 1. [Intercept](cmd/intercept/intercept.md) relays messages from `CentralEGA` to the system.
 2. [s3inbox](cmd/s3inbox/s3inbox.md) proxies uploads to the an S3 compatible storage backend.
+3. [syncapi](cmd/syncapi/syncapi.md) The sync-api service is used in the [Bigpicture](https://bigpicture.eu/) project for mirroring data between two installations of SDA.
