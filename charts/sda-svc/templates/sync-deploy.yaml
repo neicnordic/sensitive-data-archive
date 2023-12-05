@@ -117,8 +117,6 @@ spec:
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
         - name: C4GH_SYNCPUBKEYPATH
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.syncPubKey }}"
-        - name: BROKER_DURABLE
-          value: {{ .Values.global.broker.durable | quote }}
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE

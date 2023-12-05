@@ -82,8 +82,6 @@ spec:
         - name: BROKER_VERIFYPEER
           value: {{ .Values.global.broker.verifyPeer | quote }}
       {{- end }}
-        - name: BROKER_DURABLE
-          value: "true"
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange | quote}}
         - name: BROKER_HOST
