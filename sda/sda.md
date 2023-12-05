@@ -5,7 +5,7 @@ Repository:
 [neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 
 `sda` repository consists of a suite of services which are part of [NeIC Sensitive Data Archive](https://neic-sda.readthedocs.io/en/latest/) and implements the components required for data submission.
-It can be used as part of a [Federated EGA](https://ega-archive.org/federated) or as an isolated Sensitive Data Archive.
+It can be used as part of a [Federated EGA](https://ega-archive.org/federated) or as a stand-alone (isolated) Sensitive Data Archive.
 `sda` was built with support for both S3 and POSIX storage.
 
 The SDA submission pipeline has four main steps:
