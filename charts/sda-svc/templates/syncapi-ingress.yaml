@@ -1,4 +1,4 @@
-{{- if and (ne "" .Values.global.sync.api.pass) (ne "" .Values.global.sync.api.user) }}
+{{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
 {{- if and .Values.global.ingress.deploy }}
 apiVersion: networking.k8s.io/v1

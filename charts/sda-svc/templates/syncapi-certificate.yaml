@@ -1,4 +1,4 @@
-{{- if and (ne "" .Values.global.sync.api.pass) (ne "" .Values.global.sync.api.user) }}
+{{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 apiVersion: cert-manager.io/v1

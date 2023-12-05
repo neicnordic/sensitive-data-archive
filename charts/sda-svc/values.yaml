@@ -518,7 +518,7 @@ sync:
   tls:
     secretName: ""
 
-sync-api:
+syncapi:
   name: sync-api
   replicaCount: 1
   resources:
