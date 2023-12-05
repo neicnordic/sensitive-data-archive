@@ -1,3 +1,4 @@
+{{- if eq "isolated" .Values.global.schemaType }}
 {{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: v1
@@ -14,5 +15,6 @@ spec:
     protocol: TCP
   selector:
     app: {{ template "sda.fullname" . }}-syncapi
+{{- end }}
 {{- end }}
 {{- end }}

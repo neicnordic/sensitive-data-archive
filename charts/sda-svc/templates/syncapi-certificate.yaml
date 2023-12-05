@@ -1,3 +1,4 @@
+{{- if eq "isolated" .Values.global.schemaType }}
 {{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
@@ -38,3 +39,4 @@ spec:
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- end }}

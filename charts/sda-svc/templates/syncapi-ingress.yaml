@@ -1,3 +1,4 @@
+{{- if eq "isolated" .Values.global.schemaType }}
 {{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
 {{- if and .Values.global.ingress.deploy }}
@@ -46,6 +47,7 @@ spec:
   - hosts:
     - {{ .Values.global.ingress.hostName.syncapi }}
     secretName: {{ if .Values.global.ingress.secretNames.syncapi }}{{ .Values.global.ingress.secretNames.syncapi }}{{- else }}"{{ template "sda.fullname" . }}-ingress-syncapi"{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
