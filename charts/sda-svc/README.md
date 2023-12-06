@@ -62,7 +62,7 @@ Parameter | Description | Default
 `global.archive.volumePath` | Path to the mounted `posix` volume. |`/archive`
 `global.archive.nfsServer` | URL or IP address to a NFS server. |`""`
 `global.archive.nfsPath` | Path on the NFS server for the archive. |`""`
-`global.backupArchive.storageType` | Storage type for the backup of the data archive, available options are `s3` and `posix`. |`s3`
+`global.backupArchive.storageType` | Storage type for the backup of the data archive, available options are `s3` and `posix`. |`null`
 `global.backupArchive.s3Url` | URL to S3 backup archive instance. |`""`
 `global.backupArchive.s3Bucket` | S3 backup archive bucket. |`""`
 `global.backupArchive.s3Region` | S3 backup archive region. |`us-east-1`
@@ -135,6 +135,7 @@ Parameter | Description | Default
 `global.inbox.nfsPath` | Path on the NFS server for the inbox. |`""`
 `global.inbox.existingClaim` | Existing volume to use for the `posix` inbox. | `""`
 `global.inbox.s3Url` | URL to S3 inbox instance. |`""`
+`global.inbox.s3Port` | Port that the S3 inbox is available on. |`443`
 `global.inbox.s3Bucket` | S3 inbox bucket. |`""`
 `global.inbox.s3Region` | S3 inbox region. |`""`
 `global.inbox.s3ChunkSize` | S3 chunk size in MB. |`15`
@@ -142,6 +143,18 @@ Parameter | Description | Default
 `global.inbox.s3SecretKey` | Secret key to S3 inbox. |`null`
 `global.inbox.s3CaFile` | CA certificate to use if the S3 inbox is internal. |`null`
 `global.inbox.s3ReadyPath` | Endpoint to verify that the inbox is respondig. |`""`
+`global.sync.api.password` | Password for authenticating to the syncAPI server | `null`
+`global.sync.api.user` | User for authenticating to the syncAPI server | `null`
+`global.sync.centerPrefix` | Prefix for locally generated datasets | `null`
+`global.sync.destination.storageType` | Storage type for the sync destination, currently only supports S3 | `s3`
+`global.sync.destination.s3Accesskey` | Access key to S3 sync destination | `null`
+`global.sync.destination.s3Bucket` | sync destination bucket | `null`
+`global.sync.destination.s3Port` | Port that the S3 sync destination instance is available on | `443`
+`global.sync.destination.s3Secretkey` | Secret key to S3 sync destination | `null`
+`global.sync.destination.s3url` | URL to S3 sync destination instance. | `null`
+`global.sync.remote.host` | URL to jthe remote syncAPI host | `null`
+`global.sync.remote.password` | Password for connectiong to the remote syncAPI host | `null`
+`global.sync.remote.user` | Username for connectiong to the remote syncAPI host | `null`
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
@@ -152,10 +165,6 @@ If no shared credentials for the message broker and database are used these shou
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`credentials.sync.dbUser` | Databse user for sync | `""`
-`credentials.sync.dbPassword` | Database password for sync | `""`
-`credentials.sync.mqUser` | Broker user for sync | `""`
-`credentials.sync.mqPassword` | Broker password for sync | `""`
 `credentials.doa.dbUser` | Databse user for doa | `""`
 `credentials.doa.dbPassword` | Database password for doa| `""`
 `credentials.download.dbUser` | Databse user for download | `""`
@@ -172,6 +181,12 @@ Parameter | Description | Default
 `credentials.ingest.mqPassword` | Broker password for ingest | `""`
 `credentials.intercept.mqUser` | Broker user for intercept  | `""`
 `credentials.intercept.mqPassword` | Broker password for intercept | `""`
+`credentials.sync.dbUser` | Databse user for sync | `""`
+`credentials.sync.dbPassword` | Database password for sync | `""`
+`credentials.sync.mqUser` | Broker user for sync | `""`
+`credentials.sync.mqPassword` | Broker password for sync | `""`
+`credentials.syncapi.mqUser` | Broker user for sync | `""`
+`credentials.syncapi.mqPassword` | Broker password for sync | `""`
 `credentials.test.dbUser` | Databse user for test | `""`
 `credentials.test.dbPassword` | Database password for test | `""`
 `credentials.test.mqUser` | Broker user for test | `""`
@@ -246,6 +261,18 @@ Parameter | Description | Default
 `sftpInbox.resources.requests.cpu` | CPU request for sftpInbox container. |`100m`
 `sftpInbox.resources.limits.memory` | Memory limit for sftpInbox container. |`256Mi`
 `sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. |`250m`
+`sync.replicaCount`| desired number of sync containers | `1`
+`sync.annotations` | Specific annotation for the sync pod | `{}`
+`sync.resources.requests.memory` | Memory request for sync container. |`128Mi`
+`sync.resources.requests.cpu` | CPU request for sync container. |`100m`
+`sync.resources.limits.memory` | Memory limit for sync container. |`512Mi`
+`sync.resources.limits.cpu` | CPU limit for sync container. |`500m`
+`syncAPI.replicaCount`| desired number of syncAPI containers | `1`
+`syncAPI.annotations` | Specific annotation for the syncAPI pod | `{}`
+`syncAPI.resources.requests.memory` | Memory request for syncAPI container. |`64Mi`
+`syncAPI.resources.requests.cpu` | CPU request for syncAPI container. |`100m`
+`syncAPI.resources.limits.memory` | Memory limit for syncAPI container. |`256Mi`
+`syncAPI.resources.limits.cpu` | CPU limit for syncAPI container. |`500m`
 `verify.replicaCount`| desired number of verify containers | `1`
 `verify.annotations` | Specific annotation for the verify pod | `{}`
 `verify.resources.requests.memory` | Memory request for verify container. |`128Mi`
