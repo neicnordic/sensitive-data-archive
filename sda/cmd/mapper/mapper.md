@@ -65,12 +65,12 @@ These settings control how `mapper` connects to the RabbitMQ message broker.
 - `DB_PASSWORD`: password for the database
 - `DB_DATABASE`: database name
 - `DB_SSLMODE`: The TLS encryption policy to use for database connections, valid options are:
-  - `disable`
-  - `allow`
-  - `prefer`
-  - `require`
-  - `verify-ca`
-  - `verify-full`
+    - `disable`
+    - `allow`
+    - `prefer`
+    - `require`
+    - `verify-ca`
+    - `verify-full`
 
   More information is available in the [postgresql documentation](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION)  
   Note that if `DB_SSLMODE` is set to anything but `disable`, then `DB_CACERT` needs to be set, and if set to `verify-full`, then `DB_CLIENTCERT`, and `DB_CLIENTKEY` must also be set.
@@ -109,10 +109,10 @@ and if `*_TYPE` is `POSIX`:
 
 - `LOG_FORMAT` can be set to `json` to get logs in JSON format. All other values result in text logging.
 - `LOG_LEVEL` can be set to one of the following, in increasing order of severity:
-  - `trace`
-  - `debug`
-  - `info`
-  - `warn` (or `warning`)
-  - `error`
-  - `fatal`
-  - `panic`
+    - `trace`
+    - `debug`
+    - `info`
+    - `warn` (or `warning`)
+    - `error`
+    - `fatal`
+    - `panic`
