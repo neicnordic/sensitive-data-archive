@@ -8,13 +8,13 @@ help:
 	@echo 'This Makefile is designed to make the development work go smoothly.'
 	@echo 'In-depth description of how to use this Makefile can be found in the README.md'
 
-bootstrap: go-version-check
+bootstrap: go-version-check docker-version-check
 		@for dir in sda sda-auth sda-download; do \
 			cd $$dir; \
 			go get ./...; \
 			cd ..; \
 		done
-		if ! command -v curl >/dev/null; then \
+		@if ! command -v curl >/dev/null; then \
 			echo "Can't install golangci-lint because curl is missing."; \
 			exit 1; \
 		fi
@@ -51,6 +51,21 @@ go-version-check:
 	]]; then\
 		echo "SDA requires go $${GO_VERSION_MIN} to build; found $${GO_VERSION}.";\
 		exit 1;\
+	fi;
+
+docker-version-check:
+	@DOCKER_VERSION=$$(docker version -f "{{.Server.Version}}" | cut -d'.' -f 1); \
+	DOCKER_COMPOSE_VERSION=$$(docker compose version | cut -d'v' -f 3 | cut -d'.' -f 1); \
+	if [ $${DOCKER_VERSION} -lt 24 ]; then \
+		echo "Docker version less than 24 can't continue"; \
+		exit 1;\
+	fi; \
+	if [ $${DOCKER_COMPOSE_VERSION} -lt 2 ]; then \
+		echo "Docker compose version less than 2 can't continue"; \
+		exit 1;\
+	fi; \
+	if [ ! $$(docker buildx version | cut -d' ' -f 2) ]; then \
+		echo "Docker buildx does not exist can't continue"; \
 	fi;
 
 
