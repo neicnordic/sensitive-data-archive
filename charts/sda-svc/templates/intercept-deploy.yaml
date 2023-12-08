@@ -1,4 +1,4 @@
-{{- if .Values.intercept.deploy}}
+{{- if eq "federated".Values.global.schemaType }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: apps/v1
 kind: Deployment
