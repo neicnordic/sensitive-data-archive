@@ -19,7 +19,7 @@ BEGIN
     );
 
     INSERT INTO sda.dataset_events(id,title,description)
-    VALUES (10, 'registered', 'Register a dataset to recieve file accession IDs mappings.'),
+    VALUES (10, 'registered', 'Register a dataset to receive file accession IDs mappings.'),
            (20, 'released'  , 'The dataset is released on this date'),
            (30, 'deprecated', 'The dataset is deprecated on this date');
 
