@@ -18,7 +18,7 @@ for host in migrate postgres; do
     header="637279707434676801000000010000006c00000000000000"
     dbheader=$(psql -U verify -h "$host" -d sda -At -c "SELECT header from sda.files WHERE id = '$fileID';")
     if [ "$dbheader" != "$header" ]; then
-        echo "wrong header recieved"
+        echo "wrong header received"
         exit 1
     fi
 

@@ -8,7 +8,7 @@ The sync service facilitates replication of data and metadata between the nodes 
 
 When enabled the service will perform the following tasks:
 
-1. Upon recieving a POST request with JSON data to the `/dataset` route.
+1. Upon receiving a POST request with JSON data to the `/dataset` route.
    1. Parse the JSON blob and validate it against the `file-sync` schema.
    2. Build and send messages to start ingestion of files.
    3. Build and send messages to assign stableIDs to files.
@@ -50,7 +50,7 @@ These settings control how sync connects to the RabbitMQ message broker.
 - `BROKER_PASSWORD`: password to connect to rabbitmq
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
 
-The default routing keys for sending ingestion, accession and maping messages can be overridden by setting the following values:
+The default routing keys for sending ingestion, accession and mapping messages can be overridden by setting the following values:
 
 - `SYNC_API_ACCESSIONROUTING`
 - `SYNC_API_INGESTROUTING`
