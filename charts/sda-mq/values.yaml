@@ -4,7 +4,7 @@ global:
   ingress:
     # extra annotations for the ingress
     annotations: {}
-    hostname: ""
+    hostName: ""
     ingressClassName: "nginx"
     issuer: ""
     clusterIssuer: ""
