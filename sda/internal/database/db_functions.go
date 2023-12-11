@@ -75,26 +75,26 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
-func (dbs *SDAdb) UpdateFileStatus(fileUUID, event, corrID, user, message string) error {
+func (dbs *SDAdb) UpdateFileStatus(fileUUID, event, corrID, user, details, message string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.updateFileStatus(fileUUID, event, corrID, user, message)
+		err = dbs.updateFileStatus(fileUUID, event, corrID, user, details, message)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) updateFileStatus(fileUUID, event, corrID, user, message string) error {
+func (dbs *SDAdb) updateFileStatus(fileUUID, event, corrID, user, details, message string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES($1, $2, $3, $4, $5);"
+	const query = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, details, message) VALUES($1, $2, $3, $4, $5, $6);"
 
-	result, err := db.Exec(query, fileUUID, event, corrID, user, message)
+	result, err := db.Exec(query, fileUUID, event, corrID, user, details, message)
 	if err != nil {
 		return err
 	}

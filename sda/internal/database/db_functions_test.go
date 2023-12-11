@@ -71,7 +71,7 @@ func (suite *DatabaseTests) TestGetFileID() {
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}")
+	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to update file status")
 
 	fID, err := db.GetFileID(corrID)
@@ -89,11 +89,11 @@ func (suite *DatabaseTests) TestUpdateFileStatus() {
 
 	corrID := uuid.New().String()
 	// Attempt to mark a file that doesn't exist as uploaded
-	err = db.UpdateFileStatus("00000000-0000-0000-0000-000000000000", "uploaded", corrID, "testuser", "{}")
+	err = db.UpdateFileStatus("00000000-0000-0000-0000-000000000000", "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NotNil(suite.T(), err, "Unknown file could be marked as uploaded in database")
 
 	// mark file as uploaded
-	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}")
+	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to set file as uploaded in database")
 
 	exists := false
@@ -148,7 +148,7 @@ func (suite *DatabaseTests) TestGetFileStatus() {
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	err = db.UpdateFileStatus(fileID, "downloaded", corrID, "testuser", "{}")
+	err = db.UpdateFileStatus(fileID, "downloaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to set file as downloaded in database")
 
 	status, err := db.GetFileStatus(corrID)
