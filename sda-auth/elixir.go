@@ -19,7 +19,7 @@ type ElixirIdentity struct {
 	Token                string
 	Profile              string
 	Email                string
-	EdupersonEntitlement string
+	EdupersonEntitlement []string
 	ExpDate              string
 }
 
@@ -93,7 +93,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 		PassportClaim        []string `json:"ga4gh_passport_v1"`
 		ProfileClaim         string   `json:"name"`
 		EmailClaim           string   `json:"email"`
-		EdupersonEntitlement string   `json:"eduperson_entitlement"`
+		EdupersonEntitlement []string `json:"eduperson_entitlement"`
 	}
 	if err := userInfo.Claims(&claims); err != nil {
 		log.Error("Failed to get custom claims")
