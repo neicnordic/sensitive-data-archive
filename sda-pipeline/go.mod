@@ -3,7 +3,7 @@ module sda-pipeline
 go 1.20
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.5.0
+	github.com/DATA-DOG/go-sqlmock v1.5.1
 	github.com/aws/aws-sdk-go v1.47.4
 	github.com/gliderlabs/ssh v0.3.5
 	github.com/google/uuid v1.4.0
