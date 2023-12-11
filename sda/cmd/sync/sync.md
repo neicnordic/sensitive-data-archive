@@ -1,4 +1,4 @@
-# Sync
+# sync Service
 
 The sync service is used in the [Bigpicture](https://bigpicture.eu/) project.
 
@@ -8,21 +8,21 @@ Copies files from the archive to the sync destination, including the header so t
 
 The sync service copies files from the archive storage to sync storage.
 
-When running, sync reads messages from the "mapping_stream" RabbitMQ queue.  
+When running, sync reads messages from the `mapping_stream` RabbitMQ queue.  
 For each message, these steps are taken (if not otherwise noted, errors halts progress, the message is Nack'ed, and the service moves on to the next message):
 
 1. The message is validated as valid JSON that matches the "dataset-mapping" schema. If the message can’t be validated it is sent to the error queue for later analysis.
 2. Checks where the dataset is created by comparing the center prefix on the dataset ID, if it is a remote ID processing stops.
 3. For each stable ID in the dataset the following is performed:
-   1. The archive file path and file size is fetched from the database.
-   2. The file size on disk is requested from the storage system.
-   3. A file reader is created for the archive storage file, and a file writer is created for the sync storage file.
-      1. The header is read from the database.
-      2. The header is decrypted.
-      3. The header is reencrypted with the destinations public key.
-      4. The header is written to the sync file writer.
-   4. The file data is copied from the archive file reader to the sync file writer.
-4. Once all files have been copied to the destination a JSON struct is created acording to `file-sync` schema.
+    1. The archive file path and file size is fetched from the database.
+    2. The file size on disk is requested from the storage system.
+    3. A file reader is created for the archive storage file, and a file writer is created for the sync storage file.
+        1. The header is read from the database.
+        2. The header is decrypted.
+        3. The header is reencrypted with the destinations public key.
+        4. The header is written to the sync file writer.
+    4. The file data is copied from the archive file reader to the sync file writer.
+4. Once all files have been copied to the destination a JSON structure is created according to `file-sync` schema.
 5. A POST message is sent to the remote api host with the JSON data.
 6. The message is Ack'ed.
 
@@ -88,20 +88,23 @@ These settings control how sync connects to the RabbitMQ message broker.
 - `DB_PASSWORD`: password for the database
 - `DB_DATABASE`: database name
 - `DB_SSLMODE`: The TLS encryption policy to use for database connections. Valid options are:
-  - `disable`
-  - `allow`
-  - `prefer`
-  - `require`
-  - `verify-ca`
-  - `verify-full`
+    - `disable`
+    - `allow`
+    - `prefer`
+    - `require`
+    - `verify-ca`
+    - `verify-full`
 
-   More information is available [in the postgresql documentation](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION)
+  More information is available
+  [in the postgresql documentation](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION)
 
-Note that if `DB_SSLMODE` is set to anything but `disable`, then `DB_CACERT` needs to be set, and if set to `verify-full`, then `DB_CLIENTCERT`, and `DB_CLIENTKEY` must also be set
+  Note that if `DB_SSLMODE` is set to anything but `disable`, then `DB_CACERT` needs to be set,
+  and if set to `verify-full`, then `DB_CLIENTCERT`, and `DB_CLIENTKEY` must also be set.
 
 - `DB_CLIENTKEY`: key-file for the database client certificate
 - `DB_CLIENTCERT`: database client certificate file
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
+
 
 ### Storage settings
 
@@ -130,7 +133,7 @@ and if `*_TYPE` is `SFTP`:
 
 - `*_HOST`: URL to the SFTP server
 - `*_PORT`: Port of the SFTP server to connect to
-- `*_USERNAME`: Username connectin to the SFTP server
+- `*_USERNAME`: Username connection to the SFTP server
 - `*_HOSTKEY`: The SFTP server's public key
 - `*_PEMKEYPATH`: Path to the ssh private key used to connect to the SFTP server
 - `*_PEMKEYPASS`: Passphrase for the ssh private key
@@ -139,11 +142,11 @@ and if `*_TYPE` is `SFTP`:
 
 - `LOG_FORMAT` can be set to “json” to get logs in json format. All other values result in text logging
 - `LOG_LEVEL` can be set to one of the following, in increasing order of severity:
-  - `trace`
-  - `debug`
-  - `info`
-  - `warn` (or `warning`)
-  - `error`
-  - `fatal`
-  - `panic`
+    - `trace`
+    - `debug`
+    - `info`
+    - `warn` (or `warning`)
+    - `error`
+    - `fatal`
+    - `panic`
 
