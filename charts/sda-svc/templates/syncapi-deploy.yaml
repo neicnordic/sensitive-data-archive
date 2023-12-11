@@ -127,11 +127,23 @@ spec:
           value: {{ include "tlsPath" . }}/tls.key
       {{- end }}
     {{- end }}
-        {{- if .Values.global.tls.enabled}}
+        {{- if .Values.global.tls.enabled }}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt
         - name: SERVER_KEY
           value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+        {{- if .Values.global.sync.api.accessionRouting }}
+        - name: SYNC_API_ACCESSIONROUTING
+          value: {{ .Values.global.sync.api.accessionRouting | quote }}
+        {{- end }}
+        {{- if .Values.global.sync.api.ingestRouting }}
+        - name: SYNC_API_INGESTROUTING
+          value: {{ .Values.global.sync.api.ingestRouting | quote }}
+        {{- end }}
+        {{- if .Values.global.sync.api.mappingRouting }}
+        - name: SYNC_API_MAPPINGROUTING
+          value: {{ .Values.global.sync.api.mappingRouting | quote }}
         {{- end }}
         ports:
         - name: syncapi
