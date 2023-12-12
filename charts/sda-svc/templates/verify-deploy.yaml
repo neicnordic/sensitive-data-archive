@@ -91,28 +91,6 @@ spec:
         - name: ARCHIVE_LOCATION
           value: "{{ .Values.global.archive.volumePath }}"
       {{- end }}
-        - name: INBOX_TYPE
-      {{- if eq "s3" .Values.global.inbox.storageType }}
-          value: "s3"
-        - name: INBOX_BUCKET
-          value: {{ required "S3 inbox bucket missing" .Values.global.inbox.s3Bucket }}
-      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
-        - name: INBOX_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-      {{- end }}
-        - name: INBOX_REGION
-          value: {{ default "us-east-1" .Values.global.inbox.s3Region }}
-        - name: INBOX_URL
-          value: {{ required "S3 inbox URL missing" .Values.global.inbox.s3Url }}
-      {{- if .Values.global.inbox.s3Port }}
-        - name: INBOX_PORT
-          value: {{ .Values.global.inbox.s3Port | quote }}
-      {{- end }}
-      {{- else }}
-          value: "posix"
-        - name: INBOX_LOCATION
-          value: "{{ .Values.global.inbox.path }}/"
-      {{- end }}
         - name: BROKER_SSL
           value: {{ .Values.global.tls.enabled | quote }}
       {{- if .Values.global.tls.enabled }}
@@ -188,18 +166,6 @@ spec:
               name: {{ template "sda.fullname" . }}-s3archive-keys
               key: s3ArchiveSecretKey
         {{- end }}
-        {{- if eq "s3" .Values.global.inbox.storageType }}
-        - name: INBOX_ACCESSKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3inbox-keys
-              key: s3InboxAccessKey
-        - name: INBOX_SECRETKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3inbox-keys
-              key: s3InboxSecretKey
-        {{- end }}
         - name: BROKER_PASSWORD
           valueFrom:
               secretKeyRef:
@@ -244,10 +210,6 @@ spec:
         - name: archive
           mountPath: {{ .Values.global.archive.volumePath | quote }}
         {{- end }}
-        {{- if eq "posix" .Values.global.inbox.storageType }}
-        - name: inbox
-          mountPath: {{ .Values.global.inbox.path | quote }}
-        {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
@@ -285,17 +247,6 @@ spec:
           nfs:
             server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
             path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-        {{- end }}
-      {{- end }}
-      {{- if eq "posix" .Values.global.inbox.storageType }}
-        - name: inbox
-        {{- if .Values.global.inbox.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.inbox.existingClaim }}
-        {{- else }}
-          nfs:
-            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
-            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
         {{- end }}
       {{- end }}
       restartPolicy: Always
