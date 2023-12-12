@@ -17,7 +17,7 @@ jobs:
       packages: write
     steps:
       - name: Delete 'PR' containers older than one month
-        uses: snok/container-retention-policy@v2.1.3
+        uses: snok/container-retention-policy@v2.2.1
         with:
           image-names: sensitive-data-archive
           skip-tags: v*
