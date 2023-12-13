@@ -152,9 +152,9 @@ Parameter | Description | Default
 `global.sync.destination.s3Port` | Port that the S3 sync destination instance is available on | `443`
 `global.sync.destination.s3Secretkey` | Secret key to S3 sync destination | `null`
 `global.sync.destination.s3url` | URL to S3 sync destination instance. | `null`
-`global.sync.remote.host` | URL to jthe remote syncAPI host | `null`
-`global.sync.remote.password` | Password for connectiong to the remote syncAPI host | `null`
-`global.sync.remote.user` | Username for connectiong to the remote syncAPI host | `null`
+`global.sync.remote.host` | URL to the remote syncAPI host | `null`
+`global.sync.remote.password` | Password for connecting to the remote syncAPI host | `null`
+`global.sync.remote.user` | Username for connecting to the remote syncAPI host | `null`
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
@@ -165,33 +165,33 @@ If no shared credentials for the message broker and database are used these shou
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`credentials.doa.dbUser` | Databse user for doa | `""`
+`credentials.doa.dbUser` | Database user for doa | `""`
 `credentials.doa.dbPassword` | Database password for doa| `""`
-`credentials.download.dbUser` | Databse user for download | `""`
+`credentials.download.dbUser` | Database user for download | `""`
 `credentials.download.dbPassword` | Database password for download| `""`
-`credentials.finalize.dbUser` | Databse user for finalize | `""`
+`credentials.finalize.dbUser` | Database user for finalize | `""`
 `credentials.finalize.dbPassword` | Database password for finalize | `""`
 `credentials.finalize.mqUser` | Broker user for finalize | `""`
 `credentials.finalize.mqPassword` | Broker password for finalize | `""`
 `credentials.inbox.mqUser` | Broker user for inbox | `""`
 `credentials.inbox.mqPassword` | Broker password for inbox | `""`
-`credentials.ingest.dbUser` | Databse user for ingest | `""`
+`credentials.ingest.dbUser` | Database user for ingest | `""`
 `credentials.ingest.dbPassword` | Database password for ingest | `""`
 `credentials.ingest.mqUser` | Broker user for ingest  | `""`
 `credentials.ingest.mqPassword` | Broker password for ingest | `""`
 `credentials.intercept.mqUser` | Broker user for intercept  | `""`
 `credentials.intercept.mqPassword` | Broker password for intercept | `""`
-`credentials.sync.dbUser` | Databse user for sync | `""`
+`credentials.sync.dbUser` | Database user for sync | `""`
 `credentials.sync.dbPassword` | Database password for sync | `""`
 `credentials.sync.mqUser` | Broker user for sync | `""`
 `credentials.sync.mqPassword` | Broker password for sync | `""`
 `credentials.syncapi.mqUser` | Broker user for sync | `""`
 `credentials.syncapi.mqPassword` | Broker password for sync | `""`
-`credentials.test.dbUser` | Databse user for test | `""`
+`credentials.test.dbUser` | Database user for test | `""`
 `credentials.test.dbPassword` | Database password for test | `""`
 `credentials.test.mqUser` | Broker user for test | `""`
 `credentials.test.mqPassword` | Broker password for test | `""`
-`credentials.verify.dbUser` | Databse user for verify | `""`
+`credentials.verify.dbUser` | Database user for verify | `""`
 `credentials.verify.dbPassword` | Database password for verify | `""`
 `credentials.verify.mqUser` | Broker user for verify | `""`
 `credentials.verify.mqPassword` | Broker password for verify | `""`
