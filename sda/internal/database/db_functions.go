@@ -31,22 +31,6 @@ func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
 	return fileID, err
 }
 
-// UpdateFileEventLog updates the status in of the file in the database.
-// The message parameter is the rabbitmq message sent on file upload.
-func (dbs *SDAdb) UpdateFileEventLog(fileID, event, userID, message string) error {
-
-	dbs.checkAndReconnectIfNeeded()
-
-	if dbs.Version < 4 {
-		return errors.New("database schema v4 required for UpdateFileEventLog()")
-	}
-
-	query := "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES ($1, $2, $3, $4);"
-	_, err := dbs.DB.Exec(query, fileID, event, userID, message)
-
-	return err
-}
-
 func (dbs *SDAdb) GetFileID(corrID string) (string, error) {
 	var (
 		err   error
@@ -75,20 +59,22 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
-func (dbs *SDAdb) UpdateFileStatus(fileUUID, event, corrID, user, details, message string) error {
+// UpdateFileEventLog updates the status in of the file in the database.
+// The message parameter is the rabbitmq message sent on file upload.
+func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.updateFileStatus(fileUUID, event, corrID, user, details, message)
+		err = dbs.updateFileEventLog(fileUUID, event, corrID, user, details, message)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) updateFileStatus(fileUUID, event, corrID, user, details, message string) error {
+func (dbs *SDAdb) updateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB

@@ -185,7 +185,7 @@ func main() {
 			}
 
 			// Mark file as "ready"
-			if err := db.UpdateFileStatus(fileID, "ready", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
+			if err := db.UpdateFileEventLog(fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
 				log.Errorf("set status ready failed, reason: (%v)", err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
@@ -253,8 +253,8 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	// Mark file as "backed up"
-	if err := db.UpdateFileStatus(fileUUID, "backed up", delivered.CorrelationId, "finalize", string(delivered.Body)); err != nil {
-		return fmt.Errorf("UpdateFileStatus failed, reason: (%v)", err)
+	if err := db.UpdateFileEventLog(fileUUID, "backed up", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
+		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
 
 	log.Debug("Backup completed")

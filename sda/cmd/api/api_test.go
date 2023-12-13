@@ -454,7 +454,7 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	corrID := uuid.New().String()
 
 	latestStatus := "uploaded"
-	err = Conf.API.DB.UpdateFileStatus(fileID, latestStatus, corrID, suite.User, "{}")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, latestStatus, corrID, suite.User, "{}", "{}")
 	assert.NoError(suite.T(), err, "got (%v) when trying to update file status")
 
 	resp, err = client.Do(req)
@@ -470,7 +470,7 @@ func (suite *TestSuite) TestAPIGetFiles() {
 
 	// Update the file's status and make sure only the lastest status is listed
 	latestStatus = "ready"
-	err = Conf.API.DB.UpdateFileStatus(fileID, latestStatus, corrID, suite.User, "{}")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, latestStatus, corrID, suite.User, "{}", "{}")
 	assert.NoError(suite.T(), err, "got (%v) when trying to update file status")
 
 	resp, err = client.Do(req)

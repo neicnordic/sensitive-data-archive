@@ -187,7 +187,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			}
 
 			log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
-			err = p.database.UpdateFileStatus(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", string(jsonMessage))
+			err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
 			if err != nil {
 				log.Error(err)
 			}

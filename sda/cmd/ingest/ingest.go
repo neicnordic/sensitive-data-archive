@@ -148,7 +148,7 @@ func main() {
 					continue
 				}
 
-				if err := db.UpdateFileStatus(fileUUID, "disabled", delivered.CorrelationId, "ingest", "", string(delivered.Body)); err != nil {
+				if err := db.UpdateFileEventLog(fileUUID, "disabled", delivered.CorrelationId, "ingest", "{}", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 					if err = delivered.Nack(false, false); err != nil {
 						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
@@ -196,7 +196,7 @@ func main() {
 						continue
 					}
 
-					if err = db.UpdateFileStatus(fileInfo.Path, "enabled", delivered.CorrelationId, "ingest", "", string(delivered.Body)); err != nil {
+					if err = db.UpdateFileEventLog(fileInfo.Path, "enabled", delivered.CorrelationId, "ingest", "{}", string(delivered.Body)); err != nil {
 						log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
@@ -307,7 +307,7 @@ func main() {
 					continue
 				}
 
-				if err = db.UpdateFileStatus(fileID, "submitted", delivered.CorrelationId, message.User, "", string(delivered.Body)); err != nil {
+				if err = db.UpdateFileEventLog(fileID, "submitted", delivered.CorrelationId, message.User, "{}", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 				}
 

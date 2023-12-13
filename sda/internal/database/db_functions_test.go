@@ -38,31 +38,6 @@ func (suite *DatabaseTests) TestRegisterFile() {
 
 }
 
-// TestMarkFileAsUploaded tests that MarkFileAsUploaded() behaves as intended
-func (suite *DatabaseTests) TestUpdateFileEventLog() {
-	// create database connection
-	db, err := NewSDAdb(suite.dbConf)
-	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
-
-	// register a file in the database
-	fileID, err := db.RegisterFile("/testuser/file2.c4gh", "testuser")
-	assert.NoError(suite.T(), err, "failed to register file in database")
-
-	// Attempt to mark a file that doesn't exist as uploaded
-	err = db.UpdateFileEventLog("00000000-0000-0000-0000-000000000000", "uploaded", "testuser", "{}")
-	assert.NotNil(suite.T(), err, "Unknown file could be marked as uploaded in database")
-
-	// mark file as uploaded
-	err = db.UpdateFileEventLog(fileID, "uploaded", "testuser", "{}")
-	assert.NoError(suite.T(), err, "failed to set file as uploaded in database")
-
-	exists := false
-	// check that there is an "uploaded" file event connected to the file
-	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='uploaded')", fileID).Scan(&exists)
-	assert.NoError(suite.T(), err, "Failed to check if uploaded file event exists")
-	assert.True(suite.T(), exists, "UpdateFileEventLog() did not insert a row into sda.file_event_log with id: "+fileID)
-}
-
 func (suite *DatabaseTests) TestGetFileID() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
@@ -71,7 +46,7 @@ func (suite *DatabaseTests) TestGetFileID() {
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}", "{}")
+	err = db.UpdateFileEventLog(fileID, "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to update file status")
 
 	fID, err := db.GetFileID(corrID)
@@ -79,7 +54,7 @@ func (suite *DatabaseTests) TestGetFileID() {
 	assert.Equal(suite.T(), fileID, fID)
 }
 
-func (suite *DatabaseTests) TestUpdateFileStatus() {
+func (suite *DatabaseTests) TestUpdateFileEventLog() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
@@ -89,11 +64,11 @@ func (suite *DatabaseTests) TestUpdateFileStatus() {
 
 	corrID := uuid.New().String()
 	// Attempt to mark a file that doesn't exist as uploaded
-	err = db.UpdateFileStatus("00000000-0000-0000-0000-000000000000", "uploaded", corrID, "testuser", "{}", "{}")
+	err = db.UpdateFileEventLog("00000000-0000-0000-0000-000000000000", "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NotNil(suite.T(), err, "Unknown file could be marked as uploaded in database")
 
 	// mark file as uploaded
-	err = db.UpdateFileStatus(fileID, "uploaded", corrID, "testuser", "{}", "{}")
+	err = db.UpdateFileEventLog(fileID, "uploaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to set file as uploaded in database")
 
 	exists := false
@@ -148,7 +123,7 @@ func (suite *DatabaseTests) TestGetFileStatus() {
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	corrID := uuid.New().String()
-	err = db.UpdateFileStatus(fileID, "downloaded", corrID, "testuser", "{}", "{}")
+	err = db.UpdateFileEventLog(fileID, "downloaded", corrID, "testuser", "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to set file as downloaded in database")
 
 	status, err := db.GetFileStatus(corrID)
@@ -476,9 +451,9 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	for i := 0; i < testCases; i++ {
 		fileID, err := db.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", testUser, i), testUser)
 		assert.NoError(suite.T(), err, "failed to register file in database")
-		err = db.UpdateFileEventLog(fileID, "uploaded", testUser, "{}")
+		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
-		err = db.UpdateFileEventLog(fileID, "ready", testUser, "{}")
+		err = db.UpdateFileEventLog(fileID, "ready", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
 	filelist, err := db.GetUserFiles("unknownuser")
