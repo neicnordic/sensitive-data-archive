@@ -349,15 +349,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, fmt.Errorf("archive.type not set")
 		}
 
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, fmt.Errorf("inbox.type not set")
-		}
-
 	default:
 		return nil, fmt.Errorf("application '%s' doesn't exist", app)
 	}
