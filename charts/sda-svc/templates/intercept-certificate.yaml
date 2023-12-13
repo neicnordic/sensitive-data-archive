@@ -1,4 +1,4 @@
-{{- if eq "federated".Values.global.schemaType }}
+{{- if eq "federated" .Values.global.schemaType }}
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 apiVersion: cert-manager.io/v1
