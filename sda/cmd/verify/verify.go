@@ -134,9 +134,7 @@ func main() {
 			header, err := db.GetHeader(message.FileID)
 			if err != nil {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
-
-				// Nack message so the server gets notified that something is wrong but don't requeue the message
-				if err := delivered.Nack(false, false); err != nil {
+				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
 
 				}
