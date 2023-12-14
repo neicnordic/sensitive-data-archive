@@ -68,3 +68,5 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ |
     fi
     sleep 2
 done
+
+echo "ingestion and verification test completed successfully"

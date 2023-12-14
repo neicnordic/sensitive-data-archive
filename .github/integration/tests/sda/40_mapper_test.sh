@@ -196,3 +196,5 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda
     fi
     sleep 2
 done
+
+echo "mapping test completed successfully"

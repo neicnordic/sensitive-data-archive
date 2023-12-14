@@ -33,3 +33,5 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/catch_all.d
     fi
     sleep 2
 done
+
+echo "sync test completed successfully"

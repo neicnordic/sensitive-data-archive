@@ -9,3 +9,5 @@ if [ "$response" != "uploaded" ]; then
 	echo "API returned incorrect value, expected ready got: $response"
 	exit 1
 fi
+
+echo "api test completed successfully"
