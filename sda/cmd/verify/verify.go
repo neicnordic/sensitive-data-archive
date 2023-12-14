@@ -92,14 +92,13 @@ func main() {
 				// Restart on new message
 				continue
 			}
+			// we unmarshal the message in the validation step so this is safe to do
+			_ = json.Unmarshal(delivered.Body, &message)
 
 			log.Infof(
 				"Received work (corr-id: %s, filepath: %s, user: %s)",
 				delivered.CorrelationId, message.FilePath, message.User,
 			)
-
-			// we unmarshal the message in the validation step so this is safe to do
-			_ = json.Unmarshal(delivered.Body, &message)
 
 			// If the file has been canceled by the uploader, don't spend time working on it.
 			status, err := db.GetFileStatus(delivered.CorrelationId)
