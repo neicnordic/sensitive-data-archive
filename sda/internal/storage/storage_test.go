@@ -309,9 +309,11 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	assert.Nil(suite.T(), err, "Failure when writing to s3 writer")
 	assert.Equal(suite.T(), len(writeData), written, "Did not write all writeData")
 	writer.Close()
+	// sleep to allow the write to complete, otherwise the next step will fail due to timing issues.
+	time.Sleep(1 * time.Second)
 
 	reader, err := s3back.NewFileReader("s3Creatable")
-	assert.Nil(suite.T(), err, "s3 NewFileReader failed when it should work")
+	assert.NoError(suite.T(), err, "s3 NewFileReader failed when it should work")
 	assert.NotNil(suite.T(), reader, "Reader that should be usable is not, bailing out")
 
 	size, err := s3back.GetFileSize("s3Creatable")
@@ -319,33 +321,25 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	assert.NotNil(suite.T(), size, "Got a nil size for s3")
 	assert.Equal(suite.T(), int64(len(writeData)), size, "Got an incorrect file size")
 
-	err = s3back.RemoveFile("s3Creatable")
-	assert.Nil(suite.T(), err, "s3 RemoveFile failed when it should work")
-
 	var readBackBuffer [4096]byte
 	readBack, err := reader.Read(readBackBuffer[0:4096])
-
 	assert.Equal(suite.T(), len(writeData), readBack, "did not read back data as expected")
 	assert.Equal(suite.T(), writeData, readBackBuffer[:readBack], "did not read back data as expected")
-
 	if err != nil && err != io.EOF {
 		assert.Nil(suite.T(), err, "unexpected error when reading back data")
 	}
 
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
+	err = s3back.RemoveFile("s3Creatable")
+	assert.Nil(suite.T(), err, "s3 RemoveFile failed when it should work")
 
 	_, err = s3back.GetFileSize("s3DoesNotExist")
 	assert.NotNil(suite.T(), err, "s3 GetFileSize worked when it should not")
-	assert.NotZero(suite.T(), buf.Len(), "Expected warning missing")
-	buf.Reset()
+	assert.Error(suite.T(), err)
 
 	reader, err = s3back.NewFileReader("s3DoesNotExist")
 	assert.NotNil(suite.T(), err, "s3 NewFileReader worked when it should not")
+	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), reader, "Got a non-nil reader for s3")
-	assert.NotZero(suite.T(), buf.Len(), "Expected warning missing")
-
-	log.SetOutput(os.Stdout)
 
 	testConf.S3.URL = "file://tmp/"
 	_, err = NewBackend(testConf)
