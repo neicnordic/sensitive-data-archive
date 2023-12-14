@@ -14,12 +14,13 @@ import (
 
 // ElixirIdentity represents an Elixir user instance
 type ElixirIdentity struct {
-	User     string
-	Passport []string
-	Token    string
-	Profile  string
-	Email    string
-	ExpDate  string
+	User                 string
+	Passport             []string
+	Token                string
+	Profile              string
+	Email                string
+	EdupersonEntitlement []string
+	ExpDate              string
 }
 
 // Configure an OpenID Connect aware OAuth2 client.
@@ -35,7 +36,7 @@ func getOidcClient(conf ElixirConfig) (oauth2.Config, *oidc.Provider) {
 		ClientSecret: conf.Secret,
 		RedirectURL:  conf.RedirectURL,
 		Endpoint:     provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID, "ga4gh_passport_v1 profile email"},
+		Scopes:       []string{oidc.ScopeOpenID, "ga4gh_passport_v1 profile email eduperson_entitlement"},
 	}
 
 	return oauth2Config, provider
@@ -89,9 +90,10 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 	// Extract custom passports, name and email claims
 	var claims struct {
-		PassportClaim []string `json:"ga4gh_passport_v1"`
-		ProfileClaim  string   `json:"name"`
-		EmailClaim    string   `json:"email"`
+		PassportClaim        []string `json:"ga4gh_passport_v1"`
+		ProfileClaim         string   `json:"name"`
+		EmailClaim           string   `json:"email"`
+		EdupersonEntitlement []string `json:"eduperson_entitlement"`
 	}
 	if err := userInfo.Claims(&claims); err != nil {
 		log.Error("Failed to get custom claims")
@@ -100,12 +102,13 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	}
 
 	idStruct = ElixirIdentity{
-		User:     userInfo.Subject,
-		Token:    rawAccessToken,
-		Passport: claims.PassportClaim,
-		Profile:  claims.ProfileClaim,
-		Email:    claims.EmailClaim,
-		ExpDate:  rawExpDate,
+		User:                 userInfo.Subject,
+		Token:                rawAccessToken,
+		Passport:             claims.PassportClaim,
+		Profile:              claims.ProfileClaim,
+		Email:                claims.EmailClaim,
+		EdupersonEntitlement: claims.EdupersonEntitlement,
+		ExpDate:              rawExpDate,
 	}
 
 	return idStruct, err
