@@ -1,3 +1,4 @@
+{{- if eq "isolated" .Values.global.schemaType }}
 {{- if ne "" .Values.global.sync.remote.host }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: apps/v1
@@ -91,6 +92,8 @@ spec:
         - name: ARCHIVE_LOCATION
           value: "{{ .Values.global.archive.volumePath }}"
   {{- end }}
+        - name: SYNC_CENTERPREFIX
+          value: {{ .Values.global.sync.centerPrefix}}
         - name: SYNC_DESTINATION_TYPE
   {{- if eq "s3" .Values.global.sync.destination.storageType }}
           value: "s3"
@@ -113,22 +116,18 @@ spec:
   {{- end }}
         - name: C4GH_FILEPATH
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
-        - name: C4GH_SYNCPUBKEY
+        - name: C4GH_SYNCPUBKEYPATH
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.syncPubKey }}"
-        - name: BROKER_DURABLE
-          value: {{ .Values.global.broker.durable | quote }}
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE
-          value: {{ .Values.global.broker.syncRoutingKey }}
+          value: {{ default "mapping_stream" .Values.global.sync.brokerQueue }}
         - name: BROKER_HOST
           value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
         - name: BROKER_PORT
           value: {{ .Values.global.broker.port | quote }}
         - name: BROKER_PREFETCHCOUNT
           value: {{ .Values.global.broker.prefetchCount | quote }}
-        - name: BROKER_ROUTINGKEY
-          value: "completed"
         - name: BROKER_VHOST
           value: {{ .Values.global.broker.vhost | quote }}
         - name: BROKER_SERVERNAME
@@ -158,7 +157,7 @@ spec:
     {{- end }}
   {{- end }}
         - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
+          value: {{ default "sda" .Values.global.db.name | quote }}
         - name: DB_HOST
           value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
         - name: DB_PORT
@@ -175,6 +174,8 @@ spec:
       {{- end }}
         - name: SCHEMA_TYPE
           value: {{ default "isolated" .Values.global.schemaType }}
+        - name: SYNC_REMOTE_HOST
+          value: {{ .Values.global.sync.remote.host }}
   {{- if not .Values.global.vaultSecrets }}
     {{- if eq "s3" .Values.global.archive.storageType }}
         - name: ARCHIVE_ACCESSKEY
@@ -192,12 +193,12 @@ spec:
         - name: SYNC_DESTINATION_ACCESSKEY
           valueFrom:
             secretKeyRef:
-              name: {{ template "sda.fullname" . }}-keys
+              name: {{ template "sda.fullname" . }}-sync
               key: s3AccessKey
         - name: SYNC_DESTINATION_SECRETKEY
           valueFrom:
             secretKeyRef:
-              name: {{ template "sda.fullname" . }}-keys
+              name: {{ template "sda.fullname" . }}-sync
               key: s3SecretKey
     {{- end }}
         - name: BROKER_PASSWORD
@@ -210,6 +211,11 @@ spec:
               secretKeyRef:
                 name: {{ template "sda.fullname" . }}-sync
                 key: mqUser
+        - name: C4GH_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+              key: passphrase
         - name: DB_PASSWORD
           valueFrom:
               secretKeyRef:
@@ -242,12 +248,12 @@ spec:
             mountPath: {{ template "c4ghPath" . }}
       {{- end }}
   {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-          mountPath: {{ .Values.global.archive.volumePath | quote }}
+          - name: archive
+            mountPath: {{ .Values.global.archive.volumePath | quote }}
   {{- end }}
   {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: tls
-          mountPath: {{ template "tlsPath" . }}
+          - name: tls
+            mountPath: {{ template "tlsPath" . }}
   {{- end }}
       volumes:
   {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
@@ -291,5 +297,6 @@ spec:
     {{- end }}
   {{- end }}
       restartPolicy: Always
+{{- end }}
 {{- end }}
 {{- end }}

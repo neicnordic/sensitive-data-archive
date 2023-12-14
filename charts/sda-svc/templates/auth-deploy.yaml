@@ -123,6 +123,7 @@ spec:
         - name: CEGA_AUTHURL
           value: {{ .Values.global.cega.host | quote }}
         {{- end }}
+      {{- if .Values.global.auth.resignJwt }}
         - name: JWTISSUER
         {{- if .Values.global.tls.enabled }}
           value: "https://{{ .Values.global.ingress.hostName.auth }}"
@@ -133,6 +134,7 @@ spec:
           value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
         - name: JWTSIGNATUREALG
           value: {{ .Values.global.auth.jwtAlg }}
+      {{- end }}
         - name: RESIGNJWT
           value: {{ .Values.global.auth.resignJwt | quote }}
         {{- if .Values.global.tls.enabled}}
@@ -178,12 +180,12 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
       {{- end }}
-      {{- if not .Values.global.vaultSecrets }}
+      {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
         - name: jwt
           mountPath: {{ template "jwtPath" . }}
       {{- end }}
       volumes:
-      {{- if not .Values.global.vaultSecrets }}
+      {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
         - name: jwt
           projected:
             defaultMode: 0440

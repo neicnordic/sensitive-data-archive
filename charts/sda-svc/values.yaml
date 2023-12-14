@@ -110,7 +110,7 @@ global:
 
 # global configurations
   archive:
-    storageType: "s3" # s3 or posix
+    storageType: "" # s3 or posix
   # The six lines below is only used with S3 backend
     s3Url: ""
     s3Bucket: ""
@@ -126,7 +126,7 @@ global:
     nfsPath: ""
 
   backupArchive:
-    storageType: "s3" # s3 or posix
+    storageType: "" # s3 or posix
   # The six lines below is only used with S3 backend
     s3Url: ""
     s3Bucket: ""
@@ -151,7 +151,7 @@ global:
     # @param jwtPub, name of the public signing key
     jwtPub:
     # @param resignJwt, if true (or empty) the jwt will be resigned with the jwtKey
-    resignJwt: true
+    resignJwt: false
     # @param corsOrigins, domain name of allowed origin for cross-domain requests
     corsOrigins: ""
     # @param corsMethods, allowed methods for cross-domain requests
@@ -165,11 +165,10 @@ global:
 
   broker:
     durable: true
-    exchange: ""
+    exchange: "sda"
     host: ""
     password: ""
     port: 5671
-    backupRoutingKey: ""
     ssl: true
     username: ""
     verifyPeer: true
@@ -235,17 +234,17 @@ global:
       configFile: "iss.json"
       iss:
         - iss: "https://login.elixir-czech.org/oidc"
-          jku: "https://login.elixir-czech.org/oidc//oidc/jwks"
+          jku: "https://login.elixir-czech.org/oidc/jwk"
 
   oidc:
     provider:  "https://login.elixir-czech.org/oidc/"
-    jwkPath: "/oidc/jwks"
+    jwkPath: "/jwk"
     id: ""
     secret: ""
 
   inbox:
     servicePort: 2222
-    storageType: "posix"
+    storageType: ""
   # These lines below are only used with posix
     path: "/inbox"
     user: "lega"
@@ -257,6 +256,7 @@ global:
     s3Bucket: "inbox"
     s3AccessKey: null
     s3SecretKey: null
+    s3Port: 443
     s3ReadyPath: ""
     s3Region: ""
 
@@ -268,7 +268,7 @@ global:
     destination:
       type: "s3"
       url: ""
-      port: 
+      port: 443
       readypath: ""
       accessKey: ""
       secretKey: ""
@@ -518,15 +518,15 @@ sync:
   tls:
     secretName: ""
 
-sync-api:
+syncapi:
   name: sync-api
   replicaCount: 1
   resources:
     requests:
-      memory: "128Mi"
+      memory: "64Mi"
       cpu: "100m"
     limits:
-      memory: "512Mi"
+      memory: "256Mi"
       cpu: "500m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of

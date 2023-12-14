@@ -66,8 +66,6 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
         env:
-        - name: BROKER_DURABLE
-          value: {{ .Values.global.broker.durable | quote }}
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE
