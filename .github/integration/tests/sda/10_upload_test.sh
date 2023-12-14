@@ -1,5 +1,5 @@
 #!/bin/sh
-set -ex
+set -e
 
 if [ -z "$STORAGETYPE" ]; then
     echo "STORAGETYPE not set, exiting"
