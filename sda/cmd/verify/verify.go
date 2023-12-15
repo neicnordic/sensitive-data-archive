@@ -241,6 +241,8 @@ func main() {
 				continue
 			}
 
+			// At this point we should do checksum comparison
+
 			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 

@@ -436,6 +436,8 @@ func main() {
 				file.Close()
 				dest.Close()
 
+				// At this point we should do checksum comparison, but that requires updating the AWS library
+
 				fileInfo := database.FileInfo{}
 				fileInfo.Path = fileID
 				fileInfo.Checksum = fmt.Sprintf("%x", hash.Sum(nil))
