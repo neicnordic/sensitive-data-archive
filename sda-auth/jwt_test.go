@@ -5,26 +5,20 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 type JWTTests struct {
 	suite.Suite
-	TempDir    string
-	ECKeyFile  *os.File
-	ECPubFile  *os.File
-	RSAKeyFile *os.File
-	RSAPubFile *os.File
+	TempDir string
 }
 
 func TestJWTTestSuite(t *testing.T) {
@@ -33,110 +27,36 @@ func TestJWTTestSuite(t *testing.T) {
 
 func (suite *JWTTests) SetupTest() {
 	var err error
+	suite.TempDir, err = os.MkdirTemp(os.TempDir(), "jwt-test")
+	assert.NoError(suite.T(), err)
 
-	// Create a temporary directory for our config file
-	suite.TempDir, err = os.MkdirTemp(os.TempDir(), "sda-auth-test-")
-	if err != nil {
-		log.Fatal("Couldn't create temporary test directory", err)
-	}
+	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	assert.NoError(suite.T(), err)
+	ecKeyBytes, err := jwk.EncodePEM(ecKey)
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec", ecKeyBytes, 0600))
 
-	// Create RSA private key file
-	suite.RSAKeyFile, err = os.CreateTemp(suite.TempDir, "rsakey-")
-	if err != nil {
-		log.Fatal("Cannot create temporary rsa key file", err)
-	}
+	ecPubKeyBytes, err := jwk.EncodePEM(&ecKey.PublicKey)
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
 
-	RSAPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		log.Error("Failed to generate RSA key")
-	}
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(suite.T(), err)
 
-	var privateKeyBytes = x509.MarshalPKCS1PrivateKey(RSAPrivateKey)
-	privateKeyBlock := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
+	rsaKeyBytes, err := jwk.EncodePEM(rsaKey)
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa", rsaKeyBytes, 0600))
 
-	err = pem.Encode(suite.RSAKeyFile, privateKeyBlock)
-	if err != nil {
-		log.Error("Error writing RSA private key")
-	}
-
-	// Create RSA public key file
-	suite.RSAPubFile, err = os.CreateTemp(suite.TempDir, "rsapub-")
-	if err != nil {
-		log.Fatal("Cannot create temporary rsa pub file", err)
-	}
-
-	RSAPublicKey := &RSAPrivateKey.PublicKey
-	RSApublicKeyBytes, err := x509.MarshalPKIXPublicKey(RSAPublicKey)
-	if err != nil {
-		log.Error("Error marshal RSA public key")
-	}
-	RSApublicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: RSApublicKeyBytes,
-	}
-	err = pem.Encode(suite.RSAPubFile, RSApublicKeyBlock)
-	if err != nil {
-		log.Error("Error writing RSA public key")
-	}
-
-	// Create EC private key file
-	suite.ECKeyFile, err = os.CreateTemp(suite.TempDir, "eckey-")
-	if err != nil {
-		log.Fatal("Cannot create temporary ec key file", err)
-	}
-
-	ECPrivateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		log.Error("Failed to generate EC key")
-	}
-
-	privateKeyBytes, err = x509.MarshalECPrivateKey(ECPrivateKey)
-	if err != nil {
-		log.Error("Failed to marshal EC key")
-	}
-	privateKeyBlock = &pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
-
-	err = pem.Encode(suite.ECKeyFile, privateKeyBlock)
-	if err != nil {
-		log.Error("Error writing EC private key")
-	}
-
-	// Create EC public key file
-	suite.ECPubFile, err = os.CreateTemp(suite.TempDir, "ecpub-")
-	if err != nil {
-		log.Fatal("Cannot create temporary ec pub file", err)
-	}
-	ECPublicKey := &ECPrivateKey.PublicKey
-	ECpublicKeyBytes, err := x509.MarshalPKIXPublicKey(ECPublicKey)
-	if err != nil {
-		log.Error("Error marshal EC public key")
-	}
-	ECpublicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: ECpublicKeyBytes,
-	}
-	err = pem.Encode(suite.ECPubFile, ECpublicKeyBlock)
-	if err != nil {
-		log.Error("Error writing EC public key")
-	}
+	rsaPubKeyBytes, err := jwk.EncodePEM(&rsaKey.PublicKey)
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
 }
 
 func (suite *JWTTests) TearDownTest() {
-	os.Remove(suite.RSAKeyFile.Name())
-	os.Remove(suite.RSAPubFile.Name())
-	os.Remove(suite.ECKeyFile.Name())
-	os.Remove(suite.ECPubFile.Name())
-	os.Remove(suite.TempDir)
+	os.RemoveAll(suite.TempDir)
 }
 
 func (suite *JWTTests) TestGenerateJwtToken() {
-
 	type KeyAlgo struct {
 		Algorithm string
 		Keyfile   string
@@ -144,18 +64,15 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 	}
 
 	algorithms := []KeyAlgo{
-		{Algorithm: "RS256", Keyfile: suite.RSAKeyFile.Name(), Pubfile: suite.RSAPubFile.Name()},
-		{Algorithm: "ES256", Keyfile: suite.ECKeyFile.Name(), Pubfile: suite.ECPubFile.Name()},
+		{Algorithm: "RS256", Keyfile: suite.TempDir + "/rsa", Pubfile: suite.TempDir + "/rsa.pub"},
+		{Algorithm: "ES256", Keyfile: suite.TempDir + "/ec", Pubfile: suite.TempDir + "/ec.pub"},
 	}
 
-	claims := &Claims{
-		"test@foo.bar",
-		"",
-		jwt.RegisteredClaims{
-			IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
-			Issuer:   "http://local.issuer",
-			Subject:  "test@foo.bar",
-		},
+	claims := map[string]interface{}{
+		jwt.ExpirationKey: time.Now().UTC().Add(2 * time.Hour),
+		jwt.IssuedAtKey:   time.Now().UTC(),
+		jwt.IssuerKey:     "http://local.issuer",
+		jwt.SubjectKey:    "test@foo.bar",
 	}
 
 	for _, test := range algorithms {
@@ -163,34 +80,21 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 		assert.NoError(suite.T(), err)
 		assert.NotNil(suite.T(), ts)
 
-		t, err := jwt.Parse(ts, func(t *jwt.Token) (interface{}, error) {
-			// Validate that the alg is what we expect: RSA or ES
-			_, okRSA := t.Method.(*jwt.SigningMethodRSA)
-			if okRSA {
-				pub, _ := os.ReadFile(test.Pubfile)
-				publicKey, _ := jwt.ParseRSAPublicKeyFromPEM(pub)
-
-				return publicKey, nil
-			}
-			_, okES := t.Method.(*jwt.SigningMethodECDSA)
-			if okES {
-				pub, _ := os.ReadFile(test.Pubfile)
-				publicKey, _ := jwt.ParseECPublicKeyFromPEM(pub)
-
-				return publicKey, nil
-			}
-
-			return nil, fmt.Errorf("unexpected signing method")
-		})
+		keyData, err := os.ReadFile(test.Pubfile)
 		assert.NoError(suite.T(), err)
-		assert.Equal(suite.T(), test.Algorithm, t.Method.Alg())
-		claims := t.Claims.(jwt.MapClaims)
-		assert.Equal(suite.T(), "http://local.issuer", claims["iss"])
-		assert.Equal(suite.T(), "test@foo.bar", claims["email"])
+		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+		assert.NoError(suite.T(), err)
+		assert.NoError(suite.T(), jwk.AssignKeyID(key))
+		keySet := jwk.NewSet()
+		assert.NoError(suite.T(), keySet.AddKey(key))
+
+		token, err := jwt.Parse([]byte(ts), jwt.WithKeySet(keySet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		assert.NoError(suite.T(), err)
+		assert.Equal(suite.T(), "http://local.issuer", token.Issuer())
+		assert.Equal(suite.T(), "test@foo.bar", token.Subject())
 
 		// check that the expiration string is a date
 		_, err = time.Parse("2006-01-02 15:04:05", expiration)
 		assert.Nil(suite.T(), err, "Couldn't parse expiration date for jwt")
-
 	}
 }

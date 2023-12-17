@@ -1,55 +1,44 @@
 package main
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-type Claims struct {
-	Email string `json:"email,omitempty"`
-	KeyID string `json:"kid,omitempty"`
-	jwt.RegisteredClaims
-}
-
-func generateJwtToken(claims *Claims, key, alg string) (string, string, error) {
-	// Create a new token object by specifying signing method and the needed claims
-	ttl := 200 * time.Hour
-	expireDate := time.Now().UTC().Add(ttl)
-	claims.ExpiresAt = jwt.NewNumericDate(expireDate)
-
-	token := jwt.NewWithClaims(jwt.GetSigningMethod(alg), claims)
-
-	data, err := os.ReadFile(key)
+func generateJwtToken(tokenClaims map[string]interface{}, keyPath, alg string) (string, string, error) {
+	prKey, err := os.ReadFile(filepath.Clean(keyPath))
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to read signingkey, reason: %v", err)
+		return "", "", err
 	}
-	claims.KeyID = fmt.Sprintf("%x", sha256.Sum256(data))
 
-	var tokenString string
-	switch alg {
-	case "ES256":
-		pk, err := jwt.ParseECPrivateKeyFromPEM(data)
-		if err != nil {
-			return "", "", err
-		}
-		tokenString, err = token.SignedString(pk)
-		if err != nil {
-			return "", "", err
-		}
-	case "RS256":
-		pk, err := jwt.ParseRSAPrivateKeyFromPEM(data)
-		if err != nil {
-			return "", "", err
-		}
-		tokenString, err = token.SignedString(pk)
-		if err != nil {
+	jwtKey, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
+	if err != nil {
+		return "", "", err
+	}
+	if err := jwtKey.Set(jwk.AlgorithmKey, alg); err != nil {
+		return "", "", err
+	}
+	if err := jwk.AssignKeyID(jwtKey); err != nil {
+		return "", "", err
+	}
+
+	token := jwt.New()
+	for key, value := range tokenClaims {
+		if err := token.Set(key, value); err != nil {
 			return "", "", err
 		}
 	}
+	expireDate, _ := token.Get(jwt.ExpirationKey)
 
-	return tokenString, expireDate.Format("2006-01-02 15:04:05"), nil
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.KeyAlgorithmFrom(alg), jwtKey))
+	if err != nil {
+		return "", "", err
+	}
+
+	return string(tokenString), expireDate.(time.Time).Format("2006-01-02 15:04:05"), nil
 }
