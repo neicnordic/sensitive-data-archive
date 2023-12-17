@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/coreos/go-oidc"
-	"github.com/golang-jwt/jwt/v4"
-	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -44,7 +45,6 @@ func getOidcClient(conf ElixirConfig) (oauth2.Config, *oidc.Provider) {
 
 // Authenticate with an Oidc client.against Elixir AAI
 func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, code, jwkURL string) (ElixirIdentity, error) {
-
 	contx := context.Background()
 	defer contx.Done()
 	var idStruct ElixirIdentity
@@ -116,52 +116,27 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 // Validate raw (Elixir) jwt against public key from jwk. Return parsed jwt and its expiration date.
 func validateToken(rawJwt, jwksURL string) (*jwt.Token, string, error) {
-
-	// Fetch public key
-	set, err := jwk.Fetch(jwksURL)
+	set, err := jwk.Fetch(context.Background(), jwksURL)
 	if err != nil {
 		return nil, "", fmt.Errorf(err.Error())
 	}
-	pubKey, err := set.Keys[0].Materialize()
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to materialize public key %s", err.Error())
-	}
-
-	token, err := jwt.Parse(rawJwt, func(token *jwt.Token) (interface{}, error) {
-
-		// Validate that the alg is what we expect: RSA or ES
-		_, okRSA := token.Method.(*jwt.SigningMethodRSA)
-		_, okES := token.Method.(*jwt.SigningMethodECDSA)
-		if !(okRSA || okES) {
-			return nil, fmt.Errorf("unexpected signing method")
+	for it := set.Keys(context.Background()); it.Next(context.Background()); {
+		pair := it.Pair()
+		key := pair.Value.(jwk.Key)
+		if err := jwk.AssignKeyID(key); err != nil {
+			return nil, "", fmt.Errorf("AssignKeyID failed: %v", err)
 		}
-
-		return pubKey, nil
-	})
-
-	// Validate the error
-	v, _ := err.(*jwt.ValidationError)
-
-	// If error is for signature validation
-	if err != nil && v.Errors == jwt.ValidationErrorSignatureInvalid {
-		return nil, "", fmt.Errorf("signature not valid: %s", err.Error())
 	}
 
-	// Verify token dates. Ignores clock skew, but that should be
-	// irrelevant here since tokens are relatively long-lived
-	if err := token.Claims.(jwt.MapClaims).Valid(); err != nil {
-		return nil, "", fmt.Errorf(err.Error())
+	token, err := jwt.Parse(
+		[]byte(rawJwt),
+		jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)),
+		jwt.WithValidate(true),
+		jwt.WithMinDelta(10*time.Second, jwt.ExpirationKey, jwt.IssuedAtKey),
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), rawJwt)
 	}
 
-	var expireDate time.Time
-	switch d := token.Claims.(jwt.MapClaims)["exp"].(type) {
-	case float64:
-		expireDate = time.Unix(int64(d), 0)
-	case int64:
-		expireDate = time.Unix(d, 0)
-	default:
-		return nil, "", fmt.Errorf("failed to read expiration date from token")
-	}
-
-	return token, expireDate.Format("2006-01-02 15:04:05"), err
+	return &token, token.Expiration().Format("2006-01-02 15:04:05"), err
 }
