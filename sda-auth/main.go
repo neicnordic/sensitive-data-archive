@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc"
-	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/iris-contrib/middleware/cors"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/sessions"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -141,14 +141,11 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 		if ok {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Info("Valid password entered by user")
-			claims := &Claims{
-				username,
-				"",
-				jwt.RegisteredClaims{
-					IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
-					Issuer:   auth.Config.JwtIssuer,
-					Subject:  username,
-				},
+			claims := map[string]interface{}{
+				jwt.ExpirationKey: time.Now().UTC().Add(200 * time.Hour),
+				jwt.IssuedAtKey:   time.Now().UTC(),
+				jwt.IssuerKey:     auth.Config.JwtIssuer,
+				jwt.SubjectKey:    username,
 			}
 			token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 			if err != nil {
@@ -268,14 +265,11 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 
 	if auth.Config.ResignJwt {
-		claims := &Claims{
-			idStruct.Email,
-			"",
-			jwt.RegisteredClaims{
-				IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
-				Issuer:   auth.Config.JwtIssuer,
-				Subject:  idStruct.User,
-			},
+		claims := map[string]interface{}{
+			jwt.ExpirationKey: time.Now().UTC().Add(200 * time.Hour),
+			jwt.IssuedAtKey:   time.Now().UTC(),
+			jwt.IssuerKey:     auth.Config.JwtIssuer,
+			jwt.SubjectKey:    idStruct.User,
 		}
 		token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 		if err != nil {
