@@ -125,7 +125,7 @@ jobs:
           output: 'postgres-results.sarif'
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'postgres-results.sarif'
           category: postgres
@@ -140,7 +140,7 @@ jobs:
           output: 'rabbitmq-results.sarif'
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'rabbitmq-results.sarif'
           category: rabbitmq
@@ -186,7 +186,7 @@ jobs:
           output: 'inbox-results.sarif'
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'inbox-results.sarif'
           category: sftp-inbox
