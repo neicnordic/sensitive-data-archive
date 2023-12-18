@@ -265,19 +265,25 @@ func main() {
 						if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", string(jsonMsg), string(delivered.Body)); err != nil {
 							log.Errorf("failed to set error status for file from message: %v, reason: %s", delivered.CorrelationId, err.Error())
 						}
+						// Send the message to an error queue so it can be analyzed.
+						fileError := broker.InfoError{
+							Error:           "Failed to open file to ingest",
+							Reason:          err.Error(),
+							OriginalMessage: message,
+						}
+						body, _ := json.Marshal(fileError)
+						if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+							log.Errorf("failed to publish message, reason: (%s)", err.Error())
+						}
+						if err = delivered.Ack(false); err != nil {
+							log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
+						}
+
+						continue mainWorkLoop
 					}
-					// Send the message to an error queue so it can be analyzed.
-					fileError := broker.InfoError{
-						Error:           "Failed to open file to ingest",
-						Reason:          err.Error(),
-						OriginalMessage: message,
-					}
-					body, _ := json.Marshal(fileError)
-					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: (%s)", err.Error())
-					}
-					if err = delivered.Ack(false); err != nil {
-						log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
+
+					if err = delivered.Nack(false, true); err != nil {
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					// Restart on new message
