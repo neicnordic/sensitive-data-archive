@@ -118,6 +118,7 @@ curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
     -d "$verify_body"
 
 # check database to verify file status
+RETRY_TIMES=0
 until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE correlation_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
     echo "waiting for file error to be logged by verify"
     date
