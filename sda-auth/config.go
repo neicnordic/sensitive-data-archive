@@ -55,6 +55,7 @@ type Config struct {
 	ResignJwt       bool
 	InfoURL         string
 	InfoText        string
+	PublicFile      string
 }
 
 // NewConfig initializes and parses the config file and/or environment using
@@ -94,6 +95,7 @@ func (c *Config) readConfig() error {
 	c.JwtIssuer = viper.GetString("jwtIssuer")
 	c.InfoURL = viper.GetString("infoUrl")
 	c.InfoText = viper.GetString("infoText")
+	c.PublicFile = viper.GetString("publicFile")
 
 	viper.SetDefault("ResignJwt", true)
 	c.ResignJwt = viper.GetBool("resignJwt")
@@ -172,8 +174,10 @@ func (c *Config) readConfig() error {
 		log.Printf("Setting log level to '%s'", stringLevel)
 	}
 
-	if viper.GetString("s3Inbox") == "" {
-		return fmt.Errorf("%s not set", "s3Inbox")
+	for _, s := range []string{"s3Inbox", "publicFile"} {
+		if viper.GetString(s) == "" {
+			return fmt.Errorf("%s not set", s)
+		}
 	}
 
 	// no need to check the variables for JWT generation if we won't use it

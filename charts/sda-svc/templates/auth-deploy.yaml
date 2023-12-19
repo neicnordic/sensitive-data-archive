@@ -137,6 +137,8 @@ spec:
       {{- end }}
         - name: RESIGNJWT
           value: {{ .Values.global.auth.resignJwt | quote }}
+        - name: PUBLICFILE
+          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.publicFile }}"
         {{- if .Values.global.tls.enabled}}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt
@@ -184,6 +186,10 @@ spec:
         - name: jwt
           mountPath: {{ template "jwtPath" . }}
       {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          mountPath: {{ template "c4ghPath" . }}
+      {{- end }}
       volumes:
       {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
         - name: jwt
@@ -195,6 +201,15 @@ spec:
                 items:
                   - key: {{ required "The name of the JWT signing key is needed" .Values.global.auth.jwtKey }}
                     path: {{ .Values.global.auth.jwtKey }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "A secret for the C4GH public key is needed" .Values.global.c4gh.secretName }}
+            items:
+              - key: {{ required "The C4GH public key is needed" .Values.global.c4gh.publicFile }}
+                path: {{ .Values.global.c4gh.publicFile }}
       {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls

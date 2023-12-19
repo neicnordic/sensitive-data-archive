@@ -32,6 +32,7 @@ type ConfigTests struct {
 	ResignJwt         bool
 	InfoURL           string
 	InfoText          string
+	PublicFile        string
 }
 
 func TestConfigTestSuite(t *testing.T) {
@@ -89,6 +90,7 @@ func (suite *ConfigTests) SetupTest() {
 	suite.ResignJwt = true
 	suite.InfoURL = "https://test.info"
 	suite.InfoText = "About LEGA"
+	suite.PublicFile = "public.pem"
 
 	// Write config to temp config file
 	configYaml, err := yaml.Marshal(Config{
@@ -102,6 +104,7 @@ func (suite *ConfigTests) SetupTest() {
 		ResignJwt:       suite.ResignJwt,
 		InfoURL:         suite.InfoURL,
 		InfoText:        suite.InfoText,
+		PublicFile:      suite.PublicFile,
 	})
 	if err != nil {
 		log.Errorf("Error marshalling config yaml: %v", err)
@@ -186,6 +189,7 @@ func (suite *ConfigTests) TestConfig() {
 
 	os.Setenv("INFOTEXT", fmt.Sprintf("env_%v", suite.InfoText))
 	os.Setenv("INFOURL", fmt.Sprintf("env_%v", suite.InfoURL))
+	os.Setenv("PUBLICFILE", fmt.Sprintf("env_%v", suite.PublicFile))
 
 	// re-read the config
 	config, err = NewConfig()
@@ -212,6 +216,7 @@ func (suite *ConfigTests) TestConfig() {
 
 	assert.Equal(suite.T(), fmt.Sprintf("env_%v", suite.InfoText), config.InfoText, "Project info text misread from environment variable")
 	assert.Equal(suite.T(), fmt.Sprintf("env_%v", suite.InfoURL), config.InfoURL, "Project info text misread from environment variable")
+	assert.Equal(suite.T(), fmt.Sprintf("env_%v", suite.PublicFile), config.PublicFile, "Public file misread from environment variable")
 
 	// Check missing private key
 	os.Setenv("JWTPRIVATEKEY", "nonexistent-key-file")
