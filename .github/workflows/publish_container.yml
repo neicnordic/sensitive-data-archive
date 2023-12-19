@@ -118,11 +118,9 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GHCR_TOKEN }}
           commit-message: Bump chart version
-          committer: GitHub <noreply@github.com>
-          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
-          signoff: false
+          author: neicnordic <neicnordic@users.noreply.github.com>
           base: main
           branch: bump
           delete-branch: true
@@ -131,5 +129,4 @@ jobs:
             Bump the appVersion to: ${{ needs.tag_release.outputs.tag }}
           labels: |
             automated pr
-          team-reviewers: sensitive-data-development-collaboration
-          draft: false
+          team-reviewers: neicnordic/sensitive-data-development-collaboration
