@@ -4,32 +4,27 @@
 
 `CentralEGA` contains a database of users, with IDs and passwords.
 
-We have developed a solution based on [Apache Mina SSHD](https://mina.apache.org/sshd-project/)
-to allow user authentication via either a password or an RSA key against the CentralEGA database
-itself. The user is locked within their home folder, which is done programmatically using 
+A solution has been devised using [Apache Mina SSHD](https://mina.apache.org/sshd-project/) to facilitate user authentication through either a password or an RSA key, directly against the CentralEGA database. The user is locked within their home folder, which is done programmatically using 
 [RootedFileSystem](https://github.com/apache/mina-sshd/blob/master/sshd-core/src/main/java/org/apache/sshd/common/file/root/RootedFileSystem.java).
 
 The solution uses `CentralEGA`'s user IDs but can also be extended to
-use LifeScience AAI IDs (of which we strip the ``@elixir-europe.org`` suffix).
+use LifeScience AAI IDs (from which the ``@elixir-europe.org`` suffix is removed).
 
 The procedure is as follows. The inbox is started without any created
 user. When a user wants to log into the inbox (actually, only ``sftp``
 uploads are allowed), the code looks up the username in a local
-cache, and, if not found, queries the `CentralEGA` [REST endpoint](https://nss.ega-archive.org/spec/). Upon
-return, we store the user credentials in the local cache and create
-the user's home directory. The user now gets logged in if the password
+cache, and, if not found, queries the `CentralEGA` [REST endpoint](https://nss.ega-archive.org/spec/). Upon the user's return, their credentials are stored in the local cache, and a home directory is established for the user. The user now gets logged in if the password
 or public key authentication succeeds. Upon subsequent login attempts,
 only the local cache is queried, until the user's credentials
 expire. The cache has a default TTL of 5 minutes, and is wiped clean
 upon reboot (as a cache should). Default TTL can be configured via ``CACHE_TTL`` env var.
 
 The user's home directory is created when its credentials upon successful login.
-Moreover, for each user, we detect when the file upload is completed and compute its
-checksum. 
+Moreover, for each user, detection is performed to ascertain when the file upload is completed, and the checksum for the uploaded file is computed.
 
 ## S3 integration
 
-Default storage back-end for the inbox is local file-system. But we also support S3 service as a back-end. It can be 
+Default storage back-end for the inbox is local file-system. Additionally, support for the S3 service is provided as a back-end option. It can be 
 enabled using S3-related env-vars (see configuration details below).
 
 If S3 is enabled, then files are still going to be stored locally, but after successful upload, they will going to be 
