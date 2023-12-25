@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/aws/aws-sdk-go v1.47.4
-	github.com/gliderlabs/ssh v0.3.5
+	github.com/gliderlabs/ssh v0.3.6
 	github.com/google/uuid v1.4.0
 	github.com/johannesboyne/gofakes3 v0.0.0-20230129080941-f6a8a9ae6fd3
 	github.com/lib/pq v1.10.9
@@ -51,9 +51,9 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
-	golang.org/x/crypto v0.14.0
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/text v0.13.0 // indirect
+	golang.org/x/crypto v0.17.0
+	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
