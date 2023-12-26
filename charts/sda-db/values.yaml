@@ -48,7 +48,7 @@ networkPolicy:
 ##   set, choosing the default provisioner.
 persistence: 
   enabled: true
-  mountPath: "/var/lib/postgresql/data/"
+  mountPath: "/var/lib/postgresql/data"
   storageSize: 8Gi
   storageClass:
   existingClaim:
