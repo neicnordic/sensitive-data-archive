@@ -238,22 +238,16 @@ spec:
       {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            defaultMode: 256
-            sources:
-            - secret:
-          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-                name: {{ template "sda.fullname" . }}-inbox-certs
-          {{- else }}
-                name: {{ required "An certificate issuer or a TLS secret name is required for S3Inbox" .Values.s3Inbox.tls.secretName }}
-          {{- end }}
-        {{- if .Values.global.pkiPermissions }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
-      {{- end }}
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-inbox-certs
+        {{- else if .Values.s3inbox.tls.secretName }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for s3inbox" .Values.verify.tls.secretName }}
+        {{- end }}
       {{- end }}
       {{- if .Values.global.auth.jwtPub }}
         - name: jwt

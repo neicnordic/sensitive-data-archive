@@ -183,7 +183,7 @@ spec:
         resources:
 {{ toYaml .Values.auth.resources | trim | indent 10 }}
         volumeMounts:
-      {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
+      {{- if .Values.global.tls.enabled }}
         - name: tls
           mountPath: {{ template "tlsPath" . }}
       {{- end }}
@@ -218,15 +218,15 @@ spec:
       {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
-          projected:
-            sources:
-          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-auth-certs
-          {{- else }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for auth" .Values.auth.tls.secretName }}
-          {{- end }}
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-auth-certs
+        {{- else if .Values.auth.tls.secretName }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for auth" .Values.auth.tls.secretName }}
+        {{- end }}
       {{- end }}
 {{- end }}
 {{- end }}

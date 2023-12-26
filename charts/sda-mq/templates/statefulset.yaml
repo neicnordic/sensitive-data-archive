@@ -37,7 +37,7 @@ spec:
       securityContext:
         runAsUser: 100
         fsGroup: 101
-    {{- if and  .Values.persistence.volumePermissions .Values.persistence.enabled }}
+    {{- if and .Values.persistence.volumePermissions .Values.persistence.enabled }}
       initContainers:
       - name: init-data-chmod
         image: busybox

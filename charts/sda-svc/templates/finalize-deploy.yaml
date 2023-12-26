@@ -245,21 +245,15 @@ spec:
     {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-finalize-certs
-            {{- else }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
-            {{- end }}
-        {{- if .Values.global.pkiPermissions }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-finalize-certs
+        {{- else if .Values.finalize.tls.secretName }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
         {{- end }}
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}

@@ -114,16 +114,18 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
       volumes:
-        - name: {{ "tls"  }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-intercept-certs
-            {{- else }}
-              - secret:
-                  name: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
-            {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-intercept-certs
+        {{- else if .Values.intercept.tls.secretName }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for intercept" .Values.intercept.tls.secretName }}
+        {{- end }}
+      {{- end }}
     {{- end }}
       restartPolicy: Always
 {{- end }}
