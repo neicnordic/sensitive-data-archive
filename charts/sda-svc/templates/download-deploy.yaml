@@ -79,6 +79,11 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         command: ["sda-download"]
         env:
         - name: ARCHIVE_TYPE

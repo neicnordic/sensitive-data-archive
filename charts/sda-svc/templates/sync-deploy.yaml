@@ -67,6 +67,11 @@ spec:
         command: ["sda-sync"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: ARCHIVE_TYPE
   {{- if eq "s3" .Values.global.archive.storageType }}

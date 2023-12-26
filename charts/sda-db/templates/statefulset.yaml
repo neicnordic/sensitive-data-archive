@@ -57,6 +57,11 @@ spec:
             {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         volumeMounts:
         - name: data
           mountPath: /psql
@@ -71,6 +76,11 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.extraSecurityContext }}
 {{- toYaml .Values.extraSecurityContext | nindent 10 -}}
 {{- end }}

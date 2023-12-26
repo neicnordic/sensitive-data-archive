@@ -49,6 +49,11 @@ spec:
             chmod 700 /data/.erlang.cookie || true
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         volumeMounts:
         - name: data
           mountPath: /data
@@ -59,6 +64,11 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.extraSecurityContext }}
 {{- toYaml .Values.extraSecurityContext | nindent 10 -}}
 {{- end }}

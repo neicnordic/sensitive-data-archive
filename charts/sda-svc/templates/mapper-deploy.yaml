@@ -65,6 +65,11 @@ spec:
         command: ["sda-mapper"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}

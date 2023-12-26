@@ -65,6 +65,11 @@ spec:
         command: ["sda-finalize"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
 {{- if .Values.global.backupArchive.storageType }}
         - name: ARCHIVE_TYPE

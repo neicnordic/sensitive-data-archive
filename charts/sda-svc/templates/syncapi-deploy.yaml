@@ -64,6 +64,11 @@ spec:
         command: ["sda-syncapi"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.global.extraSecurityContext }}
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}
