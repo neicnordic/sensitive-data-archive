@@ -119,7 +119,7 @@ spec:
               - rabbitmq-diagnostics -q ping
           initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 3
+          timeoutSeconds: 9
         readinessProbe:
           exec:
             command:
@@ -127,8 +127,8 @@ spec:
               - -ec
               - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
           initialDelaySeconds: 30
-          periodSeconds: 5
-          timeoutSeconds: 3
+          periodSeconds: 10
+          timeoutSeconds: 9
         volumeMounts:
         - name: data
           mountPath: "/var/lib/rabbitmq/"
