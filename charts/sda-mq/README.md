@@ -39,7 +39,6 @@ Parameter | Description | Default
 `updateStrategyType` | Update strategy type. | `RollingUpdate`
 `networkPolicy.create` | Use network isolation. | `false`
 `networkPolicy.matchLabels` | App labels that are allowed to connect to the Message broker. | `app: sda-svc`
-`securityPolicy.create` | Use pod security policy. | `false`
 `persistence.enabled` | Enable persistence. | `true`
 `persistence.storageSize` | Volume size. | `8Gi`
 `persistence.storageClass` | Use specific storage class, by default dynamic provisioning enabled. | `null`

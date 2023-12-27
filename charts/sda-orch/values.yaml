@@ -23,9 +23,6 @@ pkiService:
 # Assume RBAC is enabled in the cluster
 rbacEnabled: true
 
-podSecurityPolicy:
-  create: true
-
 # utilize network isolation
 # Make sure you’ve configured a network provider with network policy support.
 # There are a number of network providers that support NetworkPolicy, including:

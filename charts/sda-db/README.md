@@ -37,7 +37,6 @@ Parameter | Description | Default
 `resources.limits.cpu` | CPU limit for container. |`200m`
 `revisionHistory` | Number of revisions to keep for the option to rollback a deployment | `3`
 `updateStrategyType` | Update strategy type. | `RollingUpdate`
-`securityPolicy.create` | Use pod security policy. | `false`
 `service.type` | Database service type. |`ClusterIP`
 `service.port` | Database service port. |`5432`
 

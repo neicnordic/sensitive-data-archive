@@ -89,9 +89,6 @@ global:
 # Assume RBAC is enabled in the cluster
   rbacEnabled: true
 
-  podSecurityPolicy:
-    create: false
-
 # Extra security context to apply to all pods
 # This should be a multi-line string mapping directly to the a map of
 # the securityContext to apply to the service pods

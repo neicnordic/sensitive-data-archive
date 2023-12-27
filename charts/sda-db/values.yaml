@@ -77,10 +77,6 @@ resources:
 ##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
 # revisionHistory: 3
 
-## This is only available on clusters running k8s < v1.25.0
-securityPolicy:
-  create: false
-
 service:
   type: ClusterIP
   port: 5432
