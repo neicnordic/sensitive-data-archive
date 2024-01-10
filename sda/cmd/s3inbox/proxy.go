@@ -103,18 +103,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Internal server error for request (%v)", r)
-	w.WriteHeader(http.StatusInternalServerError)
+	msg := fmt.Sprintf("Internal server error for request (%v)", r)
+	reportError(http.StatusInternalServerError, msg, w)
 }
 
 func (p *Proxy) notAllowedResponse(w http.ResponseWriter, _ *http.Request) {
-	log.Debug("not allowed response")
-	w.WriteHeader(http.StatusForbidden)
+	reportError(http.StatusForbidden, "not allowed response", w)
 }
 
 func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
-	log.Debug("not authorized")
-	w.WriteHeader(http.StatusUnauthorized)
+	reportError(http.StatusUnauthorized, "not authorized", w)
 }
 
 func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +132,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 
 	filepath, err := formatUploadFilePath(rawFilepath)
 	if err != nil {
-		log.Error(err.Error())
 		reportError(http.StatusNotAcceptable, err.Error(), w)
 
 		return
@@ -526,7 +523,8 @@ func formatUploadFilePath(filePath string) (string, error) {
 // Write the error and its status code to the response
 func reportError(errorCode int, message string, w http.ResponseWriter) {
 
-	w.WriteHeader(http.StatusNotAcceptable)
+	log.Error(message)
+	w.WriteHeader(errorCode)
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
