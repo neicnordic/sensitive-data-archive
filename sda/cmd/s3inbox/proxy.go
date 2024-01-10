@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,6 +58,12 @@ type Checksum struct {
 // S3RequestType is the type of request that we are currently proxying to the
 // backend
 type S3RequestType int
+
+type ErrorResponse struct {
+	XMLName xml.Name `xml:"Error"`
+	Code    string   `xml:"Code"`
+	Message string   `xml:"Message"`
+}
 
 // The different types of requests
 const (
@@ -127,8 +134,8 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 
 	filepath, err := formatUploadFilePath(rawFilepath)
 	if err != nil {
-		log.Debugf(err.Error())
-		w.WriteHeader(http.StatusNotAcceptable)
+		log.Error(err.Error())
+		reportError(http.StatusNotAcceptable, err.Error(), w)
 
 		return
 	}
@@ -514,4 +521,30 @@ func formatUploadFilePath(filePath string) (string, error) {
 	}
 
 	return outPath, nil
+}
+
+// Write the error and its status code to the response
+func reportError(errorCode int, message string, w http.ResponseWriter) {
+
+	w.WriteHeader(http.StatusNotAcceptable)
+	errorResponse := ErrorResponse{
+		Code:    http.StatusText(errorCode),
+		Message: message,
+	}
+	xmlData, err := xml.Marshal(errorResponse)
+	if err != nil {
+		// if the error message cannot be processed, just send the error code
+		log.Error(err)
+		w.WriteHeader(errorCode)
+	}
+
+	// Convert the XML byte slice to a string and write it to the response
+	_, err = io.WriteString(w, string(xmlData))
+
+	if err != nil {
+		// if the error message cannot be processed, just send the error code
+		log.Error(err)
+		w.WriteHeader(errorCode)
+	}
+
 }
