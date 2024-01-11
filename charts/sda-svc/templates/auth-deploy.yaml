@@ -6,9 +6,9 @@ metadata:
   name: {{ template "sda.fullname" . }}-auth
   labels:
     role: auth
-    app: {{ template "sda.fullname" . }}-auth
+    app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: "{{ .Values.auth.name }}"
+    component: {{ template "sda.fullname" . }}-auth
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:

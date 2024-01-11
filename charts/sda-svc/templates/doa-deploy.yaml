@@ -9,7 +9,7 @@ metadata:
     role: doa
     app: {{ template "sda.fullname" . }}-doa
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: "{{ .Values.doa.name }}"
+    component: {{ template "sda.fullname" . }}-doa
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:

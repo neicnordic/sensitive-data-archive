@@ -8,7 +8,7 @@ metadata:
     role: intercept
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-intercept
+    component: {{ template "sda.fullname" . }}-intercept
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -16,12 +16,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-intercept
+      app: {{ template "sda.fullname" . }}-intercept
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-intercept
+        app: {{ template "sda.fullname" . }}-intercept
         role: intercept
         release: {{ .Release.Name }}
       annotations:

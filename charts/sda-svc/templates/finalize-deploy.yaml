@@ -7,7 +7,7 @@ metadata:
     role: finalize
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-finalize
+    component: {{ template "sda.fullname" . }}-finalize
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-finalize
+      app: {{ template "sda.fullname" . }}-finalize
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-finalize
+        app: {{ template "sda.fullname" . }}-finalize
         role: finalize
         release: {{ .Release.Name }}
       annotations:

@@ -5,7 +5,7 @@ metadata:
   name: {{ template "sda.fullname" . }}-verify
   labels:
     role: verify
-    app: {{ template "sda.name" . }}
+    app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     component: {{ .Release.Name }}-verify
     release: {{ .Release.Name }}
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-verify
+      app: {{ template "sda.fullname" . }}-verify
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-verify
+        app: {{ template "sda.fullname" . }}-verify
         role: verify
         release: {{ .Release.Name }}
       annotations:

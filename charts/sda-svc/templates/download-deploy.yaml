@@ -8,7 +8,7 @@ metadata:
     role: download
     app: {{ template "sda.fullname" . }}-download
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: "{{ .Values.download.name }}"
+    component: {{ template "sda.fullname" . }}-download
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:

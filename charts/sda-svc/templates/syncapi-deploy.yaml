@@ -7,9 +7,9 @@ metadata:
   name: {{ template "sda.fullname" . }}-syncapi
   labels:
     role: syncapi
-    app: {{ template "sda.fullname" . }}-syncapi
+    app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-syncapi
+    component: {{ template "sda.fullname" . }}-syncapi
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:

@@ -7,7 +7,7 @@ metadata:
     role: mapper
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-mapper
+    component: {{ template "sda.fullname" . }}-mapper
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:

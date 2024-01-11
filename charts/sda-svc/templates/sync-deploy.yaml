@@ -9,7 +9,7 @@ metadata:
     role: sync
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-sync
+    component: {{ template "sda.fullname" . }}-sync
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -17,12 +17,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-sync
+      app: {{ template "sda.fullname" . }}-sync
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-sync
+        app: {{ template "sda.fullname" . }}-sync
         role: sync
         release: {{ .Release.Name }}
       annotations:

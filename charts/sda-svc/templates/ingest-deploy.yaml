@@ -7,7 +7,7 @@ metadata:
     role: ingest
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-ingest
+    component: {{ template "sda.fullname" . }}-ingest
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-ingest
+      app: {{ template "sda.fullname" . }}-ingest
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-ingest
+        app: {{ template "sda.fullname" . }}-ingest
         role: ingest
         release: {{ .Release.Name }}
       annotations:

@@ -8,7 +8,7 @@ metadata:
     role: inbox
     app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-inbox
+    component: {{ template "sda.fullname" . }}-inbox
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
