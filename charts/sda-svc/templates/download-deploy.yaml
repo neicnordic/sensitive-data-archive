@@ -235,7 +235,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-download-certs
-        {{- else if .Values.download.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for download" .Values.download.tls.secretName }}

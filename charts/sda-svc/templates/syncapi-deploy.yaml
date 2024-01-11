@@ -173,7 +173,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-syncapi-certs
-        {{- else if .Values.syncapi.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for syncapi" .Values.syncapi.tls.secretName }}

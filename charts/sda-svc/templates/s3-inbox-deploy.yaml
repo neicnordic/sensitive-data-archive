@@ -243,10 +243,10 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-inbox-certs
-        {{- else if .Values.s3inbox.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
-            secretName: {{ required "An certificate issuer or a TLS secret name is required for s3inbox" .Values.verify.tls.secretName }}
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for s3inbox" .Values.s3Ibox.tls.secretName }}
         {{- end }}
       {{- end }}
       {{- if .Values.global.auth.jwtPub }}

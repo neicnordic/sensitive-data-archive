@@ -203,7 +203,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-verify-certs
-        {{- else if .Values.verify.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for verify" .Values.verify.tls.secretName }}

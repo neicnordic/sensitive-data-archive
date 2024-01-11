@@ -250,7 +250,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-finalize-certs
-        {{- else if .Values.finalize.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}

@@ -222,7 +222,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-auth-certs
-        {{- else if .Values.auth.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for auth" .Values.auth.tls.secretName }}

@@ -187,7 +187,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-mapper-certs
-        {{- else if .Values.mapper.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for mapper" .Values.mapper.tls.secretName }}

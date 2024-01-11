@@ -267,7 +267,7 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-sync-certs
-        {{- else if .Values.sync.tls.secretName }}
+        {{- else }}
           secret:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for sync" .Values.sync.tls.secretName }}
