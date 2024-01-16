@@ -8,7 +8,7 @@ require (
 	github.com/iris-contrib/middleware/cors v0.0.0-20230311205048-b568fe9b470f
 	github.com/kataras/iris/v12 v12.2.7
 	github.com/lestrrat-go/jwx/v2 v2.0.19
-	github.com/neicnordic/crypt4gh v1.8.6
+	github.com/neicnordic/crypt4gh v1.8.8
 	github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.18.2
