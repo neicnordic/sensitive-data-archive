@@ -113,9 +113,10 @@ if [ "$STORAGETYPE" = "s3" ]; then
     ## test with token from OIDC service
     echo "testing with OIDC token"
     newToken=$(curl http://oidc:8080/tokens | jq '.[0]')
-    sed -i "s/access_token=.*/access_token=$newToken/" s3cfg
+    cp s3cfg oidc_s3cfg
+    sed -i "s/access_token=.*/access_token=$newToken/" oidc_s3cfg
 
-    s3cmd -c s3cfg put NA12878.bam.c4gh s3://requester_demo.org/data/file1.c4gh
+    s3cmd -c oidc_s3cfg put NA12878.bam.c4gh s3://requester_demo.org/data/file1.c4gh
 
     ## verify that messages exists in MQ
     echo "waiting for upload to complete"
