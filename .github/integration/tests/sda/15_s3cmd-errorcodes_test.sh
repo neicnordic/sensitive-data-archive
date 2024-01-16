@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -ex
 
 if [ "$STORAGETYPE" != "s3" ]; then
