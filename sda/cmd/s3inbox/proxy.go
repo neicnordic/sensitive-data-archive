@@ -524,25 +524,18 @@ func formatUploadFilePath(filePath string) (string, error) {
 func reportError(errorCode int, message string, w http.ResponseWriter) {
 
 	log.Error(message)
-	w.WriteHeader(errorCode)
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
 	}
+	w.WriteHeader(errorCode)
 	xmlData, err := xml.Marshal(errorResponse)
 	if err != nil {
-		// if the error message cannot be processed, just send the error code
+		// errors are logged but otherwised ignored
 		log.Error(err)
-		w.WriteHeader(errorCode)
-	}
-
-	// Convert the XML byte slice to a string and write it to the response
-	_, err = io.WriteString(w, string(xmlData))
-
-	if err != nil {
-		// if the error message cannot be processed, just send the error code
-		log.Error(err)
-		w.WriteHeader(errorCode)
+	} else {
+		// write the error message to the response
+		io.WriteString(w, string(xmlData))
 	}
 
 }
