@@ -153,7 +153,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	s3response, err := p.forwardToBackend(r)
 
 	if err != nil {
-		log.Debugf("forwarding error: %v", err)
+		log.Errorf("forwarding error: %v", err)
 		p.internalServerError(w, r)
 
 		return
