@@ -178,21 +178,12 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if p.messenger.IsConnClosed() {
-			log.Warning("connection is closed, reconnecting...")
-			m, err := broker.NewMQ(Conf.Broker)
-			if err != nil {
-				log.Errorf("could not reconnect to broker: %v", err)
-				// 500?
-				reportError(http.StatusBadGateway, "could not connect to broker", w)
-			} else {
-				p.messenger = m
-			}
-		}
-
-		if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
-			log.Errorf("error when sending message to broker: %v", err)
+		err = p.checkAndSendMessage(jsonMessage, r)
+		if err != nil {
+			log.Errorf("broker error: %v", err)
+			// 500?
 			reportError(http.StatusBadGateway, "could not connect to broker", w)
+
 			return
 		}
 
@@ -235,6 +226,26 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	// Close so connection can be reused.
 	_, _ = io.ReadAll(s3response.Body)
 	_ = s3response.Body.Close()
+}
+
+// Renew the connection to MQ if necessary, then send message
+func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
+	var err error
+	if p.messenger.IsConnClosed() {
+		log.Warning("connection is closed, reconnecting...")
+		p.messenger, err = broker.NewMQ(p.messenger.Conf)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+
+		return fmt.Errorf("error when sending message to broker: %v", err)
+	}
+
+	return nil
 }
 
 func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
