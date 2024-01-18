@@ -193,7 +193,7 @@ func TestValidateJSONIngestionAccessionRequest(t *testing.T) {
 		User:     "JohnDoe",
 		FilePath: "path/to file",
 		DecryptedChecksums: []Checksums{
-			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
+			{Type: "md5", Value: "68b329da9893e34099c7d8ad5cb9c940"},
 		},
 	}
 
@@ -248,7 +248,7 @@ func TestValidateJSONIngestionCompletion(t *testing.T) {
 		FilePath:    "path/to file",
 		AccessionID: "EGAF00123456789",
 		DecryptedChecksums: []Checksums{
-			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
+			{Type: "md5", Value: "68b329da9893e34099c7d8ad5cb9c940"},
 		},
 	}
 
