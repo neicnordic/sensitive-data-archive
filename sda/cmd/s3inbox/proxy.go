@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,6 +59,12 @@ type Checksum struct {
 // backend
 type S3RequestType int
 
+type ErrorResponse struct {
+	XMLName xml.Name `xml:"Error"`
+	Code    string   `xml:"Code"`
+	Message string   `xml:"Message"`
+}
+
 // The different types of requests
 const (
 	MakeBucket S3RequestType = iota
@@ -96,18 +103,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Internal server error for request (%v)", r)
-	w.WriteHeader(http.StatusInternalServerError)
+	msg := fmt.Sprintf("Internal server error for request (%v)", r)
+	reportError(http.StatusInternalServerError, msg, w)
 }
 
 func (p *Proxy) notAllowedResponse(w http.ResponseWriter, _ *http.Request) {
-	log.Debug("not allowed response")
-	w.WriteHeader(http.StatusForbidden)
+	reportError(http.StatusForbidden, "not allowed response", w)
 }
 
 func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
-	log.Debug("not authorized")
-	w.WriteHeader(http.StatusUnauthorized)
+	reportError(http.StatusUnauthorized, "not authorized", w)
 }
 
 func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
@@ -127,8 +132,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 
 	filepath, err := formatUploadFilePath(rawFilepath)
 	if err != nil {
-		log.Debugf(err.Error())
-		w.WriteHeader(http.StatusNotAcceptable)
+		reportError(http.StatusNotAcceptable, err.Error(), w)
 
 		return
 	}
@@ -514,4 +518,29 @@ func formatUploadFilePath(filePath string) (string, error) {
 	}
 
 	return outPath, nil
+}
+
+// Write the error and its status code to the response
+func reportError(errorCode int, message string, w http.ResponseWriter) {
+
+	log.Error(message)
+	errorResponse := ErrorResponse{
+		Code:    http.StatusText(errorCode),
+		Message: message,
+	}
+	w.WriteHeader(errorCode)
+	xmlData, err := xml.Marshal(errorResponse)
+	if err != nil {
+		// errors are logged but otherwised ignored
+		log.Error(err)
+
+		return
+	}
+	// write the error message to the response
+	_, err = io.WriteString(w, string(xmlData))
+	if err != nil {
+		// errors are logged but otherwised ignored
+		log.Error(err)
+	}
+
 }
