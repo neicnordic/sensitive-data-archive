@@ -214,7 +214,8 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = io.Copy(w, s3response.Body)
 	if err != nil {
-		log.Fatalln("redirect error")
+		reportError(http.StatusInternalServerError, fmt.Sprintf("redirect error: %v", err), w)
+		return
 	}
 
 	// Read any remaining data in the connection and
@@ -409,7 +410,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 
 	checksum.Value, event.Filesize, err = p.requestInfo(r.URL.Path)
 	if err != nil {
-		log.Fatalf("could not get checksum information: %s", err)
+		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
 
 	// Case for simple upload
