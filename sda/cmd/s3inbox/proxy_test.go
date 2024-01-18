@@ -56,7 +56,7 @@ func (suite *ProxyTests) SetupTest() {
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",
-		Exchange: "amq.default",
+		Exchange: "",
 	}
 
 	suite.messenger = &broker.AMQPBroker{}
