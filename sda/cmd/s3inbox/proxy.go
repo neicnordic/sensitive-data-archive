@@ -144,6 +144,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
 		if err != nil {
 			log.Errorf("failed to register file in database: %v", err)
+			p.internalServerError(w, r)
 
 			return
 		}
@@ -162,35 +163,46 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	// Send message to upstream and set file as uploaded in the database
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
-		message, _ := p.CreateMessageFromRequest(r, claims)
+		message, err := p.CreateMessageFromRequest(r, claims)
+		if err != nil {
+			log.Error(err)
+			p.internalServerError(w, r)
+
+			return
+		}
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
 			log.Errorf("failed to marshal rabbitmq message to json: %v", err)
+			p.internalServerError(w, r)
 
 			return
 		}
 
-		switch p.messenger.IsConnClosed() {
-		case true:
-			log.Errorln("connection is closed")
-			w.WriteHeader(http.StatusServiceUnavailable)
-
+		if p.messenger.IsConnClosed() {
+			log.Warning("connection is closed, reconnecting...")
 			m, err := broker.NewMQ(Conf.Broker)
-			if err == nil {
+			if err != nil {
+				log.Errorf("could not reconnect to broker: %v", err)
+				// 500?
+				reportError(http.StatusBadGateway, "could not connect to broker", w)
+			} else {
 				p.messenger = m
 			}
+		}
 
-		case false:
-			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
-				log.Debug("error when sending message")
-				log.Error(err)
-			}
+		if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+			log.Errorf("error when sending message to broker: %v", err)
+			reportError(http.StatusBadGateway, "could not connect to broker", w)
+			return
+		}
 
-			log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
-			err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
-			if err != nil {
-				log.Error(err)
-			}
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
+		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		if err != nil {
+			log.Error(err)
+			reportError(http.StatusBadGateway, "could not connect to db", w)
+
+			return
 		}
 
 		delete(p.fileIds, r.URL.Path)
@@ -215,6 +227,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	_, err = io.Copy(w, s3response.Body)
 	if err != nil {
 		reportError(http.StatusInternalServerError, fmt.Sprintf("redirect error: %v", err), w)
+
 		return
 	}
 
