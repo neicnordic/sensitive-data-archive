@@ -123,7 +123,7 @@
                 "type": "object",
                 "properties": {
                     "type": {
-                        "const": "md5"
+                        "const": "sha256"
                     }
                 },
                 "required": [
