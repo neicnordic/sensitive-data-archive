@@ -9,7 +9,7 @@ metadata:
     role: sync
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-sync
+    component: {{ template "sda.fullname" . }}-sync
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -17,12 +17,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-sync
+      app: {{ template "sda.fullname" . }}-sync
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-sync
+        app: {{ template "sda.fullname" . }}-sync
         role: sync
         release: {{ .Release.Name }}
       annotations:
@@ -67,6 +67,11 @@ spec:
         command: ["sda-sync"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: ARCHIVE_TYPE
   {{- if eq "s3" .Values.global.archive.storageType }}
@@ -256,24 +261,18 @@ spec:
             mountPath: {{ template "tlsPath" . }}
   {{- end }}
       volumes:
-  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-sync-certs
-            {{- else }}
-              - secret:
-                  name: {{ required "An certificate issuer or a TLS secret name is required for sync" .Values.sync.tls.secretName }}
-            {{- end }}
-    {{- if .Values.global.pkiPermissions }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
-    {{- end }}
-  {{- end }}
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-sync-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for sync" .Values.sync.tls.secretName }}
+        {{- end }}
+      {{- end }}
     {{- if not .Values.global.vaultSecrets }}
         - name: c4gh
           secret:

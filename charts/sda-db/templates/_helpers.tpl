@@ -36,9 +36,9 @@ Create chart name and version as used by the chart label.
     {{- else if and .Values.externalPkiService.tlsPath .Values.global.tls.certName -}}
         {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.externalPkiService.tlsPath .Values.global.tls.certName) "/") -}}
     {{- else if and .Values.global.tls.secretName .Values.global.tls.certName -}}
-        {{- printf "%s/tls/%s" .Values.persistence.mountPath (required "name of tls certificate is required" .Values.global.tls.certName) -}}
+        {{- printf "/tls/%s" .Values.global.tls.certName -}}
     {{- else -}}
-        {{- printf "%s/tls/tls.crt" .Values.persistence.mountPath -}}
+        {{- printf "/tls/tls.crt" -}}
     {{- end -}}
 {{- end -}}
 
@@ -48,9 +48,9 @@ Create chart name and version as used by the chart label.
     {{- else if and .Values.externalPkiService.tlsPath .Values.global.tls.keyName -}}
         {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.externalPkiService.tlsPath .Values.global.tls.keyName) "/") -}}
     {{- else if and .Values.global.tls.secretname .Values.global.tls.keyName -}}
-        {{- printf "%s/tls/%s" .Values.persistence.mountPath (required "name of tls key is required" .Values.global.tls.keyName) -}}
+        {{- printf "/tls/%s" .Values.global.tls.keyName -}}
     {{- else -}}
-        {{- printf "%s/tls/tls.key" .Values.persistence.mountPath -}}
+        {{- printf "/tls/tls.key" -}}
     {{- end -}}
 {{- end -}}
 
@@ -60,9 +60,9 @@ Create chart name and version as used by the chart label.
     {{- else if and .Values.externalPkiService.tlsPath .Values.global.tls.CAFile -}}
         {{- printf "%s" (regexReplaceAll "^/*|/+" (printf "%s/%s" .Values.externalPkiService.tlsPath .Values.global.tls.CAFile) "/") -}}
     {{- else if and .Values.global.tls.secretname .Values.global.tls.CAFile -}}
-        {{- printf "%s/tls/%s" .Values.persistence.mountPath (required "name of ca file is required" .Values.global.tls.CAFile)  -}}
+        {{- printf "/tls/%s" .Values.global.tls.CAFile -}}
     {{- else -}}
-        {{- printf "%s/tls/ca.crt" .Values.persistence.mountPath -}}
+        {{- printf "/tls/ca.crt" -}}
     {{- end -}}
 {{- end -}}
 
@@ -102,7 +102,7 @@ Create chart name and version as used by the chart label.
     {{- if .Values.persistence.mountPath }}
         {{ printf "%s/pgdata" .Values.persistence.mountPath }}
     {{- else }}
-            {{- "/var/lib/postgresql/data/pgdata/" }}
+            {{- "/var/lib/postgresql/data/pgdata" }}
     {{- end -}}
 {{- end -}}
 

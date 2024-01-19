@@ -7,7 +7,7 @@ metadata:
     role: mapper
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-mapper
+    component: {{ template "sda.fullname" . }}-mapper
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -41,23 +41,6 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
-    {{- if and .Values.global.pkiPermissions  .Values.global.tls.enabled }}
-      initContainers:
-      - name: tls-init
-        image: busybox
-        command: ["/bin/sh", "-c"]
-        args: ["/bin/cp /tls-certs/* /tls/ && chown 65534:65534 /tls/* && chmod 0600 /tls/*"]
-        securityContext:
-          allowPrivilegeEscalation: false
-{{- if .Values.global.extraSecurityContext }}
-{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
-{{- end }}
-        volumeMounts:
-        - name: tls-certs
-          mountPath: /tls-certs
-        - name: tls
-          mountPath: /tls
-    {{- end }}
       containers:
       - name: mapper
         image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
@@ -65,6 +48,11 @@ spec:
         command: ["sda-mapper"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
@@ -193,21 +181,17 @@ spec:
           {{- end }}
   {{- end }}
       volumes:
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-mapper-certs
-          {{- else if .Values.mapper.tls.secretName }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for mapper" .Values.mapper.tls.secretName }}
-          {{- end }}
-      {{- if .Values.global.pkiPermissions }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-mapper-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for mapper" .Values.mapper.tls.secretName }}
+        {{- end }}
       {{- end }}
       {{- if eq "posix" .Values.global.inbox.storageType }}
         - name: inbox

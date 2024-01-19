@@ -5,7 +5,7 @@ metadata:
   name: {{ template "sda.fullname" . }}-verify
   labels:
     role: verify
-    app: {{ template "sda.name" . }}
+    app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     component: {{ .Release.Name }}-verify
     release: {{ .Release.Name }}
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-verify
+      app: {{ template "sda.fullname" . }}-verify
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-verify
+        app: {{ template "sda.fullname" . }}-verify
         role: verify
         release: {{ .Release.Name }}
       annotations:
@@ -42,23 +42,6 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
-    {{- if and .Values.global.pkiPermissions .Values.global.tls.enabled }}
-      initContainers:
-      - name: tls-init
-        image: busybox
-        command: ["/bin/sh", "-c"]
-        args: ["/bin/cp /tls-certs/* /tls/ && chown 65534:65534 /tls/* && chmod 0600 /tls/*"]
-        securityContext:
-          allowPrivilegeEscalation: false
-{{- if .Values.global.extraSecurityContext }}
-{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
-{{- end }}
-        volumeMounts:
-        - name: tls-certs
-          mountPath: /tls-certs
-        - name: tls
-          mountPath: /tls
-    {{- end }}
       containers:
       - name: verify
         image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
@@ -66,6 +49,11 @@ spec:
         command: ["sda-verify"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: ARCHIVE_TYPE
       {{- if eq "s3" .Values.global.archive.storageType }}
@@ -210,21 +198,15 @@ spec:
         {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-verify-certs
-            {{- else if .Values.verify.tls.secretName }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for verify" .Values.verify.tls.secretName }}
-            {{- end }}
-        {{- if .Values.global.pkiPermissions }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-verify-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for verify" .Values.verify.tls.secretName }}
         {{- end }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}

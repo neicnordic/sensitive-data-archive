@@ -7,7 +7,7 @@ metadata:
     role: finalize
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-finalize
+    component: {{ template "sda.fullname" . }}-finalize
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-finalize
+      app: {{ template "sda.fullname" . }}-finalize
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-finalize
+        app: {{ template "sda.fullname" . }}-finalize
         role: finalize
         release: {{ .Release.Name }}
       annotations:
@@ -65,6 +65,11 @@ spec:
         command: ["sda-finalize"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
 {{- if .Values.global.backupArchive.storageType }}
         - name: ARCHIVE_TYPE
@@ -240,21 +245,15 @@ spec:
     {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-finalize-certs
-            {{- else }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
-            {{- end }}
-        {{- if .Values.global.pkiPermissions }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-finalize-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
         {{- end }}
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}

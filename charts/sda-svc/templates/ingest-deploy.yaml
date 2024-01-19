@@ -7,7 +7,7 @@ metadata:
     role: ingest
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-ingest
+    component: {{ template "sda.fullname" . }}-ingest
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-ingest
+      app: {{ template "sda.fullname" . }}-ingest
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-ingest
+        app: {{ template "sda.fullname" . }}-ingest
         role: ingest
         release: {{ .Release.Name }}
       annotations:
@@ -66,6 +66,11 @@ spec:
         command: ["sda-ingest"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: ARCHIVE_TYPE
       {{- if eq "s3" .Values.global.archive.storageType }}
@@ -254,24 +259,18 @@ spec:
             - key: {{ .Values.global.c4gh.keyFile }}
               path: {{ .Values.global.c4gh.keyFile }}
       {{- end }}
-    {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-        - name: {{ ternary "tls" "tls-certs" (empty .Values.global.pkiPermissions) }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-ingest-certs
-            {{- else }}
-              - secret:
-                  name: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
-            {{- end }}
-      {{- if .Values.global.pkiPermissions }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
-          emptyDir:
-            medium: Memory
-            sizeLimit: 10Mi
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-ingest-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
+        {{- end }}
       {{- end }}
-    {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
         {{- if .Values.global.archive.existingClaim }}

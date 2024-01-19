@@ -83,14 +83,9 @@ global:
 
 # If an external PKI infrastructure is used set this to true
   pkiService: false
-# if permissions needs to be set on the injected certificates set this to true
-  pkiPermissions: true
 
 # Assume RBAC is enabled in the cluster
   rbacEnabled: true
-
-  podSecurityPolicy:
-    create: false
 
 # Extra security context to apply to all pods
 # This should be a multi-line string mapping directly to the a map of

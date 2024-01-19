@@ -26,7 +26,6 @@ Parameter | Description | Default
 `tls.caCert` | name of the CA file| `""`
 `rbacEnabled` | Use role based access control. |`true`
 `networkPolicy.create` | Use network isolation. | `false`
-`podSecurityPolicy.create` | Use pod security policy. | `false`
 `vaultSecrets` | Use If Hasicorp Vault is used for secrets management. | `false`
 `broker.verifyPeer` | Use Client/Server verification (used by MQ connection). | `true`
 `broker.host` | Domain name or IP address to the message broker. |`""`

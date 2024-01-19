@@ -48,7 +48,7 @@ networkPolicy:
 ##   set, choosing the default provisioner.
 persistence: 
   enabled: true
-  mountPath: "/var/lib/postgresql/data/"
+  mountPath: "/var/lib/postgresql/data"
   storageSize: 8Gi
   storageClass:
   existingClaim:
@@ -76,10 +76,6 @@ resources:
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
 ##  RevisionHistoryLimit is number of old ReplicaSets to retain to allow rollback.
 # revisionHistory: 3
-
-## This is only available on clusters running k8s < v1.25.0
-securityPolicy:
-  create: false
 
 service:
   type: ClusterIP

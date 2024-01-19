@@ -7,9 +7,9 @@ metadata:
   name: {{ template "sda.fullname" . }}-syncapi
   labels:
     role: syncapi
-    app: {{ template "sda.fullname" . }}-syncapi
+    app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-syncapi
+    component: {{ template "sda.fullname" . }}-syncapi
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -64,6 +64,11 @@ spec:
         command: ["sda-syncapi"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.global.extraSecurityContext }}
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}
@@ -164,15 +169,15 @@ spec:
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
-          projected:
-            sources:
-          {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-syncapi-certs
-          {{- else }}
-            - secret:
-                name: {{ required "An certificate issuer or a TLS secret name is required for syncapi" .Values.syncapi.tls.secretName }}
-          {{- end }}
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-syncapi-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for syncapi" .Values.syncapi.tls.secretName }}
+        {{- end }}
       {{- end }}
 {{- end }}
 {{- end }}

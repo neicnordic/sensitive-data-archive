@@ -8,7 +8,7 @@ metadata:
     role: intercept
     app: {{ template "sda.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-intercept
+    component: {{ template "sda.fullname" . }}-intercept
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -16,12 +16,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-intercept
+      app: {{ template "sda.fullname" . }}-intercept
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-intercept
+        app: {{ template "sda.fullname" . }}-intercept
         role: intercept
         release: {{ .Release.Name }}
       annotations:
@@ -49,6 +49,11 @@ spec:
         command: ["sda-intercept"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.global.extraSecurityContext }}
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}
@@ -109,16 +114,18 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
       volumes:
-        - name: {{ "tls"  }}
-          projected:
-            sources:
-            {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-            - secret:
-                name: {{ template "sda.fullname" . }}-intercept-certs
-            {{- else }}
-              - secret:
-                  name: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
-            {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-intercept-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for intercept" .Values.intercept.tls.secretName }}
+        {{- end }}
+      {{- end }}
     {{- end }}
       restartPolicy: Always
 {{- end }}

@@ -8,7 +8,7 @@ metadata:
     role: inbox
     app: {{ template "sda.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ .Release.Name }}-inbox
+    component: {{ template "sda.fullname" . }}-inbox
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
@@ -83,6 +83,11 @@ spec:
                            -passout pass:"${KEYSTORE_PASSWORD}"
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         env:
         - name: KEYSTORE_PASSWORD
           value: {{ required "Keystore password is required" .Values.sftpInbox.keystorePass | quote }}
@@ -99,6 +104,11 @@ spec:
         command: ["java", "-jar", "inbox-0.0.3-SNAPSHOT.jar"]
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.global.extraSecurityContext }}
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}

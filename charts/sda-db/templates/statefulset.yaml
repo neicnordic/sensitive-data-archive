@@ -37,7 +37,7 @@ spec:
       securityContext:
         runAsUser: 70
         fsGroup: 70
-    {{- if or .Values.persistence.volumePermissions (and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath)) }}
+    {{- if and .Values.persistence.volumePermissions .Values.persistence.enabled }}
       initContainers:
       - name: init-data-chmod
         image: busybox
@@ -50,20 +50,16 @@ spec:
             chmod 700 /psql/pgdata
             find /psql -mindepth 1 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | xargs chown -R 70:70
             {{- end }}
-            {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
-            mkdir -p /psql/tls
-            cp /tls/* /psql/tls
-            chmod 600 /psql/tls/*
-            {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
         volumeMounts:
         - name: data
           mountPath: /psql
-      {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
-        - name: certs
-          mountPath: /tls
-      {{- end }}
     {{- end }}
       containers:
       - name: postgresql
@@ -71,6 +67,11 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
 {{- if .Values.extraSecurityContext }}
 {{- toYaml .Values.extraSecurityContext | nindent 10 -}}
 {{- end }}
@@ -123,11 +124,16 @@ spec:
         volumeMounts:
         - name: data
           mountPath: {{ .Values.persistence.mountPath }}
+        {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
+        - name: certs
+          mountPath: /tls
+        {{- end }}
       volumes:
     {{- if and .Values.global.tls.enabled (not .Values.externalPkiService.tlsPath) }}
       - name: certs
         secret:
           secretName: {{ template "TLSsecret" . }}
+          defaultMode: 0440
     {{- end }}
       - name: data
   {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
