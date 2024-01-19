@@ -244,16 +244,17 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 
 	start := time.Now()
 	for err != nil && time.Since(start) < retryTime {
+		if strings.Contains(err.Error(), "NoSuchKey:") {
+			return nil, err
+		}
+		time.Sleep(1 * time.Second)
 		r, err = sb.Client.GetObject(&s3.GetObjectInput{
 			Bucket: aws.String(sb.Bucket),
 			Key:    aws.String(filePath),
 		})
-		time.Sleep(1 * time.Second)
 	}
 
 	if err != nil {
-		log.Error(err)
-
 		return nil, err
 	}
 
@@ -304,17 +305,18 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 	// Retry on error up to five minutes to allow for
 	// "slow writes' or s3 eventual consistency
 	for err != nil && time.Since(start) < retryTime {
+		if strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
+			return 0, err
+		}
+		time.Sleep(1 * time.Second)
 		r, err = sb.Client.HeadObject(&s3.HeadObjectInput{
 			Bucket: aws.String(sb.Bucket),
-			Key:    aws.String(filePath)})
-
-		time.Sleep(1 * time.Second)
+			Key:    aws.String(filePath),
+		})
 
 	}
 
 	if err != nil {
-		log.Errorln(err)
-
 		return 0, err
 	}
 

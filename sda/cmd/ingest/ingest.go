@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -147,7 +148,7 @@ func main() {
 					continue
 				}
 
-				if err := db.UpdateFileStatus(fileUUID, "disabled", delivered.CorrelationId, "ingest", string(delivered.Body)); err != nil {
+				if err := db.UpdateFileEventLog(fileUUID, "disabled", delivered.CorrelationId, "ingest", "{}", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 					if err = delivered.Nack(false, false); err != nil {
 						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
@@ -195,7 +196,7 @@ func main() {
 						continue
 					}
 
-					if err = db.UpdateFileStatus(fileInfo.Path, "enabled", delivered.CorrelationId, "ingest", string(delivered.Body)); err != nil {
+					if err = db.UpdateFileEventLog(fileInfo.Path, "enabled", delivered.CorrelationId, "ingest", "{}", string(delivered.Body)); err != nil {
 						log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
@@ -257,20 +258,32 @@ func main() {
 				}
 
 				file, err := inbox.NewFileReader(message.FilePath)
-				if err != nil {
+				if err != nil { //nolint:nestif
 					log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
-					// Send the message to an error queue so it can be analyzed.
-					fileError := broker.InfoError{
-						Error:           "Failed to open file to ingest",
-						Reason:          err.Error(),
-						OriginalMessage: message,
+					if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") {
+						jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
+						if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", string(jsonMsg), string(delivered.Body)); err != nil {
+							log.Errorf("failed to set error status for file from message: %v, reason: %s", delivered.CorrelationId, err.Error())
+						}
+						// Send the message to an error queue so it can be analyzed.
+						fileError := broker.InfoError{
+							Error:           "Failed to open file to ingest",
+							Reason:          err.Error(),
+							OriginalMessage: message,
+						}
+						body, _ := json.Marshal(fileError)
+						if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+							log.Errorf("failed to publish message, reason: (%s)", err.Error())
+						}
+						if err = delivered.Ack(false); err != nil {
+							log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
+						}
+
+						continue mainWorkLoop
 					}
-					body, _ := json.Marshal(fileError)
-					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: (%s)", err.Error())
-					}
-					if err = delivered.Ack(false); err != nil {
-						log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
+
+					if err = delivered.Nack(false, true); err != nil {
+						log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					// Restart on new message
@@ -300,8 +313,7 @@ func main() {
 					continue
 				}
 
-				err = db.UpdateFileStatus(fileID, "submitted", delivered.CorrelationId, message.User, string(delivered.Body))
-				if err != nil {
+				if err = db.UpdateFileEventLog(fileID, "submitted", delivered.CorrelationId, message.User, "{}", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 				}
 
@@ -354,10 +366,12 @@ func main() {
 						header, err := tryDecrypt(key, readBuffer)
 						if err != nil {
 							log.Errorf("Trying to decrypt start of file failed, reason: (%s)", err.Error())
+							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()), string(delivered.Body)); err != nil {
+								log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
+							}
 
-							// Nack message so the server gets notified that something is wrong. Do not requeue the message.
-							if err = delivered.Nack(false, false); err != nil {
-								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
+							if err := delivered.Ack(false); err != nil {
+								log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
 							}
 
 							// Send the message to an error queue so it can be analyzed.
@@ -427,6 +441,8 @@ func main() {
 
 				file.Close()
 				dest.Close()
+
+				// At this point we should do checksum comparison, but that requires updating the AWS library
 
 				fileInfo := database.FileInfo{}
 				fileInfo.Path = fileID

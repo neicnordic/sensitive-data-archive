@@ -102,4 +102,4 @@ for file in NA12878.bam.c4gh NA12878.bai.c4gh NA12878_20k_b37.bam.c4gh NA12878_2
     fi
 done
 
-echo "files backed up successfully"
+echo "backup and finalize test completed successfully"

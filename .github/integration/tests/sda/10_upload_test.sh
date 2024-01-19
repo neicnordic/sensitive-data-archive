@@ -1,5 +1,5 @@
 #!/bin/sh
-set -ex
+set -e
 
 if [ -z "$STORAGETYPE" ]; then
     echo "STORAGETYPE not set, exiting"
@@ -27,7 +27,7 @@ if [ -n "$PGSSLCERT" ]; then
     URI=https://rabbitmq:15671
 fi
 ## empty all queues ##
-for q in completed inbox verified; do
+for q in accession archived backup completed inbox ingest mappings verified; do
     curl -s -k -u guest:guest -X DELETE "$URI/api/queues/sda/$q/contents"
 done
 ## truncate database

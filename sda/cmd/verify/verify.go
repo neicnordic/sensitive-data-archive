@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -91,14 +92,13 @@ func main() {
 				// Restart on new message
 				continue
 			}
+			// we unmarshal the message in the validation step so this is safe to do
+			_ = json.Unmarshal(delivered.Body, &message)
 
 			log.Infof(
 				"Received work (corr-id: %s, filepath: %s, user: %s)",
 				delivered.CorrelationId, message.FilePath, message.User,
 			)
-
-			// we unmarshal the message in the validation step so this is safe to do
-			_ = json.Unmarshal(delivered.Body, &message)
 
 			// If the file has been canceled by the uploader, don't spend time working on it.
 			status, err := db.GetFileStatus(delivered.CorrelationId)
@@ -134,9 +134,7 @@ func main() {
 			header, err := db.GetHeader(message.FileID)
 			if err != nil {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
-
-				// Nack message so the server gets notified that something is wrong but don't requeue the message
-				if err := delivered.Nack(false, false); err != nil {
+				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
 
 				}
@@ -159,8 +157,29 @@ func main() {
 
 			var file database.FileInfo
 			file.Size, err = archive.GetFileSize(message.ArchivePath)
-			if err != nil {
+			if err != nil { //nolint:nestif
 				log.Errorf("Failed to get archived file size, reson: (%s)", err.Error())
+				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
+					jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
+					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", string(jsonMsg), string(delivered.Body)); err != nil {
+						log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
+					}
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
+				}
+
+				// Send the message to an error queue so it can be analyzed.
+				fileError := broker.InfoError{
+					Error:           "Failed to get archived file size",
+					Reason:          err.Error(),
+					OriginalMessage: message,
+				}
+				body, _ := json.Marshal(fileError)
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
 
 				continue
 			}
@@ -169,7 +188,6 @@ func main() {
 			f, err := archive.NewFileReader(message.ArchivePath)
 			if err != nil {
 				log.Errorf("Failed to open archived file, reson: %v ", err.Error())
-
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Failed to open archived file",
@@ -222,6 +240,8 @@ func main() {
 
 				continue
 			}
+
+			// At this point we should do checksum comparison
 
 			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
