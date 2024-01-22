@@ -222,6 +222,60 @@ func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 	assert.Equal(suite.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
 
+func (suite *ProxyTests) TestServeHTTP_MQConnectionClosed() {
+	// Set up
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	database, _ := database.NewSDAdb(suite.DBConf)
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+
+	// Test that the mq connection will be restored when needed
+	proxy.messenger.Connection.Close()
+	assert.True(suite.T(), proxy.messenger.Connection.IsClosed())
+	r, _ := http.NewRequest("PUT", "/username/connectionclosed-file", nil)
+	w := httptest.NewRecorder()
+	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	proxy.ServeHTTP(w, r)
+	assert.Equal(suite.T(), 200, w.Result().StatusCode) // nolint:bodyclose
+	assert.False(suite.T(), proxy.messenger.Connection.IsClosed())
+}
+
+func (suite *ProxyTests) TestServeHTTP_MQChannelClosed() {
+	// Set up
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	database, _ := database.NewSDAdb(suite.DBConf)
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+
+	// Test that the mq channel will be restored when needed
+	proxy.messenger.Channel.Close()
+	assert.True(suite.T(), proxy.messenger.Channel.IsClosed())
+	r, _ := http.NewRequest("PUT", "/username/channelclosed-file", nil)
+	w := httptest.NewRecorder()
+	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	proxy.ServeHTTP(w, r)
+	assert.Equal(suite.T(), 200, w.Result().StatusCode) // nolint:bodyclose
+	assert.False(suite.T(), proxy.messenger.Channel.IsClosed())
+}
+
+func (suite *ProxyTests) TestServeHTTP_MQ_Unavailable() {
+	// Set up
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	database, _ := database.NewSDAdb(suite.DBConf)
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+
+	// Test that the correct status code is returned when mq connection can't be created
+	proxy.messenger.Conf.Port = 123456
+	proxy.messenger.Connection.Close()
+	assert.True(suite.T(), proxy.messenger.Connection.IsClosed())
+	r, _ := http.NewRequest("PUT", "/username/mqunavailbale-file", nil)
+	w := httptest.NewRecorder()
+	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	proxy.ServeHTTP(w, r)
+	assert.Equal(suite.T(), 500, w.Result().StatusCode) // nolint:bodyclose
+}
+
 // nolint:bodyclose
 func (suite *ProxyTests) TestServeHTTP_allowed() {
 
