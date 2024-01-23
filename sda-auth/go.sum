@@ -110,8 +110,8 @@ github.com/microcosm-cc/bluemonday v1.0.25/go.mod h1:ZIOjCQp1OrzBBPIJmfX4qDYFuhU
 github.com/mitchellh/go-wordwrap v1.0.1 h1:TLuKupo69TCn6TQSyGxwI1EblZZEsQ0vMlAFQflz0v0=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
-github.com/neicnordic/crypt4gh v1.8.8 h1:mP0VSAspADLIJPC+a0o4lfzX49O4clkMkYoXKRHh6MM=
-github.com/neicnordic/crypt4gh v1.8.8/go.mod h1:Wq3Y/xgaEA2rDoYiqT91uIXIlZO2IJOWnwtcQg4RiqU=
+github.com/neicnordic/crypt4gh v1.8.10 h1:oAmmV84OVpmHP2APn5inv8v3Ep2iIofKVUdfS9xXu3E=
+github.com/neicnordic/crypt4gh v1.8.10/go.mod h1:9jve3/N4BQTdiO6cnWqwg/4xQic6dQzPSPZqfAu9GBo=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282 h1:TQMyrpijtkFyXpNI3rY5hsZQZw+paiH+BfAlsb81HBY=
