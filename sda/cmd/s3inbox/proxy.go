@@ -102,7 +102,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request) {
+// Report 500 to the user, log the original error
+func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request, err string) {
+	log.Error(err)
 	msg := fmt.Sprintf("Internal server error for request (%v)", r)
 	reportError(http.StatusInternalServerError, msg, w)
 }
@@ -146,8 +148,8 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
 		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
 		if err != nil {
-			log.Errorf("failed to register file in database: %v", err)
-			p.internalServerError(w, r)
+
+			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
 			return
 		}
@@ -157,8 +159,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	s3response, err := p.forwardToBackend(r)
 
 	if err != nil {
-		log.Errorf("forwarding error: %v", err)
-		p.internalServerError(w, r)
+		p.internalServerError(w, r, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
@@ -168,15 +169,13 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		log.Debug("create message")
 		message, err := p.CreateMessageFromRequest(r, claims)
 		if err != nil {
-			log.Error(err)
-			p.internalServerError(w, r)
+			p.internalServerError(w, r, err.Error())
 
 			return
 		}
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			log.Errorf("failed to marshal rabbitmq message to json: %v", err)
-			p.internalServerError(w, r)
+			p.internalServerError(w, r, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
 
 			return
 		}
