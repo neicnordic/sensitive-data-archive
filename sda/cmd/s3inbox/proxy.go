@@ -240,6 +240,15 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 		}
 	}
 
+	if p.messenger.Channel.IsClosed() {
+		log.Warning("channel is closed, recreating...")
+		err := p.messenger.CreateNewChannel()
+
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 
 		return fmt.Errorf("error when sending message to broker: %v", err)
