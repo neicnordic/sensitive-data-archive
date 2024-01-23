@@ -148,7 +148,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
 		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
 		if err != nil {
-
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
 			return
@@ -182,9 +181,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 
 		err = p.checkAndSendMessage(jsonMessage, r)
 		if err != nil {
-			log.Errorf("broker error: %v", err)
-			// 500?
-			reportError(http.StatusBadGateway, "could not connect to broker", w)
+			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
 			return
 		}
@@ -192,8 +189,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
 		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
-			log.Error(err)
-			reportError(http.StatusBadGateway, "could not connect to db", w)
+			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
@@ -217,9 +213,10 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(header, value)
 		}
 	}
+
 	_, err = io.Copy(w, s3response.Body)
 	if err != nil {
-		reportError(http.StatusInternalServerError, fmt.Sprintf("redirect error: %v", err), w)
+		p.internalServerError(w, r, fmt.Sprintf("redirect error: %v", err))
 
 		return
 	}
@@ -236,7 +233,6 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 	if p.messenger.IsConnClosed() {
 		log.Warning("connection is closed, reconnecting...")
 		p.messenger, err = broker.NewMQ(p.messenger.Conf)
-
 		if err != nil {
 			return err
 		}
@@ -245,14 +241,12 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 	if p.messenger.Channel.IsClosed() {
 		log.Warning("channel is closed, recreating...")
 		err := p.messenger.CreateNewChannel()
-
 		if err != nil {
 			return err
 		}
 	}
 
 	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
-
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
 
