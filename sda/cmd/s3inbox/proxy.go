@@ -125,7 +125,10 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debug("prepend")
-	p.prependBucketToHostPath(r)
+	err = p.prependBucketToHostPath(r)
+	if err != nil {
+		reportError(http.StatusBadRequest, err.Error(), w)
+	}
 
 	username := claims.Subject()
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
@@ -301,13 +304,13 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 }
 
 // Add bucket to host path
-func (p *Proxy) prependBucketToHostPath(r *http.Request) {
+func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
 	bucket := p.s3.Bucket
 
 	// Extract username for request's url path
 	str, err := url.ParseRequestURI(r.URL.Path)
 	if err != nil || str.Path == "" {
-		log.Errorf("failed to get path from query (%v)", r.URL.Path)
+		return fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
 	}
 	path := strings.Split(str.Path, "/")
 	username := path[1]
@@ -352,6 +355,8 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 		}
 	}
 	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
+
+	return nil
 }
 
 // Function for signing the headers of the s3 requests
