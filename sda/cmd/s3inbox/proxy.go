@@ -230,6 +230,9 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 // Renew the connection to MQ if necessary, then send message
 func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 	var err error
+	if p.messenger == nil {
+		return fmt.Errorf("messenger is down")
+	}
 	if p.messenger.IsConnClosed() {
 		log.Warning("connection is closed, reconnecting...")
 		p.messenger, err = broker.NewMQ(p.messenger.Conf)
