@@ -57,16 +57,11 @@ curl -sq -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$accession_body"
 
-RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/completed/ | jq -r '.messages_ready')" -eq 6 ]; do
-    echo "waiting for finalize to complete"
-    RETRY_TIMES=$((RETRY_TIMES + 1))
-    if [ "$RETRY_TIMES" -eq 5 ]; then
-        echo "::OK::Time out while waiting for finalize to complete"
-        break
-    fi
-    sleep 2
-done
+sleep 10
+if [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/accession/ | jq -r '.messages_unacknowledged')" -ne 1 ]; then
+    echo "::error::Finalize processed message out of order"
+    exit 1
+fi
 
 encrypted_checksums=$(
     jq -c -n \
