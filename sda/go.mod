@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.45.10
 	github.com/google/uuid v1.1.2
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
-	github.com/lestrrat-go/jwx/v2 v2.0.13
+	github.com/lestrrat-go/jwx/v2 v2.0.19
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/neicnordic/crypt4gh v1.8.2
