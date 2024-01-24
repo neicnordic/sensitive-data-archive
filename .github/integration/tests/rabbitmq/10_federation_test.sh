@@ -8,14 +8,17 @@ if [ -f /.dockerenv ]; then
 	CEGA="cegamq:15671"
 fi
 
-if [ ! "$(command -v jq)" ]; then
-	if [ "$(id -u)" != 0 ]; then
-		echo "jq is missing, unable to install it"
-		exit 1
-	fi
+for t in curl jq; do
+    if [ ! "$(command -v $t)" ]; then
+        if [ "$(id -u)" != 0 ]; then
+            echo "$t is missing, unable to install it"
+            exit 1
+        fi
 
-	apk add --no-cache curl jq
-fi
+        apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
+        apt-get -o DPkg::Lock::Timeout=60 install -y "$t" >/dev/null
+    fi
+done
 
 RETRY_TIMES=0
 until curl -s --cacert /tmp/certs/ca.crt -u guest:guest "https://$MQHOST/api/federation-links" | jq -r '.[].status' | grep running; do

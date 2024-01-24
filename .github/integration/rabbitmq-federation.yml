@@ -39,8 +39,9 @@ services:
 
   federation_test:
     command:
-      - /bin/sh
-      - /tests/rabbitmq/10_federation_test.sh
+      - "/bin/sh"
+      - "/tests/run_scripts.sh"
+      - "/tests/rabbitmq"
     container_name: federation
     depends_on:
       certfixer:
@@ -49,7 +50,7 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
-    image: alpine:latest
+    image: debian:stable-slim
     profiles:
       - federation
     volumes:
@@ -98,6 +99,7 @@ services:
       - RABBITMQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.crt
       - RABBITMQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
       - RABBITMQ_SERVER_VERIFY=verify_none
+      - RABBITMQ_CONSUMER_TIMEOUT=1000
     healthcheck:
       test:
         [
