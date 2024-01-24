@@ -34,6 +34,7 @@ Parameter | Description | Default
 `global.shovel.user` | Username to federated server |`""`
 `global.shovel.vhost` | Vhost on federated sever to connect to |`""`
 `externalPkiService.tlsPath` | If an external PKI service is used, this is the path where the certifiates are placed | `""`
+`extraConfig.consumer_timeout` | message handling timeout in milliseconds | `""`
 `rbacEnabled` | Use role based access control. |`true`
 `revisionHistory` | Number of revisions to keep for the option to rollback a deployment | `3`
 `updateStrategyType` | Update strategy type. | `RollingUpdate`

@@ -31,6 +31,9 @@ global:
     user: ""
     vhost: ""
 
+# timeout for acking a message, in milliseconds
+extraConfig:
+  consumer_timeout: ""
 
 # If an external PKI infrastructure is used to supply certificates set this to true
 externalPkiService:
