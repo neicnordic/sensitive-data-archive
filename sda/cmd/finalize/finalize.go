@@ -96,9 +96,21 @@ func main() {
 
 				continue
 			}
-			if status == "disabled" {
+
+			switch status {
+			case "disabled":
 				log.Infof("file with correlation ID: %s is disabled, stopping work", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: %v", err)
+				}
+
+				continue
+
+			case "verified":
+			case "enabled":
+			default:
+				log.Warnf("file with correlation ID: %s is not verified yet, stopping work", delivered.CorrelationId)
+				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
 
