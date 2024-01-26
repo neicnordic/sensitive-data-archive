@@ -172,14 +172,14 @@ spec:
         resources:
 {{ toYaml .Values.mapper.resources | trim | indent 10 }}
         volumeMounts:
-  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-          - name: tls
-            mountPath: {{ template "tlsPath" . }}
-          {{- if eq "posix" .Values.global.inbox.storageType }}
-          - name: inbox
-            mountPath: {{ .Values.global.inbox.path | quote }}
-          {{- end }}
-  {{- end }}
+        {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
+        {{- if eq "posix" .Values.global.inbox.storageType }}
+        - name: inbox
+          mountPath: {{ .Values.global.inbox.path | quote }}
+        {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
