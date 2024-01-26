@@ -101,6 +101,10 @@ spec:
           value: {{ template "verifyPeer" . }}
         {{- end }}
       {{- end }}
+      {{- if .Values.extraConfig.consumer_timeout }}
+        - name: RABBITMQ_CONSUMER_TIMEOUT
+          value: {{ .Values.extraConfig.consumer_timeout }}
+      {{- end }}
       {{- if .Values.global.vhost }}
         - name: MQ_VHOST
           value: {{ .Values.global.vhost | quote }}

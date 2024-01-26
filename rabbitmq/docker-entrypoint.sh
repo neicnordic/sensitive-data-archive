@@ -52,7 +52,8 @@ fi
 cat >/var/lib/rabbitmq/advanced.config<<-EOF
 [
 	{rabbit, [
-		{default_consumer_prefetch, {false,100}}
+		{consumer_timeout, ${RABBITMQ_CONSUMER_TIMEOUT:-14400000}},
+		{default_consumer_prefetch, {false,1}}
 		]
 	}
 ].
