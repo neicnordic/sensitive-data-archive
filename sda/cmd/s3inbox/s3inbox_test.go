@@ -101,7 +101,7 @@ func TestMain(m *testing.M) {
 	mqHostAndPort := rabbitmq.GetHostPort("15672/tcp")
 
 	client := http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+mqHostAndPort+"/api/users", http.NoBody)
+	req, err := http.NewRequest(http.MethodPut, "http://"+mqHostAndPort+"/api/queues/%2F/inbox", http.NoBody)
 	if err != nil {
 		log.Fatal(err)
 	}

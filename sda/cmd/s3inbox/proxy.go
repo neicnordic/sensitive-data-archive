@@ -102,7 +102,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request) {
+// Report 500 to the user, log the original error
+func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request, err string) {
+	log.Error(err)
 	msg := fmt.Sprintf("Internal server error for request (%v)", r)
 	reportError(http.StatusInternalServerError, msg, w)
 }
@@ -125,7 +127,10 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debug("prepend")
-	p.prependBucketToHostPath(r)
+	err = p.prependBucketToHostPath(r)
+	if err != nil {
+		reportError(http.StatusBadRequest, err.Error(), w)
+	}
 
 	username := claims.Subject()
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
@@ -143,7 +148,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
 		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
 		if err != nil {
-			log.Errorf("failed to register file in database: %v", err)
+			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
 			return
 		}
@@ -153,8 +158,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	s3response, err := p.forwardToBackend(r)
 
 	if err != nil {
-		log.Debugf("forwarding error: %v", err)
-		p.internalServerError(w, r)
+		p.internalServerError(w, r, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
@@ -162,35 +166,32 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	// Send message to upstream and set file as uploaded in the database
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
-		message, _ := p.CreateMessageFromRequest(r, claims)
+		message, err := p.CreateMessageFromRequest(r, claims)
+		if err != nil {
+			p.internalServerError(w, r, err.Error())
+
+			return
+		}
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			log.Errorf("failed to marshal rabbitmq message to json: %v", err)
+			p.internalServerError(w, r, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
 
 			return
 		}
 
-		switch p.messenger.IsConnClosed() {
-		case true:
-			log.Errorln("connection is closed")
-			w.WriteHeader(http.StatusServiceUnavailable)
+		err = p.checkAndSendMessage(jsonMessage, r)
+		if err != nil {
+			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
-			m, err := broker.NewMQ(Conf.Broker)
-			if err == nil {
-				p.messenger = m
-			}
+			return
+		}
 
-		case false:
-			if err = p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
-				log.Debug("error when sending message")
-				log.Error(err)
-			}
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
+		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		if err != nil {
+			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
-			log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
-			err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
-			if err != nil {
-				log.Error(err)
-			}
+			return
 		}
 
 		delete(p.fileIds, r.URL.Path)
@@ -212,15 +213,47 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(header, value)
 		}
 	}
+
 	_, err = io.Copy(w, s3response.Body)
 	if err != nil {
-		log.Fatalln("redirect error")
+		p.internalServerError(w, r, fmt.Sprintf("redirect error: %v", err))
+
+		return
 	}
 
 	// Read any remaining data in the connection and
 	// Close so connection can be reused.
 	_, _ = io.ReadAll(s3response.Body)
 	_ = s3response.Body.Close()
+}
+
+// Renew the connection to MQ if necessary, then send message
+func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
+	var err error
+	if p.messenger == nil {
+		return fmt.Errorf("messenger is down")
+	}
+	if p.messenger.IsConnClosed() {
+		log.Warning("connection is closed, reconnecting...")
+		p.messenger, err = broker.NewMQ(p.messenger.Conf)
+		if err != nil {
+			return err
+		}
+	}
+
+	if p.messenger.Channel.IsClosed() {
+		log.Warning("channel is closed, recreating...")
+		err := p.messenger.CreateNewChannel()
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+		return fmt.Errorf("error when sending message to broker: %v", err)
+	}
+
+	return nil
 }
 
 func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
@@ -267,13 +300,13 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 }
 
 // Add bucket to host path
-func (p *Proxy) prependBucketToHostPath(r *http.Request) {
+func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
 	bucket := p.s3.Bucket
 
 	// Extract username for request's url path
 	str, err := url.ParseRequestURI(r.URL.Path)
 	if err != nil || str.Path == "" {
-		log.Errorf("failed to get path from query (%v)", r.URL.Path)
+		return fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
 	}
 	path := strings.Split(str.Path, "/")
 	username := path[1]
@@ -318,6 +351,8 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) {
 		}
 	}
 	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
+
+	return nil
 }
 
 // Function for signing the headers of the s3 requests
@@ -409,7 +444,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 
 	checksum.Value, event.Filesize, err = p.requestInfo(r.URL.Path)
 	if err != nil {
-		log.Fatalf("could not get checksum information: %s", err)
+		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
 
 	// Case for simple upload
