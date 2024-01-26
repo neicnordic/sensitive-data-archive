@@ -250,6 +250,20 @@ entries:
   sda-mq:
   - apiVersion: v2
     appVersion: v0.2.67
+    created: "2024-01-26T12:16:58.651886882Z"
+    description: RabbitMQ component for Sensitive Data Archive (SDA) installation
+    digest: cfa5be88968333b0f32fecc073ce1df8ff0323071b23398f2078d5998fb10bc6
+    home: https://neic-sda.readthedocs.io
+    icon: https://neic.no/assets/images/logo.png
+    kubeVersion: '>= 1.26.0'
+    name: sda-mq
+    sources:
+    - https://github.com/neicnordic/sda-helm
+    urls:
+    - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-mq-0.7.5/sda-mq-0.7.5.tgz
+    version: 0.7.5
+  - apiVersion: v2
+    appVersion: v0.2.67
     created: "2024-01-26T07:51:56.444592272Z"
     description: RabbitMQ component for Sensitive Data Archive (SDA) installation
     digest: ae7c451f52d3fcb6a2278c38a986a207d555256db389a59fda04aaaa79513f9d
@@ -823,4 +837,4 @@ entries:
     urls:
     - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-svc-0.18.9/sda-svc-0.18.9.tgz
     version: 0.18.9
-generated: "2024-01-26T10:01:50.563238333Z"
+generated: "2024-01-26T12:16:58.652084176Z"
