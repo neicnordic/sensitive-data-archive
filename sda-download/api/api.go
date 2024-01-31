@@ -7,12 +7,19 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/api/s3"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	log "github.com/sirupsen/logrus"
 )
+
+// SelectedMiddleware is used to control authentication and authorization
+// behaviour with config app.middleware
+// available middlewares:
+// "default" for TokenMiddleware
+var SelectedMiddleware = func() gin.HandlerFunc {
+	return nil
+}
 
 // healthResponse
 func healthResponse(c *gin.Context) {
@@ -25,15 +32,19 @@ func Setup() *http.Server {
 	// Set up routing
 	log.Info("(2/5) Registering endpoint handlers")
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(
+		gin.LoggerWithWriter(gin.DefaultWriter, "/health"),
+		gin.Recovery(),
+	)
 
 	router.HandleMethodNotAllowed = true
 
-	router.GET("/metadata/datasets", middleware.TokenMiddleware(), sda.Datasets)
-	router.GET("/metadata/datasets/*dataset", middleware.TokenMiddleware(), sda.Files)
-	router.GET("/files/:fileid", middleware.TokenMiddleware(), sda.Download)
-	router.GET("/s3/*path", middleware.TokenMiddleware(), s3.Download)
-	router.HEAD("/s3/*path", middleware.TokenMiddleware(), s3.Download)
+	router.GET("/metadata/datasets", SelectedMiddleware(), sda.Datasets)
+	router.GET("/metadata/datasets/*dataset", SelectedMiddleware(), sda.Files)
+	router.GET("/files/:fileid", SelectedMiddleware(), sda.Download)
+	router.GET("/s3/*path", SelectedMiddleware(), s3.Download)
+	router.HEAD("/s3/*path", SelectedMiddleware(), s3.Download)
 	router.GET("/health", healthResponse)
 
 	// Configure TLS settings

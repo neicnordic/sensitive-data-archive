@@ -7,18 +7,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// SessionCache stores dataset permission lists
+// SessionCache is the in-memory storage holding session keys and interfaces containing cached data
 var SessionCache *ristretto.Cache
 
-// DatasetCache stores the dataset permissions
+// Cache stores the dataset permissions
 // and information whether this information has
 // already been checked or not. This information
 // can then be used to skip the time-costly
 // authentication middleware
-// DatasetCache==nil, session doesn't exist
-// DatasetCache.Datasets==nil, session exists, user has no permissions (this case is not used in middleware.go)
-// DatasetCache.Datasets==[]string{}, session exists, user has permissions
-type DatasetCache struct {
+// Cache==nil, session doesn't exist
+// Cache.Datasets==nil, session exists, user has no permissions (this case is not used in middleware.go)
+// Cache.Datasets==[]string{...}, session exists, user has permissions
+type Cache struct {
 	Datasets []string
 }
 
@@ -49,29 +49,26 @@ func InitialiseSessionCache() (*ristretto.Cache, error) {
 	return sessionCache, nil
 }
 
-// Get returns a value from cache at key
-var Get = func(key string) ([]string, bool) {
+// Get returns a cache item from the session storage at key
+var Get = func(key string) (Cache, bool) {
 	log.Debug("get value from cache")
-	header, exists := SessionCache.Get(key)
-	var cachedDatasets []string
-	if header != nil {
-		cachedDatasets = header.(DatasetCache).Datasets
-	} else {
-		cachedDatasets = nil
+	cachedItem, exists := SessionCache.Get(key)
+	var cached Cache
+	if exists {
+		// the storage is unaware of cached types, so if an item is found
+		// we must assert it is the expected interface type (Cache)
+		cached = cachedItem.(Cache)
 	}
-	log.Debugf("cache response, exists=%t, datasets=%s", exists, cachedDatasets)
+	log.Debugf("cache response, exists=%t, cached=%v", exists, cached)
 
-	return cachedDatasets, exists
+	return cached, exists
 }
 
-func Set(key string, datasets []string) {
-	log.Debug("store to cache")
-	datasetCache := DatasetCache{
-		Datasets: datasets,
-	}
+func Set(key string, toCache Cache) {
+	log.Debugf("store %v to cache", toCache)
 	// Each item has a cost of 1, with max size of cache being 100,000 items
-	SessionCache.SetWithTTL(key, datasetCache, 1, config.Config.Session.Expiration)
-	log.Debug("stored to cache")
+	SessionCache.SetWithTTL(key, toCache, 1, config.Config.Session.Expiration)
+	log.Debugf("stored %v to cache", toCache)
 }
 
 // NewSessionKey generates a session key used for storing

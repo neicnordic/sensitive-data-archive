@@ -3,6 +3,7 @@ app:
   servercert: "./dev_utils/certs/download.pem"
   serverkey: "./dev_utils/certs/download-key.pem"
   port: "8443"
+  middleware: "default"
 
 log:
   level: "debug"
