@@ -450,6 +450,8 @@ func NewConfig(app string) (*Config, error) {
 		c.configSchemas()
 	case "notify":
 		c.configSMTP()
+
+		return c, nil
 	case "orchestrate":
 		err := c.configBroker()
 		if err != nil {

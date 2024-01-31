@@ -3,13 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
-	"sda-pipeline/internal/common"
-	"sda-pipeline/internal/config"
-
 	smtpmock "github.com/mocktools/go-smtp-mock"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -30,12 +28,12 @@ func (suite *TestSuite) SetupTest() {
 
 func TestGetUser(t *testing.T) {
 
-	archivedMsg := common.Archived{
+	archivedMsg := schema.IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to file",
-		FileID:      123456789,
+		FileID:      "123456789",
 		ArchivePath: "f25c51cb-c10b-44da-8021-d0fca7110219",
-		EncryptedChecksums: []common.Checksums{
+		EncryptedChecksums: []schema.Checksums{
 			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
 		},
 		ReVerify: false,
@@ -46,7 +44,7 @@ func TestGetUser(t *testing.T) {
 	archivedUser := getUser("ready", archivedMsgBytes)
 	assert.Equal(t, "JohnDoe", archivedUser)
 
-	infoError := common.InfoError{
+	infoError := schema.InfoError{
 		Error:           "Failed to open file to ingest",
 		Reason:          "This is an error",
 		OriginalMessage: &archivedMsgBytes,
@@ -68,12 +66,12 @@ func TestSetSubject(t *testing.T) {
 func TestValidator(t *testing.T) {
 	d := amqp091.Delivery{}
 
-	archivedMsg := common.Archived{
+	archivedMsg := schema.IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to file",
-		FileID:      123456789,
+		FileID:      "123456789",
 		ArchivePath: "f25c51cb-c10b-44da-8021-d0fca7110219",
-		EncryptedChecksums: []common.Checksums{
+		EncryptedChecksums: []schema.Checksums{
 			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
 		},
 		ReVerify: false,
@@ -81,45 +79,43 @@ func TestValidator(t *testing.T) {
 
 	orgMsg, _ := json.Marshal(archivedMsg)
 
-	infoError := common.InfoError{
+	infoError := schema.InfoError{
 		Error:           "Failed to open file to ingest",
 		Reason:          "This is an error",
 		OriginalMessage: &orgMsg,
 	}
 
 	d.Body, _ = json.Marshal(infoError)
-	err := validator("error", "file://../../schemas/federated", d)
-	assert.Nil(t, err)
+	err := validator("error", "../../schemas/federated", d)
+	assert.NoError(t, err, "validator failed unexpectedly")
 
 	d.Body = []byte("{\"test\":\"valid_json\"}")
-	err = validator("error", "file://../../schemas/federated", d)
+	err = validator("error", "../../schemas/federated", d)
 	assert.Error(t, err, "validator did not fail when it should")
-	assert.True(t, strings.Contains(err.Error(), "original-message is required"))
 
 	d.Body = d.Body[:20]
-	err = validator("error", "file://../../schemas/federated", d)
+	err = validator("error", "../../schemas/federated", d)
 	assert.Error(t, err, "validator did not fail when it should")
 
-	err = validator("ready", "file://../../schemas/federated", d)
+	err = validator("ready", "../../schemas/federated", d)
 	assert.Error(t, err, "validator did not fail when it should")
 
 	d.Body = []byte("{\"test\":\"valid_json\"}")
-	err = validator("ready", "file://../../schemas/federated", d)
+	err = validator("ready", "../../schemas/federated", d)
 	assert.Error(t, err, "validator did not fail when it should")
-	assert.True(t, strings.Contains(err.Error(), "user is required"))
 
-	finalizedMsg := common.Finalize{
+	finalizedMsg := schema.IngestionAccession{
 		User:        "JohnDoe",
-		Filepath:    "path/to file",
+		FilePath:    "path/to file",
 		AccessionID: "EGAF00123456789",
-		DecryptedChecksums: []common.Checksums{
+		DecryptedChecksums: []schema.Checksums{
 			{Type: "sha256", Value: "da886a89637d125ef9f15f6d676357f3a9e5e10306929f0bad246375af89c2e2"},
 			{Type: "md5", Value: "68b329da9893e34099c7d8ad5cb9c940"},
 		},
 	}
 
 	d.Body, _ = json.Marshal(finalizedMsg)
-	err = validator("ready", "file://../../schemas/federated", d)
+	err = validator("ready", "../../schemas/federated", d)
 	assert.Nil(t, err)
 }
 

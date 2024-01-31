@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/smtp"
-	"sda-pipeline/internal/broker"
-	"sda-pipeline/internal/common"
-	"sda-pipeline/internal/config"
 	"strconv"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
@@ -98,7 +98,7 @@ func getUser(queue string, orgMsg []byte) string {
 
 		return fmt.Sprint(message["user"])
 	case ready:
-		var notify common.Completed
+		var notify schema.IngestionCompletion
 		_ = json.Unmarshal(orgMsg, &notify)
 
 		return notify.User
@@ -144,37 +144,14 @@ func setSubject(queue string) string {
 func validator(queue, schemaPath string, delivery amqp091.Delivery) error {
 	switch queue {
 	case err:
-		reference := schemaPath + "/" + "info-error.json"
-		res, err := common.ValidateJSON(reference, delivery.Body)
-		if err != nil {
+		if err := schema.ValidateJSON(fmt.Sprintf("%s/info-error.json", schemaPath), delivery.Body); err != nil {
 			return err
-		}
-		if !res.Valid() {
-			errorString := ""
-
-			for _, validErr := range res.Errors() {
-				errorString += validErr.String() + "\n\n"
-			}
-
-			return fmt.Errorf(errorString)
 		}
 
 		return nil
 	case ready:
-		reference := schemaPath + "/" + "ingestion-completion.json"
-		res, err := common.ValidateJSON(reference, delivery.Body)
-		if err != nil {
+		if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", schemaPath), delivery.Body); err != nil {
 			return err
-		}
-
-		if !res.Valid() {
-			errorString := ""
-
-			for _, validErr := range res.Errors() {
-				errorString += validErr.String() + "\n\n"
-			}
-
-			return fmt.Errorf(errorString)
 		}
 
 		return nil

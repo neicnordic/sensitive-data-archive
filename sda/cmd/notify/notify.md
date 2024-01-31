@@ -1,8 +1,9 @@
-# sda-pipeline: notify
+# notify Service
 
 The notify service sends e-mails to users.
 
 ## Service Description
+
 The main function of the notify service is to send e-mails to alert users on errors or when files have been successfully ingested into the archive.
 
 When running, notify reads messages from the configured RabbitMQ queue (no default yet, as this is a work in progress).

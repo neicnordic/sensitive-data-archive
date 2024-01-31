@@ -10,6 +10,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.0.19
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v6 v6.0.57
+	github.com/mocktools/go-smtp-mock v1.10.0
 	github.com/neicnordic/crypt4gh v1.8.2
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/ory/dockertest/v3 v3.10.0
