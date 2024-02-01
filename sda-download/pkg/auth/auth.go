@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jws"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/pkg/request"
@@ -67,17 +67,17 @@ func VerifyJWT(o OIDCDetails, token string) (jwt.Token, error) {
 
 		return nil, err
 	}
-	key, valid := keyset.Get(0)
+	key, valid := keyset.Key(0)
 	if !valid {
 		log.Errorf("cannot get key from set , %s", err)
 	}
 
-	verifiedToken, err := jwt.Parse([]byte(token), jwt.WithKeySet(keyset), jwt.InferAlgorithmFromKey(true), jwt.WithHTTPClient(request.Client))
+	verifiedToken, err := jwt.Parse([]byte(token), jwt.WithKeySet(keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithVerifyAuto(nil, jwk.WithHTTPClient(request.Client)))
 	if err != nil {
 		log.Debugf("failed to infer validation from token, reason %s", err)
 
-		// we try with RSA256 which is in most of the providers our there
-		verifiedToken, err = jwt.Parse([]byte(token), jwt.WithVerify(jwa.RS256, key), jwt.WithHTTPClient(request.Client))
+		// we try with RSA256 which is in most of the providers out there
+		verifiedToken, err = jwt.Parse([]byte(token), jwt.WithKey(jwa.RS256, key), jwt.WithVerifyAuto(nil, jwk.WithHTTPClient(request.Client)))
 		if err != nil {
 			log.Errorf("failed to verify token as RSA256 signature of token %s, %s", token, err)
 
@@ -205,7 +205,7 @@ func checkVisaType(visa string, visaType string) bool {
 
 	log.Debug("checking visa type")
 
-	unknownToken, err := jwt.Parse([]byte(visa))
+	unknownToken, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
 	if err != nil {
 		log.Errorf("failed to parse visa, %s", err)
 
@@ -249,7 +249,7 @@ func validateVisa(visa string) (jwt.Token, bool) {
 		return nil, false
 	}
 	// Extract payload from header.payload.signature
-	payload, err := jwt.Parse([]byte(visa))
+	payload, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
 	if err != nil {
 		log.Errorf("failed to parse visa header, %s", err)
 
@@ -272,7 +272,7 @@ func validateVisa(visa string) (jwt.Token, bool) {
 	// Verify visa signature
 	var verifiedVisa jwt.Token
 	if wl != nil {
-		verifiedVisa, err = jwt.Parse([]byte(visa), jwt.InferAlgorithmFromKey(true), jwt.WithVerifyAuto(true), jwt.WithFetchWhitelist(wl), jwt.WithHTTPClient(request.Client))
+		verifiedVisa, err = jwt.Parse([]byte(visa), jwt.WithVerifyAuto(nil, jwk.WithHTTPClient(request.Client), jwk.WithFetchWhitelist(wl)))
 		if err != nil {
 			log.Errorf("failed to verify token signature of token %s, %s", visa, err)
 

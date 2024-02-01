@@ -9,15 +9,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sda-download/internal/storage"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/slices"
 )
 
 const POSIX = "posix"
 const S3 = "s3"
+
+// availableMiddlewares list the options for middlewares
+// empty string "" is an alias for default, for when the config key is not set, or it's empty
+var availableMiddlewares = []string{"", "default"}
 
 // Config is a global configuration value store
 var Config Map
@@ -51,6 +56,10 @@ type AppConfig struct {
 	// Stores the Crypt4GH private key if the two configs above are set
 	// Unconfigurable. Depends on Crypt4GHKeyFile and Crypt4GHPassFile
 	Crypt4GHKey *[32]byte
+
+	// Selected middleware for authentication and authorizaton
+	// Optional. Default value is "default" for TokenMiddleware
+	Middleware string
 }
 
 type SessionConfig struct {
@@ -213,6 +222,7 @@ func NewConfig() (*Map, error) {
 func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
+	viper.SetDefault("app.middleware", "default")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
 	viper.SetDefault("session.httponly", true)
@@ -292,6 +302,7 @@ func (c *Map) appConfig() error {
 	c.App.Port = viper.GetInt("app.port")
 	c.App.ServerCert = viper.GetString("app.servercert")
 	c.App.ServerKey = viper.GetString("app.serverkey")
+	c.App.Middleware = viper.GetString("app.middleware")
 
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")
@@ -302,6 +313,12 @@ func (c *Map) appConfig() error {
 	var err error
 	c.App.Crypt4GHKey, err = GetC4GHKey()
 	if err != nil {
+		return err
+	}
+
+	if !slices.Contains(availableMiddlewares, c.App.Middleware) {
+		err := fmt.Errorf("app.middleware value=%v is not one of allowed values=%v", c.App.Middleware, availableMiddlewares)
+
 		return err
 	}
 

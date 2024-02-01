@@ -182,8 +182,8 @@ func TestTokenMiddleware_Success_NoCache(t *testing.T) {
 	// Now that we are modifying the request context, we need to place the context test inside the handler
 	expectedDatasets := []string{"dataset1", "dataset2"}
 	testEndpointWithContextData := func(c *gin.Context) {
-		datasets := c.GetStringSlice(datasetsKey)
-		if !reflect.DeepEqual(datasets, expectedDatasets) {
+		datasets, _ := c.Get(requestContextKey)
+		if !reflect.DeepEqual(datasets.(session.Cache).Datasets, expectedDatasets) {
 			t.Errorf("TestTokenMiddleware_Success_NoCache failed, got %s expected %s", datasets, expectedDatasets)
 		}
 	}
@@ -224,10 +224,13 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 	originalGetCache := session.Get
 
 	// Substitute mock functions
-	session.Get = func(key string) ([]string, bool) {
+	session.Get = func(key string) (session.Cache, bool) {
 		log.Warningf("session.Get %v", key)
+		cached := session.Cache{
+			Datasets: []string{"dataset1", "dataset2"},
+		}
 
-		return []string{"dataset1", "dataset2"}, true
+		return cached, true
 	}
 
 	config.Config.Session.Name = "sda_session_key"
@@ -245,8 +248,8 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 	// Now that we are modifying the request context, we need to place the context test inside the handler
 	expectedDatasets := []string{"dataset1", "dataset2"}
 	testEndpointWithContextData := func(c *gin.Context) {
-		datasets := c.GetStringSlice(datasetsKey)
-		if !reflect.DeepEqual(datasets, expectedDatasets) {
+		datasets, _ := c.Get(requestContextKey)
+		if !reflect.DeepEqual(datasets.(session.Cache).Datasets, expectedDatasets) {
 			t.Errorf("TestTokenMiddleware_Success_FromCache failed, got %s expected %s", datasets, expectedDatasets)
 		}
 	}
@@ -281,11 +284,13 @@ func TestStoreDatasets(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	// Store data to request context
-	datasets := []string{"dataset1", "dataset2"}
-	modifiedContext := storeDatasets(c, datasets)
+	datasets := session.Cache{
+		Datasets: []string{"dataset1", "dataset2"},
+	}
+	c.Set(requestContextKey, datasets)
 
 	// Verify that context has new data
-	storedDatasets := modifiedContext.Value(datasetsKey).([]string)
+	storedDatasets := c.Value(requestContextKey).(session.Cache)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
 	}
@@ -299,11 +304,13 @@ func TestGetDatasets(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	// Store data to request context
-	datasets := []string{"dataset1", "dataset2"}
-	modifiedContext := storeDatasets(c, datasets)
+	datasets := session.Cache{
+		Datasets: []string{"dataset1", "dataset2"},
+	}
+	c.Set(requestContextKey, datasets)
 
 	// Verify that context has new data
-	storedDatasets := GetDatasets(modifiedContext)
+	storedDatasets := GetCacheFromContext(c)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
 	}

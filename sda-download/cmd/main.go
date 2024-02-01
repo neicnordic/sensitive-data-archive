@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/neicnordic/sda-download/api"
+	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
@@ -22,6 +23,14 @@ func init() {
 		log.Panicf("configuration loading failed, reason: %v", err)
 	}
 	config.Config = *conf
+
+	// Set middleware
+	// nolint:gocritic // this nolint can be removed, if you have more than one middlewares available
+	switch conf.App.Middleware {
+	default:
+		api.SelectedMiddleware = middleware.TokenMiddleware
+	}
+	log.Infof("%s middleware selected", conf.App.Middleware)
 
 	// Connect to database
 	db, err := database.NewDB(conf.DB)

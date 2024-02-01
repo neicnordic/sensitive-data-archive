@@ -88,6 +88,46 @@ if [[ $status = 0 ]]; then
     echo "Files are the same"
 else
     echo "Files are different"
+    exit 1
+fi
+
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
+
+dd if=old-file.txt ibs=1 skip=0 count=2 > old-part.txt
+
+cmp --silent old-part.txt test-part.txt
+status=$?
+if [[ $status = 0 ]]; then
+    echo "Files are the same"
+else
+    echo "Files are different"
+    exit 1
+fi
+
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
+
+dd if=old-file.txt ibs=1 skip=7 count=7 > old-part2.txt
+
+cmp --silent old-part2.txt test-part2.txt
+status=$?
+if [[ $status = 0 ]]; then
+    echo "Files are the same"
+else
+    echo "Files are different"
+    exit 1
+fi
+
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=70000&endCoordinate=140000" --output test-part3.txt
+
+dd if=old-file.txt ibs=1 skip=70000 count=70000 > old-part3.txt
+
+cmp --silent old-part3.txt test-part3.txt
+status=$?
+if [[ $status = 0 ]]; then
+    echo "Files are the same"
+else
+    echo "Files are different"
+    exit 1
 fi
 
 # ------------------

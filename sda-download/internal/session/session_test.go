@@ -36,7 +36,7 @@ func TestGetSetCache_Found(t *testing.T) {
 	cache, _ := InitialiseSessionCache()
 	SessionCache = cache
 
-	Set("key1", []string{"dataset1", "dataset2"})
+	Set("key1", Cache{Datasets: []string{"dataset1", "dataset2"}})
 	time.Sleep(time.Duration(100 * time.Millisecond)) // need to give cache time to get ready
 	datasets, exists := Get("key1")
 
@@ -44,7 +44,7 @@ func TestGetSetCache_Found(t *testing.T) {
 	expectedDatasets := []string{"dataset1", "dataset2"}
 	expectedExists := true
 
-	if strings.Join(datasets, "") != strings.Join(expectedDatasets, "") {
+	if strings.Join(datasets.Datasets, "") != strings.Join(expectedDatasets, "") {
 		t.Errorf("TestGetSetCache_Found failed, expected %s but received %s", expectedDatasets, datasets)
 	}
 	if expectedExists != exists {
@@ -62,7 +62,7 @@ func TestGetSetCache_NotFound(t *testing.T) {
 	cache, _ := InitialiseSessionCache()
 	SessionCache = cache
 
-	Set("key1", []string{"dataset1", "dataset2"})
+	Set("key1", Cache{Datasets: []string{"dataset1", "dataset2"}})
 	time.Sleep(time.Duration(100 * time.Millisecond)) // need to give cache time to get ready
 	datasets, exists := Get("key2")
 
@@ -70,7 +70,7 @@ func TestGetSetCache_NotFound(t *testing.T) {
 	expectedDatasets := []string{}
 	expectedExists := false
 
-	if strings.Join(datasets, "") != strings.Join(expectedDatasets, "") {
+	if strings.Join(datasets.Datasets, "") != strings.Join(expectedDatasets, "") {
 		t.Errorf("TestGetSetCache_NotFound failed, expected %s but received %s", expectedDatasets, datasets)
 	}
 	if expectedExists != exists {
