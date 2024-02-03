@@ -141,8 +141,7 @@ func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 
 // nolint:bodyclose
 func (suite *ProxyTests) TestServeHTTP_disallowed() {
-	// Start mock messenger that denies everything
-	proxy := NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
 	r, _ := http.NewRequest("", "", nil)
 	w := httptest.NewRecorder()
@@ -194,6 +193,7 @@ func (suite *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore())
 
 	// Not authorized user get 401 response
+	proxy = NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
 	w = httptest.NewRecorder()
 	r.Method = "GET"
 	r.URL, _ = url.Parse("/username/file")
