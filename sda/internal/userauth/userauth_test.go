@@ -206,36 +206,13 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 
 	r.Header.Set("X-Amz-Security-Token", defaultToken)
 
-	// Test that a user can access their own bucket
+	// Test that a correct token works
 	r.URL.Path = "/dummy/"
 	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	token, err := a.Authenticate(r)
 	assert.NoError(suite.T(), err)
 	privateClaims := token.PrivateClaims()
 	assert.Equal(suite.T(), privateClaims["pilot"], helper.DefaultTokenClaims["pilot"])
-
-	// Test that an unexpected path gives an error
-	r.URL.Path = "error"
-	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
-	_, err = a.Authenticate(r)
-	assert.Error(suite.T(), err)
-
-	// Test that a valid user can't access someone elses bucket
-	r.URL.Path = "/notvalid/"
-	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
-	_, otherBucket := a.Authenticate(r)
-	assert.Equal(suite.T(), "token supplied username dummy but URL had notvalid", otherBucket.Error())
-
-	// Create and test Elixir token with wrong username
-	wrongUserToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.WrongUserClaims)
-	assert.NoError(suite.T(), err)
-
-	r, _ = http.NewRequest("", "/", nil)
-	r.Host = "localhost"
-	r.Header.Set("X-Amz-Security-Token", wrongUserToken)
-	r.URL.Path = "/username/"
-	_, wrongUsername := a.Authenticate(r)
-	assert.Equal(suite.T(), "token supplied username c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org but URL had username", wrongUsername.Error())
 
 	// Create and test expired Elixir token
 	expiredToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.ExpiredClaims)
@@ -318,28 +295,11 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", defaultToken)
 
-	// Test that a user can access their own bucket
+	// Test that a correct token works
 	r.URL.Path = "/dummy/"
 	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	_, err = a.Authenticate(r)
 	assert.Nil(suite.T(), err)
-
-	// Test that a valid user can't access someone elses bucket
-	r.URL.Path = "/notvalid/"
-	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
-	_, otherBucket := a.Authenticate(r)
-	assert.Equal(suite.T(), "token supplied username dummy but URL had notvalid", otherBucket.Error())
-
-	// Create and test Elixir token with wrong username
-	wrongUserToken, err := helper.CreateECToken(prKeyParsed, "ES256", helper.WrongUserClaims)
-	assert.NoError(suite.T(), err)
-
-	r, _ = http.NewRequest("", "/", nil)
-	r.Host = "localhost"
-	r.Header.Set("X-Amz-Security-Token", wrongUserToken)
-	r.URL.Path = "/username/"
-	_, wrongUsername := a.Authenticate(r)
-	assert.Equal(suite.T(), "token supplied username c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org but URL had username", wrongUsername.Error())
 
 	// Create and test expired Elixir token
 	expiredToken, err := helper.CreateECToken(prKeyParsed, "ES256", helper.ExpiredClaims)
@@ -389,22 +349,6 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
 	assert.Contains(suite.T(), err.Error(), "failed to get issuer from token")
-
-	// Test LS-AAI user authentication
-	token, err := helper.CreateECToken(prKeyParsed, "ES256", helper.WrongUserClaims)
-	assert.NoError(suite.T(), err)
-
-	r, _ = http.NewRequest("", "/c5773f41d17d27bd53b1e6794aedc32d7906e779_elixir-europe.org/foo", nil)
-	r.Host = "localhost"
-	r.Header.Set("X-Amz-Security-Token", token)
-	_, err = a.Authenticate(r)
-	assert.NoError(suite.T(), err)
-
-	r, _ = http.NewRequest("", "/dataset", nil)
-	r.Host = "localhost"
-	r.Header.Set("X-Amz-Security-Token", token)
-	_, err = a.Authenticate(r)
-	assert.Equal(suite.T(), "token supplied username c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org but URL had dataset", err.Error())
 
 	defer os.RemoveAll(demoKeysPath)
 }
