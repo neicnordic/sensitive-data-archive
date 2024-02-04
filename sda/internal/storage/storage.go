@@ -169,7 +169,32 @@ type S3Conf struct {
 }
 
 func newS3Backend(conf S3Conf) (*s3Backend, error) {
-	s3cfg, err := config.LoadDefaultConfig(context.TODO(),
+	s3Client, err := NewS3Client(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	sb := &s3Backend{
+		Bucket: conf.Bucket,
+		Client: s3Client,
+		Conf:   &conf,
+		Uploader: manager.NewUploader(s3Client, func(u *manager.Uploader) {
+			u.PartSize = int64(conf.Chunksize)
+			u.Concurrency = conf.UploadConcurrency
+			u.LeavePartsOnError = false
+		}),
+	}
+
+	err = CheckS3Bucket(conf.Bucket, s3Client)
+	if err != nil {
+		return sb, err
+	}
+
+	return sb, nil
+}
+func NewS3Client(conf S3Conf) (*s3.Client, error) {
+	s3cfg, err := config.LoadDefaultConfig(
+		context.TODO(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
 		config.WithEndpointResolverWithOptions(
 			aws.EndpointResolverWithOptionsFunc(
@@ -197,25 +222,8 @@ func newS3Backend(conf S3Conf) (*s3Backend, error) {
 		},
 	)
 
-	sb := &s3Backend{
-		Bucket: conf.Bucket,
-		Client: s3Client,
-		Conf:   &conf,
-		Uploader: manager.NewUploader(s3Client, func(u *manager.Uploader) {
-			u.PartSize = int64(conf.Chunksize)
-			u.Concurrency = conf.UploadConcurrency
-			u.LeavePartsOnError = false
-		}),
-	}
-
-	err = CheckS3Bucket(conf.Bucket, s3Client)
-	if err != nil {
-		return sb, err
-	}
-
-	return sb, nil
+	return s3Client, nil
 }
-
 func CheckS3Bucket(bucket string, s3Client *s3.Client) error {
 	_, err := s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: &bucket})
 	if err != nil {

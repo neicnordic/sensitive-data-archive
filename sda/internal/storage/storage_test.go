@@ -201,6 +201,12 @@ func (suite *StorageTestSuite) TestNewBackend() {
 	assert.IsType(suite.T(), s, &s3Backend{}, "Wrong type from NewBackend with S3")
 }
 
+func (suite *StorageTestSuite) TestNewS3Client() {
+	c, err := NewS3Client(testConf.S3)
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), c)
+}
+
 func (suite *StorageTestSuite) TestCheckS3Bucket() {
 	s3, err := newS3Backend(testConf.S3)
 	assert.NoError(suite.T(), err)
