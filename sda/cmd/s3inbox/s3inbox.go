@@ -59,7 +59,14 @@ func main() {
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 
-	err = storage.CheckS3Bucket(Conf.Inbox.S3.Bucket, storage.CreateS3Session(Conf.Inbox.S3))
+	s3, err := storage.NewS3Client(Conf.Inbox.S3)
+	if err != nil {
+		log.Error(err)
+		sigc <- syscall.SIGINT
+		panic(err)
+	}
+
+	err = storage.CheckS3Bucket(Conf.Inbox.S3.Bucket, s3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT

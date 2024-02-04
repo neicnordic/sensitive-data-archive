@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
@@ -10,17 +10,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -156,7 +152,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 
 	log.Debug("Forwarding to backend")
 	s3response, err := p.forwardToBackend(r)
-
 	if err != nil {
 		p.internalServerError(w, r, fmt.Sprintf("forwarding error: %v", err))
 
@@ -281,7 +276,6 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 }
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
-
 	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
 
 	// Redirect request
@@ -463,32 +457,20 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 // the etag and size information for the uploaded document
 func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
-	s, err := p.newSession()
+	client, err := storage.NewS3Client(p.s3)
 	if err != nil {
 		return "", 0, err
 	}
-	svc := s3.New(s)
+
 	input := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(p.s3.Bucket),
-		MaxKeys: aws.Int64(1),
-		Prefix:  aws.String(filePath),
+		Bucket:  &p.s3.Bucket,
+		MaxKeys: aws.Int32(1),
+		Prefix:  &filePath,
 	}
 
-	result, err := svc.ListObjectsV2(input)
+	result, err := client.ListObjectsV2(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket:
-				log.Debug("bucket not found when listing objects")
-				log.Debug(s3.ErrCodeNoSuchBucket, aerr.Error())
-			default:
-				log.Debug("caught error when listing objects")
-				log.Debug(aerr.Error())
-			}
-		} else {
-			log.Debug("error when listing objects")
-			log.Debug(err)
-		}
+		log.Debug(err.Error())
 
 		return "", 0, err
 	}
@@ -497,44 +479,9 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 
 }
 
-func (p *Proxy) newSession() (*session.Session, error) {
-	var mySession *session.Session
-	var err error
-	if p.s3.CAcert != "" {
-		cert, _ := os.ReadFile(p.s3.CAcert)
-		cacert := bytes.NewReader(cert)
-		mySession, err = session.NewSessionWithOptions(session.Options{
-			CustomCABundle: cacert,
-			Config: aws.Config{
-				Region:           aws.String(p.s3.Region),
-				Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
-				DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
-				S3ForcePathStyle: aws.Bool(true),
-				Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
-			}})
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		mySession, err = session.NewSession(&aws.Config{
-			Region:           aws.String(p.s3.Region),
-			Endpoint:         aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)),
-			DisableSSL:       aws.Bool(strings.HasPrefix(p.s3.URL, "http:")),
-			S3ForcePathStyle: aws.Bool(true),
-			Credentials:      credentials.NewStaticCredentials(p.s3.AccessKey, p.s3.SecretKey, ""),
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return mySession, nil
-}
-
 // FormatUploadFilePath ensures that path separators are "/", and returns error if the
 // filepath contains a disallowed character matched with regex
 func formatUploadFilePath(filePath string) (string, error) {
-
 	// Check for mixed "\" and "/" in filepath. Stop and throw an error if true so that
 	// we do not end up with unintended folder structure when applying ReplaceAll below
 	if strings.Contains(filePath, "\\") && strings.Contains(filePath, "/") {
@@ -557,7 +504,6 @@ func formatUploadFilePath(filePath string) (string, error) {
 
 // Write the error and its status code to the response
 func reportError(errorCode int, message string, w http.ResponseWriter) {
-
 	log.Error(message)
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
@@ -577,5 +523,4 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 		// errors are logged but otherwised ignored
 		log.Error(err)
 	}
-
 }
