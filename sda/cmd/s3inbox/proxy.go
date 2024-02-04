@@ -121,14 +121,32 @@ func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
 	reportError(http.StatusUnauthorized, "not authorized", w)
 }
 
-func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, claims jwt.Token) {
+func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	log.Debug("prepend")
-	err := p.prependBucketToHostPath(r)
+	// Check whether token username and filepath match
+	str, err := url.ParseRequestURI(r.URL.Path)
+	if err != nil || str.Path == "" {
+		reportError(http.StatusBadRequest, err.Error(), w)
+	}
+
+	path := strings.Split(str.Path, "/")
+	if strings.Contains(token.Subject(), "@") {
+		if strings.ReplaceAll(token.Subject(), "@", "_") != path[1] {
+			reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
+
+			return
+		}
+	} else if token.Subject() != path[1] {
+		reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
+
+		return
+	}
+	err = p.prependBucketToHostPath(r)
 	if err != nil {
 		reportError(http.StatusBadRequest, err.Error(), w)
 	}
 
-	username := claims.Subject()
+	username := token.Subject()
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
 	filepath, err := formatUploadFilePath(rawFilepath)
@@ -161,7 +179,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, claims j
 	// Send message to upstream and set file as uploaded in the database
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
-		message, err := p.CreateMessageFromRequest(r, claims)
+		message, err := p.CreateMessageFromRequest(r, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
