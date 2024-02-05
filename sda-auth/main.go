@@ -86,7 +86,7 @@ func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 	var response []LoginOption
 	// Only add the Elixir option if it has both id and secret
 	if auth.Config.Elixir.ID != "" && auth.Config.Elixir.Secret != "" {
-		response = append(response, LoginOption{Name: "Elixir", URL: "/elixir"})
+		response = append(response, LoginOption{Name: "Lifescience-RI", URL: "/elixir"})
 	}
 
 	// Only add the CEGA option if it has both id and secret
