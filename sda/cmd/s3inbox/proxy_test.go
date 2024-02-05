@@ -9,13 +9,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -28,6 +32,8 @@ type ProxyTests struct {
 	MQConf     broker.MQConf
 	messenger  *broker.AMQPBroker
 	database   *database.SDAdb
+	auth       *userauth.ValidateFromToken
+	token      jwt.Token
 }
 
 func TestProxyTestSuite(t *testing.T) {
@@ -75,6 +81,32 @@ func (suite *ProxyTests) SetupTest() {
 	}
 
 	suite.database = &database.SDAdb{}
+
+	// Create temp demo rsa key pair
+	demoKeysPath := "demo-rsa-keys"
+	defer os.RemoveAll(demoKeysPath)
+	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
+	assert.NoError(suite.T(), err)
+
+	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
+	assert.NoError(suite.T(), err)
+
+	// Parse demo private key
+	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, "/rsa")
+	assert.NoError(suite.T(), err)
+
+	// Create token and set up request defaults
+	defaultToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.DefaultTokenClaims)
+	assert.NoError(suite.T(), err)
+
+	jwtpubkeypath := demoKeysPath + "/public-key/"
+	suite.auth = userauth.NewValidateFromToken(jwk.NewSet())
+	_ = suite.auth.ReadJwtPubKeyPath(jwtpubkeypath)
+
+	suite.token, err = jwt.Parse([]byte(defaultToken), jwt.WithKeySet(suite.auth.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+	if err != nil {
+		suite.T().FailNow()
+	}
 }
 
 func (suite *ProxyTests) TearDownTest() {
@@ -217,8 +249,8 @@ func (suite *ProxyTests) TestServeHTTPS3Unresponsive() {
 
 	// Just try to list the files
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/asdf/asdf")
-	proxy.ServeHTTP(w, r)
+	r.URL, _ = url.Parse("/dummy/asdf")
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
 
@@ -232,10 +264,10 @@ func (suite *ProxyTests) TestServeHTTP_MQConnectionClosed() {
 	// Test that the mq connection will be restored when needed
 	proxy.messenger.Connection.Close()
 	assert.True(suite.T(), proxy.messenger.Connection.IsClosed())
-	r, _ := http.NewRequest("PUT", "/username/connectionclosed-file", nil)
+	r, _ := http.NewRequest("PUT", "/dummy/connectionclosed-file", nil)
 	w := httptest.NewRecorder()
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(suite.T(), proxy.messenger.Connection.IsClosed())
 }
@@ -250,10 +282,10 @@ func (suite *ProxyTests) TestServeHTTP_MQChannelClosed() {
 	// Test that the mq channel will be restored when needed
 	proxy.messenger.Channel.Close()
 	assert.True(suite.T(), proxy.messenger.Channel.IsClosed())
-	r, _ := http.NewRequest("PUT", "/username/channelclosed-file", nil)
+	r, _ := http.NewRequest("PUT", "/dummy/channelclosed-file", nil)
 	w := httptest.NewRecorder()
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(suite.T(), proxy.messenger.Channel.IsClosed())
 }
@@ -269,27 +301,25 @@ func (suite *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 	proxy.messenger.Conf.Port = 123456
 	proxy.messenger.Connection.Close()
 	assert.True(suite.T(), proxy.messenger.Connection.IsClosed())
-	r, _ := http.NewRequest("PUT", "/username/mqunavailable-file", nil)
+	r, _ := http.NewRequest("PUT", "/dummy/mqunavailable-file", nil)
 	w := httptest.NewRecorder()
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
 
 // nolint:bodyclose
 func (suite *ProxyTests) TestServeHTTP_allowed() {
-
-	// Start proxy that allows everything
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
 	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// List files works
-	r, err := http.NewRequest("GET", "/username/file", nil)
+	r, err := http.NewRequest("GET", "/dummy/file", nil)
 	assert.NoError(suite.T(), err)
 	w := httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore()) // Testing the pinged interface
@@ -298,40 +328,39 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	w = httptest.NewRecorder()
 	r.Method = "PUT"
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	assert.False(suite.T(), messenger.IsConnClosed())
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Put with partnumber sends no message
 	w = httptest.NewRecorder()
 	r.Method = "PUT"
-	r.URL, _ = url.Parse("/username/file?partNumber=5")
-	proxy.ServeHTTP(w, r)
+	r.URL, _ = url.Parse("/dummy/file?partNumber=5")
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Post with uploadId sends message
 	r.Method = "POST"
-	r.URL, _ = url.Parse("/username/file?uploadId=5")
+	r.URL, _ = url.Parse("/dummy/file?uploadId=5")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Post without uploadId sends no message
 	r.Method = "POST"
-	r.URL, _ = url.Parse("/username/file")
+	r.URL, _ = url.Parse("/dummy/file")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Abort multipart works
 	r.Method = "DELETE"
-	r.URL, _ = url.Parse("/asdf/asdf?uploadId=123")
+	r.URL, _ = url.Parse("/dummy/asdf?uploadId=123")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
@@ -339,45 +368,44 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	// that trigger different code paths in the code.
 	// Delimiter alone
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/username/file?delimiter=puppe")
+	r.URL, _ = url.Parse("/dummy/file?delimiter=puppe")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Show multiparts uploads
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/username/file?uploads")
+	r.URL, _ = url.Parse("/dummy/file?uploads")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Delimiter alone together with prefix
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/username/file?delimiter=puppe&prefix=asdf")
+	r.URL, _ = url.Parse("/dummy/file?delimiter=puppe&prefix=asdf")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Location parameter
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/username/file?location=fnuffe")
+	r.URL, _ = url.Parse("/dummy/file?location=fnuffe")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 200, w.Result().StatusCode)
 	assert.Equal(suite.T(), true, suite.fakeServer.PingedAndRestore())
 
 	// Filenames with platform incompatible characters are disallowed
 	// not checked in TestServeHTTP_allowed() because we look for a non 403 response
 	r.Method = "PUT"
-	r.URL, _ = url.Parse("/username/fi|le")
+	r.URL, _ = url.Parse("/dummy/fi|le")
 	w = httptest.NewRecorder()
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	assert.Equal(suite.T(), 406, w.Result().StatusCode)
 	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore())
-
 }
 
 func (suite *ProxyTests) TestMessageFormatting() {
@@ -426,11 +454,11 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// PUT a file into the system
-	filename := "/username/db-test-file"
+	filename := "/dummy/db-test-file"
 	r, _ := http.NewRequest("PUT", filename, nil)
 	w := httptest.NewRecorder()
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	proxy.ServeHTTP(w, r)
+	proxy.allowedResponse(w, r, suite.token)
 	res := w.Result()
 	defer res.Body.Close()
 	assert.Equal(suite.T(), 200, res.StatusCode)
