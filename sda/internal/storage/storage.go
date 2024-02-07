@@ -2,9 +2,11 @@
 package storage
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,12 +17,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
@@ -144,8 +147,8 @@ func (pb *posixBackend) RemoveFile(filePath string) error {
 }
 
 type s3Backend struct {
-	Client   *s3.S3
-	Uploader *s3manager.Uploader
+	Client   *s3.Client
+	Uploader *manager.Uploader
 	Bucket   string
 	Conf     *S3Conf
 }
@@ -165,62 +168,77 @@ type S3Conf struct {
 	Readypath         string
 }
 
-func newS3Backend(config S3Conf) (*s3Backend, error) {
-	s3Session := CreateS3Session(config)
-	if err := CheckS3Bucket(config.Bucket, s3Session); err != nil {
+func newS3Backend(conf S3Conf) (*s3Backend, error) {
+	s3Client, err := NewS3Client(conf)
+	if err != nil {
 		return nil, err
 	}
 
 	sb := &s3Backend{
-		Bucket: config.Bucket,
-		Uploader: s3manager.NewUploader(s3Session, func(u *s3manager.Uploader) {
-			u.PartSize = int64(config.Chunksize)
-			u.Concurrency = config.UploadConcurrency
+		Bucket: conf.Bucket,
+		Client: s3Client,
+		Conf:   &conf,
+		Uploader: manager.NewUploader(s3Client, func(u *manager.Uploader) {
+			u.PartSize = int64(conf.Chunksize)
+			u.Concurrency = conf.UploadConcurrency
 			u.LeavePartsOnError = false
 		}),
-		Client: s3.New(s3Session),
-		Conf:   &config}
+	}
 
-	_, err := sb.Client.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: &config.Bucket})
+	err = CheckS3Bucket(conf.Bucket, s3Client)
 	if err != nil {
-		return nil, err
+		return sb, err
 	}
 
 	return sb, nil
 }
+func NewS3Client(conf S3Conf) (*s3.Client, error) {
+	s3cfg, err := config.LoadDefaultConfig(
+		context.TODO(),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
+		config.WithEndpointResolverWithOptions(
+			aws.EndpointResolverWithOptionsFunc(
+				func(service, region string, opts ...interface{}) (aws.Endpoint, error) {
+					endpoint := conf.URL
+					if conf.Port != 0 {
+						endpoint = fmt.Sprintf("%s:%d", conf.URL, conf.Port)
+					}
 
-func CreateS3Session(config S3Conf) *session.Session {
-	s3Transport := transportConfigS3(config)
-	client := http.Client{Transport: s3Transport}
-	s3Session := session.Must(session.NewSession(
-		&aws.Config{
-			Endpoint:         aws.String(fmt.Sprintf("%s:%d", config.URL, config.Port)),
-			Region:           aws.String(config.Region),
-			HTTPClient:       &client,
-			S3ForcePathStyle: aws.Bool(true),
-			DisableSSL:       aws.Bool(strings.HasPrefix(config.URL, "http:")),
-			Credentials:      credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, ""),
-		},
-	))
-
-	return s3Session
-}
-
-func CheckS3Bucket(bucket string, s3Session *session.Session) error {
-	_, err := s3.New(s3Session).CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(bucket),
-	})
+					return aws.Endpoint{URL: endpoint, HostnameImmutable: true}, nil
+				},
+			),
+		),
+		config.WithHTTPClient(&http.Client{Transport: transportConfigS3(conf)}),
+	)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
-				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
-				return fmt.Errorf("unexpected issue while creating bucket: %v", err)
+		return nil, err
+	}
+
+	s3Client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.URL, "http:")
+			o.UsePathStyle = true
+		},
+	)
+
+	return s3Client, nil
+}
+func CheckS3Bucket(bucket string, s3Client *s3.Client) error {
+	_, err := s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: &bucket})
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			var bae *types.BucketAlreadyExists
+			var baoby *types.BucketAlreadyOwnedByYou
+			if errors.As(err, &bae) || errors.As(err, &baoby) {
+				return nil
 			}
 
-			return nil
+			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
 		}
 
-		return fmt.Errorf("verifying bucket failed, check S3 configuration")
+		return fmt.Errorf("verifying bucket failed, check S3 configuration: %s", err.Error())
 	}
 
 	return nil
@@ -228,13 +246,9 @@ func CheckS3Bucket(bucket string, s3Session *session.Session) error {
 
 // NewFileReader returns an io.Reader instance
 func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
-	if sb == nil {
-		return nil, fmt.Errorf("invalid s3Backend")
-	}
-
-	r, err := sb.Client.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(sb.Bucket),
-		Key:    aws.String(filePath),
+	r, err := sb.Client.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: &sb.Bucket,
+		Key:    &filePath,
 	})
 
 	retryTime := 2 * time.Minute
@@ -248,9 +262,9 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 			return nil, err
 		}
 		time.Sleep(1 * time.Second)
-		r, err = sb.Client.GetObject(&s3.GetObjectInput{
-			Bucket: aws.String(sb.Bucket),
-			Key:    aws.String(filePath),
+		r, err = sb.Client.GetObject(context.TODO(), &s3.GetObjectInput{
+			Bucket: &sb.Bucket,
+			Key:    &filePath,
 		})
 	}
 
@@ -263,17 +277,12 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 
 // NewFileWriter uploads the contents of an io.Reader to a S3 bucket
 func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
-	if sb == nil {
-		return nil, fmt.Errorf("invalid s3Backend")
-	}
-
 	reader, writer := io.Pipe()
 	go func() {
-
-		_, err := sb.Uploader.Upload(&s3manager.UploadInput{
+		_, err := sb.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
 			Body:            reader,
-			Bucket:          aws.String(sb.Bucket),
-			Key:             aws.String(filePath),
+			Bucket:          &sb.Bucket,
+			Key:             &filePath,
 			ContentEncoding: aws.String("application/octet-stream"),
 		})
 
@@ -287,13 +296,10 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 
 // GetFileSize returns the size of a specific object
 func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
-	if sb == nil {
-		return 0, fmt.Errorf("invalid s3Backend")
-	}
-
-	r, err := sb.Client.HeadObject(&s3.HeadObjectInput{
-		Bucket: aws.String(sb.Bucket),
-		Key:    aws.String(filePath)})
+	r, err := sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: &sb.Bucket,
+		Key:    &filePath,
+	})
 
 	start := time.Now()
 
@@ -309,9 +315,9 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 			return 0, err
 		}
 		time.Sleep(1 * time.Second)
-		r, err = sb.Client.HeadObject(&s3.HeadObjectInput{
-			Bucket: aws.String(sb.Bucket),
-			Key:    aws.String(filePath),
+		r, err = sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+			Bucket: &sb.Bucket,
+			Key:    &filePath,
 		})
 
 	}
@@ -325,22 +331,10 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 
 // RemoveFile removes an object from a bucket
 func (sb *s3Backend) RemoveFile(filePath string) error {
-	if sb == nil {
-		return fmt.Errorf("invalid s3Backend")
-	}
-
-	_, err := sb.Client.DeleteObject(&s3.DeleteObjectInput{
-		Bucket: aws.String(sb.Bucket),
-		Key:    aws.String(filePath)})
-	if err != nil {
-		log.Error(err)
-
-		return err
-	}
-
-	err = sb.Client.WaitUntilObjectNotExists(&s3.HeadObjectInput{
-		Bucket: aws.String(sb.Bucket),
-		Key:    aws.String(filePath)})
+	_, err := sb.Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: &sb.Bucket,
+		Key:    &filePath,
+	})
 	if err != nil {
 		return err
 	}
@@ -349,11 +343,9 @@ func (sb *s3Backend) RemoveFile(filePath string) error {
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
-func transportConfigS3(config S3Conf) http.RoundTripper {
+func transportConfigS3(conf S3Conf) http.RoundTripper {
 	cfg := new(tls.Config)
-
-	// Enforce TLS1.2 or higher
-	cfg.MinVersion = 2
+	cfg.MinVersion = 3
 
 	// Read system CAs
 	var systemCAs, _ = x509.SystemCertPool()
@@ -363,8 +355,8 @@ func transportConfigS3(config S3Conf) http.RoundTripper {
 	}
 	cfg.RootCAs = systemCAs
 
-	if config.CAcert != "" {
-		cacert, e := os.ReadFile(config.CAcert) // #nosec this file comes from our config
+	if conf.CAcert != "" {
+		cacert, e := os.ReadFile(conf.CAcert) // #nosec this file comes from our config
 		if e != nil {
 			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e)
 		}
@@ -373,11 +365,7 @@ func transportConfigS3(config S3Conf) http.RoundTripper {
 		}
 	}
 
-	var trConfig http.RoundTripper = &http.Transport{
-		TLSClientConfig:   cfg,
-		ForceAttemptHTTP2: true}
-
-	return trConfig
+	return &http.Transport{TLSClientConfig: cfg, ForceAttemptHTTP2: true}
 }
 
 type sftpBackend struct {

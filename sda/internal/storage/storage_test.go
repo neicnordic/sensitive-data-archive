@@ -85,7 +85,7 @@ func TestMain(m *testing.M) {
 		Name:       "s3",
 		Repository: "minio/minio",
 		Tag:        "RELEASE.2023-05-18T00-05-36Z",
-		Cmd:        []string{"server", "/data"},
+		Cmd:        []string{"server", "/data", "--console-address", ":9001"},
 		Env: []string{
 			"MINIO_ROOT_USER=access",
 			"MINIO_ROOT_PASSWORD=secretKey",
@@ -201,12 +201,21 @@ func (suite *StorageTestSuite) TestNewBackend() {
 	assert.IsType(suite.T(), s, &s3Backend{}, "Wrong type from NewBackend with S3")
 }
 
-func (suite *StorageTestSuite) TestCheckS3Bucket() {
-	err := CheckS3Bucket(testConf.S3.Bucket, CreateS3Session(testConf.S3))
+func (suite *StorageTestSuite) TestNewS3Client() {
+	c, err := NewS3Client(testConf.S3)
 	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), c)
+}
+
+func (suite *StorageTestSuite) TestCheckS3Bucket() {
+	s3, err := newS3Backend(testConf.S3)
+	assert.NoError(suite.T(), err)
+	assert.NoError(suite.T(), CheckS3Bucket(testConf.S3.Bucket, s3.Client))
 
 	testConf.S3.URL = "file://tmp/"
-	err = CheckS3Bucket(testConf.S3.Bucket, CreateS3Session(testConf.S3))
+	bad, err := newS3Backend(testConf.S3)
+	assert.Error(suite.T(), err)
+	err = CheckS3Bucket(testConf.S3.Bucket, bad.Client)
 	assert.Error(suite.T(), err)
 }
 
@@ -344,22 +353,6 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	testConf.S3.URL = "file://tmp/"
 	_, err = NewBackend(testConf)
 	assert.Error(suite.T(), err, "Backend worked when it should not")
-
-	var dummyBackend *s3Backend
-	failReader, err := dummyBackend.NewFileReader("/")
-	assert.NotNil(suite.T(), err, "NewFileReader worked when it should not")
-	assert.Nil(suite.T(), failReader, "Got a Reader when expected not to")
-
-	failWriter, err := dummyBackend.NewFileWriter("/")
-	assert.NotNil(suite.T(), err, "NewFileWriter worked when it should not")
-	assert.Nil(suite.T(), failWriter, "Got a Writer when expected not to")
-
-	_, err = dummyBackend.GetFileSize("/")
-	assert.NotNil(suite.T(), err, "GetFileSize worked when it should not")
-
-	err = dummyBackend.RemoveFile("/")
-	assert.NotNil(suite.T(), err, "RemoveFile worked when it should not")
-
 }
 
 func (suite *StorageTestSuite) TestSftpBackend() {
