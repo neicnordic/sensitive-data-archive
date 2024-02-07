@@ -13,3 +13,6 @@
 #logintext {
     user-select: "all";
 }
+
+.btn-ega{color:#fff;background-color:#155177;border-color:#155177}
+.btn-ega:hover{color:#fff;background-color:#5E9CC3;border-color:#5E9CC3}
