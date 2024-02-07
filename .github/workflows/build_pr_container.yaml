@@ -1,6 +1,7 @@
 name: Build PR container
 
 on:
+  merge_group:
   pull_request:
     paths-ignore:
       - ".github/workflows/**"
