@@ -1,6 +1,7 @@
 name: Functionality tests
 
 on:
+  merge_group:
   pull_request:
 
 jobs:
