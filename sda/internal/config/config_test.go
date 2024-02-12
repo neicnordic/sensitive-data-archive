@@ -364,3 +364,23 @@ func (suite *ConfigTestSuite) TestConfigSyncAPI() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), "wrong", config.SyncAPI.AccessionRouting)
 }
+
+func (suite *ConfigTestSuite) TestConfigReEncryptServer() {
+	suite.SetupTest()
+	noConfig, err := NewConfig("reencrypt")
+	assert.Error(suite.T(), err)
+	assert.Nil(suite.T(), noConfig)
+
+	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
+	keyPath, _ := os.MkdirTemp("", "key")
+	defer os.RemoveAll(keyPath)
+	if err := os.WriteFile(keyPath+"/c4gh.key", []byte(key), 0600); err != nil {
+		suite.T().FailNow()
+	}
+
+	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	viper.Set("c4gh.passphrase", "test")
+	config, err := NewConfig("reencrypt")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), 50051, config.ReEncrypt.Port)
+}
