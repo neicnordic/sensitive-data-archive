@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -333,7 +334,7 @@ func (suite *TestSuite) TestReadinessResponse() {
 
 // Initialise configuration and create jwt keys
 func (suite *TestSuite) SetupTest() {
-
+	log.SetLevel(log.DebugLevel)
 	suite.Path = "/tmp/keys/"
 	suite.KeyName = "example.demo"
 
@@ -512,4 +513,68 @@ func (suite *TestSuite) TestAPIGetFiles() {
 
 func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
+}
+
+func testEndpoint(c *gin.Context) {
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func (suite *TestSuite) TestIsAdmin_NoToken() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	// no token should not be allowed
+	router.ServeHTTP(w, r)
+	badResponse := w.Result()
+	defer badResponse.Body.Close()
+	b, _ := io.ReadAll(badResponse.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, badResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "no access token supplied")
+}
+func (suite *TestSuite) TestIsAdmin_BadUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"foo", "bar"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	// non admin user should not be allowed
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+	router.ServeHTTP(w, r)
+	notAdmin := w.Result()
+	defer notAdmin.Body.Close()
+	b, _ := io.ReadAll(notAdmin.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, notAdmin.StatusCode)
+	assert.Contains(suite.T(), string(b), "not authorized")
+}
+func (suite *TestSuite) TestIsAdmin() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"foo", "bar", "dummy"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "ok")
 }

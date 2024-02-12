@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -173,4 +174,22 @@ func getFiles(c *gin.Context) {
 
 	// Return response
 	c.JSON(200, files)
+}
+
+func isAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := auth.Authenticate(c.Request)
+		if err != nil {
+			log.Debugln("bad token")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+
+			return
+		}
+		if !slices.Contains(Conf.API.Admins, token.Subject()) {
+			log.Debugf("%s is not an admin", token.Subject())
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
+
+			return
+		}
+	}
 }

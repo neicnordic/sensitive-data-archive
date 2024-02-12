@@ -74,6 +74,7 @@ type SyncAPIConf struct {
 }
 
 type APIConf struct {
+	Admins     []string
 	CACert     string
 	ServerCert string
 	ServerKey  string
