@@ -124,8 +124,8 @@ github.com/mitchellh/go-wordwrap v1.0.1 h1:TLuKupo69TCn6TQSyGxwI1EblZZEsQ0vMlAFQ
 github.com/mitchellh/go-wordwrap v1.0.1/go.mod h1:R62XHJLzvMFRBbcrT7m7WgmE1eOyTSsCt+hzestvNj0=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
-github.com/neicnordic/crypt4gh v1.8.10 h1:oAmmV84OVpmHP2APn5inv8v3Ep2iIofKVUdfS9xXu3E=
-github.com/neicnordic/crypt4gh v1.8.10/go.mod h1:9jve3/N4BQTdiO6cnWqwg/4xQic6dQzPSPZqfAu9GBo=
+github.com/neicnordic/crypt4gh v1.8.11 h1:OS3AQJfQ2MiEzrD5kqVf2B872qpksEOYYyAVx0g0MuQ=
+github.com/neicnordic/crypt4gh v1.8.11/go.mod h1:6GKPoKbTMXhtEnRlY0LMR+LQ+a3XMBQ5iiz/O8nzFAM=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/oauth2-proxy/mockoidc v0.0.0-20220308204021-b9169deeb282 h1:TQMyrpijtkFyXpNI3rY5hsZQZw+paiH+BfAlsb81HBY=
