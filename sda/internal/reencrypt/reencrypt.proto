@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "github.com/neicnordic/sensitive-data-archive/internal/reencrypt";
+
+package reencrypt;
+
+// The Reencrypt service definition.
+service Reencrypt {
+  // Sends the re-encrypted Crypt4gh header
+  rpc ReencryptHeader (ReencryptRequest) returns (ReencryptResponse) {}
+}
+
+// The request message containing the publickey and old header
+message ReencryptRequest {
+  string publickey = 1;
+  bytes oldheader = 2;
+}
+
+// The response message containing the re-encrypted header
+message ReencryptResponse {
+  bytes header = 1;
+}
