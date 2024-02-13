@@ -39,7 +39,7 @@ func TestReEncryptTests(t *testing.T) {
 
 func (suite *ReEncryptTests) SetupTest() {
 	var err error
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.InfoLevel)
 
 	repKey := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
 	suite.KeyPath, _ = os.MkdirTemp("", "key")
@@ -76,6 +76,14 @@ func (suite *ReEncryptTests) SetupTest() {
 
 	suite.FileHeader, _ = hex.DecodeString("637279707434676801000000010000006c000000000000007ca283608311dacfc32703a3cc9a2b445c9a417e036ba5943e233cfc65a1f81fdcc35036a584b3f95759114f584d1e81e8cf23a9b9d1e77b9e8f8a8ee8098c2a3e9270fe6872ef9d1c948caf8423efc7ce391081da0d52a49b1e6d0706f267d6140ff12b")
 	suite.FileData, _ = hex.DecodeString("e046718f01d52c626276ce5931e10afd99330c4679b3e2a43fdf18146e85bae8eaee83")
+
+}
+
+func (suite *ReEncryptTests) TearDownTest() {
+	os.RemoveAll(suite.KeyPath)
+}
+
+func (suite *ReEncryptTests) TestReencryptHeader() {
 	lis, err := net.Listen("tcp", "localhost:50051")
 	if err != nil {
 		suite.T().FailNow()
@@ -89,13 +97,7 @@ func (suite *ReEncryptTests) SetupTest() {
 			suite.T().Fail()
 		}
 	}()
-}
 
-func (suite *ReEncryptTests) TearDownTest() {
-	os.RemoveAll(suite.KeyPath)
-}
-
-func (suite *ReEncryptTests) TestReencryptHeader() {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	conn, err := grpc.Dial("localhost:50051", opts...)
@@ -121,4 +123,64 @@ func (suite *ReEncryptTests) TestReencryptHeader() {
 	data, err := io.ReadAll(c4gh)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), "content", string(data))
+}
+
+func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {
+	lis, err := net.Listen("tcp", "localhost:50052")
+	if err != nil {
+		suite.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{})
+		_ = s.Serve(lis)
+	}()
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial("localhost:50052", opts...)
+	if err != nil {
+		suite.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: suite.FileHeader, Publickey: "BadKey"})
+	assert.Contains(suite.T(), err.Error(), "illegal base64 data")
+	assert.Nil(suite.T(), res)
+}
+
+func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
+	lis, err := net.Listen("tcp", "localhost:50053")
+	if err != nil {
+		suite.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{})
+		_ = s.Serve(lis)
+	}()
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial("localhost:50053", opts...)
+	if err != nil {
+		suite.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: make([]byte, 0), Publickey: suite.UserPubKeyString})
+	assert.Contains(suite.T(), err.Error(), "no header recieved")
+	assert.Nil(suite.T(), res)
 }

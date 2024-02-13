@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 )
 
 // server struct is used to implement reencrypt.ReEncryptServer.
@@ -36,13 +37,17 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	// working with the base64 encoded key as it can be sent in both HTTP headers and HTTP body
 	publicKey, err := base64.StdEncoding.DecodeString(in.GetPublickey())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(400, err.Error())
+	}
+
+	if h := in.GetOldheader(); h == nil {
+		return nil, status.Error(400, "no header recieved")
 	}
 
 	reader := bytes.NewReader(publicKey)
 	newReaderPublicKey, err := keys.ReadPublicKey(reader)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(400, err.Error())
 	}
 	newReaderPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	newReaderPublicKeyList = append(newReaderPublicKeyList, newReaderPublicKey)
@@ -51,7 +56,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *Conf.ReEncrypt.Crypt4GHKey, newReaderPublicKeyList)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(400, err.Error())
 	}
 
 	return &re.ReencryptResponse{Header: newheader}, nil
