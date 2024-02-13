@@ -1,20 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
-	"strings"
-
-	log "github.com/sirupsen/logrus"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
-
-	"github.com/neicnordic/sda-download/internal/config"
-	"github.com/neicnordic/sda-download/internal/database"
-	re "github.com/neicnordic/sda-download/internal/reencrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -24,43 +26,30 @@ type server struct {
 	re.UnimplementedReencryptServer
 }
 
-// init is run before main, it sets up configuration and other required things
-func init() {
-	// Load configuration
-	conf, err := config.NewConfig("reencrypt")
-	if err != nil {
-		log.Panicf("configuration loading failed, reason: %v", err)
-	}
-	config.Config = *conf
-
-	// Connect to database
-	db, err := database.NewDB(conf.DB)
-	if err != nil {
-		log.Panicf("database connection failed, reason: %v", err)
-	}
-	defer db.Close()
-	database.DB = db
-
-}
+var Conf config.Config
 
 // ReencryptHeader implements reencrypt.ReEncryptHeader
-func (s *server) ReencryptHeader(ctx context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
+func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
 	log.Debugf("Received Public key: %v", in.GetPublickey())
 	log.Debugf("Received previous crypt4gh header: %v", in.GetOldheader())
 
-	// working with the base64 data instead of the full armored key is easier
-	// as it can be sent in both HTTP headers and HTTP body
-	newReaderPublicKey, err := keys.ReadPublicKey(strings.NewReader("-----BEGIN CRYPT4GH PUBLIC KEY-----\n" + in.GetPublickey() + "\n-----END CRYPT4GH PUBLIC KEY-----\n"))
+	// working with the base64 encoded key as it can be sent in both HTTP headers and HTTP body
+	publicKey, err := base64.StdEncoding.DecodeString(in.GetPublickey())
 	if err != nil {
 		return nil, err
 	}
 
+	reader := bytes.NewReader(publicKey)
+	newReaderPublicKey, err := keys.ReadPublicKey(reader)
+	if err != nil {
+		return nil, err
+	}
 	newReaderPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	newReaderPublicKeyList = append(newReaderPublicKeyList, newReaderPublicKey)
 
-	log.Debugf("crypt4ghkey: %v", *config.Config.Grpc.Crypt4GHKey)
+	log.Debugf("crypt4ghkey: %v", *Conf.ReEncrypt.Crypt4GHKey)
 
-	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *config.Config.Grpc.Crypt4GHKey, newReaderPublicKeyList)
+	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *Conf.ReEncrypt.Crypt4GHKey, newReaderPublicKeyList)
 	if err != nil {
 		return nil, err
 	}
@@ -69,16 +58,40 @@ func (s *server) ReencryptHeader(ctx context.Context, in *re.ReencryptRequest) (
 }
 
 func main() {
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.Config.Grpc.Host, config.Config.Grpc.Port))
+	Conf, err := config.NewConfig("reencrypt")
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("configuration loading failed, reason: %v", err)
+	}
+
+	// Connect to database
+	Conf.ReEncrypt.DB, err = database.NewSDAdb(Conf.Database)
+	if err != nil {
+		log.Fatalf("database connection failed, reason: %v", err)
+	}
+	defer Conf.ReEncrypt.DB.Close()
+
+	sigc := make(chan os.Signal, 5)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer func() {
+		if err := recover(); err != nil {
+			log.Fatal("Could not recover, exiting")
+		}
+	}()
+
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", Conf.ReEncrypt.Host, Conf.ReEncrypt.Port))
+	if err != nil {
+		log.Errorf("failed to listen: %v", err)
+		sigc <- syscall.SIGINT
+		panic(err)
 	}
 
 	var opts []grpc.ServerOption
-	if config.Config.Grpc.ServerCert != "" && config.Config.Grpc.ServerKey != "" {
-		creds, err := credentials.NewServerTLSFromFile(config.Config.Grpc.ServerCert, config.Config.Grpc.ServerKey)
+	if Conf.ReEncrypt.ServerCert != "" && Conf.ReEncrypt.ServerKey != "" {
+		creds, err := credentials.NewServerTLSFromFile(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
 		if err != nil {
-			log.Fatalf("Failed to generate credentials: %v", err)
+			log.Errorf("Failed to generate credentials: %v", err)
+			sigc <- syscall.SIGINT
+			panic(err)
 		}
 		opts = []grpc.ServerOption{grpc.Creds(creds)}
 	}
@@ -87,7 +100,8 @@ func main() {
 	re.RegisterReencryptServer(s, &server{})
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Errorf("failed to serve: %v", err)
+		sigc <- syscall.SIGINT
+		panic(err)
 	}
-
 }
