@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -85,13 +87,34 @@ func main() {
 
 	var opts []grpc.ServerOption
 	if Conf.ReEncrypt.ServerCert != "" && Conf.ReEncrypt.ServerKey != "" {
-		creds, err := credentials.NewServerTLSFromFile(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
-		if err != nil {
-			log.Errorf("Failed to generate credentials: %v", err)
-			sigc <- syscall.SIGINT
-			panic(err)
+		switch {
+		case Conf.ReEncrypt.CACert != "":
+			caCerts, _ := x509.SystemCertPool()
+			serverCert, err := tls.LoadX509KeyPair(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
+			if err != nil {
+				log.Errorf("Failed to parse certificates: %v", err)
+				sigc <- syscall.SIGINT
+				panic(err)
+			}
+
+			creds := credentials.NewTLS(
+				&tls.Config{
+					Certificates: []tls.Certificate{serverCert},
+					ClientAuth:   tls.RequireAndVerifyClientCert,
+					MinVersion:   tls.VersionTLS12,
+					RootCAs:      caCerts,
+				},
+			)
+			opts = []grpc.ServerOption{grpc.Creds(creds)}
+		default:
+			creds, err := credentials.NewServerTLSFromFile(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
+			if err != nil {
+				log.Errorf("Failed to generate tlsConfig: %v", err)
+				sigc <- syscall.SIGINT
+				panic(err)
+			}
+			opts = []grpc.ServerOption{grpc.Creds(creds)}
 		}
-		opts = []grpc.ServerOption{grpc.Creds(creds)}
 	}
 
 	s := grpc.NewServer(opts...)

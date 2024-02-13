@@ -761,6 +761,9 @@ func (c *Config) configReEncryptServer() (err error) {
 	if viper.IsSet("grpc.port") {
 		c.ReEncrypt.Port = viper.GetInt("grpc.port")
 	}
+	if viper.IsSet("grpc.cacert") {
+		c.ReEncrypt.CACert = viper.GetString("grpc.cacert")
+	}
 	if viper.IsSet("grpc.servercert") {
 		c.ReEncrypt.ServerCert = viper.GetString("grpc.servercert")
 	}

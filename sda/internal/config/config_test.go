@@ -383,4 +383,12 @@ func (suite *ConfigTestSuite) TestConfigReEncryptServer() {
 	config, err := NewConfig("reencrypt")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), 50051, config.ReEncrypt.Port)
+
+	viper.Set("grpc.CACert", certPath+"/ca.crt")
+	viper.Set("grpc.serverCert", certPath+"/tls.crt")
+	viper.Set("grpc.serverKey", certPath+"/tls.key")
+	config, err = NewConfig("reencrypt")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), certPath+"/ca.crt", config.ReEncrypt.CACert)
+	assert.Equal(suite.T(), certPath+"/tls.crt", config.ReEncrypt.ServerCert)
 }
