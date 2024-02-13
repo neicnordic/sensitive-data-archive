@@ -13,7 +13,6 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -62,13 +61,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
-
-	// Connect to database
-	Conf.ReEncrypt.DB, err = database.NewSDAdb(Conf.Database)
-	if err != nil {
-		log.Fatalf("database connection failed, reason: %v", err)
-	}
-	defer Conf.ReEncrypt.DB.Close()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

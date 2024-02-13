@@ -270,7 +270,8 @@ func NewConfig(app string) (*Config, error) {
 		}
 	case "reencrypt":
 		requiredConfVars = []string{
-			"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase",
+			"c4gh.filepath",
+			"c4gh.passphrase",
 		}
 	case "s3inbox":
 		requiredConfVars = []string{
@@ -470,11 +471,6 @@ func NewConfig(app string) (*Config, error) {
 
 		c.configOrchestrator()
 	case "reencrypt":
-		err := c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
 		viper.SetDefault("grpc.host", "0.0.0.0")
 		viper.SetDefault("grpc.port", 50051)
 		err := c.configReEncryptServer()
