@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 // server struct is used to implement reencrypt.ReEncryptServer.
@@ -90,6 +91,7 @@ func main() {
 
 	s := grpc.NewServer(opts...)
 	re.RegisterReencryptServer(s, &server{})
+	reflection.Register(s)
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Errorf("failed to serve: %v", err)
