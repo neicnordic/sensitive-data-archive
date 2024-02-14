@@ -109,7 +109,7 @@ func TestNewDB(t *testing.T) {
 
 	// Test failure first
 
-	sqlOpen = func(x string, y string) (*sql.DB, error) {
+	sqlOpen = func(_ string, _ string) (*sql.DB, error) {
 		return nil, errors.New("fail for testing")
 	}
 

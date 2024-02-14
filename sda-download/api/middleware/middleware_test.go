@@ -28,7 +28,7 @@ func TestTokenMiddleware_Fail_GetToken(t *testing.T) {
 	originalGetToken := auth.GetToken
 
 	// Substitute mock functions
-	auth.GetToken = func(header http.Header) (string, int, error) {
+	auth.GetToken = func(_ http.Header) (string, int, error) {
 		return "", 401, errors.New("access token must be provided")
 	}
 
@@ -70,10 +70,10 @@ func TestTokenMiddleware_Fail_GetVisas(t *testing.T) {
 	originalGetVisas := auth.GetVisas
 
 	// Substitute mock functions
-	auth.GetToken = func(header http.Header) (string, int, error) {
+	auth.GetToken = func(_ http.Header) (string, int, error) {
 		return token, 200, nil
 	}
-	auth.GetVisas = func(o auth.OIDCDetails, token string) (*auth.Visas, error) {
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
 		return nil, errors.New("get visas failed")
 	}
 
@@ -117,13 +117,13 @@ func TestTokenMiddleware_Fail_GetPermissions(t *testing.T) {
 	originalGetPermissions := auth.GetPermissions
 
 	// Substitute mock functions
-	auth.GetToken = func(header http.Header) (string, int, error) {
+	auth.GetToken = func(_ http.Header) (string, int, error) {
 		return token, 200, nil
 	}
-	auth.GetVisas = func(o auth.OIDCDetails, token string) (*auth.Visas, error) {
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
 		return &auth.Visas{}, nil
 	}
-	auth.GetPermissions = func(visas auth.Visas) []string {
+	auth.GetPermissions = func(_ auth.Visas) []string {
 		return []string{}
 	}
 
@@ -161,13 +161,13 @@ func TestTokenMiddleware_Success_NoCache(t *testing.T) {
 	originalNewSessionKey := session.NewSessionKey
 
 	// Substitute mock functions
-	auth.GetToken = func(header http.Header) (string, int, error) {
+	auth.GetToken = func(_ http.Header) (string, int, error) {
 		return token, 200, nil
 	}
-	auth.GetVisas = func(o auth.OIDCDetails, token string) (*auth.Visas, error) {
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
 		return &auth.Visas{}, nil
 	}
-	auth.GetPermissions = func(visas auth.Visas) []string {
+	auth.GetPermissions = func(_ auth.Visas) []string {
 		return []string{"dataset1", "dataset2"}
 	}
 	session.NewSessionKey = func() string {

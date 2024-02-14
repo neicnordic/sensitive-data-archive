@@ -39,13 +39,13 @@ func (suite *S3TestSuite) SetupTest() {
 	database.DB = &database.SQLdb{DB: db, ConnInfo: testConnInfo}
 
 	// Substitute mock functions
-	auth.GetToken = func(header http.Header) (string, int, error) {
+	auth.GetToken = func(_ http.Header) (string, int, error) {
 		return "token", 200, nil
 	}
-	auth.GetVisas = func(o auth.OIDCDetails, token string) (*auth.Visas, error) {
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
 		return &auth.Visas{}, nil
 	}
-	auth.GetPermissions = func(visas auth.Visas) []string {
+	auth.GetPermissions = func(_ auth.Visas) []string {
 		return []string{"dataset1", "dataset10", "https://url/dataset"}
 	}
 	session.NewSessionKey = func() string {
