@@ -108,8 +108,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/neicnordic/crypt4gh v1.8.10 h1:oAmmV84OVpmHP2APn5inv8v3Ep2iIofKVUdfS9xXu3E=
-github.com/neicnordic/crypt4gh v1.8.10/go.mod h1:9jve3/N4BQTdiO6cnWqwg/4xQic6dQzPSPZqfAu9GBo=
+github.com/neicnordic/crypt4gh v1.8.11 h1:OS3AQJfQ2MiEzrD5kqVf2B872qpksEOYYyAVx0g0MuQ=
+github.com/neicnordic/crypt4gh v1.8.11/go.mod h1:6GKPoKbTMXhtEnRlY0LMR+LQ+a3XMBQ5iiz/O8nzFAM=
 github.com/pelletier/go-toml/v2 v2.1.1 h1:LWAJwfNvjQZCFIDKWYQaM62NcYeYViCmWIwmOStowAI=
 github.com/pelletier/go-toml/v2 v2.1.1/go.mod h1:tJU2Z3ZkXwnxa4DPO899bsyIoywizdUvyaeZurnPPDc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
