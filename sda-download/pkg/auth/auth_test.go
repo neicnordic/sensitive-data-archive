@@ -19,7 +19,7 @@ func TestGetOIDCDetails_Fail_MakeRequest(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		return nil, errors.New("error")
 	}
 
@@ -51,7 +51,7 @@ func TestGetOIDCDetails_Fail_JSONDecode(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		response := &http.Response{
 			StatusCode: 200,
 			// Response body
@@ -91,7 +91,7 @@ func TestGetOIDCDetails_Success(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		response := &http.Response{
 			StatusCode: 200,
 			// Response body
@@ -248,7 +248,7 @@ func TestGetVisas_Fail_MakeRequest(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		return nil, errors.New("error")
 	}
 
@@ -277,7 +277,7 @@ func TestGetVisas_Fail_JSONDecode(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		response := &http.Response{
 			StatusCode: 200,
 			// Response body
@@ -314,7 +314,7 @@ func TestGetVisas_Success(t *testing.T) {
 	originalMakeRequest := request.MakeRequest
 
 	// Substitute mock functions
-	request.MakeRequest = func(method, url string, headers map[string]string, body []byte) (*http.Response, error) {
+	request.MakeRequest = func(_, _ string, _ map[string]string, _ []byte) (*http.Response, error) {
 		response := &http.Response{
 			StatusCode: 200,
 			// Response body

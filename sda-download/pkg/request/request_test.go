@@ -46,7 +46,7 @@ func TestMakeRequest_Fail_HTTPNewRequest(t *testing.T) {
 	originalHTTPMakeRequest := HTTPNewRequest
 
 	// Substitute mock functions
-	HTTPNewRequest = func(method, url string, body io.Reader) (*http.Request, error) {
+	HTTPNewRequest = func(_, _ string, _ io.Reader) (*http.Request, error) {
 		return nil, errors.New("failed to build http request")
 	}
 
@@ -74,7 +74,7 @@ func TestMakeRequest_Fail_HTTPNewRequest(t *testing.T) {
 func TestMakeRequest_Fail_StatusCode(t *testing.T) {
 
 	// Create mock client
-	client := newTestClient(func(req *http.Request) *http.Response {
+	client := newTestClient(func(_ *http.Request) *http.Response {
 		return &http.Response{
 			StatusCode: 500,
 			// Response body
@@ -89,7 +89,7 @@ func TestMakeRequest_Fail_StatusCode(t *testing.T) {
 	originalHTTPMakeRequest := HTTPNewRequest
 
 	// Substitute mock functions
-	HTTPNewRequest = func(method, requestUrl string, body io.Reader) (*http.Request, error) {
+	HTTPNewRequest = func(_, _ string, _ io.Reader) (*http.Request, error) {
 		u, _ := url.ParseRequestURI("https://testing.fi")
 		r := &http.Request{
 			Method: "GET",
@@ -122,7 +122,7 @@ func TestMakeRequest_Fail_StatusCode(t *testing.T) {
 func TestMakeRequest_Success(t *testing.T) {
 
 	// Create mock client
-	client := newTestClient(func(req *http.Request) *http.Response {
+	client := newTestClient(func(_ *http.Request) *http.Response {
 		return &http.Response{
 			StatusCode: 200,
 			// Response body
@@ -137,7 +137,7 @@ func TestMakeRequest_Success(t *testing.T) {
 	originalHTTPMakeRequest := HTTPNewRequest
 
 	// Substitute mock functions
-	HTTPNewRequest = func(method, requestUrl string, body io.Reader) (*http.Request, error) {
+	HTTPNewRequest = func(_, _ string, _ io.Reader) (*http.Request, error) {
 		u, _ := url.ParseRequestURI("https://testing.fi")
 		r := &http.Request{
 			Method: "GET",

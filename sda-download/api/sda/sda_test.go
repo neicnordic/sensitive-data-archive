@@ -22,7 +22,7 @@ func TestDatasets(t *testing.T) {
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 
 	// Substitute mock functions
-	middleware.GetCacheFromContext = func(c *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1", "dataset2"},
 		}
@@ -97,12 +97,12 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 	originalGetFilesDB := database.GetFiles
 
 	// Substitute mock functions
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(datasetID string) ([]*database.FileInfo, error) {
+	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
 		return nil, errors.New("something went wrong")
 	}
 
@@ -137,7 +137,7 @@ func TestGetFiles_Fail_NotFound(t *testing.T) {
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 
 	// Substitute mock functions
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1", "dataset2"},
 		}
@@ -173,12 +173,12 @@ func TestGetFiles_Success(t *testing.T) {
 	originalGetFilesDB := database.GetFiles
 
 	// Substitute mock functions
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(datasetID string) ([]*database.FileInfo, error) {
+	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
 		fileInfo := database.FileInfo{
 			FileID: "file1",
 		}
@@ -219,7 +219,7 @@ func TestFiles_Fail(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(datasetID string, ctx *gin.Context) ([]*database.FileInfo, int, error) {
+	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
 		return nil, 404, errors.New("dataset not found")
 	}
 
@@ -262,7 +262,7 @@ func TestFiles_Success(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(datasetID string, ctx *gin.Context) ([]*database.FileInfo, int, error) {
+	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
 		fileInfo := database.FileInfo{
 			FileID:                    "file1",
 			DatasetID:                 "dataset1",
@@ -326,7 +326,7 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(fileID string) (string, error) {
+	database.CheckFilePermission = func(_ string) (string, error) {
 		return "", errors.New("file not found")
 	}
 
@@ -364,11 +364,11 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(fileID string) (string, error) {
+	database.CheckFilePermission = func(_ string) (string, error) {
 		// nolint:goconst
 		return "dataset1", nil
 	}
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{}
 	}
 
@@ -408,15 +408,15 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	originalGetFile := database.GetFile
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(fileID string) (string, error) {
+	database.CheckFilePermission = func(_ string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1"},
 		}
 	}
-	database.GetFile = func(fileID string) (*database.FileDownload, error) {
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		return nil, errors.New("database error")
 	}
 
@@ -458,15 +458,15 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	Backend, _ = storage.NewBackend(config.Config.Archive)
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(fileID string) (string, error) {
+	database.CheckFilePermission = func(_ string) (string, error) {
 		return "dataset1", nil
 	}
-	middleware.GetCacheFromContext = func(ctx *gin.Context) session.Cache {
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
 			Datasets: []string{"dataset1"},
 		}
 	}
-	database.GetFile = func(fileID string) (*database.FileDownload, error) {
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
 			ArchivePath: "non-existant-file.txt",
 			ArchiveSize: 0,
