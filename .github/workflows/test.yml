@@ -104,3 +104,15 @@ jobs:
           file: ./sda/coverage.txt
           flags: unittests
           fail_ci_if_error: false
+
+  combine:
+    runs-on: ubuntu-latest
+    needs: [sftp_inbox, test_download, test_sda]
+    if: always()
+    steps:
+      - name: Any test that was run worked
+        if: ${{ !contains(needs.*.result, 'failure') || success() }}
+        run: echo ${{ toJSON(needs.*.result) }}; exit 0
+      - name: Something failed
+        if: ${{ contains(needs.*.result, 'failure') || failure() }}
+        run: echo ${{ toJSON(needs.*.result) }}; exit 1
