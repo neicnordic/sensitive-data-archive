@@ -52,7 +52,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/biobanklab/sensitive-data-archive
       
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -61,10 +61,10 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.tag }}
-            ghcr.io/${{ github.repository }}:latest
-            ${{ github.repository }}:${{ needs.tag.outputs.tag }}
-            ${{ github.repository }}:latest
+            ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag.outputs.tag }}
+            ghcr.io/biobanklab/sensitive-data-archive:latest
+            biobanklab/sensitive-data-archive:${{ needs.tag.outputs.tag }}
+            biobanklab/sensitive-data-archive:latest
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')

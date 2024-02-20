@@ -22,6 +22,12 @@ jobs:
       packages: write
       security-events: write
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -38,8 +44,8 @@ jobs:
           context: ./sda-download
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-download
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-download
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-download
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-download
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -51,8 +57,8 @@ jobs:
           context: ./sda
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -66,6 +72,12 @@ jobs:
       packages: write
       security-events: write
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -82,8 +94,8 @@ jobs:
           context: ./postgresql
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-postgres
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-postgres
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-postgres
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-postgres
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -95,8 +107,8 @@ jobs:
           context: ./rabbitmq
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-rabbitmq
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-rabbitmq
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-rabbitmq
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -105,7 +117,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on postgres
         uses: aquasecurity/trivy-action@0.18.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-postgres
+          image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-postgres
           format: "sarif"
           hide-progress: true
           ignore-unfixed: true
@@ -120,7 +132,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on rabbitmq
         uses: aquasecurity/trivy-action@0.18.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
+          image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-rabbitmq
           format: "sarif"
           hide-progress: true
           ignore-unfixed: true
@@ -140,6 +152,12 @@ jobs:
       packages: write
       security-events: write
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -156,8 +174,8 @@ jobs:
           context: ./sda-sftp-inbox
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-sftp-inbox
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-sftp-inbox
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-sftp-inbox
+            ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-sftp-inbox
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -166,7 +184,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on sftp-inbox
         uses: aquasecurity/trivy-action@0.18.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-sftp-inbox
+          image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-sftp-inbox
           format: "sarif"
           hide-progress: true
           ignore-unfixed: true
@@ -185,6 +203,12 @@ jobs:
     name: rabbitmq-federation-test
     runs-on: ubuntu-latest
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -197,6 +221,12 @@ jobs:
     name: postgres-test-suite
     runs-on: ubuntu-latest
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -212,6 +242,12 @@ jobs:
       matrix:
         storage: ["posix", "s3"]
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -237,6 +273,12 @@ jobs:
             tls: "false"
             storage: "posix"
     steps:
+      - id: string-github-repo
+        name: Check String
+        uses: ASzc/change-string-case-action@v6
+        with:
+          string: ${{ github.repository }}
+
       - name: Checkout
         uses: actions/checkout@v4
 

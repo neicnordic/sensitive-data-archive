@@ -1,7 +1,7 @@
 # Default values for SDA services.
 # Declare variables to be passed into your templates.
 image:
-  repository: "ghcr.io/neicnordic/sensitive-data-archive"
+  repository: "ghcr.io/biobanklab/sensitive-data-archive"
   tag:
   pullPolicy: "Always"
 
@@ -548,7 +548,7 @@ syncapi:
 
 releasetest:
   run: false
-  repository: neicnordic/sda-helm-tests-support
+  repository: biobanklab/sda-helm-tests-support
   imageTag: latest
   imagePullPolicy: IfNotPresent
   tls:
@@ -558,7 +558,7 @@ releasetest:
 
 verify:
   replicaCount: 1
-  repository: ghcr.io/neicnordic/sda-pipeline
+  repository: ghcr.io/biobanklab/sda-pipeline
   imageTag: v0.4.27
   imagePullPolicy: IfNotPresent
   resources:

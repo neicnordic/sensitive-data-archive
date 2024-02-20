@@ -78,6 +78,26 @@ func main() {
 
 			routingKey := routing[msgType]
 			if routingKey == "" {
+				log.Infof("Don't know schema for message type (corr-id: %s, msgType: %s, message: %s)",
+					delivered.CorrelationId, msgType, delivered.Body)
+
+				unknownSchemaErr := mq.SendMessage(delivered.CorrelationId, mq.Conf.Exchange, "unknown_schema", delivered.Body)
+				if unknownSchemaErr != nil {
+					log.Errorf("Failed to publish message with type: %v, to \"unknown_schema\" queue (corr-id: %s, reason: %v)",
+						msgType, delivered.CorrelationId, unknownSchemaErr)
+
+					deadErr := mq.SendMessage(delivered.CorrelationId, "sda.dead", "dead", delivered.Body)
+					if deadErr != nil {
+						log.Errorf("Failed to publish message (get file size error), to error queue (corr-id: %s, reason: %v)",
+							delivered.CorrelationId, deadErr)
+					}
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed to ack message for reason: %v", err)
+				}
+
+				// Restart on new message
 				continue
 			}
 

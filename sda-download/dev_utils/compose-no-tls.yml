@@ -62,7 +62,7 @@ services:
       - ARCHIVE_URL=http://s3
       - ARCHIVE_TYPE=s3
       - DB_HOST=db
-    image: neicnordic/sda-download:latest
+    image: biobanklab/sda-download:latest
     build:
       context: ..
     volumes:

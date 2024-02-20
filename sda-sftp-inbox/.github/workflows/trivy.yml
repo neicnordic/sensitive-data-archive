@@ -26,7 +26,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@8bd2f9fbda2109502356ff8a6a89da55b1ead252
         with:
-          image-ref: 'ghcr.io/${{ github.repository }}:latest'
+          image-ref: 'ghcr.io/biobanklab/sensitive-data-archive:latest'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'

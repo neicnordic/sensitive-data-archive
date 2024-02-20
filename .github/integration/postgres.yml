@@ -52,7 +52,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "35432:5432"
     restart: always
@@ -70,7 +70,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "15432:5432"
     restart: always
@@ -94,7 +94,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "25432:5432"
     restart: always

@@ -46,7 +46,7 @@ externalPkiService:
 extraSecurityContext: {}
 
 image:
-  repository: ghcr.io/neicnordic/sensitive-data-archive
+  repository: ghcr.io/biobanklab/sensitive-data-archive
   tag:
   pullPolicy: Always
 

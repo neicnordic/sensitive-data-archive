@@ -34,7 +34,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.4
+    image: ghcr.io/biobanklab/sensitive-data-archive:v0.0.2-postgres
     ports:
       - "5432:5432"
     volumes:
@@ -81,7 +81,7 @@ services:
       - db
       - mockauth
     env_file: ./env.download
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/biobanklab/sensitive-data-archive:v0.0.2-rabbitmq
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/

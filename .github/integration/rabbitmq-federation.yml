@@ -79,7 +79,7 @@ services:
       - BROKER_CLIENTKEY=/certs/client.key
       - BROKER_CACERT=/certs/ca.crt
       - LOG_LEVEL=debug
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     restart: always
     volumes:
       - certs:/certs
@@ -111,7 +111,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
       - "15672:15671"
     restart: always

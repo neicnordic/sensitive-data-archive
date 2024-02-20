@@ -131,6 +131,11 @@ func main() {
 
 					continue
 				}
+
+				log.Debug("Forward message to \"foam_integration\"")
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "foam_integration", delivered.Body); err != nil {
+					log.Errorln("We need to fix this resend stuff ...")
+				}
 			case "deprecate":
 				log.Debug("Deprecate type operation, marking dataset as deprecated")
 				if err := db.UpdateDatasetEvent(mappings.DatasetID, "deprecated", string(delivered.Body)); err != nil {

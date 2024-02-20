@@ -27,7 +27,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "15432:5432"
     restart: always
@@ -49,7 +49,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
       - "15672:15672"
     restart: always
@@ -81,7 +81,7 @@ services:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
       target: debug
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-s3inbox ]
     container_name: s3inbox
     depends_on:
@@ -110,7 +110,7 @@ services:
       - "18001:8001"
 
   ingest:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-ingest ]
     container_name: ingest
     depends_on:
@@ -135,7 +135,7 @@ services:
       - shared:/shared
 
   verify:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-verify ]
     container_name: verify
     depends_on:
@@ -160,7 +160,7 @@ services:
       - shared:/shared
 
   finalize:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-finalize ]
     container_name: finalize
     depends_on:
@@ -185,7 +185,7 @@ services:
       - shared:/shared
 
   mapper:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-mapper ]
     container_name: mapper
     depends_on:
@@ -209,7 +209,7 @@ services:
       - shared:/shared
 
   sync:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-sync ]
     container_name: sync
     depends_on:
@@ -233,7 +233,7 @@ services:
       - shared:/shared
 
   sync-api:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-syncapi ]
     container_name: sync-api
     depends_on:
@@ -295,7 +295,7 @@ services:
       - BROKER_ROUTINGERROR=error
       - DB_PASSWORD=download
       - DB_USER=download
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
     restart: always
@@ -304,7 +304,7 @@ services:
       - shared:/shared
 
   reencrypt:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-reencrypt ]
     container_name: reencrypt
     depends_on:
@@ -350,7 +350,7 @@ services:
       - AUTH_RESIGNJWT=true
       - AUTH_CEGA_ID=test
       - AUTH_CEGA_SECRET=test
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8888:8080"
     restart: always
@@ -368,7 +368,7 @@ services:
       - AUTH_RESIGNJWT=false
       - OIDC_ID=XC56EL11xx
       - OIDC_SECRET=wHPVQaYXmdDHg
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    image: ghcr.io/biobanklab/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8889:8080"
     restart: always

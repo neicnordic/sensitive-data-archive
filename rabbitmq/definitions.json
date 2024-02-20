@@ -155,6 +155,41 @@
             "durable": true,
             "auto_delete": false,
             "arguments": {}
+        },
+        {
+            "name": "unknown_schema",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "foam_integration",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "foam_dataset",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "outbox_export",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "export_stage_log",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
         }
     ],
     "exchanges": [
@@ -264,6 +299,46 @@
             "arguments": {},
             "destination": "catch_all.dead",
             "routing_key": "#"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "unknown_schema",
+            "routing_key": "unknown_schema"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "foam_integration",
+            "routing_key": "foam_integration"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "foam_dataset",
+            "routing_key": "foam_dataset"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "outbox_export",
+            "routing_key": "outbox_export"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "export_stage_log",
+            "routing_key": "export_stage_log"
         }
     ]
 }
