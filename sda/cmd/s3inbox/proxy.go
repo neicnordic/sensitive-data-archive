@@ -83,6 +83,14 @@ func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *bro
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	token, err := p.auth.Authenticate(r)
+	if err != nil {
+		log.Debugf("Request not authenticated (%v)", err)
+		p.notAuthorized(w, r)
+
+		return
+	}
+
 	switch t := p.detectRequestType(r); t {
 	case MakeBucket, RemoveBucket, Delete, Policy, Get:
 		// Not allowed
@@ -91,7 +99,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case Put, List, Other, AbortMultipart:
 		// Allowed
 		log.Debug("allowed known")
-		p.allowedResponse(w, r)
+		p.allowedResponse(w, r, token)
 	default:
 		log.Debugf("Unexpected request (%v) not allowed", r)
 		p.notAllowedResponse(w, r)
@@ -113,22 +121,32 @@ func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
 	reportError(http.StatusUnauthorized, "not authorized", w)
 }
 
-func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
-	claims, err := p.auth.Authenticate(r)
-	if err != nil {
-		log.Debugf("Request not authenticated (%v)", err)
-		p.notAuthorized(w, r)
+func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	log.Debug("prepend")
+	// Check whether token username and filepath match
+	str, err := url.ParseRequestURI(r.URL.Path)
+	if err != nil || str.Path == "" {
+		reportError(http.StatusBadRequest, err.Error(), w)
+	}
+
+	path := strings.Split(str.Path, "/")
+	if strings.Contains(token.Subject(), "@") {
+		if strings.ReplaceAll(token.Subject(), "@", "_") != path[1] {
+			reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
+
+			return
+		}
+	} else if token.Subject() != path[1] {
+		reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
 
 		return
 	}
-
-	log.Debug("prepend")
 	err = p.prependBucketToHostPath(r)
 	if err != nil {
 		reportError(http.StatusBadRequest, err.Error(), w)
 	}
 
-	username := claims.Subject()
+	username := token.Subject()
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 
 	filepath, err := formatUploadFilePath(rawFilepath)
@@ -161,7 +179,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request) {
 	// Send message to upstream and set file as uploaded in the database
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
-		message, err := p.CreateMessageFromRequest(r, claims)
+		message, err := p.CreateMessageFromRequest(r, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 

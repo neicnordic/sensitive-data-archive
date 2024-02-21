@@ -58,27 +58,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
 		}
 
-		// Check whether token username and filepath match
-		str, err := url.ParseRequestURI(r.URL.Path)
-		if err != nil || str.Path == "" {
-			return nil, fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
-		}
-
-		path := strings.Split(str.Path, "/")
-		if len(path) < 2 {
-			return nil, fmt.Errorf("length of path split was shorter than expected: %s", str.Path)
-		}
-		username := path[1]
-
-		// Case for Elixir and CEGA usernames: Replace @ with _ character
-		if strings.Contains(token.Subject(), "@") {
-			if strings.ReplaceAll(token.Subject(), "@", "_") != username {
-				return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
-			}
-		} else if token.Subject() != username {
-			return nil, fmt.Errorf("token supplied username %s but URL had %s", token.Subject(), username)
-		}
-
 		return token, nil
 
 	case r.Header.Get("Authorization") != "":
