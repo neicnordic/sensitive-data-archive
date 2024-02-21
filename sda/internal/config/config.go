@@ -47,6 +47,12 @@ type Config struct {
 	Orchestrator OrchestratorConf
 	Sync         Sync
 	SyncAPI      SyncAPIConf
+	ReEncrypt    ReEncConfig
+}
+
+type ReEncConfig struct {
+	APIConf
+	Crypt4GHKey *[32]byte
 }
 
 type Sync struct {
@@ -262,6 +268,11 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"project.fqdn",
 		}
+	case "reencrypt":
+		requiredConfVars = []string{
+			"c4gh.filepath",
+			"c4gh.passphrase",
+		}
 	case "s3inbox":
 		requiredConfVars = []string{
 			"broker.host",
@@ -459,6 +470,13 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configOrchestrator()
+	case "reencrypt":
+		viper.SetDefault("grpc.host", "0.0.0.0")
+		viper.SetDefault("grpc.port", 50051)
+		err := c.configReEncryptServer()
+		if err != nil {
+			return nil, err
+		}
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {
@@ -734,6 +752,35 @@ func (c *Config) configOrchestrator() {
 	} else {
 		c.Orchestrator.QueueAccession = "accessionIDs"
 	}
+}
+
+func (c *Config) configReEncryptServer() (err error) {
+	if viper.IsSet("grpc.host") {
+		c.ReEncrypt.Host = viper.GetString("grpc.host")
+	}
+	if viper.IsSet("grpc.port") {
+		c.ReEncrypt.Port = viper.GetInt("grpc.port")
+	}
+	if viper.IsSet("grpc.cacert") {
+		c.ReEncrypt.CACert = viper.GetString("grpc.cacert")
+	}
+	if viper.IsSet("grpc.servercert") {
+		c.ReEncrypt.ServerCert = viper.GetString("grpc.servercert")
+	}
+	if viper.IsSet("grpc.serverkey") {
+		c.ReEncrypt.ServerKey = viper.GetString("grpc.serverkey")
+	}
+
+	if c.ReEncrypt.ServerCert != "" && c.ReEncrypt.ServerKey != "" {
+		c.ReEncrypt.Port = 50443
+	}
+
+	c.ReEncrypt.Crypt4GHKey, err = GetC4GHKey()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // configSchemas configures the schemas to load depending on

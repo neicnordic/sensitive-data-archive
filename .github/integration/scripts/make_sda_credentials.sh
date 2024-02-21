@@ -56,14 +56,17 @@ socket_timeout = 30
 EOD
 
 ## create crypt4gh key
+if [ ! -f "/shared/crypt4gh" ]; then
+    echo "downloading crypt4gh"
+    latest_c4gh=$(curl -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
+    curl -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+fi
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
     echo "creating crypth4gh key"
-    curl -s -L https://github.com/neicnordic/crypt4gh/releases/download/v1.7.4/crypt4gh_linux_x86_64.tar.gz | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
     /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
 fi
 if [ ! -f "/shared/sync.sec.pem" ]; then
-    echo "creating crypth4gh key"
-    curl -s -L https://github.com/neicnordic/crypt4gh/releases/download/v1.7.4/crypt4gh_linux_x86_64.tar.gz | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    echo "creating sync crypth4gh key"
     /shared/crypt4gh generate -n /shared/sync -p syncPass
 fi
 
@@ -82,4 +85,11 @@ if [ ! -f "/shared/keys/ssh" ]; then
     }
 ]
 EOD
+fi
+
+## download grpcurl
+if [ ! -f "/shared/grpcurl" ]; then
+    echo "downloading grpcurl"
+    latest_grpculr=$(curl -sL https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
+    curl -s -L "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpculr}/grpcurl_${latest_grpculr}_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/grpcurl
 fi
