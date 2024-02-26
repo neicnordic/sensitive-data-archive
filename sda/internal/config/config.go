@@ -197,21 +197,21 @@ func NewConfig(app string) (*Config, error) {
 		}
 	case "auth":
 		requiredConfVars = []string{
-			"s3Inbox",
-			"publicFile",
+			"auth.s3Inbox",
+			"auth.publicFile",
 		}
 
-		if viper.GetString("cega.id") != "" && viper.GetString("cega.secret") != "" {
-			requiredConfVars = append(requiredConfVars, []string{"cega.authUrl"}...)
-			viper.Set("resignJwt", true)
+		if viper.GetString("auth.cega.id") != "" && viper.GetString("auth.cega.secret") != "" {
+			requiredConfVars = append(requiredConfVars, []string{"auth.cega.authUrl"}...)
+			viper.Set("auth.resignJwt", true)
 		}
 
 		if viper.GetString("oidc.id") != "" && viper.GetString("oidc.secret") != "" {
 			requiredConfVars = append(requiredConfVars, []string{"oidc.provider", "oidc.redirectUrl"}...)
 		}
 
-		if viper.GetBool("resignJwt") {
-			requiredConfVars = append(requiredConfVars, []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg"}...)
+		if viper.GetBool("auth.resignJwt") {
+			requiredConfVars = append(requiredConfVars, []string{"auth.jwtIssuer", "auth.jwtPrivateKey", "auth.jwtSignatureAlg"}...)
 		}
 	case "ingest":
 		requiredConfVars = []string{
@@ -467,9 +467,9 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 	case "auth":
-		c.Auth.Cega.AuthURL = viper.GetString("cega.authUrl")
-		c.Auth.Cega.ID = viper.GetString("cega.id")
-		c.Auth.Cega.Secret = viper.GetString("cega.secret")
+		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
+		c.Auth.Cega.ID = viper.GetString("auth.cega.id")
+		c.Auth.Cega.Secret = viper.GetString("auth.cega.secret")
 
 		c.Auth.OIDC.ID = viper.GetString("oidc.id")
 		c.Auth.OIDC.Provider = viper.GetString("oidc.provider")
@@ -483,18 +483,18 @@ func NewConfig(app string) (*Config, error) {
 			return nil, fmt.Errorf("neither cega or oidc login configured")
 		}
 
-		c.Auth.InfoURL = viper.GetString("infoUrl")
-		c.Auth.InfoText = viper.GetString("infoText")
-		c.Auth.PublicFile = viper.GetString("publicFile")
+		c.Auth.InfoURL = viper.GetString("auth.infoUrl")
+		c.Auth.InfoText = viper.GetString("auth.infoText")
+		c.Auth.PublicFile = viper.GetString("auth.publicFile")
 		if _, err := os.Stat(c.Auth.PublicFile); err != nil {
 			return nil, err
 		}
 
-		if viper.GetBool("resignJwt") {
-			c.Auth.ResignJwt = viper.GetBool("resignJwt")
-			c.Auth.JwtPrivateKey = viper.GetString("JwtPrivateKey")
-			c.Auth.JwtSignatureAlg = viper.GetString("JwtSignatureAlg")
-			c.Auth.JwtIssuer = viper.GetString("jwtIssuer")
+		if viper.GetBool("auth.resignJwt") {
+			c.Auth.ResignJwt = viper.GetBool("auth.resignJwt")
+			c.Auth.JwtPrivateKey = viper.GetString("auth.JwtPrivateKey")
+			c.Auth.JwtSignatureAlg = viper.GetString("auth.JwtSignatureAlg")
+			c.Auth.JwtIssuer = viper.GetString("auth.jwtIssuer")
 
 			if _, err := os.Stat(c.Auth.JwtPrivateKey); err != nil {
 				return nil, err
@@ -523,7 +523,7 @@ func NewConfig(app string) (*Config, error) {
 			c.Server.Key = viper.GetString("server.key")
 		}
 
-		c.Auth.S3Inbox = viper.GetString("s3Inbox")
+		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
 	case "finalize":
 		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
 			c.configArchive()
