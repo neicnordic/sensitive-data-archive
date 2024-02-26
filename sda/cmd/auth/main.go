@@ -27,8 +27,8 @@ type LoginOption struct {
 }
 
 type OIDCData struct {
-	S3Conf   map[string]string
-	ElixirID ElixirIdentity
+	S3Conf map[string]string
+	OIDCID OIDCIdentity
 }
 
 type AuthHandler struct {
@@ -85,9 +85,9 @@ func (auth AuthHandler) getMain(ctx iris.Context) {
 func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 
 	var response []LoginOption
-	// Only add the Elixir option if it has both id and secret
-	if auth.Config.Elixir.ID != "" && auth.Config.Elixir.Secret != "" {
-		response = append(response, LoginOption{Name: "Lifescience-RI", URL: "/elixir"})
+	// Only add the OIDC option if it has both id and secret
+	if auth.Config.OIDC.ID != "" && auth.Config.OIDC.Secret != "" {
+		response = append(response, LoginOption{Name: "Lifescience-RI", URL: "/oidc"})
 	}
 
 	// Only add the CEGA option if it has both id and secret
@@ -213,13 +213,13 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 	}
 }
 
-// getEGAConf returns an s3config file for an elixir login
+// getEGAConf returns an s3config file for an oidc login
 func (auth AuthHandler) getEGAConf(ctx iris.Context) {
 	auth.getInboxConfig(ctx, "ega")
 }
 
-// getElixir redirects to the elixir page defined in auth.Config
-func (auth AuthHandler) getElixir(ctx iris.Context) {
+// getOIDC redirects to the oidc page defined in auth.Config
+func (auth AuthHandler) getOIDC(ctx iris.Context) {
 	state := uuid.New()
 	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true})
 
@@ -232,9 +232,9 @@ func (auth AuthHandler) getElixir(ctx iris.Context) {
 	}
 }
 
-// elixirLogin authenticates the user with return values from the elixir
-// login page and returns the resulting data to the getElixirLogin page, or
-// getElixirCORSLogin endpoint.
+// elixirLogin authenticates the user with return values from the oidc
+// login page and returns the resulting data to the getOIDCLogin page, or
+// getOIDCCORSLogin endpoint.
 func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	state := ctx.Request().URL.Query().Get("state")
 	sessionState := ctx.GetCookie("state")
@@ -252,9 +252,9 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 
 	code := ctx.Request().URL.Query().Get("code")
-	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.Elixir.JwkURL)
+	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC.JwkURL)
 	if err != nil {
-		log.WithFields(log.Fields{"authType": "elixir"}).Errorf("authentication failed: %s", err)
+		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("authentication failed: %s", err)
 		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
 		if err != nil {
 			log.Error("Failed to write response: ", err)
@@ -280,14 +280,14 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 		idStruct.ExpDate = expDate
 	}
 
-	log.WithFields(log.Fields{"authType": "elixir", "user": idStruct.User}).Infof("User was authenticated")
+	log.WithFields(log.Fields{"authType": "oidc", "user": idStruct.User}).Infof("User was authenticated")
 	s3conf := getS3ConfigMap(idStruct.Token, auth.Config.S3Inbox, idStruct.User)
 
-	return &OIDCData{S3Conf: s3conf, ElixirID: idStruct}
+	return &OIDCData{S3Conf: s3conf, OIDCID: idStruct}
 }
 
-// getElixirLogin renders the `elixir.html` template to the given iris context
-func (auth AuthHandler) getElixirLogin(ctx iris.Context) {
+// getOIDCLogin renders the `oidc.html` template to the given iris context
+func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 
 	oidcData := auth.elixirLogin(ctx)
 	if oidcData == nil {
@@ -295,15 +295,15 @@ func (auth AuthHandler) getElixirLogin(ctx iris.Context) {
 	}
 
 	s := sessions.Get(ctx)
-	s.SetFlash("elixir", oidcData.S3Conf)
+	s.SetFlash("oidc", oidcData.S3Conf)
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	ctx.ViewData("User", oidcData.ElixirID.User)
-	ctx.ViewData("Passport", oidcData.ElixirID.Passport)
-	ctx.ViewData("Token", oidcData.ElixirID.Token)
-	ctx.ViewData("ExpDate", oidcData.ElixirID.ExpDate)
+	ctx.ViewData("User", oidcData.OIDCID.User)
+	ctx.ViewData("Passport", oidcData.OIDCID.Passport)
+	ctx.ViewData("Token", oidcData.OIDCID.Token)
+	ctx.ViewData("ExpDate", oidcData.OIDCID.ExpDate)
 
-	err := ctx.View("elixir.html")
+	err := ctx.View("oidc.html")
 	if err != nil {
 		log.Error("Failed to view login form: ", err)
 
@@ -311,8 +311,8 @@ func (auth AuthHandler) getElixirLogin(ctx iris.Context) {
 	}
 }
 
-// getElixirCORSLogin returns the oidc data as JSON to the given iris context
-func (auth AuthHandler) getElixirCORSLogin(ctx iris.Context) {
+// getOIDCCORSLogin returns the oidc data as JSON to the given iris context
+func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
 
 	oidcData := auth.elixirLogin(ctx)
 	if oidcData == nil {
@@ -327,9 +327,9 @@ func (auth AuthHandler) getElixirCORSLogin(ctx iris.Context) {
 	}
 }
 
-// getElixirConf returns an s3config file for an elixir login
-func (auth AuthHandler) getElixirConf(ctx iris.Context) {
-	auth.getInboxConfig(ctx, "elixir")
+// getOIDCConf returns an s3config file for an oidc login
+func (auth AuthHandler) getOIDCConf(ctx iris.Context) {
+	auth.getInboxConfig(ctx, "oidc")
 }
 
 // globalHeaders presets common response headers
@@ -365,9 +365,9 @@ func main() {
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
 
-	if config.Auth.Elixir.ID != "" && config.Auth.Elixir.Secret != "" {
+	if config.Auth.OIDC.ID != "" && config.Auth.OIDC.Secret != "" {
 		// Initialise OIDC client
-		oauth2Config, provider = getOidcClient(config.Auth.Elixir)
+		oauth2Config, provider = getOidcClient(config.Auth.OIDC)
 	}
 
 	// Create handler struct for the web server
@@ -409,11 +409,11 @@ func main() {
 	app.Get("/ega/s3conf", authHandler.getEGAConf)
 	app.Get("/ega/login", addCSPheaders, authHandler.getEGALogin)
 
-	// Elixir endpoints
-	app.Get("/elixir", authHandler.getElixir)
-	app.Get("/elixir/s3conf", authHandler.getElixirConf)
-	app.Get("/elixir/login", authHandler.getElixirLogin)
-	app.Get("/elixir/cors_login", authHandler.getElixirCORSLogin)
+	// OIDC endpoints
+	app.Get("/oidc", authHandler.getOIDC)
+	app.Get("/oidc/s3conf", authHandler.getOIDCConf)
+	app.Get("/oidc/login", authHandler.getOIDCLogin)
+	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
 	publicKey, err := readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {

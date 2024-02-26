@@ -113,7 +113,7 @@ type OrchestratorConf struct {
 }
 
 type AuthConf struct {
-	Elixir          ElixirConfig
+	OIDC            OIDCConfig
 	Cega            CegaConfig
 	JwtIssuer       string
 	JwtPrivateKey   string
@@ -126,7 +126,7 @@ type AuthConf struct {
 	PublicFile      string
 }
 
-type ElixirConfig struct {
+type OIDCConfig struct {
 	ID            string
 	Provider      string
 	RedirectURL   string
@@ -206,8 +206,8 @@ func NewConfig(app string) (*Config, error) {
 			viper.Set("resignJwt", true)
 		}
 
-		if viper.GetString("elixir.id") != "" && viper.GetString("elixir.secret") != "" {
-			requiredConfVars = append(requiredConfVars, []string{"elixir.provider", "elixir.redirectUrl"}...)
+		if viper.GetString("oidc.id") != "" && viper.GetString("oidc.secret") != "" {
+			requiredConfVars = append(requiredConfVars, []string{"oidc.provider", "oidc.redirectUrl"}...)
 		}
 
 		if viper.GetBool("resignJwt") {
@@ -471,16 +471,16 @@ func NewConfig(app string) (*Config, error) {
 		c.Auth.Cega.ID = viper.GetString("cega.id")
 		c.Auth.Cega.Secret = viper.GetString("cega.secret")
 
-		c.Auth.Elixir.ID = viper.GetString("elixir.id")
-		c.Auth.Elixir.Provider = viper.GetString("elixir.provider")
-		c.Auth.Elixir.RedirectURL = viper.GetString("elixir.redirectUrl")
-		c.Auth.Elixir.Secret = viper.GetString("elixir.secret")
-		if viper.IsSet("elixir.jwkPath") {
-			c.Auth.Elixir.JwkURL = c.Auth.Elixir.Provider + viper.GetString("elixir.jwkPath")
+		c.Auth.OIDC.ID = viper.GetString("oidc.id")
+		c.Auth.OIDC.Provider = viper.GetString("oidc.provider")
+		c.Auth.OIDC.RedirectURL = viper.GetString("oidc.redirectUrl")
+		c.Auth.OIDC.Secret = viper.GetString("oidc.secret")
+		if viper.IsSet("oidc.jwkPath") {
+			c.Auth.OIDC.JwkURL = c.Auth.OIDC.Provider + viper.GetString("oidc.jwkPath")
 		}
 
-		if (c.Auth.Elixir.ID == "" || c.Auth.Elixir.Secret == "") && (c.Auth.Cega.ID == "" || c.Auth.Cega.Secret == "") {
-			return nil, fmt.Errorf("neither cega or elixir login configured")
+		if (c.Auth.OIDC.ID == "" || c.Auth.OIDC.Secret == "") && (c.Auth.Cega.ID == "" || c.Auth.Cega.Secret == "") {
+			return nil, fmt.Errorf("neither cega or oidc login configured")
 		}
 
 		c.Auth.InfoURL = viper.GetString("infoUrl")

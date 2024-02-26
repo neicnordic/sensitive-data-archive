@@ -439,8 +439,8 @@ func (suite *ConfigTestSuite) TestConfigAuth_OIDC() {
 
 	viper.Set("s3Inbox", "http://inbox:8000")
 	viper.Set("publicFile", ECPath+"/ec.pub")
-	viper.Set("elixir.id", "elixirTestID")
-	viper.Set("elixir.secret", "elixirTestIssuer")
+	viper.Set("oidc.id", "oidcTestID")
+	viper.Set("oidc.secret", "oidcTestIssuer")
 	_, err = NewConfig("auth")
 	assert.Error(suite.T(), err)
 
