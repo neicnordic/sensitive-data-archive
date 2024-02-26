@@ -241,6 +241,11 @@ func Download(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
 		c.Header("ETag", fileDetails.DecryptedChecksum)
 		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
+
+		// set the user and server public keys that is send from htsget
+		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
+		c.Header("client-public-key", c.GetHeader("client-public-key"))
+		c.Header("server-public-key", c.GetHeader("server-public-key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
