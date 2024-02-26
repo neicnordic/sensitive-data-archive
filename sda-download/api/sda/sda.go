@@ -156,6 +156,7 @@ func Download(c *gin.Context) {
 		c.String(http.StatusUnauthorized, "unauthorised")
 
 		return
+
 	}
 
 	// Get file header
@@ -164,59 +165,6 @@ func Download(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "database error")
 
 		return
-	}
-
-	// Get archive file handle
-	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
-	if err != nil {
-		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
-		c.String(http.StatusInternalServerError, "archive error")
-
-		return
-	}
-
-	c.Header("Content-Type", "application/octet-stream")
-	if c.GetBool("S3") {
-		lastModified, err := time.Parse(time.RFC3339, fileDetails.LastModified)
-		if err != nil {
-			log.Errorf("failed to parse last modified time: %v", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-
-			return
-		}
-
-		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
-		c.Header("ETag", fileDetails.DecryptedChecksum)
-		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
-	}
-
-	if c.Request.Method == http.MethodHead {
-
-		return
-	}
-
-	// Stitch file and prepare it for streaming
-	var fileStream *streaming.Crypt4GHReader
-	switch c.Param("type") {
-	case "encrypted":
-		log.Print("Return encrypted file")
-		fileStream, err = stitchEncryptedFile(fileDetails.Header, file)
-		if err != nil {
-			log.Errorf("could not prepare file for streaming, %s", err)
-			c.String(http.StatusInternalServerError, "file stream error")
-
-			return
-		}
-		c.Header("Content-Length", "")
-	default:
-		// Stitch file and prepare it for streaming
-		fileStream, err = stitchFile(fileDetails.Header, file)
-		if err != nil {
-			log.Errorf("could not prepare file for streaming, %s", err)
-			c.String(http.StatusInternalServerError, "file stream error")
-
-			return
-		}
 	}
 
 	// Get query params
@@ -248,12 +196,83 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	contentLength := fileDetails.DecryptedSize
+	if c.Param("type") == "encrypted" {
+		contentLength = fileDetails.ArchiveSize
+	}
 	if start == 0 && end == 0 {
-		c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
+		c.Header("Content-Length", fmt.Sprint(contentLength))
 	} else {
 		// Calculate how much we should read (if given)
+		// TODO incorrect if encrypted
 		togo := end - start
 		c.Header("Content-Length", fmt.Sprint(togo))
+	}
+
+	// Get archive file handle
+	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
+	if err != nil {
+		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
+		c.String(http.StatusInternalServerError, "archive error")
+
+		return
+	}
+
+	c.Header("Content-Type", "application/octet-stream")
+	if c.GetBool("S3") {
+		lastModified, err := time.Parse(time.RFC3339, fileDetails.LastModified)
+		if err != nil {
+			log.Errorf("failed to parse last modified time: %v", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+
+			return
+		}
+
+		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
+		c.Header("ETag", fileDetails.DecryptedChecksum)
+		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
+	}
+
+	if c.Request.Method == http.MethodHead {
+
+		return
+	}
+
+	// Prepare the file for streaming, encrypted or decrypted
+	var encryptedFileReader io.Reader
+	var fileStream io.Reader
+	hr := bytes.NewReader(fileDetails.Header)
+	encryptedFileReader = io.MultiReader(hr, file)
+
+	switch c.Param("type") {
+	case "encrypted":
+		if start > 0 || end > 0 {
+			// unset content-length
+			c.Header("Content-Length", "-1")
+			log.Errorf("Start and end coordinates for encrypted files not implemented! %v", start)
+			c.String(http.StatusInternalServerError, "an error occurred")
+
+			return
+		}
+		fileStream = encryptedFileReader
+
+	default:
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
+		defer c4ghfileStream.Close()
+		if err != nil {
+			log.Errorf("could not prepare file for streaming, %s", err)
+			c.String(http.StatusInternalServerError, "file stream error")
+
+			return
+		}
+		err = truncateStream(c4ghfileStream, c.Writer, start)
+		fileStream = c4ghfileStream
+		if err != nil {
+			log.Errorf("error occurred while finding sending start: %v", err)
+			c.String(http.StatusInternalServerError, "an error occurred")
+
+			return
+		}
 	}
 
 	err = sendStream(fileStream, c.Writer, start, end)
@@ -265,39 +284,7 @@ func Download(c *gin.Context) {
 	}
 }
 
-// stitchFile stitches the header and file body together for Crypt4GHReader
-// and returns a streamable Reader
-var stitchFile = func(header []byte, file io.ReadCloser) (*streaming.Crypt4GHReader, error) {
-	log.Debugf("stitching header to file %s for streaming", file)
-	// Stitch header and file body together
-	hr := bytes.NewReader(header)
-	mr := io.MultiReader(hr, file)
-
-	c4ghr, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
-	//defer c4ghr.Close()
-	return c4ghr, err
-}
-
-// stitchEncryptedFile stitches the header and file body together for Crypt4GHReader
-// and returns a streamable Reader
-var stitchEncryptedFile = func(header []byte, file io.ReadCloser) (*streaming.Crypt4GHReader, error) {
-	log.Debugf("stitching header to file %s for streaming", file)
-	// Stitch header and file body together
-	hr := bytes.NewReader(header)
-
-	encryptedFile := io.MultiReader(hr, io.MultiReader(hr, file))
-
-	log.Print("Encrypted file:", encryptedFile)
-
-	log.Debugf("file stream for %s constructed", file)
-	c4ghr, err := streaming.NewCrypt4GHReader(encryptedFile, *config.Config.App.Crypt4GHKey, nil)
-
-	return c4ghr, err
-}
-
-// sendStream
-// used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
-var sendStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWriter, start, end int64) error {
+var truncateStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWriter, start int64) error {
 
 	if start != 0 {
 		// We don't want to read from start, skip ahead to where we should be
@@ -305,6 +292,11 @@ var sendStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWrit
 			return err
 		}
 	}
+	return nil
+}
+
+// used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
+var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end int64) error {
 
 	// Calculate how much we should read (if given)
 	togo := end - start
