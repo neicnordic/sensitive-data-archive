@@ -198,6 +198,7 @@ func Download(c *gin.Context) {
 	}
 
 	contentLength := fileDetails.DecryptedSize
+	log.Debug("decrypted size", fileDetails.DecryptedSize)
 	if c.Param("type") == "encrypted" {
 		end = calculateEncryptedEndPosition(start, end, fileDetails)
 		contentLength = int(end)
@@ -237,6 +238,13 @@ func Download(c *gin.Context) {
 	}
 
 	if c.Request.Method == http.MethodHead {
+
+		if c.Param("type") == "encrypted" {
+			// set the length of the crypt4gh header for htsget
+			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
+			// TODO figure out if client crypt4gh header will have other size
+			// c.Header("Client-Additional-Bytes", ...)
+		}
 
 		return
 	}

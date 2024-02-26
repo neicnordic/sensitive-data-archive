@@ -45,6 +45,7 @@ func Setup() *http.Server {
 	router.GET("/files/:fileid", SelectedMiddleware(), sda.Download)
 	router.GET("/s3/*path", SelectedMiddleware(), s3.Download)
 	router.HEAD("/s3/*path", SelectedMiddleware(), s3.Download)
+	router.HEAD("/s3-encrypted/*path", SelectedMiddleware(), s3.Download)
 	router.GET("/s3-encrypted/*path", SelectedMiddleware(), s3.Download)
 	router.GET("/health", healthResponse)
 
