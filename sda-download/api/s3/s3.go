@@ -190,7 +190,11 @@ func ListObjects(c *gin.Context) {
 
 func getFileInfo(c *gin.Context) (fileInfo *database.FileInfo, err error) {
 	// Get file info for the given file path (or abort)
-	fileInfo, err = database.GetDatasetFileInfo(c.Param("dataset"), c.Param("filename")+".c4gh")
+	filename := c.Param("filename")
+	if !strings.HasSuffix(c.Param("filename"), ".c4gh") {
+		filename = c.Param("filename") + ".c4gh"
+	}
+	fileInfo, err = database.GetDatasetFileInfo(c.Param("dataset"), filename)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			c.AbortWithStatus(http.StatusNotFound)
