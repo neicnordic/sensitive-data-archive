@@ -188,16 +188,9 @@ func ListObjects(c *gin.Context) {
 	})
 }
 
-// GetObject respondes to an S3 GetObject request. This request returns S3
-// objects. This is done by first fetching any file that matches the dataset +
-// filename request from the database and then passing the fileID to the
-// SDA Download function.
-// https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
-func GetObject(c *gin.Context) {
-	log.Debugf("S3 GetObject request, context: %v", c.Params)
-
+func getFileInfo(c *gin.Context) (fileInfo *database.FileInfo, err error) {
 	// Get file info for the given file path (or abort)
-	fileInfo, err := database.GetDatasetFileInfo(c.Param("dataset"), c.Param("filename")+".c4gh")
+	fileInfo, err = database.GetDatasetFileInfo(c.Param("dataset"), c.Param("filename")+".c4gh")
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			c.AbortWithStatus(http.StatusNotFound)
@@ -208,11 +201,53 @@ func GetObject(c *gin.Context) {
 		return
 	}
 
+	return fileInfo, nil
+}
+
+// GetObject respondes to an S3 GetObject request. This request returns S3
+// objects. This is done by first fetching any file that matches the dataset +
+// filename request from the database and then passing the fileID to the
+// SDA Download function.
+// https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
+func GetObject(c *gin.Context) {
+	log.Debugf("S3 GetObject request, context: %v", c.Params)
+
+	fileInfo, err := getFileInfo(c)
+	if err != nil {
+		return
+	}
+
 	// Set a param so that Download knows to add S3 headers
 	c.Set("S3", true)
 
 	// set the fileID so that download knows what file to download
 	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileInfo.FileID})
+
+	// Download the file
+	sda.Download(c)
+}
+
+// GetEncryptedObject respondes to an S3 GetObject request for encrypted files.
+// This request returns S3 objects. This is done by first fetching any file that matches the dataset +
+// filename request from the database and then passing the fileID to the
+// SDA Download function.
+// https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
+func GetEcnryptedObject(c *gin.Context) {
+	log.Debugf("S3 GetEncryptedObject request, context: %v", c.Params)
+
+	fileInfo, err := getFileInfo(c)
+	if err != nil {
+		return
+	}
+
+	// Set a param so that Download knows to add S3 headers
+	c.Set("S3", true)
+
+	// set the fileID so that download knows what file to download
+	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileInfo.FileID})
+
+	// set the encrypted parameter so that download gets the encrypted file instead
+	c.Params = append(c.Params, gin.Param{Key: "type", Value: "encrypted"})
 
 	// Download the file
 	sda.Download(c)
@@ -294,7 +329,11 @@ func Download(c *gin.Context) {
 		ListBuckets(c)
 
 	case c.Param("filename") != "":
-		GetObject(c)
+		if strings.Contains(c.Request.URL.String(), "encrypted") {
+			GetEcnryptedObject(c)
+		} else {
+			GetObject(c)
+		}
 
 	default:
 		log.Warningf("Got unknown S3 request: %v", c.Request)
