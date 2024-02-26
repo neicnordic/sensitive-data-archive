@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/oauth2-proxy/mockoidc"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +26,7 @@ type ElixirTests struct {
 	ECKeyFile    *os.File
 	RSAKeyFile   *os.File
 	mockServer   *mockoidc.MockOIDC
-	ElixirConfig ElixirConfig
+	ElixirConfig config.ElixirConfig
 }
 
 func TestElixirTestSuite(t *testing.T) {
@@ -38,7 +39,7 @@ func (suite *ElixirTests) SetupTest() {
 	assert.NoError(suite.T(), err)
 
 	// create an elixir config that has the needed endpoints set
-	suite.ElixirConfig = ElixirConfig{
+	suite.ElixirConfig = config.ElixirConfig{
 		ID:          suite.mockServer.ClientID,
 		Provider:    suite.mockServer.Issuer(),
 		RedirectURL: "http://redirect",

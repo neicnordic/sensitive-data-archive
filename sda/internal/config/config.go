@@ -32,6 +32,7 @@ type ServerConfig struct {
 	Key           string
 	Jwtpubkeypath string
 	Jwtpubkeyurl  string
+	CORS          CORSConfig
 }
 
 // Config is a parent object for all the different configuration parts
@@ -48,6 +49,7 @@ type Config struct {
 	Sync         Sync
 	SyncAPI      SyncAPIConf
 	ReEncrypt    ReEncConfig
+	Auth         AuthConf
 }
 
 type ReEncConfig struct {
@@ -110,6 +112,42 @@ type OrchestratorConf struct {
 	ReleaseDelay   time.Duration
 }
 
+type AuthConf struct {
+	Elixir          ElixirConfig
+	Cega            CegaConfig
+	JwtIssuer       string
+	JwtPrivateKey   string
+	JwtSignatureAlg string
+	Server          ServerConfig
+	S3Inbox         string
+	ResignJwt       bool
+	InfoURL         string
+	InfoText        string
+	PublicFile      string
+}
+
+type ElixirConfig struct {
+	ID            string
+	Provider      string
+	RedirectURL   string
+	RevocationURL string
+	Secret        string
+	JwkURL        string
+}
+
+type CegaConfig struct {
+	AuthURL string
+	ID      string
+	Secret  string
+}
+
+type CORSConfig struct {
+	AllowOrigin      string
+	AllowMethods     string
+	AllowHeaders     string
+	AllowCredentials bool
+}
+
 // NewConfig initializes and parses the config file and/or environment using
 // the viper library.
 func NewConfig(app string) (*Config, error) {
@@ -156,6 +194,24 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+		}
+	case "auth":
+		requiredConfVars = []string{
+			"s3Inbox",
+			"publicFile",
+		}
+
+		if viper.GetString("cega.id") != "" && viper.GetString("cega.secret") != "" {
+			requiredConfVars = append(requiredConfVars, []string{"cega.authUrl"}...)
+			viper.Set("resignJwt", true)
+		}
+
+		if viper.GetString("elixir.id") != "" && viper.GetString("elixir.secret") != "" {
+			requiredConfVars = append(requiredConfVars, []string{"elixir.provider", "elixir.redirectUrl"}...)
+		}
+
+		if viper.GetBool("resignJwt") {
+			requiredConfVars = append(requiredConfVars, []string{"jwtIssuer", "JwtPrivateKey", "JwtSignatureAlg"}...)
 		}
 	case "ingest":
 		requiredConfVars = []string{
@@ -410,6 +466,64 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "auth":
+		c.Auth.Cega.AuthURL = viper.GetString("cega.authUrl")
+		c.Auth.Cega.ID = viper.GetString("cega.id")
+		c.Auth.Cega.Secret = viper.GetString("cega.secret")
+
+		c.Auth.Elixir.ID = viper.GetString("elixir.id")
+		c.Auth.Elixir.Provider = viper.GetString("elixir.provider")
+		c.Auth.Elixir.RedirectURL = viper.GetString("elixir.redirectUrl")
+		c.Auth.Elixir.Secret = viper.GetString("elixir.secret")
+		if viper.IsSet("elixir.jwkPath") {
+			c.Auth.Elixir.JwkURL = c.Auth.Elixir.Provider + viper.GetString("elixir.jwkPath")
+		}
+
+		if (c.Auth.Elixir.ID == "" || c.Auth.Elixir.Secret == "") && (c.Auth.Cega.ID == "" || c.Auth.Cega.Secret == "") {
+			return nil, fmt.Errorf("neither cega or elixir login configured")
+		}
+
+		c.Auth.InfoURL = viper.GetString("infoUrl")
+		c.Auth.InfoText = viper.GetString("infoText")
+		c.Auth.PublicFile = viper.GetString("publicFile")
+		if _, err := os.Stat(c.Auth.PublicFile); err != nil {
+			return nil, err
+		}
+
+		if viper.GetBool("resignJwt") {
+			c.Auth.ResignJwt = viper.GetBool("resignJwt")
+			c.Auth.JwtPrivateKey = viper.GetString("JwtPrivateKey")
+			c.Auth.JwtSignatureAlg = viper.GetString("JwtSignatureAlg")
+			c.Auth.JwtIssuer = viper.GetString("jwtIssuer")
+
+			if _, err := os.Stat(c.Auth.JwtPrivateKey); err != nil {
+				return nil, err
+			}
+		}
+
+		cors := CORSConfig{AllowCredentials: false}
+		if viper.IsSet("cors.origins") {
+			cors.AllowOrigin = viper.GetString("cors.origins")
+		}
+		if viper.IsSet("cors.methods") {
+			cors.AllowMethods = viper.GetString("cors.methods")
+		}
+		if viper.IsSet("cors.headers") {
+			cors.AllowHeaders = viper.GetString("cors.headers")
+		}
+		if viper.IsSet("cors.credentials") {
+			cors.AllowCredentials = viper.GetBool("cors.credentials")
+		}
+		c.Server.CORS = cors
+
+		if viper.IsSet("server.cert") {
+			c.Server.Cert = viper.GetString("server.cert")
+		}
+		if viper.IsSet("server.key") {
+			c.Server.Key = viper.GetString("server.key")
+		}
+
+		c.Auth.S3Inbox = viper.GetString("s3Inbox")
 	case "finalize":
 		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
 			c.configArchive()

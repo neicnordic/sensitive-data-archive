@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -25,7 +26,7 @@ type ElixirIdentity struct {
 }
 
 // Configure an OpenID Connect aware OAuth2 client.
-func getOidcClient(conf ElixirConfig) (oauth2.Config, *oidc.Provider) {
+func getOidcClient(conf config.ElixirConfig) (oauth2.Config, *oidc.Provider) {
 	contx := context.Background()
 	provider, err := oidc.NewProvider(contx, conf.Provider)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/sessions"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -31,7 +32,7 @@ type OIDCData struct {
 }
 
 type AuthHandler struct {
-	Config       *Config
+	Config       config.AuthConf
 	OAuth2Config oauth2.Config
 	OIDCProvider *oidc.Provider
 	htmlDir      string
@@ -251,7 +252,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 
 	code := ctx.Request().URL.Query().Get("code")
-	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.Elixir.jwkURL)
+	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.Elixir.JwkURL)
 	if err != nil {
 		log.WithFields(log.Fields{"authType": "elixir"}).Errorf("authentication failed: %s", err)
 		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
@@ -355,7 +356,7 @@ func addCSPheaders(ctx iris.Context) {
 func main() {
 
 	// Initialise config
-	config, err := NewConfig()
+	config, err := config.NewConfig("auth")
 	if err != nil {
 		log.Errorf("Failed to generate config, reason: %v", err)
 		os.Exit(1)
@@ -364,14 +365,14 @@ func main() {
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
 
-	if config.Elixir.ID != "" && config.Elixir.Secret != "" {
+	if config.Auth.Elixir.ID != "" && config.Auth.Elixir.Secret != "" {
 		// Initialise OIDC client
-		oauth2Config, provider = getOidcClient(config.Elixir)
+		oauth2Config, provider = getOidcClient(config.Auth.Elixir)
 	}
 
 	// Create handler struct for the web server
 	authHandler := AuthHandler{
-		Config:       config,
+		Config:       config.Auth,
 		OAuth2Config: oauth2Config,
 		OIDCProvider: provider,
 		htmlDir:      "./frontend/templates",
