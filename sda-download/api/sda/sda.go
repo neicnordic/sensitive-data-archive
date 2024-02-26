@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -198,14 +199,16 @@ func Download(c *gin.Context) {
 
 	contentLength := fileDetails.DecryptedSize
 	if c.Param("type") == "encrypted" {
-		contentLength = fileDetails.ArchiveSize
+		end = calculateEncryptedEndPosition(start, end, fileDetails)
+		contentLength = int(end)
+		log.Debug("calculated end to", end)
 	}
 	if start == 0 && end == 0 {
 		c.Header("Content-Length", fmt.Sprint(contentLength))
 	} else {
 		// Calculate how much we should read (if given)
-		// TODO incorrect if encrypted
 		togo := end - start
+		log.Debug("partial file! set togo to", togo)
 		c.Header("Content-Length", fmt.Sprint(togo))
 	}
 
@@ -246,11 +249,9 @@ func Download(c *gin.Context) {
 
 	switch c.Param("type") {
 	case "encrypted":
-		if start > 0 || end > 0 {
-			// unset content-length
-			c.Header("Content-Length", "-1")
-			log.Errorf("Start and end coordinates for encrypted files not implemented! %v", start)
-			c.String(http.StatusInternalServerError, "an error occurred")
+		if start > 0 {
+			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
+			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
 
 			return
 		}
@@ -292,6 +293,7 @@ var truncateStream = func(reader *streaming.Crypt4GHReader, writer http.Response
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -340,4 +342,24 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 	}
 
 	return nil
+}
+
+var calculateEncryptedEndPosition = func(start, end int64, fileDetails *database.FileDownload) int64 {
+	headlength := bytes.NewReader(fileDetails.Header)
+	bodyEnd := int64(fileDetails.ArchiveSize)
+	if end > 0 {
+		var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
+		togo := end - start
+		log.Debug("headlength size: ", headlength.Size())
+		bodysize := math.Max(float64(togo-headlength.Size()), 0)
+		log.Debug("body size: ", bodysize)
+		log.Debug("#packages: ", math.Ceil(bodysize/packageSize))
+		endCoord := packageSize * math.Ceil(bodysize/packageSize)
+		log.Debug("endCoord: ", endCoord)
+		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
+		log.Debug("body end: ", bodyEnd)
+	}
+	log.Debug("setting end: ", headlength.Len()+int(bodyEnd))
+
+	return headlength.Size() + bodyEnd
 }
