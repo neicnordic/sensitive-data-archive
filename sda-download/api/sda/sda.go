@@ -197,19 +197,17 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	// Calculate the content length
 	contentLength := fileDetails.DecryptedSize
-	log.Debug("decrypted size", fileDetails.DecryptedSize)
 	if c.Param("type") == "encrypted" {
-		end = calculateEncryptedEndPosition(start, end, fileDetails)
-		contentLength = int(end)
-		log.Debug("calculated end to", end)
+		contentLength = fileDetails.ArchiveSize
+		start, end = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
 	}
 	if start == 0 && end == 0 {
 		c.Header("Content-Length", fmt.Sprint(contentLength))
 	} else {
 		// Calculate how much we should read (if given)
 		togo := end - start
-		log.Debug("partial file! set togo to", togo)
 		c.Header("Content-Length", fmt.Sprint(togo))
 	}
 
@@ -352,22 +350,31 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 	return nil
 }
 
-var calculateEncryptedEndPosition = func(start, end int64, fileDetails *database.FileDownload) int64 {
+// Calculates the start and end coordinats to use. If a range is set in HTTP headers,
+// it will be used as is. If not, the functions parameters will be used,
+// and adjusted to match the data block boundaries of the encrypted file.
+var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64) {
+	if htsget_range != "" {
+		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
+		if len(startEnd) > 1 {
+			a, errA := strconv.ParseInt(startEnd[0], 10, 64)
+			b, errB := strconv.ParseInt(startEnd[1], 10, 64)
+			if errA == nil && errB == nil && a < b {
+
+				return a, b
+			}
+		}
+	}
+	// Adapt end coordinate to follow the crypt4gh block boundaries
 	headlength := bytes.NewReader(fileDetails.Header)
 	bodyEnd := int64(fileDetails.ArchiveSize)
 	if end > 0 {
 		var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
 		togo := end - start
-		log.Debug("headlength size: ", headlength.Size())
 		bodysize := math.Max(float64(togo-headlength.Size()), 0)
-		log.Debug("body size: ", bodysize)
-		log.Debug("#packages: ", math.Ceil(bodysize/packageSize))
 		endCoord := packageSize * math.Ceil(bodysize/packageSize)
-		log.Debug("endCoord: ", endCoord)
 		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
-		log.Debug("body end: ", bodyEnd)
 	}
-	log.Debug("setting end: ", headlength.Len()+int(bodyEnd))
 
-	return headlength.Size() + bodyEnd
+	return start, headlength.Size() + bodyEnd
 }
