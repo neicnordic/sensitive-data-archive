@@ -392,3 +392,60 @@ func (suite *ConfigTestSuite) TestConfigReEncryptServer() {
 	assert.Equal(suite.T(), certPath+"/ca.crt", config.ReEncrypt.CACert)
 	assert.Equal(suite.T(), certPath+"/tls.crt", config.ReEncrypt.ServerCert)
 }
+
+func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
+	suite.SetupTest()
+
+	ECPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+		suite.T().FailNow()
+	}
+	defer os.RemoveAll(ECPath)
+
+	noConfig, err := NewConfig("auth")
+	assert.Error(suite.T(), err)
+	assert.Nil(suite.T(), noConfig)
+
+	viper.Set("s3Inbox", "http://inbox:8000")
+	viper.Set("publicFile", "no-file")
+	viper.Set("cega.authURL", "http://cega/auth")
+	viper.Set("cega.id", "CegaID")
+	viper.Set("cega.secret", "CegaSecret")
+	viper.Set("jwtIssuer", "http://auth:8080")
+	viper.Set("JwtPrivateKey", "nonexistent-key-file")
+	viper.Set("JwtSignatureAlg", "ES256")
+	_, err = NewConfig("auth")
+	assert.ErrorContains(suite.T(), err, "no such file or directory")
+
+	viper.Set("publicFile", ECPath+"/ec.pub")
+	viper.Set("JwtPrivateKey", ECPath+"/ec")
+	c, err := NewConfig("auth")
+	assert.Equal(suite.T(), c.Auth.JwtPrivateKey, fmt.Sprintf("%s/ec", ECPath))
+	assert.NoError(suite.T(), err, "unexpected failure")
+}
+
+func (suite *ConfigTestSuite) TestConfigAuth_OIDC() {
+	suite.SetupTest()
+
+	ECPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+		suite.T().FailNow()
+	}
+	defer os.RemoveAll(ECPath)
+
+	noConfig, err := NewConfig("auth")
+	assert.Error(suite.T(), err)
+	assert.Nil(suite.T(), noConfig)
+
+	viper.Set("s3Inbox", "http://inbox:8000")
+	viper.Set("publicFile", ECPath+"/ec.pub")
+	viper.Set("elixir.id", "elixirTestID")
+	viper.Set("elixir.secret", "elixirTestIssuer")
+	_, err = NewConfig("auth")
+	assert.Error(suite.T(), err)
+
+	viper.Set("oidc.provider", "http://provider:9000")
+	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
+	_, err = NewConfig("auth")
+	assert.NoError(suite.T(), err, "unexpected failure")
+}
