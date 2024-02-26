@@ -202,6 +202,14 @@ func Download(c *gin.Context) {
 	if c.Param("type") == "encrypted" {
 		contentLength = fileDetails.ArchiveSize
 		start, end = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
+		if start > 0 {
+			// reading from an offset in encrypted file is not yet supported
+			c.Header("Content-Length", "0")
+			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
+			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
+
+			return
+		}
 	}
 	if start == 0 && end == 0 {
 		c.Header("Content-Length", fmt.Sprint(contentLength))
@@ -255,12 +263,6 @@ func Download(c *gin.Context) {
 
 	switch c.Param("type") {
 	case "encrypted":
-		if start > 0 {
-			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
-			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
-
-			return
-		}
 		fileStream = encryptedFileReader
 
 	default:
