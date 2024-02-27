@@ -279,7 +279,10 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		err = truncateStream(c4ghfileStream, c.Writer, start)
+		if start != 0 {
+			// We don't want to read from start, skip ahead to where we should be
+			_, err = c4ghfileStream.Seek(start, 0)
+		}
 		fileStream = c4ghfileStream
 		if err != nil {
 			log.Errorf("error occurred while finding sending start: %v", err)
@@ -296,18 +299,6 @@ func Download(c *gin.Context) {
 
 		return
 	}
-}
-
-var truncateStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWriter, start int64) error {
-
-	if start != 0 {
-		// We don't want to read from start, skip ahead to where we should be
-		if _, err := reader.Seek(start, 0); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
