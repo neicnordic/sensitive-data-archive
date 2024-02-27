@@ -18,9 +18,10 @@ auth:
     secret:
   infoText: "About service text"
   infoURL: "http://example.org/about"
-  jwtIssuer: "https://auth:8888"
-  jwtPrivateKey: /shared/keys/jwt.key
-  jwtSignatureAlg: ES256
+  jwt:
+    issuer: "https://auth:8888"
+    privateKey: /shared/keys/jwt.key
+    signatureAlg: ES256
   publicFile: "/shared/c4gh.pub.pem"
   resignJwt:
   s3Inbox: "http://inbox:8000"
