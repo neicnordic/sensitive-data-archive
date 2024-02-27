@@ -8,29 +8,6 @@ on:
       - '**/go.*'
 
 jobs:
-  lint_auth:
-    name: Lint auth code
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ['1.21']
-    steps:
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-        id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4.0.0
-        with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck --timeout 5m
-          working-directory: sda-auth
-
   lint_download:
     name: Lint download code
     runs-on: ubuntu-latest

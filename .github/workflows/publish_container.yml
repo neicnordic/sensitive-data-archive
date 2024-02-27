@@ -54,15 +54,10 @@ jobs:
 
       - name: Pull PR containers
         run : |
-          for t in -auth -download -postgres -rabbitmq -sftp-inbox; do
+          for t in -download -postgres -rabbitmq -sftp-inbox; do
             docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}$t
           done
           docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
-
-      - name: Retag PR image for auth
-        run: |
-          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-auth
-          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-auth
 
       - name: Retag PR image for download
         run: |

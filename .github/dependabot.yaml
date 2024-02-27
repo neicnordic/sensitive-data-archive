@@ -10,13 +10,6 @@ updates:
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: docker
-    directory: "/sda-auth"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-  - package-ecosystem: docker
     directory: "/postgresql"
     schedule:
       interval: weekly
@@ -54,18 +47,6 @@ updates:
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: gomod
-    directory: "/sda-auth"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
-    open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: "gomod"
     directory: "/sda"
     groups:
       all-modules:
