@@ -10,6 +10,21 @@ archive:
   secretKey: "secretKey"
   bucket: "archive"
   region: "us-east-1"
+
+auth:
+  cega:
+    authUrl: "http://cega-nss:8443/username/"
+    id:
+    secret:
+  infoText: "About service text"
+  infoURL: "http://example.org/about"
+  jwtIssuer: "https://auth:8888"
+  jwtPrivateKey: /shared/keys/jwt.key
+  jwtSignatureAlg: ES256
+  publicFile: "/shared/c4gh.pub.pem"
+  resignJwt:
+  s3Inbox: "http://inbox:8000"
+
 backup:
   type: s3
   url: "http://s3"
@@ -51,6 +66,13 @@ c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
+
+oidc:
+  id:
+  jwkPath: /jwk
+  provider: http://oidc:8080
+  redirectUrl: http://auth_oidc:8080/oidc/login
+  secret:
 
 server:
   cert: ""

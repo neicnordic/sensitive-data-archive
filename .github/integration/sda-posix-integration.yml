@@ -46,7 +46,7 @@ services:
     command:
       [
         "python",
-        "/cega/users.py",
+        "/users.py",
         "0.0.0.0",
         "8443",
         "/shared/users.json"
@@ -58,7 +58,7 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - ./sda/users.py:/cega/users.py
+      - ./sda/users.py:/users.py
       - certs:/certs
       - shared:/shared
 

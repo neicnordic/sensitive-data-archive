@@ -7,7 +7,7 @@ import logging
 import json
 from base64 import b64decode
 import ssl
-
+from pathlib import Path
 from aiohttp import web
 
 logging.basicConfig(format="[%(levelname)-8s] (L:%(lineno)s) %(message)s")
@@ -49,6 +49,7 @@ async def user(request):
         raise web.HTTPBadRequest(text=f"No info for that user\n")
     return web.json_response(user_info)
 
+HTTP_PROTOCOL = "http"
 
 def main():
 
@@ -69,14 +70,20 @@ def main():
     server.router.add_get("/username/{identifier}", user, name="user")
 
     # SSL settings
-    cacertfile = "/certs/ca.crt"
-    certfile = "/certs/server.crt"
-    keyfile = "/certs/server.key"
+    here = Path(__file__)
+    cacertfile = here.parent / "certs" / "ca.crt"
+    certfile = here.parent / "certs" / "server.crt"
+    keyfile = here.parent / "certs" / "server.key"
 
-    ssl_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH, cafile=cacertfile)
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    ssl_ctx.load_cert_chain(certfile, keyfile=keyfile)
+    global HTTP_PROTOCOL
+    if keyfile.is_file():
+        ssl_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH, cafile=cacertfile)
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        ssl_ctx.load_cert_chain(certfile, keyfile=keyfile)
+        HTTP_PROTOCOL = "https"
+    else:
+        ssl_ctx = None
 
     web.run_app(server, host=host, port=port, shutdown_timeout=0, ssl_context=ssl_ctx)
 
