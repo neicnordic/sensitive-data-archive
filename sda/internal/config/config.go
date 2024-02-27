@@ -181,6 +181,24 @@ func NewConfig(app string) (*Config, error) {
 		}
 	}
 
+	if viper.IsSet("log.format") {
+		if viper.GetString("log.format") == "json" {
+			log.SetFormatter(&log.JSONFormatter{})
+			log.Info("The logs format is set to JSON")
+		}
+	}
+
+	if viper.IsSet("log.level") {
+		stringLevel := viper.GetString("log.level")
+		intLevel, err := log.ParseLevel(stringLevel)
+		if err != nil {
+			log.Infof("Log level '%s' not supported, setting to 'trace'", stringLevel)
+			intLevel = log.TraceLevel
+		}
+		log.SetLevel(intLevel)
+		log.Infof("Setting log level to '%s'", stringLevel)
+	}
+
 	switch app {
 	case "api":
 		requiredConfVars = []string{
@@ -424,24 +442,6 @@ func NewConfig(app string) (*Config, error) {
 		if !viper.IsSet(s) {
 			return nil, fmt.Errorf("%s not set", s)
 		}
-	}
-
-	if viper.IsSet("log.format") {
-		if viper.GetString("log.format") == "json" {
-			log.SetFormatter(&log.JSONFormatter{})
-			log.Info("The logs format is set to JSON")
-		}
-	}
-
-	if viper.IsSet("log.level") {
-		stringLevel := viper.GetString("log.level")
-		intLevel, err := log.ParseLevel(stringLevel)
-		if err != nil {
-			log.Infof("Log level '%s' not supported, setting to 'trace'", stringLevel)
-			intLevel = log.TraceLevel
-		}
-		log.SetLevel(intLevel)
-		log.Infof("Setting log level to '%s'", stringLevel)
 	}
 
 	c := &Config{}
