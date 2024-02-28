@@ -287,7 +287,10 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in download finalize inbox ingest mapper verify; do
+          for n in auth download finalize inbox ingest mapper verify; do
+            if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ]; then
+              continue
+            fi
             if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
               echo "$n is not ready after 30s, exiting"
               exit 1
