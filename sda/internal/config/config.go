@@ -229,7 +229,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		if viper.GetBool("auth.resignJwt") {
-			requiredConfVars = append(requiredConfVars, []string{"auth.jwtIssuer", "auth.jwtPrivateKey", "auth.jwtSignatureAlg"}...)
+			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg"}...)
 		}
 	case "ingest":
 		requiredConfVars = []string{
@@ -492,9 +492,9 @@ func NewConfig(app string) (*Config, error) {
 
 		if viper.GetBool("auth.resignJwt") {
 			c.Auth.ResignJwt = viper.GetBool("auth.resignJwt")
-			c.Auth.JwtPrivateKey = viper.GetString("auth.JwtPrivateKey")
-			c.Auth.JwtSignatureAlg = viper.GetString("auth.JwtSignatureAlg")
-			c.Auth.JwtIssuer = viper.GetString("auth.jwtIssuer")
+			c.Auth.JwtPrivateKey = viper.GetString("auth.jwt.privateKey")
+			c.Auth.JwtSignatureAlg = viper.GetString("auth.jwt.signatureAlg")
+			c.Auth.JwtIssuer = viper.GetString("auth.jwt.issuer")
 
 			if _, err := os.Stat(c.Auth.JwtPrivateKey); err != nil {
 				return nil, err
