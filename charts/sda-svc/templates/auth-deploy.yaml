@@ -58,7 +58,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: auth
-        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-auth"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -70,35 +70,28 @@ spec:
 {{- if .Values.global.extraSecurityContext }}
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}
+        command: ["sda-auth"]
         env:
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
       {{- if not .Values.global.vaultSecrets }}
-      {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
-        - name: ELIXIR_ID
+        {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
+        - name: OIDC_ID
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
               key: oidcID
-        - name: ELIXIR_SECRET
+        - name: OIDC_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
               key: oidcSecret
-      {{- end }}
+        {{- end }}
         {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
-        - name: CEGA_ID
+        - name: AUTH_CEGA_ID
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
               key: cegaID
-        - name: CEGA_SECRET
+        - name: AUTH_CEGA_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ template "sda.fullname" . }}-auth
@@ -108,54 +101,60 @@ spec:
         - name: SERVER_CONFFILE
           value: {{ include "confFile" . }}
       {{- end }}
-        - name: ELIXIR_REDIRECTURL
-          value: {{ template "authRedirect" .}}
-        - name: ELIXIR_PROVIDER
-          value: "{{ .Values.global.oidc.provider }}"
-        - name: ELIXIR_SCOPE
-          value: "ga4gh_passport_v1"
-        - name: ELIXIR_JWKPATH
-          value: {{ .Values.global.oidc.jwkPath | quote }}
-        {{- if .Values.global.auth.corsOrigins }}
-        - name: CORS_ORIGINS
-          value: {{ .Values.global.auth.corsOrigins | quote }}
-        - name: CORS_METHODS
-          value: {{ .Values.global.auth.corsMethods | quote }}
-        - name: CORS_CREDENTIALS
-          value: {{ .Values.global.auth.corsCreds | quote }}
-        {{- end }}
         {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
-        - name: CEGA_AUTHURL
+        - name: AUTH_CEGA_AUTHURL
           value: {{ .Values.global.cega.host | quote }}
         {{- end }}
+        {{- if .Values.global.auth.corsOrigins }}
+        - name: AUTH_CORS_ORIGINS
+          value: {{ .Values.global.auth.corsOrigins | quote }}
+        - name: AUTH_CORS_METHODS
+          value: {{ .Values.global.auth.corsMethods | quote }}
+        - name: AUTH_CORS_CREDENTIALS
+          value: {{ .Values.global.auth.corsCreds | quote }}
+        {{- end }}
+        - name: AUTH_INFOTEXT
+          value: {{ .Values.global.auth.infoText }}
+        - name: AUTH_INFOURL
+          value: {{ .Values.global.auth.inforURL }}
       {{- if .Values.global.auth.resignJwt }}
-        - name: JWTISSUER
+        - name: AUTH_JWT_ISSUER
         {{- if .Values.global.tls.enabled }}
           value: "https://{{ .Values.global.ingress.hostName.auth }}"
         {{- else }}
           value: "http://{{ .Values.global.ingress.hostName.auth }}"
         {{- end }}
-        - name: JWTPRIVATEKEY
+        - name: AUTH_JWT_PRIVATEKEY
           value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
-        - name: JWTSIGNATUREALG
+        - name: AUTH_JWT_SIGNATUREALG
           value: {{ .Values.global.auth.jwtAlg }}
       {{- end }}
-        - name: RESIGNJWT
-          value: {{ .Values.global.auth.resignJwt | quote }}
-        - name: PUBLICFILE
+        - name: AUTH_PUBLICFILE
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.publicFile }}"
+        - name: AUTH_RESIGNJWT
+          value: {{ .Values.global.auth.resignJwt | quote }}
+        - name: AUTH_S3INBOX
+          value: {{ .Values.global.ingress.hostName.s3Inbox }}
+      {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+      {{- end }}
+      {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+      {{- end }}
+        - name: OIDC_REDIRECTURL
+          value: {{ template "authRedirect" .}}
+        - name: OIDC_PROVIDER
+          value: "{{ .Values.global.oidc.provider }}"
+        - name: OIDC_JWKPATH
+          value: {{ .Values.global.oidc.jwkPath | quote }}
         {{- if .Values.global.tls.enabled}}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt
         - name: SERVER_KEY
           value: {{ template "tlsPath" . }}/tls.key
         {{- end }}
-        - name: S3INBOX
-          value: {{ .Values.global.ingress.hostName.s3Inbox }}
-        - name: INFOTEXT
-          value: {{ .Values.global.auth.infoText }}
-        - name: INFOURL
-          value: {{ .Values.global.auth.inforURL }}
         ports:
         - name: auth
           containerPort: 8080
