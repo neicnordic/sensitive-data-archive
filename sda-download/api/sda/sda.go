@@ -196,7 +196,16 @@ func Download(c *gin.Context) {
 	}
 
 	hr := bytes.NewReader(fileDetails.Header)
-	mr := io.MultiReader(hr, file)
+
+	_, ok := file.(io.ReadSeeker)
+
+	var mr io.Reader
+	if !ok {
+		mr = io.MultiReader(hr, file)
+	} else {
+		mr = storage.SeekableMultiReader(hr, file)
+	}
+
 	c4ghr, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
 	if err != nil {
 		log.Errorf("could not prepare file for streaming, %s", err)
