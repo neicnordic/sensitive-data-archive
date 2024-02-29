@@ -343,7 +343,18 @@ func Download(c *gin.Context) {
 	}
 
 	// Prepare the file for streaming, encrypted or decrypted
+
 	var fileStream io.Reader
+	hr := bytes.NewReader(fileDetails.Header)
+
+	_, ok := file.(io.ReadSeeker)
+
+	var mr io.Reader
+	if !ok {
+		mr = io.MultiReader(hr, file)
+	} else {
+		mr = storage.SeekableMultiReader(hr, file)
+	}
 
 	switch c.Param("type") {
 	case "encrypted":
@@ -372,8 +383,9 @@ func Download(c *gin.Context) {
 		fileStream = io.MultiReader(newHr, file)
 
 	default:
-		encryptedFileReader := io.MultiReader(bytes.NewReader(fileDetails.Header), file)
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
+		// encryptedFileReader := io.MultiReader(bytes.NewReader(fileDetails.Header), file)
+
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)

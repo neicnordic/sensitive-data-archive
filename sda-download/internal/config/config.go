@@ -19,6 +19,7 @@ import (
 
 const POSIX = "posix"
 const S3 = "s3"
+const S3seekable = "s3seekable"
 
 // availableMiddlewares list the options for middlewares
 // empty string "" is an alias for default, for when the config key is not set, or it's empty
@@ -176,7 +177,7 @@ func NewConfig() (*Map, error) {
 		"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
 	}
 
-	if viper.GetString("archive.type") == S3 {
+	if viper.GetString("archive.type") == S3 || viper.GetString("archive.type") == S3seekable {
 		requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
 	} else if viper.GetString("archive.type") == POSIX {
 		requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
