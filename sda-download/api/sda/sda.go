@@ -338,6 +338,50 @@ func Download(c *gin.Context) {
 			// TODO figure out if client crypt4gh header will have other size
 			// c.Header("Client-Additional-Bytes", ...)
 		}
+	hr := bytes.NewReader(fileDetails.Header)
+
+	_, ok := file.(io.ReadSeeker)
+
+	var mr io.Reader
+	if !ok {
+		mr = io.MultiReader(hr, file)
+	} else {
+		mr = storage.SeekableMultiReader(hr, file)
+	}
+
+	c4ghr, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
+	if err != nil {
+		log.Errorf("could not prepare file for streaming, %s", err)
+		c.String(http.StatusInternalServerError, "file stream error")
+
+		return
+	}
+	defer c4ghr.Close()
+
+	// Get query params
+	qStart := c.DefaultQuery("startCoordinate", "0")
+	qEnd := c.DefaultQuery("endCoordinate", "0")
+
+	// Parse and verify coordinates are valid
+	start, err := strconv.ParseInt(qStart, 10, 0)
+	if err != nil {
+		log.Errorf("failed to convert start coordinate %d to integer, %s", start, err)
+		c.String(http.StatusBadRequest, "startCoordinate must be an integer")
+
+		return
+	}
+	end, err := strconv.ParseInt(qEnd, 10, 0)
+	if err != nil {
+		log.Errorf("failed to convert end coordinate %d to integer, %s", end, err)
+
+		c.String(http.StatusBadRequest, "endCoordinate must be an integer")
+
+		return
+	}
+	if end < start {
+		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", end, start)
+
+		c.String(http.StatusBadRequest, "endCoordinate must be greater than startCoordinate")
 
 		return
 	}
