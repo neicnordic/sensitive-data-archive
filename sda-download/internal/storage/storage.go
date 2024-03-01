@@ -426,6 +426,13 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 		return
 	}
 
+	responseRange := fmt.Sprintf("bytes %d-", r.currentOffset)
+
+	if object.ContentRange == nil || !strings.HasPrefix(*object.ContentRange, responseRange) {
+		// Unexpected content range - ignore
+		return
+	}
+
 	if len(r.local) > 16 {
 		// Don't cache anything more right now
 		return
@@ -496,6 +503,7 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 
 	start := r.currentOffset
 
+	// Walk through the cache
 	for _, p := range r.local {
 		if start >= p.start && start < p.start+p.length {
 			// At least part of the data is here
@@ -518,7 +526,7 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		}
 	}
 
-	// Need to fetch data
+	// Not found in cache, need to fetch data
 
 	bucket := aws.String(r.Bucket)
 	key := aws.String(r.filePath)
@@ -538,6 +546,12 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 
 	if err != nil {
 		return 0, err
+	}
+
+	responseRange := fmt.Sprintf("bytes %d-", r.currentOffset)
+
+	if object.ContentRange == nil || !strings.HasPrefix(*object.ContentRange, responseRange) {
+		return 0, fmt.Errorf("Unexpected content range %v - expected prefix %v", object.ContentRange, responseRange)
 	}
 
 	n, err = object.Body.Read(dst)
