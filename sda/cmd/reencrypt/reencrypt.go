@@ -29,7 +29,10 @@ type server struct {
 	re.UnimplementedReencryptServer
 }
 
-var Conf config.Config
+var (
+	Conf *config.Config
+	err  error
+)
 
 // ReencryptHeader implements reencrypt.ReEncryptHeader
 func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
@@ -65,7 +68,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 }
 
 func main() {
-	Conf, err := config.NewConfig("reencrypt")
+	Conf, err = config.NewConfig("reencrypt")
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
