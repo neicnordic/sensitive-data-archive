@@ -69,6 +69,7 @@ func (suite *ReEncryptTests) SetupTest() {
 	viper.Set("c4gh.filepath", suite.KeyPath+"/c4gh.key")
 	viper.Set("c4gh.passphrase", "test")
 
+	Conf, _ = config.NewConfig("reencrypt")
 	Conf.ReEncrypt.Crypt4GHKey, err = config.GetC4GHKey()
 	if err != nil {
 		suite.T().FailNow()
