@@ -33,7 +33,7 @@ jobs:
 
     strategy:
       matrix:
-        storagetype: [s3, posix, s3notls]
+        storagetype: [s3, posix, s3notls, s3seekable]
         go-version: ['1.21']
       fail-fast: false
     steps:
