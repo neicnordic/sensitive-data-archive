@@ -373,6 +373,7 @@ func (sb *s3SeekableBackend) NewFileReader(filePath string) (io.ReadCloser, erro
 func (sb *s3SeekableBackend) GetFileSize(filePath string) (int64, error) {
 
 	s := sb.s3Backend
+
 	return s.GetFileSize(filePath)
 }
 
@@ -380,22 +381,21 @@ func (r *s3SeekableReader) Close() (err error) {
 	return nil
 }
 
-func (r *s3SeekableReader) pruneCache() error {
+func (r *s3SeekableReader) pruneCache() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if len(r.local) < 16 {
-		return nil
+		return
 	}
 
 	// Prune the cache
 	keepfrom := len(r.local) - 8
 	r.local = r.local[keepfrom:]
 
-	return nil
 }
 
-func (r *s3SeekableReader) prefetchAt(offset int64) error {
+func (r *s3SeekableReader) prefetchAt(offset int64) {
 	r.pruneCache()
 
 	r.lock.Lock()
@@ -404,7 +404,7 @@ func (r *s3SeekableReader) prefetchAt(offset int64) error {
 	for _, p := range r.local {
 		if offset >= p.start && offset < p.start+p.length {
 			// At least part of the data is here
-			return nil
+			return
 		}
 	}
 
@@ -423,24 +423,23 @@ func (r *s3SeekableReader) prefetchAt(offset int64) error {
 	r.lock.Lock()
 
 	if err != nil {
-		return err
+		return
 	}
 
 	if len(r.local) > 16 {
 		// Don't cache anything more right now
-		return nil
+		return
 	}
 
 	b := bytes.Buffer{}
 	_, err = io.Copy(&b, object.Body)
 	if err != nil {
-		return fmt.Errorf("Failed to read object: %v", err)
+		return
 	}
 
 	cacheBytes := bytes.Clone(b.Bytes())
 	r.local = append(r.local, s3CacheBlock{offset, int64(len(cacheBytes)), cacheBytes})
 
-	return nil
 }
 
 func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
@@ -458,6 +457,7 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 
 		r.currentOffset = offset
 		go r.prefetchAt(r.currentOffset)
+
 		return offset, nil
 	case 1:
 		if r.currentOffset+offset < 0 {
@@ -469,6 +469,7 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 
 		r.currentOffset = offset
 		go r.prefetchAt(r.currentOffset)
+
 		return offset, nil
 
 	case 2:
@@ -482,14 +483,11 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 
 		r.currentOffset = r.objectSize + offset
 		go r.prefetchAt(r.currentOffset)
+
 		return r.currentOffset, nil
-
-	default:
-		return r.currentOffset, fmt.Errorf("Bad whence")
-
 	}
 
-	return r.currentOffset, fmt.Errorf("How did we get here?")
+	return r.currentOffset, fmt.Errorf("Bad whence")
 }
 
 func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
@@ -515,6 +513,7 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 
 			// Prefetch the next bit
 			go r.prefetchAt(r.currentOffset)
+
 			return n, nil
 		}
 	}
@@ -615,6 +614,7 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 					// More readers left, hold that EOF
 					err = nil
 				}
+
 				return n, err
 			}
 		}
@@ -622,34 +622,50 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 		return 0, io.EOF
 	}
 
-	var readerStartAt int64 = 0
+	var readerStartAt int64
 
 	for i, reader := range r.readers {
-		if r.currentOffset >= readerStartAt && r.currentOffset < int64(readerStartAt)+r.sizes[i] {
-			// At least part of the data is in this reader
 
-			seekable, ok := reader.(io.ReadSeeker)
-			if !ok {
-				return 0, fmt.Errorf("Expected seekable reader but changed")
-			}
+		if r.currentOffset < readerStartAt {
+			// We want data from a previous reader (? HELP ?)
+			readerStartAt += r.sizes[i]
 
-			_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)
-			if err != nil {
-				return 0, fmt.Errorf("Unexpected error while seeking: %v", err)
-			}
-
-			n, err := seekable.Read(dst)
-			r.currentOffset += int64(n)
-
-			if n > 0 || err != io.EOF {
-				if err == io.EOF && len(r.readers) > 0 {
-					// More readers left, hold that EOF
-					err = nil
-				}
-				return n, err
-			}
+			continue
 		}
+
+		if readerStartAt+r.sizes[i] < r.currentOffset {
+			// We want data from a later reader
+			readerStartAt += r.sizes[i]
+
+			continue
+		}
+
+		// At least part of the data is in this reader
+
+		seekable, ok := reader.(io.ReadSeeker)
+		if !ok {
+			return 0, fmt.Errorf("Expected seekable reader but changed")
+		}
+
+		_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)
+		if err != nil {
+			return 0, fmt.Errorf("Unexpected error while seeking: %v", err)
+		}
+
+		n, err := seekable.Read(dst)
+		r.currentOffset += int64(n)
+
+		if n > 0 || err != io.EOF {
+			if err == io.EOF && len(r.readers) > 0 {
+				// More readers left, hold that EOF
+				err = nil
+			}
+
+			return n, err
+		}
+
 		readerStartAt += r.sizes[i]
+
 	}
 
 	return 0, io.EOF
