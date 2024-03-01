@@ -6,10 +6,12 @@ if [ "$STORAGETYPE" = "posix" ]; then
     exit 0
 fi
 
+publickey="LS0tLS1CRUdJTiBDUllQVDRHSCBQVUJMSUMgS0VZLS0tLS0Kb1BWeUg0Umd0cmdUcjZFV3RsbjEzcitLdkhnS1FRYXlvUHVtS09xeWpFUT0KLS0tLS1FTkQgQ1JZUFQ0R0ggUFVCTElDIEtFWS0tLS0tCg=="
+
 payload=$(
     jq -c -n  \
         --arg oldheader "" \
-        --arg publickey "LS0tLS1CRUdJTiBDUllQVDRHSCBQVUJMSUMgS0VZLS0tLS0Kb1BWeUg0Umd0cmdUcjZFV3RsbjEzcitLdkhnS1FRYXlvUHVtS09xeWpFUT0KLS0tLS1FTkQgQ1JZUFQ0R0ggUFVCTElDIEtFWS0tLS0tCg==" \
+        --arg publickey "$publickey" \
         '$ARGS.named'
 )
 
@@ -34,5 +36,20 @@ if [[ ! "$badPubKey" =~  "illegal base64 data" ]]; then
     exit 1
 fi
 
+
+oldHeader=$(head -c 124 NA12878.bam.c4gh | base64 -w0)
+payload=$(
+    jq -c -n  \
+        --arg oldheader "$oldHeader" \
+        --arg publickey "$publickey" \
+        '$ARGS.named'
+)
+
+shouldWork=$(/shared/grpcurl -plaintext -d "$payload" reencrypt:50051 reencrypt.Reencrypt.ReencryptHeader 2>&1 | jq -r '."header"')
+if [[ ! "$shouldWork" =~  "Y3J5cHQ0Z2gBAAAAAQAAAGw" ]]; then
+    echo "reencrypt failed unexpected"
+    echo "response should contain: 'Y3J5cHQ0Z2gBAAAAAQAAAGw', got: $shouldWork"
+    exit 1
+fi
 
 echo "reencryption test completed successfully"
