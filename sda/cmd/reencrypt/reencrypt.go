@@ -30,11 +30,6 @@ type server struct {
 	c4ghPrivateKey *[32]byte
 }
 
-var (
-	Conf *config.Config
-	err  error
-)
-
 // ReencryptHeader implements reencrypt.ReEncryptHeader
 func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
 	log.Debugf("Received Public key: %v", in.GetPublickey())
@@ -69,7 +64,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 }
 
 func main() {
-	Conf, err = config.NewConfig("reencrypt")
+	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
@@ -82,7 +77,7 @@ func main() {
 		}
 	}()
 
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", Conf.ReEncrypt.Host, Conf.ReEncrypt.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port))
 	if err != nil {
 		log.Errorf("failed to listen: %v", err)
 		sigc <- syscall.SIGINT
@@ -90,11 +85,11 @@ func main() {
 	}
 
 	var opts []grpc.ServerOption
-	if Conf.ReEncrypt.ServerCert != "" && Conf.ReEncrypt.ServerKey != "" {
+	if conf.ReEncrypt.ServerCert != "" && conf.ReEncrypt.ServerKey != "" {
 		switch {
-		case Conf.ReEncrypt.CACert != "":
+		case conf.ReEncrypt.CACert != "":
 			caCerts, _ := x509.SystemCertPool()
-			serverCert, err := tls.LoadX509KeyPair(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
+			serverCert, err := tls.LoadX509KeyPair(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
 				log.Errorf("Failed to parse certificates: %v", err)
 				sigc <- syscall.SIGINT
@@ -111,7 +106,7 @@ func main() {
 			)
 			opts = []grpc.ServerOption{grpc.Creds(creds)}
 		default:
-			creds, err := credentials.NewServerTLSFromFile(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
+			creds, err := credentials.NewServerTLSFromFile(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
 				log.Errorf("Failed to generate tlsConfig: %v", err)
 				sigc <- syscall.SIGINT
@@ -122,7 +117,7 @@ func main() {
 	}
 
 	s := grpc.NewServer(opts...)
-	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: Conf.ReEncrypt.Crypt4GHKey})
+	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: conf.ReEncrypt.Crypt4GHKey})
 	reflection.Register(s)
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
