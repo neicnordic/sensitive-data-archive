@@ -28,6 +28,7 @@ type ReEncryptTests struct {
 	FileData         []byte
 	KeyPath          string
 	FileHeader       []byte
+	PrivateKey       *[32]byte
 	UserPrivateKey   [32]byte
 	UserPublicKey    [32]byte
 	UserPubKeyString string
@@ -69,8 +70,7 @@ func (suite *ReEncryptTests) SetupTest() {
 	viper.Set("c4gh.filepath", suite.KeyPath+"/c4gh.key")
 	viper.Set("c4gh.passphrase", "test")
 
-	Conf, _ = config.NewConfig("reencrypt")
-	Conf.ReEncrypt.Crypt4GHKey, err = config.GetC4GHKey()
+	suite.PrivateKey, err = config.GetC4GHKey()
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -93,7 +93,7 @@ func (suite *ReEncryptTests) TestReencryptHeader() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: suite.PrivateKey})
 		if err := s.Serve(lis); err != nil {
 			suite.T().Fail()
 		}
@@ -135,7 +135,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: suite.PrivateKey})
 		_ = s.Serve(lis)
 	}()
 
@@ -165,7 +165,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: suite.PrivateKey})
 		_ = s.Serve(lis)
 	}()
 

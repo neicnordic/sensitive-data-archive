@@ -27,6 +27,7 @@ import (
 // server struct is used to implement reencrypt.ReEncryptServer.
 type server struct {
 	re.UnimplementedReencryptServer
+	c4ghPrivateKey *[32]byte
 }
 
 var (
@@ -57,9 +58,9 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	newReaderPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	newReaderPublicKeyList = append(newReaderPublicKeyList, newReaderPublicKey)
 
-	log.Debugf("crypt4ghkey: %v", *Conf.ReEncrypt.Crypt4GHKey)
+	log.Debugf("crypt4ghkey: %v", *s.c4ghPrivateKey)
 
-	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *Conf.ReEncrypt.Crypt4GHKey, newReaderPublicKeyList)
+	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *s.c4ghPrivateKey, newReaderPublicKeyList)
 	if err != nil {
 		return nil, status.Error(400, err.Error())
 	}
@@ -121,7 +122,7 @@ func main() {
 	}
 
 	s := grpc.NewServer(opts...)
-	re.RegisterReencryptServer(s, &server{})
+	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: Conf.ReEncrypt.Crypt4GHKey})
 	reflection.Register(s)
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
