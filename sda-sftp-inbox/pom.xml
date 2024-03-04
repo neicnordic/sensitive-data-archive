@@ -96,7 +96,7 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.12.666</version>
+            <version>1.12.671</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
