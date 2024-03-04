@@ -286,7 +286,7 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in auth download finalize inbox ingest mapper verify; do
+          for n in auth download finalize inbox ingest mapper reencrypt verify; do
             if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ]; then
               continue
             fi
@@ -301,7 +301,7 @@ jobs:
         run: |
           kubectl get pods
           sleep 1
-          for svc in auth finalize inbox ingest mapper verify; do
+          for svc in auth finalize inbox ingest mapper reencrypt verify; do
             echo "## describe $svc" && kubectl describe pod -l role="$svc"
             sleep 1
             echo "## logs $svc" && kubectl logs -l role="$svc"
