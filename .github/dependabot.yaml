@@ -64,7 +64,8 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: weekly
-  - package-ecosystem: gomod
+
+  - package-ecosystem: "gomod"
     directory: "/sda"
     groups:
       all-modules:
@@ -74,7 +75,8 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: weekly
+      interval: "daily"
+
   - package-ecosystem: gomod
     directory: "/sda-download"
     groups:
