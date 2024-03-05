@@ -64,7 +64,7 @@ fi
 # download encrypted partial file, check file size
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output part1.bam.c4gh
 file_size=$(stat -c %s part1.bam.c4gh)  # Get the size of the file
-part_expected_size=65688  # TODO makes sense?
+part_expected_size=65688
 
 if [ "$file_size" -ne "$part_expected_size" ]; then
     echo "Incorrect file size for partial encrypted file"
@@ -78,10 +78,16 @@ if [[ $status != 0 ]]; then
     exit 1
 fi
 
-part_decrypted_size=65536 # TODO make sense?
+
+part_decrypted_size=65536
 file_size=$(stat -c %s part1.bam)
 if [ "$file_size" -ne "$part_decrypted_size" ]; then
     echo "Incorrect file size for partial decrypted file"
+    exit 1
+fi
+
+if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
+    echo "Bad content partial decrypted file"
     exit 1
 fi
 
