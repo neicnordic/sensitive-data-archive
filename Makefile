@@ -87,7 +87,7 @@ lint-sda:
 	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 lint-sda-download:
 	@echo 'Running golangci-lint in the `sda-download` folder'
-	@cd sda-download && /home/malin/.yarn/bin/bin/golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda-download && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 
 # run static code tests
 test-all: test-sda test-sda-download test-sda-sftp-inbox
