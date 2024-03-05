@@ -333,7 +333,7 @@ func Download(c *gin.Context) {
 		ListBuckets(c)
 
 	case c.Param("filename") != "":
-		if strings.Contains(c.Request.URL.String(), "encrypted") {
+		if strings.HasPrefix(c.Request.URL.Path, "/s3-encrypted") {
 			GetEcnryptedObject(c)
 		} else {
 			GetObject(c)
