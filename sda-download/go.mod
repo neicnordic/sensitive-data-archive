@@ -11,7 +11,7 @@ require (
 	github.com/johannesboyne/gofakes3 v0.0.0-20230914150226-f005f5cc03aa
 	github.com/lestrrat-go/jwx/v2 v2.0.20
 	github.com/lib/pq v1.10.9
-	github.com/neicnordic/crypt4gh v1.9.0
+	github.com/neicnordic/crypt4gh v1.9.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
