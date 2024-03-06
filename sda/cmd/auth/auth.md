@@ -2,11 +2,11 @@
 
 This service allows users to log in both via LS-AAI (OIDC) or EGA (NSS).
 
-After successsful authentication the users will be able to get `accesstoken` and download the `S3 config file` needed in order to be able to upload files to the [S3Inbox service](../s3inbox/s3inbox.md).
+After successful authentication users will be able to get the `access token` and download the `S3 config file` needed in order to be able to upload files to the [S3Inbox service](../s3inbox/s3inbox.md).
 
 ## Choosing provider login
 
-The `auth` allows for two different type of login providers: `EGA` and `LS_AAI` (OIDC). It is possible, however, to run the service using only one of the providers.
+The `auth` allows for two different types of login providers: `EGA` and `LS_AAI` (OIDC). It is possible, to run the service using both or only one of the providers.
 
 In order to remove the `EGA` option, remove the `CEGA_ID` and `CEGA_SECRET` options from the configuration, while for removing the `LS-AAI` option, remove the `OIDC_ID` and `OIDC_SECRET` variables.
 
