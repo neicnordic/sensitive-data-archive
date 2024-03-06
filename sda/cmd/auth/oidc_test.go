@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/oauth2-proxy/mockoidc"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -19,26 +20,26 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type ElixirTests struct {
+type OIDCTests struct {
 	suite.Suite
-	TempDir      string
-	ECKeyFile    *os.File
-	RSAKeyFile   *os.File
-	mockServer   *mockoidc.MockOIDC
-	ElixirConfig ElixirConfig
+	TempDir    string
+	ECKeyFile  *os.File
+	RSAKeyFile *os.File
+	mockServer *mockoidc.MockOIDC
+	OIDCConfig config.OIDCConfig
 }
 
-func TestElixirTestSuite(t *testing.T) {
-	suite.Run(t, new(ElixirTests))
+func TestOIDCTestSuite(t *testing.T) {
+	suite.Run(t, new(OIDCTests))
 }
 
-func (suite *ElixirTests) SetupTest() {
+func (suite *OIDCTests) SetupTest() {
 	var err error
 	suite.mockServer, err = mockoidc.Run()
 	assert.NoError(suite.T(), err)
 
 	// create an elixir config that has the needed endpoints set
-	suite.ElixirConfig = ElixirConfig{
+	suite.OIDCConfig = config.OIDCConfig{
 		ID:          suite.mockServer.ClientID,
 		Provider:    suite.mockServer.Issuer(),
 		RedirectURL: "http://redirect",
@@ -46,28 +47,28 @@ func (suite *ElixirTests) SetupTest() {
 	}
 }
 
-func (suite *ElixirTests) TearDownTest() {
+func (suite *OIDCTests) TearDownTest() {
 	err := suite.mockServer.Shutdown()
 	assert.NoError(suite.T(), err)
 }
 
-func (suite *ElixirTests) TestGetOidcClient() {
+func (suite *OIDCTests) TestGetOidcClient() {
 
 	expectedEndpoint := oauth2.Endpoint{
 		AuthURL:   suite.mockServer.AuthorizationEndpoint(),
 		TokenURL:  suite.mockServer.TokenEndpoint(),
 		AuthStyle: 0}
 
-	oauth2Config, provider := getOidcClient(suite.ElixirConfig)
+	oauth2Config, provider := getOidcClient(suite.OIDCConfig)
 	assert.Equal(suite.T(), suite.mockServer.ClientID, oauth2Config.ClientID, "ClientID was modified when creating the oauth2Config")
 	assert.Equal(suite.T(), suite.mockServer.ClientSecret, oauth2Config.ClientSecret, "ClientSecret was modified when creating the oauth2Config")
-	assert.Equal(suite.T(), suite.ElixirConfig.RedirectURL, oauth2Config.RedirectURL, "RedirectURL was modified when creating the oauth2Config")
+	assert.Equal(suite.T(), suite.OIDCConfig.RedirectURL, oauth2Config.RedirectURL, "RedirectURL was modified when creating the oauth2Config")
 	assert.Equal(suite.T(), expectedEndpoint, oauth2Config.Endpoint, "Issuer was modified when creating the oauth2Config")
 	assert.Equal(suite.T(), expectedEndpoint, provider.Endpoint(), "provider has the wrong endpoint")
 	assert.Equal(suite.T(), []string{"openid", "ga4gh_passport_v1 profile email eduperson_entitlement"}, oauth2Config.Scopes, "oauth2Config has the wrong scopes")
 }
 
-func (suite *ElixirTests) TestAuthenticateWithOidc() {
+func (suite *OIDCTests) TestAuthenticateWithOidc() {
 
 	// Create a code to authenticate
 
@@ -79,17 +80,17 @@ func (suite *ElixirTests) TestAuthenticateWithOidc() {
 	code := session.SessionID
 	jwkURL := suite.mockServer.JWKSEndpoint()
 
-	oauth2Config, provider := getOidcClient(suite.ElixirConfig)
+	oauth2Config, provider := getOidcClient(suite.OIDCConfig)
 
 	elixirIdentity, err := authenticateWithOidc(oauth2Config, provider, code, jwkURL)
 	assert.Nil(suite.T(), err, "Failed to authenticate with OIDC")
 	assert.NotEqual(suite.T(), "", elixirIdentity.Token, "Empty token returned from OIDC authentication")
 }
 
-func (suite *ElixirTests) TestValidateJwt() {
+func (suite *OIDCTests) TestValidateJwt() {
 	session, err := suite.mockServer.SessionStore.NewSession("openid email profile", "nonce", mockoidc.DefaultUser(), "", "")
 	assert.NoError(suite.T(), err)
-	oauth2Config, provider := getOidcClient(suite.ElixirConfig)
+	oauth2Config, provider := getOidcClient(suite.OIDCConfig)
 	jwkURL := suite.mockServer.JWKSEndpoint()
 	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, jwkURL)
 	elixirJWT := elixirIdentity.Token

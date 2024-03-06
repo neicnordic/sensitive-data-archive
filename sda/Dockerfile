@@ -19,6 +19,7 @@ LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-arc
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 COPY --from=Build /go/sda-* /usr/local/bin/
+COPY --from=Build /go/cmd/auth/frontend /frontend
 COPY --from=Build /go/schemas /schemas
 
 USER 65534
@@ -34,6 +35,7 @@ LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-arc
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 COPY --from=Build /go/sda-* /usr/local/bin/
+COPY --from=Build /go/cmd/auth/frontend /frontend
 COPY --from=Build /go/schemas /schemas
 
 USER 65534

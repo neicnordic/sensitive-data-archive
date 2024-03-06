@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 	bcrypt "golang.org/x/crypto/bcrypt"
 )
@@ -42,7 +43,7 @@ func verifyPassword(password, hash string) bool {
 }
 
 // Authenticate against CEGA
-func authenticateWithCEGA(conf CegaConfig, username string) (*http.Response, error) {
+func authenticateWithCEGA(conf config.CegaConfig, username string) (*http.Response, error) {
 	client := &http.Client{}
 	payload := strings.NewReader("")
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", strings.TrimSuffix(conf.AuthURL, "/"), username), payload)

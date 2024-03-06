@@ -317,6 +317,65 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  cega-nss:
+    container_name: cega-nss
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    command:
+      [
+        "python",
+        "/cega/users.py",
+        "0.0.0.0",
+        "8443",
+        "/shared/users.json"
+      ]
+    environment:
+      - CEGA_USERS_PASSWORD=test
+      - CEGA_USERS_USER=test
+    image: "egarchive/lega-base:release.v0.2.0"
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./sda/users.py:/cega/users.py
+      - shared:/shared
+
+  auth-cega:
+    command: [ sda-auth ]
+    container_name: auth-cega
+    depends_on:
+      cega-nss:
+        condition: service_started
+    environment:
+      - AUTH_RESIGNJWT=true
+      - AUTH_CEGA_ID=test
+      - AUTH_CEGA_SECRET=test
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    ports:
+      - "8888:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  auth-oidc:
+    command: [ sda-auth ]
+    container_name: auth-oidc
+    depends_on:
+      oidc:
+        condition: service_healthy
+    environment:
+      - AUTH_RESIGNJWT=false
+      - OIDC_ID=XC56EL11xx
+      - OIDC_SECRET=wHPVQaYXmdDHg
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    ports:
+      - "8889:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
   integration_test:
     container_name: tester
     command:
@@ -324,6 +383,12 @@ services:
       - "/tests/run_scripts.sh"
       - "/tests/sda"
     depends_on:
+      auth-cega:
+        condition: service_started
+      auth-oidc:
+        condition: service_started
+      cega-nss:
+        condition: service_started
       credentials:
         condition: service_completed_successfully
       finalize:

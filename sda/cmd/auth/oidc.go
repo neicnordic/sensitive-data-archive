@@ -9,12 +9,13 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
 
-// ElixirIdentity represents an Elixir user instance
-type ElixirIdentity struct {
+// OIDCIdentity represents an OIDC user instance
+type OIDCIdentity struct {
 	User                 string
 	Passport             []string
 	Token                string
@@ -25,7 +26,7 @@ type ElixirIdentity struct {
 }
 
 // Configure an OpenID Connect aware OAuth2 client.
-func getOidcClient(conf ElixirConfig) (oauth2.Config, *oidc.Provider) {
+func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider) {
 	contx := context.Background()
 	provider, err := oidc.NewProvider(contx, conf.Provider)
 	if err != nil {
@@ -43,11 +44,11 @@ func getOidcClient(conf ElixirConfig) (oauth2.Config, *oidc.Provider) {
 	return oauth2Config, provider
 }
 
-// Authenticate with an Oidc client.against Elixir AAI
-func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, code, jwkURL string) (ElixirIdentity, error) {
+// Authenticate with an Oidc client.against OIDC AAI
+func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, code, jwkURL string) (OIDCIdentity, error) {
 	contx := context.Background()
 	defer contx.Done()
-	var idStruct ElixirIdentity
+	var idStruct OIDCIdentity
 
 	oauth2Token, err := oauth2Config.Exchange(contx, code)
 	if err != nil {
@@ -101,7 +102,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 		return idStruct, err
 	}
 
-	idStruct = ElixirIdentity{
+	idStruct = OIDCIdentity{
 		User:                 userInfo.Subject,
 		Token:                rawAccessToken,
 		Passport:             claims.PassportClaim,
@@ -114,7 +115,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	return idStruct, err
 }
 
-// Validate raw (Elixir) jwt against public key from jwk. Return parsed jwt and its expiration date.
+// Validate raw (OIDC) jwt against public key from jwk. Return parsed jwt and its expiration date.
 func validateToken(rawJwt, jwksURL string) (*jwt.Token, string, error) {
 	set, err := jwk.Fetch(context.Background(), jwksURL)
 	if err != nil {

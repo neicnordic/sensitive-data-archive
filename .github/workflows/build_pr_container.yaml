@@ -33,19 +33,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build container for sda-auth
-        uses: docker/build-push-action@v5
-        with:
-          context: ./sda-auth
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-auth
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-auth
-          labels: |
-            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-            org.opencontainers.image.revision=${{ github.sha }}
-
       - name: Build container for sda-download
         uses: docker/build-push-action@v5
         with:
@@ -300,7 +287,10 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in download finalize inbox ingest mapper verify; do
+          for n in auth download finalize inbox ingest mapper verify; do
+            if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ]; then
+              continue
+            fi
             if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
               echo "$n is not ready after 30s, exiting"
               exit 1

@@ -9,7 +9,7 @@ help:
 	@echo 'In-depth description of how to use this Makefile can be found in the README.md'
 
 bootstrap: go-version-check docker-version-check
-		@for dir in sda sda-auth sda-download; do \
+		@for dir in sda sda-download; do \
 			cd $$dir; \
 			go get ./...; \
 			cd ..; \
@@ -23,15 +23,13 @@ bootstrap: go-version-check docker-version-check
 		GO111MODULE=off go get golang.org/x/tools/cmd/goimports
 
 # build containers
-build-all: build-postgresql build-rabbitmq build-sda build-sda-auth build-sda-download build-sda-sftp-inbox
+build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox
 build-postgresql:
 	@cd postgresql && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-postgres .
 build-rabbitmq:
 	@cd rabbitmq && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-rabbitmq .
 build-sda:
 	@cd sda && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F) .
-build-sda-auth:
-	@cd sda-auth && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-auth .
 build-sda-download:
 	@cd sda-download && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-download .
 build-sda-sftp-inbox:
@@ -83,23 +81,18 @@ integrationtest-sda: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
 
 # lint go code
-lint-all: lint-sda lint-sda-auth lint-sda-download
+lint-all: lint-sda lint-sda-download
 lint-sda:
 	@echo 'Running golangci-lint in the `sda` folder'
 	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
-lint-sda-auth:
-	@echo 'Running golangci-lint in the `sda-auth` folder'
-	@cd sda-auth && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 lint-sda-download:
 	@echo 'Running golangci-lint in the `sda-download` folder'
 	@cd sda-download && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 
 # run static code tests
-test-all: test-sda test-sda-auth test-sda-download test-sda-sftp-inbox
+test-all: test-sda test-sda-download test-sda-sftp-inbox
 test-sda:
 	@cd sda && go test ./... -count=1
-test-sda-auth:
-	@cd sda-auth && go test ./... -count=1
 test-sda-download:
 	@cd sda-download && go test ./... -count=1
 test-sda-sftp-inbox:
