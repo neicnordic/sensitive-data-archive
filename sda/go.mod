@@ -5,10 +5,10 @@ go 1.21
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/aws/aws-sdk-go-v2 v1.25.2
-	github.com/aws/aws-sdk-go-v2/config v1.27.5
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.5
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.7
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.2
+	github.com/aws/aws-sdk-go-v2/config v1.27.6
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.6
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.8
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.3
 	github.com/aws/smithy-go v1.20.1
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/gin-gonic/gin v1.9.1
@@ -33,9 +33,9 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.21.0
-	golang.org/x/oauth2 v0.16.0
+	golang.org/x/oauth2 v0.18.0
 	google.golang.org/grpc v1.62.1
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
@@ -56,12 +56,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.20.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.28.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.28.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.10.2 // indirect
@@ -161,7 +161,7 @@ require (
 	golang.org/x/arch v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3 // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
