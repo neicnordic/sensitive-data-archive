@@ -460,6 +460,22 @@ mapper:
   tls:
     secretName: ""
 
+reencrypt:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+# Extra annotations to attach to the service pods
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+  annotations: {}
+  tls:
+    secretName: ""
+
 s3Inbox:
   name: s3Inbox
   replicaCount: 2

@@ -1,0 +1,115 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-reencrypt
+  labels:
+    role: reencrypt
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ template "sda.fullname" . }}-reencrypt
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-reencrypt
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-reencrypt
+        role: reencrypt
+        release: {{ .Release.Name }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.reencrypt.annotations }}
+{{- toYaml .Values.reencrypt.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: reencrypt
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        command: ["sda-reencrypt"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        env:
+        - name: C4GH_FILEPATH
+          value: {{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: C4GH_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+              key: passphrase
+      {{- else }}
+        - name: CONFIGFILE
+          value: {{ include "confFile" . }}
+      {{- end }}
+      {{- if .Values.global.tls.enabled}}
+        - name: GRPC_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        - name: GRPC_SERVERCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: GRPC_SERVERKEY
+          value: {{ template "tlsPath" . }}/tls.key
+      {{- end }}
+        ports:
+          - name: grpc
+            containerPort: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
+        readinessProbe:
+          initialDelaySeconds: 15
+          tcpSocket:
+            port: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
+        resources:
+{{ toYaml .Values.reencrypt.resources | trim | indent 10 }}
+        volumeMounts:
+        {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          mountPath: {{ template "c4ghPath" . }}
+        {{- end }}
+        {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
+      volumes:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+            items:
+            - key: {{ .Values.global.c4gh.keyFile }}
+              path: {{ .Values.global.c4gh.keyFile }}
+      {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-reencrypt-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for reencrypt" .Values.reencrypt.tls.secretName }}
+        {{- end }}
+      {{- end }}
+      restartPolicy: Always
+{{- end }}

@@ -1,0 +1,15 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-reencrypt
+  labels:
+    app: {{ template "sda.fullname" . }}-reencrypt
+spec:
+  ports:
+  - name: reencrypt
+    port: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
+    targetPort: grpc
+  selector:
+    app: {{ template "sda.name" . }}-reencrypt
+{{- end }}
