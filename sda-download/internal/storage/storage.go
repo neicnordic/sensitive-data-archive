@@ -143,11 +143,14 @@ type s3SeekableBackend struct {
 
 type s3SeekableReader struct {
 	s3SeekableBackend
-	currentOffset int64
-	local         []s3CacheBlock
-	filePath      string
-	objectSize    int64
-	lock          sync.Mutex
+	currentOffset         int64
+	local                 []s3CacheBlock
+	filePath              string
+	objectSize            int64
+	lock                  sync.Mutex
+	outstandingPrefetches []int64
+	seeked                bool
+	objectReader          io.Reader
 }
 
 // S3Conf stores information about the S3 storage backend
@@ -365,6 +368,9 @@ func (sb *s3SeekableBackend) NewFileReader(filePath string) (io.ReadCloser, erro
 		filePath,
 		objectSize,
 		sync.Mutex{},
+		make([]int64, 0, 32),
+		false,
+		nil,
 	}
 
 	return reader, nil
@@ -395,12 +401,29 @@ func (r *s3SeekableReader) pruneCache() {
 
 }
 
+func (r *s3SeekableReader) prefetchSize() int64 {
+
+	n := r.Conf.Chunksize
+
+	if n >= 5*1024*1024 {
+		return int64(n)
+	}
+
+	return 50 * 1024 * 1024
+}
+
 func (r *s3SeekableReader) prefetchAt(offset int64) {
 	r.pruneCache()
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	if r.isPrefetching(offset) {
+		// We're already fetching this
+		return
+	}
+
+	// Check if we have the data in cache
 	for _, p := range r.local {
 		if offset >= p.start && offset < p.start+p.length {
 			// At least part of the data is here
@@ -408,11 +431,16 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 		}
 	}
 
+	// Not found in cache, we should fetch the data
 	bucket := aws.String(r.Bucket)
 	key := aws.String(r.filePath)
+	prefetchSize := r.prefetchSize()
+
+	r.outstandingPrefetches = append(r.outstandingPrefetches, offset)
+
 	r.lock.Unlock()
 
-	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+int64(r.Conf.Chunksize)))
+	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+prefetchSize-1))
 
 	object, err := r.Client.GetObject(&s3.GetObjectInput{
 		Bucket: bucket,
@@ -421,6 +449,8 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 	})
 
 	r.lock.Lock()
+
+	r.removeFromOutstanding(offset)
 
 	if err != nil {
 		return
@@ -438,13 +468,15 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 		return
 	}
 
+	// Read into Buffer
 	b := bytes.Buffer{}
 	_, err = io.Copy(&b, object.Body)
 	if err != nil {
 		return
 	}
 
-	cacheBytes := bytes.Clone(b.Bytes())
+	// Store in cache
+	cacheBytes := b.Bytes()
 	r.local = append(r.local, s3CacheBlock{offset, int64(len(cacheBytes)), cacheBytes})
 
 }
@@ -452,6 +484,10 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	// Flag that we've seeked, so we don't use the mode optimised for reading from
+	// start to end
+	r.seeked = true
 
 	switch whence {
 	case 0:
@@ -480,7 +516,6 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 		return offset, nil
 
 	case 2:
-
 		if r.objectSize+offset < 0 {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
 		}
@@ -497,9 +532,83 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 	return r.currentOffset, fmt.Errorf("Bad whence")
 }
 
+// removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
+func (r *s3SeekableReader) removeFromOutstanding(toRemove int64) {
+	switch len(r.outstandingPrefetches) {
+	case 0:
+		// Nothing to do
+	case 1:
+		// Check if it's the one we should remove
+		if r.outstandingPrefetches[0] == toRemove {
+			r.outstandingPrefetches = r.outstandingPrefetches[:0]
+
+		}
+
+	default:
+		remove := 0
+		found := false
+		for i, j := range r.outstandingPrefetches {
+			if j == toRemove {
+				remove = i
+				found = true
+			}
+		}
+		if found {
+			r.outstandingPrefetches[remove] = r.outstandingPrefetches[len(r.outstandingPrefetches)-1]
+			r.outstandingPrefetches = r.outstandingPrefetches[:len(r.outstandingPrefetches)-1]
+		}
+
+	}
+}
+
+// isPrefetching checks if the data is already being fetched
+func (r *s3SeekableReader) isPrefetching(offset int64) bool {
+	// Walk through the outstanding prefetches
+	for _, p := range r.outstandingPrefetches {
+		if offset >= p && offset < p+r.prefetchSize() {
+			// At least some of this read is already being fetched
+
+			return true
+		}
+	}
+
+	return false
+}
+
+// wholeReader is a helper for when we read the whole object
+func (r *s3SeekableReader) wholeReader(dst []byte) (int, error) {
+	if r.objectReader == nil {
+		// First call, setup a reader for the object
+		object, err := r.Client.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String(r.Bucket),
+			Key:    aws.String(r.filePath),
+		})
+
+		if err != nil {
+			return 0, err
+		}
+
+		// Store for future use
+		r.objectReader = object.Body
+	}
+
+	// Just use the reader, offset is handled in the caller
+	return r.objectReader.Read(dst)
+}
+
 func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	if !r.seeked {
+		// If not seeked, guess that we use a whole object reader for performance
+
+		n, err = r.wholeReader(dst)
+		// We need to keep track of the position in the stream in case we seek
+		r.currentOffset += int64(n)
+
+		return n, err
+	}
 
 	start := r.currentOffset
 
@@ -526,15 +635,23 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		}
 	}
 
+	// Check if we're already fetching this data
+	if r.isPrefetching(start) {
+		// Return 0, nil to have the client retry
+
+		return 0, nil
+	}
+
 	// Not found in cache, need to fetch data
 
 	bucket := aws.String(r.Bucket)
 	key := aws.String(r.filePath)
 
-	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", r.currentOffset, r.currentOffset+int64(len(dst))))
-	r.lock.Unlock()
+	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", r.currentOffset, r.currentOffset+r.prefetchSize()-1))
 
-	// We don't bother putting the object into the cache, as we're going to read it all anyway
+	r.outstandingPrefetches = append(r.outstandingPrefetches, start)
+
+	r.lock.Unlock()
 
 	object, err := r.Client.GetObject(&s3.GetObjectInput{
 		Bucket: bucket,
@@ -543,6 +660,8 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	})
 
 	r.lock.Lock()
+
+	r.removeFromOutstanding(start)
 
 	if err != nil {
 		return 0, err
@@ -554,7 +673,15 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		return 0, fmt.Errorf("Unexpected content range %v - expected prefix %v", object.ContentRange, responseRange)
 	}
 
-	n, err = object.Body.Read(dst)
+	b := bytes.Buffer{}
+	_, err = io.Copy(&b, object.Body)
+
+	// Add to cache
+	cacheBytes := bytes.Clone(b.Bytes())
+	r.local = append(r.local, s3CacheBlock{start, int64(len(cacheBytes)), cacheBytes})
+	log.Infof("Stored into cache starting at %v, length %v", start, len(cacheBytes))
+
+	n, err = b.Read(dst)
 
 	r.currentOffset += int64(n)
 	go r.prefetchAt(r.currentOffset)
