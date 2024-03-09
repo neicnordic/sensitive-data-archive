@@ -9,7 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
 	github.com/johannesboyne/gofakes3 v0.0.0-20230914150226-f005f5cc03aa
-	github.com/lestrrat-go/jwx/v2 v2.0.20
+	github.com/lestrrat-go/jwx/v2 v2.0.21
 	github.com/lib/pq v1.10.9
 	github.com/neicnordic/crypt4gh v1.9.1
 	github.com/sirupsen/logrus v1.9.3
@@ -43,7 +43,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/httprc v1.0.4 // indirect
+	github.com/lestrrat-go/httprc v1.0.5 // indirect
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -68,9 +68,9 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/crypto v0.19.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
