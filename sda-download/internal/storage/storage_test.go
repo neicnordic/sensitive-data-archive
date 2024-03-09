@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -507,6 +508,132 @@ func TestSeekableBackend(t *testing.T) {
 
 		log.SetOutput(os.Stdout)
 	}
+}
+
+func TestS3SeekablePrefetchSize(t *testing.T) {
+
+	testConf.Type = s3SeekableType
+	chunkSize := testConf.S3.Chunksize
+	testConf.S3.Chunksize = 5 * 1024 * 1024
+	backend, err := NewBackend(testConf)
+	s3back := backend.(*s3SeekableBackend)
+	assert.IsType(t, s3back, &s3SeekableBackend{}, "Wrong type from NewBackend with seekable s3")
+	assert.Nil(t, err, "S3 backend failed")
+	path := fmt.Sprintf("%v.%v", s3Creatable, time.Now().UnixNano())
+
+	writer, err := backend.NewFileWriter(path)
+
+	assert.NotNil(t, writer, "Got a nil reader for writer from s3")
+	assert.Nil(t, err, "posix NewFileWriter failed when it shouldn't")
+
+	writer.Close()
+
+	reader, err := backend.NewFileReader(path)
+	assert.Nil(t, err, "s3 NewFileReader failed when it should work")
+	assert.NotNil(t, reader, "Got a nil reader for s3")
+
+	s := reader.(*s3SeekableReader)
+
+	assert.Equal(t, int64(5*1024*1024), s.prefetchSize(), "Prefetch size not as expected with chunksize 5MB")
+	s.Conf.Chunksize = 0
+	assert.Equal(t, int64(50*1024*1024), s.prefetchSize(), "Prefetch size not as expected")
+
+	s.Conf.Chunksize = 1024 * 1024
+	assert.Equal(t, int64(50*1024*1024), s.prefetchSize(), "Prefetch size not as expected")
+
+	testConf.S3.Chunksize = chunkSize
+}
+
+func TestS3SeekableSpecial(t *testing.T) {
+	// Some special tests here, messing with internals to expose behaviour
+
+	testConf.Type = s3SeekableType
+
+	backend, err := NewBackend(testConf)
+	assert.Nil(t, err, "Backend failed")
+
+	path := fmt.Sprintf("%v.%v", s3Creatable, time.Now().UnixNano())
+
+	s3back := backend.(*s3SeekableBackend)
+	assert.IsType(t, s3back, &s3SeekableBackend{}, "Wrong type from NewBackend with seekable s3")
+
+	writer, err := backend.NewFileWriter(path)
+
+	assert.NotNil(t, writer, "Got a nil reader for writer from s3")
+	assert.Nil(t, err, "posix NewFileWriter failed when it shouldn't")
+
+	for i := 0; i < 1000; i++ {
+		written, err := writer.Write(writeData)
+		assert.Nil(t, err, "Failure when writing to s3 writer")
+		assert.Equal(t, len(writeData), written, "Did not write all writeData")
+	}
+
+	writer.Close()
+
+	reader, err := backend.NewFileReader(path)
+	reader.(*s3SeekableReader).seeked = true
+
+	assert.Nil(t, err, "s3 NewFileReader failed when it should work")
+	assert.NotNil(t, reader, "Got a nil reader for s3")
+	size, err := backend.GetFileSize(path)
+	assert.Nil(t, err, "s3 GetFileSize failed when it should work")
+	assert.Equal(t, int64(len(writeData))*1000, size, "Got an incorrect file size")
+
+	if reader == nil {
+		t.Error("reader that should be usable is not, bailing out")
+
+		return
+	}
+
+	var readBackBuffer [4096]byte
+	seeker := reader.(io.ReadSeekCloser)
+
+	_, err = seeker.Read(readBackBuffer[0:4096])
+	assert.Equal(t, writeData, readBackBuffer[:14], "did not read back data as expected")
+	assert.Nil(t, err, "read returned unexpected error")
+
+	err = seeker.Close()
+	assert.Nil(t, err, "unexpected error when closing")
+
+	reader, err = backend.NewFileReader(path)
+	assert.Nil(t, err, "unexpected error when creating reader")
+
+	s := reader.(*s3SeekableReader)
+	s.seeked = true
+	s.prefetchAt(0)
+	assert.Equal(t, 1, len(s.local), "nothing cached after prefetch")
+	// Clear cache
+	s.local = s.local[:0]
+
+	s.outstandingPrefetches = []int64{0}
+	t.Logf("Cache %v, outstanding %v", s.local, s.outstandingPrefetches)
+
+	n, err := s.Read(readBackBuffer[0:4096])
+	assert.Nil(t, err, "read returned unexpected error")
+	assert.Equal(t, 0, n, "got data when we should get 0 because of prefetch")
+
+	for i := 0; i < 30; i++ {
+		s.local = append(s.local, s3CacheBlock{90000000, int64(0), nil})
+	}
+	s.prefetchAt(0)
+	assert.Equal(t, 8, len(s.local), "unexpected length of cache after prefetch")
+
+	s.outstandingPrefetches = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	s.removeFromOutstanding(9)
+	assert.Equal(t, s.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	s.removeFromOutstanding(19)
+	assert.Equal(t, s.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	s.removeFromOutstanding(5)
+	// We don't care about the internal order, sort for simplicity
+	slices.Sort(s.outstandingPrefetches)
+	assert.Equal(t, s.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+
+	s.objectReader = nil
+	s.Bucket = ""
+	s.filePath = ""
+	data := make([]byte, 100)
+	_, err = s.wholeReader(data)
+	assert.NotNil(t, err, "wholeReader object instantiation worked when it should have failed")
 }
 
 func TestSeekableMultiReader(t *testing.T) {
