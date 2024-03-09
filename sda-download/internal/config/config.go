@@ -306,10 +306,17 @@ func (c *Map) configureOIDC() error {
 // configArchive provides configuration for the archive storage
 // we default to POSIX unless S3 specified
 func (c *Map) configArchive() {
-	if viper.GetString("archive.type") == S3 {
+
+	switch viper.GetString("archive.type") {
+	case S3:
 		c.Archive.Type = S3
 		c.Archive.S3 = configS3Storage("archive")
-	} else {
+
+	case S3seekable:
+		c.Archive.Type = S3seekable
+		c.Archive.S3 = configS3Storage("archive")
+
+	default:
 		c.Archive.Type = POSIX
 		c.Archive.Posix.Location = viper.GetString("archive.location")
 	}
