@@ -99,6 +99,32 @@ func (suite *TestSuite) TestArchiveConfig() {
 
 }
 
+func (suite *TestSuite) TestArchiveS3Config() {
+	for _, archiveType := range []string{S3, S3seekable} {
+		viper.Set("archive.type", archiveType)
+		viper.Set("archive.url", "localhost")
+		viper.Set("archive.accesskey", "access")
+		viper.Set("archive.secretkey", "secret")
+		viper.Set("archive.bucket", "bucket")
+		viper.Set("archive.port", "9090")
+		viper.Set("archive.chunksize", "10")
+		viper.Set("archive.region", "us-west-1")
+		viper.Set("archive.cacert", "filename")
+
+		c := &Map{}
+		c.configArchive()
+		assert.Equal(suite.T(), "localhost", c.Archive.S3.URL)
+		assert.Equal(suite.T(), "access", c.Archive.S3.AccessKey)
+		assert.Equal(suite.T(), "secret", c.Archive.S3.SecretKey)
+		assert.Equal(suite.T(), "bucket", c.Archive.S3.Bucket)
+		assert.Equal(suite.T(), "us-west-1", c.Archive.S3.Region)
+		assert.Equal(suite.T(), "filename", c.Archive.S3.Cacert)
+		assert.Equal(suite.T(), 10*1024*1024, c.Archive.S3.Chunksize)
+		assert.Equal(suite.T(), 9090, c.Archive.S3.Port)
+
+	}
+}
+
 func (suite *TestSuite) TestSessionConfig() {
 
 	viper.Set("session.expiration", 3600)
