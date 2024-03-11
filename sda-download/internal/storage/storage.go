@@ -624,14 +624,9 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 			// At least part of the data is here
 
 			offsetInBlock := start - p.start
-			wanted := int64(len(dst))
-
-			if p.length-offsetInBlock < wanted {
-				wanted = p.length - offsetInBlock
-			}
 
 			// Pull out wanted data (as much as we have)
-			n = copy(dst, p.data[offsetInBlock:offsetInBlock+wanted])
+			n = copy(dst, p.data[offsetInBlock:])
 			r.currentOffset += int64(n)
 
 			// Prefetch the next bit
