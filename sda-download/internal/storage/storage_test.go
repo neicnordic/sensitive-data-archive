@@ -478,6 +478,7 @@ func TestSeekableBackend(t *testing.T) {
 
 		n, err := seeker.Read(readBackBuffer[0:4096])
 		assert.Equal(t, 5, n, "Unexpected amount of read bytes")
+		assert.Nil(t, err, "Read failed when it shouldn't")
 
 		n, err = seeker.Read(readBackBuffer[0:4096])
 
@@ -490,6 +491,7 @@ func TestSeekableBackend(t *testing.T) {
 
 		n, err = seeker.Read(readBackBuffer[0:4096])
 		assert.Equal(t, 0, n, "Unexpected amount of read bytes")
+		assert.Equal(t, io.EOF, err, "Read returned unexpected error when EOF")
 
 		offset, err = seeker.Seek(6302, io.SeekStart)
 
@@ -687,7 +689,10 @@ func TestSeekableMultiReader(t *testing.T) {
 	assert.Equal(t, writeData[4:], readBackBuffer[:10], "did not read back data as expected")
 	assert.Nil(t, err, "Read failed when it should not")
 
-	seeker.Seek(0, io.SeekEnd)
+	offset, err = seeker.Seek(0, io.SeekEnd)
+	assert.Equal(t, int64(140), offset, "Seek did not return expected offset")
+	assert.Nil(t, err, "Seek failed when it should not")
+
 	n, err := seeker.Read(readBackBuffer[0:4096])
 
 	assert.Equal(t, 0, n, "Read did not return expected amounts of bytes")
