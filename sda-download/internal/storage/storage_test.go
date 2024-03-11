@@ -415,7 +415,7 @@ func TestSeekableBackend(t *testing.T) {
 
 		// Wait for consistency after s3 write
 		if testConf.Type == s3SeekableType {
-			time.Sleep(750 * time.Millisecond)
+			time.Sleep(1500 * time.Millisecond)
 		}
 
 		reader, err := backend.NewFileReader(path)
