@@ -13,7 +13,7 @@ All endpoints require an `Authorization` header with an access token in the `Bea
 Authorization: Bearer <token>
 ```
 ### Authenticated Session
-The client can establish a session to skip time-costly visa validations for further requests. Session is based on the `SESSION_NAME=sda_session_key` (configurable name) cookie returned by the server, which should be returned in later requests.
+The client can establish a session to bypass time-costly visa validations for further requests. The session is established based on the `SESSION_NAME=sda_session_key` (configurable name) cookie returned by the server, which should be included in later requests.
 
 ## Service Description
 
@@ -32,7 +32,7 @@ The client can establish a session to skip time-costly visa validations for furt
 
 ### Data out API
 #### Datasets
-The `/metadata/datasets` endpoint is used to display the list of datasets the given token is authorised to access, that are present in the archive.
+The `/metadata/datasets` endpoint is used to display the list of datasets that the given token is authorised to access, that are present in the archive.
 ##### Request
 ```
 GET /metadata/datasets
@@ -46,13 +46,13 @@ GET /metadata/datasets
 ```
 #### Files
 ##### Request
-Files contained by a dataset are listed using the `datasetName` from `/metadata/datasets`.
+The files contained in a dataset are listed using the `datasetName` obtained from `/metadata/datasets` endpoint.
 ```
 GET /metadata/datasets/{datasetName}/files
 ```
 **Scheme Parameter**
-The `?scheme=` query parameter is optional. When a dataset contains a scheme, it may sometimes be problematic with reverse proxies.
-The scheme can be split from the dataset name, and supplied in a query parameter.
+The `?scheme=` query parameter is optional. When a dataset contains a scheme, it may sometimes encounter issues with reverse proxies.
+The scheme can be separated from the dataset name and supplied in a query parameter.
 ```
 dataset := strings.Split("https://doi.org/abc/123", "://")
 len(dataset) // 2 -> scheme can be used
@@ -115,8 +115,8 @@ Parts of a file can be requested with specific byte ranges using `startCoordinat
 **Parameters**:
 
 *Partial file retrieval*: 
-- `startCoordinate` Start byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
-- `endCoordinate` End byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
+- `startCoordinate`: start byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
+- `endCoordinate`: end byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
 
 Headers:
 
