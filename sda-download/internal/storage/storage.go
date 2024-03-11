@@ -611,6 +611,11 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		return n, err
 	}
 
+	if r.currentOffset >= r.objectSize {
+		// For reading when there is no more data, just return EOF
+		return 0, io.EOF
+	}
+
 	start := r.currentOffset
 
 	// Walk through the cache
