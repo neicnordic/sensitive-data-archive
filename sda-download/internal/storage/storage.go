@@ -353,7 +353,6 @@ func transportConfigS3(config S3Conf) http.RoundTripper {
 }
 
 func (sb *s3SeekableBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
-
 	s := sb.s3Backend
 	objectSize, err := s.GetFileSize(filePath)
 
@@ -377,7 +376,6 @@ func (sb *s3SeekableBackend) NewFileReader(filePath string) (io.ReadCloser, erro
 }
 
 func (sb *s3SeekableBackend) GetFileSize(filePath string) (int64, error) {
-
 	s := sb.s3Backend
 
 	return s.GetFileSize(filePath)
@@ -402,7 +400,6 @@ func (r *s3SeekableReader) pruneCache() {
 }
 
 func (r *s3SeekableReader) prefetchSize() int64 {
-
 	n := r.Conf.Chunksize
 
 	if n >= 5*1024*1024 {
@@ -478,7 +475,6 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 	// Store in cache
 	cacheBytes := b.Bytes()
 	r.local = append(r.local, s3CacheBlock{offset, int64(len(cacheBytes)), cacheBytes})
-
 }
 
 func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
@@ -542,7 +538,6 @@ func (r *s3SeekableReader) removeFromOutstanding(toRemove int64) {
 		// Check if it's the one we should remove
 		if r.outstandingPrefetches[0] == toRemove {
 			r.outstandingPrefetches = r.outstandingPrefetches[:0]
-
 		}
 
 	default:
@@ -558,7 +553,6 @@ func (r *s3SeekableReader) removeFromOutstanding(toRemove int64) {
 			r.outstandingPrefetches[remove] = r.outstandingPrefetches[len(r.outstandingPrefetches)-1]
 			r.outstandingPrefetches = r.outstandingPrefetches[:len(r.outstandingPrefetches)-1]
 		}
-
 	}
 }
 

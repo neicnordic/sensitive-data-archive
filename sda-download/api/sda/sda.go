@@ -360,7 +360,6 @@ func Download(c *gin.Context) {
 
 			return
 		}
-
 	}
 
 	switch c.Param("type") {
