@@ -413,11 +413,6 @@ func TestSeekableBackend(t *testing.T) {
 
 		writer.Close()
 
-		// Wait for consistency after s3 write
-		if testConf.Type == s3SeekableType {
-			time.Sleep(1500 * time.Millisecond)
-		}
-
 		reader, err := backend.NewFileReader(path)
 		assert.Nil(t, err, "s3 NewFileReader failed when it should work")
 		assert.NotNil(t, reader, "Got a nil reader for s3")
@@ -497,13 +492,15 @@ func TestSeekableBackend(t *testing.T) {
 		assert.Nil(t, err, "Seek failed")
 		assert.Equal(t, int64(6302), offset, "Seek did not return expected offset")
 
-		n, err = seeker.Read(readBackBuffer[0:4096])
-		assert.Equal(t, 4096, n, "Read did not return expected amounts of bytes")
-		assert.Equal(t, writeData[2:], readBackBuffer[:12], "did not read back data as expected")
-
-		if err != nil && err != io.EOF {
-			assert.Nil(t, err, "unexpected error when reading back data")
+		n = 0
+		for i := 0; i < 500000 && n == 0 && err == nil; i++ {
+			// Allow 0 sizes while waiting for prefetch
+			n, err = seeker.Read(readBackBuffer[0:4096])
 		}
+
+		assert.Equal(t, 4096, n, "Read did not return expected amounts of bytes for %v", seeker)
+		assert.Equal(t, writeData[2:], readBackBuffer[:12], "did not read back data as expected")
+		assert.Nil(t, err, "unexpected error when reading back data")
 
 		offset, err = seeker.Seek(6302, io.SeekStart)
 		assert.Nil(t, err, "unexpected error when seeking to read back data")
