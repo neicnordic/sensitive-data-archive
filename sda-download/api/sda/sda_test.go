@@ -541,4 +541,14 @@ func TestEncrypted_Coords(t *testing.T) {
 	// range 0-0 should give whole file
 	start, end, err = calculateEncryptedCoords(0, 0, "", fileDetails)
 	assert.Equal(t, end-start, fullSize)
+	assert.NoError(t, err)
+
+	// range 0-0 with range in the header should return the range size
+	_, end, err = calculateEncryptedCoords(0, 0, "bytes=0-1000", fileDetails)
+	assert.Equal(t, end, int64(1000))
+	assert.NoError(t, err)
+
+	// range in the header should return error if values are not numbers
+	_, _, err = calculateEncryptedCoords(0, 0, "bytes=start-end", fileDetails)
+	assert.Error(t, err)
 }
