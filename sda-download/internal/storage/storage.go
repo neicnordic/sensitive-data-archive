@@ -728,17 +728,13 @@ func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 
 func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 
-	if !r.allSeekable {
-		return 0, fmt.Errorf("Not all readers are seekable")
-	}
-
 	switch whence {
-	case 0:
+	case io.SeekStart:
 		r.currentOffset = offset
-	case 1:
+	case io.SeekCurrent:
 		r.currentOffset += offset
-	case 2:
-		return 0, fmt.Errorf("Seeking from end not supported")
+	case io.SeekEnd:
+		r.currentOffset = r.totalSize + offset
 
 	default:
 		return 0, fmt.Errorf("Unsupported whence")
@@ -793,9 +789,7 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 		}
 
 		readerStartAt += r.sizes[i]
-
 	}
 
 	return 0, io.EOF
-
 }
