@@ -210,7 +210,6 @@ func Download(c *gin.Context) {
 
 			return
 		}
-
 	}
 
 	c4ghr, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
