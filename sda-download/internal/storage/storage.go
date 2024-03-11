@@ -780,8 +780,8 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 		r.currentOffset += int64(n)
 
 		if n > 0 || err != io.EOF {
-			if err == io.EOF && len(r.readers) > 0 {
-				// More readers left, hold that EOF
+			if err == io.EOF && r.currentOffset < r.totalSize {
+				// More data left, hold that EOF
 				err = nil
 			}
 
