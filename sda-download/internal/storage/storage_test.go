@@ -413,6 +413,11 @@ func TestSeekableBackend(t *testing.T) {
 
 		writer.Close()
 
+		// Wait for consistency after s3 write
+		if testConf.Type == s3SeekableType {
+			time.Sleep(750 * time.Millisecond)
+		}
+
 		reader, err := backend.NewFileReader(path)
 		assert.Nil(t, err, "s3 NewFileReader failed when it should work")
 		assert.NotNil(t, reader, "Got a nil reader for s3")
@@ -457,22 +462,42 @@ func TestSeekableBackend(t *testing.T) {
 			_, err = seeker.Seek(0, 4)
 			assert.NotNil(t, err, "Seek didn't fail when it should")
 
-			offset, err := seeker.Seek(5, io.SeekCurrent)
-			assert.Nil(t, err, "Seek failed when it shouldn't")
-			assert.Equal(t, int64(5), offset, "Seek did not return expected offset")
-
-			offset, err = seeker.Seek(-5, io.SeekEnd)
-			assert.Nil(t, err, "Seek failed when it shouldn't")
-			assert.Equal(t, int64(13995), offset, "Seek did not return expected offset")
 		}
 
-		offset, err := seeker.Seek(6302, io.SeekStart)
+		offset, err := seeker.Seek(15, io.SeekStart)
+		assert.Nil(t, err, "Seek failed when it shouldn't")
+		assert.Equal(t, int64(15), offset, "Seek did not return expected offset")
+
+		offset, err = seeker.Seek(5, io.SeekCurrent)
+		assert.Nil(t, err, "Seek failed when it shouldn't")
+		assert.Equal(t, int64(20), offset, "Seek did not return expected offset")
+
+		offset, err = seeker.Seek(-5, io.SeekEnd)
+		assert.Nil(t, err, "Seek failed when it shouldn't")
+		assert.Equal(t, int64(13995), offset, "Seek did not return expected offset")
+
+		n, err := seeker.Read(readBackBuffer[0:4096])
+		assert.Equal(t, 5, n, "Unexpected amount of read bytes")
+
+		n, err = seeker.Read(readBackBuffer[0:4096])
+
+		assert.Equal(t, io.EOF, err, "Expected EOF")
+		assert.Equal(t, 0, n, "Unexpected amount of read bytes")
+
+		offset, err = seeker.Seek(0, io.SeekEnd)
+		assert.Nil(t, err, "Seek failed when it shouldn't")
+		assert.Equal(t, int64(14000), offset, "Seek did not return expected offset")
+
+		n, err = seeker.Read(readBackBuffer[0:4096])
+		assert.Equal(t, 0, n, "Unexpected amount of read bytes")
+
+		offset, err = seeker.Seek(6302, io.SeekStart)
 
 		assert.Nil(t, err, "Seek failed")
 		assert.Equal(t, int64(6302), offset, "Seek did not return expected offset")
 
-		time.Sleep(1 * time.Second)
-		_, err = seeker.Read(readBackBuffer[0:4096])
+		n, err = seeker.Read(readBackBuffer[0:4096])
+		assert.Equal(t, 4096, n, "Read did not return expected amounts of bytes")
 
 		assert.Equal(t, writeData[2:], readBackBuffer[:12], "did not read back data as expected")
 
@@ -643,11 +668,12 @@ func TestSeekableMultiReader(t *testing.T) {
 		readers[i] = bytes.NewReader(writeData)
 	}
 
-	seeker := SeekableMultiReader(readers...)
+	seeker, err := SeekableMultiReader(readers...)
+	assert.Nil(t, err, "unexpected error from creating SeekableMultiReader")
 
 	var readBackBuffer [4096]byte
 
-	_, err := seeker.Read(readBackBuffer[0:4096])
+	_, err = seeker.Read(readBackBuffer[0:4096])
 	assert.Equal(t, writeData, readBackBuffer[:14], "did not read back data as expected")
 	assert.Nil(t, err, "unexpected error from read")
 
@@ -656,13 +682,16 @@ func TestSeekableMultiReader(t *testing.T) {
 	assert.Nil(t, err, "Seek failed")
 	assert.Equal(t, int64(60), offset, "Seek did not return expected offset")
 
+	// We don't know how many bytes this should return
 	_, err = seeker.Read(readBackBuffer[0:4096])
-
 	assert.Equal(t, writeData[4:], readBackBuffer[:10], "did not read back data as expected")
+	assert.Nil(t, err, "Read failed when it should not")
 
-	if err != nil && err != io.EOF {
-		assert.Nil(t, err, "unexpected error when reading back data")
-	}
+	seeker.Seek(0, io.SeekEnd)
+	n, err := seeker.Read(readBackBuffer[0:4096])
+
+	assert.Equal(t, 0, n, "Read did not return expected amounts of bytes")
+	assert.Equal(t, io.EOF, err, "did not get EOF as expected")
 
 	offset, err = seeker.Seek(56, io.SeekStart)
 	assert.Equal(t, int64(56), offset, "Seek did not return expected offset")
