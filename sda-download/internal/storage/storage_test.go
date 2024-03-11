@@ -494,13 +494,11 @@ func TestSeekableBackend(t *testing.T) {
 		assert.Equal(t, io.EOF, err, "Read returned unexpected error when EOF")
 
 		offset, err = seeker.Seek(6302, io.SeekStart)
-
 		assert.Nil(t, err, "Seek failed")
 		assert.Equal(t, int64(6302), offset, "Seek did not return expected offset")
 
 		n, err = seeker.Read(readBackBuffer[0:4096])
 		assert.Equal(t, 4096, n, "Read did not return expected amounts of bytes")
-
 		assert.Equal(t, writeData[2:], readBackBuffer[:12], "did not read back data as expected")
 
 		if err != nil && err != io.EOF {
