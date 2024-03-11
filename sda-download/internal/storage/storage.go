@@ -709,18 +709,19 @@ func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 
 	var totalSize int64
 	for i, reader := range readers {
-		if seeker, ok := reader.(io.ReadSeeker); !ok {
+		seeker, ok := reader.(io.ReadSeeker)
+		if !ok {
 			return nil, fmt.Errorf("Reader %d to SeekableMultiReader is not seekable", i)
-		} else {
-
-			size, err := seeker.Seek(0, io.SeekEnd)
-			if err != nil {
-				return nil, fmt.Errorf("Size determination failed for reader %d to SeekableMultiReader: %v", i, err)
-			}
-
-			sizes[i] = size
-			totalSize += size
 		}
+
+		size, err := seeker.Seek(0, io.SeekEnd)
+		if err != nil {
+			return nil, fmt.Errorf("Size determination failed for reader %d to SeekableMultiReader: %v", i, err)
+		}
+
+		sizes[i] = size
+		totalSize += size
+
 	}
 
 	return &seekableMultiReader{r, sizes, 0, totalSize}, nil
