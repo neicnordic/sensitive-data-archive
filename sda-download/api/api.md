@@ -6,7 +6,7 @@ It implements the [Data Out API](https://neic-sda.readthedocs.io/en/latest/datao
 
 Further, it enables the endpoints `/s3` and `/s3-encrypted`, used for htsget.
 
-The response can be restricted to only contain a given range of a file, and the files can be returned encrypted or decrypted.
+The response can be restricted to only contain a given range of a file, and the files can be returned encrypted or unencrypted.
 
 All endpoints require an `Authorization` header with an access token in the `Bearer` scheme.
 ```
@@ -123,9 +123,9 @@ Headers:
 - `Authorization: Bearer <token>` 
 - `Range: bytes=<start>-<end>`  exact positions. Overrides parameter coordinates.
 - `User-agent` used in communication with htsget, to mark who is making the request.
-Download a decrypted file in a given dataset.
 
-#### Retreive decrypted file size
+
+#### Retreive size of unencrypted file
 ##### Request
 ```
 HEAD /s3/{datasetid}/{fileid}
@@ -133,16 +133,16 @@ HEAD /s3/{datasetid}/{fileid}
 ##### Response
 Returns the size of the unencrypted file, communicated in the response header `Content-Length`.
 
-#### Retreive decrypted file
+#### Retreive unencrypted file
 ##### Request
 ```
 GET /s3/{datasetid}/{fileid}
 ```
 ##### Response
-Returns the decrypted file.
+Returns the unencrypted file.
 
 
-#### Retreive encrypted file size
+#### Retreive size of encrypted file
 ##### Request
 ```
 HEAD /s3-encrypted/{datasetid}/{fileid}
@@ -156,4 +156,4 @@ Returns the size of the unencrypted file, communicated in the response header `C
 GET /s3-encrypted/{datasetid}/{fileid}
 ```
 ##### Response
-Returns the decrypted file.
+Returns the unencrypted file.
