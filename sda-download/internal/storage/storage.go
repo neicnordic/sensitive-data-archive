@@ -695,27 +695,35 @@ type seekableMultiReader struct {
 	readers       []io.Reader
 	sizes         []int64
 	currentOffset int64
-	allSeekable   bool
+	totalSize     int64
 }
 
-// SeekableMultiReader constructs a multireader that supports seeking
-func SeekableMultiReader(readers ...io.Reader) io.ReadSeeker {
+// SeekableMultiReader constructs a multireader that supports seeking. Requires
+// all passed readers to be seekable
+func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 
 	r := make([]io.Reader, len(readers))
-	s := make([]int64, len(readers))
+	sizes := make([]int64, len(readers))
 
 	copy(r, readers)
 
-	allSeekable := true
+	var totalSize int64
 	for i, reader := range readers {
 		if seeker, ok := reader.(io.ReadSeeker); !ok {
-			allSeekable = false
+			return nil, fmt.Errorf("Reader %d to SeekableMultiReader is not seekable", i)
 		} else {
-			s[i], _ = seeker.Seek(0, 2)
+
+			size, err := seeker.Seek(0, io.SeekEnd)
+			if err != nil {
+				return nil, fmt.Errorf("Size determination failed for reader %d to SeekableMultiReader: %v", i, err)
+			}
+
+			sizes[i] = size
+			totalSize += size
 		}
 	}
 
-	return &seekableMultiReader{r, s, 0, allSeekable}
+	return &seekableMultiReader{r, sizes, 0, totalSize}, nil
 }
 
 func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
@@ -741,28 +749,6 @@ func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (r *seekableMultiReader) Read(dst []byte) (int, error) {
-
-	if !r.allSeekable {
-		// Modeled after io.MultiReader. Is it better to refuse at creation
-		// if not all are seekable?
-
-		for len(r.readers) > 0 {
-			n, err := r.readers[0].Read(dst)
-			if err == io.EOF {
-				r.readers = r.readers[1:]
-			}
-			if n > 0 || err != io.EOF {
-				if err == io.EOF && len(r.readers) > 0 {
-					// More readers left, hold that EOF
-					err = nil
-				}
-
-				return n, err
-			}
-		}
-		// no readers left and no data to return
-		return 0, io.EOF
-	}
 
 	var readerStartAt int64
 
