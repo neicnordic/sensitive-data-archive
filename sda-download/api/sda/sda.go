@@ -198,7 +198,12 @@ func Download(c *gin.Context) {
 	contentLength := fileDetails.DecryptedSize
 	if c.Param("type") == "encrypted" {
 		contentLength = fileDetails.ArchiveSize
-		start, end = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
+		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
+		if err != nil {
+			log.Errorf("Byte range coordinates invalid! %v", err)
+
+			return
+		}
 		if start > 0 {
 			// reading from an offset in encrypted file is not yet supported
 			c.Header("Content-Length", "0")
@@ -344,16 +349,23 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 // Calculates the start and end coordinats to use. If a range is set in HTTP headers,
 // it will be used as is. If not, the functions parameters will be used,
 // and adjusted to match the data block boundaries of the encrypted file.
-var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64) {
+var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64, error) {
 	if htsget_range != "" {
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {
-			a, errA := strconv.ParseInt(startEnd[0], 10, 64)
-			b, errB := strconv.ParseInt(startEnd[1], 10, 64)
-			if errA == nil && errB == nil && a < b {
-
-				return a, b
+			a, err := strconv.ParseInt(startEnd[0], 10, 64)
+			if err != nil {
+				return 0, 0, err
 			}
+			b, err := strconv.ParseInt(startEnd[1], 10, 64)
+			if err != nil {
+				return 0, 0, err
+			}
+			if a > b {
+				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
+			}
+
+			return a, b, nil
 		}
 	}
 	// Adapt end coordinate to follow the crypt4gh block boundaries
@@ -367,5 +379,5 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
 	}
 
-	return start, headlength.Size() + bodyEnd
+	return start, headlength.Size() + bodyEnd, nil
 }

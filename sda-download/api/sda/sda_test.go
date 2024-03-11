@@ -518,23 +518,27 @@ func TestEncrypted_Coords(t *testing.T) {
 	//	htsget_range should be used first and as is
 	headerSize := bytes.NewReader(fileDetails.Header).Size()
 	fullSize := headerSize + int64(fileDetails.ArchiveSize)
-	start, end := calculateEncryptedCoords(from, to, "bytes=10-20", fileDetails)
+	start, end, err := calculateEncryptedCoords(from, to, "bytes=10-20", fileDetails)
 	assert.Equal(t, start, int64(10))
 	assert.Equal(t, end, int64(20))
+	assert.NoError(t, err)
 
 	// end should be greater than or equal to inputted end
-	_, end = calculateEncryptedCoords(from, to, "", fileDetails)
+	_, end, err = calculateEncryptedCoords(from, to, "", fileDetails)
 	assert.GreaterOrEqual(t, end, from)
+	assert.NoError(t, err)
 
 	// end should not be smaller than a header
-	_, end = calculateEncryptedCoords(from, headerSize-10, "", fileDetails)
+	_, end, err = calculateEncryptedCoords(from, headerSize-10, "", fileDetails)
 	assert.GreaterOrEqual(t, end, headerSize)
+	assert.NoError(t, err)
 
 	// end should not be larger than file length + header
-	_, end = calculateEncryptedCoords(from, fullSize+1900, "", fileDetails)
+	_, end, err = calculateEncryptedCoords(from, fullSize+1900, "", fileDetails)
 	assert.Equal(t, fullSize, end)
+	assert.NoError(t, err)
 
 	// range 0-0 should give whole file
-	start, end = calculateEncryptedCoords(0, 0, "", fileDetails)
+	start, end, err = calculateEncryptedCoords(0, 0, "", fileDetails)
 	assert.Equal(t, end-start, fullSize)
 }
