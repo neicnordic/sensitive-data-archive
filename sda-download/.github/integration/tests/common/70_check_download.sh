@@ -26,7 +26,7 @@ fi
 # test that start, end=0 returns the whole file
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=0" --output full2.bam
 
-if [[ ! cmp --silent full1.bam full2.bam ]]; then
+if ! cmp --silent full1.bam full2.bam; then
     echo "Full decrypted files, with and without coordinates, are different"
     exit 1
 fi
@@ -43,7 +43,7 @@ fi
 
 crypt4gh decrypt --sk c4gh.sec.pem < full3.bam.c4gh > full3.bam
 
-if [[ ! cmp --silent full1.bam full3.bam ]]; then
+if ! cmp --silent full1.bam full3.bam ; then
     echo "Full encrypted files is not correct when decrypting"
     exit 1
 fi
@@ -51,7 +51,7 @@ fi
 # download full encrypted file, test that start, end=0 returns the whole file
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=0" --output full4.bam.c4gh
 
-if [[ ! cmp --silent full3.bam.c4gh full4.bam.c4gh ]]; then
+if ! cmp --silent full3.bam.c4gh full4.bam.c4gh; then
     echo "Full encrypted files with coordinates is not correct"
     exit 1
 fi
@@ -67,7 +67,7 @@ if [ "$file_size" -ne "$part_expected_size" ]; then
 fi
 
 
-if [[ ! crypt4gh decrypt --sk c4gh.sec.pem < part1.bam.c4gh > part1.bam ]]; then
+if ! crypt4gh decrypt --sk c4gh.sec.pem < part1.bam.c4gh > part1.bam; then
     echo "Partial encrypted file could not be decrypted"
     exit 1
 fi
