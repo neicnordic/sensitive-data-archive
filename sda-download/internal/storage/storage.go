@@ -680,7 +680,6 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	// Add to cache
 	cacheBytes := bytes.Clone(b.Bytes())
 	r.local = append(r.local, s3CacheBlock{start, int64(len(cacheBytes)), cacheBytes})
-	log.Infof("Stored into cache starting at %v, length %v", start, len(cacheBytes))
 
 	n, err = b.Read(dst)
 
