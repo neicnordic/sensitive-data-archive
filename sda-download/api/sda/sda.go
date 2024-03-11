@@ -353,7 +353,14 @@ func Download(c *gin.Context) {
 	if !ok {
 		mr = io.MultiReader(hr, file)
 	} else {
-		mr = storage.SeekableMultiReader(hr, file)
+		mr, err = storage.SeekableMultiReader(hr, file)
+		if err != nil {
+			log.Errorf("Construct SeekableMultiReader for file: %v", err)
+			c.String(http.StatusInternalServerError, "file stream error")
+
+			return
+		}
+
 	}
 
 	switch c.Param("type") {
