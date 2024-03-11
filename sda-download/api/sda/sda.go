@@ -157,7 +157,6 @@ func Download(c *gin.Context) {
 		c.String(http.StatusUnauthorized, "unauthorised")
 
 		return
-
 	}
 
 	// Get file header
@@ -184,14 +183,12 @@ func Download(c *gin.Context) {
 	end, err := strconv.ParseInt(qEnd, 10, 0)
 	if err != nil {
 		log.Errorf("failed to convert end coordinate %d to integer, %s", end, err)
-
 		c.String(http.StatusBadRequest, "endCoordinate must be an integer")
 
 		return
 	}
 	if end < start {
 		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", end, start)
-
 		c.String(http.StatusBadRequest, "endCoordinate must be greater than startCoordinate")
 
 		return
@@ -278,14 +275,14 @@ func Download(c *gin.Context) {
 		if start != 0 {
 			// We don't want to read from start, skip ahead to where we should be
 			_, err = c4ghfileStream.Seek(start, 0)
+			if err != nil {
+				log.Errorf("error occurred while finding sending start: %v", err)
+				c.String(http.StatusInternalServerError, "an error occurred")
+
+				return
+			}
 		}
 		fileStream = c4ghfileStream
-		if err != nil {
-			log.Errorf("error occurred while finding sending start: %v", err)
-			c.String(http.StatusInternalServerError, "an error occurred")
-
-			return
-		}
 	}
 
 	err = sendStream(fileStream, c.Writer, start, end)
