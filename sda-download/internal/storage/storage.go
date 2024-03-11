@@ -490,11 +490,11 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 	r.seeked = true
 
 	switch whence {
-	case 0:
+	case io.SeekStart:
 		if offset < 0 {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
 		}
-		if offset >= r.objectSize {
+		if offset > r.objectSize {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
 		}
 
@@ -502,24 +502,25 @@ func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 		go r.prefetchAt(r.currentOffset)
 
 		return offset, nil
-	case 1:
+
+	case io.SeekCurrent:
 		if r.currentOffset+offset < 0 {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
 		}
-		if offset >= r.objectSize {
+		if offset > r.objectSize {
 			return r.currentOffset, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
 		}
 
-		r.currentOffset = offset
+		r.currentOffset += offset
 		go r.prefetchAt(r.currentOffset)
 
-		return offset, nil
+		return r.currentOffset, nil
 
-	case 2:
+	case io.SeekEnd:
 		if r.objectSize+offset < 0 {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
 		}
-		if r.objectSize+offset >= r.objectSize {
+		if r.objectSize+offset > r.objectSize {
 			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
 		}
 
