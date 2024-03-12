@@ -246,8 +246,8 @@ func Download(c *gin.Context) {
 
 		// set the user and server public keys that is send from htsget
 		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
-		c.Header("client-public-key", c.GetHeader("client-public-key"))
-		c.Header("server-public-key", c.GetHeader("server-public-key"))
+		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
+		c.Header("Server-Public-Key", c.GetHeader("Server-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
@@ -268,13 +268,19 @@ func Download(c *gin.Context) {
 	var encryptedFileReader io.Reader
 	var fileStream io.Reader
 	hr := bytes.NewReader(fileDetails.Header)
-	encryptedFileReader = io.MultiReader(hr, file)
 
 	switch c.Param("type") {
 	case "encrypted":
 		fileStream = encryptedFileReader
+		reencKey := c.GetHeader("Client-Public-Key")
+		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
+			reencKey = c.GetHeader("Server-Public-Key")
+		}
+		newHeader := reencryptionServer.reencrypt(reencKey, hr)
+		encryptedFileReader = io.MultiReader(newHeader, file)
 
 	default:
+		encryptedFileReader = io.MultiReader(hr, file)
 		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
