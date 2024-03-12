@@ -124,7 +124,7 @@ Headers:
 - `Range: bytes=<start>-<end>`  exact positions. Overrides parameter coordinates.
 - `Client-public-key: <key>` used for re-encrypting the header of the file before sending it.
 - `Server-public-key: <key>` used in communication with htsget, for re-encrypting the header of the file.
-- `User-agent` used in communication with htsget, to mark who is making the request.
+- `User-agent` used in communication with htsget, to mark who is making the request. For example `htsget-search/0.6.6.`
 
 
 #### Retreive size of unencrypted file
