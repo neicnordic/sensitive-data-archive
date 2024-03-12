@@ -1,0 +1,959 @@
+#!/bin/sh
+
+set -u -e
+
+myself=$0
+
+# Default values for global options.  Values in the environment override
+# these hard-coded defaults, and values set via command line options
+# override these later.
+
+MQ_CREDENTIALS=${MQ_CREDENTIALS-test:test}		# --mq-credentials user:pass
+MQ_URL=${MQ_URL-http://localhost:15672}			# --mq-url URL
+MQ_EXCHANGE=${MQ_EXCHANGE-sda}		# --mq-exchange string
+MQ_VHOST=${MQ_VHOST-sda}			# --mq-vhost string
+
+SDA_CONFIG=${SDA_CONFIG-s3cmd.conf}			# --sda-config pathname
+SDA_KEY=${SDA_KEY-crypt4gh_key.pub}			# --sda-key pathname
+
+# Allow a user to use the environment variable "SDA_CLI" to point
+# directly to the "sda-cli" executable.  If this environment variable is
+# not set, the tool will be picked up from "$PATH" as usual.
+SDA_CLI=${SDA_CLI-sda-cli}	# --sda-cli pathname
+
+# There is also S3_ACCESS_KEY (--s3-access-key and its alias, --user),
+# but since its value depends on the final value of "$SDA_CONFIG", we
+# can't set it here.
+
+encrypt () {
+	# Encrypt the given files using "sda-cli".
+	#
+	# Files are encrypted unconditionally, regardless of whether
+	# there exists encrypted variants of the files or not.  The only
+	# scenario wherein a file is not encrypted is when the user
+	# gives us the pathname of an encrypted file and we can't find
+	# the unencrypted variant of the file by simply removing the
+	# ".c4gh" filename suffix.
+	#
+	# Directories and other non-regular files are ignored.
+
+	for pathname do
+		shift
+
+		if [ ! -f "$pathname" ] || [ ! -f "${pathname%.c4gh}" ]
+		then
+			# Error out if we are given something that
+			# doesn't exist or isn't a regular file, or if
+			# the variant of the filename with no ".c4gh"
+			# suffix does not exist or isn't a regular file.
+
+			printf '%s: %s: No such file or directory\n' \
+				"$myself" "$pathname" >&2
+			return 1
+		fi
+
+		pathname=${pathname%.c4gh}
+
+		# Skip if the unencrypted pathname is already in the
+		# list.
+		#
+		for dup do
+			if [ "$pathname" = "$dup" ]; then
+				continue 2
+			fi
+		done
+
+		# Remove the encrypted variant of the file, if it
+		# exists.
+		#
+		rm -f "$pathname.c4gh"
+
+		# Remember the unencrypted variant of the file for
+		# encryption later.
+		#
+		set -- "$@" "$pathname"
+	done
+
+	# If there are files to encrypt, encrypt them.
+	#
+	if [ "$#" -gt 0 ]; then
+		"$SDA_CLI" encrypt -key "$SDA_KEY" "$@"
+	fi
+}
+
+upload () {
+	# Encrypt+upload using "sda-cli".
+	#
+	# Files are uploaded to the top-level directory of the S3
+	# storage bucket, offset by the target directory path given by
+	# the option-argument of the "-t" option.
+	#
+	# Directories are handled recursively and will be uploaded to
+	# the target directory path given by the directory name, offset
+	# by the target path given by the option-argument of the "-t"
+	# option.
+
+	OPTIND=1
+	unset -v target_dir
+	while getopts t: opt; do
+		case $opt in
+			t)
+				target_dir=$OPTARG
+				;;
+			*)
+				echo 'Error in command line parsing' >&2
+				exit 1
+		esac
+	done
+	shift "$(( OPTIND - 1 ))"
+
+	# Sanity check the target directory path.
+	#
+	case ${target_dir-} in
+		../*|*/../*|*/..)
+			echo 'Target path contains ".."' >&2
+			exit 1
+			;;
+		./*|*/./*|*/.)
+			echo 'Target path contains "."' >&2
+			exit 1
+			;;
+		/*)
+			echo 'Target path is absolute' >&2
+			exit 1
+	esac
+
+	for pathname do
+		shift
+		if [ -d "$pathname" ]; then
+			# Recursively encrypt and upload the directory.
+			# We do this in a subshell to isolate the
+			# changes made to the "target_dir" variable in
+			# the recursive call.
+			#
+			(
+				upload -t "${target_dir+$target_dir/}$(basename "$pathname")" \
+					"$pathname"/*
+			)
+			continue
+		fi
+		set -- "$@" "$pathname"
+	done
+
+	encrypt "$@"
+
+	# Ensure that our list of files to upload only consists of
+	# encrypted files that exists, and that this list does not
+	# contain duplicate entries.
+	#
+	for pathname do
+		shift
+		pathname=${pathname%.c4gh}.c4gh
+
+		if [ ! -f "$pathname" ]; then
+			continue
+		fi
+
+		for dup do
+			if [ "$pathname" = "$dup" ]; then
+				continue 2
+			fi
+		done
+
+		set -- "$@" "$pathname"
+	done
+
+	# If there are files to upload, upload them, possibly in a
+	# subdirectory of the user's S3 bucket.
+	#
+	if [ "$#" -gt 0 ]; then
+		"$SDA_CLI" upload \
+			-config "$SDA_CONFIG" \
+			${target_dir+-targetDir "$target_dir"} \
+			"$@"
+	fi
+}
+
+curl () {
+	# Helper function that makes curl calls a bit shorter.
+
+	command curl \
+		--silent \
+		--show-error \
+		--user "$MQ_CREDENTIALS" \
+		--request POST \
+		--header 'Content-Type: application/json' \
+		--header 'Accept: application/json' \
+		"$@" |
+	jq 'if type == "object" and has("error") then halt_error(1) else . end'
+}
+
+publish () {
+	# Will read base64-encoded messages from standard input, one
+	# per line, decode each message and publish it.  Any output is
+	# explicitly discarded.
+
+	while IFS= read -r message; do
+		printf "%s\n" "$message" | base64 -d |
+		curl --data @- "$url_exchanges/publish"
+	done >/dev/null
+}
+
+jq_filter=$(cat <<'JQ_FILTER'
+map(
+	# Add an array of pathnames that would match this message.  This
+	# includes the pathname of each parent directory, leading up to
+	# and including the pathname of the file itself.
+	#
+	.tmp_paths = [
+		# The file's full pathname is part of the message's
+		# payload (a JSON encoded object).
+		#
+		foreach (
+			.payload |
+			fromjson.filepath |
+			split("/")[]
+		) as $elem (
+			null;
+			. += $elem + "/";
+			.
+		)
+	] |
+	# The last element is the full file path and should not have a
+	# trailing slash.
+	#
+	.tmp_paths[-1] |= rtrimstr("/")
+) |
+[
+	# Match the pathnames given as positional arguments against the
+	# computed pathnames in the "tmp_paths" array in each message.
+	# Depending on the $yes boolean variable, extract or discard
+	# matching messages.
+	#
+	JOIN(
+		INDEX($ARGS.positional[]; .);
+		.[];
+		.tmp_paths[];
+		if (.[1:] | any | if $yes then . else not end) then
+			.[0]
+		else
+			empty
+		end
+	)
+] |
+# Deduplicate the extracted messages on the full pathname of the file,
+# then remove the "tmp_paths" array from each message and base64 encode
+# them.
+#
+unique_by(.tmp_paths[-1]) |
+map( del(.tmp_paths) | @base64 )[]
+JQ_FILTER
+)
+
+rotate_dump_files () {
+	# Given a RabbitMQ queue name, this function rotates the queue
+	# dump file "<queue>-0.json" to "<queue>-1.json", etc. up to
+	# "<queue>-9.json".
+
+	queue=$1
+
+	for i in 8 7 6 5 4 3 2 1 0; do
+		if [ -f "$queue-$i.json" ]; then
+			mv -- "$queue-$i.json" "$queue-$(( i + 1 )).json"
+		fi
+	done
+}
+
+get_messages () {
+	# Retrieves the messages from the RabbitMQ queue given by the
+	# 1st operand.  The remaining operands are pathnames that we
+	# filter the messages with (together with the access key from
+	# the S3 configuration).  Any message that does not correspond
+	# to any of the given pathnames is requeued.  The remaining
+	# messages are individually base64-encoded and outputted on the
+	# standard output stream, one message per line of output.
+	#
+	# If a given pathname ends with a slash, then all messages with
+	# file paths in or below that directory will be returned.  If
+	# the given pathname is an empty string (""), then all messages
+	# are returned.
+	#
+	# Calling this function will additionally save the messages of
+	# the given queue to a file in the current directory called
+	# "<queue>-0.json".  If this file exists, it will be rotated to
+	# "<queue>-1.json" first, etc., up to "<queue>-9.json".
+
+	queue=$1
+	shift
+
+	for pathname do
+		shift
+
+		# Add the user bucket name to the start of the given
+		# pathname.
+		#
+		pathname=$S3_ACCESS_KEY/$pathname
+
+		set -- "$@" "$pathname"
+	done
+
+	dumpfile=./$queue-0.json
+	rotate_dump_files "$queue"
+
+	# Get messages and ACK them all without requeuing them.
+	# This empties the queue.
+	#
+	curl --data \
+		'{"count":-1,"encoding":"auto","ackmode":"ack_requeue_false"}' \
+		"$url_queues/$queue/get" >"$dumpfile"
+
+	# Requeue the messages that we're not interested in.
+	#
+	# Note that we only requeue unique messages, based on the file
+	# path stored in each message's payload.
+	#
+	jq -r --argjson yes false "$jq_filter" --args "$@" <"$dumpfile" |
+	publish
+
+	# Filter out (extract) the set of messages that we want to keep.
+	# This set does not contain any duplicated file paths.
+	#
+	jq -r --argjson yes true "$jq_filter" --args "$@" <"$dumpfile"
+}
+
+get_filenames () {
+	# Return the filenames present in the queue given by the 1st
+	# operand.  The messages in the queue are filtered on the access
+	# key from the S3 configuration, unless the "-a" option is
+	# given, in which case all messages are returned.
+
+	OPTIND=1
+	unset -v opt_all
+	while getopts a opt; do
+		case $opt in
+			a)
+				opt_all=true
+				;;
+			*)
+				echo 'Error in command line parsing' >&2
+				exit 1
+		esac
+	done
+	shift "$(( OPTIND - 1 ))"
+
+	queue=$1
+
+	curl --data \
+		'{"count":-1,"encoding":"auto","ackmode":"ack_requeue_true"}' \
+		"$url_queues/$queue/get" |
+	jq -r \
+		--argjson no_filter "${opt_all-false}" \
+		--arg access_key "$S3_ACCESS_KEY" '
+		map(
+			.payload |
+			fromjson |
+			if $no_filter then
+				.filepath
+			else
+				select(
+					.filepath |
+					startswith($access_key + "/")
+				).filepath |
+				sub(".*?/"; "")
+			end
+		) | unique[]'
+}
+
+ingest () {
+	# Ingest the given filenames.  If given a directory path ending
+	# with a slash, ingest all files in or below that path.
+
+	OPTIND=1
+	unset -v opt_all
+	while getopts a opt; do
+		case $opt in
+			a)
+				opt_all=true
+				;;
+			*)
+				echo 'Error in command line parsing' >&2
+				exit 1
+		esac
+	done
+	shift "$(( OPTIND - 1 ))"
+
+	# If no operands are given, list the filenames that may be
+	# processed, then return immediately.
+	#
+	if [ "$#" -eq 0 ]; then
+		get_filenames ${opt_all+-a} inbox
+		return
+	fi
+
+	# Get the messages that we want from the "inbox" queue, then
+	# rewrite them into ingest messages and publish them.
+	#
+	get_messages inbox "$@" |
+	jq -r -R '@base64d | fromjson |
+		.payload |= (
+			fromjson |
+			.type = "ingest" |
+			del(.filesize,.operation) |
+			tojson
+		) |
+		.routing_key = "ingest" |
+		del(.payload_bytes) |
+		@base64' |
+	publish
+}
+
+accession () {
+	# Assign an accession ID to a single ingested file, or assign
+	# multiple accession IDs to several files.
+
+	OPTIND=1
+	unset -v opt_all
+	while getopts a opt; do
+		case $opt in
+			a)
+				opt_all=true
+				;;
+			*)
+				echo 'Error in command line parsing' >&2
+				exit 1
+		esac
+	done
+	shift "$(( OPTIND - 1 ))"
+
+	# If no operands are given, list the filenames that may be
+	# processed, then return immediately.
+	#
+	if [ "$#" -eq 0 ]; then
+		get_filenames ${opt_all+-a} verified
+		return
+	fi
+
+	# We expect either exactly two operands here (one accession
+	# ID and one filename), or three or more operands (one
+	# format string, an inital counter value, and one or several
+	# pathnames).
+	#
+	err=false
+	if [ "$#" -eq 2 ]; then
+		accession_id=$1
+		shift
+
+		# The filename must not end in "/".
+		#
+		case $1 in
+			*/)
+				err=true
+		esac
+	elif [ "$#" -ge 3 ]; then
+		accession_format=$1
+		counter=$2
+		shift 2
+
+		# The format string must contain exactly one "%".
+		#
+		case $accession_format in
+			*%*%*)
+				err=true
+				;;
+			*%*)
+				# Do nothing.
+				;;
+			*)
+				err=true
+		esac
+	else
+		err=true
+	fi
+
+	if "$err"; then
+		usage accession >&2
+		return 1
+	fi
+
+	# Get the messages that we want from the "verified" queue,
+	# figure out a new accession ID (if we're asked to do so),
+	# rewrite them into accession messages, and publish them.
+	#
+	get_messages verified "$@" |
+	while IFS= read -r message; do
+		# If "$accession_format" is set, then we should use that
+		# with "$counter" to calculate the new accession ID.
+		# Otherwise just use "$accession_id" directly.
+		#
+		if [ "${accession_format+set}" = set ]; then
+			# shellcheck disable=SC2059
+			accession_id=$( printf "$accession_format" "$counter" )
+			printf 'Accession ID #%d: %s\n' "$counter" "$accession_id" >&2
+			counter=$(( counter + 1 ))
+		fi
+
+		printf '%s\n' "$message" |
+		jq -r -R --arg accession_id "$accession_id" '
+			@base64d | fromjson |
+			.payload |= (
+				fromjson |
+				.type = "accession" |
+				.accession_id = $accession_id |
+				del(.filesize,.operation) |
+				tojson
+			) |
+			.routing_key = "accession" |
+			del(.payload_bytes) |
+			@base64'
+	done | publish
+}
+
+dataset () {
+	# Collect filenames into datasets.  If a directory path is
+	# given with a slash at the end, all files in or beneath that
+	# directory will be assigned to the given dataset ID.
+
+	OPTIND=1
+	unset -v opt_all
+	while getopts a opt; do
+		case $opt in
+			a)
+				opt_all=true
+				;;
+			*)
+				echo 'Error in command line parsing' >&2
+				exit 1
+		esac
+	done
+	shift "$(( OPTIND - 1 ))"
+
+	# If no operands are given, list the files that may be
+	# processed, then return immediately.
+	#
+	if [ "$#" -eq 0 ]; then
+		get_filenames ${opt_all+-a} completed
+		return
+	fi
+
+	# We expect at least two operands here; one dataset ID and at
+	# least one filename.
+	#
+	if [ "$#" -lt 2 ]; then
+		usage dataset >&2
+		return 1
+	fi
+
+	dataset_id=$1
+	shift
+
+	# Ensure that none of the filenames are empty.
+	for name do
+		if [ -z "$name" ]; then
+			printf '%s: empty filename\n' "$myself" >&2
+			return 1
+		fi
+	done
+
+	# Get the messages that we want from the "completed" queue, and
+	# assign the accession IDs from these to the given dataset ID.
+	#
+	get_messages completed "$@" |
+	jq -r -R -n --arg dataset_id "$dataset_id" '
+		{
+			properties: {
+				delivery_mode: 2,
+				content_encoding: "UTF-8",
+				content_type: "application/json"
+			},
+			routing_key: "mappings",
+			payload: {
+				type: "mapping",
+				dataset_id: $dataset_id,
+				accession_ids: [
+					inputs | @base64d |
+					fromjson.payload |
+					fromjson.accession_id
+				]
+			} | tojson,
+			payload_encoding: "string"
+		} | @base64' |
+	publish
+}
+
+restore () {
+	# Given a JSON dump file with a filename on the form
+	# "<queue>-<n>.json", this function merges the RabbitMQ messages
+	# in that file into the relevant RabbitMQ queue, removing
+	# duplicates based on the filepath in the message payload.  If
+	# there are duplicates, the message from the dump file is given
+	# precedence (on account of being seen first).
+
+	# We expect exactly one operand here; the name of the dump file.
+	# That file must exist.
+	#
+	if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+		usage restore >&2
+		return 1
+	fi
+
+	dumpfile=$1
+
+	queue=$(basename "$dumpfile")
+	queue=${queue%%-*}
+
+	# Verify queue name.
+	#
+	case $queue in
+		inbox|verified|completed)
+			# Do nothing.
+			;;
+		*)
+			printf 'Invalid queue name: %s\n' "$queue" >&2
+			exit 1
+	esac
+
+	# Combine the messages from the dump file with the messages from
+	# the queue, remove any duplicates based on the filepath in the
+	# messages' payload.  Then requeue the merged set of messages.
+	#
+	{
+		cat "$dumpfile" &&
+		curl --data \
+			'{"count":-1,"encoding":"auto","ackmode":"ack_requeue_false"}' \
+			"$url_queues/$queue/get"
+	} |
+	jq -r -s 'flatten(1) | unique_by(.payload | fromjson.filepath)[] | @base64' |
+	publish
+}
+
+usage () {
+	case ${1-} in
+		upload|ingest|accession|dataset|restore)
+			"usage_$1"
+			;;
+		"")
+			usage_general
+			;;
+		*)
+			usage_general >&2
+			return 1
+	esac
+}
+
+usage_general () {
+	cat <<-USAGE_GENERAL
+	General synopsis:
+	    $myself [GLOBAL OPTIONS] [help] {upload|ingest|accession|dataset} [ARGUMENTS]
+
+	Global options:
+	    --mq-credentials user:pass	MQ credentials			Currently: $MQ_CREDENTIALS
+	    --mq-url URL		MQ URL				Currently: $MQ_URL
+	    --mq-exchange	MQ exchange		Currently: $MQ_EXCHANGE
+	    --mq-vhost		MQ vhost		Currently: $MQ_VHOST
+	    --sda-cli pathname		Path for "sda-cli" executable	Currently: $SDA_CLI
+	    --sda-config pathname	SDA S3 configuration file	Currently: $SDA_CONFIG
+	    --sda-key pathname		SDA CRYPT4GH public key file	Currently: $SDA_KEY
+	    --s3-access-key		Override S3 access key		Currently: ${S3_ACCESS_KEY-<unset>}
+	    --user			Alias for "--s3-access-key"
+
+	Specific synopsis:
+	    $myself help
+
+	    $myself [...] upload [-t target-path] pathname [pathname...]
+	    $myself help upload
+
+	    $myself [...] ingest pathname [pathname...]
+	    $myself [...] ingest [-a]
+	    $myself help ingest
+
+	    $myself [...] accession accessionID pathname
+	    $myself [...] accession format start pathname [pathname...]
+	    $myself [...] accession [-a]
+	    $myself help accession
+
+	    $myself [...] dataset datasetID pathname [pathname...]
+	    $myself [...] dataset [-a]
+	    $myself help dataset
+
+	    $myself [...] restore '<queue>-<n>.json'
+	    $myself help restore
+
+	Environment variables:
+
+	    MQ_CREDENTIALS, MQ_URL, MQ_EXCHANGE, MQ_VHOST,
+	    SDA_CLI, SDA_CONFIG, SDA_KEY, S3_ACCESS_KEY
+
+	        These variables corresponds to the similarly named
+	        global options.  The command line options will override
+	        the environment variables.
+
+	USAGE_GENERAL
+}
+
+usage_upload () {
+	cat <<-USAGE_UPLOAD
+	The "upload" sub-command is used for encrypting and uploading
+	one or several files or directories to the configured S3
+	storage's inbox.  Any file or directory given as an operand is
+	uploaded to the top-level of the S3 inbox.  Directories are
+	uploaded recursively and files within them maintain their place
+	in the directory structure rooted at the named directory.
+
+	The "upload" sub-command takes an optional "-t" option whose
+	option-argument will be used as a target directory path beneath
+	the S3 inbox.  The given target path may not contain the
+	substring ".." nor an initial "/".  See examples further down.
+
+	Files are unconditionally re-encrypted.  Any existing encrypted
+	copy of a file will be overwritten.
+
+	This script uses "sda-cli" for encryption and uploading to the
+	S3 storage.  If the "SDA_CLI" environment variable is set, it
+	is assumed to hold the pathname of the "sda-cli" executable.
+	If the "SDA_CLI" variable is unset, the "sda-cli" executable
+	will be located using the user's "PATH" variable, like any other
+	command.
+
+	Example usage:
+
+	    Files may be uploaded one by one or several at once.  The
+	    following two commands encrypts and uploads three files
+	    (this creates or re-creates "file1.c4gh", "file2.c4gh", and
+	    "file3.c4gh").  All three files are placed at the top-level
+	    of the inbox.
+
+	    $myself upload file1 file2
+	    $myself upload dir/file3
+
+	    The following command encrypts and uploads all files in the
+	    "data" subdirectory.  The files will retain their relative
+	    location under a "data" subdirectory in the S3 inbox.
+
+	    $myself upload data
+
+	    Using the "-t" option, the target directory can be set to
+	    some other path under the top-level inbox.  Using e.g. "-t
+	    project/files" with the examples above would have the effect
+	    of displacing the upload to a top-level path "project/files"
+	    directory in the inbox.
+
+	USAGE_UPLOAD
+}
+
+usage_ingest () {
+	cat <<-USAGE_INGEST
+	The "ingest" sub-command is used for ingesting one or several
+	uploaded files.
+
+	If a directory path is specified with a trailing slash, all
+	files in or beneath that directory will be ingested recursively.
+	Specifying an empty string ("") as the pathname will have the
+	effect of ingesting all files in the user's inbox.
+
+	Example usage:
+
+	    Listing the filenames currently in the "inbox" queue waiting
+	    to be ingested:
+
+	    $myself ingest
+
+	    The same as the above, but processing all buckets, not just
+	    the one associated with the configured S3 access key:
+
+	    $myself ingest -a
+
+	    Files may be ingested one by one or several at once.
+	    Ingesting three files:
+
+	    $myself ingest file1 file2
+	    $myself ingest file3
+
+	    Ingesting all files in or beneath the "project/data" path:
+
+	    $myself ingest project/data/
+
+	USAGE_INGEST
+}
+
+usage_accession () {
+	cat <<-USAGE_ACCESSION
+	The "accession" sub-command is used for assigning a specific
+	accession ID to a single file that has previously been ingested,
+	or for assigning a sequence of accession IDs to several ingested
+	files.
+
+	When assigning a sequence of IDs to multiple files, the
+	accession IDs are assigned given a printf format string (which
+	must accept a single integer) and an initial value for an
+	integer counter.  The accession IDs will be assigned to the
+	mentioned files in ascending integer sequence.
+
+	NOTE:   This script does not care about the format of the
+	NOTE:   accession IDs or whether the assigned accession IDs
+	NOTE:   are unique etc.  It is up to the user to ensure that
+	NOTE:   the correct accession IDs are assigned.
+
+	Example usage:
+
+	    Listing the filenames currently in the "verified" queue
+	    waiting to have accession IDs assigned to them:
+
+	    $myself accession
+
+	    The same as the above, but processing all buckets, not just
+	    the one associated with the configured S3 access key:
+
+	    $myself accession -a
+
+	    Accessions are only ever assigned to one file at a time.
+	    Assigning accessions to three files:
+
+	    $myself accession MYID001 file1
+	    $myself accession MYID002 file2
+	    $myself accession MYID003 file3
+
+	    Assigning accessions to three files, giving them the IDs
+	    "MYID001", "MYID002", and "MYID003":
+
+	    $myself accession 'MYID%03d' 1 file1 file2 file3
+
+	    Assigning accession IDs to all files in or beneath the path
+	    "project/data", starting at 123.  The first two accession
+	    IDs will be "PROJ00000123" and "PROJ00000124".  The ordering
+	    in which accession IDs are assigned will depend on the
+	    ordering of the files in the RabbitMQ queue.
+
+	    $myself accession 'PROJ%08d' 123 project/data/
+
+	USAGE_ACCESSION
+}
+
+usage_dataset () {
+	cat <<-USAGE_DATASET
+	The "dataset" sub-command is used for associating one or several
+	files to a single dataset ID.
+
+	If a directory path is given with a slash at the end, all files
+	in or beneath that directory will be associated to the given
+	dataset ID.
+
+	Example usage:
+
+	    Listing the filenames currently in the "completed" queue
+	    waiting to be associated with a dataset ID:
+
+	    $myself dataset
+
+	    The same as the above, but processing all buckets, not just
+	    the one associated with the configured S3 access key:
+
+	    $myself dataset -a
+
+	    Files are associated to dataset IDs one at a time or several
+	    at once.  Associating three files with a dataset ID:
+
+	    $myself dataset MYSET00A file1 file2
+	    $myself dataset MYSET00A file3
+
+	    Associate all files in or beneath the path
+	    "project/data/set1" to a dataset ID:
+
+	    $myself dataset MYSET001 project/data/set1/
+
+	USAGE_DATASET
+}
+
+usage_restore () {
+	cat <<-USAGE_RESTORE
+	The "restore" sub-command is used for restoring the RabbitMQ
+	messages from one of the "<queue>-<n>.json" files that are
+	automatically created by this script.  The messages in the JSON
+	file are added to the messages in the corresponding RabbitMQ
+	queue, but if there are duplicates based on the filepath in
+	the messages' payload, the duplicate(s) from the queue will be
+	dropped.
+
+	Example usage:
+
+	    Restoring the messages from the "inbox-0.json" file (the
+	    most recent backup of the "inbox" queue):
+
+	    $myself restore inbox-0.json
+
+	USAGE_RESTORE
+}
+
+# Handle global options.
+#
+while true; do
+	case ${1-} in
+		--mq-credentials)
+			MQ_CREDENTIALS=$2
+			;;
+		--mq-url)
+			MQ_URL=$2
+			;;
+		--mq-exchange)
+			MQ_EXCHANGE=$2
+			;;
+		--mq-vhost)
+			MQ_VHOST=$2
+			;;
+		--sda-cli)
+			SDA_CLI=$2
+			;;
+		--sda-config)
+			SDA_CONFIG=$2
+			;;
+		--sda-key)
+			SDA_KEY=$2
+			;;
+		--s3-access-key|--user)
+			S3_ACCESS_KEY=$2
+			;;
+		-*)
+			usage >&2
+			exit 1
+			;;
+		*)
+			break
+	esac
+	shift 2
+done
+
+url_api=$MQ_URL/api
+url_exchanges=$url_api/exchanges/$MQ_VHOST/$MQ_EXCHANGE
+url_queues=$url_api/queues/$MQ_VHOST
+
+# Handle S3_ACCESS_KEY.
+#
+if [ "${S3_ACCESS_KEY+set}" != set ] && [ -f "$SDA_CONFIG" ]; then
+	S3_ACCESS_KEY=$(
+		sed	-e '/^access_key[[:blank:]]*=[[:blank:]]*/!d' \
+			-e 's///' -e 's/[[:blank:]]*$//' -e 'q' \
+			"$SDA_CONFIG"
+	)
+fi
+
+# Replace any @ with _ in the S3 access key.
+#
+S3_ACCESS_KEY=$(printf '%s\n' "$S3_ACCESS_KEY" | tr @ _)
+
+# Handle sub-commands.
+#
+case ${1-} in
+	upload|ingest|accession|dataset|restore)
+		# Ensure that S3_ACCESS_KEY is actually set before
+		# trying to use it, or bail out here.
+		#
+		: "${S3_ACCESS_KEY?Missing S3 access key}"
+		"$@"
+		;;
+	help)
+		shift
+		usage "$@" | "${PAGER:-less}"
+		;;
+	*)
+		usage >&2
+		exit 1
+esac
