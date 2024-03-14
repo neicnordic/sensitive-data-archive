@@ -194,7 +194,8 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	if c.Param("type") == "encrypted" {
+	switch c.Param("type") {
+	case "encrypted":
 		// calculate coordinates
 		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
 		if err != nil {
@@ -209,7 +210,7 @@ func Download(c *gin.Context) {
 
 			return
 		}
-	} else {
+	default:
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
 			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
