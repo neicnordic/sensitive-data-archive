@@ -19,6 +19,7 @@ import (
 
 const POSIX = "posix"
 const S3 = "s3"
+const S3seekable = "s3seekable"
 
 // availableMiddlewares list the options for middlewares
 // empty string "" is an alias for default, for when the config key is not set, or it's empty
@@ -166,7 +167,7 @@ func NewConfig() (*Map, error) {
 		"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
 	}
 
-	if viper.GetString("archive.type") == S3 {
+	if viper.GetString("archive.type") == S3 || viper.GetString("archive.type") == S3seekable {
 		requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
 	} else if viper.GetString("archive.type") == POSIX {
 		requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
@@ -287,10 +288,17 @@ func (c *Map) configureOIDC() error {
 // configArchive provides configuration for the archive storage
 // we default to POSIX unless S3 specified
 func (c *Map) configArchive() {
-	if viper.GetString("archive.type") == S3 {
+
+	switch viper.GetString("archive.type") {
+	case S3:
 		c.Archive.Type = S3
 		c.Archive.S3 = configS3Storage("archive")
-	} else {
+
+	case S3seekable:
+		c.Archive.Type = S3seekable
+		c.Archive.S3 = configS3Storage("archive")
+
+	default:
 		c.Archive.Type = POSIX
 		c.Archive.Posix.Location = viper.GetString("archive.location")
 	}
