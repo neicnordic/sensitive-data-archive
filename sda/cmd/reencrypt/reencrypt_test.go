@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"io"
@@ -14,12 +16,14 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -184,4 +188,82 @@ func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
 	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: make([]byte, 0), Publickey: suite.UserPubKeyString})
 	assert.Contains(suite.T(), err.Error(), "no header recieved")
 	assert.Nil(suite.T(), res)
+}
+
+func (suite *ReEncryptTests) TestReencryptHeader_TLS() {
+	certPath := suite.T().TempDir()
+	helper.MakeCerts(certPath)
+	rootCAs := x509.NewCertPool()
+	cacertFile, err := os.ReadFile(certPath + "/ca.crt")
+	if err != nil {
+		suite.T().FailNow()
+	}
+	ok := rootCAs.AppendCertsFromPEM(cacertFile)
+	if !ok {
+		suite.T().FailNow()
+	}
+	certs, err := tls.LoadX509KeyPair(certPath+"/tls.crt", certPath+"/tls.key")
+	if err != nil {
+		suite.T().Log(err.Error())
+		suite.T().FailNow()
+	}
+
+	lis, err := net.Listen("tcp", "localhost:50443")
+	if err != nil {
+		suite.T().FailNow()
+	}
+
+	go func() {
+		serverCreds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				MinVersion:   tls.VersionTLS13,
+				ClientCAs:    rootCAs,
+			},
+		)
+		opts := []grpc.ServerOption{grpc.Creds(serverCreds)}
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: suite.PrivateKey})
+		if err := s.Serve(lis); err != nil {
+			suite.T().Fail()
+		}
+	}()
+
+	clientCreds := credentials.NewTLS(
+		&tls.Config{
+			Certificates: []tls.Certificate{certs},
+			MinVersion:   tls.VersionTLS13,
+			RootCAs:      rootCAs,
+		},
+	)
+	conn, err := grpc.Dial("localhost:50443", grpc.WithTransportCredentials(clientCreds))
+	if err != nil {
+		suite.T().Log(err.Error())
+		suite.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: suite.FileHeader, Publickey: suite.UserPubKeyString})
+	if err != nil {
+		suite.T().Log(err.Error())
+		suite.T().FailNow()
+	}
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), res)
+	assert.Equal(suite.T(), "crypt4gh", string(res.Header[:8]))
+
+	hr := bytes.NewReader(res.Header)
+	fileStream := io.MultiReader(hr, bytes.NewReader(suite.FileData))
+
+	c4gh, err := streaming.NewCrypt4GHReader(fileStream, suite.UserPrivateKey, nil)
+	assert.NoError(suite.T(), err)
+
+	data, err := io.ReadAll(c4gh)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "content", string(data))
 }

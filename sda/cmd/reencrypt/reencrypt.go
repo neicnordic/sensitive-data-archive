@@ -88,7 +88,19 @@ func main() {
 	if conf.ReEncrypt.ServerCert != "" && conf.ReEncrypt.ServerKey != "" {
 		switch {
 		case conf.ReEncrypt.CACert != "":
-			caCerts, _ := x509.SystemCertPool()
+			caFile, err := os.ReadFile(conf.ReEncrypt.CACert)
+			if err != nil {
+				log.Errorf("Failed to read CA certificate: %v", err)
+				sigc <- syscall.SIGINT
+				panic(err)
+			}
+
+			caCert := x509.NewCertPool()
+			if !caCert.AppendCertsFromPEM(caFile) {
+				sigc <- syscall.SIGINT
+				panic("Failed to append ca certificate")
+			}
+
 			serverCert, err := tls.LoadX509KeyPair(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
 				log.Errorf("Failed to parse certificates: %v", err)
@@ -100,8 +112,8 @@ func main() {
 				&tls.Config{
 					Certificates: []tls.Certificate{serverCert},
 					ClientAuth:   tls.RequireAndVerifyClientCert,
-					MinVersion:   tls.VersionTLS12,
-					RootCAs:      caCerts,
+					MinVersion:   tls.VersionTLS13,
+					ClientCAs:    caCert,
 				},
 			)
 			opts = []grpc.ServerOption{grpc.Creds(creds)}

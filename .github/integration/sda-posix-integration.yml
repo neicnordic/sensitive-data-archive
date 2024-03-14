@@ -36,6 +36,29 @@ services:
       - client_certs:/certs
       - shared:/shared
 
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-reencrypt ]
+    container_name: reencrypt
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      credentials:
+        condition: service_completed_successfully
+    environment:
+      - GRPC_CACERT=/certs/ca.crt
+      - GRPC_SERVERCERT=/certs/server.crt
+      - GRPC_SERVERKEY=/certs/server.key
+    ports:
+      - "50443:50443"
+    restart: always
+    user: 1000:1000
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - certs:/certs
+      - client_certs:/client
+      - shared:/shared
+
   cega-nss:
     container_name: cega-nss
     depends_on:
