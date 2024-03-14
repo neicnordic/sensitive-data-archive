@@ -194,10 +194,8 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	// Calculate the content length
-	contentLength := fileDetails.DecryptedSize
 	if c.Param("type") == "encrypted" {
-		contentLength = fileDetails.ArchiveSize
+		// calculate coordinates
 		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
 		if err != nil {
 			log.Errorf("Byte range coordinates invalid! %v", err)
@@ -206,19 +204,20 @@ func Download(c *gin.Context) {
 		}
 		if start > 0 {
 			// reading from an offset in encrypted file is not yet supported
-			c.Header("Content-Length", "0")
 			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
 			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
 
 			return
 		}
-	}
-	if start == 0 && end == 0 {
-		c.Header("Content-Length", fmt.Sprint(contentLength))
 	} else {
-		// Calculate how much we should read (if given)
-		togo := end - start
-		c.Header("Content-Length", fmt.Sprint(togo))
+		// set the content-length for unencrypted files
+		if start == 0 && end == 0 {
+			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
+		} else {
+			// Calculate how much we should read (if given)
+			togo := end - start
+			c.Header("Content-Length", fmt.Sprint(togo))
+		}
 	}
 
 	// Get archive file handle
@@ -249,6 +248,8 @@ func Download(c *gin.Context) {
 	if c.Request.Method == http.MethodHead {
 
 		if c.Param("type") == "encrypted" {
+			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
+
 			// set the length of the crypt4gh header for htsget
 			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
 			// TODO figure out if client crypt4gh header will have other size
