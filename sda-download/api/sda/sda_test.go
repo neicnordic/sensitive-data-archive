@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/internal/config"
@@ -503,4 +504,51 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 
+}
+
+func TestEncrypted_Coords(t *testing.T) {
+	var to, from int64
+	from, to = 0, 1000
+	fileDetails := &database.FileDownload{
+		ArchivePath: "non-existant-file.txt",
+		ArchiveSize: 2000,
+		Header:      make([]byte, 124),
+	}
+
+	//	htsget_range should be used first and as is
+	headerSize := bytes.NewReader(fileDetails.Header).Size()
+	fullSize := headerSize + int64(fileDetails.ArchiveSize)
+	start, end, err := calculateEncryptedCoords(from, to, "bytes=10-20", fileDetails)
+	assert.Equal(t, start, int64(10))
+	assert.Equal(t, end, int64(20))
+	assert.NoError(t, err)
+
+	// end should be greater than or equal to inputted end
+	_, end, err = calculateEncryptedCoords(from, to, "", fileDetails)
+	assert.GreaterOrEqual(t, end, from)
+	assert.NoError(t, err)
+
+	// end should not be smaller than a header
+	_, end, err = calculateEncryptedCoords(from, headerSize-10, "", fileDetails)
+	assert.GreaterOrEqual(t, end, headerSize)
+	assert.NoError(t, err)
+
+	// end should not be larger than file length + header
+	_, end, err = calculateEncryptedCoords(from, fullSize+1900, "", fileDetails)
+	assert.Equal(t, fullSize, end)
+	assert.NoError(t, err)
+
+	// range 0-0 should give whole file
+	start, end, err = calculateEncryptedCoords(0, 0, "", fileDetails)
+	assert.Equal(t, end-start, fullSize)
+	assert.NoError(t, err)
+
+	// range 0-0 with range in the header should return the range size
+	_, end, err = calculateEncryptedCoords(0, 0, "bytes=0-1000", fileDetails)
+	assert.Equal(t, end, int64(1000))
+	assert.NoError(t, err)
+
+	// range in the header should return error if values are not numbers
+	_, _, err = calculateEncryptedCoords(0, 0, "bytes=start-end", fileDetails)
+	assert.Error(t, err)
 }

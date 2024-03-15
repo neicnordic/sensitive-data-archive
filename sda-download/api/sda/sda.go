@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -166,6 +167,60 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	// Get query params
+	qStart := c.DefaultQuery("startCoordinate", "0")
+	qEnd := c.DefaultQuery("endCoordinate", "0")
+
+	// Parse and verify coordinates are valid
+	start, err := strconv.ParseInt(qStart, 10, 0)
+
+	if err != nil {
+		log.Errorf("failed to convert start coordinate %d to integer, %s", start, err)
+		c.String(http.StatusBadRequest, "startCoordinate must be an integer")
+
+		return
+	}
+	end, err := strconv.ParseInt(qEnd, 10, 0)
+	if err != nil {
+		log.Errorf("failed to convert end coordinate %d to integer, %s", end, err)
+		c.String(http.StatusBadRequest, "endCoordinate must be an integer")
+
+		return
+	}
+	if end < start {
+		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", end, start)
+		c.String(http.StatusBadRequest, "endCoordinate must be greater than startCoordinate")
+
+		return
+	}
+
+	switch c.Param("type") {
+	case "encrypted":
+		// calculate coordinates
+		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
+		if err != nil {
+			log.Errorf("Byte range coordinates invalid! %v", err)
+
+			return
+		}
+		if start > 0 {
+			// reading from an offset in encrypted file is not yet supported
+			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
+			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
+
+			return
+		}
+	default:
+		// set the content-length for unencrypted files
+		if start == 0 && end == 0 {
+			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
+		} else {
+			// Calculate how much we should read (if given)
+			togo := end - start
+			c.Header("Content-Length", fmt.Sprint(togo))
+		}
+	}
+
 	// Get archive file handle
 	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
 	if err != nil {
@@ -188,61 +243,56 @@ func Download(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
 		c.Header("ETag", fileDetails.DecryptedChecksum)
 		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
+
 	}
 
 	if c.Request.Method == http.MethodHead {
 
+		if c.Param("type") == "encrypted" {
+			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
+
+			// set the length of the crypt4gh header for htsget
+			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
+			// TODO figure out if client crypt4gh header will have other size
+			// c.Header("Client-Additional-Bytes", ...)
+		}
+
 		return
 	}
 
+	// Prepare the file for streaming, encrypted or decrypted
+	var encryptedFileReader io.Reader
+	var fileStream io.Reader
 	hr := bytes.NewReader(fileDetails.Header)
-	mr := io.MultiReader(hr, file)
-	c4ghr, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
-	if err != nil {
-		log.Errorf("could not prepare file for streaming, %s", err)
-		c.String(http.StatusInternalServerError, "file stream error")
+	encryptedFileReader = io.MultiReader(hr, file)
 
-		return
-	}
-	defer c4ghr.Close()
+	switch c.Param("type") {
+	case "encrypted":
+		fileStream = encryptedFileReader
 
-	// Get query params
-	qStart := c.DefaultQuery("startCoordinate", "0")
-	qEnd := c.DefaultQuery("endCoordinate", "0")
+	default:
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
+		defer c4ghfileStream.Close()
+		if err != nil {
+			log.Errorf("could not prepare file for streaming, %s", err)
+			c.String(http.StatusInternalServerError, "file stream error")
 
-	// Parse and verify coordinates are valid
-	start, err := strconv.ParseInt(qStart, 10, 0)
-	if err != nil {
-		log.Errorf("failed to convert start coordinate %d to integer, %s", start, err)
-		c.String(http.StatusBadRequest, "startCoordinate must be an integer")
+			return
+		}
+		if start != 0 {
+			// We don't want to read from start, skip ahead to where we should be
+			_, err = c4ghfileStream.Seek(start, 0)
+			if err != nil {
+				log.Errorf("error occurred while finding sending start: %v", err)
+				c.String(http.StatusInternalServerError, "an error occurred")
 
-		return
-	}
-	end, err := strconv.ParseInt(qEnd, 10, 0)
-	if err != nil {
-		log.Errorf("failed to convert end coordinate %d to integer, %s", end, err)
-
-		c.String(http.StatusBadRequest, "endCoordinate must be an integer")
-
-		return
-	}
-	if end < start {
-		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", end, start)
-
-		c.String(http.StatusBadRequest, "endCoordinate must be greater than startCoordinate")
-
-		return
+				return
+			}
+		}
+		fileStream = c4ghfileStream
 	}
 
-	if start == 0 && end == 0 {
-		c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
-	} else {
-		// Calculate how much we should read (if given)
-		togo := end - start
-		c.Header("Content-Length", fmt.Sprint(togo))
-	}
-
-	err = sendStream(c4ghr, c.Writer, start, end)
+	err = sendStream(fileStream, c.Writer, start, end)
 	if err != nil {
 		log.Errorf("error occurred while sending stream: %v", err)
 		c.String(http.StatusInternalServerError, "an error occurred")
@@ -251,16 +301,8 @@ func Download(c *gin.Context) {
 	}
 }
 
-// sendStream
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
-var sendStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWriter, start, end int64) error {
-
-	if start != 0 {
-		// We don't want to read from start, skip ahead to where we should be
-		if _, err := reader.Seek(start, 0); err != nil {
-			return err
-		}
-	}
+var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end int64) error {
 
 	// Calculate how much we should read (if given)
 	togo := end - start
@@ -304,4 +346,40 @@ var sendStream = func(reader *streaming.Crypt4GHReader, writer http.ResponseWrit
 	}
 
 	return nil
+}
+
+// Calculates the start and end coordinats to use. If a range is set in HTTP headers,
+// it will be used as is. If not, the functions parameters will be used,
+// and adjusted to match the data block boundaries of the encrypted file.
+var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64, error) {
+	if htsget_range != "" {
+		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
+		if len(startEnd) > 1 {
+			a, err := strconv.ParseInt(startEnd[0], 10, 64)
+			if err != nil {
+				return 0, 0, err
+			}
+			b, err := strconv.ParseInt(startEnd[1], 10, 64)
+			if err != nil {
+				return 0, 0, err
+			}
+			if a > b {
+				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
+			}
+
+			return a, b, nil
+		}
+	}
+	// Adapt end coordinate to follow the crypt4gh block boundaries
+	headlength := bytes.NewReader(fileDetails.Header)
+	bodyEnd := int64(fileDetails.ArchiveSize)
+	if end > 0 {
+		var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
+		togo := end - start
+		bodysize := math.Max(float64(togo-headlength.Size()), 0)
+		endCoord := packageSize * math.Ceil(bodysize/packageSize)
+		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
+	}
+
+	return start, headlength.Size() + bodyEnd, nil
 }
