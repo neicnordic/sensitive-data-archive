@@ -275,9 +275,9 @@ Create chart name and version as used by the chart label.
 
 {{- define "authRedirect" -}}
 {{- if .Values.global.tls.enabled }}
-  {{- printf "https://%s/elixir/login" .Values.global.ingress.hostName.auth }}
+  {{- printf "https://%s/oidc/login" .Values.global.ingress.hostName.auth }}
 {{- else }}
-  {{- printf "http://%s/elixir/login" .Values.global.ingress.hostName.auth }}
+  {{- printf "http://%s/oidc/login" .Values.global.ingress.hostName.auth }}
 {{- end -}}
 {{- end -}}
 
