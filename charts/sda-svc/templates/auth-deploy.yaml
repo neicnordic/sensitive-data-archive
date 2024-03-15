@@ -143,12 +143,14 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
+        {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
         - name: OIDC_REDIRECTURL
           value: {{ template "authRedirect" .}}
         - name: OIDC_PROVIDER
           value: "{{ .Values.global.oidc.provider }}"
         - name: OIDC_JWKPATH
           value: {{ .Values.global.oidc.jwkPath | quote }}
+        {{- end }}
         {{- if .Values.global.tls.enabled}}
         - name: SERVER_CERT
           value: {{ template "tlsPath" . }}/tls.crt
