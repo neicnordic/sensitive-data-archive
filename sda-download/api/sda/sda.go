@@ -2,6 +2,7 @@ package sda
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,8 +18,11 @@ import (
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
+	re "github.com/neicnordic/sda-download/internal/reencrypt"
 	"github.com/neicnordic/sda-download/internal/storage"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var Backend storage.Backend
@@ -27,6 +31,31 @@ func sanitizeString(str string) string {
 	var pattern = regexp.MustCompile(`(https?://[^\s/$.?#].[^\s]+|[A-Za-z0-9-_:.]+)`)
 
 	return pattern.ReplaceAllString(str, "[identifier]: $1")
+}
+
+func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial("reencrypt:50051", opts...)
+	if err != nil {
+		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+		return nil, err
+	}
+	defer conn.Close()
+	log.Debugf("Connection to the reencrypt service established, conn = %v", conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	log.Debugf("client created, c = %v", c)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
+	if err != nil {
+		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
+		return nil, err
+	}
+	log.Debugf("Response from the reencrypt service: %v", res)
+	return res.Header, nil
 }
 
 // Datasets serves a list of permitted datasets
@@ -268,19 +297,31 @@ func Download(c *gin.Context) {
 	var encryptedFileReader io.Reader
 	var fileStream io.Reader
 	hr := bytes.NewReader(fileDetails.Header)
+	encryptedFileReader = io.MultiReader(hr, file)
 
 	switch c.Param("type") {
 	case "encrypted":
 		fileStream = encryptedFileReader
+		// The key provided in the header should be base64 encoded
 		reencKey := c.GetHeader("Client-Public-Key")
 		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
 			reencKey = c.GetHeader("Server-Public-Key")
 		}
-		newHeader := reencryptionServer.reencrypt(reencKey, hr)
-		encryptedFileReader = io.MultiReader(newHeader, file)
+		if reencKey == "" {
+			fileStream = encryptedFileReader
+		} else {
+			log.Debugf("Public key from the request header = %v", reencKey)
+			log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
+			newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+			if err != nil {
+				log.Errorf("Failed to reencrypt the file header, reason: %v\n", err)
+			}
+			log.Debugf("Reencrypted c4gh file header = %v", newHeader)
+			newHr := bytes.NewReader(newHeader)
+			fileStream = io.MultiReader(newHr, file)
+		}
 
 	default:
-		encryptedFileReader = io.MultiReader(hr, file)
 		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
