@@ -93,10 +93,10 @@ func setup(config *config.Config) *http.Server {
 		Handler:           r,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      -1,
 		IdleTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 3 * time.Second,
+		ReadHeaderTimeout: 20 * time.Second,
 	}
 
 	return srv
