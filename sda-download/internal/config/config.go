@@ -29,11 +29,12 @@ var Config Map
 
 // ConfigMap stores all different configs
 type Map struct {
-	App     AppConfig
-	Session SessionConfig
-	DB      DatabaseConfig
-	OIDC    OIDCConfig
-	Archive storage.Conf
+	App       AppConfig
+	Session   SessionConfig
+	DB        DatabaseConfig
+	OIDC      OIDCConfig
+	Archive   storage.Conf
+	Reencrypt ReencryptConfig
 }
 
 type AppConfig struct {
@@ -138,6 +139,14 @@ type DatabaseConfig struct {
 	ClientKey string
 }
 
+type ReencryptConfig struct {
+	Host       string
+	Port       int
+	CACert     string
+	ServerCert string
+	ServerKey  string
+}
+
 // NewConfig populates ConfigMap with data
 func NewConfig() (*Map, error) {
 	viper.SetConfigName("config")
@@ -200,6 +209,9 @@ func NewConfig() (*Map, error) {
 	c.applyDefaults()
 	c.sessionConfig()
 	c.configArchive()
+	if viper.IsSet("reencrypt.host") {
+		c.configReencrypt()
+	}
 	err := c.configureOIDC()
 	if err != nil {
 		return nil, err
@@ -293,6 +305,20 @@ func (c *Map) configArchive() {
 	} else {
 		c.Archive.Type = POSIX
 		c.Archive.Posix.Location = viper.GetString("archive.location")
+	}
+}
+
+func (c *Map) configReencrypt() {
+	c.Reencrypt.Host = viper.GetString("reencrypt.host")
+	c.Reencrypt.Port = viper.GetInt("reencrypt.port")
+	if viper.IsSet("grpc.cacert") {
+		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
+	}
+	if viper.IsSet("grpc.servercert") {
+		c.Reencrypt.ServerCert = viper.GetString("grpc.servercert")
+	}
+	if viper.IsSet("grpc.serverkey") {
+		c.Reencrypt.ServerKey = viper.GetString("grpc.serverkey")
 	}
 }
 
