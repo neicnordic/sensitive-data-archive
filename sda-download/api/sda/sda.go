@@ -36,9 +36,11 @@ func sanitizeString(str string) string {
 func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	hostname := config.Config.Reencrypt.Host + ":" + fmt.Sprint(config.Config.Reencrypt.Port)
-	log.Debugf("hostname of the reencrypt service: %s", hostname)
-	conn, err := grpc.Dial(hostname, opts...)
+
+	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
+	log.Debugf("Address of the reencrypt service: %s", address)
+
+	conn, err := grpc.Dial(address, opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
 		return nil, err
@@ -50,7 +52,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	defer cancel()
 
 	c := re.NewReencryptClient(conn)
-	log.Debugf("client created, c = %v", c)
+	log.Debugf("Client created, c = %v", c)
 	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
 	if err != nil {
 		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
