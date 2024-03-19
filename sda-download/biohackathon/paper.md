@@ -151,13 +151,12 @@ sequenceDiagram
  ```
 
 
-## Bits and bobs
+## Extra updates
 
- * Updated the htsget starter-kit to use the htsget-rs
- * Enhanced sda-cli with a htsget command
- * Drank lots of coffee
- * Found and fixed a bunch of bugs.
- * Started implementing native support for crypt4gh in htsget-rs
+Two docker compose files were developed in order to include the whole infrastructure for the sensitive data archive and the htsget-rs version. These compose files allow the users to make requests to the htsget and get the response with the parts of the data that the client then can download and assemble them.
+
+The Sensitive Data Archive Command Line Interface (sda-cli) has a demo version of the htsget command.
+This command, when provided with the public key of a user and (potentially) a region for a file, it makes the request to htsget, retrieves the results, requests the particular regions from the sda-download and then assembles these parts together.
 
 
 # Conclusions and Future work
@@ -173,6 +172,8 @@ To address this, the htsget-rs was extended to support access to encrypted data 
 by implementing the crypt4gh and enabling support for crypt4gh edit lists. The sda-download service was also
 extended to support re-encryption of requested files and we aim to implement as well the authentication of requests/tickets
 so that the sda-download service can trust that a request came from the htsget-rs service as well as removing unnecessary bytes from the file. We also aim for a showcase where an encrypted file will be read over the htsget protocol.
+
+Furthermore, there are two more focus areas for future development. First, we plan to implement random access of file in sda-download service and second, we aim to extend the sda-cli to generate a key and send the public part when making a request to htsget.
 
 
 # GitHub repositories
