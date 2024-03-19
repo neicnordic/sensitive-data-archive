@@ -42,12 +42,6 @@ jobs:
       contents: read
       packages: write
     steps:
-      - id: string-github-repo
-        name: Check String
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ steps.string-github-repo.outputs.lowercase }}
-
       - name: Check out the repo
         uses: actions/checkout@v4
 
@@ -61,34 +55,34 @@ jobs:
       - name: Pull PR containers
         run : |
           for t in -download -postgres -rabbitmq -sftp-inbox; do
-            docker pull ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}$t
+            docker pull ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}$t
           done
-          docker pull ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}
+          docker pull ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}
 
       - name: Retag PR image for download
         run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-download ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-download
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-download
+          docker tag ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}-download ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-download
+          docker push ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-download
 
       - name: Retag PR image for postgres
         run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-postgres ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-postgres
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-postgres
+          docker tag ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}-postgres ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-postgres
+          docker push ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-postgres
 
       - name: Retag PR image for rabbitmq
         run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-rabbitmq ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-rabbitmq
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-rabbitmq
+          docker tag ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}-rabbitmq ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-rabbitmq
+          docker push ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-rabbitmq
 
       - name: Retag PR image for sftp-inbox
         run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-sftp-inbox ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-sftp-inbox
+          docker tag ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }}-sftp-inbox ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-sftp-inbox
+          docker push ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}-sftp-inbox
 
       - name: Retag PR image for sensitive-data-archive
         run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }} ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}
+          docker tag ghcr.io/biobanklab/sensitive-data-archive:PR${{ github.event.number }} ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}
+          docker push ghcr.io/biobanklab/sensitive-data-archive:${{ needs.tag_release.outputs.tag }}
 
   bump_chart_version:
     needs: [tag_release, push_to_registry]
