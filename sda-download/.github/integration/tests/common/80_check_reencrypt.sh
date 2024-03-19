@@ -33,19 +33,22 @@ if [ "$file_size" -ne "$expected_size" ]; then
     exit 1
 fi
 
-C4GH_PASSPHRASE=strongpass # passphrase for the client crypt4gh key
-export C4GH_PASSPHRASE
+export C4GH_PASSPHRASE=strongpass # passphrase for the client crypt4gh key
 
 # test reencrypt the file header with the client public key 
 clientkey=$(base64 -w0 client.pub.pem)
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output reencrypted.bam
-if [ ! -f "reencrypted.bam" ]; then
+reencryptedFile=reencrypted.bam.c4gh
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $reencryptedFile
+if [ ! -f "$reencryptedFile" ]; then
     echo "Failed to reencrypt the header of the file from sda-download"
     exit 1
 fi
 
+file_size_rec=$(stat -c %s $reencryptedFile)
+echo "Size of $reencryptedFile: $file_size_rec"
+
 # descrypt the reencrypted file
-if ! crypt4gh decrypt --sk client.sec.pem < reencrypted.bam > full2.bam; then
+if ! crypt4gh decrypt --sk client.sec.pem < $reencryptedFile > full2.bam; then
     echo "Failed to descrypt the reencrypted BAM file with the client public key"
     exit 1
 fi
@@ -56,4 +59,4 @@ if ! cmp --silent full1.bam full2.bam; then
 fi
 
 # Clean up
-rm full1.bam reencrypted.bam full2.bam
+rm full1.bam reencrypted.bam.c4gh full2.bam
