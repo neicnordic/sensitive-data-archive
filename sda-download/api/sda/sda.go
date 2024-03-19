@@ -48,6 +48,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	conn, err := grpc.Dial(address, opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+
 		return nil, err
 	}
 	defer conn.Close()
@@ -61,9 +62,11 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
 	if err != nil {
 		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
+
 		return nil, err
 	}
 	log.Debugf("Response from the reencrypt service: %v", res)
+
 	return res.Header, nil
 }
 
@@ -310,7 +313,6 @@ func Download(c *gin.Context) {
 
 	switch c.Param("type") {
 	case "encrypted":
-		fileStream = encryptedFileReader
 		// The key provided in the header should be base64 encoded
 		reencKey := c.GetHeader("Client-Public-Key")
 		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
