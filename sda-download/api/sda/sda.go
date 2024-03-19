@@ -34,12 +34,17 @@ func sanitizeString(str string) string {
 }
 
 func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
+	if config.Config.Reencrypt.Host == "" {
+		return nil, fmt.Errorf("host of the reencrypt service not set")
+	} else if config.Config.Reencrypt.Port == 0 {
+		return nil, fmt.Errorf("port of the reencrypt service not set")
+	}
 	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
 	log.Debugf("Address of the reencrypt service: %s", address)
 
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
 	conn, err := grpc.Dial(address, opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
@@ -318,7 +323,7 @@ func Download(c *gin.Context) {
 			log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
 			newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
 			if err != nil {
-				log.Errorf("Failed to reencrypt the file header, reason: %v\n", err)
+				log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			}
 			log.Debugf("Reencrypted c4gh file header = %v", newHeader)
 			newHr := bytes.NewReader(newHeader)
