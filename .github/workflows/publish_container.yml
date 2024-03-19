@@ -65,11 +65,6 @@ jobs:
           done
           docker pull ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}
 
-      - name: Retag PR image for auth
-        run: |
-          docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-auth ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-auth
-          docker push ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-auth
-
       - name: Retag PR image for download
         run: |
           docker tag ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:PR${{ github.event.number }}-download ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:${{ needs.tag_release.outputs.tag }}-download
