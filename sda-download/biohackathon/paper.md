@@ -34,7 +34,7 @@ authors:
   - name: Marko Malenic
     orcid: 0009-0007-3824-8449
     affiliation: 4
-    
+
 affiliations:
  - name: CSC – IT CENTER FOR SCIENCE, Espoo, Finland
     index: 1
@@ -42,7 +42,7 @@ affiliations:
     index: 2
   - name: National Bioinformatics Infrastructure Sweden (NBIS), Uppsala University, SciLifeLab, ICM - Department of Cell and Molecular Biology, Uppsala, Sweden.
     index: 3
-  - name: University of Melbourne, Melbourne, AU 
+  - name: University of Melbourne, Melbourne, AU
     index: 4
 date: 14 March 2024
 cito-bibliography: paper.bib
@@ -51,14 +51,15 @@ biohackathon_name: "BioHackathon Europe"
 biohackathon_url:   "https://2023.biohackathon-europe.org/"
 biohackathon_location: "Barcelona, Spain, 2023"
 group: Life Sciences
-git_url: https://github.com/<wherever-the-paper.md-will-be> 
+git_url: https://github.com/<wherever-the-paper.md-will-be>
 authors_short: Johan Viklund, Stefan Negru & Dimitrios Bambalikis \emph{et al.}
 ---
+
 
 # Introduction
 
 The European Genome-phenome Archive (EGA) [@EGA] and it's extension the
-Federated EGA (FEGA) (@FEGA) are services for archiving and sharing personally
+Federated EGA (FEGA) [@FEGA] are services for archiving and sharing personally
 identifiable genetic and phenotypic data, while The Genomic Data Infrastructure
 (GDI) [@GDI] project is enabling secondary use of genomic and phenotypic
 clinical data across Europe. Both projects are focused on creating federated
@@ -91,17 +92,14 @@ We also aimed to extend already existing client tools so they can access
 encrypted data over the htsget protocol using GA4GH Passport and Visa standard,
 which enhances the security of the data access interfaces.
 
+
 # Results
-In order to achieve the project goals, our plan is to focus on modifications of
-the sda-download service of the NeIC nordic sensitive data archiving suite in order
-to serve encrypted files by creating endpoint and adding function in the archive for
-returning encrypted files.
-**TODO**
-* creating endpoint for encrypted files
-* return an encrypted file and download service can deal with those encrypted files
+
+In order to achieve the project goals, both htsget-rs and sda-download need to be externted.
+The following sections describe the work done on each of the services.
+
 
 ## HTSGet
-
 
 In order to enable for random data access on encrypted files, we worked on
 extending htsget-rs [@htsget-rs] to work with the new version of the sda-download.
@@ -128,16 +126,16 @@ sequenceDiagram
     Download API->>Htsget Client: re-encrypted file
 ```
 
+
 ## Extend sda-download to support re-encryption
 
-
-We also extended the sda-download service to support re-encryption of
-requested files. This so the user can get files encrypted with their own
-keypair instead of just plain unencrypted files. Since we don't want to keep
-the archive secret key in a service that is available directly from the
-internet we have implemented a small microservice (gRPC Server in the diagram)
-that recieves the encrypted header and a public key and re-encrypts and sends
-it back.
+We also extended the functionality of the sda-download service to support re-encryption of
+requested files. This allows users to get files that are encrypted with their own
+keypair instead of receiving just plain unencrypted files. To ensure the security of
+the archive secret key (avoid to keep it in a service that is available directly from the
+internet) we have implemented a small microservice (gRPC Server in the diagram)
+that recieves the encrypted header and a public key, re-encrypts the file, and sends
+it back to the user.
 
 
  ```mermaid
@@ -155,13 +153,11 @@ sequenceDiagram
 
 ## Bits and bobs
 
-
  * Updated the htsget starter-kit to use the htsget-rs
  * Enhanced sda-cli with a htsget command
  * Drank lots of coffee
  * Found and fixed a bunch of bugs.
  * Started implementing native support for crypt4gh in htsget-rs
-
 
 
 # Conclusions and Future work
@@ -171,10 +167,13 @@ htsget protocol for bioinformatics in Rust from the University of Melbourne (Cen
 This in person collaboration helped on identifying the needs and closely work together on developing the sda-download and
 htsget server on meeting those needs and moving towards achieving the project goal.
 
-We aim to implement the crypt4gh in the htsget-ts server and to enable support for crypt4gh edit lists.
-The authontication of requests/tickets need to be implemented so that the sda-download service can trust
-that a request came from the htsget-rs service as well as removing unnecesarry bytes from the file.
-We also aim for a showcase where an encrypted file will be read over the htsget protocol.
+The project was focused on improving the data access part of the sensitive data archive infrastructure. The existing process
+of data access was cumbersome: user receiving the whole file even when only a small part of it was needed.
+To address this, the htsget-rs was extended to support access to encrypted data and it is planned to extend it further
+by implementing the crypt4gh and enabling support for crypt4gh edit lists. The sda-download service was also
+extended to support re-encryption of requested files and we aim to implement as well the authentication of requests/tickets
+so that the sda-download service can trust that a request came from the htsget-rs service as well as removing unnecessary bytes from the file. We also aim for a showcase where an encrypted file will be read over the htsget protocol.
+
 
 # GitHub repositories
 
@@ -185,12 +184,14 @@ We also aim for a showcase where an encrypted file will be read over the htsget 
 * [neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 * [NBISweden/sda-cli](https://github.com/NBISweden/sda-cli)
 
+
 # Acknowledgements
 
 We thank the organizers of the BioHackathon-Europe 2023 for the travel support and for the well planned event.
 
 TODO Copy from last paper
 Please always remember to acknowledge the BioHackathon, CodeFest, VoCamp, Sprint or similar where this work was (partially) developed.
+
 
 # References
 
