@@ -66,7 +66,7 @@ clinical data across Europe. Both projects are focused on creating federated
 and secure infrastructure for researchers to archive and share data with the
 research community, to support further research. In the nordics we collaborate
 on a sofware suite under the Nordic e-Infrastructure Collaboration(NeIC) [@NEIC]
-umbrella called the Sensitive Data Archive [@ref] to support these efforts.
+umbrella called the Sensitive Data Archive to support these efforts.
 
 
 This project was focused on the data access part of the infrastructure. The
@@ -188,9 +188,6 @@ so that the sda-download service can trust that a request came from the htsget-r
 # Acknowledgements
 
 We thank the organizers of the BioHackathon-Europe 2023 for the travel support and for the well planned event.
-
-TODO Copy from last paper
-Please always remember to acknowledge the BioHackathon, CodeFest, VoCamp, Sprint or similar where this work was (partially) developed.
 
 
 # References
