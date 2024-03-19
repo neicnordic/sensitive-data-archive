@@ -132,7 +132,7 @@ func main() {
 					continue
 				}
 
-				log.Debug("Forward message to \"foam_integration\"")
+				log.Debug("Forward message to \"foam_integration\" queue")
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "foam_integration", delivered.Body); err != nil {
 					log.Errorln("We need to fix this resend stuff ...")
 				}
