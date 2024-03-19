@@ -13,8 +13,8 @@ MQ_URL=${MQ_URL-http://localhost:15672}			# --mq-url URL
 MQ_EXCHANGE=${MQ_EXCHANGE-sda}		# --mq-exchange string
 MQ_VHOST=${MQ_VHOST-sda}			# --mq-vhost string
 
-SDA_CONFIG=${SDA_CONFIG-s3cmd.conf}			# --sda-config pathname
-SDA_KEY=${SDA_KEY-crypt4gh_key.pub}			# --sda-key pathname
+S3_CONFIG=${S3_CONFIG-s3cmd.conf}			# --sda-config pathname
+C4GH_PUB_KEY=${C4GH_PUB_KEY-crypt4gh_key.pub}			# --sda-key pathname
 
 # Allow a user to use the environment variable "SDA_CLI" to point
 # directly to the "sda-cli" executable.  If this environment variable is
@@ -22,7 +22,7 @@ SDA_KEY=${SDA_KEY-crypt4gh_key.pub}			# --sda-key pathname
 SDA_CLI=${SDA_CLI-sda-cli}	# --sda-cli pathname
 
 # There is also S3_ACCESS_KEY (--s3-access-key and its alias, --user),
-# but since its value depends on the final value of "$SDA_CONFIG", we
+# but since its value depends on the final value of "$S3_CONFIG", we
 # can't set it here.
 
 encrypt () {
@@ -77,7 +77,7 @@ encrypt () {
 	# If there are files to encrypt, encrypt them.
 	#
 	if [ "$#" -gt 0 ]; then
-		"$SDA_CLI" encrypt -key "$SDA_KEY" "$@"
+		"$SDA_CLI" encrypt -key "$C4GH_PUB_KEY" "$@"
 	fi
 }
 
@@ -168,7 +168,7 @@ upload () {
 	#
 	if [ "$#" -gt 0 ]; then
 		"$SDA_CLI" upload \
-			-config "$SDA_CONFIG" \
+			-config "$S3_CONFIG" \
 			${target_dir+-targetDir "$target_dir"} \
 			"$@"
 	fi
@@ -651,8 +651,8 @@ usage_general () {
 	    --mq-exchange	MQ exchange		Currently: $MQ_EXCHANGE
 	    --mq-vhost		MQ vhost		Currently: $MQ_VHOST
 	    --sda-cli pathname		Path for "sda-cli" executable	Currently: $SDA_CLI
-	    --sda-config pathname	SDA S3 configuration file	Currently: $SDA_CONFIG
-	    --sda-key pathname		SDA CRYPT4GH public key file	Currently: $SDA_KEY
+	    --s3-config pathname	S3 configuration file	Currently: $S3_CONFIG
+	    --c4gh-pub-key pathname		CRYPT4GH public key file	Currently: $C4GH_PUB_KEY
 	    --s3-access-key		Override S3 access key		Currently: ${S3_ACCESS_KEY-<unset>}
 	    --user			Alias for "--s3-access-key"
 
@@ -681,7 +681,7 @@ usage_general () {
 	Environment variables:
 
 	    MQ_CREDENTIALS, MQ_URL, MQ_EXCHANGE, MQ_VHOST,
-	    SDA_CLI, SDA_CONFIG, SDA_KEY, S3_ACCESS_KEY
+	    SDA_CLI, S3_CONFIG, C4GH_PUB_KEY, S3_ACCESS_KEY
 
 	        These variables corresponds to the similarly named
 	        global options.  The command line options will override
@@ -903,10 +903,10 @@ while true; do
 			SDA_CLI=$2
 			;;
 		--sda-config)
-			SDA_CONFIG=$2
+			S3_CONFIG=$2
 			;;
 		--sda-key)
-			SDA_KEY=$2
+			C4GH_PUB_KEY=$2
 			;;
 		--s3-access-key|--user)
 			S3_ACCESS_KEY=$2
@@ -927,11 +927,11 @@ url_queues=$url_api/queues/$MQ_VHOST
 
 # Handle S3_ACCESS_KEY.
 #
-if [ "${S3_ACCESS_KEY+set}" != set ] && [ -f "$SDA_CONFIG" ]; then
+if [ "${S3_ACCESS_KEY+set}" != set ] && [ -f "$S3_CONFIG" ]; then
 	S3_ACCESS_KEY=$(
 		sed	-e '/^access_key[[:blank:]]*=[[:blank:]]*/!d' \
 			-e 's///' -e 's/[[:blank:]]*$//' -e 'q' \
-			"$SDA_CONFIG"
+			"$S3_CONFIG"
 	)
 fi
 
