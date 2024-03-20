@@ -13,8 +13,8 @@ MQ_URL=${MQ_URL-http://localhost:15672}			# --mq-url URL
 MQ_EXCHANGE=${MQ_EXCHANGE-sda}		# --mq-exchange string
 MQ_VHOST=${MQ_VHOST-sda}			# --mq-vhost string
 
-S3_CONFIG=${S3_CONFIG-s3cmd.conf}			# --sda-config pathname
-C4GH_PUB_KEY=${C4GH_PUB_KEY-crypt4gh_key.pub}			# --sda-key pathname
+S3_CONFIG=${S3_CONFIG-s3cmd.conf}			# --s3-config pathname
+C4GH_PUB_KEY=${C4GH_PUB_KEY-crypt4gh_key.pub}			# --c4gh-pub-key pathname
 
 # Allow a user to use the environment variable "SDA_CLI" to point
 # directly to the "sda-cli" executable.  If this environment variable is
@@ -902,10 +902,10 @@ while true; do
 		--sda-cli)
 			SDA_CLI=$2
 			;;
-		--sda-config)
+		--s3-config)
 			S3_CONFIG=$2
 			;;
-		--sda-key)
+		--c4gh-pub-key)
 			C4GH_PUB_KEY=$2
 			;;
 		--s3-access-key|--user)
