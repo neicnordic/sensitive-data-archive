@@ -33,29 +33,6 @@ if [ "$file_size" -ne "$expected_size" ]; then
     exit 1
 fi
 
-# Download encrypted full file, check the file size
-encryptedFile=encrypted.bam.c4gh
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $encryptedFile
-if [ ! -f "$encryptedFile" ]; then
-    echo "Failed to download the encrypted file from sda-download"
-    exit 1
-fi
-file_size=$(stat -c %s $encryptedFile)
-echo "Size of $encryptedFile: $file_size"
-
-# Descrypt the encrypted file and compare it with the original unencrypted file
-C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
-export C4GH_PASSPHRASE
-if ! crypt4gh decrypt --sk c4gh.sec.pem  < $encryptedFile > full2.bam; then
-    echo "Failed to descrypt the $encryptedFile"
-    exit 1
-fi
-
-if ! cmp --silent full1.bam full2.bam; then
-    echo "Decrypted version of $encryptedFile and the original unencrypted file, are different"
-    exit 1
-fi
-
 # Test reencrypt the file header with the client public key 
 clientkey=$(base64 -w0 client.pub.pem)
 reencryptedFile=reencrypted.bam.c4gh
@@ -65,20 +42,53 @@ if [ ! -f "$reencryptedFile" ]; then
     exit 1
 fi
 
+expected_encrypted_size=1049205
 file_size=$(stat -c %s $reencryptedFile)
-echo "Size of $reencryptedFile: $file_size"
+if [ "$file_size" -ne "$expected_encrypted_size" ]; then
+    echo "Incorrect file size for the reencrypted file, should be $expected_encrypted_size but is $file_size"
+    exit 1
+fi
 
 # Descrypt the reencrypted file and compare it with the original unencrypted file
 export C4GH_PASSPHRASE="strongpass" # passphrase for the client crypt4gh key
-if ! crypt4gh decrypt --sk client.sec.pem < $reencryptedFile > full3.bam; then
+if ! crypt4gh decrypt --sk client.sec.pem < $reencryptedFile > full2.bam; then
     echo "Failed to descrypt $reencryptedFile with the client public key"
     exit 1
 fi
 
-if ! cmp --silent full1.bam full3.bam; then
+if ! cmp --silent full1.bam full2.bam; then
     echo "Decrypted version of $reencryptedFile and the original unencrypted file, are different"
     exit 1
 fi
 
+# download reencrypted partial file, check file size
+partReencryptedFile=part1.bam.c4gh
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
+file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
+part_expected_size=65688
+
+if [ "$file_size" -ne "$part_expected_size" ]; then
+    echo "Incorrect file size for partially reencrypted file, should be $part_expected_size but is $file_size"
+    exit 1
+fi
+
+if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; then
+    echo "Partially reencrypted file could not be decrypted"
+    exit 1
+fi
+
+part_decrypted_size=65536
+file_size=$(stat -c %s part1.bam)
+if [ "$file_size" -ne "$part_decrypted_size" ]; then
+    echo "Incorrect file size for partially decrypted file, should be $part_decrypted_size but is $file_size"
+    exit 1
+fi
+
+if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
+    echo "Bad content partial decrypted file"
+    exit 1
+fi
+
+
 # Clean up
-rm full1.bam full2.bam full3.bam $encryptedFile $reencryptedFile
+rm full1.bam full2.bam part1.bam $reencryptedFile
