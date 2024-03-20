@@ -7,7 +7,7 @@ on:
       - "!main" # excludes main
     paths:
       - "**.sh"
-      - "/tools/sda-admin"
+      - "tools/sda-admin"
 
 jobs:
   shelcheck:
