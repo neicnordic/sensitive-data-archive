@@ -44,6 +44,10 @@ c4gh:
   passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
   filepath: "./dev_utils/c4gh.sec.pem"
 
+grpc:
+    host: "reencrypt"
+    port: "50051"
+
 db:
   host: "localhost"
   port: 5432

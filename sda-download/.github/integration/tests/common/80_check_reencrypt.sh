@@ -44,7 +44,8 @@ file_size=$(stat -c %s $encryptedFile)
 echo "Size of $encryptedFile: $file_size"
 
 # Descrypt the encrypted file and compare it with the original unencrypted file
-export C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
+C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
+export C4GH_PASSPHRASE
 if ! crypt4gh decrypt --sk c4gh.sec.pem  < $encryptedFile > full2.bam; then
     echo "Failed to descrypt the $encryptedFile"
     exit 1
