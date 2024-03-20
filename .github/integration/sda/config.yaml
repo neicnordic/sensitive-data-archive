@@ -68,7 +68,7 @@ c4gh:
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
 
-reencrypt:
+grpc:
   host: "reencrypt"
   port: "50051"
 

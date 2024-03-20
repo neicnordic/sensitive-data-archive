@@ -209,7 +209,7 @@ func NewConfig() (*Map, error) {
 	c.applyDefaults()
 	c.sessionConfig()
 	c.configArchive()
-	if viper.IsSet("reencrypt.host") {
+	if viper.IsSet("grpc.host") {
 		c.configReencrypt()
 	}
 	err := c.configureOIDC()
@@ -309,8 +309,8 @@ func (c *Map) configArchive() {
 }
 
 func (c *Map) configReencrypt() {
-	c.Reencrypt.Host = viper.GetString("reencrypt.host")
-	c.Reencrypt.Port = viper.GetInt("reencrypt.port")
+	c.Reencrypt.Host = viper.GetString("grpc.host")
+	c.Reencrypt.Port = viper.GetInt("grpc.port")
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
 	}
