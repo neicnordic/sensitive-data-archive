@@ -68,10 +68,6 @@ c4gh:
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
 
-grpc:
-  host: "reencrypt"
-  port: "50051"
-
 oidc:
   id:
   jwkPath: /jwk
