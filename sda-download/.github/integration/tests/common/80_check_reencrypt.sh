@@ -38,7 +38,7 @@ clientkey=$(base64 -w0 client.pub.pem)
 reencryptedFile=reencrypted.bam.c4gh
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $reencryptedFile
 if [ ! -f "$reencryptedFile" ]; then
-    echo "Failed to reencrypt the header of the file from sda-download"
+    echo "Failed to download re-encrypted file"
     exit 1
 fi
 
@@ -49,10 +49,10 @@ if [ "$file_size" -ne "$expected_encrypted_size" ]; then
     exit 1
 fi
 
-# Descrypt the reencrypted file and compare it with the original unencrypted file
+# Decrypt the reencrypted file and compare it with the original unencrypted file
 export C4GH_PASSPHRASE="strongpass" # passphrase for the client crypt4gh key
 if ! crypt4gh decrypt --sk client.sec.pem < $reencryptedFile > full2.bam; then
-    echo "Failed to descrypt $reencryptedFile with the client public key"
+    echo "Failed to decrypt re-encrypted file with the client's private key"
     exit 1
 fi
 
@@ -68,12 +68,12 @@ file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
 part_expected_size=65688
 
 if [ "$file_size" -ne "$part_expected_size" ]; then
-    echo "Incorrect file size for partially reencrypted file, should be $part_expected_size but is $file_size"
+    echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
     exit 1
 fi
 
 if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; then
-    echo "Partially reencrypted file could not be decrypted"
+    echo "Re-encrypted partial file could not be decrypted"
     exit 1
 fi
 
