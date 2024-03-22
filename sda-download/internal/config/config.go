@@ -143,8 +143,8 @@ type ReencryptConfig struct {
 	Host       string
 	Port       int
 	CACert     string
-	ServerCert string
-	ServerKey  string
+	ClientCert string
+	ClientKey  string
 }
 
 // NewConfig populates ConfigMap with data
@@ -314,11 +314,11 @@ func (c *Map) configReencrypt() {
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
 	}
-	if viper.IsSet("grpc.servercert") {
-		c.Reencrypt.ServerCert = viper.GetString("grpc.servercert")
+	if viper.IsSet("grpc.clientcert") {
+		c.Reencrypt.ClientCert = viper.GetString("grpc.clientcert")
 	}
 	if viper.IsSet("grpc.serverkey") {
-		c.Reencrypt.ServerKey = viper.GetString("grpc.serverkey")
+		c.Reencrypt.ClientKey = viper.GetString("grpc.clientkey")
 	}
 }
 
