@@ -145,6 +145,7 @@ type ReencryptConfig struct {
 	CACert     string
 	ClientCert string
 	ClientKey  string
+	Timeout    int
 }
 
 // NewConfig populates ConfigMap with data
@@ -313,8 +314,12 @@ func (c *Map) configArchive() {
 func (c *Map) configReencrypt() {
 	c.Reencrypt.Host = viper.GetString("grpc.host")
 	viper.SetDefault("grpc.port", 50051)
+	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
 	if viper.IsSet("grpc.port") {
 		c.Reencrypt.Port = viper.GetInt("grpc.port")
+	}
+	if viper.IsSet("grpc.timeout") {
+		c.Reencrypt.Timeout = viper.GetInt("grpc.timeout")
 	}
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
