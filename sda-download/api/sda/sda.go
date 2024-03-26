@@ -90,7 +90,8 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	defer conn.Close()
 	log.Debugf("Connection to the reencrypt service established, conn = %v", conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	timeoutDuration := time.Duration(config.Config.Reencrypt.Timeout) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
