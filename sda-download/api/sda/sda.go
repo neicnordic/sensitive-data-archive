@@ -3,11 +3,14 @@ package sda
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +25,7 @@ import (
 	"github.com/neicnordic/sda-download/internal/storage"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -34,12 +38,49 @@ func sanitizeString(str string) string {
 }
 
 func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+	var opts []grpc.DialOption
+	if config.Config.Reencrypt.CACert != "" {
+		cacert := config.Config.Reencrypt.CACert
+		clientKey := config.Config.Reencrypt.ClientKey
+		clientCert := config.Config.Reencrypt.ClientCert
+		rootCAs := x509.NewCertPool()
+		cacertByte, err := os.ReadFile(cacert)
+		if err != nil {
+			log.Errorf("Failed to read CA certificate, reason: %s", err)
+
+			return nil, err
+		}
+		ok := rootCAs.AppendCertsFromPEM(cacertByte)
+		if !ok {
+			log.Errorf("Failed to append CA certificate to rootCAs")
+
+			return nil, errors.New("failed to append CA certificate to rootCAs")
+		}
+		// Load the client key pair
+		certs, err := tls.LoadX509KeyPair(clientCert, clientKey)
+		if err != nil {
+			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
+			log.Debugf("clientCert: %s, clientKey: %s", clientCert, clientKey)
+
+			return nil, err
+		}
+		clientCreds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				MinVersion:   tls.VersionTLS13,
+				RootCAs:      rootCAs,
+			},
+		)
+		// Use secure gRPC connection with mutual TLS authentication
+		opts = append(opts, grpc.WithTransportCredentials(clientCreds))
+	} else {
+		// Use insecure gRPC connection
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
 	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
 	log.Debugf("Address of the reencrypt service: %s", address)
 
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
 	conn, err := grpc.Dial(address, opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
