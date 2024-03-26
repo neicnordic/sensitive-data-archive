@@ -18,7 +18,7 @@ import (
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
-	re "github.com/neicnordic/sda-download/internal/reencrypt"
+	"github.com/neicnordic/sda-download/internal/reencrypt"
 	"github.com/neicnordic/sda-download/internal/storage"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -57,9 +57,9 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	c := re.NewReencryptClient(conn)
+	c := reencrypt.NewReencryptClient(conn)
 	log.Debugf("Client created, c = %v", c)
-	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
 	if err != nil {
 		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
 
