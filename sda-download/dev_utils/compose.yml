@@ -113,13 +113,14 @@ services:
       certfixer:
         condition: service_completed_successfully
     ports:
-      - "50051:50051"
+      - "50443:50443"
     restart: always
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - ./iss.json:/iss.json
       - certs:/dev_utils/certs
+      - certs:/etc/ssl/certs/
 
   mockauth:
     command:
