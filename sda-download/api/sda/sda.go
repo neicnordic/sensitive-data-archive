@@ -34,11 +34,6 @@ func sanitizeString(str string) string {
 }
 
 func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
-	if config.Config.Reencrypt.Host == "" {
-		return nil, fmt.Errorf("host of the reencrypt service not set")
-	} else if config.Config.Reencrypt.Port == 0 {
-		return nil, fmt.Errorf("port of the reencrypt service not set")
-	}
 	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
 	log.Debugf("Address of the reencrypt service: %s", address)
 
