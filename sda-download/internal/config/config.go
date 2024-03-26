@@ -211,6 +211,8 @@ func NewConfig() (*Map, error) {
 	c.configArchive()
 	if viper.IsSet("grpc.host") {
 		c.configReencrypt()
+	} else {
+		log.Info("Reencrypt service is not configured")
 	}
 	err := c.configureOIDC()
 	if err != nil {
@@ -310,9 +312,16 @@ func (c *Map) configArchive() {
 
 func (c *Map) configReencrypt() {
 	c.Reencrypt.Host = viper.GetString("grpc.host")
-	c.Reencrypt.Port = viper.GetInt("grpc.port")
+	viper.SetDefault("grpc.port", 50051)
+	if viper.IsSet("grpc.port") {
+		c.Reencrypt.Port = viper.GetInt("grpc.port")
+	}
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
+		// when certificate is set, the port number should be 50443
+		if c.Reencrypt.Port != 50443 {
+			log.Errorf("CACert is set, but port number is set to %v, which should be 50443", c.Reencrypt.Port)
+		}
 	}
 	if viper.IsSet("grpc.clientcert") {
 		c.Reencrypt.ClientCert = viper.GetString("grpc.clientcert")
