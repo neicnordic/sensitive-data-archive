@@ -132,7 +132,7 @@ sequenceDiagram
 We also extended the functionality of the sda-download service to support re-encryption of
 requested files. This allows users to get files that are encrypted with their own
 keypair instead of receiving just plain unencrypted files. To ensure the security of
-the archive secret key (avoid to keep it in a service that is available directly from the is available directly from the
+the archive secret key (that is, to avoid keeping it in the htsget service, which is available directly from the
 internet) we have implemented a small microservice (gRPC Server in the diagram)
 that recieves the encrypted header and a public key, re-encrypts the file, and sends
 it back to the user.
