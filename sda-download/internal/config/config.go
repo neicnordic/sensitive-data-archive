@@ -211,7 +211,10 @@ func NewConfig() (*Map, error) {
 	c.sessionConfig()
 	c.configArchive()
 	if viper.IsSet("grpc.host") {
-		c.configReencrypt()
+		err := c.configReencrypt()
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		log.Info("Reencrypt service is not configured")
 	}
@@ -311,7 +314,7 @@ func (c *Map) configArchive() {
 	}
 }
 
-func (c *Map) configReencrypt() {
+func (c *Map) configReencrypt() error {
 	c.Reencrypt.Host = viper.GetString("grpc.host")
 	viper.SetDefault("grpc.port", 50051)
 	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
@@ -323,17 +326,40 @@ func (c *Map) configReencrypt() {
 	}
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
+		fi, err := os.Stat(c.Reencrypt.CACert)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
 	}
 	if viper.IsSet("grpc.clientcert") {
 		c.Reencrypt.ClientCert = viper.GetString("grpc.clientcert")
+		fi, err := os.Stat(c.Reencrypt.ClientCert)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
 	}
-	if viper.IsSet("grpc.serverkey") {
+	if viper.IsSet("grpc.clientkey") {
 		c.Reencrypt.ClientKey = viper.GetString("grpc.clientkey")
+		fi, err := os.Stat(c.Reencrypt.ClientKey)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
 	}
 	if c.Reencrypt.ClientCert != "" && c.Reencrypt.ClientKey != "" {
 		log.Infoln("client certificates detected, setting grpc port to 50443")
 		c.Reencrypt.Port = 50443
 	}
+
+	return nil
 }
 
 // appConfig sets required settings
