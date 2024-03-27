@@ -60,7 +60,7 @@ authors_short: Johan Viklund, Stefan Negru & Dimitrios Bambalikis \emph{et al.}
 
 The European Genome-phenome Archive (EGA) [@EGA] and it's extension the
 Federated EGA (FEGA) [@FEGA] are services for archiving and sharing personally
-identifiable genetic and phenotypic data, while The Genomic Data Infrastructure
+identifiable genetic and phenotypic data, while the Genomic Data Infrastructure
 (GDI) [@GDI] project is enabling secondary use of genomic and phenotypic
 clinical data across Europe. Both projects are focused on creating federated
 and secure infrastructure for researchers to archive and share data with the
@@ -71,41 +71,41 @@ umbrella called the Sensitive Data Archive to support these efforts.
 
 This project focused on the data access part of the infrastructure. The
 files are encrypted in the archives, using the crypt4gh standard [@crypt4gh].
-Currently, we have a data access processes, where the files are either
+Currently, we have a data access process, where the files are either
 decrypted on the server side and then transferred to the user or re-encrypted
 server-side with the users public key and provided to the user in a dedicated
 outbox. This process is cumbersome and requires a lot of manual intervention by
 the archive operators. It's also not very granular, for example, in the case a
 user only wants access to just a small region of the genomic files we still
-provide the full reencrypted dataset, which is expensive in both human and
+provide the full re-encrypted dataset, which is expensive in both human and
 computational resources.
 
 
-Htsget [@htsget] is a data access protocol allows that access to parts of files.
+Htsget [@htsget] is a data access protocol which allows that access to parts of files.
 Before the Biohackathon event, there were no htsget servers that supported
-partial access to encrypted data. Our goal of the project was to integrate the
+partial access to encrypted data. Our goal for the project was to integrate the
 htsget-rs [@htsget-rs] Rust server into the GDI starter kit and to extend it to
 support GA4GH Passport authorized, re-encrypted access to partial files.
 
 
 We also aimed to extend already existing client tools so they can access
-encrypted data over the htsget protocol using GA4GH Passport and Visa standard,
+encrypted data over the htsget protocol using the GA4GH Passport and Visa standard[@ga4gh-passport],
 which enhances the security of the data access interfaces.
 
 
 # Results
 
-In order to achieve the project goals, both htsget-rs and sda-download needed to be extened.
+In order to achieve the project goals, both htsget-rs and sda-download needed to be extended.
 The following sections describe the work done on each of the services.
 
 
 ## HTSGet
 
 In order to enable for random data access on encrypted files, we
-extended htsget-rs [@htsget-rs] to work with the new version of the sda-download.
-We developed the following sequence diagram for interactions between the server softwares.
+extended htsget-rs [@htsget-rs] to work with the new version of the sda-download, developed during the biohackathon.
+We developed the following sequence diagram for interactions between the services.
 In short, the client first communicates with the Rust server
-to get information on what to download, and then downloads the expected data from the sda-download service.
+to get information on what to download as defined by the htsget standard, and then downloads the expected data from the sda-download service.
 
 
 ```mermaid
@@ -131,11 +131,11 @@ sequenceDiagram
 
 We also extended the functionality of the sda-download service to support re-encryption of
 requested files. This allows users to get files that are encrypted with their own
-keypair instead of receiving just plain unencrypted files. To ensure the security of
-the archive secret key (that is, to avoid keeping it in the htsget service, which is available directly from the
+keypair instead of receiving unencrypted files. To ensure the security of
+the archive secret key (that is, to avoid keeping it in the sda-download service, which is available directly from the
 internet) we have implemented a small microservice (gRPC Server in the diagram)
-that recieves the encrypted header and a public key, re-encrypts the file, and sends
-it back to the user.
+that receives the encrypted header and a public key, re-encrypts the file, and sends
+it back to the sda-download.
 
 
  ```mermaid
@@ -156,7 +156,7 @@ sequenceDiagram
 Two docker compose files were developed in order to include the whole infrastructure for the sensitive data archive and the htsget-rs version. These compose files allow the users to make requests to the htsget and receive a response containing pointers to the requested parts of the data, which the client can then download and assemble.
 
 The Sensitive Data Archive Command Line Interface (sda-cli) has a demo version of the htsget command.
-This command, when provided with the public key of a user and (potentially) a region for a file, it makes the request to htsget, retrieves the results, requests the particular regions from the sda-download and then assembles these parts together.
+This command, when provided with the public key of a user and (potentially) a region for a file, it makes the request to htsget, retrieves the results, requests the particular regions from the sda-download and then assembles these parts together. The end result should be a file that is encrypted with the user's public key, containing the regions requested by the user.
 
 
 # Conclusions and Future work
@@ -170,14 +170,14 @@ htsget server to meet those needs.
 The project was focused on improving the data access part of the sensitive data archive infrastructure. The existing process
 of data access was cumbersome: user receiving the whole file even when only a small part of it was needed.
 To address this, the htsget-rs was extended to support access to encrypted data and it is planned to extend it further
-by implementing the crypt4gh and enabling support for crypt4gh edit lists. The sda-download service was also
+by implementing the crypt4gh decryption and enabling support for crypt4gh edit lists. The sda-download service was also
 extended to support re-encryption of requested files and we further aim to
 implement authentication of requests/tickets. This will allow the sda-download
 service to fully trust that a request comes from the htsget-rs service, as well as
-removing unnecessary bytes from the file. We also aim for a showcase where an
+to return only the requested parts of the file based on the calculations done on the htsget-rs side. We also aim for a showcase where an
 encrypted file will be read over the htsget protocol.
 
-Furthermore, there are two additional focus areas for future development. First, we plan to implement random access of files in sda-download service.
+Furthermore, there are two additional focus areas for future development. First, we plan to implement random access of encypted files in sda-download service.
 Secondly, we aim to extend the sda-cli to automate
 the key genaration for communication with htsget, by automatically generate a
 key and send the public part to htsget.
