@@ -39,28 +39,30 @@ func sanitizeString(str string) string {
 
 func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	var opts []grpc.DialOption
-	if config.Config.Reencrypt.CACert != "" {
-		cacert := config.Config.Reencrypt.CACert
-		clientKey := config.Config.Reencrypt.ClientKey
-		clientCert := config.Config.Reencrypt.ClientCert
-		rootCAs := x509.NewCertPool()
-		cacertByte, err := os.ReadFile(cacert)
+	switch {
+	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
+		rootCAs, err := x509.SystemCertPool()
 		if err != nil {
-			log.Errorf("Failed to read CA certificate, reason: %s", err)
-
-			return nil, err
+			rootCAs = x509.NewCertPool()
 		}
-		ok := rootCAs.AppendCertsFromPEM(cacertByte)
-		if !ok {
-			log.Errorf("Failed to append CA certificate to rootCAs")
+		if config.Config.Reencrypt.CACert != "" {
+			cacertByte, err := os.ReadFile(config.Config.Reencrypt.CACert)
+			if err != nil {
+				log.Errorf("Failed to read CA certificate file, reason: %s", err)
 
-			return nil, errors.New("failed to append CA certificate to rootCAs")
+				return nil, err
+			}
+			ok := rootCAs.AppendCertsFromPEM(cacertByte)
+			if !ok {
+				log.Errorf("Failed to append CA certificate to rootCAs")
+
+				return nil, errors.New("failed to append CA certificate to cert pool")
+			}
 		}
-		// Load the client key pair
-		certs, err := tls.LoadX509KeyPair(clientCert, clientKey)
+
+		certs, err := tls.LoadX509KeyPair(config.Config.Reencrypt.ClientCert, config.Config.Reencrypt.ClientKey)
 		if err != nil {
 			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
-			log.Debugf("clientCert: %s, clientKey: %s", clientCert, clientKey)
 
 			return nil, err
 		}
@@ -71,10 +73,9 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 				RootCAs:      rootCAs,
 			},
 		)
-		// Use secure gRPC connection with mutual TLS authentication
+
 		opts = append(opts, grpc.WithTransportCredentials(clientCreds))
-	} else {
-		// Use insecure gRPC connection
+	default:
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
