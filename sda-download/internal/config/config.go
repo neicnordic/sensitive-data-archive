@@ -323,16 +323,16 @@ func (c *Map) configReencrypt() {
 	}
 	if viper.IsSet("grpc.cacert") {
 		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
-		// when certificate is set, the port number should be 50443
-		if c.Reencrypt.Port != 50443 {
-			log.Errorf("CACert is set, but port number is set to %v, which should be 50443", c.Reencrypt.Port)
-		}
 	}
 	if viper.IsSet("grpc.clientcert") {
 		c.Reencrypt.ClientCert = viper.GetString("grpc.clientcert")
 	}
 	if viper.IsSet("grpc.serverkey") {
 		c.Reencrypt.ClientKey = viper.GetString("grpc.clientkey")
+	}
+	if c.Reencrypt.ClientCert != "" && c.Reencrypt.ClientKey != "" {
+		log.Infoln("client certificates detected, setting grpc port to 50443")
+		c.Reencrypt.Port = 50443
 	}
 }
 
