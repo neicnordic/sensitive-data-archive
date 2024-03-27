@@ -354,18 +354,23 @@ func Download(c *gin.Context) {
 			reencKey = c.GetHeader("Server-Public-Key")
 		}
 		if reencKey == "" {
-			fileStream = encryptedFileReader
-		} else {
-			log.Debugf("Public key from the request header = %v", reencKey)
-			log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
-			newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
-			if err != nil {
-				log.Errorf("Failed to reencrypt the file header, reason: %v", err)
-			}
-			log.Debugf("Reencrypted c4gh file header = %v", newHeader)
-			newHr := bytes.NewReader(newHeader)
-			fileStream = io.MultiReader(newHr, file)
+			c.String(http.StatusBadRequest, "c4gh public key is mmissing from the header")
+
+			return
 		}
+
+		log.Debugf("Public key from the request header = %v", reencKey)
+		log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
+		newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+		if err != nil {
+			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+			c.String(http.StatusInternalServerError, "file re-encryption error")
+
+			return
+		}
+		log.Debugf("Reencrypted c4gh file header = %v", newHeader)
+		newHr := bytes.NewReader(newHeader)
+		fileStream = io.MultiReader(newHr, file)
 
 	default:
 		encryptedFileReader := io.MultiReader(bytes.NewReader(fileDetails.Header), file)
