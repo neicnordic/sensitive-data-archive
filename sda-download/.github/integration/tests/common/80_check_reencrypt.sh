@@ -29,7 +29,7 @@ fi
 file_size=$(stat -c %s full1.bam)  # Get the size of the file
 
 if [ "$file_size" -ne "$expected_size" ]; then
-    echo "Incorrect file size for full decrypted file"
+    echo "Incorrect file size for downloaded file"
     exit 1
 fi
 
@@ -45,7 +45,7 @@ fi
 expected_encrypted_size=1049205
 file_size=$(stat -c %s $reencryptedFile)
 if [ "$file_size" -ne "$expected_encrypted_size" ]; then
-    echo "Incorrect file size for the reencrypted file, should be $expected_encrypted_size but is $file_size"
+    echo "Incorrect file size for the re-encrypted file, should be $expected_encrypted_size but is $file_size"
     exit 1
 fi
 
@@ -80,12 +80,12 @@ fi
 part_decrypted_size=65536
 file_size=$(stat -c %s part1.bam)
 if [ "$file_size" -ne "$part_decrypted_size" ]; then
-    echo "Incorrect file size for partially decrypted file, should be $part_decrypted_size but is $file_size"
+    echo "Incorrect file size for decrypted partial file, should be $part_decrypted_size but is $file_size"
     exit 1
 fi
 
 if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
-    echo "Bad content partial decrypted file"
+    echo "Bad content of decrypted partial file"
     exit 1
 fi
 
