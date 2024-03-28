@@ -89,6 +89,20 @@ if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
     exit 1
 fi
 
-
 # Clean up
 rm full1.bam full2.bam part1.bam $reencryptedFile
+
+# try to download encrypted full file without sending a public key
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3-encrypted/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+
+if [ "$resp" -ne 400 ]; then
+    echo "Incorrect response with missing public key, expected 400 got $resp"
+    exit 1
+fi
+
+# try to download encrypted full file with a bad public key
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" "https://localhost:8443/s3-encrypted/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+
+if [ "$resp" -ne 500 ]; then
+    echo "Incorrect response with missing public key, expected 500 got $resp"
+fi
