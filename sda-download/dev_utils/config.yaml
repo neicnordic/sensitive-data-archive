@@ -44,6 +44,15 @@ c4gh:
   passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
   filepath: "./dev_utils/c4gh.sec.pem"
 
+grpc:
+    host: "reencrypt"
+    port: "50443"
+    cacert: "./dev_utils/certs/ca.pem"
+    servercert: "./dev_utils/certs/reencrypt.pem"
+    serverkey: "./dev_utils/certs/reencrypt-key.pem"
+    clientcert: "./dev_utils/certs/client.pem"
+    clientkey: "./dev_utils/certs/client-key.pem"
+
 db:
   host: "localhost"
   port: 5432

@@ -14,7 +14,7 @@ import (
 )
 
 var requiredConfVars = []string{
-	"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "oidc.configuration.url",
+	"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
 }
 
 type TestSuite struct {
@@ -184,6 +184,29 @@ func (suite *TestSuite) TestOIDC() {
 	assert.Equal(suite.T(), "test", c.OIDC.CACert)
 	assert.Equal(suite.T(), trustedList, c.OIDC.TrustedList)
 	assert.Equal(suite.T(), whitelist, c.OIDC.Whitelist)
+
+}
+
+func (suite *TestSuite) TestConfigReencrypt() {
+	tempDir := suite.T().TempDir()
+	c := &Map{}
+	viper.Set("grpc.host", "localhost")
+	assert.NoError(suite.T(), c.configReencrypt())
+	assert.Equal(suite.T(), 50051, c.Reencrypt.Port)
+
+	// fail if set file doesn't exists
+	viper.Set("grpc.clientcert", "/tmp/abracadabra")
+	assert.ErrorContains(suite.T(), c.configReencrypt(), "no such file or directory")
+
+	// any existing flle will make it pass
+	generateKeyForTest(suite)
+	viper.Set("grpc.clientcert", viper.Get("c4gh.filepath"))
+	assert.NoError(suite.T(), c.configReencrypt())
+
+	// it will fail if certificate is set to a folder
+	generateKeyForTest(suite)
+	viper.Set("grpc.clientcert", tempDir)
+	assert.ErrorContains(suite.T(), c.configReencrypt(), "is a folder")
 
 }
 
