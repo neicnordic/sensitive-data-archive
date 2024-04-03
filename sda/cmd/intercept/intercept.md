@@ -13,6 +13,7 @@ For each message, these steps are taken:
 3. The message is sent to the queue. 
    - This has no error handling as the resend-mechanism hasn't been finished.
 4. The message is Ack'ed.
+5. If the message type is of type unknown, we acknowledge it and send it to `catch_all.dead` (needs to exist)
 
 ## Communication
 
