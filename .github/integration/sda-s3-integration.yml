@@ -292,7 +292,6 @@ services:
       - BROKER_PASSWORD=ingest
       - BROKER_USER=ingest
       - BROKER_ROUTINGKEY=ingest
-      - BROKER_ROUTINGERROR=error
       - DB_PASSWORD=download
       - DB_USER=download
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
