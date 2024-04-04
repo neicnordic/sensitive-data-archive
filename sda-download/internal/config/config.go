@@ -29,11 +29,12 @@ var Config Map
 
 // ConfigMap stores all different configs
 type Map struct {
-	App     AppConfig
-	Session SessionConfig
-	DB      DatabaseConfig
-	OIDC    OIDCConfig
-	Archive storage.Conf
+	App       AppConfig
+	Session   SessionConfig
+	DB        DatabaseConfig
+	OIDC      OIDCConfig
+	Archive   storage.Conf
+	Reencrypt ReencryptConfig
 }
 
 type AppConfig struct {
@@ -138,6 +139,15 @@ type DatabaseConfig struct {
 	ClientKey string
 }
 
+type ReencryptConfig struct {
+	Host       string
+	Port       int
+	CACert     string
+	ClientCert string
+	ClientKey  string
+	Timeout    int
+}
+
 // NewConfig populates ConfigMap with data
 func NewConfig() (*Map, error) {
 	viper.SetConfigName("config")
@@ -163,7 +173,7 @@ func NewConfig() (*Map, error) {
 		}
 	}
 	requiredConfVars := []string{
-		"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "oidc.configuration.url",
+		"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
 	}
 
 	if viper.GetString("archive.type") == S3 {
@@ -200,6 +210,14 @@ func NewConfig() (*Map, error) {
 	c.applyDefaults()
 	c.sessionConfig()
 	c.configArchive()
+	if viper.IsSet("grpc.host") {
+		err := c.configReencrypt()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		log.Info("Reencrypt service is not configured")
+	}
 	err := c.configureOIDC()
 	if err != nil {
 		return nil, err
@@ -294,6 +312,54 @@ func (c *Map) configArchive() {
 		c.Archive.Type = POSIX
 		c.Archive.Posix.Location = viper.GetString("archive.location")
 	}
+}
+
+func (c *Map) configReencrypt() error {
+	c.Reencrypt.Host = viper.GetString("grpc.host")
+	viper.SetDefault("grpc.port", 50051)
+	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
+	if viper.IsSet("grpc.port") {
+		c.Reencrypt.Port = viper.GetInt("grpc.port")
+	}
+	if viper.IsSet("grpc.timeout") {
+		c.Reencrypt.Timeout = viper.GetInt("grpc.timeout")
+	}
+	if viper.IsSet("grpc.cacert") {
+		c.Reencrypt.CACert = viper.GetString("grpc.cacert")
+		fi, err := os.Stat(c.Reencrypt.CACert)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
+	}
+	if viper.IsSet("grpc.clientcert") {
+		c.Reencrypt.ClientCert = viper.GetString("grpc.clientcert")
+		fi, err := os.Stat(c.Reencrypt.ClientCert)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
+	}
+	if viper.IsSet("grpc.clientkey") {
+		c.Reencrypt.ClientKey = viper.GetString("grpc.clientkey")
+		fi, err := os.Stat(c.Reencrypt.ClientKey)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return errors.New("configured client certificate is a folder")
+		}
+	}
+	if c.Reencrypt.ClientCert != "" && c.Reencrypt.ClientKey != "" {
+		log.Infoln("client certificates detected, setting grpc port to 50443")
+		c.Reencrypt.Port = 50443
+	}
+
+	return nil
 }
 
 // appConfig sets required settings

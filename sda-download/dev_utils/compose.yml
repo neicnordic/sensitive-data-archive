@@ -105,6 +105,23 @@ services:
       - "8443:8443"
     restart: always
 
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:v0.3.7
+    command: [ sda-reencrypt ]
+    container_name: reencrypt
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    ports:
+      - "50443:50443"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - ./iss.json:/iss.json
+      - certs:/dev_utils/certs
+      - certs:/etc/ssl/certs/
+
   mockauth:
     command:
       - /bin/sh
