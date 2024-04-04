@@ -56,7 +56,7 @@ while [ $i -le 4 ]; do
 
     curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
         -H 'Content-Type: application/json;charset=UTF-8' \
-        -d "$accession_body"
+        -d "$accession_body" | jq
 
     i=$(( i + 1 ))
 done

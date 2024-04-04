@@ -37,7 +37,7 @@ dac_body=$(
 
 curl -s --cacert /tmp/certs/ca.crt -u guest:guest "https://$MQHOST/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$dac_body"
+    -d "$dac_body" | jq
 
 
 echo "waiting for message to be in catch_all.dead"

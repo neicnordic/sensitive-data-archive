@@ -54,7 +54,7 @@ for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
 
     curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
         -H 'Content-Type: application/json;charset=UTF-8' \
-        -d "$ingest_body"
+        -d "$ingest_body" | jq
 done
 
 echo "waiting for verify to complete"
