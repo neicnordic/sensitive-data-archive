@@ -77,7 +77,16 @@ func main() {
 			}
 
 			routingKey := routing[msgType]
+
 			if routingKey == "" {
+				log.Debugf("msg type: %s", msgType)
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "undeliverable", delivered.Body); err != nil {
+					log.Errorf("failed to publish message, reason: (%v)", err)
+				}
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to ack message for reason: %v", err)
+				}
+
 				continue
 			}
 

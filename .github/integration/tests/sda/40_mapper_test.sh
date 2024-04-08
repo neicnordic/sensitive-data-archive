@@ -40,7 +40,7 @@ mapping_body=$(
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body"
+    -d "$mapping_body" | jq
 
 # check DB for dataset contents
 RETRY_TIMES=0
@@ -106,7 +106,7 @@ release_body=$(
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$release_body"
+    -d "$release_body" | jq 
 
 until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1;")" = "released" ]; do
     echo "waiting for dataset be released"
@@ -141,7 +141,7 @@ deprecate_body=$(
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$deprecate_body"
+    -d "$deprecate_body" | jq
 
 until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.dataset_event_log where dataset_id = 'EGAD74900000101' order by event_date DESC LIMIT 1")" = "deprecated" ]; do
     echo "waiting for dataset be deprecated"
@@ -183,7 +183,7 @@ mapping_body=$(
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body"
+    -d "$mapping_body" | jq
 
 # check DB for dataset contents
 RETRY_TIMES=0

@@ -55,7 +55,7 @@ accession_body=$(
 
 curl -sq -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$accession_body"
+    -d "$accession_body" | jq
 
 sleep 10
 if [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/accession/ | jq -r '.messages_unacknowledged')" -ne 1 ]; then
@@ -92,7 +92,7 @@ ingest_body=$(
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$ingest_body"
+    -d "$ingest_body" | jq
 
 RETRY_TIMES=0
 until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 2 ]; do
