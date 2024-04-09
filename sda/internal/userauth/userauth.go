@@ -50,7 +50,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 		}
 		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 		if err != nil {
-			return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
+			return nil, err
 		}
 
 		iss, err := url.ParseRequestURI(token.Issuer())
