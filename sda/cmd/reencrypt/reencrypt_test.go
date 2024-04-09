@@ -105,7 +105,7 @@ func (suite *ReEncryptTests) TestReencryptHeader() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50051", opts...)
+	conn, err := grpc.NewClient("localhost:50051", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -145,7 +145,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50052", opts...)
+	conn, err := grpc.NewClient("localhost:50052", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -175,7 +175,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50053", opts...)
+	conn, err := grpc.NewClient("localhost:50053", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -237,7 +237,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_TLS() {
 			RootCAs:      rootCAs,
 		},
 	)
-	conn, err := grpc.Dial("localhost:50443", grpc.WithTransportCredentials(clientCreds))
+	conn, err := grpc.NewClient("localhost:50443", grpc.WithTransportCredentials(clientCreds))
 	if err != nil {
 		suite.T().Log(err.Error())
 		suite.T().FailNow()
