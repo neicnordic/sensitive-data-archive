@@ -82,7 +82,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
 	log.Debugf("Address of the reencrypt service: %s", address)
 
-	conn, err := grpc.Dial(address, opts...)
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
 
