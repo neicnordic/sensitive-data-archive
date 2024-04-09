@@ -235,7 +235,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.URL.Path = "/username/"
 	_, nonvalidToken := a.Authenticate(r)
 	// The error output is huge so a smaller part is compared
-	assert.Equal(suite.T(), "signed token not valid: \"iat\" not satisfied", nonvalidToken.Error()[0:43])
+	assert.Equal(suite.T(), "\"iat\" not satisfied", nonvalidToken.Error())
 
 	// Elixir tokens broken
 	r, _ = http.NewRequest("", "/", nil)
@@ -243,7 +243,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.Header.Set("X-Amz-Security-Token", defaultToken[3:])
 	r.URL.Path = "/username/"
 	_, brokenToken := a.Authenticate(r)
-	assert.Equal(suite.T(), "signed token not valid: failed to parse jws: failed to parse JOSE headers:", brokenToken.Error()[0:74])
+	assert.Contains(suite.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
@@ -252,7 +252,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	_, err = a.Authenticate(r)
 	assert.Error(suite.T(), err)
 	_, brokenToken2 := a.Authenticate(r)
-	assert.Equal(suite.T(), "signed token not valid: failed to parse jws: failed to parse JOSE headers:", brokenToken2.Error()[0:74])
+	assert.Contains(suite.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	// Bad issuer
 	basIss, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.WrongTokenAlgClaims)
@@ -322,7 +322,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.URL.Path = "/username/"
 	_, nonvalidToken := a.Authenticate(r)
 	// The error output is huge so a smaller part is compared
-	assert.Equal(suite.T(), "signed token not valid: \"iat\" not satisfied", nonvalidToken.Error()[0:43])
+	assert.Equal(suite.T(), "\"iat\" not satisfied", nonvalidToken.Error())
 
 	// Elixir tokens broken
 	r, _ = http.NewRequest("", "/", nil)
@@ -330,14 +330,14 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.Header.Set("X-Amz-Security-Token", defaultToken[3:])
 	r.URL.Path = "/username/"
 	_, brokenToken := a.Authenticate(r)
-	assert.Equal(suite.T(), "signed token not valid: failed to parse jws: failed to parse JOSE headers:", brokenToken.Error()[0:74])
+	assert.Contains(suite.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", "random"+defaultToken)
 	r.URL.Path = "/username/"
 	_, brokenToken2 := a.Authenticate(r)
-	assert.Equal(suite.T(), "signed token not valid: failed to parse jws: failed to parse JOSE headers:", brokenToken2.Error()[0:74])
+	assert.Contains(suite.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	// Bad issuer
 	basIss, err := helper.CreateECToken(prKeyParsed, "ES256", helper.WrongTokenAlgClaims)
@@ -414,7 +414,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	r.Header.Set("X-Amz-Security-Token", wrongAlgToken)
 	r.URL.Path = "/username/"
 	_, WrongAlg := a.Authenticate(r)
-	assert.Contains(suite.T(), WrongAlg.Error(), "signed token not valid:")
+	assert.Contains(suite.T(), WrongAlg.Error(), "failed to find key with key ID")
 }
 
 func TestGetBearerToken(t *testing.T) {
