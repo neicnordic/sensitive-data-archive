@@ -281,13 +281,6 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		if start > 0 {
-			// reading from an offset in encrypted file is not yet supported
-			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
-			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
-
-			return
-		}
 	default:
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
@@ -344,36 +337,24 @@ func Download(c *gin.Context) {
 
 	// Prepare the file for streaming, encrypted or decrypted
 
-	var fileStream io.Reader
+	var fileStream io.ReadSeeker
 	hr := bytes.NewReader(fileDetails.Header)
-
-	_, ok := file.(io.ReadSeeker)
-
-	var mr io.Reader
-	if !ok {
-		mr = io.MultiReader(hr, file)
-	} else {
-		mr, err = storage.SeekableMultiReader(hr, file)
-		if err != nil {
-			log.Errorf("Construct SeekableMultiReader for file: %v", err)
-			c.String(http.StatusInternalServerError, "file stream error")
-
-			return
-		}
-	}
 
 	switch c.Param("type") {
 	case "encrypted":
 		// The key provided in the header should be base64 encoded
-		reencKey := c.GetHeader("Client-Public-Key")
+		// TODO should these be swapped??
+		reencKey := c.GetHeader("Server-Public-Key")
 		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
-			reencKey = c.GetHeader("Server-Public-Key")
+			reencKey = c.GetHeader("Client-Public-Key")
+			log.Warnf("htsget: using client key %v", reencKey)
 		}
 		if reencKey == "" {
-			c.String(http.StatusBadRequest, "c4gh public key is mmissing from the header")
+			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
 			return
 		}
+		log.Warnf("using key for reencryption %v", reencKey)
 
 		log.Debugf("Public key from the request header = %v", reencKey)
 		log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
@@ -386,12 +367,24 @@ func Download(c *gin.Context) {
 		}
 		log.Debugf("Reencrypted c4gh file header = %v", newHeader)
 		newHr := bytes.NewReader(newHeader)
-		fileStream = io.MultiReader(newHr, file)
+
+		fileStream, err = storage.SeekableMultiReader(newHr, file)
+		if err != nil {
+			log.Errorf("Construct SeekableMultiReader for file: %v", err)
+			c.String(http.StatusInternalServerError, "file stream error")
+			return
+		}
 
 	default:
-		// encryptedFileReader := io.MultiReader(bytes.NewReader(fileDetails.Header), file)
 
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(mr, *config.Config.App.Crypt4GHKey, nil)
+		fileStream, err = storage.SeekableMultiReader(hr, file)
+		if err != nil {
+			log.Errorf("Construct SeekableMultiReader for file: %v", err)
+			c.String(http.StatusInternalServerError, "file stream error")
+
+			return
+		}
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, *config.Config.App.Crypt4GHKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)
@@ -399,19 +392,26 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		if start != 0 {
-			// We don't want to read from start, skip ahead to where we should be
-			_, err = c4ghfileStream.Seek(start, 0)
-			if err != nil {
-				log.Errorf("error occurred while finding sending start: %v", err)
-				c.String(http.StatusInternalServerError, "an error occurred")
-
-				return
-			}
-		}
 		fileStream = c4ghfileStream
 	}
+	if start != 0 {
+		log.Warnf("using start pos %v", start)
 
+		// We don't want to read from start, skip ahead to where we should be
+		_, err = fileStream.Seek(start, 0)
+		if err != nil {
+			log.Errorf("error occurred while finding sending start: %v", err)
+			c.String(http.StatusInternalServerError, "an error occurred")
+
+			return
+		}
+		// adjust end to reflect that the file start has been moved
+		end = end - start
+		log.Warnf("setting end pos %v", end)
+		start = 0
+	}
+
+	log.Warnf("using end pos %v", end)
 	err = sendStream(fileStream, c.Writer, start, end)
 	if err != nil {
 		log.Errorf("error occurred while sending stream: %v", err)
