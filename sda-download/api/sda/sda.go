@@ -401,24 +401,7 @@ func Download(c *gin.Context) {
 		}
 		fileStream = c4ghfileStream
 	}
-	if start != 0 {
-		log.Warnf("using start pos %v", start)
 
-		// We don't want to read from start, skip ahead to where we should be
-		_, err = fileStream.Seek(start, 0)
-		if err != nil {
-			log.Errorf("error occurred while finding sending start: %v", err)
-			c.String(http.StatusInternalServerError, "an error occurred")
-
-			return
-		}
-		// adjust end to reflect that the file start has been moved
-		end = end - start
-		log.Warnf("setting end pos %v", end)
-		start = 0
-	}
-
-	log.Warnf("using end pos %v", end)
 	err = sendStream(fileStream, c.Writer, start, end)
 	if err != nil {
 		log.Errorf("error occurred while sending stream: %v", err)
@@ -428,8 +411,33 @@ func Download(c *gin.Context) {
 	}
 }
 
+var seekStart = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+	if start != 0 {
+		log.Warnf("using start pos %v", start)
+
+		// We don't want to read from start, skip ahead to where we should be
+		_, err := fileStream.Seek(start, 0)
+		if err != nil {
+
+			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		}
+		// adjust end to reflect that the file start has been moved
+		end = end - start
+		log.Warnf("setting end pos %v", end)
+		start = 0
+
+	}
+
+	return start, end, nil
+}
+
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
-var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end int64) error {
+var sendStream = func(reader io.ReadSeeker, writer http.ResponseWriter, start, end int64) error {
+
+	start, end, err := seekStart(reader, start, end)
+	if err != nil {
+		return err
+	}
 
 	// Calculate how much we should read (if given)
 	togo := end - start
