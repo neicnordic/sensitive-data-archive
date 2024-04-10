@@ -494,7 +494,8 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
 			}
 
-			return a, b, nil
+			// Byte ranges are inclusive; +1 so that the last byte is included
+			return a, b + 1, nil
 		}
 	}
 	// Adapt end coordinate to follow the crypt4gh block boundaries
