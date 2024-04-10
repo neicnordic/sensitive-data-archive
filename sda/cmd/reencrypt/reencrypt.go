@@ -31,6 +31,11 @@ type server struct {
 }
 
 // ReencryptHeader implements reencrypt.ReEncryptHeader
+// called with a crypt4gh header and a public key along with an optional dataeditlist,
+// returns a new crypt4gh header using the same symmetric key as the original header
+// but encrypted with the new public key. If a dataeditlist is provided and contains at
+// least one entry it is added to the new header, replacing any existing dataeditlist. If
+// no dataeditlist is passed and one exists already, it is kept in the new header.
 func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
 	log.Debugf("Received Public key: %v", in.GetPublickey())
 	log.Debugf("Received previous crypt4gh header: %v", in.GetOldheader())
@@ -42,7 +47,21 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	}
 
 	if h := in.GetOldheader(); h == nil {
-		return nil, status.Error(400, "no header recieved")
+		return nil, status.Error(400, "no header received")
+	}
+
+	extraHeaderPackets := make([]headers.EncryptedHeaderPacket, 0)
+	dataEditList := in.GetDataeditlist()
+
+	if len(dataEditList) > 0 { // linter doesn't like checking for nil before len
+
+		// Only do this if we're passed a data edit list
+		dataEditListPacket := headers.DataEditListHeaderPacket{
+			PacketType:    headers.PacketType{PacketType: headers.DataEditList},
+			NumberLengths: uint32(len(dataEditList)),
+			Lengths:       dataEditList,
+		}
+		extraHeaderPackets = append(extraHeaderPackets, dataEditListPacket)
 	}
 
 	reader := bytes.NewReader(publicKey)
@@ -55,7 +74,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	log.Debugf("crypt4ghkey: %v", *s.c4ghPrivateKey)
 
-	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *s.c4ghPrivateKey, newReaderPublicKeyList)
+	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *s.c4ghPrivateKey, newReaderPublicKeyList, extraHeaderPackets...)
 	if err != nil {
 		return nil, status.Error(400, err.Error())
 	}
