@@ -99,8 +99,6 @@ spec:
         - name: OIDC_TRUSTED_ISS
           value: {{ include "trustedIssPath" . }}/{{ default "iss.json" .Values.global.download.trusted.configFile }}
       {{- end }}
-        - name: C4GH_FILEPATH
-          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
       {{- if .Values.global.tls.enabled }}
         - name: DB_CACERT
           value: {{ include "tlsPath" . }}/ca.crt
@@ -122,6 +120,18 @@ spec:
           value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
         - name: DB_PORT
           value: {{ .Values.global.db.port | quote }}
+      {{- if .Values.global.tls.enabled }}
+        - name: GRPC_CACERT
+          value: {{ include "tlsPath" . }}/ca.crt
+        - name: GRPC_CLIENTCERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: GRPC_CLIENTKEY
+          value: {{ include "tlsPath" . }}/tls.key
+      {{- end }}
+        - name: GRPC_HOST
+          value: {{ required "A valid grpc host is required" .Values.global.reencrypt.host | quote }}
+        - name: GRPC_PORT
+          value: {{ .Values.global.reencrypt.port | quote }}
       {{- if .Values.global.log.format }}
         - name: LOG_FORMAT
           value: {{ .Values.global.log.format | quote }}
@@ -158,11 +168,6 @@ spec:
               name: {{ template "sda.fullname" . }}-s3archive-keys
               key: s3ArchiveSecretKey
         {{- end }}
-        - name: C4GH_PASSPHRASE
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-download
-              key: c4ghPassphrase
         - name: DB_PASSWORD
           valueFrom:
               secretKeyRef:

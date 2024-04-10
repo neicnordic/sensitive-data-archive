@@ -70,6 +70,8 @@ global:
     databaseNamespace: ""
     externalNamespace: ""
     internalNamespace: ""
+    ingressNamespace: ""
+    ingressLabelMatch: ""
 
 ## RevisionHistory
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
@@ -254,6 +256,11 @@ global:
     s3Port: 443
     s3ReadyPath: ""
     s3Region: ""
+
+  reencrypt:
+    host: ""
+    port: 50051
+    timeout: 5
 
   sync:
     api:

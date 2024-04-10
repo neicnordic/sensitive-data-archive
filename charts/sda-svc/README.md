@@ -45,6 +45,8 @@ Parameter | Description | Default
 `global.networkPolicy.databaseNamespace` | Namespace where the database is deployed. | `""`
 `global.networkPolicy.externalNamespace` | Namespace where the external components are deployed. | `""`
 `global.networkPolicy.internalNamespace` | Namespace where the internal components are deployed. | `""`
+`global.networkPolicy.ingressNamespace` | Namespace where the ingress is deployed. | `""`
+`global.networkPolicy.ingressLabelMatch` | Match to use to allow connections from ingress controller pod. | `""`
 `global.revisionHistory` | Number of revisions to keep for the option to rollback a deployment | `3`
 `global.podAnnotations` | Annotations applied to pods of all services. |`{}`
 `global.pkiService` | If an external PKI infrastructure is used set this to true. |`false`

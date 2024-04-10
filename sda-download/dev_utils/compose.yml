@@ -106,7 +106,8 @@ services:
     restart: always
 
   reencrypt:
-    image: ghcr.io/neicnordic/sensitive-data-archive:v0.3.7
+    image: ghcr.io/neicnordic/sensitive-data-archive:latest
+    build: ../../sda
     command: [ sda-reencrypt ]
     container_name: reencrypt
     depends_on:

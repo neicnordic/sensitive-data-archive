@@ -2,19 +2,17 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 var requiredConfVars = []string{
-	"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
+	"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url",
 }
 
 type TestSuite struct {
@@ -63,22 +61,27 @@ func (suite *TestSuite) TestMissingRequiredConfVar() {
 
 func (suite *TestSuite) TestAppConfig() {
 
-	// Test fail on key read error
+	// Test fail on missing middleware
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
 	viper.Set("app.servercert", "test")
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
-
 	viper.Set("db.sslmode", "disable")
+
+	viper.Set("app.middleware", "noexist")
 
 	c := &Map{}
 	err := c.appConfig()
 	assert.Error(suite.T(), err, "Error expected")
-	assert.Nil(suite.T(), c.App.Crypt4GHKey)
+	viper.Reset()
 
-	// Generate a Crypt4GH private key, so that ConfigMap.appConfig() doesn't fail
-	generateKeyForTest(suite)
+	viper.Set("app.host", "test")
+	viper.Set("app.port", 1234)
+	viper.Set("app.servercert", "test")
+	viper.Set("app.serverkey", "test")
+	viper.Set("log.logLevel", "debug")
+	viper.Set("db.sslmode", "disable")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -87,6 +90,8 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), 1234, c.App.Port)
 	assert.Equal(suite.T(), "test", c.App.ServerCert)
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
+	assert.NotNil(suite.T(), c.App.Crypt4GHPrivateKey)
+	assert.NotNil(suite.T(), c.App.Crypt4GHPublicKeyB64)
 }
 
 func (suite *TestSuite) TestArchiveConfig() {
@@ -199,26 +204,11 @@ func (suite *TestSuite) TestConfigReencrypt() {
 	assert.ErrorContains(suite.T(), c.configReencrypt(), "no such file or directory")
 
 	// any existing flle will make it pass
-	generateKeyForTest(suite)
-	viper.Set("grpc.clientcert", viper.Get("c4gh.filepath"))
+	viper.Set("grpc.clientcert", "config_test.go")
 	assert.NoError(suite.T(), c.configReencrypt())
 
 	// it will fail if certificate is set to a folder
-	generateKeyForTest(suite)
 	viper.Set("grpc.clientcert", tempDir)
 	assert.ErrorContains(suite.T(), c.configReencrypt(), "is a folder")
 
-}
-
-func generateKeyForTest(suite *TestSuite) {
-	// Generate a key, so that ConfigMap.appConfig() doesn't fail
-	_, privateKey, err := keys.GenerateKeyPair()
-	assert.NoError(suite.T(), err)
-	tempDir := suite.T().TempDir()
-	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
-	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
-	assert.NoError(suite.T(), err)
-	viper.Set("c4gh.filepath", fmt.Sprintf("%s/c4fg.key", tempDir))
-	viper.Set("c4gh.passphrase", "password")
 }
