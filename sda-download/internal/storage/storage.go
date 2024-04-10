@@ -27,6 +27,7 @@ import (
 type Backend interface {
 	GetFileSize(filePath string) (int64, error)
 	NewFileReader(filePath string) (io.ReadCloser, error)
+	NewFileReadSeeker(filePath string) (io.ReadSeekCloser, error)
 	NewFileWriter(filePath string) (io.WriteCloser, error)
 }
 
