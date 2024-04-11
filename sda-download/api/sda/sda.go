@@ -328,15 +328,17 @@ func Download(c *gin.Context) {
 			reencKey = c.GetHeader("Client-Public-Key")
 			log.Warnf("htsget: using client key %v", reencKey)
 		}
-		c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
+		headerSize := bytes.NewReader(fileDetails.Header).Size()
+		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
 		if reencKey != "" {
 			log.Warnf("do we have reencryption key? yes: %v", reencKey)
 			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
-			c.Header("Client-Additional-Bytes", fmt.Sprint(bytes.NewReader(newHeader).Size()))
+			headerSize = bytes.NewReader(newHeader).Size()
+			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
 		}
 		if c.Param("type") == "encrypted" {
 			// update the content length to match the encrypted file size
-			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
+			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
 		}
 
 		return
