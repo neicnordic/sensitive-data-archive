@@ -148,7 +148,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_DataEditList() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50054", opts...)
+	conn, err := grpc.NewClient("localhost:50054", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
