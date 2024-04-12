@@ -27,7 +27,7 @@ services:
                         -passout pass:"$${KEYSTORE_PASSWORD}"
 
     container_name: certfixer
-    image: neicnordic/openssl-alpine:latest
+    image: neicnordic/sda-inbox-sftp
     volumes:
       - ./certs:/origcerts
       - certs:/tls-certs

@@ -64,7 +64,7 @@ spec:
       {{- if not .Values.global.pkiService }}
       initContainers:
       - name: init-java-certs
-        image: neicnordic/openssl-alpine:latest
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-sftp-inbox"
         command:
           - /bin/sh
           - -c

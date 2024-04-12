@@ -60,7 +60,7 @@ spec:
     {{- if not .Values.global.pkiService }}
       initContainers:
       - name: init-java-certs
-        image: neicnordic/openssl-alpine:latest
+        image: "{{ .Values.doa.repository }}:{{ .Values.doa.imageTag }}"
         command:
           - /bin/sh
           - -c
