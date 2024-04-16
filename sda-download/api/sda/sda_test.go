@@ -514,7 +514,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 }
 
-func TestEncrypted_Coords(t *testing.T) {
+func Test_CalucalateCoords(t *testing.T) {
 	var to, from int64
 	from, to = 0, 1000
 	fileDetails := &database.FileDownload{
@@ -528,38 +528,38 @@ func TestEncrypted_Coords(t *testing.T) {
 	fullSize := headerSize + int64(fileDetails.ArchiveSize)
 	var endPos int64
 	endPos = 20
-	start, end, err := calculateEncryptedCoords(from, to, "bytes=10-"+strconv.FormatInt(endPos, 10), fileDetails, "default")
+	start, end, err := calculateCoords(from, to, "bytes=10-"+strconv.FormatInt(endPos, 10), fileDetails, "default")
 	assert.Equal(t, start, int64(10))
 	assert.Equal(t, end, endPos+1)
 	assert.NoError(t, err)
 
 	// end should be greater than or equal to inputted end
-	_, end, err = calculateEncryptedCoords(from, to, "", fileDetails, "encrypted")
+	_, end, err = calculateCoords(from, to, "", fileDetails, "encrypted")
 	assert.GreaterOrEqual(t, end, from)
 	assert.NoError(t, err)
 
 	// end should not be smaller than a header
-	_, end, err = calculateEncryptedCoords(from, headerSize-10, "", fileDetails, "encrypted")
+	_, end, err = calculateCoords(from, headerSize-10, "", fileDetails, "encrypted")
 	assert.GreaterOrEqual(t, end, headerSize)
 	assert.NoError(t, err)
 
 	// end should not be larger than file length + header
-	_, end, err = calculateEncryptedCoords(from, fullSize+1900, "", fileDetails, "encrypted")
+	_, end, err = calculateCoords(from, fullSize+1900, "", fileDetails, "encrypted")
 	assert.Equal(t, fullSize, end)
 	assert.NoError(t, err)
 
 	// param range 0-0 should give whole file
-	start, end, err = calculateEncryptedCoords(0, 0, "", fileDetails, "encrypted")
+	start, end, err = calculateCoords(0, 0, "", fileDetails, "encrypted")
 	assert.Equal(t, end-start, fullSize)
 	assert.NoError(t, err)
 
 	// byte range 0-1000 should return the range size, end coord inclusive
 	endPos = 1000
-	_, end, err = calculateEncryptedCoords(0, 0, "bytes=0-"+strconv.FormatInt(endPos, 10), fileDetails, "encrypted")
+	_, end, err = calculateCoords(0, 0, "bytes=0-"+strconv.FormatInt(endPos, 10), fileDetails, "encrypted")
 	assert.Equal(t, end, endPos+1)
 	assert.NoError(t, err)
 
 	// range in the header should return error if values are not numbers
-	_, _, err = calculateEncryptedCoords(0, 0, "bytes=start-end", fileDetails, "encrypted")
+	_, _, err = calculateCoords(0, 0, "bytes=start-end", fileDetails, "encrypted")
 	assert.Error(t, err)
 }
