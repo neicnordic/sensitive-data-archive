@@ -271,7 +271,8 @@ func Download(c *gin.Context) {
 
 		return
 	}
-	start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
+
+	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
 	if err != nil {
 		log.Errorf("Byte range coordinates invalid! %v", err)
 
@@ -287,13 +288,6 @@ func Download(c *gin.Context) {
 			c.Header("Content-Length", fmt.Sprint(togo))
 		}
 	}
-	// switch c.Param("type") {
-	// case "encrypted":
-	// 	// calculate coordinates
-
-	// default:
-
-	// }
 
 	// Get archive file handle
 	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
@@ -321,26 +315,23 @@ func Download(c *gin.Context) {
 		// set the user and server public keys that is send from htsget
 		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
 		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
-		//c.Header("Server-Public-Key", c.GetHeader("Server-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
 
+		// Create headers for htsget, containing size of the crypt4gh header
 		reencKey := c.GetHeader("Client-Public-Key")
-		/*reencKey := c.GetHeader("Server-Public-Key")
-		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
-			reencKey = c.GetHeader("Client-Public-Key")
-		}*/
 		headerSize := bytes.NewReader(fileDetails.Header).Size()
+		// Size of the header in the archive
 		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
 		if reencKey != "" {
-			log.Warnf("do we have reencryption key? yes: %v", reencKey)
 			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
 			headerSize = bytes.NewReader(newHeader).Size()
+			// Size of the header if the file is re-encrypted before downloading
 			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
 		}
 		if c.Param("type") == "encrypted" {
-			// update the content length to match the encrypted file size
+			// Update the content length to match the encrypted file size
 			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
 		}
 
@@ -355,19 +346,11 @@ func Download(c *gin.Context) {
 	switch c.Param("type") {
 	case "encrypted":
 		reencKey := c.GetHeader("Client-Public-Key")
-		// The key provided in the header should be base64 encoded
-		// TODO should these be swapped??
-		/*reencKey := c.GetHeader("Server-Public-Key")
-		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
-			reencKey = c.GetHeader("Client-Public-Key")
-			log.Warnf("htsget: using client key %v", reencKey)
-		}*/
 		if reencKey == "" {
 			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
 			return
 		}
-		log.Warnf("using key for reencryption %v", reencKey)
 
 		log.Debugf("Public key from the request header = %v", reencKey)
 		log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
@@ -385,6 +368,7 @@ func Download(c *gin.Context) {
 		if err != nil {
 			log.Errorf("Construct SeekableMultiReader for file: %v", err)
 			c.String(http.StatusInternalServerError, "file stream error")
+
 			return
 		}
 
@@ -419,7 +403,6 @@ func Download(c *gin.Context) {
 
 var seekStart = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
 	if start != 0 {
-		log.Warnf("using start pos %v", start)
 
 		// We don't want to read from start, skip ahead to where we should be
 		_, err := fileStream.Seek(start, 0)
@@ -428,8 +411,7 @@ var seekStart = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, 
 			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
 		}
 		// adjust end to reflect that the file start has been moved
-		end = end - start
-		log.Warnf("setting end pos %v", end)
+		end -= start
 		start = 0
 
 	}
@@ -490,11 +472,12 @@ var sendStream = func(reader io.ReadSeeker, writer http.ResponseWriter, start, e
 }
 
 // Calculates the start and end coordinats to use. If a range is set in HTTP headers,
-// it will be used as is. If not, the functions parameters will be used,
-// and adjusted to match the data block boundaries of the encrypted file.
+// it will be used as is. If not, the functions parameters will be used.
+// If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
 var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
-	log.Warnf("type %v", encryptedType)
+	log.Warnf("calculate")
 	if htsget_range != "" {
+		log.Warnf("calculate non empty")
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {
 			a, err := strconv.ParseInt(startEnd[0], 10, 64)
@@ -510,25 +493,27 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 			}
 
 			// Byte ranges are inclusive; +1 so that the last byte is included
-			log.Warnf("using range %v-%v", a, b+1)
+
 			return a, b + 1, nil
 		}
 	}
-	if encryptedType == "encrypted" {
 
-		// Adapt end coordinate to follow the crypt4gh block boundaries
-		headlength := bytes.NewReader(fileDetails.Header)
-		bodyEnd := int64(fileDetails.ArchiveSize)
-		if end > 0 {
-			var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
-			togo := end - start
-			bodysize := math.Max(float64(togo-headlength.Size()), 0)
-			endCoord := packageSize * math.Ceil(bodysize/packageSize)
-			bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
-		}
-
-		return start, headlength.Size() + bodyEnd, nil
+	// For unencrypted files, return the coordinates as is
+	if encryptedType != "encrypted" {
+		return start, end, nil
 	}
 
-	return start, end, nil
+	// Adapt end coordinate to follow the crypt4gh block boundaries
+	headlength := bytes.NewReader(fileDetails.Header)
+	bodyEnd := int64(fileDetails.ArchiveSize)
+	if end > 0 {
+		var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
+		togo := end - start
+		bodysize := math.Max(float64(togo-headlength.Size()), 0)
+		endCoord := packageSize * math.Ceil(bodysize/packageSize)
+		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
+	}
+
+	return start, headlength.Size() + bodyEnd, nil
+
 }
