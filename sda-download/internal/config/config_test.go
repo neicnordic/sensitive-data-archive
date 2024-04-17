@@ -15,7 +15,7 @@ import (
 )
 
 var requiredConfVars = []string{
-	"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url",
+	"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
 }
 
 type TestSuite struct {
