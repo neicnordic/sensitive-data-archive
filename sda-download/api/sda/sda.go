@@ -374,7 +374,6 @@ func Download(c *gin.Context) {
 	default:
 		// Reencrypt header for use with our temporary key
 		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
-
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")

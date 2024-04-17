@@ -175,7 +175,7 @@ func NewConfig() (*Map, error) {
 		}
 	}
 	requiredConfVars := []string{
-		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url",
+		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host"
 	}
 
 	if viper.GetString("archive.type") == S3 {
@@ -315,10 +315,6 @@ func (c *Map) configArchive() {
 
 func (c *Map) configReencrypt() error {
 	c.Reencrypt.Host = viper.GetString("grpc.host")
-	if c.Reencrypt.Host == "" {
-		return fmt.Errorf("grpc.host is not set")
-	}
-
 	viper.SetDefault("grpc.port", 50051)
 	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
 	if viper.IsSet("grpc.port") {
@@ -380,7 +376,7 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GetC4GHKey()
+	c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GenerateC4GHKey()
 	if err != nil {
 		return err
 	}
@@ -482,7 +478,7 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key
-func GetC4GHKey() ([32]byte, string, error) {
+func GenerateC4GHKey() ([32]byte, string, error) {
 	log.Info("creating temporary crypt4gh key")
 
 	public, private, err := keys.GenerateKeyPair()
@@ -495,7 +491,6 @@ func GetC4GHKey() ([32]byte, string, error) {
 
 	pem := bytes.Buffer{}
 	err = keys.WriteCrypt4GHX25519PublicKey(&pem, public)
-
 	if err != nil {
 		log.Errorf("Error when converting public key to PEM format: %v", err)
 
@@ -506,7 +501,6 @@ func GetC4GHKey() ([32]byte, string, error) {
 
 	encoder := base64.NewEncoder(base64.StdEncoding, &b64)
 	_, err = encoder.Write(pem.Bytes())
-
 	if err != nil {
 		log.Errorf("Error when converting public key to PEM format: %v", err)
 
