@@ -175,7 +175,7 @@ func NewConfig() (*Map, error) {
 		}
 	}
 	requiredConfVars := []string{
-		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host"
+		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
 	}
 
 	if viper.GetString("archive.type") == S3 {
