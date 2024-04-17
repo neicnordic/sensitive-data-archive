@@ -477,7 +477,8 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 	return wl
 }
 
-// GetC4GHKey reads and decrypts and returns the c4gh key
+// GeneerateC4GHKey generates a keypair and returns the private key as a byte
+// array and the public key as a base64 encoded string
 func GenerateC4GHKey() ([32]byte, string, error) {
 	log.Info("creating temporary crypt4gh key")
 
@@ -497,15 +498,7 @@ func GenerateC4GHKey() ([32]byte, string, error) {
 		return [32]byte{}, "", err
 	}
 
-	b64 := bytes.Buffer{}
+	b64 := base64.StdEncoding.EncodeToString(pem.Bytes())
 
-	encoder := base64.NewEncoder(base64.StdEncoding, &b64)
-	_, err = encoder.Write(pem.Bytes())
-	if err != nil {
-		log.Errorf("Error when converting public key to PEM format: %v", err)
-
-		return [32]byte{}, "", err
-	}
-
-	return private, b64.String(), nil
+	return private, b64, nil
 }
