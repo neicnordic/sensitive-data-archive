@@ -1,11 +1,14 @@
 package config
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -92,6 +95,12 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
 	assert.NotNil(suite.T(), c.App.Crypt4GHPrivateKey)
 	assert.NotNil(suite.T(), c.App.Crypt4GHPublicKeyB64)
+
+	// Check the key that was generated
+	publicKey, err := base64.StdEncoding.DecodeString(c.App.Crypt4GHPublicKeyB64)
+	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
+	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))
+	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
 }
 
 func (suite *TestSuite) TestArchiveConfig() {
