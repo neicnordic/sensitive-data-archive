@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,9 +56,9 @@ type AppConfig struct {
 	// Optional. Defaults to empty
 	ServerKey string
 
-	// Stores the Crypt4GH private key if the two configs above are set
-	// Unconfigurable. Depends on Crypt4GHKeyFile and Crypt4GHPassFile
-	Crypt4GHKey *[32]byte
+	// Stores the Crypt4GH private key used internally
+	Crypt4GHPrivateKey   [32]byte
+	Crypt4GHPublicKeyB64 string
 
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
@@ -173,7 +175,7 @@ func NewConfig() (*Map, error) {
 		}
 	}
 	requiredConfVars := []string{
-		"db.host", "db.user", "db.password", "db.database", "c4gh.filepath", "c4gh.passphrase", "oidc.configuration.url",
+		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
 	}
 
 	if viper.GetString("archive.type") == S3 {
@@ -210,15 +212,12 @@ func NewConfig() (*Map, error) {
 	c.applyDefaults()
 	c.sessionConfig()
 	c.configArchive()
-	if viper.IsSet("grpc.host") {
-		err := c.configReencrypt()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		log.Info("Reencrypt service is not configured")
+	err := c.configReencrypt()
+	if err != nil {
+		return nil, err
 	}
-	err := c.configureOIDC()
+
+	err = c.configureOIDC()
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +353,7 @@ func (c *Map) configReencrypt() error {
 			return errors.New("configured client certificate is a folder")
 		}
 	}
-	if c.Reencrypt.ClientCert != "" && c.Reencrypt.ClientKey != "" {
+	if c.Reencrypt.ClientCert != "" && c.Reencrypt.ClientKey != "" && !viper.IsSet("grpc.port") {
 		log.Infoln("client certificates detected, setting grpc port to 50443")
 		c.Reencrypt.Port = 50443
 	}
@@ -377,7 +376,7 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	c.App.Crypt4GHKey, err = GetC4GHKey()
+	c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GenerateC4GHKey()
 	if err != nil {
 		return err
 	}
@@ -478,25 +477,28 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 	return wl
 }
 
-// GetC4GHKey reads and decrypts and returns the c4gh key
-func GetC4GHKey() (*[32]byte, error) {
-	log.Info("reading crypt4gh private key")
-	keyPath := viper.GetString("c4gh.filepath")
-	passphrase := viper.GetString("c4gh.passphrase")
+// GeneerateC4GHKey generates a keypair and returns the private key as a byte
+// array and the public key as a base64 encoded string
+func GenerateC4GHKey() ([32]byte, string, error) {
+	log.Info("creating temporary crypt4gh key")
 
-	// Make sure the key path and passphrase is valid
-	keyFile, err := os.Open(keyPath)
+	public, private, err := keys.GenerateKeyPair()
+
 	if err != nil {
-		return nil, err
+		log.Errorf("Error when generating keys: %v", err)
+
+		return [32]byte{}, "", err
 	}
 
-	key, err := keys.ReadPrivateKey(keyFile, []byte(passphrase))
+	pem := bytes.Buffer{}
+	err = keys.WriteCrypt4GHX25519PublicKey(&pem, public)
 	if err != nil {
-		return nil, err
+		log.Errorf("Error when converting public key to PEM format: %v", err)
+
+		return [32]byte{}, "", err
 	}
 
-	keyFile.Close()
-	log.Info("crypt4gh private key loaded")
+	b64 := base64.StdEncoding.EncodeToString(pem.Bytes())
 
-	return &key, nil
+	return private, b64, nil
 }

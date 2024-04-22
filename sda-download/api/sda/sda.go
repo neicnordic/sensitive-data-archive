@@ -372,8 +372,17 @@ func Download(c *gin.Context) {
 		fileStream = io.MultiReader(newHr, file)
 
 	default:
-		encryptedFileReader := io.MultiReader(bytes.NewReader(fileDetails.Header), file)
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
+		// Reencrypt header for use with our temporary key
+		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
+		if err != nil {
+			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+			c.String(http.StatusInternalServerError, "file re-encryption error")
+
+			return
+		}
+
+		encryptedFileReader := io.MultiReader(bytes.NewReader(newHeader), file)
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, config.Config.App.Crypt4GHPrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)
