@@ -2,17 +2,31 @@ package sda
 
 import (
 	"bytes"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/chacha20poly1305"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
+	"github.com/neicnordic/sda-download/internal/reencrypt"
 	"github.com/neicnordic/sda-download/internal/session"
 	"github.com/neicnordic/sda-download/internal/storage"
 )
@@ -551,4 +565,218 @@ func TestEncrypted_Coords(t *testing.T) {
 	// range in the header should return error if values are not numbers
 	_, _, err = calculateEncryptedCoords(0, 0, "bytes=start-end", fileDetails)
 	assert.Error(t, err)
+}
+
+type fakeGRPC struct {
+	t      *testing.T
+	pubkey [32]byte
+}
+
+func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Poor person's grpc server
+
+	w.Header().Add("Content-type", "application/grpc+proto")
+	w.Header().Add("Grpc-encoding", "identity")
+	w.Header().Add("Trailer", "Grpc-status")
+
+	var inLength int32
+	compressed := make([]byte, 1)
+	_, err := r.Body.Read(compressed)
+	assert.NoError(f.t, err, "Could not read compressed flag")
+	assert.Equal(f.t, compressed[0], byte(0), "Unexpected compressed flag")
+
+	err = binary.Read(r.Body, binary.BigEndian, &inLength)
+	assert.NoError(f.t, err, "Could not read length")
+
+	body, err := io.ReadAll(r.Body)
+	assert.NoError(f.t, err, "Could not read body")
+
+	re := reencrypt.ReencryptRequest{}
+	err = proto.Unmarshal(body, &re)
+	assert.NoError(f.t, err, "Could not unmarshal request")
+
+	rr := reencrypt.ReencryptResponse{Header: re.GetOldheader()}
+	response, err := proto.Marshal(&rr)
+	assert.NoError(f.t, err, "Could not marshal response")
+
+	w.WriteHeader(200)
+	_, err = w.Write([]byte{0})
+	assert.NoError(f.t, err, "Could not write response flag")
+
+	err = binary.Write(w, binary.BigEndian, int32(len(response)))
+	assert.NoError(f.t, err, "Could not write response length")
+
+	_, err = w.Write(response)
+	assert.NoError(f.t, err, "Could not write response")
+	w.Header().Add("Grpc-status", "0")
+}
+
+func TestDownload_Success_Whole(t *testing.T) {
+
+	// Fix to run fake GRPC server
+	faker := fakeGRPC{t: t}
+	server := httptest.NewUnstartedServer(&faker)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	serverdetails := strings.Split(server.Listener.Addr().String(), ":")
+
+	keyfile, err := os.CreateTemp("", "key")
+	assert.NoError(t, err, "Could not create temp file for key")
+	defer os.Remove(keyfile.Name())
+	privdata, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
+	assert.NoError(t, err, "Could not marshal private key")
+
+	privPEM := "-----BEGIN PRIVATE KEY-----\n" + base64.StdEncoding.EncodeToString(privdata) + "\n-----END PRIVATE KEY-----\n"
+	_, err = keyfile.Write([]byte(privPEM))
+	assert.NoError(t, err, "Could not write private key")
+	keyfile.Close()
+
+	certfile, err := os.CreateTemp("", "cert")
+	assert.NoError(t, err, "Could not create temp file for cert")
+	defer os.Remove(certfile.Name())
+	pubPEM := "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(server.Certificate().Raw) + "\n-----END CERTIFICATE-----\n"
+	_, err = certfile.Write([]byte(pubPEM))
+	assert.NoError(t, err, "Could not write public key")
+	certfile.Close()
+
+	config.Config.Reencrypt.Host = serverdetails[0]
+	port, _ := strconv.ParseInt(serverdetails[1], 10, 32)
+	config.Config.Reencrypt.Port = int(port)
+	config.Config.Reencrypt.CACert = certfile.Name()
+	config.Config.Reencrypt.ClientCert = certfile.Name()
+	config.Config.Reencrypt.ClientKey = keyfile.Name()
+	config.Config.Reencrypt.Timeout = 10
+
+	// Set up keys
+	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GenerateC4GHKey()
+	assert.NoError(t, err, "Could not generate temporary keys")
+
+	datafile, err := os.CreateTemp(".", "datafile.")
+	assert.NoError(t, err, "Could not create datafile for test")
+	datafileName := datafile.Name()
+	defer os.Remove(datafileName)
+
+	tempKey, err := base64.StdEncoding.DecodeString(config.Config.App.Crypt4GHPublicKeyB64)
+	assert.NoError(t, err, "Could not decode public key envelope")
+
+	pubKeyReader := bytes.NewReader(tempKey)
+	publicKey, err := keys.ReadPublicKey(pubKeyReader)
+	assert.NoError(t, err, "Could not decode public key")
+
+	readerPublicKeyList := [][chacha20poly1305.KeySize]byte{}
+	readerPublicKeyList = append(readerPublicKeyList, [32]byte(publicKey))
+	faker.pubkey = [32]byte(publicKey)
+
+	bufferWriter := bytes.Buffer{}
+	dataWriter, err := streaming.NewCrypt4GHWriter(&bufferWriter, config.Config.App.Crypt4GHPrivateKey, readerPublicKeyList, nil)
+	assert.NoError(t, err, "Could not make crypt4gh writer for test")
+
+	for i := 0; i < 1000; i++ {
+		_, err = dataWriter.Write([]byte("data"))
+		assert.NoError(t, err, "Could not write to crypt4gh writer for test")
+	}
+	dataWriter.Close()
+
+	t.Logf("buffer: %v", bufferWriter.Len())
+	headerBytes, err := headers.ReadHeader(&bufferWriter)
+	assert.NoError(t, err, "Could not get header")
+
+	_, err = io.Copy(datafile, &bufferWriter)
+	assert.NoError(t, err, "Could not write temporary file")
+	datafile.Close()
+
+	// Save original to-be-mocked functions
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+	archive := config.Config.Archive
+	archive.Posix.Location = "."
+	Backend, _ = storage.NewBackend(archive)
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: datafileName,
+			ArchiveSize: 0,
+			Header:      headerBytes,
+		}
+
+		return fileDetails, nil
+	}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{}}
+
+	// Test the outcomes of the handler
+	Download(c)
+	response := w.Result()
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("data"), body[:4], "Unexpected body from download")
+
+	// Mock request and response holders
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=5&endCoordinate=10"}}
+	// Test the outcomes of the handler
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("atada"), body, "Unexpected body from download")
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=0-10"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	// Test the outcomes of the handler
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	// Test the outcomes of the handler
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 400, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("c4gh pub"), body[:8], "Unexpected body from download")
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+
 }
