@@ -611,7 +611,15 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Grpc-status", "0")
 }
 
-func TestDownload_Success_Whole(t *testing.T) {
+func TestDownload_Whole_Range_Encrypted(t *testing.T) {
+
+	// Save original to-be-mocked functions
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+	archive := config.Config.Archive
+	archive.Posix.Location = "."
+	Backend, _ = storage.NewBackend(archive)
 
 	// Fix to run fake GRPC server
 	faker := fakeGRPC{t: t}
@@ -620,8 +628,10 @@ func TestDownload_Success_Whole(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
+	// Figure out IP, port
 	serverdetails := strings.Split(server.Listener.Addr().String(), ":")
 
+	// Set up TLS for fake server
 	keyfile, err := os.CreateTemp("", "key")
 	assert.NoError(t, err, "Could not create temp file for key")
 	defer os.Remove(keyfile.Name())
@@ -641,6 +651,7 @@ func TestDownload_Success_Whole(t *testing.T) {
 	assert.NoError(t, err, "Could not write public key")
 	certfile.Close()
 
+	// Configure Reencrypt to use fake server
 	config.Config.Reencrypt.Host = serverdetails[0]
 	port, _ := strconv.ParseInt(serverdetails[1], 10, 32)
 	config.Config.Reencrypt.Port = int(port)
@@ -649,10 +660,11 @@ func TestDownload_Success_Whole(t *testing.T) {
 	config.Config.Reencrypt.ClientKey = keyfile.Name()
 	config.Config.Reencrypt.Timeout = 10
 
-	// Set up keys
+	// Set up crypt4gh keys
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GenerateC4GHKey()
 	assert.NoError(t, err, "Could not generate temporary keys")
 
+	// Make a file to hold the archive file
 	datafile, err := os.CreateTemp(".", "datafile.")
 	assert.NoError(t, err, "Could not create datafile for test")
 	datafileName := datafile.Name()
@@ -661,10 +673,12 @@ func TestDownload_Success_Whole(t *testing.T) {
 	tempKey, err := base64.StdEncoding.DecodeString(config.Config.App.Crypt4GHPublicKeyB64)
 	assert.NoError(t, err, "Could not decode public key envelope")
 
+	// Decode public key
 	pubKeyReader := bytes.NewReader(tempKey)
 	publicKey, err := keys.ReadPublicKey(pubKeyReader)
 	assert.NoError(t, err, "Could not decode public key")
 
+	// Reader list for archive file
 	readerPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	readerPublicKeyList = append(readerPublicKeyList, [32]byte(publicKey))
 	faker.pubkey = [32]byte(publicKey)
@@ -673,27 +687,22 @@ func TestDownload_Success_Whole(t *testing.T) {
 	dataWriter, err := streaming.NewCrypt4GHWriter(&bufferWriter, config.Config.App.Crypt4GHPrivateKey, readerPublicKeyList, nil)
 	assert.NoError(t, err, "Could not make crypt4gh writer for test")
 
+	// Write some data to the file
 	for i := 0; i < 1000; i++ {
 		_, err = dataWriter.Write([]byte("data"))
 		assert.NoError(t, err, "Could not write to crypt4gh writer for test")
 	}
 	dataWriter.Close()
 
-	t.Logf("buffer: %v", bufferWriter.Len())
+	// We have now written a crypt4gh to our buffer, prepare it for use
+	// by separating out the header and write the rest to the file
+
 	headerBytes, err := headers.ReadHeader(&bufferWriter)
 	assert.NoError(t, err, "Could not get header")
 
 	_, err = io.Copy(datafile, &bufferWriter)
 	assert.NoError(t, err, "Could not write temporary file")
 	datafile.Close()
-
-	// Save original to-be-mocked functions
-	originalCheckFilePermission := database.CheckFilePermission
-	originalGetCacheFromContext := middleware.GetCacheFromContext
-	originalGetFile := database.GetFile
-	archive := config.Config.Archive
-	archive.Posix.Location = "."
-	Backend, _ = storage.NewBackend(archive)
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -714,21 +723,21 @@ func TestDownload_Success_Whole(t *testing.T) {
 		return fileDetails, nil
 	}
 
-	// Mock request and response holders
+	// Test download, should work and return the whole file
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{}}
 
-	// Test the outcomes of the handler
 	Download(c)
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
-	assert.Equal(t, []byte("data"), body[:4], "Unexpected body from download")
+	// We only check
+	assert.Equal(t, []byte(strings.Repeat("data", 1000)), body, "Unexpected body from download")
 
-	// Mock request and response holders
+	// Test download with specified coordinates, should return a small bit of the file
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=5&endCoordinate=10"}}
@@ -741,6 +750,8 @@ func TestDownload_Success_Whole(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, []byte("atada"), body, "Unexpected body from download")
 
+	// Test encrypted download, should work and give output that is crypt4gh
+	// encrypted
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
@@ -750,7 +761,6 @@ func TestDownload_Success_Whole(t *testing.T) {
 	c.Params = make(gin.Params, 1)
 	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
 
-	// Test the outcomes of the handler
 	Download(c)
 	response = w.Result()
 	defer response.Body.Close()
@@ -759,13 +769,13 @@ func TestDownload_Success_Whole(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
 
+	// Test encrypted download without passing the key, should fail
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
 	c.Params = make(gin.Params, 1)
 	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
 
-	// Test the outcomes of the handler
 	Download(c)
 	response = w.Result()
 	defer response.Body.Close()
