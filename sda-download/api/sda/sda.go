@@ -299,8 +299,20 @@ func Download(c *gin.Context) {
 		}
 	}
 
+	wholeFile := true
+	if start != 0 || end != 0 {
+		wholeFile = false
+	}
+
 	// Get archive file handle
-	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
+	var file io.Reader
+
+	if wholeFile {
+		file, err = Backend.NewFileReader(fileDetails.ArchivePath)
+	} else {
+		file, err = Backend.NewFileReadSeeker(fileDetails.ArchivePath)
+	}
+
 	if err != nil {
 		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
 		c.String(http.StatusInternalServerError, "archive error")
@@ -368,9 +380,21 @@ func Download(c *gin.Context) {
 			return
 		}
 		log.Debugf("Reencrypted c4gh file header = %v", newHeader)
-		newHr := bytes.NewReader(newHeader)
-		fileStream = io.MultiReader(newHr, file)
 
+		newHr := bytes.NewReader(newHeader)
+
+		if wholeFile {
+			fileStream = io.MultiReader(newHr, file)
+		} else {
+			seeker, _ := file.(io.ReadSeeker)
+			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
+			if err != nil {
+				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+		}
 	default:
 		// Reencrypt header for use with our temporary key
 		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
@@ -381,8 +405,22 @@ func Download(c *gin.Context) {
 			return
 		}
 
-		encryptedFileReader := io.MultiReader(bytes.NewReader(newHeader), file)
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, config.Config.App.Crypt4GHPrivateKey, nil)
+		newHr := bytes.NewReader(newHeader)
+
+		if wholeFile {
+			fileStream = io.MultiReader(newHr, file)
+		} else {
+			seeker, _ := file.(io.ReadSeeker)
+			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
+			if err != nil {
+				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+		}
+
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.App.Crypt4GHPrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)
