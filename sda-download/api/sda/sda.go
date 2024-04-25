@@ -327,7 +327,6 @@ func Download(c *gin.Context) {
 		// set the user and server public keys that is send from htsget
 		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
 		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
-		c.Header("Server-Public-Key", c.GetHeader("Server-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
