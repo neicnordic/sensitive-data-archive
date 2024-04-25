@@ -272,23 +272,18 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	switch c.Param("type") {
-	case "encrypted":
-		// calculate coordinates
-		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
-		if err != nil {
-			log.Errorf("Byte range coordinates invalid! %v", err)
+	wholeFile := true
+	if start != 0 || end != 0 {
+		wholeFile = false
+	}
 
-			return
-		}
-		if start > 0 {
-			// reading from an offset in encrypted file is not yet supported
-			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
-			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
+	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
+	if err != nil {
+		log.Errorf("Byte range coordinates invalid! %v", err)
 
-			return
-		}
-	default:
+		return
+	}
+	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
 			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
@@ -297,11 +292,6 @@ func Download(c *gin.Context) {
 			togo := end - start
 			c.Header("Content-Length", fmt.Sprint(togo))
 		}
-	}
-
-	wholeFile := true
-	if start != 0 || end != 0 {
-		wholeFile = false
 	}
 
 	// Get archive file handle
@@ -355,6 +345,7 @@ func Download(c *gin.Context) {
 	}
 
 	// Prepare the file for streaming, encrypted or decrypted
+
 	var fileStream io.Reader
 
 	switch c.Param("type") {
@@ -387,13 +378,15 @@ func Download(c *gin.Context) {
 			fileStream = io.MultiReader(newHr, file)
 		} else {
 			seeker, _ := file.(io.ReadSeeker)
-			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
+			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
 			if err != nil {
 				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
 
 				return
 			}
+			start, end, err = seekStart(seekStream, start, end)
+			fileStream = seekStream
 		}
 	default:
 		// Reencrypt header for use with our temporary key
@@ -428,16 +421,7 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		if start != 0 {
-			// We don't want to read from start, skip ahead to where we should be
-			_, err = c4ghfileStream.Seek(start, 0)
-			if err != nil {
-				log.Errorf("error occurred while finding sending start: %v", err)
-				c.String(http.StatusInternalServerError, "an error occurred")
-
-				return
-			}
-		}
+		start, end, err = seekStart(c4ghfileStream, start, end)
 		fileStream = c4ghfileStream
 	}
 
@@ -448,6 +432,24 @@ func Download(c *gin.Context) {
 
 		return
 	}
+}
+
+var seekStart = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+	if start != 0 {
+
+		// We don't want to read from start, skip ahead to where we should be
+		_, err := fileStream.Seek(start, 0)
+		if err != nil {
+
+			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		}
+		// adjust end to reflect that the file start has been moved
+		end -= start
+		start = 0
+
+	}
+
+	return start, end, nil
 }
 
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
