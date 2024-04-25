@@ -331,13 +331,20 @@ func Download(c *gin.Context) {
 
 	if c.Request.Method == http.MethodHead {
 
+		// Create headers for htsget, containing size of the crypt4gh header
+		reencKey := c.GetHeader("Client-Public-Key")
+		headerSize := bytes.NewReader(fileDetails.Header).Size()
+		// Size of the header in the archive
+		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
+		if reencKey != "" {
+			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
+			headerSize = bytes.NewReader(newHeader).Size()
+			// Size of the header if the file is re-encrypted before downloading
+			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
+		}
 		if c.Param("type") == "encrypted" {
-			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
-
-			// set the length of the crypt4gh header for htsget
-			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
-			// TODO figure out if client crypt4gh header will have other size
-			// c.Header("Client-Additional-Bytes", ...)
+			// Update the content length to match the encrypted file size
+			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
 		}
 
 		return
