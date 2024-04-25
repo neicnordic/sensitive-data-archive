@@ -358,11 +358,8 @@ func Download(c *gin.Context) {
 	case "encrypted":
 		// The key provided in the header should be base64 encoded
 		reencKey := c.GetHeader("Client-Public-Key")
-		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
-			reencKey = c.GetHeader("Server-Public-Key")
-		}
 		if reencKey == "" {
-			c.String(http.StatusBadRequest, "c4gh public key is mmissing from the header")
+			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
 			return
 		}
