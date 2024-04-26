@@ -389,6 +389,12 @@ func Download(c *gin.Context) {
 				return
 			}
 			start, end, err = seekStart(seekStream, start, end)
+			if err != nil {
+				log.Errorf("Could not seek stream: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
 			fileStream = seekStream
 		}
 	default:
@@ -425,6 +431,12 @@ func Download(c *gin.Context) {
 			return
 		}
 		start, end, err = seekStart(c4ghfileStream, start, end)
+		if err != nil {
+			log.Errorf("Could not seek stream: %v", err)
+			c.String(http.StatusInternalServerError, "file decoding error")
+
+			return
+		}
 		fileStream = c4ghfileStream
 	}
 

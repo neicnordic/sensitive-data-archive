@@ -52,7 +52,7 @@ func Setup() *http.Server {
 	// Configure TLS settings
 	log.Info("(3/5) Configuring TLS")
 	cfg := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
+		MinVersion: tls.VersionTLS12,
 	}
 
 	// Configure web server
