@@ -388,7 +388,7 @@ func Download(c *gin.Context) {
 
 				return
 			}
-			start, end, err = seekStart(seekStream, start, end)
+			start, end, err = adjustSeekPos(seekStream, start, end)
 			if err != nil {
 				log.Errorf("Could not seek stream: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
@@ -430,7 +430,7 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		start, end, err = seekStart(c4ghfileStream, start, end)
+		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
 		if err != nil {
 			log.Errorf("Could not seek stream: %v", err)
 			c.String(http.StatusInternalServerError, "file decoding error")
@@ -449,7 +449,7 @@ func Download(c *gin.Context) {
 	}
 }
 
-var seekStart = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
 	if start != 0 {
 
 		// We don't want to read from start, skip ahead to where we should be
