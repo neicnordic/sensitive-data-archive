@@ -272,23 +272,18 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	switch c.Param("type") {
-	case "encrypted":
-		// calculate coordinates
-		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
-		if err != nil {
-			log.Errorf("Byte range coordinates invalid! %v", err)
+	wholeFile := true
+	if start != 0 || end != 0 {
+		wholeFile = false
+	}
 
-			return
-		}
-		if start > 0 {
-			// reading from an offset in encrypted file is not yet supported
-			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
-			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
+	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
+	if err != nil {
+		log.Errorf("Byte range coordinates invalid! %v", err)
 
-			return
-		}
-	default:
+		return
+	}
+	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
 			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
@@ -297,11 +292,6 @@ func Download(c *gin.Context) {
 			togo := end - start
 			c.Header("Content-Length", fmt.Sprint(togo))
 		}
-	}
-
-	wholeFile := true
-	if start != 0 || end != 0 {
-		wholeFile = false
 	}
 
 	// Get archive file handle
@@ -337,35 +327,39 @@ func Download(c *gin.Context) {
 		// set the user and server public keys that is send from htsget
 		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
 		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
-		c.Header("Server-Public-Key", c.GetHeader("Server-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
 
+		// Create headers for htsget, containing size of the crypt4gh header
+		reencKey := c.GetHeader("Client-Public-Key")
+		headerSize := bytes.NewReader(fileDetails.Header).Size()
+		// Size of the header in the archive
+		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
+		if reencKey != "" {
+			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
+			headerSize = bytes.NewReader(newHeader).Size()
+			// Size of the header if the file is re-encrypted before downloading
+			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
+		}
 		if c.Param("type") == "encrypted" {
-			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
-
-			// set the length of the crypt4gh header for htsget
-			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
-			// TODO figure out if client crypt4gh header will have other size
-			// c.Header("Client-Additional-Bytes", ...)
+			// Update the content length to match the encrypted file size
+			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
 		}
 
 		return
 	}
 
 	// Prepare the file for streaming, encrypted or decrypted
+
 	var fileStream io.Reader
 
 	switch c.Param("type") {
 	case "encrypted":
 		// The key provided in the header should be base64 encoded
 		reencKey := c.GetHeader("Client-Public-Key")
-		if strings.HasPrefix(c.GetHeader("User-Agent"), "htsget") {
-			reencKey = c.GetHeader("Server-Public-Key")
-		}
 		if reencKey == "" {
-			c.String(http.StatusBadRequest, "c4gh public key is mmissing from the header")
+			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
 			return
 		}
@@ -387,13 +381,21 @@ func Download(c *gin.Context) {
 			fileStream = io.MultiReader(newHr, file)
 		} else {
 			seeker, _ := file.(io.ReadSeeker)
-			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
+			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
 			if err != nil {
 				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
 
 				return
 			}
+			start, end, err = adjustSeekPos(seekStream, start, end)
+			if err != nil {
+				log.Errorf("Could not seek stream: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+			fileStream = seekStream
 		}
 	default:
 		// Reencrypt header for use with our temporary key
@@ -428,15 +430,12 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		if start != 0 {
-			// We don't want to read from start, skip ahead to where we should be
-			_, err = c4ghfileStream.Seek(start, 0)
-			if err != nil {
-				log.Errorf("error occurred while finding sending start: %v", err)
-				c.String(http.StatusInternalServerError, "an error occurred")
+		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
+		if err != nil {
+			log.Errorf("Could not seek stream: %v", err)
+			c.String(http.StatusInternalServerError, "file decoding error")
 
-				return
-			}
+			return
 		}
 		fileStream = c4ghfileStream
 	}
@@ -448,6 +447,24 @@ func Download(c *gin.Context) {
 
 		return
 	}
+}
+
+var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+	if start != 0 {
+
+		// We don't want to read from start, skip ahead to where we should be
+		_, err := fileStream.Seek(start, 0)
+		if err != nil {
+
+			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		}
+		// adjust end to reflect that the file start has been moved
+		end -= start
+		start = 0
+
+	}
+
+	return start, end, nil
 }
 
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
@@ -498,9 +515,10 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 }
 
 // Calculates the start and end coordinats to use. If a range is set in HTTP headers,
-// it will be used as is. If not, the functions parameters will be used,
-// and adjusted to match the data block boundaries of the encrypted file.
-var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64, error) {
+// it will be used as is. If not, the functions parameters will be used.
+// If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
+var calculateCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
+	log.Warnf("calculate")
 	if htsget_range != "" {
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {
@@ -516,9 +534,17 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
 			}
 
-			return a, b, nil
+			// Byte ranges are inclusive; +1 so that the last byte is included
+
+			return a, b + 1, nil
 		}
 	}
+
+	// For unencrypted files, return the coordinates as is
+	if encryptedType != "encrypted" {
+		return start, end, nil
+	}
+
 	// Adapt end coordinate to follow the crypt4gh block boundaries
 	headlength := bytes.NewReader(fileDetails.Header)
 	bodyEnd := int64(fileDetails.ArchiveSize)
@@ -531,4 +557,5 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 	}
 
 	return start, headlength.Size() + bodyEnd, nil
+
 }
