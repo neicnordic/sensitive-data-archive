@@ -64,12 +64,13 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 	// Read system CAs
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
+		log.Errorf("failed to read system CAs: %v", err)
+
 		return nil, err
 	}
 
 	tlsConfig := tls.Config{
-		MinVersion: tls.VersionTLS12,
-		RootCAs:    systemCAs,
+		RootCAs: systemCAs,
 	}
 
 	// Add CAs for broker and database

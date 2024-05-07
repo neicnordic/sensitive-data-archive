@@ -43,6 +43,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
 		rootCAs, err := x509.SystemCertPool()
 		if err != nil {
+			log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
 			rootCAs = x509.NewCertPool()
 		}
 		if config.Config.Reencrypt.CACert != "" {

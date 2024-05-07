@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
@@ -289,13 +288,10 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 func transportConfigS3(config S3Conf) http.RoundTripper {
 	cfg := new(tls.Config)
 
-	// Enforce TLS1.2 or higher
-	cfg.MinVersion = 2
-
 	// Read system CAs
-	var systemCAs, _ = x509.SystemCertPool()
-	if reflect.DeepEqual(systemCAs, x509.NewCertPool()) {
-		log.Debug("creating new CApool")
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
 		systemCAs = x509.NewCertPool()
 	}
 	cfg.RootCAs = systemCAs
