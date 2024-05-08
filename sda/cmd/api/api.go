@@ -71,7 +71,7 @@ func setup(config *config.Config) *http.Server {
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", getFiles)
 
-	cfg := &tls.Config{}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
 		Addr:              config.API.Host + ":" + fmt.Sprint(config.API.Port),

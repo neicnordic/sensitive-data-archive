@@ -70,7 +70,8 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 	}
 
 	tlsConfig := tls.Config{
-		RootCAs: systemCAs,
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    systemCAs,
 	}
 
 	// Add CAs for broker and database

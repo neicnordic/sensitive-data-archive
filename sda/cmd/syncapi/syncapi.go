@@ -79,7 +79,7 @@ func setup(config *config.Config) *http.Server {
 	r.HandleFunc("/dataset", basicAuth(http.HandlerFunc(dataset))).Methods("POST")
 	r.HandleFunc("/metadata", basicAuth(http.HandlerFunc(metadata))).Methods("POST")
 
-	cfg := &tls.Config{}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
 		Addr:              config.API.Host + ":" + fmt.Sprint(config.API.Port),
