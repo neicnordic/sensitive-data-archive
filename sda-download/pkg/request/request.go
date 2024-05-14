@@ -38,8 +38,8 @@ func InitialiseClient() (*http.Client, error) {
 	t.MaxConnsPerHost = 100
 	t.MaxIdleConnsPerHost = 100
 	t.TLSClientConfig = &tls.Config{
-		RootCAs:    caCertPool,
 		MinVersion: tls.VersionTLS12,
+		RootCAs:    caCertPool,
 	}
 	client := &http.Client{
 		Timeout:   20 * time.Second,

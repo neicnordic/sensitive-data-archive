@@ -64,6 +64,8 @@ func TLSConfigBroker(config MQConf) (*tls.Config, error) {
 	// Read system CAs
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
+		log.Errorf("failed to read system CAs: %v", err)
+
 		return nil, err
 	}
 
