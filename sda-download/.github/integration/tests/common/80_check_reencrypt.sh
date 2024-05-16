@@ -77,7 +77,7 @@ if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; th
     exit 1
 fi
 
-part_decrypted_size=65536
+part_decrypted_size=1000
 file_size=$(stat -c %s part1.bam)
 if [ "$file_size" -ne "$part_decrypted_size" ]; then
     echo "Incorrect file size for decrypted partial file, should be $part_decrypted_size but is $file_size"
@@ -88,6 +88,67 @@ if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
     echo "Bad content of decrypted partial file"
     exit 1
 fi
+
+# download reencrypted partial file with range, not from start, check file size
+partReencryptedFile=part1.bam.c4gh
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Range: bytes=72000-72999" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
+file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
+part_expected_size=65688
+
+if [ "$file_size" -ne "$part_expected_size" ]; then
+    echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
+    exit 1
+fi
+
+if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; then
+    echo "Re-encrypted partial file could not be decrypted"
+    exit 1
+fi
+
+part_decrypted_size=1000
+file_size=$(stat -c %s part1.bam)
+if [ "$file_size" -ne "$part_decrypted_size" ]; then
+    echo "Incorrect file size for decrypted partial file, should be $part_decrypted_size but is $file_size"
+    exit 1
+fi
+
+dd if=full1.bam ibs=1 skip=72000 count=1000 of = part1_orig.bam
+
+if ! cmp --silent part1.bam part1_orig.bam; then
+    echo "Decrypted version file fetch as range and part of the original unencrypted file are different"
+    exit 1
+fi
+
+# download reencrypted partial file with range crossing multiple blocks, not from start, check file size
+partReencryptedFile=part1.bam.c4gh
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Range: bytes=130000-202999" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
+file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
+part_expected_size=199704
+
+if [ "$file_size" -ne "$part_expected_size" ]; then
+    echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
+    exit 1
+fi
+
+if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; then
+    echo "Re-encrypted partial file could not be decrypted"
+    exit 1
+fi
+
+part_decrypted_size=73000
+file_size=$(stat -c %s part1.bam)
+if [ "$file_size" -ne "$part_decrypted_size" ]; then
+    echo "Incorrect file size for decrypted partial file, should be $part_decrypted_size but is $file_size"
+    exit 1
+fi
+
+dd if=full1.bam ibs=1 skip=130000 count=73000 of = part1_orig.bam
+
+if ! cmp --silent part1.bam part1_orig.bam; then
+    echo "Decrypted version file fetch as range and part of the original unencrypted file are different"
+    exit 1
+fi
+
 
 # Clean up
 rm full1.bam full2.bam part1.bam $reencryptedFile

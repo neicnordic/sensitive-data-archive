@@ -525,59 +525,143 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 }
 
-func Test_CalucalateCoords(t *testing.T) {
-	var to, from int64
-	from, to = 0, 1000
+func Test_getCoordinates(t *testing.T) {
+
 	fileDetails := &database.FileDownload{
-		ArchivePath: "non-existant-file.txt",
-		ArchiveSize: 2000,
-		Header:      make([]byte, 124),
+		ArchiveSize:   320028,
+		DecryptedSize: 320000,
 	}
 
-	//	htsget_range should be used first and its end position should be increased by one
-	headerSize := bytes.NewReader(fileDetails.Header).Size()
-	fullSize := headerSize + int64(fileDetails.ArchiveSize)
-	var endPos int64
-	endPos = 20
-	start, end, err := calculateCoords(from, to, "bytes=10-"+strconv.FormatInt(endPos, 10), fileDetails, "default")
-	assert.Equal(t, start, int64(10))
-	assert.Equal(t, end, endPos+1)
-	assert.NoError(t, err)
+	w := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(w)
+	context.Request = &http.Request{}
 
-	// end should be greater than or equal to inputted end
-	_, end, err = calculateCoords(from, to, "", fileDetails, "encrypted")
-	assert.GreaterOrEqual(t, end, from)
-	assert.NoError(t, err)
+	// Should work
+	context.Request.Header = http.Header{"Range": []string{"bytes=131000-196999"}}
+	c, err := getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(131000), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(197000), c[0].end, "Unexpected end coordinate")
 
-	// end should not be smaller than a header
-	_, end, err = calculateCoords(from, headerSize-10, "", fileDetails, "encrypted")
-	assert.GreaterOrEqual(t, end, headerSize)
-	assert.NoError(t, err)
+	// Should fail - unknown unit
+	context.Request.Header = http.Header{"Range": []string{"octets=191000-136999"}}
+	_, err = getCoordinates(context, fileDetails)
+	assert.Error(t, err, "Unexpected not error from getCoordinates")
 
-	// end should not be larger than file length + header
-	_, end, err = calculateCoords(from, fullSize+1900, "", fileDetails, "encrypted")
-	assert.Equal(t, fullSize, end)
-	assert.NoError(t, err)
+	// Should fail - start after end
+	context.Request.Header = http.Header{"Range": []string{"bytes=191000-136999"}}
+	_, err = getCoordinates(context, fileDetails)
+	assert.Error(t, err, "Unexpected not error from getCoordinates")
 
-	// param range 0-0 should give whole file
-	start, end, err = calculateCoords(0, 0, "", fileDetails, "encrypted")
-	assert.Equal(t, end-start, fullSize)
-	assert.NoError(t, err)
+	// Start of file
+	context.Request.Header = http.Header{"Range": []string{"bytes=-400"}}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(319600), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(320000), c[0].end, "Unexpected end coordinate")
 
-	// byte range 0-1000 should return the range size, end coord inclusive
-	endPos = 1000
-	_, end, err = calculateCoords(0, 0, "bytes=0-"+strconv.FormatInt(endPos, 10), fileDetails, "encrypted")
-	assert.Equal(t, end, endPos+1)
-	assert.NoError(t, err)
+	// End of file
+	context.Request.Header = http.Header{"Range": []string{"bytes=315000-"}}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(315000), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(320000), c[0].end, "Unexpected end coordinate")
 
-	// range in the header should return error if values are not numbers
-	_, _, err = calculateCoords(0, 0, "bytes=start-end", fileDetails, "encrypted")
-	assert.Error(t, err)
+	// End of file
+	context.Request.Header = http.Header{"Range": []string{"bytes=340000-350000"}}
+	_, err = getCoordinates(context, fileDetails)
+	assert.Error(t, err, "Unexpected lack error from getCoordinates when after file")
+
+	// Now we add query params
+	context.Request = &http.Request{URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=5&endCoordinate=10"}}
+
+	// Should work, Range overrides query params
+	context.Request.Header = http.Header{"Range": []string{"bytes=131000-196999"}}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(131000), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(197000), c[0].end, "Unexpected end coordinate")
+
+	// Should work, without Range, query params are used
+	context.Request.Header = http.Header{}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(5), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(10), c[0].end, "Unexpected end coordinate")
+
+	context, _ = gin.CreateTestContext(w)
+	context.Request = &http.Request{URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=5"}}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(5), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(320000), c[0].end, "Unexpected end coordinate")
+
+	context, _ = gin.CreateTestContext(w)
+	context.Request = &http.Request{URL: &url.URL{Path: "/somepath", RawQuery: "endCoordinate=35"}}
+	c, err = getCoordinates(context, fileDetails)
+	assert.NoError(t, err, "Unexpected error from getCoordinates")
+	assert.Equal(t, 1, len(c), "Unexpected number of coordinates")
+	assert.Equal(t, int64(0), c[0].start, "Unexpected start coordinate")
+	assert.Equal(t, int64(35), c[0].end, "Unexpected end coordinate")
+
+	context, _ = gin.CreateTestContext(w)
+	context.Request = &http.Request{URL: &url.URL{Path: "/somepath", RawQuery: "endCoordinate=3500000"}}
+	_, err = getCoordinates(context, fileDetails)
+	assert.Error(t, err, "Unexpected lack of error from getCoordinates")
+
+	context, _ = gin.CreateTestContext(w)
+	context.Request = &http.Request{URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=350000&endCoordinate=350100"}}
+	_, err = getCoordinates(context, fileDetails)
+	assert.Error(t, err, "Unexpected lack of error from getCoordinates")
+}
+
+func Test_adjustCoordinates(t *testing.T) {
+	fileDetails := &database.FileDownload{
+		ArchiveSize:   320140,
+		DecryptedSize: 320000,
+	}
+
+	coords := []coordinates{{start: 0, end: 10}}
+
+	del, err := adjustCoordinates(coords, fileDetails)
+	assert.NoError(t, err, "Unexpected error from adjustCoordinates")
+	assert.Equal(t, []uint64{0, 10}, del, "Incorrect dataeditlist returned")
+	assert.Equal(t, int64(0), coords[0].start, "Incorrect start after adjustCoordinates")
+	assert.Equal(t, int64(65536+28), coords[0].end, "Incorrect end after adjustCoordinates")
+
+	coords = []coordinates{{start: 75000, end: 200000}}
+	del, err = adjustCoordinates(coords, fileDetails)
+	assert.NoError(t, err, "Unexpected error from adjustCoordinates")
+	assert.Equal(t, []uint64{75000 - 65536, 200000 - 75000}, del, "Incorrect dataeditlist returned")
+	assert.Equal(t, int64(65536+28), coords[0].start, "Incorrect start after adjustCoordinates")
+	assert.Equal(t, int64(4*(65536+28)), coords[0].end, "Incorrect end after adjustCoordinates")
+
+	coords = []coordinates{{start: 200000, end: 320000}}
+	del, err = adjustCoordinates(coords, fileDetails)
+	assert.NoError(t, err, "Unexpected error from adjustCoordinates")
+	assert.Equal(t, []uint64{200000 - 3*65536}, del, "Incorrect dataeditlist returned")
+	assert.Equal(t, int64(3*(65536+28)), coords[0].start, "Incorrect start after adjustCoordinates")
+	assert.Equal(t, int64(320140), coords[0].end, "Incorrect end after adjustCoordinates")
+
+	coords = []coordinates{{start: 319700, end: 320000}}
+	del, err = adjustCoordinates(coords, fileDetails)
+	assert.NoError(t, err, "Unexpected error from adjustCoordinates")
+	assert.Equal(t, []uint64{57556}, del, "Incorrect dataeditlist returned")
+	assert.Equal(t, int64(4*(65536+28)), coords[0].start, "Incorrect start after adjustCoordinates")
+	assert.Equal(t, int64(320140), coords[0].end, "Incorrect end after adjustCoordinates")
+
 }
 
 type fakeGRPC struct {
-	t      *testing.T
-	pubkey [32]byte
+	t         *testing.T
+	pubkey    [32]byte
+	passedDel []uint64
 }
 
 func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -602,6 +686,8 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	re := reencrypt.ReencryptRequest{}
 	err = proto.Unmarshal(body, &re)
 	assert.NoError(f.t, err, "Could not unmarshal request")
+
+	f.passedDel = re.Dataeditlist
 
 	rr := reencrypt.ReencryptResponse{Header: re.GetOldheader()}
 	response, err := proto.Marshal(&rr)
@@ -696,10 +782,9 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.NoError(t, err, "Could not make crypt4gh writer for test")
 
 	// Write some data to the file
-	for i := 0; i < 1000; i++ {
-		_, err = dataWriter.Write([]byte("data"))
-		assert.NoError(t, err, "Could not write to crypt4gh writer for test")
-	}
+
+	_, err = dataWriter.Write([]byte(strings.Repeat("data", 80000)))
+	assert.NoError(t, err, "Could not write to crypt4gh writer for test")
 	dataWriter.Close()
 
 	// We have now written a crypt4gh to our buffer, prepare it for use
@@ -723,9 +808,11 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: datafileName,
-			ArchiveSize: 0,
-			Header:      headerBytes,
+			ArchivePath:   datafileName,
+			ArchiveSize:   5*28 + 4*80000,
+			DecryptedSize: 4 * 80000,
+			LastModified:  "2006-01-02T15:04:05Z",
+			Header:        headerBytes,
 		}
 
 		return fileDetails, nil
@@ -741,9 +828,9 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
 
-	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
 	// We only check
-	assert.Equal(t, []byte(strings.Repeat("data", 1000)), body, "Unexpected body from download")
+	assert.Equal(t, []byte(strings.Repeat("data", 80000)), body, "Unexpected body from download")
 
 	// Test download with specified coordinates, should return a small bit of the file
 	w = httptest.NewRecorder()
@@ -755,16 +842,14 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	defer response.Body.Close()
 	body, _ = io.ReadAll(response.Body)
 
-	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
 	assert.Equal(t, []byte("atada"), body, "Unexpected body from download")
 
-	// Test encrypted download, should work and give output that is crypt4gh
-	// encrypted
+	// Test encrypted download of whole file, should work and give output that is crypt4gh encrypted
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
-	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
-		"Range": []string{"bytes=0-10"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64}}
 
 	c.Params = make(gin.Params, 1)
 	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
@@ -774,8 +859,111 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	defer response.Body.Close()
 	body, _ = io.ReadAll(response.Body)
 
-	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
-	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download, complete body length is %v", len(body))
+
+	assert.Equal(t, 4*80000+5*28+124, len(body), "Unexpected body length from download")
+
+	f, err := streaming.NewCrypt4GHReader(bytes.NewReader(body), config.Config.App.Crypt4GHPrivateKey, nil)
+	assert.Equal(t, nil, err, "Could not create crypt4gh reader from download")
+
+	output, err := io.ReadAll(f)
+	assert.Equal(t, nil, err, "Read from crypt4gh decoder failed")
+	assert.Equal(t, []byte("datadatada"), output[:10], "Unexpected decrypted content")
+	assert.Equal(t, 320000, len(output), "Unexpected decrypted content length")
+
+	// Test encrypted download with range, should work and give output that is crypt4gh encrypted
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=0-9"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download, complete body length is %v", len(body))
+
+	assert.Equal(t, 65688, len(body), "Unexpected body length from download")
+
+	f, err = streaming.NewCrypt4GHReader(bytes.NewReader(body), config.Config.App.Crypt4GHPrivateKey, nil)
+	assert.Equal(t, nil, err, "Could not create crypt4gh reader from download")
+
+	output, err = io.ReadAll(f)
+	assert.Equal(t, nil, err, "Read from crypt4gh decoder failed")
+	assert.Equal(t, []byte("datadatada"), output[:10], "Unexpected decrypted content")
+
+	// Our simple grpc doesn't inject del, but we check that the correct is passed
+	assert.Equal(t, []uint64{0, 10}, faker.passedDel, "Unexpected deletions passed to reencrypt")
+
+	// Test encrypted download with a range not from start and check the data edit list
+	// is correct
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=131000-196999"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download, complete body length is %v", len(body))
+	//
+	assert.Equal(t, 124+3*65564, len(body), "Unexpected body length from download")
+
+	f, err = streaming.NewCrypt4GHReader(bytes.NewReader(body), config.Config.App.Crypt4GHPrivateKey, nil)
+	assert.Equal(t, nil, err, "Could not create crypt4gh reader from download")
+
+	output, err = io.ReadAll(f)
+	assert.Equal(t, nil, err, "Read from crypt4gh decoder failed")
+	assert.Equal(t, []byte("datadatada"), output[:10], "Unexpected decrypted content")
+
+	// Our simple grpc doesn't inject del, but we check that the correct is passed
+	assert.Equal(t, []uint64{65464, 66000}, faker.passedDel, "Unexpected deletions passed to reencrypt")
+
+	// Test encrypted download with a range not from start and check the data edit list
+	// is correct
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=-300"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	t.Logf("Body is %v bytes", len(body))
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download, body is %v", string(body))
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download, complete body length is %v", len(body))
+
+	assert.Equal(t, 124+(320000-4*65536)+28, len(body), "Unexpected body length from download")
+
+	f, err = streaming.NewCrypt4GHReader(bytes.NewReader(body), config.Config.App.Crypt4GHPrivateKey, nil)
+	assert.Equal(t, nil, err, "Could not create crypt4gh reader from download")
+
+	output, err = io.ReadAll(f)
+	assert.Equal(t, nil, err, "Read from crypt4gh decoder failed")
+	assert.Equal(t, []byte("datadatada"), output[:10], "Unexpected decrypted content")
+
+	// Our simple grpc doesn't inject del, but we check that the correct is passed
+	assert.Equal(t, []uint64{57556}, faker.passedDel, "Unexpected deletions passed to reencrypt")
 
 	// Test encrypted download without passing the key, should fail
 	w = httptest.NewRecorder()

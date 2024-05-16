@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -37,7 +36,7 @@ func sanitizeString(str string) string {
 	return pattern.ReplaceAllString(str, "[identifier]: $1")
 }
 
-func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+func reencryptHeader(oldHeader []byte, reencKey string, dataeditlist ...uint64) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
@@ -97,7 +96,14 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 
 	c := reencrypt.NewReencryptClient(conn)
 	log.Debugf("Client created, c = %v", c)
-	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
+
+	request := reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey}
+
+	if len(dataeditlist) > 0 {
+		request.Dataeditlist = dataeditlist
+	}
+
+	res, err := c.ReencryptHeader(ctx, &request)
 	if err != nil {
 		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
 
@@ -246,59 +252,38 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	// Get query params
-	qStart := c.DefaultQuery("startCoordinate", "0")
-	qEnd := c.DefaultQuery("endCoordinate", "0")
-
-	// Parse and verify coordinates are valid
-	start, err := strconv.ParseInt(qStart, 10, 0)
-
+	coords, err := getCoordinates(c, fileDetails)
 	if err != nil {
-		log.Errorf("failed to convert start coordinate %d to integer, %s", start, err)
-		c.String(http.StatusBadRequest, "startCoordinate must be an integer")
-
-		return
-	}
-	end, err := strconv.ParseInt(qEnd, 10, 0)
-	if err != nil {
-		log.Errorf("failed to convert end coordinate %d to integer, %s", end, err)
-		c.String(http.StatusBadRequest, "endCoordinate must be an integer")
-
-		return
-	}
-	if end < start {
-		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", end, start)
-		c.String(http.StatusBadRequest, "endCoordinate must be greater than startCoordinate")
+		log.Errorf("Coordinate parse error: %v", err)
+		c.String(http.StatusInternalServerError, "failed to parse range/coordinates")
 
 		return
 	}
 
-	wholeFile := true
-	if start != 0 || end != 0 {
-		wholeFile = false
-	}
-
-	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
-	if err != nil {
-		log.Errorf("Byte range coordinates invalid! %v", err)
+	if len(coords) > 1 {
+		log.Warnf("Multiple ranges were requested but this is currently unsupported: %v", coords)
+		// Should we use a 416 here instead? Or determine what should be returned and fix it, might
+		// have use cases for e.g. Cytomine
+		c.String(http.StatusInternalServerError, "multiple ranges is not yet supported")
 
 		return
 	}
+
 	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
-		if start == 0 && end == 0 {
+		if len(coords) == 0 {
+			// No coordinates specified, so we're sending the whole file
 			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
 		} else {
 			// Calculate how much we should read (if given)
-			togo := end - start
-			c.Header("Content-Length", fmt.Sprint(togo))
+			c.Header("Content-Length", fmt.Sprint(coords[0].end-coords[0].start))
 		}
 	}
 
 	// Get archive file handle
 	var file io.Reader
 
-	if wholeFile {
+	if len(coords) == 0 {
 		file, err = Backend.NewFileReader(fileDetails.ArchivePath)
 	} else {
 		file, err = Backend.NewFileReadSeeker(fileDetails.ArchivePath)
@@ -312,18 +297,19 @@ func Download(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/octet-stream")
+	lastModified, err := time.Parse(time.RFC3339, fileDetails.LastModified)
+	if err != nil {
+		log.Errorf("failed to parse last modified time: %v", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%v", fileID))
+	c.Header("ETag", fileDetails.DecryptedChecksum)
+	c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
+
 	if c.GetBool("S3") {
-		lastModified, err := time.Parse(time.RFC3339, fileDetails.LastModified)
-		if err != nil {
-			log.Errorf("failed to parse last modified time: %v", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-
-			return
-		}
-
-		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
-		c.Header("ETag", fileDetails.DecryptedChecksum)
-		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
 
 		// set the user and server public keys that is send from htsget
 		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
@@ -332,20 +318,19 @@ func Download(c *gin.Context) {
 
 	if c.Request.Method == http.MethodHead {
 
-		// Create headers for htsget, containing size of the crypt4gh header
-		reencKey := c.GetHeader("Client-Public-Key")
-		headerSize := bytes.NewReader(fileDetails.Header).Size()
-		// Size of the header in the archive
-		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
-		if reencKey != "" {
-			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
-			headerSize = bytes.NewReader(newHeader).Size()
-			// Size of the header if the file is re-encrypted before downloading
-			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
-		}
+		c.Header("Accept-Ranges", "bytes")
+
+		// Header size can vary if doing parts so we add a dataeditlist packet,
+		// but ignore that here.
+
+		c.Header("Server-Additional-Bytes", fmt.Sprint(len(fileDetails.Header)))
+		c.Header("Client-Additional-Bytes", fmt.Sprint(len(fileDetails.Header)))
+
 		if c.Param("type") == "encrypted" {
 			// Update the content length to match the encrypted file size
-			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
+			c.Header("Content-Length", fmt.Sprint(len(fileDetails.Header)+fileDetails.ArchiveSize))
+		} else {
+			c.Header("Content-Length", fmt.Sprint(len(fileDetails.Header)+fileDetails.DecryptedSize))
 		}
 
 		return
@@ -355,93 +340,78 @@ func Download(c *gin.Context) {
 
 	var fileStream io.Reader
 
-	switch c.Param("type") {
-	case "encrypted":
-		// The key provided in the header should be base64 encoded
-		reencKey := c.GetHeader("Client-Public-Key")
-		if reencKey == "" {
-			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
+	if c.Param("type") == "encrypted" {
+		// Manage case of encrypted file
+		downloadEncrypted(c, fileDetails, coords, file)
 
-			return
-		}
+		return
+	}
 
-		log.Debugf("Public key from the request header = %v", reencKey)
-		log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
-		newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+	// Reencrypt header for use with our temporary key
+	newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
+	if err != nil {
+		log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+		c.String(http.StatusInternalServerError, "file re-encryption error")
+
+		return
+	}
+
+	newHr := bytes.NewReader(newHeader)
+
+	if len(coords) == 0 {
+		fileStream = io.MultiReader(newHr, file)
+	} else {
+		seeker, _ := file.(io.ReadSeeker)
+		fileStream, err = storage.SeekableMultiReader(newHr, seeker)
 		if err != nil {
-			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
-			c.String(http.StatusInternalServerError, "file re-encryption error")
-
-			return
-		}
-		log.Debugf("Reencrypted c4gh file header = %v", newHeader)
-
-		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
-			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-			start, end, err = adjustSeekPos(seekStream, start, end)
-			if err != nil {
-				log.Errorf("Could not seek stream: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-			fileStream = seekStream
-		}
-	default:
-		// Reencrypt header for use with our temporary key
-		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
-		if err != nil {
-			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
-			c.String(http.StatusInternalServerError, "file re-encryption error")
-
-			return
-		}
-
-		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
-			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-		}
-
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.App.Crypt4GHPrivateKey, nil)
-		defer c4ghfileStream.Close()
-		if err != nil {
-			log.Errorf("could not prepare file for streaming, %s", err)
-			c.String(http.StatusInternalServerError, "file stream error")
-
-			return
-		}
-		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
-		if err != nil {
-			log.Errorf("Could not seek stream: %v", err)
+			log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file decoding error")
 
 			return
 		}
-		fileStream = c4ghfileStream
 	}
 
-	err = sendStream(fileStream, c.Writer, start, end)
+	c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.App.Crypt4GHPrivateKey, nil)
+	if err != nil {
+		log.Errorf("could not prepare file for streaming, %s", err)
+		c.String(http.StatusInternalServerError, "file stream error")
+
+		return
+	}
+	defer c4ghfileStream.Close()
+
+	if len(coords) == 0 {
+		// No coordinates specified, so we're sending the whole file
+		_, err = io.Copy(c.Writer, c4ghfileStream)
+
+		if err != nil {
+			log.Errorf("Error while sending stream: %v", err)
+			// Probably to late for errors but we'll try
+			c.String(http.StatusInternalServerError, "an error occurred while sending stream")
+		}
+
+		return
+	}
+
+	// Coordinates specified, so we'll send only the requested range
+	// Should we send as parts if more than one range?
+
+	// If coordinates given, check if we're not sending from start
+	err = seekToStartPos(c4ghfileStream, coords[0].start)
+	if err != nil {
+		log.Errorf("Could not seek stream: %v", err)
+		c.String(http.StatusInternalServerError, "file decoding error")
+
+		return
+	}
+
+	fileStream = c4ghfileStream
+
+	// Coordinates specified, so we'll send only the requested range
+	// Seek to the start position
+
+	_, err = io.CopyN(c.Writer, fileStream, coords[0].end-coords[0].start)
+
 	if err != nil {
 		log.Errorf("error occurred while sending stream: %v", err)
 		c.String(http.StatusInternalServerError, "an error occurred")
@@ -450,113 +420,326 @@ func Download(c *gin.Context) {
 	}
 }
 
-var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
-	if start != 0 {
+func downloadEncrypted(c *gin.Context, fileDetails *database.FileDownload, coords []coordinates, file io.Reader) {
+	var dataeditlist []uint64
+	var err error
 
-		// We don't want to read from start, skip ahead to where we should be
-		_, err := fileStream.Seek(start, 0)
+	if len(coords) > 0 {
+		dataeditlist, err = adjustCoordinates(coords, fileDetails)
+
 		if err != nil {
+			log.Errorf("Byte range coordinates invalid! %v", err)
+			c.String(http.StatusBadRequest, "Bad request range ")
 
-			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+			return
 		}
-		// adjust end to reflect that the file start has been moved
-		end -= start
-		start = 0
+	}
+
+	// The key provided in the header should be base64 encoded
+	reencKey := c.GetHeader("Client-Public-Key")
+	if reencKey == "" {
+		c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
+
+		return
+	}
+
+	log.Debugf("Public key from the request header = %v", reencKey)
+	log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
+	clientHeader, err := reencryptHeader(fileDetails.Header, reencKey, dataeditlist...)
+	if err != nil {
+		log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+		c.String(http.StatusInternalServerError, "file re-encryption error")
+
+		return
+	}
+
+	log.Debugf("Reencrypted c4gh file header = %v", clientHeader)
+
+	newHr := bytes.NewReader(clientHeader)
+
+	if len(coords) == 0 {
+		// No coordinates specified, so we're sending the whole file
+		fileStream := io.MultiReader(newHr, file)
+		_, err = io.Copy(c.Writer, fileStream)
+
+		if err != nil {
+			log.Errorf("Error while sending encrypted stream: %v", err)
+			c.String(http.StatusInternalServerError, "Errow while sending file")
+		}
+
+		return
+	}
+
+	// We have at least one range specified
+
+	// We start by sending the header (reencrypted for the key passed from the client)
+	copied, err := io.Copy(c.Writer, newHr)
+	if err != nil || copied != int64(len(clientHeader)) {
+		log.Errorf("Error (%v) or unexpected length copied of header (%v instead of %v) ", err, copied, len(clientHeader))
+		c.String(http.StatusInternalServerError, "file error")
+
+		return
 
 	}
 
-	return start, end, nil
+	seeker, ok := file.(io.ReadSeeker)
+	if !ok {
+		log.Errorf("Failed to make ReadSeeker of archive source")
+		c.String(http.StatusInternalServerError, "file error")
+
+		return
+	}
+
+	err = seekToStartPos(seeker, coords[0].start)
+
+	if err != nil {
+		log.Errorf("Could not seek stream: %v", err)
+		c.String(http.StatusInternalServerError, "file decoding error")
+
+		return
+	}
+
+	_, err = io.CopyN(c.Writer, seeker, coords[0].end-coords[0].start)
+	if err != nil {
+		log.Errorf("Error while sending partial stream: %v", err)
+		c.String(http.StatusInternalServerError, "file sending error")
+
+		return
+	}
 }
 
-// used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
-var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end int64) error {
+var seekToStartPos = func(fileStream io.ReadSeeker, start int64) error {
+	if start == 0 {
+		return nil
+	}
 
-	// Calculate how much we should read (if given)
-	togo := end - start
+	// We don't want to read from start, skip ahead to where we should be
+	_, err := fileStream.Seek(start, 0)
+	if err != nil {
 
-	buf := make([]byte, 4096)
-
-	// Loop until we've read what we should (if no/faulty end given, that's EOF)
-	for end == 0 || togo > 0 {
-		rbuf := buf
-
-		if end != 0 && togo < 4096 {
-			// If we don't want to read as much as 4096 bytes
-			rbuf = buf[:togo]
-		}
-		r, err := reader.Read(rbuf)
-		togo -= int64(r)
-
-		// Nothing more to read?
-		if err == io.EOF && r == 0 {
-			// Fall out without error if we had EOF (if we got any data, do one
-			// more lap in the loop)
-			return nil
-		}
-
-		if err != nil && err != io.EOF {
-			// An error we want to signal?
-			return err
-		}
-
-		wbuf := rbuf[:r]
-		for len(wbuf) > 0 {
-			// Loop until we've written all that we could read,
-			// fall out on error
-			w, err := writer.Write(wbuf)
-
-			if err != nil {
-				return err
-			}
-			wbuf = wbuf[w:]
-		}
+		return fmt.Errorf("error occurred while finding sending start: %v", err)
 	}
 
 	return nil
 }
 
-// Calculates the start and end coordinats to use. If a range is set in HTTP headers,
-// it will be used as is. If not, the functions parameters will be used.
-// If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
-var calculateCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
-	log.Warnf("calculate")
-	if htsget_range != "" {
-		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
-		if len(startEnd) > 1 {
-			a, err := strconv.ParseInt(startEnd[0], 10, 64)
-			if err != nil {
-				return 0, 0, err
-			}
-			b, err := strconv.ParseInt(startEnd[1], 10, 64)
-			if err != nil {
-				return 0, 0, err
-			}
-			if a > b {
-				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
-			}
+// cordinates struct to hold start and end coordinates, allows recording if an entry
+// was specified (as opposed to default value/derived), but this is not used now.
+// coordinates are right-open intervals, so start is inclusive and end is exclusive
+// (end should be the first byte not included)
+type coordinates struct {
+	start          int64
+	end            int64
+	startSpecified bool
+	endSpecified   bool
+}
 
-			// Byte ranges are inclusive; +1 so that the last byte is included
+// getCoordinates figures out if the requests specifies start and end coordinates
+func getCoordinates(c *gin.Context, fileDetails *database.FileDownload) (coords []coordinates, err error) {
 
-			return a, b + 1, nil
+	// Range has higher priority than query params, so check that first
+	header := c.GetHeader("Range")
+
+	if header == "" {
+		// Header not specified, so we'll check query parameters
+		return getCoordinatesFromQuery(c, fileDetails)
+	}
+
+	// Header specified, so we'll parse that
+	if !strings.HasPrefix(header, "bytes=") {
+		err = fmt.Errorf("header Range specified (%v) but in unknown unit, expected bytes", header)
+
+		return
+	}
+
+	ranges := strings.Split(strings.TrimPrefix(header, "bytes="), ",")
+
+	// Loop over all ranges specified
+	for _, rangeSpec := range ranges {
+
+		rangeParts := strings.Split(rangeSpec, "-")
+
+		//	Prefill with size from header
+		coord := coordinates{end: int64(fileDetails.DecryptedSize)}
+
+		if len(rangeParts) == 1 {
+			// No dash in range
+			err = fmt.Errorf("Invalid range specified (%v) in Range header %v, expected dash", rangeSpec, header)
+
+			return
 		}
+
+		if len(rangeParts[0]) > 0 {
+			// Start (left of dash) specified
+			coord.startSpecified = true
+			coord.start, err = strconv.ParseInt(rangeParts[0], 10, 64)
+			if err != nil {
+				return
+			}
+		}
+
+		if len(rangeParts[1]) > 0 {
+			// End (right of dash) specified
+			coord.endSpecified = true
+			var endValue int64
+			endValue, err = strconv.ParseInt(rangeParts[1], 10, 64)
+			if err != nil {
+				return
+			}
+
+			if !coord.startSpecified {
+				// Range specified as -suffix, meaning we want the last suffix bytes,
+				// end is filled in already
+				coord.start = int64(fileDetails.DecryptedSize) - endValue
+			} else {
+				// range intervals are closed (inclusive) whereas coordinates are right-open, so add 1 to the value from range
+				coord.end = endValue + 1
+			}
+		}
+
+		if coord.start > coord.end {
+			err = fmt.Errorf("endCoordinate must be greater than startCoordinate")
+
+			return
+		}
+
+		if coord.start >= int64(fileDetails.DecryptedSize) || coord.end > int64(fileDetails.DecryptedSize) {
+			err = fmt.Errorf("Start (%d) or end (%d) coordinate outside file size %d", coord.start, coord.end, fileDetails.DecryptedSize)
+
+			return
+		}
+
+		coords = append(coords, coord)
 	}
 
-	// For unencrypted files, return the coordinates as is
-	if encryptedType != "encrypted" {
-		return start, end, nil
+	// We had a header specified, so we're done, we shouldn't parse query
+	// parameters
+
+	return
+}
+
+func getCoordinatesFromQuery(c *gin.Context, fileDetails *database.FileDownload) (coords []coordinates, err error) {
+	// Get query params
+	qStart, startGiven := c.GetQuery("startCoordinate")
+	qEnd, endGiven := c.GetQuery("endCoordinate")
+
+	// Neither specified, bail out
+	if !startGiven && !endGiven {
+		// No coordinates specified
+		return
 	}
 
-	// Adapt end coordinate to follow the crypt4gh block boundaries
-	headlength := bytes.NewReader(fileDetails.Header)
-	bodyEnd := int64(fileDetails.ArchiveSize)
-	if end > 0 {
-		var packageSize float64 = 65564 // 64KiB+28, 28 is for chacha20_ietf_poly1305
-		togo := end - start
-		bodysize := math.Max(float64(togo-headlength.Size()), 0)
-		endCoord := packageSize * math.Ceil(bodysize/packageSize)
-		bodyEnd = int64(math.Min(float64(bodyEnd), endCoord))
+	//	Prefill with size from header
+	coord := coordinates{end: int64(fileDetails.DecryptedSize)}
+
+	// Parse and verify coordinates are valid
+	if startGiven {
+		var startValue int64
+		startValue, err = strconv.ParseInt(strings.TrimSpace(qStart), 10, 0)
+		if err != nil {
+			log.Errorf("failed to convert start coordinate %v to integer, %s", qStart, err)
+
+			return
+		}
+
+		if startValue >= 0 {
+			coord.start = startValue
+		} else {
+			// Negative start value, so we want to start from the end
+			coord.start = int64(fileDetails.DecryptedSize) + startValue
+		}
+
+		coord.startSpecified = true
 	}
 
-	return start, headlength.Size() + bodyEnd, nil
+	if endGiven {
+		var endValue int64
+		endValue, err = strconv.ParseInt(strings.TrimSpace(qEnd), 10, 0)
+		if err != nil {
+			log.Errorf("failed to convert end coordinate %v to integer, %s", qEnd, err)
 
+			return
+		}
+
+		if endValue >= 0 {
+			coord.end = endValue
+		} else {
+			// Negative start value, so we want to start from the end
+			coord.end = int64(fileDetails.DecryptedSize) + endValue
+		}
+
+		coord.endSpecified = true
+	}
+
+	if coord.end < coord.start {
+		log.Errorf("endCoordinate=%d must be greater than startCoordinate=%d", coord.end, coord.start)
+		err = fmt.Errorf("endCoordinate must be greater than startCoordinate")
+
+		return
+	}
+
+	if coord.start >= int64(fileDetails.DecryptedSize) || coord.end > int64(fileDetails.DecryptedSize) {
+		log.Errorf("Start (%d) or end (%d) coordinate outside file ", coord.start, coord.end)
+		err = fmt.Errorf("start or end coordinate outside file size")
+
+		return
+	}
+
+	coords = append(coords, coord)
+
+	return
+}
+
+// Calculates the start and end coordinates to use for encrypted transfer.
+// This includes transforming the coordinates from the virtual decrypted stream
+// to the in file encrypted stream (which includes MACs and other overheads)
+// returns a dataeditlist and any possible error
+var adjustCoordinates = func(coords []coordinates, fileDetails *database.FileDownload) (del []uint64, err error) {
+
+	if len(coords) == 0 {
+		// No coordinates specified so send the whole file, nothing to do
+		return
+	}
+
+	totalWant := coords[0].end - coords[0].start
+	var alignedStart, alignedEnd int64
+
+	if coords[0].start > 0 {
+		// Align to 64k boundary
+		alignedStart = coords[0].start - (coords[0].start % 65536)
+
+		if coords[0].start != alignedStart {
+			del = append(del, uint64(coords[0].start-alignedStart))
+		}
+
+		coords[0].start = alignedStart / 65536 * 65564
+	}
+
+	// Align end to 64k boundary, adjusting for padding
+	if coords[0].end%65536 == 0 {
+		alignedEnd = coords[0].end
+	} else {
+		alignedEnd = coords[0].end - (coords[0].end % 65536) + 65536
+	}
+
+	if coords[0].end != int64(fileDetails.DecryptedSize) {
+		// If we don't want to grab the rest of the file, adjust data edit list
+
+		if len(del) == 0 {
+			// No initial skip added, so record that we're grabbing data from the start
+			// this is zero since the case of not reading from start added one above
+			del = append(del, 0)
+		}
+
+		del = append(del, uint64(totalWant))
+	}
+
+	coords[0].end = alignedEnd / 65536 * 65564
+
+	// If the end coordinate is beyond the file size, adjust it
+	if coords[0].end > int64(fileDetails.ArchiveSize) {
+		coords[0].end = int64(fileDetails.ArchiveSize)
+	}
+
+	return
 }
