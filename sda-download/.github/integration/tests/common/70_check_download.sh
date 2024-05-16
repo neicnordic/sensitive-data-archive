@@ -23,8 +23,8 @@ if [ "$file_size" -ne "$expected_size" ]; then
     exit 1
 fi
 
-# test that start, end=0 returns the whole file
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=0" --output full2.bam
+# test that start=0 returns the whole file
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0" --output full2.bam
 
 if ! cmp --silent full1.bam full2.bam; then
     echo "Full decrypted files, with and without coordinates, are different"

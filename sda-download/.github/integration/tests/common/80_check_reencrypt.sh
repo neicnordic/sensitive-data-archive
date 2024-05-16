@@ -65,7 +65,7 @@ fi
 partReencryptedFile=part1.bam.c4gh
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
-part_expected_size=65688
+part_expected_size=65780
 
 if [ "$file_size" -ne "$part_expected_size" ]; then
     echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
@@ -93,7 +93,8 @@ fi
 partReencryptedFile=part1.bam.c4gh
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Range: bytes=72000-72999" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
-part_expected_size=65688
+# Data block of 65536+28 bytes, header is larger because of data-edit-list
+part_expected_size=65780
 
 if [ "$file_size" -ne "$part_expected_size" ]; then
     echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
@@ -112,7 +113,7 @@ if [ "$file_size" -ne "$part_decrypted_size" ]; then
     exit 1
 fi
 
-dd if=full1.bam ibs=1 skip=72000 count=1000 of = part1_orig.bam
+dd if=full1.bam ibs=1 skip=72000 count=1000 of=part1_orig.bam
 
 if ! cmp --silent part1.bam part1_orig.bam; then
     echo "Decrypted version file fetch as range and part of the original unencrypted file are different"
@@ -123,7 +124,8 @@ fi
 partReencryptedFile=part1.bam.c4gh
 curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Range: bytes=130000-202999" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
-part_expected_size=199704
+# Header with DEL, 3 data blocks (65536+28)
+part_expected_size=196908
 
 if [ "$file_size" -ne "$part_expected_size" ]; then
     echo "Incorrect file size for re-encrypted partial file, should be $part_expected_size but is $file_size"
@@ -142,7 +144,7 @@ if [ "$file_size" -ne "$part_decrypted_size" ]; then
     exit 1
 fi
 
-dd if=full1.bam ibs=1 skip=130000 count=73000 of = part1_orig.bam
+dd if=full1.bam ibs=1 skip=130000 count=73000 of=part1_orig.bam
 
 if ! cmp --silent part1.bam part1_orig.bam; then
     echo "Decrypted version file fetch as range and part of the original unencrypted file are different"
