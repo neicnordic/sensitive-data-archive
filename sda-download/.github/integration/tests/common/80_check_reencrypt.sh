@@ -62,8 +62,10 @@ if ! cmp --silent full1.bam full2.bam; then
 fi
 
 # download reencrypted partial file, check file size
+# EGA crypt4gh has a bug with edit lists that breaks when starting from 0,
+# use startCoordinate=1 to avoid it for now
 partReencryptedFile=part1.bam.c4gh
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
+curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=1&endCoordinate=1000" --output $partReencryptedFile
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
 part_expected_size=65780
 
@@ -77,14 +79,14 @@ if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; th
     exit 1
 fi
 
-part_decrypted_size=1000
+part_decrypted_size=999
 file_size=$(stat -c %s part1.bam)
 if [ "$file_size" -ne "$part_decrypted_size" ]; then
     echo "Incorrect file size for decrypted partial file, should be $part_decrypted_size but is $file_size"
     exit 1
 fi
 
-if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
+if ! grep -q "^HIS FILE IS JUST DUMMY DATA" part1.bam; then
     echo "Bad content of decrypted partial file"
     exit 1
 fi
