@@ -39,6 +39,12 @@ if [ "$1" == "sda-mq" ]; then
 fi
 
 if [ "$1" == "sda-svc" ]; then
+    sync_host=""
+    if [ "$4" == "s3" ]; then
+        sync_host=https://sync-api
+        sync_api_pass=pass
+        sync_api_user=user
+    fi
     helm install pipeline charts/sda-svc \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
@@ -47,6 +53,9 @@ if [ "$1" == "sda-svc" ]; then
         --set global.archive.storageType="$4" \
         --set global.backupArchive.storageType="$4" \
         --set global.inbox.storageType="$4" \
+        --set global.sync.api.password="$sync_api_pass" \
+        --set global.sync.api.user="$sync_api_user" \
+        --set global.sync.remote.host="$sync_host" \
         -f .github/integration/scripts/charts/values.yaml \
         --wait
 fi

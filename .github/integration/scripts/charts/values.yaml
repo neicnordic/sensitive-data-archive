@@ -49,6 +49,7 @@ global:
     keyFile: c4gh.sec.pem
     publicFile: c4gh.pub.pem
     passphrase: PLACEHOLDER_VALUE
+    syncPubKey: c4gh.pub.pem
   db:
     host: "postgres-sda-db"
     user: "postgres"
@@ -80,6 +81,26 @@ global:
   reencrypt:
     host: reencrypt
     port: 50443
+  sync:
+    api:
+      password: ""
+      user: ""
+    brokerQueue: "mapping_stream"
+    centerPrefix: "SYNC"
+    destination:
+      storageType: "s3"
+      url: "http://minio.minio"
+      port: 9000
+      readypath: "/minio/health/ready"
+      accessKey: PLACEHOLDER_VALUE
+      secretKey: PLACEHOLDER_VALUE
+      bucket: "sync"
+      region: "us-east-1"
+    remote:
+      host: ""
+      port: "8080"
+      password: "pass"
+      user: "user"
 auth:
   replicaCount: 1
   resources: null
