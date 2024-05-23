@@ -71,5 +71,7 @@ yq -i '
 .global.db.password = strenv(PGPASSWORD) |
 .global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.inbox.s3SecretKey = strenv(MINIO_SECRET) |
+.global.sync.destination.accessKey = strenv(MINIO_ACCESS) |
+.global.sync.destination.secretKey = strenv(MINIO_SECRET) |
 .releasetest.secrets.accessToken = strenv(TEST_TOKEN)
 ' .github/integration/scripts/charts/values.yaml

@@ -3,6 +3,7 @@ name: Build PR container
 on:
   pull_request:
     paths-ignore:
+      - ".github/integration/**"
       - ".github/workflows/**"
       - ".gitignore"
       - "**/*.md"
@@ -242,8 +243,6 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Initialise k3d
         id: initK3D
@@ -262,7 +261,7 @@ jobs:
         id: deployDB
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }} ${{matrix.tls}}
       - name: debug
-        if: steps.deployDB.outcome == 'failure'
+        if: failure() && steps.deployDB.outcome == 'failure'
         run: |
           kubectl describe pod postgres-sda-db-0
           sleep 1
@@ -273,7 +272,7 @@ jobs:
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}}
         shell: bash
       - name: debug
-        if: steps.deployMQ.outcome == 'failure'
+        if: failure() && steps.deployMQ.outcome == 'failure'
         run: |
           kubectl describe pod broker-sda-mq-0
           sleep 1
@@ -286,8 +285,8 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in auth download finalize inbox ingest mapper reencrypt verify; do
-            if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ]; then
+          for n in auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
+            if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
               continue
             fi
             if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
@@ -301,7 +300,7 @@ jobs:
         run: |
           kubectl get pods
           sleep 1
-          for svc in auth finalize inbox ingest mapper reencrypt verify; do
+          for svc in auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
             echo "## describe $svc" && kubectl describe pod -l role="$svc"
             sleep 1
             echo "## logs $svc" && kubectl logs -l role="$svc"

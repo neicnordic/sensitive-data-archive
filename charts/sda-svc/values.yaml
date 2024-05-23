@@ -266,9 +266,10 @@ global:
     api:
       pass: ""
       user: ""
+    brokerQueue: ""
     centerPrefix: ""
     destination:
-      type: "s3"
+      storageType: "s3"
       url: ""
       port: 443
       readypath: ""
