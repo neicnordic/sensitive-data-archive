@@ -1,0 +1,93 @@
+version: '3.3'
+
+services:
+
+  db:
+    image: ghcr.io/neicnordic/sensitive-data-archive:v0.3.47-postgres
+    ports:
+      - 5432:5432
+    environment:
+      - DB_LEGA_IN_PASSWORD=password
+      - DB_LEGA_OUT_PASSWORD=password
+      - POSTGRES_SERVER_CERT=/etc/ega/pg.cert
+      - POSTGRES_SERVER_KEY=/etc/ega/pg.key
+      - POSTGRES_SERVER_CACERT=/etc/ega/CA.cert
+      - PG_VERIFY_PEER=1
+      - POSTGRES_PASSWORD=rootpasswd
+    secrets:
+      - source: server.pem
+        target: /etc/ega/pg.cert
+        uid: '70'
+        gid: '70'
+        mode: 0600
+      - source: server-key.pem
+        target: /etc/ega/pg.key
+        uid: '70'
+        gid: '70'
+        mode: 0600
+      - source: rootCA.pem
+        target: /etc/ega/CA.cert
+        uid: '70'
+        gid: '70'
+        mode: 0600
+    volumes:
+      - db:/ega
+
+  mockauth:
+    image: cscfi/beacon-python
+    ports:
+      - 8000:8000
+    volumes:
+      - ./test/mock_auth.py:/mock_auth.py
+    entrypoint: ["python", "/mock_auth.py", "0.0.0.0", "8000"]
+
+  private-mq:
+    image: uiobmi/localega-broker-private:latest
+    ports:
+      - 5671:5671
+      - 15671:15671
+    environment:
+      - SSL_VERIFY=verify_peer
+      - SSL_FAIL_IF_NO_PEER_CERT=false
+      - SSL_DEPTH=2
+      - USER_NAME=admin
+      - PASSWORD_HASH=4tHURqDiZzypw0NTvoHhpn8/MMgONWonWxgRZ4NXgR8nZRBz
+      - VIRTUAL_HOST=sda
+    secrets:
+      - source: server.pem
+        target: /etc/rabbitmq/ssl.cert
+      - source: server-key.pem
+        target: /etc/rabbitmq/ssl.key
+      - source: rootCA.pem
+        target: /etc/rabbitmq/CA.cert
+
+  outbox:
+    image: minio/minio
+    ports:
+      - 9000:9000
+    environment:
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=miniostorage
+    command: server /data
+
+  createbucket:
+    image: minio/mc
+    depends_on:
+      - s3
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add s3 http://outbox:9000 minio miniostorage;
+      /usr/bin/mc mb s3/lega;
+      exit 0;
+      "
+
+volumes:
+  db:
+
+secrets:
+  rootCA.pem:
+    file: test/rootCA.pem
+  server.pem:
+    file: test/localhost.pem
+  server-key.pem:
+    file: test/localhost-key.pem

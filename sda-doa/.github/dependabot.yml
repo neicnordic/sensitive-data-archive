@@ -1,0 +1,36 @@
+version: 2
+registries:
+  maven-github-uio-bmi:
+    type: maven-repository
+    url: 'https://maven.pkg.github.com/uio-bmi'
+    username: '${{secrets.MAVEN_USER}}'
+    password: '${{secrets.MAVEN_GITHUB}}'
+  maven-github-elixir-oslo:
+    type: maven-repository
+    url: 'https://maven.pkg.github.com/elixir-oslo'
+    username: '${{secrets.MAVEN_USER}}'
+    password: '${{secrets.MAVEN_GITHUB}}'
+updates:
+- package-ecosystem: maven
+  directory: "/"
+  registries: "*"
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10
+  reviewers:
+    - "neicnordic/sensitive-data-development-collaboration"
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10
+  reviewers:
+    - "neicnordic/sensitive-data-development-collaboration"
+- package-ecosystem: "github-actions"
+  directory: "/"
+  schedule:
+    interval: "weekly"
+  open-pull-requests-limit: 10
+  reviewers:
+    - "neicnordic/sensitive-data-development-collaboration"
+

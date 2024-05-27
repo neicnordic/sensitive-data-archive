@@ -1,0 +1,38 @@
+name: Docker Build Test
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: create maven settings.xml
+        uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id":"github-clearinghouse",
+              "username": "${{ github.actor }}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            },
+            {
+              "id":"github-crypt4gh",
+              "username": "${{ github.actor }}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      - name: Copy settings.xml to project root
+        shell: bash
+        run: cp /home/runner/.m2/settings.xml ./settings.xml
+
+      - name: Build Docker image
+        run: docker build -t sda-doa:test .
