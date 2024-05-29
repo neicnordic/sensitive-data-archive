@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -1087,15 +1086,14 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 
 	log.Debug("setting up TLS for broker connection")
 
-	// Enforce TLS1.2 or higher
-	cfg.MinVersion = 2
-
 	// Read system CAs
-	var systemCAs, _ = x509.SystemCertPool()
-	if reflect.DeepEqual(systemCAs, x509.NewCertPool()) {
-		log.Debug("creating new CApool")
-		systemCAs = x509.NewCertPool()
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v", err)
+
+		return nil, err
 	}
+
 	cfg.RootCAs = systemCAs
 
 	if c.Broker.CACert != "" {
@@ -1136,15 +1134,14 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 
 	log.Debug("setting up TLS for S3 connection")
 
-	// Enforce TLS1.2 or higher
-	cfg.MinVersion = 2
-
 	// Read system CAs
-	var systemCAs, _ = x509.SystemCertPool()
-	if reflect.DeepEqual(systemCAs, x509.NewCertPool()) {
-		log.Debug("creating new CApool")
-		systemCAs = x509.NewCertPool()
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v", err)
+
+		return nil, err
 	}
+
 	cfg.RootCAs = systemCAs
 
 	if c.Inbox.S3.CAcert != "" {

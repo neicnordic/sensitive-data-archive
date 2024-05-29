@@ -101,4 +101,5 @@ sync:
     password: "pass"
     user: "user"
 
-schema.type: "isolated"
+schema:
+  type: "isolated"

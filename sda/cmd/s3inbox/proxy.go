@@ -85,7 +85,7 @@ func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *bro
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
-		log.Debugf("Request not authenticated (%v)", err)
+		log.Debugln("Request not authenticated")
 		p.notAuthorized(w, r)
 
 		return

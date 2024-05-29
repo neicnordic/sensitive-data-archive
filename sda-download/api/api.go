@@ -51,14 +51,7 @@ func Setup() *http.Server {
 
 	// Configure TLS settings
 	log.Info("(3/5) Configuring TLS")
-	cfg := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-		PreferServerCipherSuites: true,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-		},
-	}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Configure web server
 	log.Info("(4/5) Configuring server")

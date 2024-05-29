@@ -52,7 +52,7 @@ cancel_body=$(
 
 curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$cancel_body"
+    -d "$cancel_body" | jq
 
 # check database to verify file status
 if [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where correlation_id = '$CORRID' order by id DESC LIMIT 1")" != "disabled" ]; then
@@ -83,7 +83,7 @@ ingest_body=$(
 
 curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$ingest_body"
+    -d "$ingest_body" | jq
 
 RETRY_TIMES=0
 until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 5 ]; do

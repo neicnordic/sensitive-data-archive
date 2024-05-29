@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v5.26.1
-// source: internal/reencrypt/reencrypt.proto
+// source: sda-download/internal/reencrypt/reencrypt.proto
 
 package reencrypt
 
@@ -107,5 +107,5 @@ var Reencrypt_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/reencrypt/reencrypt.proto",
+	Metadata: "sda-download/internal/reencrypt/reencrypt.proto",
 }

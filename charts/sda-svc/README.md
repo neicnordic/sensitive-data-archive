@@ -16,9 +16,9 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`global.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
-`global.imageTag` | Tag version to deploy | ``
-`global.imagePullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
+`image.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
+`image.tag` | Tag version to deploy | ``
+`image.pullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
 `global.secretsPath` | Path where the sensitive files can be found | `/.secrets`
 `global.c4ghPath` | This path will be a subpath to the secretsPath | `c4gh`
 `global.tlsPath` | This path will be a subpath to the secretsPath | `tls`
@@ -45,6 +45,8 @@ Parameter | Description | Default
 `global.networkPolicy.databaseNamespace` | Namespace where the database is deployed. | `""`
 `global.networkPolicy.externalNamespace` | Namespace where the external components are deployed. | `""`
 `global.networkPolicy.internalNamespace` | Namespace where the internal components are deployed. | `""`
+`global.networkPolicy.ingressNamespace` | Namespace where the ingress is deployed. | `""`
+`global.networkPolicy.ingressLabelMatch` | Match to use to allow connections from ingress controller pod. | `""`
 `global.revisionHistory` | Number of revisions to keep for the option to rollback a deployment | `3`
 `global.podAnnotations` | Annotations applied to pods of all services. |`{}`
 `global.pkiService` | If an external PKI infrastructure is used set this to true. |`false`
@@ -145,14 +147,16 @@ Parameter | Description | Default
 `global.inbox.s3ReadyPath` | Endpoint to verify that the inbox is respondig. |`""`
 `global.sync.api.password` | Password for authenticating to the syncAPI server | `null`
 `global.sync.api.user` | User for authenticating to the syncAPI server | `null`
+`global.sync.brokerQueue` | Queue to read messages from | `sync`
 `global.sync.centerPrefix` | Prefix for locally generated datasets | `null`
 `global.sync.destination.storageType` | Storage type for the sync destination, currently only supports S3 | `s3`
-`global.sync.destination.s3Accesskey` | Access key to S3 sync destination | `null`
-`global.sync.destination.s3Bucket` | sync destination bucket | `null`
-`global.sync.destination.s3Port` | Port that the S3 sync destination instance is available on | `443`
-`global.sync.destination.s3Secretkey` | Secret key to S3 sync destination | `null`
-`global.sync.destination.s3url` | URL to S3 sync destination instance. | `null`
+`global.sync.destination.accesskey` | Access key to S3 sync destination | `null`
+`global.sync.destination.bucket` | sync destination bucket | `null`
+`global.sync.destination.port` | Port that the S3 sync destination instance is available on | `443`
+`global.sync.destination.secretkey` | Secret key to S3 sync destination | `null`
+`global.sync.destination.url` | URL to S3 sync destination instance. | `null`
 `global.sync.remote.host` | URL to the remote syncAPI host | `null`
+`global.sync.remote.port` | Port that the remote syncAPI host instance is available on | `null`
 `global.sync.remote.password` | Password for connecting to the remote syncAPI host | `null`
 `global.sync.remote.user` | Username for connecting to the remote syncAPI host | `null`
 `global.tls.enabled` | Use TLS for all connections. |`true`
@@ -215,7 +219,6 @@ Parameter | Description | Default
 `doa.replicaCount` | desired number of replicas | `2`
 `doa.repository` | dataedge container image repository | `neicnordic/sda-doa`
 `doa.imageTag` | dataedge container image version | `"latest"`
-`doa.imagePullPolicy` | dataedge container image pull policy | `Always`
 `doa.keystorePass` | keystore password | `changeit`
 `doa.annotations` | Specific annotation for the doa pod | `{}`
 `doa.resources.requests.memory` | Memory request for dataedge container. |`128Mi`

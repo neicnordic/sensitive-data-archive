@@ -68,7 +68,7 @@ ingest_body=$(
 
 curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$ingest_body"
+    -d "$ingest_body" | jq
 
 # check database to verify file status
 until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE correlation_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
@@ -115,7 +115,7 @@ verify_body=$(
 
 curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$verify_body"
+    -d "$verify_body" | jq
 
 # check database to verify file status
 RETRY_TIMES=0

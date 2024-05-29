@@ -14,6 +14,10 @@ archive:
   # posix backend
   location: "/tmp"
 
+grpc:
+  host: reencrypt
+  port: 50051
+
 c4gh:
   passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
   filepath: "./dev_utils/c4gh.sec.pem"
