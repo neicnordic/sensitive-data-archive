@@ -335,6 +335,62 @@ func TestFiles_Success(t *testing.T) {
 
 }
 
+func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
+
+	// Save original to-be-mocked config
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
+
+	config.Config.App.AllowUnencryptedDownload = false
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// Test downloading of unencrypted file, should fail
+	Download(c)
+	response := w.Result()
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	expectedStatusCode := 403
+	expectedBody := []byte("request to unencrypted file not allowed")
+
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
+	}
+	if !bytes.Equal(body, []byte(expectedBody)) {
+		// visual byte comparison in terminal (easier to find string differences)
+		t.Error(body)
+		t.Error([]byte(expectedBody))
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %s expected %s", string(body), string(expectedBody))
+	}
+
+	// Test downloading of unencrypted file from the s3 endpoint, should fail
+	// encrypted
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3/somepath", RawQuery: "filename=somepath"}}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+	expectedStatusCode = 403
+	expectedBody = []byte("request to unencrypted file not allowed")
+
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
+	}
+	if !bytes.Equal(body, []byte(expectedBody)) {
+		// visual byte comparison in terminal (easier to find string differences)
+		t.Error(body)
+		t.Error([]byte(expectedBody))
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %s expected %s", string(body), string(expectedBody))
+	}
+
+	// Return mock config to originals
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
+}
+
 func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Save original to-be-mocked functions
