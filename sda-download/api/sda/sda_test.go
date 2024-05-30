@@ -847,6 +847,26 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
 
+	// Test encrypted download, should work even when AllowedUnencryptedDownload is false
+	config.Config.App.AllowUnencryptedDownload = false
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=0-10"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+	config.Config.App.AllowUnencryptedDownload = true
+
 	// Test encrypted download without passing the key, should fail
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
