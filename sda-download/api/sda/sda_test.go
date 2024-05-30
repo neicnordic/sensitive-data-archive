@@ -339,11 +339,13 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Save original to-be-mocked functions
 	originalCheckFilePermission := database.CheckFilePermission
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
 		return "", errors.New("file not found")
 	}
+	config.Config.App.AllowUnencryptedDownload = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -369,6 +371,7 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Return mock functions to originals
 	database.CheckFilePermission = originalCheckFilePermission
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
 
 }
 
@@ -377,6 +380,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	// Save original to-be-mocked functions
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -386,6 +390,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{}
 	}
+	config.Config.App.AllowUnencryptedDownload = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -412,6 +417,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	// Return mock functions to originals
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
 
 }
 
@@ -421,6 +427,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -434,6 +441,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		return nil, errors.New("database error")
 	}
+	config.Config.App.AllowUnencryptedDownload = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -461,6 +469,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
 
 }
 
@@ -470,6 +479,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
 	Backend, _ = storage.NewBackend(config.Config.Archive)
 
 	// Substitute mock functions
@@ -490,6 +500,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 		return fileDetails, nil
 	}
+	config.Config.App.AllowUnencryptedDownload = true
 
 	// Mock request and response holders and initialize headers
 	w := httptest.NewRecorder()
@@ -522,7 +533,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
-
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
 }
 
 func Test_CalucalateCoords(t *testing.T) {
@@ -625,6 +636,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalAllowUnencryptedDownload := config.Config.App.AllowUnencryptedDownload
 	archive := config.Config.Archive
 	archive.Posix.Location = "."
 	Backend, _ = storage.NewBackend(archive)
@@ -667,6 +679,8 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	config.Config.Reencrypt.ClientCert = certfile.Name()
 	config.Config.Reencrypt.ClientKey = keyfile.Name()
 	config.Config.Reencrypt.Timeout = 10
+
+	config.Config.App.AllowUnencryptedDownload = true
 
 	// Set up crypt4gh keys
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GenerateC4GHKey()
@@ -796,5 +810,5 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
-
+	config.Config.App.AllowUnencryptedDownload = originalAllowUnencryptedDownload
 }
