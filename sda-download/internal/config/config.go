@@ -63,6 +63,8 @@ type AppConfig struct {
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+
+	AllowUnencryptedDownload bool
 }
 
 type SessionConfig struct {
@@ -239,6 +241,7 @@ func NewConfig() (*Map, error) {
 func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
+	viper.SetDefault("app.allowUnencryptedDownload", false)
 	viper.SetDefault("app.middleware", "default")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
@@ -368,6 +371,7 @@ func (c *Map) appConfig() error {
 	c.App.ServerCert = viper.GetString("app.servercert")
 	c.App.ServerKey = viper.GetString("app.serverkey")
 	c.App.Middleware = viper.GetString("app.middleware")
+	c.App.AllowUnencryptedDownload = viper.GetBool("app.allowUnencryptedDownload")
 
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")
