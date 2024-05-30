@@ -207,6 +207,11 @@ func Files(c *gin.Context) {
 
 // Download serves file contents as bytes
 func Download(c *gin.Context) {
+	if c.Param("type") != "encrypted" && !config.Config.App.AllowUnencryptedDownload {
+		c.String(http.StatusForbidden, "request to unencrypted file not allowed")
+
+		return
+	}
 
 	// Get file ID from path
 	fileID := c.Param("fileid")
@@ -400,12 +405,6 @@ func Download(c *gin.Context) {
 		}
 	default:
 		// Reencrypt header for use with our temporary key
-		if config.Config.App.AllowUnencryptedDownload == false {
-			c.String(http.StatusForbidden, "request to unencrypted file not allowed")
-
-			return
-		}
-
 		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
