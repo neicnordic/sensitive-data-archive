@@ -207,7 +207,7 @@ func Files(c *gin.Context) {
 
 // Download serves file contents as bytes
 func Download(c *gin.Context) {
-	if c.Param("type") != "encrypted" && !config.Config.App.AllowUnencryptedDownload {
+	if c.Param("type") != "encrypted" && !config.Config.App.ServeUnencryptedData {
 		c.String(http.StatusForbidden, "request to unencrypted file not allowed")
 
 		return
