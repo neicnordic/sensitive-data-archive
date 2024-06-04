@@ -351,8 +351,8 @@ func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
 	response := w.Result()
 	defer response.Body.Close()
 	body, _ := io.ReadAll(response.Body)
-	expectedStatusCode := 403
-	expectedBody := []byte("request to unencrypted file not allowed")
+	expectedStatusCode := 400
+	expectedBody := []byte("downloading unencrypted data is not supported")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -374,8 +374,8 @@ func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
 	response = w.Result()
 	defer response.Body.Close()
 	body, _ = io.ReadAll(response.Body)
-	expectedStatusCode = 403
-	expectedBody = []byte("request to unencrypted file not allowed")
+	expectedStatusCode = 400
+	expectedBody = []byte("downloading unencrypted data is not supported")
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
