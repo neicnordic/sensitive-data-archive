@@ -195,28 +195,23 @@ func NewS3Client(conf S3Conf) (*s3.Client, error) {
 	s3cfg, err := config.LoadDefaultConfig(
 		context.TODO(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
-		config.WithEndpointResolverWithOptions(
-			aws.EndpointResolverWithOptionsFunc(
-				func(service, region string, opts ...interface{}) (aws.Endpoint, error) {
-					endpoint := conf.URL
-					if conf.Port != 0 {
-						endpoint = fmt.Sprintf("%s:%d", conf.URL, conf.Port)
-					}
-
-					return aws.Endpoint{URL: endpoint, HostnameImmutable: true}, nil
-				},
-			),
-		),
 		config.WithHTTPClient(&http.Client{Transport: transportConfigS3(conf)}),
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	endpoint := conf.URL
+	if conf.Port != 0 {
+		endpoint = fmt.Sprintf("%s:%d", conf.URL, conf.Port)
+	}
+
 	s3Client := s3.NewFromConfig(
 		s3cfg,
 		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
 			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.URL, "http:")
+			o.Region = conf.Region
 			o.UsePathStyle = true
 		},
 	)
