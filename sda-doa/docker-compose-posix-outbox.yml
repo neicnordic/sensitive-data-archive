@@ -45,7 +45,10 @@ services:
     entrypoint: ["python", "/mock_auth.py", "0.0.0.0", "8000"]
 
   private-mq:
-    image: uiobmi/localega-broker-private:latest
+    build:
+      context: ../../rabbitmq
+    container_name: rabbitmq
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
       - 5671:5671
       - 15671:15671
