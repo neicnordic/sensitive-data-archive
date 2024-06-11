@@ -3,7 +3,7 @@ version: '3.3'
 services:
 
   db:
-    image: ghcr.io/neicnordic/sensitive-data-archive:v0.3.47-postgres
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - 5432:5432
     environment:
