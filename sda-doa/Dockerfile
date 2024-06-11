@@ -15,9 +15,7 @@ RUN mvn clean install -DskipTests --no-transfer-progress
 
 FROM eclipse-temurin:21-jre-alpine
 
-RUN apk -U upgrade && \
-    apk add ca-certificates openssl && \
-    rm -rf /var/cache/apk/*
+RUN apk add --no-cache --upgrade ca-certificates openssl 
 
 COPY --from=builder /target/localega-doa-*.jar /localega-doa.jar
 
