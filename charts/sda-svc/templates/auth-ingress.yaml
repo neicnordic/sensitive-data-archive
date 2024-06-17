@@ -16,6 +16,7 @@ metadata:
     {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
     nginx.ingress.kubernetes.io/rewrite-target: "/"
     nginx.ingress.kubernetes.io/backend-protocol: "{{ ternary "HTTPS" "HTTP" .Values.global.tls.enabled }}"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
     {{- end }}
     {{- if .Values.global.ingress.clusterIssuer }}
     cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
