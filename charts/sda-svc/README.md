@@ -119,6 +119,7 @@ Parameter | Description | Default
 `global.doa.outbox.s3AccessKey` | Outbox S3 Access Key | `null`
 `global.doa.outbox.s3SecretKey` | Outbox S3 Secret key | `null`
 `global.download.enabled` | Deploy the download service | `true`
+`global.download.serveUnencryptedData` | Whether the download service serves unencrypted data | `false`
 `global.download.sessionExpiration` | Session key expiration time in seconds | `28800`
 `global.download.trusted.configPath` | Path to the ISS config file | `$secrets/iss`
 `global.download.trusted.configFile` | Name of ISS config file | `iss.json`
