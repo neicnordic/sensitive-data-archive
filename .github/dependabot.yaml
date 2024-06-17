@@ -82,3 +82,23 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: weekly
+
+  - package-ecosystem: maven
+    directory: "/sda-doa"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/sda-doa"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
