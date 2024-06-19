@@ -96,9 +96,38 @@ setup_hba_conf() {
 	fi
 }
 
+setup_lega_users(){
+	if [ -z "$LEGA_IN_PASSWORD" ]; then
+      echo "Environment variable LEGA_IN_PASSWORD is empty"
+  elif [ -z "$LEGA_OUT_PASSWORD" ]; then
+      echo "Environment variable LEGA_OUT_PASSWORD is empty"
+	else
+		echo "Altering users passwords..."
+		export PGPASSWORD="${PGPASSWORD:-$POSTGRES_PASSWORD}"
+		temp_server_start
+		sleep 2
+    psql -v ON_ERROR_STOP=1 --username postgres --no-password --dbname "${POSTGRES_DB:-sda}" <<-EOSQL
+      DO \$\$
+      BEGIN
+        IF (SELECT usename FROM pg_shadow WHERE usename = 'lega_in' AND passwd IS NULL) IS NOT NULL THEN
+          ALTER USER lega_in WITH PASSWORD '$LEGA_IN_PASSWORD';
+        END IF;
+
+        IF (SELECT usename FROM pg_shadow WHERE usename = 'lega_out' AND passwd IS NULL) IS NOT NULL THEN
+          ALTER USER lega_out WITH PASSWORD '$LEGA_OUT_PASSWORD';
+        END IF;
+      END
+      \$\$;
+EOSQL
+		pg_ctl -D "$PGDATA" -w stop
+		unset PGPASSWORD
+	fi
+}
 # If already initialized, then run
 if [ -s "$PGDATA/PG_VERSION" ]; then
 	migrate "$@"
+
+  setup_lega_users
 
 	setup_hba_conf
 
@@ -128,6 +157,18 @@ for f in docker-entrypoint-initdb.d/*; do
 	psql -v ON_ERROR_STOP=1 --username postgres --dbname "${POSTGRES_DB:-sda}" -f "$f"
 	echo
 done
+
+if [ -z "$LEGA_IN_PASSWORD" ]; then
+    echo "Environment variable LEGA_IN_PASSWORD is empty"
+elif [ -z "$LEGA_OUT_PASSWORD" ]; then
+    echo "Environment variable LEGA_OUT_PASSWORD is empty"
+else
+	echo "Altering users passwords..."
+	psql -v ON_ERROR_STOP=1 --username postgres --no-password --dbname "${POSTGRES_DB:-sda}" <<-EOSQL
+		ALTER USER lega_in WITH PASSWORD '$LEGA_IN_PASSWORD';
+		ALTER USER lega_out WITH PASSWORD '$LEGA_OUT_PASSWORD';
+EOSQL
+fi
 
 pg_ctl -D "$PGDATA" -m fast -w stop
 
