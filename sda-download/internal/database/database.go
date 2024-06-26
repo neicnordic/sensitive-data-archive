@@ -30,7 +30,7 @@ type FileInfo struct {
 	DisplayFileName           string `json:"displayFileName"`
 	FilePath                  string `json:"filePath"`
 	FileName                  string `json:"fileName"`
-	FileSize                  int64  `json:"fileSize"`
+	EncryptedFileSize         int64  `json:"encryptedFileSize"`
 	DecryptedFileSize         int64  `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
@@ -199,7 +199,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// Read rows into struct
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &fi.FilePath, &fi.FileName,
-			&fi.FileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
+			&fi.EncryptedFileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
 			&fi.DecryptedFileChecksumType, &fi.LastModified)
 		if err != nil {
 			log.Error(err)
@@ -213,7 +213,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// so the user needs to know the size of the header when downloading in encrypted format.
 		// A way to get this could be:
 		// fd := GetFile()
-		// fi.FileSize = fi.FileSize + len(fd.Header)
+		// fi.EncryptedFileSize = fi.EncryptedFileSize + len(fd.Header)
 		// But if the header is re-encrypted or a completely new header is generated, the length
 		// needs to be conveyd to the user in some other way.
 
@@ -365,7 +365,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
 		&file.DatasetID, &file.DisplayFileName, &file.FilePath, &file.FileName,
-		&file.FileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
+		&file.EncryptedFileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
 		&file.DecryptedFileChecksumType,
 		&file.LastModified)
 	if err != nil {
