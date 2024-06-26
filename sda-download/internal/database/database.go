@@ -34,8 +34,6 @@ type FileInfo struct {
 	DecryptedFileSize         int64  `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-	Status                    string `json:"fileStatus"`
-	CreatedAt                 string `json:"createdAt"`
 	LastModified              string `json:"lastModified"`
 }
 
@@ -153,6 +151,13 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	return r, err
 }
 
+// processFileInfo removes any sensitive information from the file info
+func processFileInfo(fi *FileInfo) error {
+	// Remove userids from file paths
+	// fi.FilePath = ""
+	return nil
+}
+
 // getFiles is the actual function performing work for GetFile
 func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
@@ -170,8 +175,6 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
 			sha.type AS decrypted_file_checksum_type,
-			log.event AS status,
-			files.created_at,
 			files.last_modified
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
@@ -197,7 +200,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &fi.FilePath, &fi.FileName,
 			&fi.FileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
-			&fi.DecryptedFileChecksumType, &fi.Status, &fi.CreatedAt, &fi.LastModified)
+			&fi.DecryptedFileChecksumType, &fi.LastModified)
 		if err != nil {
 			log.Error(err)
 
@@ -213,6 +216,12 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// fi.FileSize = fi.FileSize + len(fd.Header)
 		// But if the header is re-encrypted or a completely new header is generated, the length
 		// needs to be conveyd to the user in some other way.
+
+		// Process file info so that we don't leak any unneccessary info.
+		err = processFileInfo(fi)
+		if err != nil {
+			log.Error(err)
+		}
 
 		// Add structs to array
 		files = append(files, fi)
@@ -335,8 +344,6 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 			f.decrypted_file_size,
 			dc.checksum AS decrypted_file_checksum,
 			dc.type AS decrypted_file_checksum_type,
-			e.event AS status,
-			f.created_at,
 			f.last_modified
 		FROM sda.files f
 		JOIN sda.file_dataset fd ON fd.file_id = f.id
@@ -359,7 +366,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
 		&file.DatasetID, &file.DisplayFileName, &file.FilePath, &file.FileName,
 		&file.FileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
-		&file.DecryptedFileChecksumType, &file.Status, &file.CreatedAt,
+		&file.DecryptedFileChecksumType,
 		&file.LastModified)
 	if err != nil {
 		log.Error(err)
