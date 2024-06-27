@@ -30,7 +30,6 @@ type FileInfo struct {
 	DatasetID                 string `json:"datasetId"`
 	DisplayFileName           string `json:"displayFileName"`
 	FilePath                  string `json:"filePath"`
-	FileName                  string `json:"fileName"`
 	EncryptedFileSize         int64  `json:"encryptedFileSize"`
 	EncryptedFileChecksum     string `json:"encryptedFileChecksum"`
 	EncryptedFileChecksumType string `json:"encryptedFileChecksumType"`
@@ -183,7 +182,6 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 			reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
 			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
-			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
 			lef.archive_file_checksum AS encrypted_file_checksum,
 			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
@@ -216,7 +214,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// Read rows into struct
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
-			&userId, &fi.FilePath, &fi.FileName,
+			&userId, &fi.FilePath,
 			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
 			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
 		if err != nil {
@@ -360,7 +358,6 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 			reverse(split_part(reverse(f.submission_file_path::text), '/'::text, 1)) AS display_file_name,
 			f.submission_user AS user_id,
 			f.submission_file_path AS file_path,
-			f.archive_file_path AS file_name,
 			f.archive_file_size AS file_size,
 			lef.archive_file_checksum AS encrypted_file_checksum,
 			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
@@ -388,7 +385,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	var userId string
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath, &file.FileName,
+		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath,
 		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
 		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
 
