@@ -37,7 +37,6 @@ type FileInfo struct {
 	DecryptedFileSize         int64  `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-	LastModified              string `json:"lastModified"`
 }
 
 type DatasetInfo struct {
@@ -190,8 +189,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type,
-			files.last_modified
+			sha.type AS decrypted_file_checksum_type
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
 		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
@@ -220,8 +218,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
 			&userId, &fi.FilePath, &fi.FileName,
 			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
-			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType,
-			&fi.LastModified)
+			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
 		if err != nil {
 			log.Error(err)
 
@@ -369,8 +366,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			f.decrypted_file_size,
 			dc.checksum AS decrypted_file_checksum,
-			dc.type AS decrypted_file_checksum_type,
-			f.last_modified
+			dc.type AS decrypted_file_checksum_type
 		FROM sda.files f
 		JOIN sda.file_dataset fd ON fd.file_id = f.id
 		JOIN sda.datasets d ON fd.dataset_id = d.id
@@ -394,8 +390,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
 		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath, &file.FileName,
 		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
-		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType,
-		&file.LastModified)
+		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
 
 	if err != nil {
 		log.Error(err)
