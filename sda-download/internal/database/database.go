@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/neicnordic/sda-download/internal/config"
@@ -151,10 +152,20 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	return r, err
 }
 
+func removeUserIDPrefix(filePath, userId string) string {
+	// Construct the full prefix we expect to find (userId + "/").
+	fullPrefix := userId + "/"
+	if strings.HasPrefix(filePath, fullPrefix) {
+		return strings.TrimPrefix(filePath, fullPrefix)
+	}
+	return filePath
+}
+
 // processFileInfo removes any sensitive information from the file info
-func processFileInfo(fi *FileInfo) error {
+func processFileInfo(fi *FileInfo, userId string) error {
 	// Remove userids from file paths
-	// fi.FilePath = ""
+	userId = strings.ReplaceAll(userId, "@", "_") // in filePath, @ is replaced with _
+	fi.FilePath = removeUserIDPrefix(fi.FilePath, userId)
 	return nil
 }
 
@@ -169,6 +180,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		SELECT files.stable_id AS id,
 			datasets.stable_id AS dataset_id,
 			reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
 			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
@@ -193,12 +205,14 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	}
 	defer rows.Close()
 
+	var userId string
+
 	// Iterate rows
 	for rows.Next() {
 
 		// Read rows into struct
 		fi := &FileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &fi.FilePath, &fi.FileName,
+		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &userId, &fi.FilePath, &fi.FileName,
 			&fi.EncryptedFileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
 			&fi.DecryptedFileChecksumType, &fi.LastModified)
 		if err != nil {
@@ -218,9 +232,11 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// needs to be conveyd to the user in some other way.
 
 		// Process file info so that we don't leak any unneccessary info.
-		err = processFileInfo(fi)
+		err = processFileInfo(fi, userId)
 		if err != nil {
 			log.Error(err)
+
+			return nil, err
 		}
 
 		// Add structs to array
@@ -338,6 +354,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 		SELECT f.stable_id AS file_id,
 			d.stable_id AS dataset_id,
 			reverse(split_part(reverse(f.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+			files.submission_user AS user_id,
 			f.submission_file_path AS file_path,
 			f.archive_file_path AS file_name,
 			f.archive_file_size AS file_size,
@@ -362,12 +379,22 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
 
+	var userId string
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DatasetID, &file.DisplayFileName, &file.FilePath, &file.FileName,
+		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath, &file.FileName,
 		&file.EncryptedFileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
 		&file.DecryptedFileChecksumType,
 		&file.LastModified)
+
+	if err != nil {
+		log.Error(err)
+
+		return nil, err
+	}
+
+	// Process file info so that we don't leak any unneccessary info.
+	err = processFileInfo(file, userId)
 	if err != nil {
 		log.Error(err)
 
