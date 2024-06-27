@@ -32,6 +32,8 @@ type FileInfo struct {
 	FilePath                  string `json:"filePath"`
 	FileName                  string `json:"fileName"`
 	EncryptedFileSize         int64  `json:"encryptedFileSize"`
+	EncryptedFileChecksum     string `json:"encryptedFileChecksum"`
+	EncryptedFileChecksumType string `json:"encryptedFileChecksumType"`
 	DecryptedFileSize         int64  `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
@@ -184,6 +186,8 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 			files.submission_file_path AS file_path,
 			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
 			sha.type AS decrypted_file_checksum_type,
@@ -191,6 +195,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
 		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
+		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
 		LEFT JOIN (SELECT file_id, (ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event FROM sda.file_event_log GROUP BY file_id) log ON files.id = log.file_id
 		LEFT JOIN (SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED') sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = $1;
@@ -212,9 +217,11 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 
 		// Read rows into struct
 		fi := &FileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &userId, &fi.FilePath, &fi.FileName,
-			&fi.EncryptedFileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
-			&fi.DecryptedFileChecksumType, &fi.LastModified)
+		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
+			&userId, &fi.FilePath, &fi.FileName,
+			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
+			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType,
+			&fi.LastModified)
 		if err != nil {
 			log.Error(err)
 
@@ -354,10 +361,12 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 		SELECT f.stable_id AS file_id,
 			d.stable_id AS dataset_id,
 			reverse(split_part(reverse(f.submission_file_path::text), '/'::text, 1)) AS display_file_name,
-			files.submission_user AS user_id,
+			f.submission_user AS user_id,
 			f.submission_file_path AS file_path,
 			f.archive_file_path AS file_name,
 			f.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			f.decrypted_file_size,
 			dc.checksum AS decrypted_file_checksum,
 			dc.type AS decrypted_file_checksum_type,
@@ -365,6 +374,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 		FROM sda.files f
 		JOIN sda.file_dataset fd ON fd.file_id = f.id
 		JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN local_ega.files lef ON f.stable_id = lef.stable_id
 		LEFT JOIN (SELECT file_id,
 					(ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event
 				FROM sda.file_event_log
@@ -383,8 +393,8 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
 		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath, &file.FileName,
-		&file.EncryptedFileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
-		&file.DecryptedFileChecksumType,
+		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
+		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType,
 		&file.LastModified)
 
 	if err != nil {
