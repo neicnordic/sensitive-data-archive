@@ -132,7 +132,7 @@ func (suite *S3TestSuite) TestListByPrefix() {
 		DecryptedFileChecksumType: "sha256",
 	}
 
-	userId := "user1"
+	userID := "user1"
 
 	query := `
 		SELECT files.stable_id AS id,
@@ -161,7 +161,7 @@ func (suite *S3TestSuite) TestListByPrefix() {
 			"decrypted_file_checksum", "decrypted_file_checksum_type",
 			"decrypted_file_size", "decrypted_file_checksum",
 			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-			fileInfo.DisplayFileName, userId, fileInfo.FilePath,
+			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
 			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
 			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
@@ -210,7 +210,7 @@ func (suite *S3TestSuite) TestListObjects() {
 		DecryptedFileChecksumType: "sha256",
 	}
 
-	userId := "user1"
+	userID := "user1"
 
 	query := `
 		SELECT files.stable_id AS id,
@@ -239,7 +239,7 @@ func (suite *S3TestSuite) TestListObjects() {
 			"encrypted_file_checksum", "encrypted_file_checksum_type",
 			"decrypted_file_size", "decrypted_file_checksum",
 			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-			fileInfo.DisplayFileName, userId, fileInfo.FilePath,
+			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
 			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
 			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 

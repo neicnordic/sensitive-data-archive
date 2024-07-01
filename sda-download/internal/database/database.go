@@ -152,20 +152,22 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	return r, err
 }
 
-func removeUserIDPrefix(filePath, userId string) string {
-	// Construct the full prefix we expect to find (userId + "/").
-	fullPrefix := userId + "/"
+func removeUserIDPrefix(filePath, userID string) string {
+	// Construct the full prefix we expect to find (userID + "/").
+	fullPrefix := userID + "/"
 	if strings.HasPrefix(filePath, fullPrefix) {
 		return strings.TrimPrefix(filePath, fullPrefix)
 	}
+
 	return filePath
 }
 
 // processFileInfo removes any sensitive information from the file info
-func processFileInfo(fi *FileInfo, userId string) error {
+func processFileInfo(fi *FileInfo, userID string) error {
 	// Remove userids from file paths
-	userId = strings.ReplaceAll(userId, "@", "_") // in filePath, @ is replaced with _
-	fi.FilePath = removeUserIDPrefix(fi.FilePath, userId)
+	userID = strings.ReplaceAll(userID, "@", "_") // in filePath, @ is replaced with _
+	fi.FilePath = removeUserIDPrefix(fi.FilePath, userID)
+
 	return nil
 }
 
@@ -206,7 +208,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	}
 	defer rows.Close()
 
-	var userId string
+	var userID string
 
 	// Iterate rows
 	for rows.Next() {
@@ -214,7 +216,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// Read rows into struct
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
-			&userId, &fi.FilePath,
+			&userID, &fi.FilePath,
 			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
 			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
 		if err != nil {
@@ -234,7 +236,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// needs to be conveyd to the user in some other way.
 
 		// Process file info so that we don't leak any unneccessary info.
-		err = processFileInfo(fi, userId)
+		err = processFileInfo(fi, userID)
 		if err != nil {
 			log.Error(err)
 
@@ -382,10 +384,10 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
 
-	var userId string
+	var userID string
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DatasetID, &file.DisplayFileName, &userId, &file.FilePath,
+		&file.DatasetID, &file.DisplayFileName, &userID, &file.FilePath,
 		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
 		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
 
@@ -396,7 +398,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	}
 
 	// Process file info so that we don't leak any unneccessary info.
-	err = processFileInfo(file, userId)
+	err = processFileInfo(file, userID)
 	if err != nil {
 		log.Error(err)
 

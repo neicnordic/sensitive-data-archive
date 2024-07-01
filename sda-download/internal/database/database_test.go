@@ -298,7 +298,7 @@ func TestGetDatasetFileInfo(t *testing.T) {
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
 		}
-		userId := "user1"
+		userID := "user1"
 
 		query := `
 		SELECT f.stable_id AS file_id,
@@ -332,7 +332,7 @@ func TestGetDatasetFileInfo(t *testing.T) {
 				"display_file_name", "user_id", "file_path", "file_size",
 				"encrypted_file_checksum", "encrypted_file_checksum_type", "decrypted_file_size", "decrypted_file_checksum",
 				"decrypted_file_checksum_type"}).AddRow(expected.FileID, expected.DatasetID,
-				expected.DisplayFileName, userId, expected.FilePath,
+				expected.DisplayFileName, userID, expected.FilePath,
 				expected.EncryptedFileSize, expected.EncryptedFileChecksum, expected.EncryptedFileChecksumType, expected.DecryptedFileSize,
 				expected.DecryptedFileChecksum, expected.DecryptedFileChecksumType))
 
@@ -417,7 +417,7 @@ func TestGetFiles(t *testing.T) {
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
 		}
-		userId := "user1"
+		userID := "user1"
 
 		expected = append(expected, fileInfo)
 		query := `
@@ -445,7 +445,7 @@ func TestGetFiles(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
 				"display_file_name", "user_id", "file_path", "file_size", "encrypted_file_checksum",
 				"encrypted_file_checksum_type", "decrypted_file_size", "decrypted_file_checksum", "decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-				fileInfo.DisplayFileName, userId, fileInfo.FilePath,
+				fileInfo.DisplayFileName, userID, fileInfo.FilePath,
 				fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
 				fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
