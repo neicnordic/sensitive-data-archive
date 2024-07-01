@@ -140,7 +140,6 @@ func (suite *S3TestSuite) TestListByPrefix() {
 			reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
 			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
-			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
 			lef.archive_file_checksum AS encrypted_file_checksum,
 			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
@@ -158,10 +157,10 @@ func (suite *S3TestSuite) TestListByPrefix() {
 	suite.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-			"display_file_name", "user_id", "file_path", "file_name", "file_size",
+			"display_file_name", "user_id", "file_path", "file_size",
+			"decrypted_file_checksum", "decrypted_file_checksum_type",
 			"decrypted_file_size", "decrypted_file_checksum",
-			"decrypted_file_checksum_type", "file_status", "created_at",
-			"last_modified"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
 			fileInfo.DisplayFileName, userId, fileInfo.FilePath,
 			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
 			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
@@ -183,7 +182,6 @@ func (suite *S3TestSuite) TestListByPrefix() {
 	expected := xml.Header +
 		"<ListBucketResult><CommonPrefixes></CommonPrefixes><Contents>" +
 		"<Key>file.txt</Key>" +
-		"<LastModified>Mon, 17 Apr 2023 14:40:12 GMT</LastModified>" +
 		"<Owner></Owner>" +
 		"<Size>32</Size>" +
 		"</Contents>" +
