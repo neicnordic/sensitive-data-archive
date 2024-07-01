@@ -283,14 +283,12 @@ func TestFiles_Success(t *testing.T) {
 			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
-			FileName:                  "file1.txt",
-			FileSize:                  200,
+			EncryptedFileSize:         200,
+			EncryptedFileChecksum:     "hash",
+			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
-			Status:                    "READY",
-			CreatedAt:                 "a while ago",
-			LastModified:              "now",
 		}
 		files := []*database.FileInfo{}
 		files = append(files, &fileInfo)
@@ -316,9 +314,10 @@ func TestFiles_Success(t *testing.T) {
 	expectedStatusCode := 200
 	expectedBody := []byte(
 		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
-			`"dir/file1.txt","fileName":"file1.txt","fileSize":200,"decryptedFileSize":100,` +
-			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256",` +
-			`"fileStatus":"READY","createdAt":"a while ago","lastModified":"now"}]`)
+			`"dir/file1.txt","encryptedFileSize":200,` +
+			`"encryptedFileChecksum":"hash","encryptedFileChecksumType":"sha256",` +
+			`"decryptedFileSize":100,` +
+			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
