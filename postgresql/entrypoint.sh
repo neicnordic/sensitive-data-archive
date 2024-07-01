@@ -118,7 +118,7 @@ setup_lega_users(){
 				END IF;
 			END
 			\$\$;
-EOSQL
+		EOSQL
 		pg_ctl -D "$PGDATA" -w stop
 		unset PGPASSWORD
 	fi
@@ -167,7 +167,7 @@ else
 	psql -v ON_ERROR_STOP=1 --username postgres --no-password --dbname "${POSTGRES_DB:-sda}" <<-EOSQL
 		ALTER USER lega_in WITH PASSWORD '$LEGA_IN_PASSWORD';
 		ALTER USER lega_out WITH PASSWORD '$LEGA_OUT_PASSWORD';
-EOSQL
+	EOSQL
 fi
 
 pg_ctl -D "$PGDATA" -m fast -w stop
