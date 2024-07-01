@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/api/middleware"
@@ -39,7 +38,6 @@ type Object struct {
 	ChecksumAlgorithm []string `xml:"ChecksumAlgorithm,omitempty"`
 	ETag              string   `xml:"ETag,omitempty"`
 	Key               string   `xml:"Key"`
-	LastModified      string   `xml:"LastModified,omitempty"`
 	Owner             Owner    `xml:"Owner,omitempty"`
 	Size              int      `xml:"Size,omitempty"`
 	StorageClass      string   `xml:"StorageClass,omitempty"`
@@ -160,7 +158,6 @@ func ListObjects(c *gin.Context) {
 		if !strings.HasPrefix(key, c.Param("prefix")) {
 			continue
 		}
-		lastModified, err := time.Parse(time.RFC3339, file.LastModified)
 		if err != nil {
 			log.Errorf("failed to parse last modified time: %v", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -168,9 +165,8 @@ func ListObjects(c *gin.Context) {
 			return
 		}
 		objects = append(objects, Object{
-			Key:          key,
-			Size:         int(file.DecryptedFileSize),
-			LastModified: lastModified.Format(http.TimeFormat),
+			Key:  key,
+			Size: int(file.DecryptedFileSize),
 		})
 	}
 
