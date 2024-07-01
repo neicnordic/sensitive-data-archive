@@ -291,32 +291,31 @@ func TestGetDatasetFileInfo(t *testing.T) {
 			DatasetID:                 "dataset1",
 			DisplayFileName:           "file.txt",
 			FilePath:                  "dir/file.txt",
-			FileName:                  "urn:file1",
-			FileSize:                  60,
+			EncryptedFileSize:         60,
+			EncryptedFileChecksum:     "hash",
+			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         32,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
-			Status:                    "ready",
-			CreatedAt:                 "a while ago",
-			LastModified:              "now",
 		}
+		userId := "user1"
 
 		query := `
 		SELECT f.stable_id AS file_id,
 			d.stable_id AS dataset_id,
 			reverse\(split_part\(reverse\(f.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+			f.submission_user AS user_id,
 			f.submission_file_path AS file_path,
-			f.archive_file_path AS file_name,
 			f.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			f.decrypted_file_size,
 			dc.checksum AS decrypted_file_checksum,
-			dc.type AS decrypted_file_checksum_type,
-			e.event AS status,
-			f.created_at,
-			f.last_modified
+			dc.type AS decrypted_file_checksum_type
 		FROM sda.files f
 		JOIN sda.file_dataset fd ON fd.file_id = f.id
 		JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN local_ega.files lef ON f.stable_id = lef.stable_id
 		LEFT JOIN \(SELECT file_id,
 					\(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event
 				FROM sda.file_event_log
@@ -330,14 +329,12 @@ func TestGetDatasetFileInfo(t *testing.T) {
 		mock.ExpectQuery(query).
 			WithArgs("dataset1", "file1").
 			WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-				"display_file_name", "file_path", "file_name", "file_size",
-				"decrypted_file_size", "decrypted_file_checksum",
-				"decrypted_file_checksum_type", "file_status", "created_at",
-				"last_modified"}).AddRow(expected.FileID, expected.DatasetID,
-				expected.DisplayFileName, expected.FilePath, expected.FileName,
-				expected.FileSize, expected.DecryptedFileSize,
-				expected.DecryptedFileChecksum, expected.DecryptedFileChecksumType,
-				expected.Status, expected.CreatedAt, expected.LastModified))
+				"display_file_name", "user_id", "file_path", "file_size",
+				"encrypted_file_checksum", "encrypted_file_checksum_type", "decrypted_file_size", "decrypted_file_checksum",
+				"decrypted_file_checksum_type"}).AddRow(expected.FileID, expected.DatasetID,
+				expected.DisplayFileName, userId, expected.FilePath,
+				expected.EncryptedFileSize, expected.EncryptedFileChecksum, expected.EncryptedFileChecksumType, expected.DecryptedFileSize,
+				expected.DecryptedFileChecksum, expected.DecryptedFileChecksumType))
 
 		x, err := testDb.getDatasetFileInfo("dataset1", "file1")
 
@@ -413,32 +410,32 @@ func TestGetFiles(t *testing.T) {
 			DatasetID:                 "dataset1",
 			DisplayFileName:           "file.txt",
 			FilePath:                  "dir/file.txt",
-			FileName:                  "urn:file1",
-			FileSize:                  60,
+			EncryptedFileSize:         60,
+			EncryptedFileChecksum:     "hash",
+			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         32,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
-			Status:                    "ready",
-			CreatedAt:                 "a while ago",
-			LastModified:              "now",
 		}
+		userId := "user1"
+
 		expected = append(expected, fileInfo)
 		query := `
 			SELECT files.stable_id AS id,
 				datasets.stable_id AS dataset_id,
 				reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+				files.submission_user AS user_id,
 				files.submission_file_path AS file_path,
-				files.archive_file_path AS file_name,
 				files.archive_file_size AS file_size,
+				lef.archive_file_checksum AS encrypted_file_checksum,
+				lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 				files.decrypted_file_size,
 				sha.checksum AS decrypted_file_checksum,
-				sha.type AS decrypted_file_checksum_type,
-				log.event AS status,
-				files.created_at,
-				files.last_modified
+				sha.type AS decrypted_file_checksum_type
 			FROM sda.files
 			JOIN sda.file_dataset ON file_id = files.id
 			JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
+			LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
 			LEFT JOIN \(SELECT file_id, \(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event FROM sda.file_event_log GROUP BY file_id\) log ON files.id = log.file_id
 			LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
 			WHERE datasets.stable_id = \$1;
@@ -446,14 +443,11 @@ func TestGetFiles(t *testing.T) {
 		mock.ExpectQuery(query).
 			WithArgs("dataset1").
 			WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-				"display_file_name", "file_path", "file_name", "file_size",
-				"decrypted_file_size", "decrypted_file_checksum",
-				"decrypted_file_checksum_type", "file_status", "created_at",
-				"last_modified"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-				fileInfo.DisplayFileName, fileInfo.FilePath, fileInfo.FileName,
-				fileInfo.FileSize, fileInfo.DecryptedFileSize,
-				fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType,
-				fileInfo.Status, fileInfo.CreatedAt, fileInfo.LastModified))
+				"display_file_name", "user_id", "file_path", "file_size", "encrypted_file_checksum",
+				"encrypted_file_checksum_type", "decrypted_file_size", "decrypted_file_checksum", "decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+				fileInfo.DisplayFileName, userId, fileInfo.FilePath,
+				fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
+				fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
 		x, err := testDb.getFiles("dataset1")
 		assert.Equal(t, expected, x, "did not get expected file details")
