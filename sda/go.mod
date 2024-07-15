@@ -4,12 +4,12 @@ go 1.22.2
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/aws/aws-sdk-go-v2 v1.30.0
-	github.com/aws/aws-sdk-go-v2/config v1.27.21
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.21
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.1
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.56.1
-	github.com/aws/smithy-go v1.20.2
+	github.com/aws/aws-sdk-go-v2 v1.30.3
+	github.com/aws/aws-sdk-go-v2/config v1.27.26
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.26
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.7
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.58.2
+	github.com/aws/smithy-go v1.20.3
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
@@ -32,9 +32,9 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/crypto v0.24.0
+	golang.org/x/crypto v0.25.0
 	golang.org/x/oauth2 v0.21.0
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 )
 
@@ -49,26 +49,26 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20220729165902-8cddb4f5de06 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.8 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.3 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.11 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.15 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.15 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.14 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.14 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.21.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.25.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.29.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.22.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/containerd/continuity v0.3.0 // indirect
@@ -99,7 +99,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/iris-contrib/schema v0.0.6 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kataras/blocks v0.0.8 // indirect
@@ -163,11 +162,11 @@ require (
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
