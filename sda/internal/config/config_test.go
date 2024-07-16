@@ -414,6 +414,7 @@ func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
 	viper.Set("auth.jwt.Issuer", "http://auth:8080")
 	viper.Set("auth.Jwt.privateKey", "nonexistent-key-file")
 	viper.Set("auth.Jwt.signatureAlg", "ES256")
+	viper.Set("auth.Jwt.tokenTTL", 168)
 	_, err = NewConfig("auth")
 	assert.ErrorContains(suite.T(), err, "no such file or directory")
 
@@ -421,6 +422,7 @@ func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
 	viper.Set("auth.Jwt.privateKey", ECPath+"/ec")
 	c, err := NewConfig("auth")
 	assert.Equal(suite.T(), c.Auth.JwtPrivateKey, fmt.Sprintf("%s/ec", ECPath))
+	assert.Equal(suite.T(), c.Auth.JwtTTL, 168)
 	assert.NoError(suite.T(), err, "unexpected failure")
 }
 

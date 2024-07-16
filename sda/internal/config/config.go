@@ -117,6 +117,7 @@ type AuthConf struct {
 	JwtIssuer       string
 	JwtPrivateKey   string
 	JwtSignatureAlg string
+	JwtTTL          int
 	Server          ServerConfig
 	S3Inbox         string
 	ResignJwt       bool
@@ -228,7 +229,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		if viper.GetBool("auth.resignJwt") {
-			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg"}...)
+			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
 	case "ingest":
 		requiredConfVars = []string{
@@ -494,6 +495,7 @@ func NewConfig(app string) (*Config, error) {
 			c.Auth.JwtPrivateKey = viper.GetString("auth.jwt.privateKey")
 			c.Auth.JwtSignatureAlg = viper.GetString("auth.jwt.signatureAlg")
 			c.Auth.JwtIssuer = viper.GetString("auth.jwt.issuer")
+			c.Auth.JwtTTL = viper.GetInt("auth.jwt.tokenTTL")
 
 			if _, err := os.Stat(c.Auth.JwtPrivateKey); err != nil {
 				return nil, err
