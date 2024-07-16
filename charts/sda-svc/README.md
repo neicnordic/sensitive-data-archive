@@ -79,6 +79,7 @@ Parameter | Description | Default
 `global.auth.jwtAlg` | Key type to sign the JWT, available options are RS265 & ES256, Must match the key type |`"ES256"`
 `global.auth.jwtKey` | Private key used to sign the JWT. |`""`
 `global.auth.jwtPub` | Public key ues to verify the JWT. |`""`
+`global.auth.jwtTTL` | TTL of the resigned token (hours). |`168`
 `global.auth.resignJWT` | Resign the LS-AAI JWTs. |`true`
 `global.auth.useTLS` | Run a TLS secured server. |`true`
 `global.auth.corsOrigins` | Domain name allowed for cross-domain requests. |`""`
