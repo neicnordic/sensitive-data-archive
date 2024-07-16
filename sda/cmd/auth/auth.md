@@ -25,6 +25,7 @@ The following settings can be configured for deploying the service, either by us
 | `AUTH_JWT_ISSUER`       | Issuer of JWT tokens                                                                 | `http://auth:8080`                      |
 | `AUTH_JWT_PRIVATEKEY`   | Path to private key for signing the JWT token                                        | `keys/sign-jwt.key`                     |
 | `AUTH_JWT_SIGNATUREALG` | Algorithm used to sign the JWT token. ES256 (ECDSA) or RS256 (RSA) are supported     | `ES256`                                 |
+| `AUTH_JWT_TOKENTTL`     | TTL of the resigned token in hours                                                   | `168`                                   |
 | `AUTH_RESIGNJWT`        | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it                 | `""`                                    |
 | `AUTH_S3INBOX`          | S3 inbox host                                                                        | `http://s3.example.com`                 |
 | `LOG_LEVEL`             | Log level                                                                            | `info`                                  |
