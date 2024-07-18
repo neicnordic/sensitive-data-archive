@@ -1,11 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/kataras/iris/v12"
-	"github.com/neicnordic/crypt4gh/keys"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,19 +18,20 @@ type Info struct {
 }
 
 // Reads the public key file and returns the public key
-func readPublicKeyFile(filename string) (key *[32]byte, err error) {
+func readPublicKeyFile(filename string) (string, error) {
 	log.Info("Reading Public key file")
 	file, err := os.Open(filepath.Clean(filename))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer file.Close()
-	publicKey, err := keys.ReadPublicKey(file)
+
+	data, err := io.ReadAll(file)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return &publicKey, err
+	return base64.StdEncoding.EncodeToString(data), err
 }
 
 // getInfo returns information needed by the client to authenticate
