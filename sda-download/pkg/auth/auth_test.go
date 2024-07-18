@@ -351,11 +351,15 @@ func TestValidateTrustedIss(t *testing.T) {
 	trustedList := []config.TrustedISS([]config.TrustedISS{{ISS: "https://demo.example", JKU: "https://mockauth:8000/idp/profile/oidc/keyset"}, {ISS: "https://demo1.example", JKU: "https://mockauth:8000/idp/profile/oidc/keyset"}})
 
 	ok := validateTrustedIss(trustedList, "https://demo.example", "https://mockauth:8000/idp/profile/oidc/keyset")
-
 	assert.True(t, ok, "values might have changed in fixture")
 
-	ok = validateTrustedIss(trustedList, "https://demo3.example", "https://mockauth:8000/idp/profile/oidc/keyset")
+	ok = validateTrustedIss(trustedList, "https://demo.example/", "https://mockauth:8000/idp/profile/oidc/keyset")
+	assert.True(t, ok, "trailing slash in ISS should be allowed")
 
+	ok = validateTrustedIss(trustedList, "https://demo.example", "https://mockauth:8000/idp/profile/oidc/keyset/")
+	assert.True(t, ok, "trailing slash in JKU should be allowed")
+
+	ok = validateTrustedIss(trustedList, "https://demo3.example", "https://mockauth:8000/idp/profile/oidc/keyset")
 	assert.False(t, ok, "values might have changed in fixture")
 }
 
