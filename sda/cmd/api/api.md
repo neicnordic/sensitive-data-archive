@@ -17,3 +17,17 @@ Endpoints:
     [{"inboxPath":"requester_demo.org/data/file1.c4gh","fileStatus":"uploaded","createAt":"2023-11-13T10:12:43.144242Z"}] 
     ```
      If the `token` is invalid, 401 is returned.
+
+### Admin endpoints
+
+Admin endpoints are only available to a set of whitelisted users specified in the application config.
+
+- `/file/ingest`
+  - accepts `POST` requests with JSON data with the format: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+  - triggers the ingestion of the file.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/ingest
+    ```

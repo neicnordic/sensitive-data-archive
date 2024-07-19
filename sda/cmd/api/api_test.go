@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 )
 
 var dbPort, mqPort, OIDCport int
+var BrokerAPI string
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -107,10 +109,10 @@ func TestMain(m *testing.M) {
 	}
 
 	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	mqHostAndPort := rabbitmq.GetHostPort("15672/tcp")
+	BrokerAPI = rabbitmq.GetHostPort("15672/tcp")
 
 	client := http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+mqHostAndPort+"/api/users", http.NoBody)
+	req, err := http.NewRequest(http.MethodPut, "http://"+BrokerAPI+"/api/queues/%2F/ingest", http.NoBody)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -333,7 +335,7 @@ func (suite *TestSuite) TestReadinessResponse() {
 }
 
 // Initialise configuration and create jwt keys
-func (suite *TestSuite) SetupTest() {
+func (suite *TestSuite) SetupSuite() {
 	log.SetLevel(log.DebugLevel)
 	suite.Path = "/tmp/keys/"
 	suite.KeyName = "example.demo"
@@ -373,6 +375,16 @@ func (suite *TestSuite) SetupTest() {
 		SslMode:  "disable",
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker = broker.MQConf{
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "",
+	}
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
 
 }
@@ -577,4 +589,157 @@ func (suite *TestSuite) TestIsAdmin() {
 	b, _ := io.ReadAll(okResponse.Body)
 	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
 	assert.Contains(suite.T(), string(b), "ok")
+}
+
+func (suite *TestSuite) TestIngestFile() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: user, FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10*time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/%2F/ingest", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestIngestFile_NoUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "", FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+func (suite *TestSuite) TestIngestFile_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "foo", FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusInternalServerError, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
+}
+
+func (suite *TestSuite) TestIngestFile_WrongFilePath() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "dummy", FilePath: "bad/path"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/file/ingest", bytes.NewBuffer(ingestMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", isAdmin(), ingestFile)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusInternalServerError, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
 }
