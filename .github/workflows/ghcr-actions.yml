@@ -8,6 +8,7 @@ name: ghcr.io
 on:
   schedule:
     - cron: "21 21 * * *"
+  workflow_dispatch:
 
 jobs:
   clean-ghcr:
@@ -19,11 +20,10 @@ jobs:
       - name: Delete 'PR' containers older than one month
         uses: snok/container-retention-policy@v3.0.0
         with:
+          account: ${{ github.repository_owner }}
           image-names: sensitive-data-archive
-          skip-tags: v*
+          image-tags: "!v*"
           cut-off: One month ago UTC
-          account-type: org
-          org-name: ${{ github.repository_owner }}
-          keep-at-least: 1
+          keep-n-most-recent: 1
           token: ${{ secrets.GHCR_TOKEN }}
           timestamp-to-use: updated_at
