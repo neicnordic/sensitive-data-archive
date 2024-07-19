@@ -666,3 +666,33 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 
 	return files, nil
 }
+
+func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
+	var (
+		corrID string
+		err    error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		corrID, err = dbs.getCorrID(user, path)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return corrID, err
+}
+func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 and f.submission_user = $2 AND NOT EXISTS (SELECT file_id FROM sda.file_dataset WHERE file_id = f.id)"
+
+	var corrID string
+	err := db.QueryRow(query, path, user).Scan(&corrID)
+	if err != nil {
+		return "", err
+	}
+
+	return corrID, nil
+}

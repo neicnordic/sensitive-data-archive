@@ -468,3 +468,45 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		assert.Equal(suite.T(), "ready", fileInfo.Status, "incorrect file status")
 	}
 }
+
+func (suite *DatabaseTests) TestGetCorrID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	filePath := "/testuser/file10.c4gh"
+	user := "testuser"
+
+	fileID, err := db.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	corrID, err := db.GetCorrID(user, filePath)
+	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
+	assert.Equal(suite.T(), fileID, corrID)
+
+	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, "/testuser/file10.c4gh", checksum, 999}
+	err = db.SetArchived(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = db.SetVerified(fileInfo, fileID, corrID)
+	assert.NoError(suite.T(), err, "failed to mark file as Verified")
+
+	stableID := "TEST:get-corr-id"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when setting stable ID: %s, %s", err, stableID, fileID)
+
+	diSet := map[string][]string{
+		"dataset-corr-id": {"TEST:get-corr-id"},
+	}
+
+	for di, acs := range diSet {
+		err := db.MapFilesToDataset(di, acs)
+		assert.NoError(suite.T(), err, "failed to map file to dataset")
+	}
+
+	corrID2, err := db.GetCorrID(user, filePath)
+	assert.Error(suite.T(), err, "failed to get correlation ID of file in database")
+	assert.Equal(suite.T(), "", corrID2)
+}
