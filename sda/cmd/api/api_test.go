@@ -95,8 +95,8 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "rabbitmq",
-		Tag:        "3-management-alpine",
+		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
+		Tag:        "v0.3.89-rabbitmq",
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
@@ -105,14 +105,17 @@ func TestMain(m *testing.M) {
 		}
 	})
 	if err != nil {
+		if err := pool.Purge(postgres); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
 	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
 	BrokerAPI = rabbitmq.GetHostPort("15672/tcp")
 
-	client := http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodPut, "http://"+BrokerAPI+"/api/queues/%2F/ingest", http.NoBody)
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/", http.NoBody)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -233,7 +236,8 @@ func (suite *TestSuite) TestShutdown() {
 		Port:     mqPort,
 		User:     "guest",
 		Password: "guest",
-		Exchange: "amq.default",
+		Exchange: "sda",
+		Vhost:    "/sda",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
@@ -274,6 +278,7 @@ func (suite *TestSuite) TestReadinessResponse() {
 		User:     "guest",
 		Password: "guest",
 		Exchange: "amq.default",
+		Vhost:    "/sda",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
@@ -382,7 +387,8 @@ func (suite *TestSuite) SetupSuite() {
 		Port:     mqPort,
 		User:     "guest",
 		Password: "guest",
-		Exchange: "",
+		Exchange: "sda",
+		Vhost:    "/sda",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
@@ -624,9 +630,9 @@ func (suite *TestSuite) TestIngestFile() {
 	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
 
 	// verify that the message shows up in the queue
-	time.Sleep(10*time.Second) // this is needed to ensure we don't get any false negatives
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
 	client := http.Client{Timeout: 5 * time.Second}
-	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/%2F/ingest", http.NoBody)
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/ingest", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
 	res, err := client.Do(req)
 	assert.NoError(suite.T(), err, "failed to query broker")
