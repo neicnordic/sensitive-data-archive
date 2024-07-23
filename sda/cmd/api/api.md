@@ -41,3 +41,13 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     ```bash
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
     ```
+
+- `/dataset/create`
+  - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>"}`
+  - creates a datset from the list of accession IDs and the dataset ID.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_idd": ["my-id-01", "my-id-02"], "dataset_id": "my-dataset-01"}' https://HOSTNAME/dataset/create
+    ```

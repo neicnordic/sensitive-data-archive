@@ -76,6 +76,7 @@ func setup(config *config.Config) *http.Server {
 	// admin endpoints below here
 	r.POST("/file/ingest", isAdmin(), ingestFile) // start ingestion of a file
 	r.POST("/file/accession", isAdmin(), setAccession) // assign accession ID to a file
+	r.POST("/dataset/create", isAdmin(), createDataset) // maps a set of files to a dataset
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -285,6 +286,46 @@ func setAccession(c *gin.Context) {
 	}
 
 	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "accession", marshaledMsg)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func createDataset(c *gin.Context) {
+	var dataset schema.DatasetMapping
+	if err := c.BindJSON(&dataset); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		return
+	}
+
+	dataset.Type = "mapping"
+	marshaledMsg, err := json.Marshal(&dataset)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusConflict, err.Error())
+
+		return
+	}
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
