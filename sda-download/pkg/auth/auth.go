@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -345,7 +347,7 @@ func validateTrustedIss(obj []config.TrustedISS, issuerValue string, jkuValue st
 	log.Debugf("check combination of iss: %s and jku: %s", issuerValue, jkuValue)
 	if obj != nil {
 		for _, value := range obj {
-			if value.ISS == issuerValue && value.JKU == jkuValue {
+			if cleanURL(value.ISS) == cleanURL(issuerValue) && cleanURL(value.JKU) == cleanURL(jkuValue) {
 				return true
 			}
 		}
@@ -354,4 +356,11 @@ func validateTrustedIss(obj []config.TrustedISS, issuerValue string, jkuValue st
 	}
 
 	return true
+}
+
+func cleanURL(clean string) string {
+	u, _ := url.Parse(clean)
+	u.Path = path.Clean(u.RequestURI())
+
+	return u.String()
 }
