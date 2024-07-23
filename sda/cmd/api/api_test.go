@@ -1017,3 +1017,79 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 
 	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
 }
+
+func (suite *TestSuite) TestReleaseDataset() {
+	// purge the queue so that the test passes when all tests are run as well as when run standalone.
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, "http://"+BrokerAPI+"/api/queues/sda/mappings/contents", http.NoBody)
+	assert.NoError(suite.T(), err, "failed to generate query")
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	res.Body.Close()
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/release/API:dataset-01", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	req, _ = http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/mappings", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err = client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestReleaseDataset_NoDataset() {
+	// purge the queue so that the test passes when all tests are run as well as when run standalone.
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, "http://"+BrokerAPI+"/api/queues/sda/mappings/contents", http.NoBody)
+	assert.NoError(suite.T(), err, "failed to generate query")
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	res.Body.Close()
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/release/", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+}

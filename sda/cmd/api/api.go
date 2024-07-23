@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -74,9 +75,10 @@ func setup(config *config.Config) *http.Server {
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", getFiles)
 	// admin endpoints below here
-	r.POST("/file/ingest", isAdmin(), ingestFile) // start ingestion of a file
-	r.POST("/file/accession", isAdmin(), setAccession) // assign accession ID to a file
-	r.POST("/dataset/create", isAdmin(), createDataset) // maps a set of files to a dataset
+	r.POST("/file/ingest", isAdmin(), ingestFile)                  // start ingestion of a file
+	r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
+	r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
+	r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -319,6 +321,36 @@ func createDataset(c *gin.Context) {
 		return
 	}
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func releaseDataset(c *gin.Context) {
+	datasetMsg := schema.DatasetRelease{
+		Type:      "release",
+		DatasetID: strings.TrimPrefix(c.Param("dataset"), "/"),
+	}
+	marshaledMsg, err := json.Marshal(&datasetMsg)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
