@@ -58,8 +58,8 @@ EOD
 ## create crypt4gh key
 if [ ! -f "/shared/crypt4gh" ]; then
     echo "downloading crypt4gh"
-    latest_c4gh=$(curl -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
-    curl -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    latest_c4gh=$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
+    curl --retry 100 -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
 fi
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
     echo "creating crypth4gh key"
@@ -90,6 +90,6 @@ fi
 ## download grpcurl
 if [ ! -f "/shared/grpcurl" ]; then
     echo "downloading grpcurl"
-    latest_grpculr=$(curl -sL https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
-    curl -s -L "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpculr}/grpcurl_${latest_grpculr}_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/grpcurl
+    latest_grpculr=$(curl --retry 100 -sL https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
+    curl --retry 100 -s -L "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpculr}/grpcurl_${latest_grpculr}_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/grpcurl
 fi

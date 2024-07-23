@@ -1,15 +1,15 @@
 #!/bin/bash
 set -ex
 
-k8s="$(curl -L -s https://dl.k8s.io/release/stable.txt)"
+k8s="$(curl --retry 100 -L -s https://dl.k8s.io/release/stable.txt)"
 
-curl -s -L https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | sudo bash
+curl --retry 100 -s -L https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | sudo bash
 
 if [ -n "$1" ]; then
     k8s=$(k3d version list k3s | grep "$1" | head -n 1 | cut -d '-' -f 1)
 fi
 
-curl -sLO https://dl.k8s.io/release/"$k8s"/bin/linux/amd64/kubectl
+curl --retry 100 -sLO https://dl.k8s.io/release/"$k8s"/bin/linux/amd64/kubectl
 chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
 

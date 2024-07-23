@@ -2,16 +2,16 @@
 set -ex
 
 YQ_VERSION="v4.20.1"
-C4GH_VERSION="$(curl -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')"
+C4GH_VERSION="$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')"
 
 random-string() {
         head -c 32 /dev/urandom | base64 -w0 | tr -d '/+' | fold -w 32 | head -n 1
 }
 
-sudo curl -sLO "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /usr/bin/yq &&
+sudo curl --retry 100 -sLO "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -O /usr/bin/yq &&
         sudo chmod +x /usr/bin/yq
 
-curl -sL https://github.com/neicnordic/crypt4gh/releases/download/"${C4GH_VERSION}"/crypt4gh_linux_x86_64.tar.gz | sudo tar -xz -C /usr/bin/ &&
+curl --retry 100 -sL https://github.com/neicnordic/crypt4gh/releases/download/"${C4GH_VERSION}"/crypt4gh_linux_x86_64.tar.gz | sudo tar -xz -C /usr/bin/ &&
         sudo chmod +x /usr/bin/crypt4gh
 
 # secret for the crypt4gh keypair
