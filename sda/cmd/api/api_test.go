@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -750,4 +751,168 @@ func (suite *TestSuite) TestIngestFile_WrongFilePath() {
 	b, _ := io.ReadAll(okResponse.Body)
 	assert.Equal(suite.T(), http.StatusInternalServerError, okResponse.StatusCode)
 	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
+}
+
+func (suite *TestSuite) TestSetAccession() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file11.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := database.FileInfo{
+		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: filePath, User: user})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestSetAccession_WrongUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: "/inbox/dummy/file11.c4gh", User: "fooBar"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestSetAccession_WrongFormat() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/federated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: "/inbox/dummy/file11.c4gh", User: "dummy"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	// admin user should be allowed
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
 }

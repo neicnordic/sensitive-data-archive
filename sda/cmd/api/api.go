@@ -75,6 +75,7 @@ func setup(config *config.Config) *http.Server {
 	r.GET("/files", getFiles)
 	// admin endpoints below here
 	r.POST("/file/ingest", isAdmin(), ingestFile) // start ingestion of a file
+	r.POST("/file/accession", isAdmin(), setAccession) // assign accession ID to a file
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -229,6 +230,63 @@ func ingestFile(c *gin.Context) {
 
 	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func setAccession(c *gin.Context) {
+	var accession schema.IngestionAccession
+	if err := c.BindJSON(&accession); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		return
+	}
+
+	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
+	accession.Type = "accession"
+	marshaledMsg, err := json.Marshal(&accession)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "accession", marshaledMsg)
+	if err != nil {
+		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
