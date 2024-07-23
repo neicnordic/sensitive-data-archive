@@ -271,29 +271,6 @@ func (suite *TestSuite) TestReadinessResponse() {
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	Conf = &config.Config{}
-	Conf.Broker = broker.MQConf{
-		Host:     "localhost",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Exchange: "amq.default",
-		Vhost:    "/sda",
-	}
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(suite.T(), err)
-
-	Conf.Database = database.DBConf{
-		Host:     "localhost",
-		Port:     dbPort,
-		User:     "postgres",
-		Password: "rootpasswd",
-		Database: "sda",
-		SslMode:  "disable",
-	}
-	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
-	assert.NoError(suite.T(), err)
-
 	res, err := http.Get(ts.URL + "/ready")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusOK, res.StatusCode)
@@ -393,6 +370,31 @@ func (suite *TestSuite) SetupSuite() {
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
 
+}
+
+func (suite *TestSuite) SetupTest() {
+	log.Print("Setup DB for my test")
+	Conf.Database = database.DBConf{
+		Host:     "localhost",
+		Port:     dbPort,
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
+		SslMode:  "disable",
+	}
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker = broker.MQConf{
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "sda",
+		Vhost:    "/sda",
+	}
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
 }
 
 func (suite *TestSuite) TestDatabasePingCheck() {
