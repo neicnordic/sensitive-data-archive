@@ -1080,3 +1080,53 @@ func (suite *TestSuite) TestReleaseDataset_NoDataset() {
 	defer okResponse.Body.Close()
 	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
 }
+
+func (suite *TestSuite) TestListActiveUsers() {
+	testUsers := []string{"User-A", "User-B", "User-C"}
+	for _, user := range testUsers {
+		for i := 0; i < 3; i++ {
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			if err != nil {
+				suite.FailNow("failed to register file in database")
+			}
+
+			err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				suite.FailNow("failed to update satus of file in database")
+			}
+
+			stableID := fmt.Sprintf("accession_%s_0%d", user, i)
+			err = Conf.API.DB.SetAccessionID(stableID, fileID)
+			if err != nil {
+				suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+			}
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"accession_User-A_00", "accession_User-A_01", "accession_User-A_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/users", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/users", isAdmin(), listActiveUsers)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	var users []string
+	err = json.NewDecoder(okResponse.Body).Decode(&users)
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	assert.Equal(suite.T(), []string{"User-B", "User-C"}, users)
+}
