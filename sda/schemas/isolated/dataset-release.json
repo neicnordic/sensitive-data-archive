@@ -23,7 +23,8 @@
             "description": "The Accession identifier for the dataset",
             "examples": [
                 "anyidentifier"
-            ]
+            ],
+            "minLength": 2
         }
     }
 }
