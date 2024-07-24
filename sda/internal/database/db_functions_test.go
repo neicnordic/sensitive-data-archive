@@ -510,3 +510,62 @@ func (suite *DatabaseTests) TestGetCorrID() {
 	assert.Error(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), "", corrID2)
 }
+
+func (suite *DatabaseTests) TestListActiveUsers() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	testCases := 5
+	testUsers := []string{"User-A", "User-B", "User-C", "User-D"}
+
+	for _, user := range testUsers {
+		for i := 0; i < testCases; i++ {
+			filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i)
+			fileID, err := db.RegisterFile(filePath, user)
+			if err != nil {
+				suite.FailNow("Failed to register file")
+			}
+			err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				suite.FailNow("Failed to update file event log")
+			}
+
+			corrID, err := db.GetCorrID(user, filePath)
+			if err != nil {
+				suite.FailNow("Failed to get CorrID for file")
+			}
+			assert.Equal(suite.T(), fileID, corrID)
+
+			checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+			fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, filePath, checksum, 999}
+			err = db.SetArchived(fileInfo, fileID, corrID)
+			if err != nil {
+				suite.FailNow("failed to mark file as Archived")
+			}
+
+			err = db.SetVerified(fileInfo, fileID, corrID)
+			if err != nil {
+				suite.FailNow("failed to mark file as Verified")
+			}
+
+			stableID := fmt.Sprintf("accession_%s_0%d", user, i)
+			err = db.SetAccessionID(stableID, fileID)
+			if err != nil {
+				suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+			}
+		}
+	}
+
+	err = db.MapFilesToDataset("test-dataset-01", []string{"accession_User-A_00", "accession_User-A_01", "accession_User-A_02"})
+	if err != nil {
+		suite.FailNow("failed to map files§ to dataset")
+	}
+
+	err = db.MapFilesToDataset("test-dataset-02", []string{"accession_User-C_00", "accession_User-C_01", "accession_User-C_02", "accession_User-C_03", "accession_User-C_04"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	userList, err := db.ListActiveUsers()
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	assert.Equal(suite.T(), 3, len(userList))
+}
