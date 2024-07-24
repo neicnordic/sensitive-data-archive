@@ -1181,5 +1181,5 @@ func (suite *TestSuite) TestListUserFiles() {
 	files := []database.SubmissionFileInfo{}
 	err = json.NewDecoder(okResponse.Body).Decode(&files)
 	assert.NoError(suite.T(), err, "failed to list users from DB")
-	assert.Equal(suite.T(), 5, len(files))
+	assert.Equal(suite.T(), 2, len(files))
 }

@@ -103,3 +103,18 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - `200` Query execute ok.
   - `401` User is not in the list of admins.
   - `500` Internal error due to DB failure.
+
+- `/users/:username/files`
+  - accepts `GET` requests`
+  - Returns all files for a user with active uploads as a JSON array
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users
+    ```
+
+- Error codes
+  - `200` Query execute ok.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB failure.
