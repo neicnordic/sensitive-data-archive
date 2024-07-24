@@ -385,6 +385,9 @@ func (suite *TestSuite) SetupTest() {
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	assert.NoError(suite.T(), err)
 
+	_, err = Conf.API.DB.DB.Exec("TRUNCATE sda.files CASCADE")
+	assert.NoError(suite.T(), err)
+
 	Conf.Broker = broker.MQConf{
 		Host:     "localhost",
 		Port:     mqPort,
