@@ -88,3 +88,18 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     ```bash
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
     ```
+
+- `/users`
+  - accepts `GET` requests`
+  - Returns all users with active uploads as a JSON array
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users
+    ```
+
+- Error codes
+  - `200` Query execute ok.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB failure.

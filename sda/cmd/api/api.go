@@ -79,6 +79,7 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
 	r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
+	r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -357,4 +358,15 @@ func releaseDataset(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func listActiveUsers(c *gin.Context) {
+	users, err := Conf.API.DB.ListActiveUsers()
+	if err != nil {
+		log.Debugln("ListActiveUsers failed")
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	c.JSON(http.StatusOK, users)
 }
