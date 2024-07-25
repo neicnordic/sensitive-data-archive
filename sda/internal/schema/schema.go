@@ -62,8 +62,8 @@ func getStructName(path string) interface{} {
 		return new(IngestionUserError)
 	case "ingestion-verification":
 		return new(IngestionVerification)
-	case "file-sync":
-		return new(SyncDataset)
+	case "sync-file":
+		return new(SyncFileData)
 	case "metadata-sync":
 		return new(SyncMetadata)
 	default:
@@ -159,16 +159,11 @@ type IngestionVerification struct {
 	ReVerify           bool        `json:"re_verify"`
 }
 
-type SyncDataset struct {
-	DatasetID    string         `json:"dataset_id"`
-	DatasetFiles []DatasetFiles `json:"dataset_files"`
-	User         string         `json:"user"`
-}
-
-type DatasetFiles struct {
-	FilePath string `json:"filepath"`
-	FileID   string `json:"file_id"`
-	ShaSum   string `json:"sha256"`
+type SyncFileData struct {
+	AccessionID       string `json:"accession_id"`
+	DecryptedChecksum string `json:"decrypted_checksum"`
+	FilePath          string `json:"filepath"`
+	User              string `json:"user"`
 }
 
 type SyncMetadata struct {

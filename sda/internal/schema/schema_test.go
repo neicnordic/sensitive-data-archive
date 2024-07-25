@@ -411,34 +411,26 @@ func TestValidateJSONIsolatedIngestionCompletion(t *testing.T) {
 	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/isolated/ingestion-completion.json", schemaPath), msg))
 }
 
-func TestValidateJSONBigpictureFileSync(t *testing.T) {
-	okMsg := SyncDataset{
-		DatasetID: "cd532362-e06e-4460-8490-b9ce64b8d9e7",
-		DatasetFiles: []DatasetFiles{
-			{
-				FilePath: "inbox/user/file1.c4gh",
-				FileID:   "5fe7b660-afea-4c3a-88a9-3daabf055ebb",
-				ShaSum:   "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6",
-			},
-			{
-				FilePath: "inbox/user/file2.c4gh",
-				FileID:   "ed6af454-d910-49e3-8cda-488a6f246e76",
-				ShaSum:   "c967d96e56dec0f0cfee8f661846238b7f15771796ee1c345cae73cd812acc2b",
-			},
-		},
-		User: "test.user@example.com",
+func TestValidateJSONBigpictureSyncFile(t *testing.T) {
+	okMsg := SyncFileData{
+		AccessionID:       "internal-file-identifier-001",
+		FilePath:          "/inbox/subpath/file_01.c4gh",
+		DecryptedChecksum: "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6",
+		User:              "test.user@example.com",
 	}
 
 	msg, _ := json.Marshal(okMsg)
-	assert.Nil(t, ValidateJSON(fmt.Sprintf("%s/bigpicture/file-sync.json", schemaPath), msg))
+	assert.Nil(t, ValidateJSON(fmt.Sprintf("%s/bigpicture/sync-file.json", schemaPath), msg))
 
-	badMsg := SyncDataset{
-		DatasetID:    "cd532362-e06e-4460-8490-b9ce64b8d9e7",
-		DatasetFiles: []DatasetFiles{{}},
+	badMsg := SyncFileData{
+		AccessionID:       "internal-file-identifier-001",
+		FilePath:          "inbox/subpath/file_01.c4gh",
+		DecryptedChecksum: "",
+		User:              "test.user@example.com",
 	}
 
 	msg, _ = json.Marshal(badMsg)
-	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/bigpicture/file-sync.json", schemaPath), msg))
+	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/bigpicture/sync-file.json", schemaPath), msg))
 }
 
 func TestValidateJSONBigpictureMetadtaSync(t *testing.T) {
