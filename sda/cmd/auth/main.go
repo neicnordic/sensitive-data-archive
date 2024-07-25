@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -415,11 +414,10 @@ func main() {
 	app.Get("/oidc/login", authHandler.getOIDCLogin)
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
-	publicKey, err := readPublicKeyFile(authHandler.Config.PublicFile)
+	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
-		log.Fatalf("Failed to get public key: %s", err.Error())
+		log.Fatalf("Failed to read public key: %s", err.Error())
 	}
-	authHandler.pubKey = hex.EncodeToString(publicKey[:])
 
 	// Endpoint for client login info
 	app.Get("/info", authHandler.getInfo)
