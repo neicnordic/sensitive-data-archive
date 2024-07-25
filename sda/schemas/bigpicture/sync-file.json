@@ -1,0 +1,54 @@
+{
+    "title": "JSON schema for file syncing message interface.",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/bigpicture/file-sync.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "accession_id",
+        "decrypted_checksum",
+        "filepath",
+        "user"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "accession_id": {
+            "$id": "#/properties/accession_id",
+            "type": "string",
+            "title": "The Accession identifier",
+            "description": "The Accession identifier",
+            "pattern": "^\\S+$",
+            "examples": [
+                "anyidentifier"
+            ]
+        },
+        "decrypted_checksum": {
+            "$id": "#/properties/decrypted_checksum",
+            "type": "string",
+            "title": "The sha256 checksum of the original file",
+            "description": "The sha256 checksum of the original file.",
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "examples": [
+                "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"
+            ]
+        },
+        "filepath": {
+            "$id": "#/properties/filepath",
+            "type": "string",
+            "title": "The new filepath",
+            "description": "The new filepath",
+            "examples": [
+                "/user.name/identifier/subpath/the-file.c4gh"
+            ]
+        },
+        "user": {
+            "$id": "#/properties/user",
+            "type": "string",
+            "title": "The username",
+            "description": "The username",
+            "minLength": 5,
+            "examples": [
+                "user.name@example.com"
+            ]
+        }
+    }
+}
