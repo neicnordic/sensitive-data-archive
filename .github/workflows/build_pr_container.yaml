@@ -285,7 +285,7 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          for n in api auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
             if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
               continue
             fi
@@ -300,7 +300,7 @@ jobs:
         run: |
           kubectl get pods
           sleep 1
-          for svc in auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          for svc in api auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
             echo "## describe $svc" && kubectl describe pod -l role="$svc"
             sleep 1
             echo "## logs $svc" && kubectl logs -l role="$svc"

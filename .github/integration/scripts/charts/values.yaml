@@ -3,6 +3,7 @@ global:
   ingress:
     deploy: false
     hostName:
+      api: pipeline-sda-svc-api
       auth: pipeline-sda-svc-auth
       download: pipeline-sda-svc-download
       s3Inbox: pipeline-sda-svc-inbox
@@ -12,6 +13,11 @@ global:
     enabled: false
     issuer: ""
     clusterIssuer: "cert-issuer"
+  api:
+    adminUsers:
+      - dummy
+    jwtPubKeyName: jwt.pub
+    jwtSecret: jwk
   archive:
     storageType: s3
     s3AccessKey: PLACEHOLDER_VALUE
@@ -102,6 +108,9 @@ global:
       port: "8080"
       password: "pass"
       user: "user"
+api:
+  replicaCount: 1
+  resources: null
 auth:
   replicaCount: 1
   resources: null
