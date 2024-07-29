@@ -96,7 +96,7 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.12.762</version>
+            <version>1.12.765</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -106,7 +106,7 @@
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>7.4</version>
+            <version>8.0</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
