@@ -142,7 +142,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 		if ok {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Info("Valid password entered by user")
 			claims := map[string]interface{}{
-				jwt.ExpirationKey: time.Now().UTC().Add(200 * time.Hour),
+				jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 				jwt.IssuedAtKey:   time.Now().UTC(),
 				jwt.IssuerKey:     auth.Config.JwtIssuer,
 				jwt.SubjectKey:    username,

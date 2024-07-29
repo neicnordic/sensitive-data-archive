@@ -128,6 +128,8 @@ spec:
           value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
         - name: AUTH_JWT_SIGNATUREALG
           value: {{ .Values.global.auth.jwtAlg }}
+        - name: AUTH_JWT_TOKENTTL
+          value: {{ .Values.global.auth.jwtTTL | quote }}
       {{- end }}
         - name: AUTH_PUBLICFILE
           value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.publicFile }}"

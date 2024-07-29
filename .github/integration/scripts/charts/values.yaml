@@ -33,6 +33,7 @@ global:
     jwtAlg: ES256
     jwtKey: jwt.key
     jwtPub: jwt.pub
+    jwtTTL: 168
     resignJwt: true
   broker:
     durable: true
