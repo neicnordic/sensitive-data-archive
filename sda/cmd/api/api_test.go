@@ -374,7 +374,6 @@ func (suite *TestSuite) SetupSuite() {
 }
 
 func (suite *TestSuite) SetupTest() {
-	log.Print("Setup DB for my test")
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
 		Port:     dbPort,
@@ -591,7 +590,6 @@ func (suite *TestSuite) TestIsAdmin() {
 	_, router := gin.CreateTestContext(w)
 	router.GET("/", isAdmin(), testEndpoint)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -626,7 +624,6 @@ func (suite *TestSuite) TestIngestFile() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/ingest", ingestFile)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -676,7 +673,6 @@ func (suite *TestSuite) TestIngestFile_NoUser() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/ingest", ingestFile)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -708,7 +704,6 @@ func (suite *TestSuite) TestIngestFile_WrongUser() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/ingest", ingestFile)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -744,7 +739,6 @@ func (suite *TestSuite) TestIngestFile_WrongFilePath() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/ingest", isAdmin(), ingestFile)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -803,7 +797,6 @@ func (suite *TestSuite) TestSetAccession() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/accession", isAdmin(), setAccession)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -848,7 +841,6 @@ func (suite *TestSuite) TestSetAccession_WrongUser() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/accession", isAdmin(), setAccession)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -893,7 +885,6 @@ func (suite *TestSuite) TestSetAccession_WrongFormat() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/accession", isAdmin(), setAccession)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -968,7 +959,6 @@ func (suite *TestSuite) TestCreateDataset() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/dataset/create", isAdmin(), createDataset)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -1010,7 +1000,6 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/dataset/create", isAdmin(), createDataset)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	response := w.Result()
 	defer response.Body.Close()
@@ -1041,7 +1030,6 @@ func (suite *TestSuite) TestReleaseDataset() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
@@ -1087,7 +1075,6 @@ func (suite *TestSuite) TestReleaseDataset_NoDataset() {
 	_, router := gin.CreateTestContext(w)
 	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
 
-	// admin user should be allowed
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
