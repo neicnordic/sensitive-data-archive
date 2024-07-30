@@ -282,13 +282,7 @@ func setAccession(c *gin.Context) {
 
 	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
 	accession.Type = "accession"
-	marshaledMsg, err := json.Marshal(&accession)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
+	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -322,13 +316,7 @@ func createDataset(c *gin.Context) {
 	}
 
 	dataset.Type = "mapping"
-	marshaledMsg, err := json.Marshal(&dataset)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusConflict, err.Error())
-
-		return
-	}
+	marshaledMsg, _ := json.Marshal(&dataset)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -352,13 +340,7 @@ func releaseDataset(c *gin.Context) {
 		Type:      "release",
 		DatasetID: strings.TrimPrefix(c.Param("dataset"), "/"),
 	}
-	marshaledMsg, err := json.Marshal(&datasetMsg)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
+	marshaledMsg, _ := json.Marshal(&datasetMsg)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
