@@ -510,7 +510,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 	outPath := strings.ReplaceAll(filePath, "\\", "/")
 
 	// [\x00-\x1F\x7F] is the control character set
-	re := regexp.MustCompile(`[\\:\*\?"<>\|\x00-\x1F\x7F]`)
+	re := regexp.MustCompile(`[\\<>"\|\x00-\x1F\x7F\!\*\'\(\)\;\:\@\&\=\+\$\,\?\%\#\[\]]`)
 
 	dissallowedChars := re.FindAllString(outPath, -1)
 	if dissallowedChars != nil {
