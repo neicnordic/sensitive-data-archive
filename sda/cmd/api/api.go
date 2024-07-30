@@ -226,7 +226,12 @@ func ingestFile(c *gin.Context) {
 
 	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		switch {
+		case corrID == "":
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		default:
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
 
 		return
 	}
@@ -257,8 +262,12 @@ func setAccession(c *gin.Context) {
 
 	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath)
 	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		switch {
+		case corrID == "":
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		default:
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
 
 		return
 	}

@@ -708,7 +708,7 @@ func (suite *TestSuite) TestIngestFile_WrongUser() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	b, _ := io.ReadAll(okResponse.Body)
-	assert.Equal(suite.T(), http.StatusInternalServerError, okResponse.StatusCode)
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
 	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
 }
 
@@ -743,7 +743,7 @@ func (suite *TestSuite) TestIngestFile_WrongFilePath() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	b, _ := io.ReadAll(okResponse.Body)
-	assert.Equal(suite.T(), http.StatusInternalServerError, okResponse.StatusCode)
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
 	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
 }
 
