@@ -29,6 +29,12 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with JSON data with the format: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
   - triggers the ingestion of the file.
 
+- Error codes
+  - `200` Query execute ok.
+  - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB or MQ failures.
+
     Example:
 
     ```bash
@@ -38,6 +44,12 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - `/file/accession`
   - accepts `POST` requests with JSON data with the format: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
   - assigns accession ID to the file.
+
+- Error codes
+  - `200` Query execute ok.
+  - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB or MQ failures.
 
     Example:
 
@@ -49,6 +61,12 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>"}`
   - creates a datset from the list of accession IDs and the dataset ID.
 
+- Error codes
+  - `200` Query execute ok.
+  - `400` Error due to bad payload.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB or MQ failures.
+
     Example:
 
     ```bash
@@ -58,6 +76,12 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - `/dataset/release/*dataset`
   - accepts `POST` requests with the dataset name as last part of the path`
   - releases a dataset so that it can be downloaded.
+
+- Error codes
+  - `200` Query execute ok.
+  - `400` Error due to bad payload.
+  - `401` User is not in the list of admins.
+  - `500` Internal error due to DB or MQ failures.
 
     Example:
 
