@@ -111,7 +111,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users
+    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users/submitter@example.org/files
     ```
 
 - Error codes
