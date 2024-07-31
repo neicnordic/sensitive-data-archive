@@ -1,0 +1,47 @@
+{
+    "title": "JSON schema for dataset mapping message interface. Derived from Federated EGA schemas.",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/isolated/dataset-mapping.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "type",
+        "dataset_id",
+        "accession_ids"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "type": {
+            "$id": "#/properties/type",
+            "type": "string",
+            "title": "The message type",
+            "description": "The message type",
+            "const": "mapping"
+        },
+        "dataset_id": {
+            "$id": "#/properties/dataset_id",
+            "type": "string",
+            "title": "The Accession identifier for the dataset",
+            "description": "The Accession identifier for the dataset",
+            "pattern": "^[a-z]{2}-Dataset-[a-hj-km-z2-9]{6}-[a-hj-km-z2-9]{6}$",
+            "examples": [
+                "aa-Dataset-v5y9hk-nc2rfu"
+            ]
+        },
+        "accession_ids": {
+            "$id": "#/properties/accession_ids",
+            "type": "array",
+            "title": "The file stable ids in that dataset",
+            "description": "The file stable ids in that dataset",
+            "examples": [
+                [
+                    "aa-File-v5y9hk-nc2rfd"
+                ]
+            ],
+            "additionalItems": false,
+            "items": {
+                "type": "string",
+                "pattern": "^[a-z]{2}-File-[a-hj-km-z2-9]{6}-[a-hj-km-z2-9]{6}$"
+            }
+        }
+    }
+}

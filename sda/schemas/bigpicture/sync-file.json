@@ -1,0 +1,84 @@
+{
+    "title": "JSON schema for file syncing message interface.",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/bigpicture/sync-file.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "accession_id",
+        "archive_path",
+        "correlation_id",
+        "decrypted_checksum",
+        "encrypted_checksum",
+        "file_path",
+        "user"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "accession_id": {
+            "$id": "#/properties/accession_id",
+            "type": "string",
+            "title": "The Accession identifier",
+            "description": "The Accession identifier",
+            "pattern": "^[a-z]{2}-File-[a-hj-km-z2-9]{6}-[a-hj-km-z2-9]{6}$",
+            "examples": [
+                "aa-File-v5y9hk-nc2rfd"
+            ]
+        },
+        "archive_path": {
+            "$id": "#/properties/archive_path",
+            "type": "string",
+            "title": "The path to the file in the archive",
+            "description": "The path to the file in the archive",
+            "examples": [
+                "/archive_path/file.name"
+            ]
+        },
+        "correlation_id": {
+            "$id": "#/properties/header",
+            "type": "string",
+            "title": "The file correlation ID",
+            "description": "The file correlation ID",
+            "pattern": "^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$",
+            "examples": [
+                "ced759d1-fd19-4671-9d97-c9b102e8072f"
+            ]
+        },
+        "decrypted_checksum": {
+            "$id": "#/properties/decrypted_checksum",
+            "type": "string",
+            "title": "The sha256 checksum of the original file",
+            "description": "The sha256 checksum of the original file.",
+            "examples": [
+                "82e4e60e7beb3db2e06a00a079788f7d71f75b61a4b75f28c4c942703dabb6d6"
+            ]
+        },
+        "encrypted_checksum": {
+            "$id": "#/properties/encrypted_checksum",
+            "type": "string",
+            "title": "The sha256 checksum of the file",
+            "description": "The sha256 checksum of the file.",
+            "examples": [
+                "82e4e60e7beb3db2e06a00a079788f7d71f75b61a4b75f28c4c942703dabb6d6"
+            ]
+        },
+        "file_path": {
+            "$id": "#/properties/file_path",
+            "type": "string",
+            "title": "The path to the file in the inbox",
+            "description": "The path to the file in the inbox",
+            "examples": [
+                "/inbox_path/file.name"
+            ]
+        },
+        "user": {
+            "$id": "#/properties/user",
+            "type": "string",
+            "title": "The username",
+            "description": "The username",
+            "minLength": 5,
+            "examples": [
+                "user.name@example.com"
+            ]
+        }
+    }
+}
