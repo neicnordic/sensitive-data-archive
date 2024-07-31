@@ -32,7 +32,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - Error codes
   - `200` Query execute ok.
   - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB or MQ failures.
 
     Example:
@@ -48,7 +48,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - Error codes
   - `200` Query execute ok.
   - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB or MQ failures.
 
     Example:
@@ -64,7 +64,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - Error codes
   - `200` Query execute ok.
   - `400` Error due to bad payload.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB or MQ failures.
 
     Example:
@@ -80,7 +80,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 - Error codes
   - `200` Query execute ok.
   - `400` Error due to bad payload.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB or MQ failures.
 
     Example:
@@ -101,7 +101,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - Error codes
   - `200` Query execute ok.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB failure.
 
 - `/users/:username/files`
@@ -116,5 +116,5 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - Error codes
   - `200` Query execute ok.
-  - `401` User is not in the list of admins.
+  - `401` Token user is not in the list of admins.
   - `500` Internal error due to DB failure.
