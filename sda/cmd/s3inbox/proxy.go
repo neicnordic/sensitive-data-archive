@@ -512,9 +512,9 @@ func formatUploadFilePath(filePath string) (string, error) {
 	// [\x00-\x1F\x7F] is the control character set
 	re := regexp.MustCompile(`[\\<>"\|\x00-\x1F\x7F\!\*\'\(\)\;\:\@\&\=\+\$\,\?\%\#\[\]]`)
 
-	dissallowedChars := re.FindAllString(outPath, -1)
-	if dissallowedChars != nil {
-		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(dissallowedChars, ", "))
+	disallowedChars := re.FindAllString(outPath, -1)
+	if disallowedChars != nil {
+		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(disallowedChars, ", "))
 	}
 
 	return outPath, nil
