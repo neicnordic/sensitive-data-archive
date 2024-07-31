@@ -1135,7 +1135,7 @@ func (suite *TestSuite) TestListActiveUsers() {
 }
 
 func (suite *TestSuite) TestListUserFiles() {
-	testUsers := []string{"User-A", "User-B", "User-C"}
+	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
 			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
@@ -1156,7 +1156,7 @@ func (suite *TestSuite) TestListUserFiles() {
 		}
 	}
 
-	err = Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"accession_User-A_00", "accession_User-A_01", "accession_User-A_02"})
+	err = Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"accession_user_example.org_00", "accession_user_example.org_01", "accession_user_example.org_02"})
 	if err != nil {
 		suite.FailNow("failed to map files to dataset")
 	}
@@ -1167,7 +1167,7 @@ func (suite *TestSuite) TestListUserFiles() {
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/users/User-A/files", http.NoBody)
+	r := httptest.NewRequest(http.MethodGet, "/users/user@example.org/files", http.NoBody)
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
