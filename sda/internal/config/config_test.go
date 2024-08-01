@@ -212,6 +212,7 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Nil(suite.T(), config)
 
 	// testing deafult values
+	suite.SetupTest()
 	config, err = NewConfig("api")
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
@@ -224,6 +225,7 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(suite.T(), -1*time.Second, config.API.Session.Expiration)
 
 	viper.Reset()
+	suite.SetupTest()
 	// over write defaults
 	viper.Set("api.port", 8443)
 	viper.Set("api.session.secure", false)
