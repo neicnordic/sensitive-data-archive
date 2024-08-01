@@ -76,6 +76,7 @@ func setup(config *config.Config) *http.Server {
 	r := mux.NewRouter().SkipClean(true)
 
 	r.HandleFunc("/ready", readinessResponse).Methods("GET")
+	r.HandleFunc("/accession", basicAuth(http.HandlerFunc(accession))).Methods("POST")
 	r.HandleFunc("/dataset", basicAuth(http.HandlerFunc(dataset))).Methods("POST")
 	r.HandleFunc("/ingest", basicAuth(http.HandlerFunc(ingest))).Methods("POST")
 	r.HandleFunc("/metadata", basicAuth(http.HandlerFunc(metadata))).Methods("POST")
@@ -281,6 +282,30 @@ func ingest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Format(time.RFC3339)), Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, msg); err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %s", err.Error()))
+
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func accession(w http.ResponseWriter, r *http.Request) {
+	msg, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to read request body")
+
+		return
+	}
+	defer r.Body.Close()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), msg); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
+
+		return
+	}
+
+	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Format(time.RFC3339)), Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, msg); err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %s", err.Error()))
 
 		return
