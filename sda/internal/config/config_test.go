@@ -132,12 +132,12 @@ func (suite *ConfigTestSuite) TestConfigS3Storage() {
 }
 
 func (suite *ConfigTestSuite) TestConfigBroker() {
-	config, err := NewConfig("s3inbox")
+	config, err := NewConfig("finalize")
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), config.Inbox.S3)
 	assert.Equal(suite.T(), "/testvhost", config.Broker.Vhost)
 	assert.Equal(suite.T(), false, config.Broker.Ssl)
+	assert.Equal(suite.T(), "/schemas/federated/", config.Broker.SchemasPath)
 
 	viper.Set("broker.ssl", true)
 	viper.Set("broker.verifyPeer", true)
@@ -290,6 +290,7 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	viper.Set("reencrypt.cacert", certPath+"/ca.crt")
 	viper.Set("reencrypt.clientcert", certPath+"/tls.crt")
 	viper.Set("reencrypt.clientkey", certPath+"/tls.key")
+	viper.Set("schema.type", "bigpicture")
 
 	config, err = NewConfig("sync")
 	assert.NotNil(suite.T(), config)
@@ -312,6 +313,7 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(suite.T(), config.Sync)
 	assert.NotNil(suite.T(), config.Sync.Destination.Posix)
 	assert.Equal(suite.T(), "test", config.Sync.Destination.Posix.Location)
+	assert.Equal(suite.T(), "/schemas/bigpicture/", config.Broker.SchemasPath)
 
 	defer os.RemoveAll(pubKeyPath)
 }

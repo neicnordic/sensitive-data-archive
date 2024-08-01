@@ -950,9 +950,12 @@ func (c *Config) configReEncryptServer() (err error) {
 // configSchemas configures the schemas to load depending on
 // the type IDs of connection Federated EGA or isolate (stand-alone)
 func (c *Config) configSchemas() {
-	if viper.GetString("schema.type") == "federated" {
+	switch viper.GetString("schema.type") {
+	case "bigpicture":
+		c.Broker.SchemasPath = "/schemas/bigpicture/"
+	case "federated":
 		c.Broker.SchemasPath = "/schemas/federated/"
-	} else {
+	case "isolated":
 		c.Broker.SchemasPath = "/schemas/isolated/"
 	}
 }
