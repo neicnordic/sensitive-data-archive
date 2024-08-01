@@ -303,3 +303,30 @@ func (suite *SyncAPITest) TestIngestRoute() {
 	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
 	defer bad.Body.Close()
 }
+
+func (suite *SyncAPITest) TestAccessionRoute() {
+	Conf, err = config.NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker.SchemasPath = "../../schemas/bigpicture"
+
+	r := mux.NewRouter()
+	r.HandleFunc("/accession", accession)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	goodJSON := []byte(`{"type": "accession", "accession_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "user": "test.user@example.com", "filepath": "inbox/user/file-1.c4gh", "decrypted_checksums": [{"type": "sha256", "value": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}]}`)
+	good, err := http.Post(ts.URL+"/accession", "application/json", bytes.NewBuffer(goodJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, good.StatusCode)
+	defer good.Body.Close()
+
+	badJSON := []byte(`{"dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": []}`)
+	bad, err := http.Post(ts.URL+"/accession", "application/json", bytes.NewBuffer(badJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
+	defer bad.Body.Close()
+}
