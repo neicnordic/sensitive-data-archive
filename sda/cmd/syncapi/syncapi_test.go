@@ -113,19 +113,16 @@ func (suite *SyncAPITest) SetupTest() {
 	viper.Set("broker.port", mqPort)
 	viper.Set("broker.user", "guest")
 	viper.Set("broker.password", "guest")
-	viper.Set("broker.queue", "mappings")
 	viper.Set("broker.exchange", "amq.direct")
 	viper.Set("broker.vhost", "/")
 
-	viper.Set("schema.type", "isolated")
+	viper.Set("schema.type", "bigpicture")
 
 	viper.Set("sync.api.user", "dummy")
 	viper.Set("sync.api.password", "admin")
 }
 
-func (suite *SyncAPITest) TestSetup() {
-	suite.SetupTest()
-
+func (suite *SyncAPITest) TestConfigSyncAPI() {
 	conf, err := config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err, "Failed to setup config")
 	assert.Equal(suite.T(), mqPort, conf.Broker.Port)
@@ -136,7 +133,6 @@ func (suite *SyncAPITest) TestSetup() {
 }
 
 func (suite *SyncAPITest) TestShutdown() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
@@ -154,7 +150,6 @@ func (suite *SyncAPITest) TestShutdown() {
 }
 
 func (suite *SyncAPITest) TestReadinessResponse() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
@@ -199,7 +194,6 @@ func (suite *SyncAPITest) TestReadinessResponse() {
 }
 
 func (suite *SyncAPITest) TestDatasetRoute() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
