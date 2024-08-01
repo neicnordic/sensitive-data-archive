@@ -276,3 +276,30 @@ func (suite *SyncAPITest) TestBasicAuth() {
 	assert.Equal(suite.T(), http.StatusUnauthorized, bad.StatusCode)
 	defer bad.Body.Close()
 }
+
+func (suite *SyncAPITest) TestIngestRoute() {
+	Conf, err = config.NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker.SchemasPath = "../../schemas/bigpicture"
+
+	r := mux.NewRouter()
+	r.HandleFunc("/ingest", ingest)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	goodJSON := []byte(`{"type": "ingest", "user": "test.user@example.com", "filepath": "inbox/user/file-1.c4gh"}`)
+	good, err := http.Post(ts.URL+"/ingest", "application/json", bytes.NewBuffer(goodJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, good.StatusCode)
+	defer good.Body.Close()
+
+	badJSON := []byte(`{"dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": []}`)
+	bad, err := http.Post(ts.URL+"/ingest", "application/json", bytes.NewBuffer(badJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
+	defer bad.Body.Close()
+}
