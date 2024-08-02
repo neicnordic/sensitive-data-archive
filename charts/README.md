@@ -56,6 +56,8 @@ To configure a Helm chart with your own values, you can copy the default `values
 helm show values neicnordic/<chart-name> > <values-filename>.yaml
 ```
 
+**Note** that Kubernetes resources, such as secrets, may be required for a chart to function properly. All necessary resources should be created in the Kubernetes cluster before installing the chart.
+
 Then, you can install the chart with the following command:
 
 ```sh
@@ -63,6 +65,24 @@ helm install my-release -f <values-filename>.yaml neicnordic/<chart-name>
 ```
 
 Example:
+
+First create the required crypt4gh
+```sh
+crypt4gh generate -n c4gh -p somepassphrase
+kubectl create secret generic c4gh --from-file="c4gh.sec.pem" --from-file="c4gh.pub.pem" --from-literal=passphrase="somepassphrase"
+```
+
+and jwt keys
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out "jwt.key"
+openssl ec -in "jwt.key" -pubout -out "jwt.pub"
+kubectl create secret generic jwk --from-file="jwt.key" --from-file="jwt.pub"
+```
+
+as secrets in the Kubernetes cluster.
+
+Finally, install the chart with the following command:
 
 ```sh
 helm show values neicnordic/sda-svc > my-values.yaml
