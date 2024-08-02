@@ -34,6 +34,7 @@ global:
     deploy: true
     ingressClassName: "nginx"
     hostName:
+      api: ""
       auth: ""
       doa: ""
       download: ""
@@ -106,6 +107,10 @@ global:
   vaultSecrets: false
 
 # global configurations
+  api:
+    adminUsers:
+    jwtPubKeyName:
+    jwtSecret:
   archive:
     storageType: "" # s3 or posix
   # The six lines below is only used with S3 backend
@@ -289,6 +294,12 @@ global:
 ##################################
 # service specific credentials
 credentials:
+  api:
+    dbUser: ""
+    dbPassword: ""
+    mqUser: ""
+    mqPassword: ""
+
   doa:
     dbUser: ""
     dbPassword: ""
@@ -345,6 +356,23 @@ credentials:
 
 ##################################
 # Service specific settings
+
+api:
+  name: auth
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+# Extra annotations to attach to the service pods
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+  annotations: {}
+  tls:
+    secretName: ""
 
 auth:
   name: auth

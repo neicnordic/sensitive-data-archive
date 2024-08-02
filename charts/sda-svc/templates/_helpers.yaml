@@ -134,6 +134,20 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/**/}}
+{{- define "dbUserAPI" -}}
+{{- ternary .Values.global.db.user .Values.credentials.api.dbUser (empty .Values.credentials.api.dbUser) -}}
+{{- end -}}
+{{- define "dbPassAPI" -}}
+{{- ternary .Values.global.db.password .Values.credentials.api.dbPassword (empty .Values.credentials.api.dbPassword) -}}
+{{- end -}}
+{{- define "mqUserAPI" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.api.mqUser (empty .Values.credentials.api.mqUser) -}}
+{{- end -}}
+{{- define "mqPassAPI" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.api.mqPassword (empty .Values.credentials.api.mqPassword) -}}
+{{- end -}}
+
+{{/**/}}
 {{- define "dbUserSync" -}}
 {{- ternary .Values.global.db.user .Values.credentials.sync.dbUser (empty .Values.credentials.sync.dbUser) -}}
 {{- end -}}
