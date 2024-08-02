@@ -48,6 +48,11 @@ if [ -n "$CEGA_CONNECTION" ]; then
 	chmod 600 "/var/lib/rabbitmq/federation.json" 
 fi
 
+if [ -n "$BP_SYNC" ]; then
+	echo "Enabling sync queues and shovels"
+	sleep 30 && rabbitmqctl import_definitions /etc/rabbitmq/sync.json &
+fi
+
 # This is needed for the streams to work properly
 cat >/var/lib/rabbitmq/advanced.config<<-EOF
 [
