@@ -21,6 +21,7 @@ The `neicnordic` Helm repository contains the following charts (for configuratio
 - [sda-orch - SDA orchestrate service](https://github.com/neicnordic/sensitive-data-archive/blob/main/charts/sda-orch/README.md)
 
   This chart deploys an orchestration service for the Sensitive Data Archive solution. This is a helper service designed to curate the ingestion flow in an automated manner when the SDA solution is deployed and configured as standalone (non-federated).
+  **Note:** The `sda-orch` chart may be out of date and is thus not guaranteed to be functional.
 
 ## Usage
 
@@ -67,6 +68,7 @@ helm install my-release -f <values-filename>.yaml neicnordic/<chart-name>
 Example:
 
 First create the required crypt4gh
+
 ```sh
 crypt4gh generate -n c4gh -p somepassphrase
 kubectl create secret generic c4gh --from-file="c4gh.sec.pem" --from-file="c4gh.pub.pem" --from-literal=passphrase="somepassphrase"
