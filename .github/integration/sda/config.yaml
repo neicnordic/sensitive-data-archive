@@ -75,6 +75,8 @@ oidc:
   provider: http://oidc:8080
   redirectUrl: http://auth_oidc:8080/oidc/login
   secret:
+reencrypt:
+  host: reencrypt
 
 server:
   cert: ""
