@@ -413,6 +413,7 @@ func TestValidateJSONIsolatedIngestionCompletion(t *testing.T) {
 
 func TestValidateJSONBigpictureSyncFile(t *testing.T) {
 	okMsg := SyncFileData{
+		Type:              "sync",
 		AccessionID:       "internal-file-identifier-001",
 		FilePath:          "/inbox/subpath/file_01.c4gh",
 		DecryptedChecksum: "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6",

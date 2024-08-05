@@ -163,6 +163,7 @@ type SyncFileData struct {
 	AccessionID       string `json:"accession_id"`
 	DecryptedChecksum string `json:"decrypted_checksum"`
 	FilePath          string `json:"filepath"`
+	Type              string `json:"type"`
 	User              string `json:"user"`
 }
 
