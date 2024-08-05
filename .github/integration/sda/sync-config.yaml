@@ -1,8 +1,8 @@
 log:
   format: "json"
   level: "debug"
-api:
-  rbacFile: /rbac.json
+admin:
+  users: "requester@demo.org"
 archive:
   type: s3
   url: "http://s3"
@@ -23,7 +23,7 @@ auth:
   jwt:
     issuer: "https://auth:8888"
     privateKey: /shared/keys/jwt.key
-    signatureAlg: RS256
+    signatureAlg: ES256
     tokenTTL: 168
   publicFile: "/shared/c4gh.pub.pem"
   resignJwt:
@@ -36,7 +36,7 @@ backup:
   readypath: "/minio/health/ready"
   accessKey: "access"
   secretKey: "secretKey"
-  bucket: "backup"
+  bucket: "sync-inbox"
   region: "us-east-1"
 inbox:
   type: s3
@@ -70,26 +70,41 @@ c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
-  privateKeys:
-  - filePath: /shared/c4gh.sec.pem
-    passphrase: "c4ghpass"
-  - filePath: /shared/c4gh1.sec.pem
-    passphrase: "c4ghpass"
 
 oidc:
-  id: XC56EL11xx
-  jwkPath: jwk
-  provider: http://localhost:8800/oidc/
-  redirectUrl: http://localhost:8801/oidc/login
-  secret: wHPVQaYXmdDHg
+  id:
+  jwkPath: /jwk
+  provider: http://oidc:8080
+  redirectUrl: http://auth_oidc:8080/oidc/login
+  secret:
 reencrypt:
   host: reencrypt
 
 server:
   cert: ""
   key: ""
-  # jwtpubkeypath: "/shared/keys/pub/"
-  jwtpubkeyurl: "http://localhost:8800/oidc/jwk"
+  jwtpubkeypath: "/shared/keys/pub/"
+  jwtpubkeyurl: "http://oidc:8080/jwk"
+
+sync:
+  api:
+    password: "pass"
+    user: "user"
+  centerPrefix: "aa"
+  destination:
+    type: "s3"
+    url: "http://s3"
+    port: 9000
+    readypath: "/minio/health/ready"
+    accessKey: "access"
+    secretKey: "secretKey"
+    bucket: "sync-inbox"
+    region: "us-east-1"
+  remote:
+    host: "http://sync-api"
+    port: "8080"
+    password: "pass"
+    user: "user"
 
 schema:
   type: "isolated"
