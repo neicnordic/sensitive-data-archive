@@ -107,6 +107,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	// test head request
 	res, err = http.Head("http://localhost:8888")
+	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,6 +146,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	// Mock DB failure, check that 503 is reported
 	mock.ExpectPing().WillReturnError(fmt.Errorf("dbDown"))
 	res, err := http.Head("http://localhost:8888")
+	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -157,6 +159,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	mock.ExpectPing()
 
 	res, err = http.Head("http://localhost:8888")
+	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,6 +173,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	ts.Close()
 
 	res, err = http.Head("http://localhost:8888")
+	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
