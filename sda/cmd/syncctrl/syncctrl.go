@@ -171,6 +171,7 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 					AccessionID:       aID,
 					DecryptedChecksum: fileData.Checksum,
 					FilePath:          fileData.FilePath,
+					Type:              "sync",
 					User:              fileData.User,
 				}
 
