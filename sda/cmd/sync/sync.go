@@ -77,19 +77,88 @@ func main() {
 			log.Fatal(err)
 		}
 		for delivered := range messages {
-			log.Debugf("Received a message (corr-id: %s, message: %s)",
-				delivered.CorrelationId,
-				delivered.Body)
+			log.Debugf("Received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 
-			var message schema.SyncFileData
-			_ = json.Unmarshal(delivered.Body, &message)
-			if err := syncFile(message); err != nil {
-				log.Errorf("failed to sync archived file %s, reason: (%s)", message.AccessionID, err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetFileSize error message")
+			var msgType struct {
+				Type string `json:"type"`
+			}
+			_ = json.Unmarshal(delivered.Body, &msgType)
+
+			switch msgType.Type {
+			case "deprecate":
+				var message schema.IngestionCompletion
+				_ = json.Unmarshal(delivered.Body, &message)
+				err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-deprecate.json", conf.Broker.SchemasPath), delivered.Body)
+				if err != nil {
+					log.Errorf("failed to validate message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following message validation")
+					}
+
+					continue
 				}
 
-				continue
+				if err := sendPOST(delivered.Body, "dataset"); err != nil {
+					log.Errorf("failed to send dataset message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following POST message")
+					}
+
+					continue
+				}
+			case "mapping":
+				var message schema.IngestionCompletion
+				_ = json.Unmarshal(delivered.Body, &message)
+				err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", conf.Broker.SchemasPath), delivered.Body)
+				if err != nil {
+					log.Errorf("failed to validate message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following message validation")
+					}
+
+					continue
+				}
+
+				if err := sendPOST(delivered.Body, "dataset"); err != nil {
+					log.Errorf("failed to send dataset message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following POST message")
+					}
+
+					continue
+				}
+			case "release":
+				var message schema.IngestionCompletion
+				_ = json.Unmarshal(delivered.Body, &message)
+				err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", conf.Broker.SchemasPath), delivered.Body)
+				if err != nil {
+					log.Errorf("failed to validate message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following message validation")
+					}
+
+					continue
+				}
+
+				if err := sendPOST(delivered.Body, "dataset"); err != nil {
+					log.Errorf("failed to send dataset message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following POST message")
+					}
+
+					continue
+				}
+			case "sync":
+				var message schema.SyncFileData
+				_ = json.Unmarshal(delivered.Body, &message)
+				if err := syncFile(message); err != nil {
+					log.Errorf("failed to sync archived file %s, reason: (%s)", message.AccessionID, err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following file sync error")
+					}
+
+					continue
+				}
 			}
 
 			if err := delivered.Ack(false); err != nil {
