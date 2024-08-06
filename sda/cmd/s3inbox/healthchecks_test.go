@@ -81,7 +81,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
-	h := NewHealthCheck(8888,
+	h := NewHealthCheck(5555,
 		db,
 		conf,
 		new(tls.Config))
@@ -90,7 +90,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	res, err := http.Get("http://localhost:8888/ready?full=1")
+	res, err := http.Get("http://localhost:5555/ready?full=1")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	}
 
 	// test head request
-	res, err = http.Head("http://localhost:8888")
+	res, err = http.Head("http://localhost:5555")
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -134,7 +134,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
-	h := NewHealthCheck(8888,
+	h := NewHealthCheck(7777,
 		db,
 		conf,
 		new(tls.Config))
@@ -145,7 +145,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 
 	// Mock DB failure, check that 503 is reported
 	mock.ExpectPing().WillReturnError(fmt.Errorf("dbDown"))
-	res, err := http.Head("http://localhost:8888")
+	res, err := http.Head("http://localhost:7777")
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -158,7 +158,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	// DB fixed, check that 200 is reported
 	mock.ExpectPing()
 
-	res, err = http.Head("http://localhost:8888")
+	res, err = http.Head("http://localhost:7777")
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -172,7 +172,7 @@ func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
 	mock.ExpectPing()
 	ts.Close()
 
-	res, err = http.Head("http://localhost:8888")
+	res, err = http.Head("http://localhost:7777")
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
