@@ -67,7 +67,7 @@ helm install my-release -f <values-filename>.yaml neicnordic/<chart-name>
 
 Example:
 
-First create the secret containing the crypt4gh keypair and passphrase before the chart is deployed. Then edit the `values.yaml` to your liking and install the chart:
+First create the secret containing the crypt4gh keypair and passphrase before the chart is deployed (see e.g. [here](https://github.com/neicnordic/sensitive-data-archive/blob/cc66756318bfac5fd92ef22f9763e69b42ed5c3c/.github/integration/scripts/charts/dependencies.sh#L17)). Then edit the `values.yaml` to your liking and install the chart:
 
 ```sh
 helm show values neicnordic/sda-svc > my-values.yaml
