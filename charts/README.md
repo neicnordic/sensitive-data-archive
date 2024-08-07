@@ -67,24 +67,7 @@ helm install my-release -f <values-filename>.yaml neicnordic/<chart-name>
 
 Example:
 
-First create the required crypt4gh
-
-```sh
-crypt4gh generate -n c4gh -p somepassphrase
-kubectl create secret generic c4gh --from-file="c4gh.sec.pem" --from-file="c4gh.pub.pem" --from-literal=passphrase="somepassphrase"
-```
-
-and jwt keys
-
-```sh
-openssl ecparam -name prime256v1 -genkey -noout -out "jwt.key"
-openssl ec -in "jwt.key" -pubout -out "jwt.pub"
-kubectl create secret generic jwk --from-file="jwt.key" --from-file="jwt.pub"
-```
-
-as secrets in the Kubernetes cluster.
-
-Finally, install the chart with the following command:
+First create the secret containing the crypt4gh keypair and passphrase before the chart is deployed. Then edit the `values.yaml` to your liking and install the chart:
 
 ```sh
 helm show values neicnordic/sda-svc > my-values.yaml
