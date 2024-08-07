@@ -3,11 +3,15 @@ services:
     container_name: credentials
     command:
       - "/bin/sh"
-      - "/scripts/make_sda_credentials.sh"
+      - "/scripts/make_sda_sync_credentials.sh"
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      remote-postgres:
+        condition: service_healthy
+      remote-rabbitmq:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
@@ -15,6 +19,125 @@ services:
     volumes:
       - ./scripts:/scripts
       - shared:/shared
+
+  remote-postgres:
+    build:
+      context: ../../postgresql
+    container_name: remote-postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    ports:
+      - "25432:5432"
+    restart: always
+    volumes:
+      - remote-postgres_data:/var/lib/postgresql/data
+
+  remote-rabbitmq:
+    build:
+      context: ../../rabbitmq
+    container_name: remote-rabbitmq
+    environment:
+      - BP_SYNC=true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    ports:
+      - "25672:15672"
+    restart: always
+    volumes:
+      - remote-rabbitmq_data:/var/lib/rabbitmq
+
+  remote-sync:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-sync ]
+    container_name: remote-sync
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      remote-postgres:
+        condition: service_healthy
+      remote-rabbitmq:
+        condition: service_healthy
+      sync-api:
+        condition: service_started
+    environment:
+      - BROKER_HOST=remote-rabbitmq
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_QUEUE=sync
+      - DB_HOST=remote-postgres
+      - DB_PASSWORD=sync
+      - DB_USER=sync
+      - SCHEMA_TYPE=bigpicture
+      - SYNC_DESTINATION_URL=http://s3
+      - SYNC_REMOTE_HOTS=http://sync-api
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  remote-sync-api:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-syncapi ]
+    container_name: remote-sync-api
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      remote-rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_HOST=remote-rabbitmq
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_EXCHANGE=sda
+      - SCHEMA_TYPE=bigpicture
+      - SYNC_API_MAPPINGROUTING=mappings
+    ports:
+      - "28080:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+
+  remote-sync-ctrl:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-syncctrl ]
+    container_name: remote-sync-ctrl
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      remote-postgres:
+        condition: service_healthy
+      remote-rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_EXCHANGE=sda
+      - BROKER_HOST=remote-rabbitmq
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_QUEUE=sync_datasets
+      - DB_HOST=remote-postgres
+      - DB_PASSWORD=sync
+      - DB_USER=sync
+      - SCHEMA_TYPE=bigpicture
+      - SYNC_CENTERPREFIX=EGAD
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
 
   postgres:
     build:
@@ -228,7 +351,7 @@ services:
     environment:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=mapping_stream
+      - BROKER_QUEUE=sync
       - DB_PASSWORD=sync
       - DB_USER=sync
       - SCHEMA_TYPE=bigpicture
@@ -253,6 +376,28 @@ services:
       - SCHEMA_TYPE=bigpicture
     ports:
       - "18080:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+
+  sync-ctrl:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-syncctrl ]
+    container_name: sync-ctrl
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=sync
+      - BROKER_USER=sync
+      - BROKER_QUEUE=sync_datasets
+      - DB_PASSWORD=sync
+      - DB_USER=sync
+      - SCHEMA_TYPE=bigpicture
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -343,12 +488,18 @@ services:
         condition: service_started
       sync-api:
         condition: service_started
+      sync-ctrl:
+        condition: service_started
       verify:
          condition: service_started
       api:
          condition: service_started
       reencrypt:
          condition: service_started
+      remote-sync-api:
+        condition: service_started
+      remote-sync-ctrl:
+        condition: service_started
     environment:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
@@ -363,4 +514,6 @@ volumes:
   minio_data:
   postgres_data:
   rabbitmq_data:
+  remote-postgres_data:
+  remote-rabbitmq_data:
   shared:

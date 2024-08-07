@@ -96,10 +96,10 @@ sync:
     readypath: "/minio/health/ready"
     accessKey: "access"
     secretKey: "secretKey"
-    bucket: "sync"
+    bucket: "sync-inbox"
     region: "us-east-1"
   remote:
-    host: "http://sync-api"
+    host: "http://remote-sync-api"
     port: "8080"
     password: "pass"
     user: "user"
