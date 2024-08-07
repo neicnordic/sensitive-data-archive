@@ -10,13 +10,13 @@ sh make_certs.sh
 Start creating the certificates, java is picky and we need to create them first
 
 ```command
-docker-compose up -d certfixer
+docker compose up -d certfixer
 ```
 
 To start all the other services using docker compose.
 
 ```command
-docker-compose up -d
+docker compose up -d
 ```
 
 For a test example use:

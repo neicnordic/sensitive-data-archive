@@ -78,8 +78,8 @@ jobs:
         run: |
           cd sda-sftp-inbox/dev_utils
           bash ./make_certs.sh
-          docker-compose up certfixer
-          docker-compose up -d
+          docker compose up certfixer
+          docker compose up -d
           sleep 20
 
       - name: Run test for sftp ssh connection
