@@ -27,8 +27,8 @@ The client can establish a session to bypass time-costly visa validations for fu
 
 **[File download requests, for htsget](#file-download-requests)**
 
-- `/s3/<datasetid>/<fileid>`
-- `/s3-encrypted/<datasetid>/<fileid>`
+- `/s3/*datasetid/*filepath`
+- `/s3-encrypted/*datasetid/*filepath`
 
 ### Data out API
 #### Datasets
@@ -54,18 +54,10 @@ GET /metadata/datasets/{datasetName}/files
 The `?scheme=` query parameter is optional. When a dataset name contains a scheme, such as `https://`, it may sometimes encounter issues with reverse proxies.
 This can be solved by separating the scheme from the dataset name and suppling it as a query parameter.
 ```
-dataset := strings.Split("https://doi.org/abc/123", "://")
-len(dataset) // 2 -> scheme can be used
-dataset[0] // "https"
-dataset[1] // "doi.org/abc/123
-
-dataset := strings.Split("EGAD1000", "://")
-len(dataset) // 1 -> no scheme
-dataset[0] // "EGAD1000"
-```
-```
 GET /metadata/datasets/{datasetName}/files?scheme=https
 ```
+For example, given a dataset name `https://doi.org/abc/123`, one can do `GET /metadata/datasets/doi.org/abc/123/files?scheme=https`.
+ 
 ##### Response
 ```
 [
