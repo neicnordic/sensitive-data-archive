@@ -79,6 +79,8 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
 	r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
+	r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
+	r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -357,4 +359,31 @@ func releaseDataset(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func listActiveUsers(c *gin.Context) {
+	users, err := Conf.API.DB.ListActiveUsers()
+	if err != nil {
+		log.Debugln("ListActiveUsers failed")
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	c.JSON(http.StatusOK, users)
+}
+
+func listUserFiles(c *gin.Context) {
+	username := c.Param("username")
+	username = strings.TrimPrefix(username, "/")
+	username = strings.TrimSuffix(username, "/files")
+	log.Debugln(username)
+	files, err := Conf.API.DB.GetUserFiles(strings.ReplaceAll(username, "@", "_"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.JSON(200, files)
 }

@@ -19,7 +19,7 @@ sh make_certs.sh
 ## Getting up and running fast with docker compose
 
 ```command
-docker-compose -f compose-no-tls.yml up -d
+docker compose -f compose-no-tls.yml up -d
 ```
 
 For testing the API

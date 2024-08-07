@@ -635,14 +635,9 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	db := dbs.DB
 
 	// select all files of the user, each one annotated with its latest event
-	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
-		"FROM sda.files f " +
-		"LEFT JOIN ( " +
-		"SELECT DISTINCT ON (file_id) file_id, started_at, event " +
-		"FROM sda.file_event_log " +
-		"ORDER BY file_id, started_at DESC" +
-		") e ON f.id = e.file_id " +
-		"WHERE f.submission_user = $1; "
+	const query = "SELECT f.submission_file_path, e.event, f.created_at FROM sda.files f " +
+		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
+		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
 
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
@@ -695,4 +690,31 @@ func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
 	}
 
 	return corrID, nil
+}
+
+func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var users []string
+	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files WHERE id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id) ORDER BY submission_user ASC;")
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user string
+		err := rows.Scan(&user)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
 }
