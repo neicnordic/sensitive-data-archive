@@ -19,7 +19,7 @@ fi
 
 echo "Health endpoint is ok"
 
-check_health_header=$(curl -s -w "%{http_code}\n" -LI --cacert certs/ca.pem https://localhost:8443/)
+check_health_header=$(curl -o /dev/null  -s -w "%{http_code}\n" -LI --cacert certs/ca.pem https://localhost:8443/)
 
 if [ "$check_health_header" != "200" ]; then
     echo "Head request to health endpoint does not respond properly"
