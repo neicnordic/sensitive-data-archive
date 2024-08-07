@@ -87,9 +87,9 @@ type SyncCtrl struct {
 type SyncAPIConf struct {
 	APIPassword      string
 	APIUser          string
-	AccessionRouting string `default:"accession"`
-	IngestRouting    string `default:"ingest"`
-	MappingRouting   string `default:"mappings"`
+	AccessionRouting string
+	IngestRouting    string
+	MappingRouting   string
 }
 
 type APIConf struct {
@@ -1071,6 +1071,9 @@ func (c *Config) configSync() error {
 
 // configSync provides configuration for the outgoing sync settings
 func (c *Config) configSyncAPI() {
+	viper.SetDefault("sync.api.AccessionRouting", "accession")
+	viper.SetDefault("sync.api.IngestRouting", "ingest")
+	viper.SetDefault("sync.api.MappingRouting", "mappings")
 	c.SyncAPI = SyncAPIConf{}
 	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
 	c.SyncAPI.APIUser = viper.GetString("sync.api.user")
