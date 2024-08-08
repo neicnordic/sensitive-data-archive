@@ -211,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        storage: ["posix", "s3"]
+        storage: ["posix", "s3", "sync"]
     steps:
       - name: Check out code
         uses: actions/checkout@v4
