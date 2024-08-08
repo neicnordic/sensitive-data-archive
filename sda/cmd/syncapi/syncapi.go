@@ -25,18 +25,6 @@ import (
 var Conf *config.Config
 var err error
 
-type syncDataset struct {
-	DatasetID    string         `json:"dataset_id"`
-	DatasetFiles []datasetFiles `json:"dataset_files"`
-	User         string         `json:"user"`
-}
-
-type datasetFiles struct {
-	FilePath string `json:"filepath"`
-	FileID   string `json:"file_id"`
-	ShaSum   string `json:"sha256"`
-}
-
 func main() {
 	Conf, err = config.NewConfig("sync-api")
 	if err != nil {
@@ -76,7 +64,9 @@ func setup(config *config.Config) *http.Server {
 	r := mux.NewRouter().SkipClean(true)
 
 	r.HandleFunc("/ready", readinessResponse).Methods("GET")
+	r.HandleFunc("/accession", basicAuth(http.HandlerFunc(accession))).Methods("POST")
 	r.HandleFunc("/dataset", basicAuth(http.HandlerFunc(dataset))).Methods("POST")
+	r.HandleFunc("/ingest", basicAuth(http.HandlerFunc(ingest))).Methods("POST")
 	r.HandleFunc("/metadata", basicAuth(http.HandlerFunc(metadata))).Methods("POST")
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -136,74 +126,34 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/../bigpicture/file-sync.json", Conf.Broker.SchemasPath), b); err != nil {
+	var d struct {
+		Type         string   `json:"type"`
+		DatasetID    string   `json:"dataset_id"`
+		AccessionIDs []string `json:"accession_ids,omitempty"`
+	}
+	_ = json.Unmarshal(b, &d)
+
+	var action string
+	switch d.Type {
+	case "mapping":
+		action = "mapping"
+	case "release":
+		action = "release"
+	}
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-%s.json", Conf.Broker.SchemasPath, action), b); err != nil {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
 
 		return
 	}
 
-	if err := parseDatasetMessage(b); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	if err := Conf.API.MQ.SendMessage(uuid.New().String(), Conf.Broker.Exchange, Conf.SyncAPI.MappingRouting, b); err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %s", err.Error()))
+
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-}
-
-// parseDatasetMessage parses the JSON blob and sends the relevant messages
-func parseDatasetMessage(msg []byte) error {
-	log.Debugf("incoming blob %s", msg)
-	blob := syncDataset{}
-	_ = json.Unmarshal(msg, &blob)
-
-	var accessionIDs []string
-	for _, files := range blob.DatasetFiles {
-		ingest := schema.IngestionTrigger{
-			Type:     "ingest",
-			User:     blob.User,
-			FilePath: files.FilePath,
-		}
-		ingestMsg, err := json.Marshal(ingest)
-		if err != nil {
-			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
-		}
-		corrID := uuid.New().String()
-		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
-			return fmt.Errorf("failed to send ingest messge: Reason %v", err)
-		}
-
-		accessionIDs = append(accessionIDs, files.FileID)
-		finalize := schema.IngestionAccession{
-			Type:               "accession",
-			User:               blob.User,
-			FilePath:           files.FilePath,
-			AccessionID:        files.FileID,
-			DecryptedChecksums: []schema.Checksums{{Type: "sha256", Value: files.ShaSum}},
-		}
-		finalizeMsg, err := json.Marshal(finalize)
-		if err != nil {
-			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
-		}
-
-		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
-			return fmt.Errorf("failed to send mapping messge: Reason %v", err)
-		}
-	}
-
-	mappings := schema.DatasetMapping{
-		Type:         "mapping",
-		DatasetID:    blob.DatasetID,
-		AccessionIDs: accessionIDs,
-	}
-	mappingMsg, err := json.Marshal(mappings)
-	if err != nil {
-		return fmt.Errorf("failed to marshal json messge: Reason %v", err)
-	}
-
-	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.MappingRouting, mappingMsg); err != nil {
-		return fmt.Errorf("failed to send mapping messge: Reason %v", err)
-	}
-
-	return nil
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
@@ -262,4 +212,50 @@ func basicAuth(auth http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
+}
+
+func ingest(w http.ResponseWriter, r *http.Request) {
+	msg, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to read request body")
+
+		return
+	}
+	defer r.Body.Close()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", Conf.Broker.SchemasPath), msg); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
+
+		return
+	}
+	if err := Conf.API.MQ.SendMessage("73796e63-0000-0000-0000-696e67657374", Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, msg); err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %s", err.Error()))
+
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func accession(w http.ResponseWriter, r *http.Request) {
+	msg, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to read request body")
+
+		return
+	}
+	defer r.Body.Close()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), msg); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
+
+		return
+	}
+	if err := Conf.API.MQ.SendMessage("73796e63-0000-0000-0000-737461626c65", Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, msg); err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %s", err.Error()))
+
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

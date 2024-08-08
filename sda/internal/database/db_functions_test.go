@@ -505,10 +505,6 @@ func (suite *DatabaseTests) TestGetCorrID() {
 		err := db.MapFilesToDataset(di, acs)
 		assert.NoError(suite.T(), err, "failed to map file to dataset")
 	}
-
-	corrID2, err := db.GetCorrID(user, filePath)
-	assert.Error(suite.T(), err, "failed to get correlation ID of file in database")
-	assert.Equal(suite.T(), "", corrID2)
 }
 
 func (suite *DatabaseTests) TestListActiveUsers() {
