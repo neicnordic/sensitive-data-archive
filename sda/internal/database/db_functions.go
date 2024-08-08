@@ -634,7 +634,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 
-	// select all files of the user, each one annotated with its latest event
+	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = "SELECT f.submission_file_path, e.event, f.created_at FROM sda.files f " +
 		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
 		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
@@ -662,6 +662,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	return files, nil
 }
 
+// get the correlation ID for a user-inbox_path combination
 func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
 	var (
 		corrID string
@@ -692,6 +693,7 @@ func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
 	return corrID, nil
 }
 
+// list all users with files not yet assigned to a dataset
 func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
