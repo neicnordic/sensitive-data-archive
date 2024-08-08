@@ -106,7 +106,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/users/:username/files`
   - accepts `GET` requests`
-  - Returns all files for a user with active uploads as a JSON array
+  - Returns all files (that is not part of a dataset) for a user with active uploads as a JSON array
 
     Example:
 
