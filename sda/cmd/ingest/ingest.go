@@ -313,7 +313,7 @@ func main() {
 					continue
 				}
 
-				if err = db.UpdateFileEventLog(fileID, "submitted", delivered.CorrelationId, message.User, "{}", string(delivered.Body)); err != nil {
+				if err = db.UpdateFileEventLog(fileID, "submitted", fileID, message.User, "{}", string(delivered.Body)); err != nil {
 					log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 				}
 
@@ -366,7 +366,7 @@ func main() {
 						header, err := tryDecrypt(key, readBuffer)
 						if err != nil {
 							log.Errorf("Trying to decrypt start of file failed, reason: (%s)", err.Error())
-							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()), string(delivered.Body)); err != nil {
+							if err := db.UpdateFileEventLog(fileID, "error", fileID, "ingest", fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()), string(delivered.Body)); err != nil {
 								log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 							}
 
@@ -381,7 +381,7 @@ func main() {
 								OriginalMessage: message,
 							}
 							body, _ := json.Marshal(fileError)
-							if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+							if err := mq.SendMessage(fileID, conf.Broker.Exchange, "error", body); err != nil {
 								log.Errorf("failed to publish message, reason: (%s)", err.Error())
 							}
 
@@ -460,7 +460,7 @@ func main() {
 				log.Debugf("Wrote archived file (corr-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)",
 					delivered.CorrelationId, message.User, message.FilePath, fileID, fileInfo.Size)
 
-				status, err = db.GetFileStatus(delivered.CorrelationId)
+				status, err = db.GetFileStatus(fileID)
 				if err != nil {
 					log.Errorf("failed to get file status, reason: (%s)", err.Error())
 					if err = delivered.Nack(false, true); err != nil {
@@ -468,7 +468,7 @@ func main() {
 					}
 				}
 				if status == "disabled" {
-					log.Infof("file with correlation ID: %s is disabled, stopping ingestion", delivered.CorrelationId)
+					log.Infof("file with correlation ID: %s is disabled, stopping ingestion", fileID)
 					if err := delivered.Ack(false); err != nil {
 						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
@@ -476,12 +476,12 @@ func main() {
 					continue
 				}
 
-				if err := db.SetArchived(fileInfo, fileID, delivered.CorrelationId); err != nil {
+				if err := db.SetArchived(fileInfo, fileID, fileID); err != nil {
 					log.Errorf("SetArchived failed, reason: (%s)", err.Error())
 				}
 
 				log.Debugf("File marked as archived (corr-id: %s, user: %s, filepath: %s, archivepath: %s)",
-					delivered.CorrelationId, message.User, message.FilePath, fileID)
+					fileID, message.User, message.FilePath, fileID)
 
 				// Send message to archived
 				msg := schema.IngestionVerification{
@@ -502,7 +502,7 @@ func main() {
 					continue
 				}
 
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, archivedMsg); err != nil {
+				if err := mq.SendMessage(fileID, conf.Broker.Exchange, conf.Broker.RoutingKey, archivedMsg); err != nil {
 					// TODO fix resend mechanism
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
