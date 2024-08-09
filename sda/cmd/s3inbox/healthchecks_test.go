@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -80,7 +81,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	conf, err := config.NewConfig("s3inbox")
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), conf)
-	h := NewHealthCheck(8888,
+	h := NewHealthCheck(5555,
 		db,
 		conf,
 		new(tls.Config))
@@ -89,7 +90,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	res, err := http.Get("http://localhost:8888/ready?full=1")
+	res, err := http.Get("http://localhost:5555/ready?full=1")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,5 +105,80 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 		suite.T().Errorf("Response: %s", b)
 	}
 
+	// test head request
+	res, err = http.Head("http://localhost:5555")
+	res.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		suite.T().Errorf("Response code was %v; want 200", res.StatusCode)
+	}
+
 	ts.Close()
+}
+
+func (suite *HealthcheckTestSuite) TestBadHealthchecks() {
+	l, err := net.Listen("tcp", "127.0.0.1:8080")
+	if err != nil {
+		log.Fatal(err)
+	}
+	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	ts := httptest.NewUnstartedServer(foo)
+	ts.Listener.Close()
+	ts.Listener = l
+	ts.Start()
+
+	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	conf, err := config.NewConfig("s3inbox")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), conf)
+	h := NewHealthCheck(7777,
+		db,
+		conf,
+		new(tls.Config))
+
+	go h.RunHealthChecks()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Mock DB failure, check that 503 is reported
+	mock.ExpectPing().WillReturnError(fmt.Errorf("dbDown"))
+	res, err := http.Head("http://localhost:7777")
+	res.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if res.StatusCode != http.StatusServiceUnavailable {
+		suite.T().Errorf("Response code was %v; want 503", res.StatusCode)
+	}
+
+	// DB fixed, check that 200 is reported
+	mock.ExpectPing()
+
+	res, err = http.Head("http://localhost:7777")
+	res.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		suite.T().Errorf("Response code was %v; want 200", res.StatusCode)
+	}
+
+	// DB ok, s3 and broker down, check that 503 is reported
+	mock.ExpectPing()
+	ts.Close()
+
+	res, err = http.Head("http://localhost:7777")
+	res.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode != http.StatusServiceUnavailable {
+		suite.T().Errorf("Response code was %v; want 503", res.StatusCode)
+	}
+
 }

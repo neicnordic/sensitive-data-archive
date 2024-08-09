@@ -51,10 +51,20 @@ func (h *HealthCheck) RunHealthChecks() {
 
 	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(h.DB, 1*time.Second))
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			// readyEndpoint does not accept method head
+			r.Method = http.MethodGet
+			health.ReadyEndpoint(w, r)
+		}
+	})
+	mux.HandleFunc("/health", health.ReadyEndpoint)
+
 	addr := ":" + strconv.Itoa(h.port)
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           health,
+		Handler:           mux,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       30 * time.Second,
