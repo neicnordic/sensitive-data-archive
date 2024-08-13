@@ -8,13 +8,13 @@ The `neicnordic` Helm repository contains the following charts (for configuratio
 
 - [sda-svc - SDA services](https://github.com/neicnordic/sensitive-data-archive/blob/main/charts/sda-svc/README.md)
 
-  This chart deploys the service components needed to operate the Sensitive Data Archive solution. The charts may include additional service components that might be beneficial for administrative operations or extending the Sensitive Data Archive solutions to facilitate different use cases.
+  This chart deploys the service components needed to operate the Sensitive Data Archive (SDA) solution. It may include additional service components that might be beneficial for administrative operations or extending the SDA solution to facilitate different use cases.
 
 - [sda-db - SDA database](https://github.com/neicnordic/sensitive-data-archive/blob/main/charts/sda-db/README.md)
 
   This chart deploys a pre-configured database ([PostgreSQL](https://www.postgresql.org/)) instance for Sensitive Data Archive, the database schemas are designed to adhere to [European Genome-Phenome Archive](https://ega-archive.org/) federated archiving model.
 
-- [sda-mq - SDA Message broker](https://github.com/neicnordic/sensitive-data-archive/blob/main/charts/sda-mq/README.md)
+- [sda-mq - SDA message broker](https://github.com/neicnordic/sensitive-data-archive/blob/main/charts/sda-mq/README.md)
 
   This chart deploys a pre-configured message broker ([RabbitMQ](https://www.rabbitmq.com/)) designed for [European Genome-Phenome Archive](https://ega-archive.org/) federated messaging between `CentralEGA` and Local/Federated EGAs but also configurable to support Standalone SDA deployments.
 
@@ -71,7 +71,7 @@ First create the secret containing the crypt4gh keypair and passphrase before th
 
 ```sh
 helm show values neicnordic/sda-svc > my-values.yaml
-vi my-values.yaml
+vi my-values.yaml # modify with your own settings
 helm install my-release neicnordic/sda-svc -f my-values.yaml
 ```
 
@@ -79,7 +79,7 @@ For quick reference to Helm's chart management capabilities see [here](https://h
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `my-release` deployment:
+To uninstall the `my-release` deployment:
 
 ```sh
 helm delete my-release
