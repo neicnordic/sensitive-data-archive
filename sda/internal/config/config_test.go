@@ -250,7 +250,7 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	_, err = adminFile.Write([]byte(`["foo@example.com","bar@example.com","baz@example.com"]`))
 	assert.NoError(suite.T(), err)
 
-	viper.Set("admin.configFile", adminFile.Name())
+	viper.Set("admin.usersFile", adminFile.Name())
 	cFile, err := NewConfig("api")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), []string{"foo@example.com", "bar@example.com", "baz@example.com"}, cFile.API.Admins)

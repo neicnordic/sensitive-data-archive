@@ -468,8 +468,8 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		if viper.IsSet("admin.configFile") {
-			admins, err := os.ReadFile(viper.GetString("admin.configFile"))
+		if viper.IsSet("admin.usersFile") {
+			admins, err := os.ReadFile(viper.GetString("admin.usersFile"))
 			if err != nil {
 				return nil, err
 			}

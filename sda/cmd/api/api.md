@@ -124,11 +124,11 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 The users that should have administrative access can be set in two ways:
 
 - As a comma separated list of user identifiers assigned to: `admin.users`.
-- As a JSON file containg a list of the user identities, the path to the file is assigned to: `admin.configFile`. This is the recommended way.
+- As a JSON file containg a list of the user identities, the path to the file is assigned to: `admin.usersFile`. This is the recommended way.
 
 ```json
 [
-"foo-user@example.com"
+"foo-user@example.com",
 "bar-user@example.com"
 ]
 ```
