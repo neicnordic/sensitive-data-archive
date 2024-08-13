@@ -29,11 +29,11 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with JSON data with the format: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
   - triggers the ingestion of the file.
 
-- Error codes
-  - `200` Query execute ok.
-  - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
-  - `401` Token user is not in the list of admins.
-  - `500` Internal error due to DB or MQ failures.
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
 
     Example:
 
@@ -45,11 +45,11 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with JSON data with the format: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
   - assigns accession ID to the file.
 
-- Error codes
-  - `200` Query execute ok.
-  - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
-  - `401` Token user is not in the list of admins.
-  - `500` Internal error due to DB or MQ failures.
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
 
     Example:
 
@@ -77,11 +77,11 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with the dataset name as last part of the path`
   - releases a dataset so that it can be downloaded.
 
-- Error codes
-  - `200` Query execute ok.
-  - `400` Error due to bad payload.
-  - `401` Token user is not in the list of admins.
-  - `500` Internal error due to DB or MQ failures.
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
 
     Example:
 
@@ -99,14 +99,14 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users
     ```
 
-- Error codes
-  - `200` Query execute ok.
-  - `401` Token user is not in the list of admins.
-  - `500` Internal error due to DB failure.
+  - Error codes
+    - `200` Query execute ok.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB failure.
 
 - `/users/:username/files`
   - accepts `GET` requests`
-  - Returns all files (that is not part of a dataset) for a user with active uploads as a JSON array
+  - Returns all files (that are not part of a dataset) for a user with active uploads as a JSON array
 
     Example:
 
@@ -114,16 +114,16 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users/submitter@example.org/files
     ```
 
-- Error codes
-  - `200` Query execute ok.
-  - `401` Token user is not in the list of admins.
-  - `500` Internal error due to DB failure.
+  - Error codes
+    - `200` Query execute ok.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB failure.
 
 #### Configure Admin users
 
 The users that should have administrative access can be set in two ways:
 
-- As a comma separated list of user identifiers asigned to: `admin.users`.
+- As a comma separated list of user identifiers assigned to: `admin.users`.
 - As a JSON file containg a list of the user identities, the path to the file is assigned to: `admin.configFile`. This is the recommended way.
 
 ```json
