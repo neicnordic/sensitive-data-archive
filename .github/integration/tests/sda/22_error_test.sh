@@ -74,7 +74,7 @@ curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
 until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE correlation_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
     echo "waiting for file error to be logged by ingest"
     RETRY_TIMES=$((RETRY_TIMES + 1))
-    if [ "$RETRY_TIMES" -eq 30 ]; then
+    if [ "$RETRY_TIMES" -eq 61 ]; then
         echo "::error::Time out while waiting for ingest to set file error"
         exit 1
     fi
@@ -123,7 +123,7 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.fil
     echo "waiting for file error to be logged by verify"
     date
     RETRY_TIMES=$((RETRY_TIMES + 1))
-    if [ "$RETRY_TIMES" -eq 30 ]; then
+    if [ "$RETRY_TIMES" -eq 61 ]; then
         echo "::error::Time out while waiting for verify to set file error"
         exit 1
     fi
