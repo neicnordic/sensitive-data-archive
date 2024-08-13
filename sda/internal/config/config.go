@@ -483,6 +483,7 @@ func NewConfig(app string) (*Config, error) {
 		if viper.IsSet("admin.users") {
 			c.API.Admins = append(c.API.Admins, strings.Split(string(viper.GetString("admin.users")), ",")...)
 		}
+		c.configSchemas()
 	case "auth":
 		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
 		c.Auth.Cega.ID = viper.GetString("auth.cega.id")
