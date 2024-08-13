@@ -379,7 +379,7 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimPrefix(username, "/")
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
-	files, err := Conf.API.DB.GetUserFiles(strings.ReplaceAll(username, "@", "_"))
+	files, err := Conf.API.DB.GetUserFiles(username)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

@@ -14,6 +14,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1138,7 +1139,7 @@ func (suite *TestSuite) TestListUserFiles() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				suite.FailNow("failed to register file in database")
 			}
