@@ -21,6 +21,8 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -156,6 +158,13 @@ func main() {
 	s := grpc.NewServer(opts...)
 	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: conf.ReEncrypt.Crypt4GHKey})
 	reflection.Register(s)
+
+	// Add health check
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
+	healthServer.SetServingStatus(re.Reencrypt_ServiceDesc.ServiceName, healthgrpc.HealthCheckResponse_SERVING)
+	healthgrpc.RegisterHealthServer(s, healthServer)
+
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Errorf("failed to serve: %v", err)
