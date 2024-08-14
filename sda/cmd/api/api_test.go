@@ -14,6 +14,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,7 +207,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Println("starting tests")
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgres); err != nil {
@@ -218,6 +219,8 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(code)
 }
 
 type TestSuite struct {
@@ -1138,7 +1141,7 @@ func (suite *TestSuite) TestListUserFiles() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				suite.FailNow("failed to register file in database")
 			}

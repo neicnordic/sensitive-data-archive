@@ -91,7 +91,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Println("starting tests")
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(rabbitmq); err != nil {
@@ -101,6 +101,8 @@ func TestMain(m *testing.M) {
 	if _, err := pool.Client.PruneVolumes(pvo); err != nil {
 		log.Fatalf("could not prune docker volumes: %s", err.Error())
 	}
+
+	os.Exit(code)
 }
 
 func (suite *SyncAPITest) SetupTest() {

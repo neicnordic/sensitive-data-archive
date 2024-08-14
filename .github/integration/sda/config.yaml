@@ -1,6 +1,8 @@
 log:
   format: "json"
   level: "debug"
+admin:
+  users: "requester@demo.org"
 archive:
   type: s3
   url: "http://s3"

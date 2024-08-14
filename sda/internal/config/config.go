@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -467,6 +468,22 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		if viper.IsSet("admin.usersFile") {
+			admins, err := os.ReadFile(viper.GetString("admin.usersFile"))
+			if err != nil {
+				return nil, err
+			}
+
+			if err := json.Unmarshal(admins, &c.API.Admins); err != nil {
+				return nil, err
+			}
+		}
+
+		// This is mainly for convenience when testing stuff
+		if viper.IsSet("admin.users") {
+			c.API.Admins = append(c.API.Admins, strings.Split(string(viper.GetString("admin.users")), ",")...)
+		}
+		c.configSchemas()
 	case "auth":
 		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
 		c.Auth.Cega.ID = viper.GetString("auth.cega.id")

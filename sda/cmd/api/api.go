@@ -75,12 +75,14 @@ func setup(config *config.Config) *http.Server {
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", getFiles)
 	// admin endpoints below here
-	r.POST("/file/ingest", isAdmin(), ingestFile)                  // start ingestion of a file
-	r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
-	r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
-	r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
-	r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
-	r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
+	if len(config.API.Admins) > 0 {
+		r.POST("/file/ingest", isAdmin(), ingestFile)                  // start ingestion of a file
+		r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
+		r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
+		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
+		r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
+		r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
+	}
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -377,7 +379,7 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimPrefix(username, "/")
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
-	files, err := Conf.API.DB.GetUserFiles(strings.ReplaceAll(username, "@", "_"))
+	files, err := Conf.API.DB.GetUserFiles(username)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

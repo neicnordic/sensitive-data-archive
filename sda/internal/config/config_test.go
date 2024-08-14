@@ -242,6 +242,27 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(suite.T(), false, config.API.Session.Secure)
 	assert.Equal(suite.T(), "test", config.API.Session.Domain)
 	assert.Equal(suite.T(), 60*time.Second, config.API.Session.Expiration)
+
+	viper.Reset()
+	suite.SetupTest()
+	adminFile, err := os.CreateTemp("", "admins")
+	assert.NoError(suite.T(), err)
+	_, err = adminFile.Write([]byte(`["foo@example.com","bar@example.com","baz@example.com"]`))
+	assert.NoError(suite.T(), err)
+
+	viper.Set("admin.usersFile", adminFile.Name())
+	cFile, err := NewConfig("api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), []string{"foo@example.com", "bar@example.com", "baz@example.com"}, cFile.API.Admins)
+
+	os.Remove(adminFile.Name())
+
+	viper.Reset()
+	suite.SetupTest()
+	viper.Set("admin.users", "foo@bar.com,bar@foo.com")
+	cList, err := NewConfig("api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), []string{"foo@bar.com", "bar@foo.com"}, cList.API.Admins)
 }
 
 func (suite *ConfigTestSuite) TestNotifyConfiguration() {
