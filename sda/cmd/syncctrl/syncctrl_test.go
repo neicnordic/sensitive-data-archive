@@ -247,7 +247,7 @@ func (suite *SyncTest) TestHandleDatasetMsg() {
 	mq, err := broker.NewMQ(conf.Broker)
 	assert.NoError(suite.T(), err)
 
-	_, err = mq.Channel.QueueDeclare("sync", false, false, false, false, nil)
+	_, err = mq.Channel.QueueDeclare("sync_files", false, false, false, false, nil)
 	assert.NoError(suite.T(), err)
 
 	go handleDatasetMsg(conf, db, mq)
@@ -259,7 +259,7 @@ func (suite *SyncTest) TestHandleDatasetMsg() {
 		assert.NoError(suite.T(), err)
 	}
 
-	s, err := mq.Channel.QueueDeclarePassive("sync", false, false, false, false, nil)
+	s, err := mq.Channel.QueueDeclarePassive("sync_files", false, false, false, false, nil)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), 3, s.Messages)
 

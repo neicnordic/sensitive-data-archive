@@ -9,6 +9,13 @@
     "global_parameters": [],
     "queues": [
         {
+            "name": "sync_accession",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
             "name": "sync_datasets",
             "vhost": "sda",
             "durable": true,
@@ -16,7 +23,7 @@
             "arguments": {}
         },
         {
-            "name": "sync",
+            "name": "sync_files",
             "vhost": "sda",
             "durable": true,
             "auto_delete": false,
@@ -29,8 +36,16 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "sync",
-            "routing_key": "sync"
+            "destination": "sync_accession",
+            "routing_key": "sync_accession"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "sync_files",
+            "routing_key": "sync_files"
         }
     ],
     "parameters": [

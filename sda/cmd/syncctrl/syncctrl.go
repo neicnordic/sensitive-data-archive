@@ -48,6 +48,7 @@ func main() {
 	log.Info("Starting sync control service")
 
 	go handleDatasetMsg(conf, db, mq)
+	go handleAccessionMsg(conf, db, mq)
 
 	<-forever
 }
@@ -103,7 +104,7 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 			}
 
 			for count := 1; count <= database.RetryTimes; count++ {
-				err := mq.SendMessage("", conf.Broker.Exchange, "sync", delivered.Body)
+				err := mq.SendMessage("", conf.Broker.Exchange, "sync_files", delivered.Body)
 				if err == nil {
 					break
 				}
@@ -186,7 +187,7 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 				}
 
 				for count := 1; count <= database.RetryTimes; count++ {
-					err := mq.SendMessage("", conf.Broker.Exchange, "sync", fileMsg)
+					err := mq.SendMessage("", conf.Broker.Exchange, "sync_files", fileMsg)
 					if err == nil {
 						break
 					}
@@ -240,7 +241,7 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 			}
 
 			for count := 1; count <= database.RetryTimes; count++ {
-				err := mq.SendMessage("", conf.Broker.Exchange, "sync", delivered.Body)
+				err := mq.SendMessage("", conf.Broker.Exchange, "sync_files", delivered.Body)
 				if err == nil {
 					break
 				}
@@ -256,6 +257,81 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 
 				time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 			}
+		}
+
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+	}
+}
+
+func handleAccessionMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBroker) {
+	messages, err := mq.GetMessages("sync_accession")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for delivered := range messages {
+		log.Debugf("Received a message (message: %s)", delivered.Body)
+
+		message := schema.IngestionAccession{}
+		// we unmarshal the message in the validation step so this is safe to do
+		_ = json.Unmarshal(delivered.Body, &message)
+
+		if strings.HasPrefix(message.AccessionID, conf.SyncCtrl.CenterPrefix) {
+			log.Infof("skipping local dataset: %s", message.AccessionID)
+			if err := delivered.Ack(false); err != nil {
+				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+			}
+
+			continue
+		}
+
+		corrID, err := db.GetCorrID(message.User, message.FilePath)
+		if err != nil {
+			log.Infof("skipping local dataset: %s", message.AccessionID)
+			if err := delivered.Nack(false, true); err != nil {
+				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+			}
+
+			continue
+		}
+
+		status, err := db.GetFileStatus(corrID)
+		if err != nil {
+			log.Infof("skipping local dataset: %s", message.AccessionID)
+			if err := delivered.Nack(false, true); err != nil {
+				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+			}
+
+			continue
+		}
+
+		if status != "verified" {
+			if err := delivered.Nack(false, true); err != nil {
+				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+			}
+
+			continue
+
+		}
+
+		for count := 1; count <= database.RetryTimes; count++ {
+			err := mq.SendMessage(corrID, conf.Broker.Exchange, "accession", delivered.Body)
+			if err == nil {
+				break
+			}
+
+			if count == database.RetryTimes {
+				log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				if err := delivered.Nack(false, false); err != nil {
+					log.Errorf("failed to nack following send message failure")
+				}
+
+				continue
+			}
+
+			time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 		}
 
 		if err := delivered.Ack(false); err != nil {

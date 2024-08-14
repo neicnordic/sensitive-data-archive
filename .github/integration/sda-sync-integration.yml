@@ -62,6 +62,37 @@ services:
     volumes:
       - remote-rabbitmq_data:/var/lib/rabbitmq
 
+  remote-finalize:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-finalize ]
+    container_name: remote-finalize
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      remote-postgres:
+        condition: service_healthy
+      remote-rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_HOST=remote-rabbitmq
+      - BROKER_PORT=5672
+      - BROKER_PASSWORD=finalize
+      - BROKER_USER=finalize
+      - BROKER_EXCHANGE=sda
+      - BROKER_QUEUE=accession
+      - BROKER_ROUTINGKEY=completed
+      - BROKER_VHOST=/sda
+      - DB_DATABASE=sda
+      - DB_HOST=remote-postgres
+      - DB_PORT=5432
+      - DB_PASSWORD=finalize
+      - DB_USER=finalize
+      - DB_SSLMODE=disable
+      - LOG_FORMAT=json
+      - LOG_LEVEL=debug
+      - SCHEMA_TYPE=bigpicture
+    restart: always
+
   remote-ingest:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-ingest ]
@@ -108,7 +139,7 @@ services:
       - BROKER_HOST=remote-rabbitmq
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=sync
+      - BROKER_QUEUE=sync_files
       - DB_HOST=remote-postgres
       - DB_PASSWORD=sync
       - DB_USER=sync
@@ -135,6 +166,7 @@ services:
       - BROKER_USER=sync
       - BROKER_EXCHANGE=sda
       - SCHEMA_TYPE=bigpicture
+      - SYNC_API_ACCESSIONROUTING=sync_accession
       - SYNC_API_MAPPINGROUTING=mappings
     ports:
       - "28080:8080"
@@ -408,7 +440,7 @@ services:
     environment:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=sync
+      - BROKER_QUEUE=sync_files
       - DB_PASSWORD=sync
       - DB_USER=sync
       - SCHEMA_TYPE=bigpicture
@@ -553,6 +585,8 @@ services:
          condition: service_started
       reencrypt:
          condition: service_started
+      remote-finalize:
+        condition: service_started
       remote-ingest:
         condition: service_started
       remote-sync-api:

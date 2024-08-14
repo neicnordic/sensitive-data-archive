@@ -24,7 +24,7 @@ echo "files synced successfully"
 
 echo "waiting for sync-api to send messages"
 RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://remote-rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 2 ]; do
+until [ "$(curl -su guest:guest http://remote-rabbitmq:15672/api/queues/sda/completed/ | jq -r '.messages_ready')" -eq 2 ]; do
     echo "waiting for sync-api to send messages"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
