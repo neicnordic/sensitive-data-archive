@@ -113,19 +113,16 @@ func (suite *SyncAPITest) SetupTest() {
 	viper.Set("broker.port", mqPort)
 	viper.Set("broker.user", "guest")
 	viper.Set("broker.password", "guest")
-	viper.Set("broker.queue", "mappings")
 	viper.Set("broker.exchange", "amq.direct")
 	viper.Set("broker.vhost", "/")
 
-	viper.Set("schema.type", "isolated")
+	viper.Set("schema.type", "bigpicture")
 
 	viper.Set("sync.api.user", "dummy")
 	viper.Set("sync.api.password", "admin")
 }
 
-func (suite *SyncAPITest) TestSetup() {
-	suite.SetupTest()
-
+func (suite *SyncAPITest) TestConfigSyncAPI() {
 	conf, err := config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err, "Failed to setup config")
 	assert.Equal(suite.T(), mqPort, conf.Broker.Port)
@@ -136,7 +133,6 @@ func (suite *SyncAPITest) TestSetup() {
 }
 
 func (suite *SyncAPITest) TestShutdown() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
@@ -154,7 +150,6 @@ func (suite *SyncAPITest) TestShutdown() {
 }
 
 func (suite *SyncAPITest) TestReadinessResponse() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
@@ -199,21 +194,20 @@ func (suite *SyncAPITest) TestReadinessResponse() {
 }
 
 func (suite *SyncAPITest) TestDatasetRoute() {
-	suite.SetupTest()
 	Conf, err = config.NewConfig("sync-api")
 	assert.NoError(suite.T(), err)
 
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
 
-	Conf.Broker.SchemasPath = "../../schemas/isolated/"
+	Conf.Broker.SchemasPath = "../../schemas/bigpicture/"
 
 	r := mux.NewRouter()
 	r.HandleFunc("/dataset", dataset)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	goodJSON := []byte(`{"user": "test.user@example.com", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e6", "dataset_files": [{"filepath": "inbox/user/file-1.c4gh","file_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "sha256": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}, {"filepath": "inbox/user/file2.c4gh","file_id": "ed6af454-d910-49e3-8cda-488a6f246e76", "sha256": "c967d96e56dec0f0cfee8f661846238b7f15771796ee1c345cae73cd812acc2b"}]}`)
+	goodJSON := []byte(`{"type": "mapping", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e6", "accession_ids": ["5fe7b660-afea-4c3a-88a9-3daabf055ebb", "ed6af454-d910-49e3-8cda-488a6f246e76"]}`)
 	good, err := http.Post(ts.URL+"/dataset", "application/json", bytes.NewBuffer(goodJSON))
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusOK, good.StatusCode)
@@ -224,6 +218,12 @@ func (suite *SyncAPITest) TestDatasetRoute() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
 	defer bad.Body.Close()
+
+	goodJSON2 := []byte(`{"type": "release", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e6"}`)
+	good2, err := http.Post(ts.URL+"/dataset", "application/json", bytes.NewBuffer(goodJSON2))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, good2.StatusCode)
+	defer good2.Body.Close()
 }
 
 func (suite *SyncAPITest) TestMetadataRoute() {
@@ -274,5 +274,59 @@ func (suite *SyncAPITest) TestBasicAuth() {
 	bad, err := ts.Client().Do(req)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusUnauthorized, bad.StatusCode)
+	defer bad.Body.Close()
+}
+
+func (suite *SyncAPITest) TestIngestRoute() {
+	Conf, err = config.NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker.SchemasPath = "../../schemas/bigpicture"
+
+	r := mux.NewRouter()
+	r.HandleFunc("/ingest", ingest)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	goodJSON := []byte(`{"type": "ingest", "user": "test.user@example.com", "filepath": "inbox/user/file-1.c4gh"}`)
+	good, err := http.Post(ts.URL+"/ingest", "application/json", bytes.NewBuffer(goodJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, good.StatusCode)
+	defer good.Body.Close()
+
+	badJSON := []byte(`{"dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": []}`)
+	bad, err := http.Post(ts.URL+"/ingest", "application/json", bytes.NewBuffer(badJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
+	defer bad.Body.Close()
+}
+
+func (suite *SyncAPITest) TestAccessionRoute() {
+	Conf, err = config.NewConfig("sync-api")
+	assert.NoError(suite.T(), err)
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker.SchemasPath = "../../schemas/bigpicture"
+
+	r := mux.NewRouter()
+	r.HandleFunc("/accession", accession)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	goodJSON := []byte(`{"type": "accession", "accession_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "user": "test.user@example.com", "filepath": "inbox/user/file-1.c4gh", "decrypted_checksums": [{"type": "sha256", "value": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}]}`)
+	good, err := http.Post(ts.URL+"/accession", "application/json", bytes.NewBuffer(goodJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, good.StatusCode)
+	defer good.Body.Close()
+
+	badJSON := []byte(`{"dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": []}`)
+	bad, err := http.Post(ts.URL+"/accession", "application/json", bytes.NewBuffer(badJSON))
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, bad.StatusCode)
 	defer bad.Body.Close()
 }

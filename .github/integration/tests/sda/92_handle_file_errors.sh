@@ -99,11 +99,15 @@ curl -s -u guest:guest 'http://rabbitmq:15672/api/exchanges/sda/sda/publish' \
 
 sleep 10
 
-
-if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')" ]; then
-    echo "missing file not moved to error"
-    exit 1
-fi
+RETRY_TIMES=0
+until [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')" ]; do
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 61 ]; then
+        echo "missing file not moved to error"
+        exit 1
+    fi
+    sleep 2
+done
 
 CORRID=$(
     curl -s -X POST \

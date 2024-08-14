@@ -1,0 +1,68 @@
+{
+    "rabbit_version": "3.11.11",
+    "rabbitmq_version": "3.11.11",
+    "product_name": "RabbitMQ",
+    "product_version": "3.11.11",
+    "users": [],
+    "vhosts": [],
+    "permissions": [],
+    "global_parameters": [],
+    "queues": [
+        {
+            "name": "sync_accession",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "sync_datasets",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "sync_files",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "sync_accession",
+            "routing_key": "sync_accession"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "sync_files",
+            "routing_key": "sync_files"
+        }
+    ],
+    "parameters": [
+        {
+            "component": "shovel",
+            "name": "sync_datasets",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-queue": "sync_datasets",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "mapping_stream",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
+        }
+    ]
+}

@@ -79,6 +79,9 @@ integrationtest-sda: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml down -v --remove-orphans
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml run integration_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
+integrationtest-sync: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml run integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml down -v --remove-orphans
 
 # lint go code
 lint-all: lint-sda lint-sda-download
