@@ -63,7 +63,7 @@ func main() {
 			log.Debugf("received a message: %s", delivered.Body)
 			schemaType, err := schemaFromDatasetOperation(delivered.Body)
 			if err != nil {
-				log.Errorf(err.Error())
+				log.Errorf("%s", err.Error())
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("failed to ack message: %v", err)
 				}

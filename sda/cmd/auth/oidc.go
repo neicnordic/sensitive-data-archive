@@ -119,7 +119,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 func validateToken(rawJwt, jwksURL string) (*jwt.Token, string, error) {
 	set, err := jwk.Fetch(context.Background(), jwksURL)
 	if err != nil {
-		return nil, "", fmt.Errorf(err.Error())
+		return nil, "", fmt.Errorf("%s", err.Error())
 	}
 	for it := set.Keys(context.Background()); it.Next(context.Background()); {
 		pair := it.Pair()

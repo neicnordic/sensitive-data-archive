@@ -181,7 +181,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Println("starting tests")
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgres); err != nil {
@@ -193,4 +193,6 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(code)
 }

@@ -94,12 +94,14 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}
 
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgres); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(code)
 }
 
 func (suite *DatabaseTests) SetupTest() {

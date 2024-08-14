@@ -536,7 +536,7 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 		return
 	}
 	// write the error message to the response
-	_, err = io.WriteString(w, string(xmlData))
+	_, err = io.Writer.Write(w, xmlData)
 	if err != nil {
 		// errors are logged but otherwised ignored
 		log.Error(err)

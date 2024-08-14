@@ -34,16 +34,10 @@ const sftpType = "sftp"
 
 func TestMain(m *testing.M) {
 	sshPath, _ = os.MkdirTemp("", "ssh")
-	defer os.RemoveAll(sshPath)
 	if err := helper.CreateSSHKey(sshPath); err != nil {
 		log.Panicf("Failed to create SSH keys, reason: %v", err.Error())
 	}
 
-	defer func() {
-		if r := recover(); r != nil {
-			log.Infoln("Recovered")
-		}
-	}()
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -127,7 +121,7 @@ func TestMain(m *testing.M) {
 		log.Panicf("Could not connect to minio: %s", err)
 	}
 
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(minio); err != nil {
@@ -136,6 +130,10 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(sftp); err != nil {
 		log.Panicf("Could not purge resource: %s", err)
 	}
+
+	os.RemoveAll(sshPath)
+
+	os.Exit(code)
 }
 
 func TestStorageTestSuite(t *testing.T) {

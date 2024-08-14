@@ -109,7 +109,7 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 		schemaType, err := schemaNameFromQueue(queue, delivered.Body, conf)
 
 		if err != nil {
-			log.Errorf(err.Error())
+			log.Error(err.Error())
 
 			if err := delivered.Ack(false); err != nil {
 				log.Errorf("failed to ack message: %v", err)

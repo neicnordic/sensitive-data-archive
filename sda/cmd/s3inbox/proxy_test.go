@@ -128,7 +128,7 @@ func startFakeServer(port string) *FakeServer {
 	f := FakeServer{}
 	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.pinged = true
-		fmt.Fprintf(w, f.resp)
+		fmt.Fprint(w, f.resp)
 	})
 	ts := httptest.NewUnstartedServer(foo)
 	ts.Listener.Close()
