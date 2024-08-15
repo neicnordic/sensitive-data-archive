@@ -217,12 +217,14 @@ spec:
           httpGet:
             path: /live
             port: liveness-port
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
           failureThreshold: 1
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /ready
             port: liveness-port
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
           failureThreshold: 1
           periodSeconds: 5
         resources:
