@@ -24,7 +24,8 @@ VALUES (0, now(), 'Created with version'),
        (7, now(), 'Add permissions to mapper to files'),
        (8, now(), 'Add ingestion functions'),
        (9, now(), 'Add dataset event log'),
-       (10, now(), 'Create Inbox user');
+       (10, now(), 'Create Inbox user'),
+       (11, now(), 'Grant select permission to download on dataset_event_log');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
