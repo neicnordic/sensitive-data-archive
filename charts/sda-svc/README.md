@@ -77,8 +77,8 @@ Parameter | Description | Default
 `global.backupArchive.nfsServer` | URL or IP address to a NFS server. |`""`
 `global.backupArchive.nfsPath` | Path on the NFS server for the backup archive. |`""`
 `global.api.adminFileSecret` | A secret holding a JSON file named `admin.json` containg a list of identifiers |``
-`global.api.adminUsers` | A list of user identifiers |``
-`global.api.jwtPubKeyName` | Public key ues to verify the JWT. |``
+`global.api.adminUsers` | A list of identifiers of the users with admin privileges |``
+`global.api.jwtPubKeyName` | Public key used to verify the JWT. |``
 `global.api.jwtSecret` | The name of the secret holding the JWT public key |``
 `global.auth.jwtAlg` | Key type to sign the JWT, available options are RS265 & ES256, Must match the key type |`"ES256"`
 `global.auth.jwtKey` | Private key used to sign the JWT. |`""`
@@ -214,7 +214,7 @@ Parameter | Description | Default
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`api.replicaCount` | desired number of replicas | `2`
+`api.replicaCount` | Desired number of replicas | `2`
 `api.annotations` | Specific annotation for the auth pod | `{}`
 `api.resources.requests.memory` | Memory request for container. |`128Mi`
 `api.resources.requests.cpu` | CPU request for container. |`100m`
