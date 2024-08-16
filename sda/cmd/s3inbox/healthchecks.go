@@ -47,7 +47,7 @@ func (h *HealthCheck) RunHealthChecks() {
 
 	health.AddReadinessCheck("S3-backend-http", h.httpsGetCheck(h.s3URL, 5000*time.Millisecond))
 
-	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 50*time.Millisecond))
+	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 5000*time.Millisecond))
 
 	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(h.DB, 1*time.Second))
 
