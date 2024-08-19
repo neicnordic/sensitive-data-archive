@@ -11,7 +11,7 @@ spec:
   duration: 2160h # 90d
 
   # The use of the common name field has been deprecated since 2000 and is
-  # discouraged from being used.
+  # discouraged from being used. However, it is still needed for TLS based authentication  for Postgres and other services.
   commonName: {{ template "sda.fullname" . }}-api
   isCA: false
   privateKey:
