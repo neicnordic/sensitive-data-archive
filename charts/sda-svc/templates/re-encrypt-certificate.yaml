@@ -18,6 +18,7 @@ spec:
     algorithm: ECDSA
     size: 256
   usages:
+    - client auth
     - server auth
   # At least one of a DNS Name, URI, or IP address is required.
   dnsNames:

@@ -74,10 +74,14 @@ spec:
         ports:
           - name: grpc
             containerPort: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
+          - name: grpchealth
+            containerPort: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
         readinessProbe:
-          initialDelaySeconds: 15
-          tcpSocket:
-            port: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+          grpc:
+            port: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
+            service: "reencrypt.Reencrypt"
         resources:
 {{ toYaml .Values.reencrypt.resources | trim | indent 10 }}
         volumeMounts:
