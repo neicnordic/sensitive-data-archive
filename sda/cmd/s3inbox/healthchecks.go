@@ -14,11 +14,13 @@ import (
 
 // HealthCheck registers and endpoint for healthchecking the service
 type HealthCheck struct {
-	port      int
-	DB        *sql.DB
-	s3URL     string
-	brokerURL string
-	tlsConfig *tls.Config
+	port       int
+	DB         *sql.DB
+	s3URL      string
+	brokerURL  string
+	tlsConfig  *tls.Config
+	serverCert string
+	serverKey  string
 }
 
 // NewHealthCheck creates a new healthchecker. It needs to know where to find
@@ -34,7 +36,10 @@ func NewHealthCheck(port int, db *sql.DB, conf *config.Config, tlsConfig *tls.Co
 
 	brokerURL := fmt.Sprintf("%s:%d", conf.Broker.Host, conf.Broker.Port)
 
-	return &HealthCheck{port, db, s3URL, brokerURL, tlsConfig}
+	serverCert := conf.Server.Cert
+	serverKey := conf.Server.Key
+
+	return &HealthCheck{port, db, s3URL, brokerURL, tlsConfig, serverCert, serverKey}
 }
 
 // RunHealthChecks should be run as a go routine in the main app. It registers
@@ -47,7 +52,7 @@ func (h *HealthCheck) RunHealthChecks() {
 
 	health.AddReadinessCheck("S3-backend-http", h.httpsGetCheck(h.s3URL, 5000*time.Millisecond))
 
-	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 50*time.Millisecond))
+	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 5000*time.Millisecond))
 
 	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(h.DB, 1*time.Second))
 
@@ -70,8 +75,14 @@ func (h *HealthCheck) RunHealthChecks() {
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 3 * time.Second,
 	}
-	if err := server.ListenAndServe(); err != nil {
-		panic(err)
+	if h.serverCert != "" && h.serverKey != "" {
+		if err := server.ListenAndServeTLS(h.serverCert, h.serverKey); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := server.ListenAndServe(); err != nil {
+			panic(err)
+		}
 	}
 }
 
