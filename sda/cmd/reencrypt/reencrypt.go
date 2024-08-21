@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -56,7 +57,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	if len(dataEditList) > 0 { // linter doesn't like checking for nil before len
 
 		// Check that G115: integer overflow conversion int -> uint32 is satisfied
-		if len(dataEditList) > int(^uint32(0)) {
+		if len(dataEditList) > int(math.MaxUint32) {
 			return nil, status.Error(400, "data edit list too long")
 		}
 
