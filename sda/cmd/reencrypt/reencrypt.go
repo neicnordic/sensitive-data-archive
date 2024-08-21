@@ -41,7 +41,6 @@ type hServer struct {
 	healthgrpc.UnimplementedHealthServer
 	srvCert   tls.Certificate
 	srvCACert *x509.CertPool
-	srvHost   string
 	srvPort   int
 }
 
@@ -115,7 +114,6 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 	if p.srvCert.Certificate != nil {
 		creds := credentials.NewTLS(
 			&tls.Config{
-				ServerName:   p.srvHost,
 				Certificates: []tls.Certificate{p.srvCert},
 				MinVersion:   tls.VersionTLS13,
 				RootCAs:      p.srvCACert,
@@ -126,7 +124,7 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", p.srvHost, p.srvPort), opts...)
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", "127.0.0.1", p.srvPort), opts...)
 	if err != nil {
 		log.Printf("failed to dial: %v", err)
 
@@ -233,7 +231,7 @@ func main() {
 
 	// Start proxy health server
 	p := grpc.NewServer()
-	healthgrpc.RegisterHealthServer(p, &hServer{srvCert: serverCert, srvCACert: caCert, srvHost: conf.ReEncrypt.Host, srvPort: conf.ReEncrypt.Port})
+	healthgrpc.RegisterHealthServer(p, &hServer{srvCert: serverCert, srvCACert: caCert, srvPort: conf.ReEncrypt.Port})
 
 	healthServerListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port+1))
 	if err != nil {
