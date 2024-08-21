@@ -1,0 +1,49 @@
+{{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "sda.fullname" . }}-api-ingress
+  labels:
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.global.ingress.labels }}
+{{ toYaml .Values.global.ingress.labels | indent 4 }}
+{{- end }}
+  annotations:
+    {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
+    nginx.ingress.kubernetes.io/rewrite-target: "/"
+    nginx.ingress.kubernetes.io/backend-protocol: "{{ ternary "HTTPS" "HTTP" .Values.global.tls.enabled }}"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    {{- end }}
+    {{- if .Values.global.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
+    {{- else if .Values.global.ingress.issuer }}
+    cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
+    {{- end }}
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.global.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.global.ingress.ingressClassName }}
+{{- end }}
+  rules:
+  - host: {{ required "An ingress hostname is required!" .Values.global.ingress.hostName.api }}
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: {{ template "sda.fullname" . }}-api
+            port:
+              number: 8080
+{{- if .Values.global.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ required "An ingress hostname is required!" .Values.global.ingress.hostName.api }}
+    secretName: {{ if .Values.global.ingress.secretNames.api }}{{ .Values.global.ingress.secretNames.api }}{{- else }}"{{ template "sda.fullname" . }}-ingress-api"{{- end }}
+{{- end }}
+{{- end }}

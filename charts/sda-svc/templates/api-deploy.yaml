@@ -1,0 +1,248 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-api
+  labels:
+    role: api
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ template "sda.fullname" . }}-api
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-api
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-api
+        role: api
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/api-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.api.annotations }}
+{{- toYaml .Values.api.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-api
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: api
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+{{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
+{{- end }}
+        command: ["sda-api"]
+        env:
+{{- if not .Values.global.vaultSecrets }}
+        - name: API_ADMINFILE
+          value: {{ template "secretsPath" . }}/admins.json
+    {{- if .Values.global.tls.enabled }}
+        - name: API_SERVERCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: API_SERVERKEY
+          value: {{ template "tlsPath" . }}/tls.key
+    {{- end }}
+        - name: BROKER_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-api
+                key: mqPassword
+        - name: BROKER_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-api
+                key: mqUser
+    {{- if .Values.global.tls.enabled }}
+        - name: BROKER_CACERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if .Values.global.broker.verifyPeer }}
+        - name: BROKER_CLIENTCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        - name: BROKER_CLIENTKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        {{- end }}
+        - name: BROKER_SSL
+          value: {{ .Values.global.tls.enabled | quote }}
+        - name: BROKER_VERIFYPEER
+          value: {{ .Values.global.broker.verifyPeer | quote }}
+    {{- end }}
+        - name: BROKER_EXCHANGE
+          value: {{ default "sda" .Values.global.broker.exchange }}
+        - name: BROKER_HOST
+          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
+        - name: BROKER_PORT
+          value: {{ .Values.global.broker.port | quote }}
+        - name: BROKER_PREFETCHCOUNT
+          value: {{ .Values.global.broker.prefetchCount | quote }}
+        - name: BROKER_VHOST
+          value: {{ .Values.global.broker.vhost | quote }}
+        - name: BROKER_SERVERNAME
+          value: {{ .Values.global.broker.host | quote }}
+    {{- if .Values.global.tls.enabled }}
+        - name: DB_CACERT
+          value: {{ include "tlsPath" . }}/ca.crt
+        {{- if ne "verify-none" .Values.global.db.sslMode }}
+        - name: DB_CLIENTCERT
+          value: {{ include "tlsPath" . }}/tls.crt
+        - name: DB_CLIENTKEY
+          value: {{ include "tlsPath" . }}/tls.key
+        {{- end }}
+        - name: DB_SSLMODE
+          value: {{ .Values.global.db.sslMode | quote }}
+    {{- else }}
+        - name: DB_SSLMODE
+          value: "disable"
+    {{- end }}
+        - name: DB_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-api
+                key: dbPassword
+        - name: DB_USER
+          valueFrom:
+              secretKeyRef:
+                name: {{ template "sda.fullname" . }}-api
+                key: dbUser
+        - name: DB_DATABASE
+          value: {{ default "lega" .Values.global.db.name | quote }}
+        - name: DB_HOST
+          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.global.db.port | quote }}
+    {{- if .Values.global.log.format }}
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | quote }}
+    {{- end }}
+    {{- if .Values.global.log.level }}
+        - name: LOG_LEVEL
+          value: {{ .Values.global.log.level | quote }}
+    {{- end }}
+    {{- if .Values.global.api.jwtPubKeyName }}
+        - name: SERVER_JWTPUBKEYPATH
+          value: {{ include "jwtPath" . }}
+    {{- else }}
+        - name: SERVER_JWTPUBKEYURL
+          value: {{ required "A oidc provider is required" .Values.global.oidc.provider }}{{ .Values.global.oidc.jwkPath }}
+    {{- end }}
+{{- else }}
+        - name: SERVER_CONFFILE
+          value: {{ include "confFile" . }}
+{{- end }}
+        ports:
+        - name: api
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            port: api
+            path: /ready
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
+            httpHeaders:
+            - name: Host
+              value: {{ .Values.global.ingress.hostName.api }}
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            port: api
+            path: /ready
+            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
+            httpHeaders:
+            - name: Host
+              value: {{ .Values.global.ingress.hostName.api }}
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+{{ toYaml .Values.api.resources | trim | indent 10 }}
+        volumeMounts:
+    {{- if .Values.global.api.jwtPubKeyName }}
+        - name: jwt
+          mountPath: {{ include "jwtPath" . }}
+    {{- end }}
+    {{- if not .Values.global.vaultSecrets }}
+        - name: admins
+          mountPath: {{ template "secretsPath" . }}
+    {{- end }}
+    {{- if .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+    {{- end }}
+      volumes:
+    {{- if not .Values.global.vaultSecrets }}
+        - name: admins
+          projected:
+            sources:
+            - secret:
+              {{- if .Values.global.api.adminsFileSecret }}
+                name: {{ .Values.global.api.adminsFileSecret }}
+                items:
+                  - key: admins.json
+                    path: admins.json
+              {{- else }}
+                name: {{ template "sda.fullname" . }}-api-admins
+                items:
+                  - key: admins.json
+                    path: admins.json
+              {{- end }}
+        {{- if .Values.global.api.jwtPubKeyName }}
+        - name: jwt
+          projected:
+            sources:
+            - secret:
+                name: {{ .Values.global.api.jwtSecret }}
+                items:
+                  - key: {{ .Values.global.api.jwtPubKeyName }}
+                    path: {{ .Values.global.api.jwtPubKeyName }}
+        {{- end }}
+    {{- end }}
+    {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-api-certs
+        {{- else }}
+          secret:
+            defaultMode: 0440
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for api" .Values.api.tls.secretName }}
+        {{- end }}
+    {{- end }}
+{{- end }}
