@@ -77,6 +77,7 @@ func setup(config *config.Config) *http.Server {
 
 	r.HandleFunc("/ready", readinessResponse).Methods("GET")
 	r.HandleFunc("/dataset", basicAuth(http.HandlerFunc(dataset))).Methods("POST")
+	r.HandleFunc("/file", basicAuth(http.HandlerFunc(file))).Methods("POST")
 	r.HandleFunc("/metadata", basicAuth(http.HandlerFunc(metadata))).Methods("POST")
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -262,4 +263,38 @@ func basicAuth(auth http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
+}
+
+func file(w http.ResponseWriter, r *http.Request) {
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to read request body")
+
+		return
+	}
+	defer r.Body.Close()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/../bigpicture/sync-file.json", Conf.Broker.SchemasPath), b); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
+
+		return
+	}
+
+	if err := parseFileMessage(b); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func parseFileMessage(msg []byte) error {
+	log.Debugf("incoming message %s", msg)
+	file := schema.SyncFileData{}
+	_ = json.Unmarshal(msg, &file)
+
+	if err := Conf.API.MQ.SendMessage(file.CorrelationID, Conf.Broker.Exchange, "sync_datasets", msg); err != nil {
+		return fmt.Errorf("failed to send ingest messge: Reason %v", err)
+	}
+
+	return nil
 }
