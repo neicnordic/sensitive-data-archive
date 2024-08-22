@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -55,10 +56,15 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	if len(dataEditList) > 0 { // linter doesn't like checking for nil before len
 
-		// Only do this if we're passed a data edit list
+		// Check that G115: integer overflow conversion int -> uint32 is satisfied
+		if len(dataEditList) > int(math.MaxUint32) {
+			return nil, status.Error(400, "data edit list too long")
+		}
+
+		// Only do this if we're passed a data edit whose length fits in a uint32
 		dataEditListPacket := headers.DataEditListHeaderPacket{
 			PacketType:    headers.PacketType{PacketType: headers.DataEditList},
-			NumberLengths: uint32(len(dataEditList)),
+			NumberLengths: uint32(len(dataEditList)), //nolint:gosec // we're checking the length above
 			Lengths:       dataEditList,
 		}
 		extraHeaderPackets = append(extraHeaderPackets, dataEditListPacket)

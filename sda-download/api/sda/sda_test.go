@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -677,7 +678,8 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write([]byte{0})
 	assert.NoError(f.t, err, "Could not write response flag")
 
-	err = binary.Write(w, binary.BigEndian, int32(len(response)))
+	assert.LessOrEqual(f.t, len(response), math.MaxInt32, "Response too long")
+	err = binary.Write(w, binary.BigEndian, int32(len(response))) //nolint:gosec // we're checking the length above
 	assert.NoError(f.t, err, "Could not write response length")
 
 	_, err = w.Write(response)
