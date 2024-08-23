@@ -2,6 +2,20 @@ apiVersion: v1
 entries:
   sda-db:
   - apiVersion: v2
+    appVersion: v0.3.121
+    created: "2024-08-23T13:44:05.196838673Z"
+    description: Database component for Sensitive Data Archive (SDA) installation
+    digest: 0e0da0b4e0aebb66e082f4406af7e605c1c922d1b33efe268b40a5275ab766ec
+    home: https://neic-sda.readthedocs.io
+    icon: https://neic.no/assets/images/logo.png
+    kubeVersion: '>= 1.26.0'
+    name: sda-db
+    sources:
+    - https://github.com/neicnordic/sensitive-data-archive
+    urls:
+    - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-db-0.8.59/sda-db-0.8.59.tgz
+    version: 0.8.59
+  - apiVersion: v2
     appVersion: v0.3.120
     created: "2024-08-22T09:07:50.805723625Z"
     description: Database component for Sensitive Data Archive (SDA) installation
@@ -1004,6 +1018,20 @@ entries:
     - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-db-0.5.2/sda-db-0.5.2.tgz
     version: 0.5.2
   sda-mq:
+  - apiVersion: v2
+    appVersion: v0.3.121
+    created: "2024-08-23T13:44:05.377524598Z"
+    description: RabbitMQ component for Sensitive Data Archive (SDA) installation
+    digest: feaa65d796125798cd81c56be9de3d02d4e8423de2926f0569ef398fc50a7355
+    home: https://neic-sda.readthedocs.io
+    icon: https://neic.no/assets/images/logo.png
+    kubeVersion: '>= 1.26.0'
+    name: sda-mq
+    sources:
+    - https://github.com/neicnordic/sda-helm
+    urls:
+    - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-mq-0.7.60/sda-mq-0.7.60.tgz
+    version: 0.7.60
   - apiVersion: v2
     appVersion: v0.3.120
     created: "2024-08-22T09:07:50.941241371Z"
@@ -2036,6 +2064,20 @@ entries:
     - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-orch-0.7.5/sda-orch-0.7.5.tgz
     version: 0.7.5
   sda-svc:
+  - apiVersion: v2
+    appVersion: v0.3.121
+    created: "2024-08-23T13:44:05.553913205Z"
+    description: Components for Sensitive Data Archive (SDA) installation
+    digest: d7c30b654bc248d5488ded8a426709348c7f9ba287e5daedeb251e29818c088b
+    home: https://neic-sda.readthedocs.io
+    icon: https://neic.no/assets/images/logo.png
+    kubeVersion: '>= 1.26.0'
+    name: sda-svc
+    sources:
+    - https://github.com/neicnordic/sensitive-data-archive
+    urls:
+    - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-svc-0.28.3/sda-svc-0.28.3.tgz
+    version: 0.28.3
   - apiVersion: v2
     appVersion: v0.3.120
     created: "2024-08-22T09:07:51.076052696Z"
@@ -3189,4 +3231,4 @@ entries:
     urls:
     - https://github.com/neicnordic/sensitive-data-archive/releases/download/sda-svc-0.18.9/sda-svc-0.18.9.tgz
     version: 0.18.9
-generated: "2024-08-22T09:07:51.078297863Z"
+generated: "2024-08-23T13:44:05.554546092Z"
