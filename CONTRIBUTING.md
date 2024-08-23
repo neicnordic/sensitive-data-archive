@@ -4,13 +4,13 @@ We thank you in advance 👍 🎉 for taking the time to contribute, whether wit
 
 ## Did you find a bug?
 
-- Ensure that the bug was not already reported by [searching under Issues].
+- Ensure that the bug has not already been reported by [searching under Issues].
 
-- If you're unable to find an (open) issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
+- If you're unable to find an issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
 
-      - a *clear* description,
-      - as much relevant information as possible, and
-      - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
+    - a *clear* description,
+    - as much relevant information as possible, and
+    - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
 
 - If possible, prefix the issue title with a short identifier for the relevant repository component, e.g. **[ingest]**, **[postgres]** etc.
 
@@ -22,7 +22,7 @@ We thank you in advance 👍 🎉 for taking the time to contribute, whether wit
 
 - Discussions on how to proceed about that issue take place in the comment section on that issue.
 
-Some of the work might have been done already by a co-worker. In this case, unnecessary work duplication and waste of time and effort are to be avoided. As some of the features might impact different components, it is a good idea to discuss the issue beforehand with the team and communicate the intended changes so that planning can be done accordingly.
+To avoid unnecessary work duplication and waste of time and effort, it's generally a good idea to discuss the issue beforehand with the team. Some of the work might have been done already by a co-worker. Also, as some of the features might impact different components, please communicate the intended changes, so that planning can be done accordingly.
 
 ## How we work with Git
 
@@ -38,18 +38,18 @@ Use comments in your code, choose variable and function names that clearly show 
 
 Once the feature is done you can request it to be merged back into `main` by making a Pull Request.
 
-Before making the pull request it is a good idea to rebase your branch to `main` to ensure that eventual conflicts with the `main` branch are solved before the PR is reviewed and that there can be a clean merge.
+Before making the pull request, it is a good idea to rebase your branch onto `main` to ensure that eventual conflicts with the `main` branch are solved before the PR is reviewed and that there can be a clean merge.
 > NOTE:
 > In older github repositories the default branch might be called `master` instead of `main`.
 
 
 ### About git and commit messages
 
-In general it is better to commit often. Small commits are easier to roll back and also makes the code easier to review.
+In general it is better to commit often. Small commits are easier to roll back and also make the code easier to review.
 
 Write helpful commit messages that describe the changes and possibly why they were necessary.
 
-Each commit should contain changes that are functionally connected and/or related. If, for example, the first line of the commit message contains the word *and*, this is an indicator that this commit should have been split in two.
+Each commit should contain changes that are functionally connected and/or related. If, for example, the first line of the commit message contains the word *and*, this is an indicator that this commit should have been split into two.
 
 > NOTE:
 > The commands `git add -p` or `git commit -p` can prove useful for selecting chunks of changed files in order to group unrelated things into multiple separate commits.
@@ -77,7 +77,7 @@ A code review is initiated when someone has made a Pull Request in the appropria
 
 Work should not continue on the branch *unless* it is a [Draft Pull Request](https://github.blog/2019-02-14-introducing-draft-pull-requests/). Once the PR is marked ready the review can start.
 
-The initiator of the PR should assign the [@sensitive-data-development-collaboration](https://github.com/orgs/neicnordic/teams/sensitive-data-development-collaboration) team for reviewer duty on the branch.
+The initiator of the PR should assign the [@sensitive-data-development-collaboration](https://github.com/orgs/neicnordic/teams/sensitive-data-development-collaboration) team as reviewers.
 
 Other people may also look at the PR and review the code.
 
