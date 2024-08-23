@@ -1,59 +1,58 @@
-# Contributing guidelines
+# Contributing Guidelines
 
-We thank you in advance :thumbsup: :tada: for taking the time to contribute, whether with *code* or with *ideas*, to the NeIC SDA project.
-
+We thank you in advance 👍 🎉 for taking the time to contribute, whether with *code* or with *ideas*, to the NeIC SDA project.
 
 ## Did you find a bug?
 
-* Ensure that the bug was not already reported by [searching under Issues].
+- Ensure that the bug was not already reported by [searching under Issues].
 
-* If you're unable to find an (open) issue addressing the problem, [open a new one]. Be sure to prefix the issue title with **[BUG]** and to include:
+- If you're unable to find an (open) issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
 
-  - a *clear* description,
-  - as much relevant information as possible, and
-  - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
+      - a *clear* description,
+      - as much relevant information as possible, and
+      - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
 
-* If possible, use the following [template to report a bug].
-
+- If possible, prefix the issue title with a short identifier for the relevant repository component, e.g. **[ingest]**, **[postgres]** etc.
 
 ## How to work on a new feature/bug
 
-Create an issue on Github or you can alternatively pick one already created.
+- Create an issue on Github or you can alternatively pick one already created.
 
-Assign yourself to that issue.
+- Assign yourself to that issue.
 
-Discussions on how to proceed about that issue take place in the comment section on that issue.
+- Discussions on how to proceed about that issue take place in the comment section on that issue.
 
-Some of the work might have been done already by somebody, hence we avoid unnecessary work duplication and a waste of time and effort. Other reason for discussing the issue beforehand is to communicate with the team the changes as some of the features might impact different components, and we can plan accordingly.
+Some of the work might have been done already by a co-worker. In this case, unnecessary work duplication and waste of time and effort are to be avoided. As some of the features might impact different components, it is a good idea to discuss the issue beforehand with the team and communicate the intended changes so that planning can be done accordingly.
 
 ## How we work with Git
 
-All work take place in feature branches. Give your branch a short descriptive name and prefix the name with the most suitable of:
+All work takes place in feature branches. Give your branch a short descriptive name and prefix the name with the most suitable of:
 
-   * `feature/`
-   * `docs/`
-   * `bugfix/`
-   * `test/`
-   * `refactor/`
+- `feature/`
+- `docs/`
+- `bugfix/`
+- `test/`
+- `refactor/`
 
 Use comments in your code, choose variable and function names that clearly show what you intend to implement.
 
-Once the feature is done you can request it to be merged back into `master` by making a Pull Request.
+Once the feature is done you can request it to be merged back into `main` by making a Pull Request.
 
-Before making the pull request it is a good idea to rebase your branch to `master` to ensure that eventual conflicts with the `master` branch is solved before the PR is reviewed and we can therefore have a clean merge.
+Before making the pull request it is a good idea to rebase your branch to `main` to ensure that eventual conflicts with the `main` branch are solved before the PR is reviewed and that there can be a clean merge.
+> NOTE:
+> In older github repositories the default branch might be called `master` instead of `main`.
 
 
-
-### General stuff about git and commit messages
+### About git and commit messages
 
 In general it is better to commit often. Small commits are easier to roll back and also makes the code easier to review.
 
-Write helpful commit messages that describes the changes and possibly why they were necessary.
+Write helpful commit messages that describe the changes and possibly why they were necessary.
 
-Each commit should contain changes that are functionally connected and/or related. If you for example want to write _and_ in the first line of the commit message this is an indicator that it should have been two commits.
+Each commit should contain changes that are functionally connected and/or related. If, for example, the first line of the commit message contains the word *and*, this is an indicator that this commit should have been split in two.
 
-Learn how to select chunks of changed files to do multiple separate commits of unrelated things. This can be done with either `git add -p` or `git commit -p`.
-
+> NOTE:
+> The commands `git add -p` or `git commit -p` can prove useful for selecting chunks of changed files in order to group unrelated things into multiple separate commits.
 
 #### Helpful commit messages
 
@@ -69,29 +68,31 @@ Some tips about writing helpful commit messages:
  6. Wrap the body at 72 characters.
  7. Use the body to explain what and why vs. how.
 
-For an in-depth explanation of the above points, please see [How to Write a Git Commit Message](http://chris.beams.io/posts/git-commit/).
+For an in-depth explanation of the above points, please see [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/).
 
 
 ### How we do code reviews
 
 A code review is initiated when someone has made a Pull Request in the appropriate repo on github.
 
-Work should not continue on the branch _unless_ it is a [Draft Pull Request](https://github.blog/2019-02-14-introducing-draft-pull-requests/). Once the PR is marked ready the review can start.
+Work should not continue on the branch *unless* it is a [Draft Pull Request](https://github.blog/2019-02-14-introducing-draft-pull-requests/). Once the PR is marked ready the review can start.
 
-The initiator of the PR should recruit 2 reviewers that get assigned reviewer duty on the branch.
+The initiator of the PR should assign the [@sensitive-data-development-collaboration](https://github.com/orgs/neicnordic/teams/sensitive-data-development-collaboration) team for reviewer duty on the branch.
 
-Other people may also look at and review the code.
+Other people may also look at the PR and review the code.
 
-A reviewers job is to:
+A reviewer's job is to:
 
-  * Write polite and friendly comments - remember that it can be tough to have other people criticizing your work, a little kindness goes a long way. This does not mean we should not comment on things that need to be changed of course.
-  * Read the code and make sure it is understandable
-  * Make sure that commit messages and commits are structured so that it is possible to understand why certain changes were made.
-  * Ensure that the test-suite covers the new behavior
+- Write polite and friendly comments - remember that it can be tough to have other people criticizing your work, a little kindness goes a long way. This does not mean we should not comment on things that need to be changed of course, but instead focus on providing constructive criticism on how the work can be improved.
+- Read the code and make sure it is understandable
+- Make sure that commit messages and commits are structured so that it is possible to understand why certain changes were made.
+- Ensure that the test-suite covers the new behavior
 
-It is _not_ the reviewers job to checkout and run the code - that is what the test-suite is for.
+It is *not* the reviewer's job to checkout and run the code - that is what the test-suite is for.
 
-Once all the reviews are positive the Pull Request can be _merged_ into `master` and the feature branch deleted.
+Once at least 3 reviews from 3 different partners are positive, the Pull Request can be *merged* into `main` and the feature branch deleted.
+
+If it takes long for some partner to review code, it is common practice to try to contact them on slack to see what the problem is and if it can be resolved quickly or whether it's ok to merge.
 
 
 ----
@@ -99,6 +100,7 @@ Once all the reviews are positive the Pull Request can be _merged_ into `master`
 Thanks again,
 /NeIC System Developers
 
-[searching under Issues]: https://github.com/neicnordic/neic-sda/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug%20%5BBUG%5D%20in%3Atitle
-[open a new one]: https://github.com/neicnordic/neic-sda/issues/new?title=%5BBUG%5D
-[template to report a bug]: https://github.com/neicnordic/neic-sda/issues/new?template=bug-report.md
+[searching under Issues]: https://github.com/neicnordic/sensitive-data-archive/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug
+[template to report a bug]: https://github.com/neicnordic/sensitive-data-archive/issues/new?assignees=&labels=bug&projects=&template=BUG_REPORT.md
+[open Issues]: https://github.com/neicnordic/neic-sda/issues
+[template to open a new Pull Request]: https://github.com/neicnordic/neic-sda/blob/master/.github/PULL_REQUEST_TEMPLATE.md
