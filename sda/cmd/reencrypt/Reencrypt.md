@@ -21,8 +21,8 @@ c4gh:
     passphrase: "passphrase to unlock the keyfile"
 grpc:
     cacert: "path to (CA) certificate file for validating incoming request"
-    serverkey: "path to the x509 certificate used by the service"
-    servercert: "path to the x509 private key used by the service"
+    servercert: "path to the x509 certificate used by the service"
+    serverkey: "path to the x509 private key used by the service"
 log:
   level: "debug"
   format: "json"
