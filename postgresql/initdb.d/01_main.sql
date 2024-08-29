@@ -30,7 +30,8 @@ VALUES (0, now(), 'Created with version'),
        (13, now(), 'Create API user'),
        (14, now(), 'Create Auth user'),
        (15, now(), 'Give API user insert priviledge in logs table'),
-       (16, now(), 'Give ingest user select priviledge in encryption_keys table');
+       (16, now(), 'Give ingest user select priviledge in encryption_keys table'),
+       (17, now(), 'Update SYNC user permissions');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level

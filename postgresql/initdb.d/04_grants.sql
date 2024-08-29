@@ -129,6 +129,7 @@ CREATE ROLE sync;
 -- uses: db.GetArchived
 GRANT USAGE ON SCHEMA sda TO sync;
 GRANT SELECT ON sda.files TO sync;
+GRANT SELECT ON sda.file_dataset TO sync;
 GRANT SELECT ON sda.file_event_log TO sync;
 GRANT SELECT ON sda.checksums TO sync;
 
