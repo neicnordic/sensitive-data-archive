@@ -107,4 +107,4 @@ sync:
     user: "user"
 
 schema:
-  type: "isolated"
+  type: "bigpicture"

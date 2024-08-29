@@ -16,7 +16,9 @@ mappings=$(
     jq -c -n \
         '$ARGS.positional' \
         --args "aa-File-v5y9hk-nc9rf2" \
-        --args "aa-File-v5y9hk-nc9rf3"
+        --args "aa-File-v5y9hk-nc9rf3" \
+        --args "aa-File-v5y9hk-nc9rf4" \
+        --args "aa-File-v5y9hk-nc9rf5"
 )
 
 mapping_payload=$(
@@ -44,7 +46,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 
 # check DB for dataset contents
 RETRY_TIMES=0
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'aa-Dataset-v5y9hk-nc9rfa');")" -eq 2 ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'aa-Dataset-v5y9hk-nc9rfa');")" -eq 4 ]; do
     echo "waiting for mapper to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
