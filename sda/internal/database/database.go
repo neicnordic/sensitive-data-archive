@@ -40,9 +40,10 @@ type FileInfo struct {
 }
 
 type SyncData struct {
-	User     string
-	FilePath string
-	Checksum string
+	ArchivePath string
+	User        string
+	FilePath    string
+	Checksum    string
 }
 
 type SubmissionFileInfo struct {

@@ -541,3 +541,14 @@ func (suite *ConfigTestSuite) TestConfigAuth_OIDC() {
 	_, err = NewConfig("auth")
 	assert.NoError(suite.T(), err, "unexpected failure")
 }
+
+func (suite *ConfigTestSuite) TestConfigSyncCrtl() {
+	badConfig, err := NewConfig("sync-ctrl")
+	assert.Error(suite.T(), err)
+	assert.Nil(suite.T(), badConfig)
+
+	viper.Set("sync.CenterPrefix", "prefix")
+	config, err := NewConfig("sync-ctrl")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "prefix", config.SyncCtrl.CenterPrefix)
+}

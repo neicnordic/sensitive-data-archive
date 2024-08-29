@@ -615,9 +615,9 @@ func (dbs *SDAdb) GetSyncData(accessionID string) (SyncData, error) {
 func (dbs *SDAdb) getSyncData(accessionID string) (SyncData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	const query = "SELECT submission_user, submission_file_path from sda.files WHERE stable_id = $1;"
+	const query = "SELECT submission_user, submission_file_path, archive_file_path from sda.files WHERE stable_id = $1;"
 	var data SyncData
-	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.User, &data.FilePath); err != nil {
+	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.User, &data.FilePath, &data.ArchivePath); err != nil {
 		return SyncData{}, err
 	}
 

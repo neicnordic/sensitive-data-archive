@@ -46,6 +46,7 @@ type Config struct {
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
 	Sync         Sync
+	SyncCtrl     SyncCtrl
 	SyncAPI      SyncAPIConf
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
@@ -63,6 +64,10 @@ type Sync struct {
 	RemotePassword string
 	RemotePort     int
 	RemoteUser     string
+}
+
+type SyncCtrl struct {
+	CenterPrefix   string
 }
 
 type SyncAPIConf struct {
@@ -431,6 +436,20 @@ func NewConfig(app string) (*Config, error) {
 			"sync.api.user",
 			"sync.api.password",
 		}
+	case "sync-ctrl":
+		requiredConfVars = []string{
+			"broker.exchange",
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+			"sync.centerPrefix",
+		}
 	case "verify":
 		requiredConfVars = []string{
 			"broker.host",
@@ -663,6 +682,19 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSyncAPI()
+		c.configSchemas()
+	case "sync-ctrl":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		if err := c.configDatabase(); err != nil {
+			return nil, err
+		}
+
+		c.SyncCtrl.CenterPrefix = viper.GetString("sync.centerPrefix")
+
+
 		c.configSchemas()
 	case "verify":
 		c.configArchive()
