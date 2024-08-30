@@ -177,8 +177,8 @@ type SyncFileData struct {
 	ArchivePath       string `json:"archive_path"`
 	CorrelationID     string `json:"correlation_id"`
 	DecryptedChecksum string `json:"decrypted_checksum"`
-	EncryptedChecksum string `json:"encrypted_checksum"`
 	FilePath          string `json:"file_path"`
+	Header            string `json:"header"`
 	User              string `json:"user"`
 }
 

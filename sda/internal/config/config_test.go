@@ -27,7 +27,6 @@ var certPath, rootDir string
 func (suite *ConfigTestSuite) SetupTest() {
 	_, b, _, _ := runtime.Caller(0)
 	rootDir = path.Join(path.Dir(b), "../../../")
-	// pwd, _ = os.Getwd()
 	certPath, _ = os.MkdirTemp("", "gocerts")
 	helper.MakeCerts(certPath)
 
@@ -285,24 +284,25 @@ func (suite *ConfigTestSuite) TestNotifyConfiguration() {
 }
 
 func (suite *ConfigTestSuite) TestSyncConfig() {
-	suite.SetupTest()
 	// At this point we should fail because we lack configuration
-	config, err := NewConfig("backup")
+	config, err := NewConfig("sync")
 	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), config)
 
-	viper.Set("archive.type", "posix")
-	viper.Set("archive.location", "test")
-	viper.Set("sync.centerPrefix", "prefix")
-	viper.Set("sync.destination.type", "posix")
-	viper.Set("sync.destination.location", "test")
+	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
+	pubKeyPath, _ := os.MkdirTemp("", "pubkey")
+	err = os.WriteFile(pubKeyPath+"/c4gh.pub", []byte(pubKey), 0600)
+	assert.NoError(suite.T(), err)
 	viper.Set("sync.remote.host", "https://test.org")
 	viper.Set("sync.remote.user", "test")
 	viper.Set("sync.remote.password", "test")
 	viper.Set("schema.type", "bigpicture")
-	viper.Set("c4gh.filepath", "/keys/key")
-	viper.Set("c4gh.passphrase", "pass")
-	viper.Set("c4gh.syncPubKeyPath", "/keys/recipient")
+	viper.Set("c4gh.syncPubKeyPath", pubKeyPath+"/c4gh.pub")
+	viper.Set("reencrypt.host", "https://reencrypt.org")
+	viper.Set("reencrypt.cacert", certPath+"/ca.crt")
+	viper.Set("reencrypt.clientcert", certPath+"/tls.crt")
+	viper.Set("reencrypt.clientkey", certPath+"/tls.key")
+
 	config, err = NewConfig("sync")
 	assert.NotNil(suite.T(), config)
 	assert.NoError(suite.T(), err)
@@ -311,20 +311,14 @@ func (suite *ConfigTestSuite) TestSyncConfig() {
 	assert.Equal(suite.T(), 123, config.Broker.Port)
 	assert.Equal(suite.T(), "testuser", config.Broker.User)
 	assert.Equal(suite.T(), "testpassword", config.Broker.Password)
-	assert.Equal(suite.T(), "testqueue", config.Broker.Queue)
 	assert.NotNil(suite.T(), config.Database)
 	assert.Equal(suite.T(), "test", config.Database.Host)
 	assert.Equal(suite.T(), 123, config.Database.Port)
 	assert.Equal(suite.T(), "test", config.Database.User)
 	assert.Equal(suite.T(), "test", config.Database.Password)
 	assert.Equal(suite.T(), "test", config.Database.Database)
-	assert.NotNil(suite.T(), config.Archive)
-	assert.NotNil(suite.T(), config.Archive.Posix)
-	assert.Equal(suite.T(), "test", config.Archive.Posix.Location)
-	assert.NotNil(suite.T(), config.Sync)
-	assert.NotNil(suite.T(), config.Sync.Destination.Posix)
-	assert.Equal(suite.T(), "test", config.Sync.Destination.Posix.Location)
-	assert.Equal(suite.T(), "/schemas/bigpicture/", config.Broker.SchemasPath)
+
+	defer os.RemoveAll(pubKeyPath)
 }
 func (suite *ConfigTestSuite) TestGetC4GHPublicKey() {
 	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
@@ -437,7 +431,6 @@ func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_InvalidKey() {
 }
 
 func (suite *ConfigTestSuite) TestConfigSyncAPI() {
-	suite.SetupTest()
 	noConfig, err := NewConfig("sync-api")
 	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), noConfig)
@@ -456,7 +449,6 @@ func (suite *ConfigTestSuite) TestConfigSyncAPI() {
 }
 
 func (suite *ConfigTestSuite) TestConfigReEncryptServer() {
-	suite.SetupTest()
 	noConfig, err := NewConfig("reencrypt")
 	assert.Error(suite.T(), err)
 	assert.Nil(suite.T(), noConfig)
@@ -484,8 +476,6 @@ func (suite *ConfigTestSuite) TestConfigReEncryptServer() {
 }
 
 func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
-	suite.SetupTest()
-
 	ECPath, _ := os.MkdirTemp("", "EC")
 	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
 		suite.T().FailNow()
@@ -517,8 +507,6 @@ func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
 }
 
 func (suite *ConfigTestSuite) TestConfigAuth_OIDC() {
-	suite.SetupTest()
-
 	ECPath, _ := os.MkdirTemp("", "EC")
 	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
 		suite.T().FailNow()

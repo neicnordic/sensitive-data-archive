@@ -4,30 +4,27 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/chacha20poly1305"
+	"google.golang.org/grpc"
 )
 
 var (
-	err                      error
-	key, publicKey           *[32]byte
-	db                       *database.SDAdb
-	conf                     *config.Config
-	archive, syncDestination storage.Backend
+	err  error
+	db   *database.SDAdb
+	conf *config.Config
 )
 
 func main() {
@@ -41,25 +38,6 @@ func main() {
 		log.Fatal(err)
 	}
 	db, err = database.NewSDAdb(conf.Database)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	syncDestination, err = storage.NewBackend(conf.Sync.Destination)
-	if err != nil {
-		log.Fatal(err)
-	}
-	archive, err = storage.NewBackend(conf.Archive)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	key, err = config.GetC4GHKey()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	publicKey, err = config.GetC4GHPublicKey()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,10 +59,9 @@ func main() {
 	}()
 
 	log.Info("Starting sync service")
-	var message schema.DatasetMapping
 
 	go func() {
-		messages, err := mq.GetMessages(conf.Broker.Queue)
+		messages, err := mq.GetMessages("sync_files")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -93,59 +70,12 @@ func main() {
 				delivered.CorrelationId,
 				delivered.Body)
 
-			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", conf.Broker.SchemasPath), delivered.Body)
-			if err != nil {
-				log.Errorf("validation of incoming message (dataset-mapping) failed, reason: (%s)", err.Error())
-				// Send the message to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed in sync service",
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-
-			// we unmarshal the message in the validation step so this is safe to do
+			var message schema.SyncFileData
 			_ = json.Unmarshal(delivered.Body, &message)
-
-			if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
-				log.Infoln("external dataset")
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-
-			for _, aID := range message.AccessionIDs {
-				if err := syncFiles(aID); err != nil {
-					log.Errorf("failed to sync archived file %s, reason: (%s)", aID, err.Error())
-					if err := delivered.Nack(false, false); err != nil {
-						log.Errorf("failed to nack following GetFileSize error message")
-					}
-
-					continue
-				}
-			}
-
-			log.Infoln("buildSyncDatasetJSON")
-			blob, err := buildSyncDatasetJSON(delivered.Body)
-			if err != nil {
-				log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
-			}
-			if err := sendPOST(blob); err != nil {
-				log.Errorf("failed to send POST, Reason: %v", err)
+			if err := syncFile(message); err != nil {
+				log.Errorf("failed to sync archived file %s, reason: (%s)", message.AccessionID, err.Error())
 				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following sendPOST error message")
+					log.Errorf("failed to nack following GetFileSize error message")
 				}
 
 				continue
@@ -160,107 +90,54 @@ func main() {
 	<-forever
 }
 
-func syncFiles(stableID string) error {
-	log.Debugf("syncing file %s", stableID)
-	inboxPath, err := db.GetInboxPath(stableID)
+func syncFile(message schema.SyncFileData) error {
+	log.Debugf("syncing file: %s", message.AccessionID)
+
+	header, err := db.GetHeaderForStableID(message.AccessionID)
 	if err != nil {
-		return fmt.Errorf("failed to get inbox path for file with stable ID: %s", stableID)
+		return fmt.Errorf("failed to get header for %s, (%s)", message.AccessionID, err.Error())
 	}
 
-	archivePath, err := db.GetArchivePath(stableID)
-	if err != nil {
-		return fmt.Errorf("failed to get archive path for file with stable ID: %s", stableID)
-	}
-
-	fileSize, err := archive.GetFileSize(archivePath)
+	newHeader, err := reencryptHeader(conf.Sync.Reencrypt, header, conf.Sync.PublicKey)
 	if err != nil {
 		return err
 	}
 
-	file, err := archive.NewFileReader(archivePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	dest, err := syncDestination.NewFileWriter(inboxPath)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
-
-	header, err := db.GetHeaderForStableID(stableID)
-	if err != nil {
+	syncMsg, _ := json.Marshal(schema.SyncFileData{
+		AccessionID:       message.AccessionID,
+		ArchivePath:       message.ArchivePath,
+		CorrelationID:     message.CorrelationID,
+		DecryptedChecksum: message.DecryptedChecksum,
+		FilePath:          message.FilePath,
+		Header:            hex.EncodeToString(newHeader),
+		User:              message.User,
+	})
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/sync-file.json", conf.Broker.SchemasPath), syncMsg); err != nil {
 		return err
 	}
 
-	pubkeyList := [][chacha20poly1305.KeySize]byte{}
-	pubkeyList = append(pubkeyList, *publicKey)
-	newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
-	if err != nil {
+	if err := sendPOST(syncMsg, "file"); err != nil {
 		return err
-	}
-
-	_, err = dest.Write(newHeader)
-	if err != nil {
-		return err
-	}
-
-	// Copy the file and check is sizes match
-	copiedSize, err := io.Copy(dest, file)
-	if err != nil || copiedSize != int64(fileSize) {
-		switch {
-		case copiedSize != int64(fileSize):
-			return fmt.Errorf("copied size does not match file size")
-		default:
-			return err
-		}
 	}
 
 	return nil
 }
 
-func buildSyncDatasetJSON(b []byte) ([]byte, error) {
-	var msg schema.DatasetMapping
-	_ = json.Unmarshal(b, &msg)
-
-	var dataset = schema.SyncDataset{
-		DatasetID: msg.DatasetID,
-	}
-
-	for _, ID := range msg.AccessionIDs {
-		data, err := db.GetSyncData(ID)
-		if err != nil {
-			return nil, err
-		}
-		datasetFile := schema.DatasetFiles{
-			FilePath: data.FilePath,
-			FileID:   ID,
-			ShaSum:   data.Checksum,
-		}
-		dataset.DatasetFiles = append(dataset.DatasetFiles, datasetFile)
-		dataset.User = data.User
-	}
-
-	json, err := json.Marshal(dataset)
-	if err != nil {
-		return nil, err
-	}
-
-	return json, nil
-}
-
-func sendPOST(payload []byte) error {
+func sendPOST(payload []byte, route string) error {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	URL, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
+	url, err := url.ParseRequestURI(conf.Sync.RemoteHost)
 	if err != nil {
 		return err
 	}
+	if url.Port() == "" && conf.Sync.RemotePort != 0 {
+		url.Host += fmt.Sprintf(":%d", conf.Sync.RemotePort)
+	}
+	url.Path = route
 
-	req, err := http.NewRequest(http.MethodPost, URL, bytes.NewBuffer(payload))
+	req, err := http.NewRequest(http.MethodPost, url.String(), bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
@@ -278,15 +155,36 @@ func sendPOST(payload []byte) error {
 	return nil
 }
 
-func createHostURL(host string, port int) (string, error) {
-	url, err := url.ParseRequestURI(host)
+func reencryptHeader(conf config.ReencryptConfig, oldHeader []byte, reencKey string) ([]byte, error) {
+	opts, err := config.TLSReencryptConfig(conf)
 	if err != nil {
-		return "", err
-	}
-	if url.Port() == "" && port != 0 {
-		url.Host += fmt.Sprintf(":%d", port)
-	}
-	url.Path = "/dataset"
+		log.Errorf("Failed to create reencrypt options, reason: %s", err)
 
-	return url.String(), nil
+		return nil, err
+	}
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("%s:%d", conf.Host, conf.Port),
+		grpc.WithTransportCredentials(opts),
+	)
+	if err != nil {
+		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	defer conn.Close()
+
+	timeoutDuration := 10 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	defer cancel()
+
+	c := reencrypt.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
+	if err != nil {
+		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	log.Debugf("Response from the reencrypt service: %v", res)
+
+	return res.Header, nil
 }

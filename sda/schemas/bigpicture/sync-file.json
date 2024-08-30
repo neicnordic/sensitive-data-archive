@@ -8,8 +8,8 @@
         "archive_path",
         "correlation_id",
         "decrypted_checksum",
-        "encrypted_checksum",
         "file_path",
+        "header",
         "user"
     ],
     "additionalProperties": false,
@@ -52,15 +52,6 @@
                 "82e4e60e7beb3db2e06a00a079788f7d71f75b61a4b75f28c4c942703dabb6d6"
             ]
         },
-        "encrypted_checksum": {
-            "$id": "#/properties/encrypted_checksum",
-            "type": "string",
-            "title": "The sha256 checksum of the file",
-            "description": "The sha256 checksum of the file.",
-            "examples": [
-                "82e4e60e7beb3db2e06a00a079788f7d71f75b61a4b75f28c4c942703dabb6d6"
-            ]
-        },
         "file_path": {
             "$id": "#/properties/file_path",
             "type": "string",
@@ -68,6 +59,16 @@
             "description": "The path to the file in the inbox",
             "examples": [
                 "/inbox_path/file.name"
+            ]
+        },
+        "header": {
+            "$id": "#/properties/header",
+            "type": "string",
+            "title": "The header of the file",
+            "description": "The header of the file",
+            "minLength": 20,
+            "examples": [
+                "83da723f55e04bf78e1fe8a7e8c4c4e6"
             ]
         },
         "user": {

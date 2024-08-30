@@ -3,6 +3,8 @@ package config
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +17,8 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -57,9 +61,20 @@ type ReEncConfig struct {
 	Crypt4GHKey *[32]byte
 }
 
+type ReencryptConfig struct {
+	Host       string
+	Port       int
+	CACert     string
+	ClientCert string
+	ClientKey  string
+	Timeout    int
+}
+
 type Sync struct {
-	CenterPrefix   string
 	Destination    storage.Conf
+	GrpcOpts       credentials.TransportCredentials
+	PublicKey      string
+	Reencrypt      ReencryptConfig
 	RemoteHost     string
 	RemotePassword string
 	RemotePort     int
@@ -67,7 +82,7 @@ type Sync struct {
 }
 
 type SyncCtrl struct {
-	CenterPrefix   string
+	CenterPrefix string
 }
 
 type SyncAPIConf struct {
@@ -392,39 +407,16 @@ func NewConfig(app string) (*Config, error) {
 			"broker.port",
 			"broker.user",
 			"broker.password",
-			"broker.queue",
-			"c4gh.filepath",
-			"c4gh.passphrase",
 			"c4gh.syncPubKeyPath",
 			"db.host",
 			"db.port",
 			"db.user",
 			"db.password",
 			"db.database",
-			"sync.centerPrefix",
+			"reencrypt.host",
 			"sync.remote.host",
 			"sync.remote.user",
 			"sync.remote.password",
-		}
-
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, fmt.Errorf("archive.type not set")
-		}
-
-		switch viper.GetString("sync.destination.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.url", "sync.destination.accesskey", "sync.destination.secretkey", "sync.destination.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.location"}...)
-		case SFTP:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
-		default:
-			return nil, fmt.Errorf("sync.destination.type not set")
 		}
 	case "sync-api":
 		requiredConfVars = []string{
@@ -669,8 +661,10 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configArchive()
-		c.configSync()
+		if err := c.configSync(); err != nil {
+			return nil, err
+		}
+
 		c.configSchemas()
 	case "sync-api":
 		if err := c.configBroker(); err != nil {
@@ -693,7 +687,6 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.SyncCtrl.CenterPrefix = viper.GetString("sync.centerPrefix")
-
 
 		c.configSchemas()
 	case "verify":
@@ -1045,7 +1038,13 @@ func (c *Config) configSMTP() {
 }
 
 // configSync provides configuration for the sync destination storage
-func (c *Config) configSync() {
+func (c *Config) configSync() error {
+	pubKeyData, err := os.ReadFile(viper.GetString("c4gh.syncPubKeyPath"))
+	if err != nil {
+		return err
+	}
+	c.Sync.PublicKey = base64.StdEncoding.EncodeToString(pubKeyData)
+
 	switch viper.GetString("sync.destination.type") {
 	case S3:
 		c.Sync.Destination.Type = S3
@@ -1058,13 +1057,31 @@ func (c *Config) configSync() {
 		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
 	}
 
+	c.Sync.Reencrypt.Host = viper.GetString("reencrypt.host")
+	c.Sync.Reencrypt.Port = 50051
+	if viper.IsSet("reencrypt.clientCert") && viper.IsSet("reencrypt.clientKey") {
+		c.Sync.Reencrypt.CACert = viper.GetString("reencrypt.caCert")
+		c.Sync.Reencrypt.ClientCert = viper.GetString("reencrypt.clientCert")
+		c.Sync.Reencrypt.ClientKey = viper.GetString("reencrypt.clientKey")
+		c.Sync.Reencrypt.Port = 50443
+	}
+	if viper.IsSet("reencrypt.port") {
+		c.Sync.Reencrypt.Port = viper.GetInt("reencrypt.port")
+	}
+
+	c.Sync.GrpcOpts, err = TLSReencryptConfig(c.Sync.Reencrypt)
+	if err != nil {
+		return err
+	}
+
 	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
 	if viper.IsSet("sync.remote.port") {
 		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
 	}
 	c.Sync.RemotePassword = viper.GetString("sync.remote.password")
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
-	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
+
+	return nil
 }
 
 // configSync provides configuration for the outgoing sync settings
@@ -1256,4 +1273,49 @@ func TLSConfigProxy(c *Config) (*tls.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func TLSReencryptConfig(conf ReencryptConfig) (credentials.TransportCredentials, error) {
+	var creds credentials.TransportCredentials
+	switch {
+	case conf.ClientKey != "" && conf.ClientCert != "":
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+			rootCAs = x509.NewCertPool()
+		}
+		if conf.CACert != "" {
+			cacertByte, err := os.ReadFile(conf.CACert)
+			if err != nil {
+				log.Errorf("Failed to read CA certificate file, reason: %s", err)
+
+				return nil, err
+			}
+			ok := rootCAs.AppendCertsFromPEM(cacertByte)
+			if !ok {
+				log.Errorf("Failed to append CA certificate to rootCAs")
+
+				return nil, errors.New("failed to append CA certificate to cert pool")
+			}
+		}
+
+		certs, err := tls.LoadX509KeyPair(conf.ClientCert, conf.ClientKey)
+		if err != nil {
+			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
+
+			return nil, err
+		}
+		creds = credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				MinVersion:   tls.VersionTLS13,
+				RootCAs:      rootCAs,
+			},
+		)
+
+	default:
+		creds = credentials.TransportCredentials(insecure.NewCredentials())
+	}
+
+	return creds, nil
 }
