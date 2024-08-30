@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
@@ -105,7 +106,7 @@ func (suite *ReEncryptTests) TestReencryptHeader() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50051", opts...)
+	conn, err := grpc.NewClient("localhost:50051", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -130,6 +131,81 @@ func (suite *ReEncryptTests) TestReencryptHeader() {
 	assert.Equal(suite.T(), "content", string(data))
 }
 
+func (suite *ReEncryptTests) TestReencryptHeader_DataEditList() {
+	lis, err := net.Listen("tcp", "localhost:50054")
+	if err != nil {
+		suite.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: suite.PrivateKey})
+		if err := s.Serve(lis); err != nil {
+			suite.T().Fail()
+		}
+	}()
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:50054", opts...)
+	if err != nil {
+		suite.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: suite.FileHeader, Publickey: suite.UserPubKeyString, Dataeditlist: []uint64{1, 2, 1, 2}})
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "crypt4gh", string(res.Header[:8]))
+
+	hr := bytes.NewReader(res.Header)
+	fileStream := io.MultiReader(hr, bytes.NewReader(suite.FileData))
+
+	c4gh, err := streaming.NewCrypt4GHReader(fileStream, suite.UserPrivateKey, nil)
+	assert.NoError(suite.T(), err)
+
+	data, err := io.ReadAll(c4gh)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "onen", string(data))
+
+	hr = bytes.NewReader(res.Header)
+	header, err := headers.NewHeader(hr, suite.UserPrivateKey)
+	assert.NoError(suite.T(), err)
+	packet := header.GetDataEditListHeaderPacket()
+	assert.NotNilf(suite.T(), packet, "DataEditList HeaderPacket not found")
+	assert.Equal(suite.T(), uint32(4), packet.NumberLengths)
+	assert.Equal(suite.T(), uint64(1), packet.Lengths[0])
+	assert.Equal(suite.T(), uint64(2), packet.Lengths[1])
+	assert.Equal(suite.T(), uint64(1), packet.Lengths[2])
+	assert.Equal(suite.T(), uint64(2), packet.Lengths[3])
+	assert.Equal(suite.T(), int(4), len(packet.Lengths))
+
+	res, err = c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: suite.FileHeader, Publickey: suite.UserPubKeyString, Dataeditlist: []uint64{}})
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "crypt4gh", string(res.Header[:8]))
+
+	hr = bytes.NewReader(res.Header)
+	fileStream = io.MultiReader(hr, bytes.NewReader(suite.FileData))
+
+	c4gh, err = streaming.NewCrypt4GHReader(fileStream, suite.UserPrivateKey, nil)
+	assert.NoError(suite.T(), err)
+
+	data, err = io.ReadAll(c4gh)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "content", string(data))
+
+	hr = bytes.NewReader(res.Header)
+	header, err = headers.NewHeader(hr, suite.UserPrivateKey)
+	assert.NoError(suite.T(), err)
+	packet = header.GetDataEditListHeaderPacket()
+	assert.Nilf(suite.T(), packet, "DataEditList HeaderPacket found when not expected")
+
+}
+
 func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {
 	lis, err := net.Listen("tcp", "localhost:50052")
 	if err != nil {
@@ -145,7 +221,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50052", opts...)
+	conn, err := grpc.NewClient("localhost:50052", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -175,7 +251,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
 
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.Dial("localhost:50053", opts...)
+	conn, err := grpc.NewClient("localhost:50053", opts...)
 	if err != nil {
 		suite.T().FailNow()
 	}
@@ -186,7 +262,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_NoHeader() {
 
 	c := re.NewReencryptClient(conn)
 	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: make([]byte, 0), Publickey: suite.UserPubKeyString})
-	assert.Contains(suite.T(), err.Error(), "no header recieved")
+	assert.Contains(suite.T(), err.Error(), "no header received")
 	assert.Nil(suite.T(), res)
 }
 
@@ -237,7 +313,7 @@ func (suite *ReEncryptTests) TestReencryptHeader_TLS() {
 			RootCAs:      rootCAs,
 		},
 	)
-	conn, err := grpc.Dial("localhost:50443", grpc.WithTransportCredentials(clientCreds))
+	conn, err := grpc.NewClient("localhost:50443", grpc.WithTransportCredentials(clientCreds))
 	if err != nil {
 		suite.T().Log(err.Error())
 		suite.T().FailNow()

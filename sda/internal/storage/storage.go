@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
@@ -345,14 +344,14 @@ func (sb *s3Backend) RemoveFile(filePath string) error {
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
 func transportConfigS3(conf S3Conf) http.RoundTripper {
 	cfg := new(tls.Config)
-	cfg.MinVersion = 3
 
 	// Read system CAs
-	var systemCAs, _ = x509.SystemCertPool()
-	if reflect.DeepEqual(systemCAs, x509.NewCertPool()) {
-		log.Debug("creating new CApool")
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
 		systemCAs = x509.NewCertPool()
 	}
+
 	cfg.RootCAs = systemCAs
 
 	if conf.CAcert != "" {

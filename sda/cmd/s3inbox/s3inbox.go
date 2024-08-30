@@ -80,8 +80,6 @@ func main() {
 		panic(err)
 	}
 
-	log.Debug("messenger acquired ", messenger)
-
 	go func() {
 		<-sigc
 		sdaDB.Close()
@@ -102,8 +100,6 @@ func main() {
 		}
 	}
 	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
-
-	log.Debug("got the proxy ", proxy)
 
 	http.Handle("/", proxy)
 

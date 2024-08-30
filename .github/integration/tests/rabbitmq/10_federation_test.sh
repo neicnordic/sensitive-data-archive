@@ -73,7 +73,7 @@ for r in completed error inbox verified; do
 
 	curl -s --cacert /tmp/certs/ca.crt -u guest:guest "https://$MQHOST/api/exchanges/sda/sda/publish" \
 		-H 'Content-Type: application/json;charset=UTF-8' \
-		-d "$request_body"
+		-d "$request_body" | jq
 done
 
 # check that message arrived in queue v1.files.inbox in cega MQ
@@ -130,7 +130,7 @@ request_body=$(
 
 curl --cacert /tmp/certs/ca.crt -u test:test "https://$CEGA/api/exchanges/cega/localega/publish" \
 	-H 'Content-Type: application/json;charset=UTF-8' \
-	-d "$request_body"
+	-d "$request_body" | jq
 
 # check that message arrived in queue ingest in MQ
 sleep 5

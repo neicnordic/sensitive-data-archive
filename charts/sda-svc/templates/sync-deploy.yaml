@@ -103,15 +103,15 @@ spec:
   {{- if eq "s3" .Values.global.sync.destination.storageType }}
           value: "s3"
         - name: SYNC_DESTINATION_URL
-          value: {{ required "S3 sync archive URL missing" .Values.global.sync.destination.s3Url }}
-      {{- if .Values.global.sync.destination.s3Port }}
+          value: {{ required "S3 sync archive URL missing" .Values.global.sync.destination.url }}
+      {{- if .Values.global.sync.destination.port }}
         - name: SYNC_DESTINATION_PORT
-          value: {{ .Values.global.sync.destination.s3Port | quote }}
+          value: {{ .Values.global.sync.destination.port | quote }}
       {{- end }}
         - name: SYNC_DESTINATION_BUCKET
-          value: {{ required "S3 sync archive bucket missing" .Values.global.sync.destination.s3Bucket }}
+          value: {{ required "S3 sync archive bucket missing" .Values.global.sync.destination.bucket }}
         - name: SYNC_DESTINATION_REGION
-          value: {{ default "us-east-1" .Values.global.sync.destination.s3Region }}
+          value: {{ default "us-east-1" .Values.global.sync.destination.region }}
         - name: SYNC_DESTINATION_CHUNKSIZE
           value: {{ .Values.global.sync.destination.s3ChunkSize | quote }}
     {{- if and .Values.global.sync.destination.s3CaFile .Values.global.tls.enabled }}
@@ -126,7 +126,7 @@ spec:
         - name: BROKER_EXCHANGE
           value: {{ default "sda" .Values.global.broker.exchange }}
         - name: BROKER_QUEUE
-          value: {{ default "mapping_stream" .Values.global.sync.brokerQueue }}
+          value: {{ default "sync" .Values.global.sync.brokerQueue }}
         - name: BROKER_HOST
           value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
         - name: BROKER_PORT

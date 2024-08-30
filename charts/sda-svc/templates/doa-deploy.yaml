@@ -103,7 +103,7 @@ spec:
       containers:
       - name: doa
         image: "{{ .Values.doa.repository }}:{{ .Values.doa.imageTag }}"
-        imagePullPolicy: {{ .Values.doa.imagePullPolicy | quote }}
+        imagePullPolicy: {{ .Values.image.imagePullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

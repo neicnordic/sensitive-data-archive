@@ -91,5 +91,17 @@ services:
       - "8000:8000"
     restart: always
 
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:latest
+    build: ../../sda/
+    command: [ sda-reencrypt ]
+    container_name: reencrypt
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+
 volumes:
   archive:

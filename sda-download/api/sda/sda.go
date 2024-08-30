@@ -2,11 +2,15 @@ package sda
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,8 +21,12 @@ import (
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
+	"github.com/neicnordic/sda-download/internal/reencrypt"
 	"github.com/neicnordic/sda-download/internal/storage"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var Backend storage.Backend
@@ -27,6 +35,77 @@ func sanitizeString(str string) string {
 	var pattern = regexp.MustCompile(`(https?://[^\s/$.?#].[^\s]+|[A-Za-z0-9-_:.]+)`)
 
 	return pattern.ReplaceAllString(str, "[identifier]: $1")
+}
+
+func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+	var opts []grpc.DialOption
+	switch {
+	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+			rootCAs = x509.NewCertPool()
+		}
+		if config.Config.Reencrypt.CACert != "" {
+			cacertByte, err := os.ReadFile(config.Config.Reencrypt.CACert)
+			if err != nil {
+				log.Errorf("Failed to read CA certificate file, reason: %s", err)
+
+				return nil, err
+			}
+			ok := rootCAs.AppendCertsFromPEM(cacertByte)
+			if !ok {
+				log.Errorf("Failed to append CA certificate to rootCAs")
+
+				return nil, errors.New("failed to append CA certificate to cert pool")
+			}
+		}
+
+		certs, err := tls.LoadX509KeyPair(config.Config.Reencrypt.ClientCert, config.Config.Reencrypt.ClientKey)
+		if err != nil {
+			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
+
+			return nil, err
+		}
+		clientCreds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				MinVersion:   tls.VersionTLS13,
+				RootCAs:      rootCAs,
+			},
+		)
+
+		opts = append(opts, grpc.WithTransportCredentials(clientCreds))
+	default:
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	address := fmt.Sprintf("%s:%d", config.Config.Reencrypt.Host, config.Config.Reencrypt.Port)
+	log.Debugf("Address of the reencrypt service: %s", address)
+
+	conn, err := grpc.NewClient(address, opts...)
+	if err != nil {
+		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	defer conn.Close()
+
+	timeoutDuration := time.Duration(config.Config.Reencrypt.Timeout) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	defer cancel()
+
+	c := reencrypt.NewReencryptClient(conn)
+	log.Debugf("Client created, c = %v", c)
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reencKey})
+	if err != nil {
+		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	log.Debugf("Response from the reencrypt service: %v", res)
+
+	return res.Header, nil
 }
 
 // Datasets serves a list of permitted datasets
@@ -194,23 +273,18 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	switch c.Param("type") {
-	case "encrypted":
-		// calculate coordinates
-		start, end, err = calculateEncryptedCoords(start, end, c.GetHeader("Range"), fileDetails)
-		if err != nil {
-			log.Errorf("Byte range coordinates invalid! %v", err)
+	wholeFile := true
+	if start != 0 || end != 0 {
+		wholeFile = false
+	}
 
-			return
-		}
-		if start > 0 {
-			// reading from an offset in encrypted file is not yet supported
-			log.Errorf("Start coordinate for encrypted files not implemented! %v", start)
-			c.String(http.StatusBadRequest, "Start coordinate for encrypted files not implemented!")
+	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
+	if err != nil {
+		log.Errorf("Byte range coordinates invalid! %v", err)
 
-			return
-		}
-	default:
+		return
+	}
+	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
 			c.Header("Content-Length", fmt.Sprint(fileDetails.DecryptedSize))
@@ -222,7 +296,14 @@ func Download(c *gin.Context) {
 	}
 
 	// Get archive file handle
-	file, err := Backend.NewFileReader(fileDetails.ArchivePath)
+	var file io.Reader
+
+	if wholeFile {
+		file, err = Backend.NewFileReader(fileDetails.ArchivePath)
+	} else {
+		file, err = Backend.NewFileReadSeeker(fileDetails.ArchivePath)
+	}
+
 	if err != nil {
 		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
 		c.String(http.StatusInternalServerError, "archive error")
@@ -244,34 +325,105 @@ func Download(c *gin.Context) {
 		c.Header("ETag", fileDetails.DecryptedChecksum)
 		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
 
+		// set the user and server public keys that is send from htsget
+		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
+		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
 
+		// Create headers for htsget, containing size of the crypt4gh header
+		reencKey := c.GetHeader("Client-Public-Key")
+		headerSize := bytes.NewReader(fileDetails.Header).Size()
+		// Size of the header in the archive
+		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
+		if reencKey != "" {
+			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
+			headerSize = bytes.NewReader(newHeader).Size()
+			// Size of the header if the file is re-encrypted before downloading
+			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
+		}
 		if c.Param("type") == "encrypted" {
-			c.Header("Content-Length", fmt.Sprint(fileDetails.ArchiveSize))
-
-			// set the length of the crypt4gh header for htsget
-			c.Header("Server-Additional-Bytes", fmt.Sprint(bytes.NewReader(fileDetails.Header).Size()))
-			// TODO figure out if client crypt4gh header will have other size
-			// c.Header("Client-Additional-Bytes", ...)
+			// Update the content length to match the encrypted file size
+			c.Header("Content-Length", fmt.Sprint(int(headerSize)+fileDetails.ArchiveSize))
 		}
 
 		return
 	}
 
 	// Prepare the file for streaming, encrypted or decrypted
-	var encryptedFileReader io.Reader
+
 	var fileStream io.Reader
-	hr := bytes.NewReader(fileDetails.Header)
-	encryptedFileReader = io.MultiReader(hr, file)
 
 	switch c.Param("type") {
 	case "encrypted":
-		fileStream = encryptedFileReader
+		// The key provided in the header should be base64 encoded
+		reencKey := c.GetHeader("Client-Public-Key")
+		if reencKey == "" {
+			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
+			return
+		}
+
+		log.Debugf("Public key from the request header = %v", reencKey)
+		log.Debugf("old c4gh file header = %v\n", fileDetails.Header)
+		newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+		if err != nil {
+			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+			c.String(http.StatusInternalServerError, "file re-encryption error")
+
+			return
+		}
+		log.Debugf("Reencrypted c4gh file header = %v", newHeader)
+
+		newHr := bytes.NewReader(newHeader)
+
+		if wholeFile {
+			fileStream = io.MultiReader(newHr, file)
+		} else {
+			seeker, _ := file.(io.ReadSeeker)
+			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
+			if err != nil {
+				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+			start, end, err = adjustSeekPos(seekStream, start, end)
+			if err != nil {
+				log.Errorf("Could not seek stream: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+			fileStream = seekStream
+		}
 	default:
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(encryptedFileReader, *config.Config.App.Crypt4GHKey, nil)
+		// Reencrypt header for use with our temporary key
+		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
+		if err != nil {
+			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
+			c.String(http.StatusInternalServerError, "file re-encryption error")
+
+			return
+		}
+
+		newHr := bytes.NewReader(newHeader)
+
+		if wholeFile {
+			fileStream = io.MultiReader(newHr, file)
+		} else {
+			seeker, _ := file.(io.ReadSeeker)
+			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
+			if err != nil {
+				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
+				c.String(http.StatusInternalServerError, "file decoding error")
+
+				return
+			}
+		}
+
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.App.Crypt4GHPrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)
@@ -279,15 +431,12 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		if start != 0 {
-			// We don't want to read from start, skip ahead to where we should be
-			_, err = c4ghfileStream.Seek(start, 0)
-			if err != nil {
-				log.Errorf("error occurred while finding sending start: %v", err)
-				c.String(http.StatusInternalServerError, "an error occurred")
+		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
+		if err != nil {
+			log.Errorf("Could not seek stream: %v", err)
+			c.String(http.StatusInternalServerError, "file decoding error")
 
-				return
-			}
+			return
 		}
 		fileStream = c4ghfileStream
 	}
@@ -299,6 +448,24 @@ func Download(c *gin.Context) {
 
 		return
 	}
+}
+
+var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+	if start != 0 {
+
+		// We don't want to read from start, skip ahead to where we should be
+		_, err := fileStream.Seek(start, 0)
+		if err != nil {
+
+			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		}
+		// adjust end to reflect that the file start has been moved
+		end -= start
+		start = 0
+
+	}
+
+	return start, end, nil
 }
 
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
@@ -349,9 +516,10 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 }
 
 // Calculates the start and end coordinats to use. If a range is set in HTTP headers,
-// it will be used as is. If not, the functions parameters will be used,
-// and adjusted to match the data block boundaries of the encrypted file.
-var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload) (int64, int64, error) {
+// it will be used as is. If not, the functions parameters will be used.
+// If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
+var calculateCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
+	log.Warnf("calculate")
 	if htsget_range != "" {
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {
@@ -367,9 +535,17 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
 			}
 
-			return a, b, nil
+			// Byte ranges are inclusive; +1 so that the last byte is included
+
+			return a, b + 1, nil
 		}
 	}
+
+	// For unencrypted files, return the coordinates as is
+	if encryptedType != "encrypted" {
+		return start, end, nil
+	}
+
 	// Adapt end coordinate to follow the crypt4gh block boundaries
 	headlength := bytes.NewReader(fileDetails.Header)
 	bodyEnd := int64(fileDetails.ArchiveSize)
@@ -382,4 +558,5 @@ var calculateEncryptedCoords = func(start, end int64, htsget_range string, fileD
 	}
 
 	return start, headlength.Size() + bodyEnd, nil
+
 }

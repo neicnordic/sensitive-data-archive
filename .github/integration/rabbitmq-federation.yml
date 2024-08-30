@@ -72,7 +72,6 @@ services:
       - BROKER_PASSWORD=guest
       - BROKER_VHOST=sda
       - BROKER_QUEUE=from_cega
-      - BROKER_ROUTINGERROR=error
       - BROKER_VERIFYPEER=false
       - BROKER_SSL=true
       - BROKER_CLIENTCERT=/certs/client.crt
