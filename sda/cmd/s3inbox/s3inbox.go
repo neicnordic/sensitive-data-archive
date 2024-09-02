@@ -99,12 +99,12 @@ func main() {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
+	mux := http.NewServeMux()
 	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
-
-	http.Handle("/", proxy)
-
-	hc := NewHealthCheck(8001, sdaDB.DB, Conf, tlsProxy)
-	go hc.RunHealthChecks()
+	//hc := NewHealthCheck(sdaDB.DB, Conf, messenger, tlsProxy)
+	mux.HandleFunc("HEAD /", proxy.CheckHealth)
+	mux.HandleFunc("/health", proxy.CheckHealth)
+	mux.Handle("/", proxy)
 
 	server := &http.Server{
 		Addr:              ":8000",
