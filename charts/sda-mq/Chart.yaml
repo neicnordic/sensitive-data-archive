@@ -1,7 +1,7 @@
 apiVersion: v2
 name: sda-mq
-version: 0.7.61
-appVersion: v0.3.125
+version: 0.7.62
+appVersion: v0.3.128
 kubeVersion: '>= 1.26.0'
 description: RabbitMQ component for Sensitive Data Archive (SDA) installation
 home: https://neic-sda.readthedocs.io
