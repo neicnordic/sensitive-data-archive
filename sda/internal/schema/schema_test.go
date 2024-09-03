@@ -439,6 +439,7 @@ func TestValidateJSONBigpictureSyncFile(t *testing.T) {
 		CorrelationID:     "1",
 		DecryptedChecksum: "",
 		FilePath:          "/inbox/subpath/file_01.c4gh",
+		Type:              "sync",
 		User:              "test.user@example.com",
 	}
 

@@ -179,6 +179,7 @@ type SyncFileData struct {
 	DecryptedChecksum string `json:"decrypted_checksum"`
 	FilePath          string `json:"file_path"`
 	Header            string `json:"header"`
+	Type              string `json:"type"`
 	User              string `json:"user"`
 }
 

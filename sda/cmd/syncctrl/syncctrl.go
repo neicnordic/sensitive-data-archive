@@ -183,6 +183,7 @@ func handleDatasetMsg(conf *config.Config, db *database.SDAdb, mq *broker.AMQPBr
 					CorrelationID:     corrID,
 					DecryptedChecksum: fileData.Checksum,
 					FilePath:          fileData.FilePath,
+					Type:              "sync",
 					User:              fileData.User,
 				}
 

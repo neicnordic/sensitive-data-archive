@@ -10,6 +10,7 @@
         "decrypted_checksum",
         "file_path",
         "header",
+        "type",
         "user"
     ],
     "additionalProperties": false,
@@ -70,6 +71,13 @@
             "examples": [
                 "83da723f55e04bf78e1fe8a7e8c4c4e6"
             ]
+        },
+        "type": {
+            "$id": "#/properties/type",
+            "type": "string",
+            "title": "The message type",
+            "description": "The message type",
+            "const": "sync"
         },
         "user": {
             "$id": "#/properties/user",

@@ -110,6 +110,7 @@ func syncFile(message schema.SyncFileData) error {
 		DecryptedChecksum: message.DecryptedChecksum,
 		FilePath:          message.FilePath,
 		Header:            hex.EncodeToString(newHeader),
+		Type:              "sync",
 		User:              message.User,
 	})
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/sync-file.json", conf.Broker.SchemasPath), syncMsg); err != nil {
