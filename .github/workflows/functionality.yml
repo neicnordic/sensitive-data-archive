@@ -16,12 +16,10 @@ jobs:
         id: changes
         with:
           filters: |
-            sda-auth:
-              - 'sda-auth/**'
             sda-download:
               - 'sda-download/**'
             sftp-inbox:
-            - 'sftp-inbox/**'
+            - 'sda-sftp-inbox/**'
 
   sda-download:
     needs: check_changes
