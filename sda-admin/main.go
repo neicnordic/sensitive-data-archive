@@ -194,20 +194,28 @@ func parseFlagsAndEnv() {
 	// Parse global flags first
 	flag.Parse()
 
-	// Check environment variables if flags are not provided
-	if api_uri == "" {
-		api_uri = os.Getenv("API_HOST")
-		if api_uri == "" {
-			fmt.Println("Error: either -uri must be provided or API_HOST environment variable must be set.")
-			os.Exit(1)
-		}
+	// If no command or help command is provided, show usage
+	if flag.NArg() == 0 || (flag.NArg() == 1 && flag.Arg(0) == "help") {
+		flag.Usage()
+		os.Exit(0)
 	}
 
-	if token == "" {
-		token = os.Getenv("ACCESS_TOKEN")
+	// Check environment variables if flags are not provided
+	if flag.Arg(0) != "help" {
+		if api_uri == "" {
+			api_uri = os.Getenv("API_HOST")
+			if api_uri == "" {
+				fmt.Println("Error: either -uri must be provided or API_HOST environment variable must be set.")
+				os.Exit(1)
+			}
+		}
+
 		if token == "" {
-			fmt.Println("Error: either -token must be provided or ACCESS_TOKEN environment variable must be set.")
-			os.Exit(1)
+			token = os.Getenv("ACCESS_TOKEN")
+			if token == "" {
+				fmt.Println("Error: either -token must be provided or ACCESS_TOKEN environment variable must be set.")
+				os.Exit(1)
+			}
 		}
 	}
 }
@@ -433,12 +441,6 @@ func handleDatasetReleaseCommand() {
 
 func main() {
 	parseFlagsAndEnv()
-
-	if flag.NArg() < 1 {
-		fmt.Println("Error: a command is required.")
-		flag.Usage()
-		os.Exit(1)
-	}
 
 	switch flag.Arg(0) {
 	case "help", "-h", "-help":
