@@ -2,16 +2,24 @@ package list
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 )
 
-// ListUsers returns all users
-func ListUsers(apiURI, token string) error {
-
-	url := apiURI + "/users"
-	response, err := helpers.GetResponseBody(url, token)
+// Users returns all users
+func Users(apiURI, token string) error {
+	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
+
+		return err
+	}
+	parsedURL.Path = fmt.Sprintf("%s/users", parsedURL.Path)
+
+
+	response, err := helpers.GetResponseBody(parsedURL.String(), token)
+	if err != nil {
+
 		return err
 	}
 
@@ -20,11 +28,18 @@ func ListUsers(apiURI, token string) error {
 	return nil
 }
 
-// ListFiles returns all files
-func ListFiles(apiURI, token, username string) error {
-	response, err := helpers.GetResponseBody(fmt.Sprintf("%s/users/%s/files", apiURI, username), token)
-
+// Files returns all files
+func Files(apiURI, token, username string) error {
+	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
+
+		return err
+	}
+	parsedURL.Path = fmt.Sprintf("%s/users/%s/files", parsedURL.Path, username)
+
+	response, err := helpers.GetResponseBody(parsedURL.String(), token)
+	if err != nil {
+
 		return err
 	}
 

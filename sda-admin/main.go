@@ -15,7 +15,7 @@ var version = "1.0.0"
 
 var (
 	apiURI string
-	token   string
+	token  string
 )
 
 // Command-line usage
@@ -290,7 +290,7 @@ func handleListCommand() {
 	switch flag.Arg(1) {
 	case "users":
 		checkToken(token)
-		err := list.ListUsers(apiURI, token)
+		err := list.Users(apiURI, token)
 		if err != nil {
 			fmt.Printf("Error: failed to get users, reason: %v\n", err)
 		}
@@ -317,7 +317,7 @@ func handleListFilesCommand() {
 	}
 
 	checkToken(token)
-	err := list.ListFiles(apiURI, token, username)
+	err := list.Files(apiURI, token, username)
 	if err != nil {
 		fmt.Printf("Error: failed to get files, reason: %v\n", err)
 	}
@@ -355,7 +355,7 @@ func handleFileIngestCommand() {
 	}
 
 	checkToken(token)
-	err := file.FileIngest(apiURI, token, username, filepath)
+	err := file.Ingest(apiURI, token, username, filepath)
 	if err != nil {
 		fmt.Printf("Error: failed to ingest file, reason: %v\n", err)
 	} else {
@@ -378,7 +378,7 @@ func handleFileAccessionCommand() {
 	}
 
 	checkToken(token)
-	err := file.FileAccession(apiURI, token, username, filepath, accessionID)
+	err := file.Accession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
 		fmt.Printf("Error: failed to assign accession ID to file, reason: %v\n", err)
 	} else {
@@ -418,7 +418,7 @@ func handleDatasetCreateCommand() {
 	}
 
 	checkToken(token)
-	err := dataset.DatasetCreate(apiURI, token, datasetID, accessionIDs)
+	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
 		fmt.Printf("Error: failed to create dataset, reason: %v\n", err)
 	} else {
@@ -439,7 +439,7 @@ func handleDatasetReleaseCommand() {
 	}
 
 	checkToken(token)
-	err := dataset.DatasetRelease(apiURI, token, datasetID)
+	err := dataset.Release(apiURI, token, datasetID)
 	if err != nil {
 		fmt.Printf("Error: failed to release dataset, reason: %v\n", err)
 	} else {

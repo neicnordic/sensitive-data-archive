@@ -3,6 +3,7 @@ package file
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 )
@@ -18,10 +19,14 @@ type RequestBodyFileAccession struct {
 	User        string `json:"user"`
 }
 
-// FileIngest triggers the ingestion of a given file
-func FileIngest(apiURI, token, username, filepath string) error {
+// Ingest triggers the ingestion of a given file
+func Ingest(apiURI, token, username, filepath string) error {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
 
-	url := apiURI + "/file/ingest"
+		return err
+	}
+	parsedURL.Path = fmt.Sprintf("%s/file/ingest", parsedURL.Path)
 
 	requestBody := RequestBodyFileIngest{
 		Filepath: filepath,
@@ -30,37 +35,45 @@ func FileIngest(apiURI, token, username, filepath string) error {
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
+
 		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
 	}
-
-	_, err = helpers.PostRequest(url, token, jsonBody)
-
+	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
 	if err != nil {
+
 		return err
 	}
+
 	return nil
 }
 
-// FileAccession assigns a given file to a given accession ID
-func FileAccession(apiURI, token, username, filepath, accessionID string) error {
+// Accession assigns a given file to a given accession ID
+func Accession(apiURI, token, username, filepath, accessionID string) error {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
 
-	url := apiURI + "/file/accession"
+		return err
+	}
+	parsedURL.Path = fmt.Sprintf("%s/file/accession", parsedURL.Path)
 
 	requestBody := RequestBodyFileAccession{
 		AccessionID: accessionID,
-		Filepath: filepath,
-		User:     username,
+		Filepath:    filepath,
+		User:        username,
 	}
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
+
 		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
 	}
 
-	_, err = helpers.PostRequest(url, token, jsonBody)
+	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
 
 	if err != nil {
+
 		return err
 	}
+
 	return nil
 }
