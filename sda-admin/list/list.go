@@ -22,15 +22,8 @@ func ListUsers(api_uri, token string) error {
 
 // ListFiles returns all files
 func ListFiles(api_uri, token, username string) error {
-	var url string
+	response, err := helpers.GetResponseBody(fmt.Sprintf("%s/users/%s/files", api_uri, username), token)
 
-	if username == "" {
-		url = api_uri + "/files"
-	} else {
-		url = fmt.Sprintf("%s/users/%s/files", api_uri, username)
-	}
-
-	response, err := helpers.GetResponseBody(url, token)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ var usage = `USAGE:
 
 Commands:
   list users                     List all users
-  list files [-user USERNAME]    List all files associated to the token, optionally for a specified user
+  list files -user USERNAME      List all files for a specified user
   file ingest -filepath FILEPATH -user USERNAME
                                  Trigger ingestion of the given file
   file accession -filepath FILEPATH -user USERNAME -accession-id accessionID
@@ -50,11 +50,11 @@ List Users:
     List all users in the system.
 
 List Files:
-  Usage: sda-admin list files [-user USERNAME]
-    List all files, optionally for a specific user.
+  Usage: sda-admin list files -user USERNAME
+    List all files for a specified user.
   
 Options:
-  -user USERNAME    (For list files) List files owned by the specified username.
+  -user USERNAME    (For list files) List files owned by the specified user
 
 Use 'sda-admin help list <command>' for information on a specific list command.
 `
@@ -69,11 +69,11 @@ func listUsersUsage() {
 }
 
 func listFilesUsage() {
-	usageText := `Usage: sda-admin list files [-user USERNAME]
-  List all files, optionally for a specific user
+	usageText := `Usage: sda-admin list files -user USERNAME
+  List all files for a specified user.
 
 Options:
-  -user USERNAME    List files owned by the specified username.
+  -user USERNAME    List files owned by the specified user
 `
 	fmt.Println(usageText)
 }
@@ -308,6 +308,14 @@ func handleListFilesCommand() {
 	var username string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
 	listFilesCmd.Parse(flag.Args()[2:])
+
+	// Check if the -user flag was provided
+	if username == "" {
+		fmt.Println("Error: the -user flag is required.")
+		listFilesUsage()
+		os.Exit(1)
+	}
+
 	checkToken(token)
 	err := list.ListFiles(api_uri, token, username)
 	if err != nil {
