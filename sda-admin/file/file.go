@@ -19,9 +19,9 @@ type RequestBodyFileAccession struct {
 }
 
 // FileIngest triggers the ingestion of a given file
-func FileIngest(api_uri, token, username, filepath string) error {
+func FileIngest(apiURI, token, username, filepath string) error {
 
-	url := api_uri + "/file/ingest"
+	url := apiURI + "/file/ingest"
 
 	requestBody := RequestBodyFileIngest{
 		Filepath: filepath,
@@ -42,9 +42,9 @@ func FileIngest(api_uri, token, username, filepath string) error {
 }
 
 // FileAccession assigns a given file to a given accession ID
-func FileAccession(api_uri, token, username, filepath, accessionID string) error {
+func FileAccession(apiURI, token, username, filepath, accessionID string) error {
 
-	url := api_uri + "/file/accession"
+	url := apiURI + "/file/accession"
 
 	requestBody := RequestBodyFileAccession{
 		AccessionID: accessionID,

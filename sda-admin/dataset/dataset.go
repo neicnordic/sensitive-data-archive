@@ -13,9 +13,9 @@ type RequestBodyDataset struct {
 }
 
 // DatasetCreate creates a dataset from a list of accession IDs and the dataset ID.
-func DatasetCreate(api_uri, token, datasetID string, accessionIDs []string) error {
+func DatasetCreate(apiURI, token, datasetID string, accessionIDs []string) error {
 
-	url := api_uri + "/dataset/create"
+	url := apiURI + "/dataset/create"
 
 	requestBody := RequestBodyDataset{
 		AccessionIDs: accessionIDs,
@@ -37,9 +37,9 @@ func DatasetCreate(api_uri, token, datasetID string, accessionIDs []string) erro
 }
 
 // DatasetRelease releases a dataset for downloading
-func DatasetRelease(api_uri, token, datasetID string) error {
+func DatasetRelease(apiURI, token, datasetID string) error {
 
-	url := api_uri + "/dataset/release/" + datasetID
+	url := apiURI + "/dataset/release/" + datasetID
 
 	jsonBody := []byte("{}")
 	_, err := helpers.PostRequest(url, token, jsonBody)

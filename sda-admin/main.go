@@ -14,7 +14,7 @@ import (
 var version = "1.0.0"
 
 var (
-	api_uri string
+	apiURI string
 	token   string
 )
 
@@ -183,7 +183,7 @@ func checkToken(token string) {
 
 func parseFlagsAndEnv() {
 	// Set up flags
-	flag.StringVar(&api_uri, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
+	flag.StringVar(&apiURI, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
 	flag.StringVar(&token, "token", "", "Set the authentication token (optional if ACCESS_TOKEN is set)")
 
 	// Custom usage message
@@ -202,9 +202,9 @@ func parseFlagsAndEnv() {
 
 	// Check environment variables if flags are not provided
 	if flag.Arg(0) != "help" {
-		if api_uri == "" {
-			api_uri = os.Getenv("API_HOST")
-			if api_uri == "" {
+		if apiURI == "" {
+			apiURI = os.Getenv("API_HOST")
+			if apiURI == "" {
 				fmt.Println("Error: either -uri must be provided or API_HOST environment variable must be set.")
 				os.Exit(1)
 			}
@@ -290,7 +290,7 @@ func handleListCommand() {
 	switch flag.Arg(1) {
 	case "users":
 		checkToken(token)
-		err := list.ListUsers(api_uri, token)
+		err := list.ListUsers(apiURI, token)
 		if err != nil {
 			fmt.Printf("Error: failed to get users, reason: %v\n", err)
 		}
@@ -317,7 +317,7 @@ func handleListFilesCommand() {
 	}
 
 	checkToken(token)
-	err := list.ListFiles(api_uri, token, username)
+	err := list.ListFiles(apiURI, token, username)
 	if err != nil {
 		fmt.Printf("Error: failed to get files, reason: %v\n", err)
 	}
@@ -355,7 +355,7 @@ func handleFileIngestCommand() {
 	}
 
 	checkToken(token)
-	err := file.FileIngest(api_uri, token, username, filepath)
+	err := file.FileIngest(apiURI, token, username, filepath)
 	if err != nil {
 		fmt.Printf("Error: failed to ingest file, reason: %v\n", err)
 	} else {
@@ -378,7 +378,7 @@ func handleFileAccessionCommand() {
 	}
 
 	checkToken(token)
-	err := file.FileAccession(api_uri, token, username, filepath, accessionID)
+	err := file.FileAccession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
 		fmt.Printf("Error: failed to assign accession ID to file, reason: %v\n", err)
 	} else {
@@ -418,7 +418,7 @@ func handleDatasetCreateCommand() {
 	}
 
 	checkToken(token)
-	err := dataset.DatasetCreate(api_uri, token, datasetID, accessionIDs)
+	err := dataset.DatasetCreate(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
 		fmt.Printf("Error: failed to create dataset, reason: %v\n", err)
 	} else {
@@ -439,7 +439,7 @@ func handleDatasetReleaseCommand() {
 	}
 
 	checkToken(token)
-	err := dataset.DatasetRelease(api_uri, token, datasetID)
+	err := dataset.DatasetRelease(apiURI, token, datasetID)
 	if err != nil {
 		fmt.Printf("Error: failed to release dataset, reason: %v\n", err)
 	} else {
