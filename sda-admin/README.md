@@ -21,13 +21,7 @@ Use the following command to return all users with active uploads as a JSON arra
 sda-admin list users 
 ```
 
-## List all files, optionally filtered by a specific user.
-
-Use the following command to return all files belonging to the user associated with the token
-
-```sh
-sda-admin list files 
-```
+## List all files for a specified user
 
 Use the following command to return all files belonging to the specified user `test@dummy.org`
 ```sh
