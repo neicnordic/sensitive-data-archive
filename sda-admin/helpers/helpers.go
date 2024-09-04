@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 	"strconv"
 	"time"
 
@@ -145,4 +147,20 @@ func PostReq(url, token string, jsonBody []byte) ([]byte, error) {
 	}
 
 	return resBody, nil
+}
+
+// Check for invalid characters for filepath
+func CheckValidChars(filename string) error {
+	re := regexp.MustCompile(`[\\<>"\|\x00-\x1F\x7F\!\*\'\(\)\;\:\@\&\=\+\$\,\?\%\#\[\]]`)
+	disallowedChars := re.FindAllString(filename, -1)
+	if disallowedChars != nil {
+
+		return fmt.Errorf(
+			"filepath '%v' contains disallowed characters: %+v",
+			filename,
+			strings.Join(disallowedChars, ", "),
+		)
+	}
+
+	return nil
 }

@@ -354,8 +354,14 @@ func handleFileIngestCommand() {
 		os.Exit(1)
 	}
 
+	err := helpers.CheckValidChars(filepath)
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
 	checkToken(token)
-	err := file.Ingest(apiURI, token, username, filepath)
+	err = file.Ingest(apiURI, token, username, filepath)
 	if err != nil {
 		fmt.Printf("Error: failed to ingest file, reason: %v\n", err)
 	} else {
@@ -377,8 +383,14 @@ func handleFileAccessionCommand() {
 		os.Exit(1)
 	}
 
+	err := helpers.CheckValidChars(filepath)
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
 	checkToken(token)
-	err := file.Accession(apiURI, token, username, filepath, accessionID)
+	err = file.Accession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
 		fmt.Printf("Error: failed to assign accession ID to file, reason: %v\n", err)
 	} else {

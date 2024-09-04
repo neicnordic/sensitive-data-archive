@@ -3,6 +3,7 @@ package helpers
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -106,4 +107,16 @@ func TestPostReq(t *testing.T) {
 	body, err = PostReq(serverError.URL, "mock_token", []byte(`{"name":"test"}`))
 	assert.Error(t, err)
 	assert.Nil(t, body)
+}
+
+func TestInvalidCharacters(t *testing.T) {
+	// Test that file paths with invalid characters trigger errors
+	for _, badc := range "\x00\x7F\x1A:*?\\<>\"|!'();@&=+$,%#[]" {
+		badchar := string(badc)
+		testfilepath := "test" + badchar + "file"
+
+		err := CheckValidChars(testfilepath)
+		assert.Error(t, err)
+		assert.Equal(t, fmt.Sprintf("filepath '%v' contains disallowed characters: %+v", testfilepath, badchar), err.Error())
+	}
 }
