@@ -16,6 +16,7 @@ type MockHelpers struct {
 // Mock the GetResponseBody function
 func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
 	args := m.Called(url, token)
+
 	return args.Get(0).([]byte), args.Error(1)
 }
 

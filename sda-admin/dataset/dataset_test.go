@@ -16,6 +16,7 @@ type MockHelpers struct {
 
 func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, error) {
 	args := m.Called(url, token, jsonBody)
+
 	return args.Get(0).([]byte), args.Error(1)
 }
 
