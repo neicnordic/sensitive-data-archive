@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 )
@@ -17,10 +18,9 @@ type RequestBodyDataset struct {
 func Create(apiURI, token, datasetID string, accessionIDs []string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/dataset/create", parsedURL.Path)
+	parsedURL.Path = path.Join(parsedURL.Path, "dataset/create")
 
 	requestBody := RequestBodyDataset{
 		AccessionIDs: accessionIDs,
@@ -28,36 +28,30 @@ func Create(apiURI, token, datasetID string, accessionIDs []string) error {
 	}
 
 	jsonBody, err := json.Marshal(requestBody)
-
 	if err != nil {
-
 		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
 	}
 
 	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
-
 	if err != nil {
-
 		return err
 	}
 
 	return nil
 }
 
-// DatasetRelease releases a dataset for downloading
+// Release releases a dataset for downloading
 func Release(apiURI, token, datasetID string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/dataset/release/%s", parsedURL.Path, datasetID)
+	parsedURL.Path = path.Join(parsedURL.Path, "dataset/release", datasetID)
 
 	jsonBody := []byte("{}")
 	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
 
 	if err != nil {
-
 		return err
 	}
 

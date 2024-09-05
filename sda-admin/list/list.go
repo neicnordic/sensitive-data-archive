@@ -3,6 +3,7 @@ package list
 import (
 	"fmt"
 	"net/url"
+	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 )
@@ -11,15 +12,12 @@ import (
 func Users(apiURI, token string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/users", parsedURL.Path)
-
+	parsedURL.Path = path.Join(parsedURL.Path, "users")
 
 	response, err := helpers.GetResponseBody(parsedURL.String(), token)
 	if err != nil {
-
 		return err
 	}
 
@@ -32,14 +30,12 @@ func Users(apiURI, token string) error {
 func Files(apiURI, token, username string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/users/%s/files", parsedURL.Path, username)
+	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
 
 	response, err := helpers.GetResponseBody(parsedURL.String(), token)
 	if err != nil {
-
 		return err
 	}
 

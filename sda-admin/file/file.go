@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 )
@@ -23,10 +24,9 @@ type RequestBodyFileAccession struct {
 func Ingest(apiURI, token, username, filepath string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/file/ingest", parsedURL.Path)
+	parsedURL.Path = path.Join(parsedURL.Path, "file/ingest")
 
 	requestBody := RequestBodyFileIngest{
 		Filepath: filepath,
@@ -35,12 +35,11 @@ func Ingest(apiURI, token, username, filepath string) error {
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-
 		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
 	}
+
 	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
 	if err != nil {
-
 		return err
 	}
 
@@ -51,10 +50,9 @@ func Ingest(apiURI, token, username, filepath string) error {
 func Accession(apiURI, token, username, filepath, accessionID string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
-
 		return err
 	}
-	parsedURL.Path = fmt.Sprintf("%s/file/accession", parsedURL.Path)
+	parsedURL.Path = path.Join(parsedURL.Path, "file/accession")
 
 	requestBody := RequestBodyFileAccession{
 		AccessionID: accessionID,
@@ -64,14 +62,11 @@ func Accession(apiURI, token, username, filepath, accessionID string) error {
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-
 		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
 	}
 
 	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
-
 	if err != nil {
-
 		return err
 	}
 
