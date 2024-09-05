@@ -20,7 +20,7 @@ func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func TestListUsers(t *testing.T) {
+func TestUsers(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	mockHelpers.On("GetResponseBody", "http://example.com/users", "test-token").Return([]byte(`["user1", "user2"]`), nil)
 
@@ -29,12 +29,12 @@ func TestListUsers(t *testing.T) {
 	defer func() { helpers.GetResponseBody = originalFunc }()
 	helpers.GetResponseBody = mockHelpers.GetResponseBody
 
-	err := ListUsers("http://example.com", "test-token")
+	err := Users("http://example.com", "test-token")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestListFiles(t *testing.T) {
+func TestFiles(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	mockHelpers.On("GetResponseBody", "http://example.com/users/testuser/files", "test-token").Return([]byte(`["file1", "file2"]`), nil)
 
@@ -43,7 +43,7 @@ func TestListFiles(t *testing.T) {
 	defer func() { helpers.GetResponseBody = originalFunc }()
 	helpers.GetResponseBody = mockHelpers.GetResponseBody
 
-	err := ListFiles("http://example.com", "test-token", "testuser")
+	err := Files("http://example.com", "test-token", "testuser")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }

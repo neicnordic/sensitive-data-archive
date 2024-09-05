@@ -20,7 +20,7 @@ func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, e
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func TestDatasetCreate_Success(t *testing.T) {
+func TestCreate_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -34,12 +34,12 @@ func TestDatasetCreate_Success(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := DatasetCreate("http://example.com", token, datasetID, accessionIDs)
+	err := Create("http://example.com", token, datasetID, accessionIDs)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestDatasetCreate_PostRequestFailure(t *testing.T) {
+func TestCreate_PostRequestFailure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -53,13 +53,13 @@ func TestDatasetCreate_PostRequestFailure(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := DatasetCreate("http://example.com", token, datasetID, accessionIDs)
+	err := Create("http://example.com", token, datasetID, accessionIDs)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestDatasetRelease_Success(t *testing.T) {
+func TestRelease_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -71,12 +71,12 @@ func TestDatasetRelease_Success(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := DatasetRelease("http://example.com", token, "dataset-123")
+	err := Release("http://example.com", token, "dataset-123")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestDatasetRelease_PostRequestFailure(t *testing.T) {
+func TestRelease_PostRequestFailure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -88,7 +88,7 @@ func TestDatasetRelease_PostRequestFailure(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := DatasetRelease("http://example.com", token, "dataset-123")
+	err := Release("http://example.com", token, "dataset-123")
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
