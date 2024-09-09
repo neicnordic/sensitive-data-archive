@@ -29,6 +29,7 @@ func main() {
 	// Create a function to handle panic and exit gracefully
 	defer func() {
 		if err := recover(); err != nil {
+			log.Errorf("Could not recover from %v", err)
 			log.Fatal("Could not recover, exiting")
 		}
 	}()
