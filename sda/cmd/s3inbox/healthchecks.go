@@ -57,6 +57,8 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusServiceUnavailable)
+
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
