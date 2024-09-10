@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"path"
+	"strconv"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	log "github.com/sirupsen/logrus"
@@ -52,8 +54,7 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	// Check that s3 backend responds
-	s3URL := p.getS3ReadyPath()
-	err = p.httpsGetCheck(s3URL)
+	err = p.httpsGetCheck(p.getS3ReadyPath())
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -65,7 +66,6 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
 func (p *Proxy) httpsGetCheck(url string) error {
-
 	resp, e := p.client.Get(url)
 	if e != nil {
 		return e
@@ -81,10 +81,10 @@ func (p *Proxy) httpsGetCheck(url string) error {
 func (p *Proxy) getS3ReadyPath() string {
 	s3URL := p.s3.URL
 	if p.s3.Port != 0 {
-		s3URL = fmt.Sprintf("%s:%d", s3URL, p.s3.Port)
+		s3URL = path.Join(s3URL, strconv.Itoa(p.s3.Port))
 	}
 	if p.s3.Readypath != "" {
-		s3URL += p.s3.Readypath
+		s3URL += path.Join(s3URL, p.s3.Readypath)
 	}
 
 	return s3URL
