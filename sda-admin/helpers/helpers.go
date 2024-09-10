@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt"
@@ -19,7 +19,7 @@ import (
 
 // CheckTokenExpiration is used to determine whether the token is expiring in less than a day
 func CheckTokenExpiration(accessToken string) error {
-	// Parse jwt token with unverifies, since we don't need to check the signatures here
+	// Parse jwt token with unverified, since we don't need to check the signatures here
 	token, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
 	if err != nil {
 		return fmt.Errorf("could not parse token, reason: %s", err)
@@ -78,7 +78,7 @@ func CheckTokenExpiration(accessToken string) error {
 // necessary for mocking in unit tests
 var GetResponseBody = GetBody
 
-// GetBody gets the body of the response from the URL
+// GetBody sends a GET request to the given URL and returns the body of the response
 func GetBody(url, token string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
