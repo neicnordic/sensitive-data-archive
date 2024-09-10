@@ -19,7 +19,8 @@ var (
 )
 
 // Command-line usage
-var usage = `USAGE: 
+var usage = `
+Usage:
   sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
@@ -43,8 +44,7 @@ Additional Commands:
   -h, -help        Show this help message
 `
 
-func listUsage() {
-	usageText := `
+var listUsage = `
 List Users:
   Usage: sda-admin list users
     List all users in the system.
@@ -58,28 +58,21 @@ Options:
 
 Use 'sda-admin help list <command>' for information on a specific list command.
 `
-	fmt.Println(usageText)
-}
 
-func listUsersUsage() {
-	usageText := `Usage: sda-admin list users
+var listUsersUsage = `
+Usage: sda-admin list users
   List all users in the system.
 `
-	fmt.Println(usageText)
-}
 
-func listFilesUsage() {
-	usageText := `Usage: sda-admin list files -user USERNAME
+var listFilesUsage = `
+Usage: sda-admin list files -user USERNAME
   List all files for a specified user.
 
 Options:
   -user USERNAME    List files owned by the specified user
 `
-	fmt.Println(usageText)
-}
 
-func fileUsage() {
-	usageText := `
+var fileUsage = `
 Ingest a File:
   Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
     Trigger the ingestion of a given file for a specific user.
@@ -97,22 +90,18 @@ Common Options for 'file' Commands:
 
 Use 'sda-admin help file <command>' for information on a specific command.
 `
-	fmt.Println(usageText)
-}
 
-func fileIngestUsage() {
-	usageText := `Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
+var fileIngestUsage = `
+Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
   Trigger ingestion of the given file for a specific user.
 
 Options:
   -filepath FILEPATH    Specify the path of the file to ingest.
   -user USERNAME        Specify the username associated with the file.
 `
-	fmt.Println(usageText)
-}
 
-func fileAccessionUsage() {
-	usageText := `Usage: sda-admin file accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
+var fileAccessionUsage = `
+Usage: sda-admin file accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
   Assign accession ID to a file and associate it with a user.
 
 Options:
@@ -120,11 +109,8 @@ Options:
   -user USERNAME        Specify the username associated with the file.
   -accession-id ID      Specify the accession ID to assign to the file.
 `
-	fmt.Println(usageText)
-}
 
-func datasetUsage() {
-	usageText := `
+var datasetUsage = `
 Create a Dataset:
   Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
     Create a dataset from a list of accession IDs and the dataset ID.
@@ -139,65 +125,57 @@ Options:
 
 Use 'sda-admin help dataset <command>' for information on a specific dataset command.
 `
-	fmt.Println(usageText)
-}
 
-func datasetCreateUsage() {
-	usageText := `Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
+var datasetCreateUsage = `
+Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
   Create a dataset from a list of accession IDs and the dataset ID.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
   [ACCESSION_ID ...]         (For dataset create) Specify one or more accession IDs to include in the dataset.
 `
-	fmt.Println(usageText)
-}
 
-func datasetReleaseUsage() {
-	usageText := `Usage: sda-admin dataset release -dataset-id DATASET_ID
+var datasetReleaseUsage = `
+Usage: sda-admin dataset release -dataset-id DATASET_ID
   Release a dataset for downloading based on its dataset ID.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset to release.
 `
-	fmt.Println(usageText)
-}
 
-func versionUsage() {
-	usageText := `Usage: sda-admin version
+var versionUsage = `
+Usage: sda-admin version
   Show the version information for sda-admin.
 `
-	fmt.Println(usageText)
-}
 
 func printVersion() {
 	fmt.Printf("sda-admin version %s\n", version)
 }
 
-func checkToken(token string) {
+func checkToken(token string) error {
 	if err := helpers.CheckTokenExpiration(token); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
-func parseFlagsAndEnv() {
+func parseFlagsAndEnv() error {
 	// Set up flags
 	flag.StringVar(&apiURI, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
 	flag.StringVar(&token, "token", "", "Set the authentication token (optional if ACCESS_TOKEN is set)")
 
 	// Custom usage message
 	flag.Usage = func() {
-		fmt.Println(usage)
+		fmt.Fprint(os.Stderr, usage)
 	}
 
 	// Parse global flags first
 	flag.Parse()
 
-	// If no command or help command is provided, show usage
-	if flag.NArg() == 0 || (flag.NArg() == 1 && flag.Arg(0) == "help") {
-		flag.Usage()
-		os.Exit(0)
+	// If no command is provided, show usage
+	if flag.NArg() == 0 {
+		return fmt.Errorf(usage)
 	}
 
 	// Check environment variables if flags are not provided
@@ -205,105 +183,127 @@ func parseFlagsAndEnv() {
 		if apiURI == "" {
 			apiURI = os.Getenv("API_HOST")
 			if apiURI == "" {
-				fmt.Println("Error: either -uri must be provided or API_HOST environment variable must be set.")
-				os.Exit(1)
+				return fmt.Errorf("error: either -uri must be provided or API_HOST environment variable must be set.")
 			}
 		}
 
 		if token == "" {
 			token = os.Getenv("ACCESS_TOKEN")
 			if token == "" {
-				fmt.Println("Error: either -token must be provided or ACCESS_TOKEN environment variable must be set.")
-				os.Exit(1)
+				return fmt.Errorf("error: either -token must be provided or ACCESS_TOKEN environment variable must be set.")
 			}
 		}
 	}
+
+	return nil
 }
 
-func handleHelpCommand() {
+func handleHelpCommand() error {
 	if flag.NArg() > 1 {
 		switch flag.Arg(1) {
 		case "list":
-			handleHelpList()
+			if err := handleHelpList(); err != nil {
+				return err
+			}
 		case "file":
-			handleHelpFile()
+			if err := handleHelpFile(); err != nil {
+				return err
+			}
 		case "dataset":
-			handleHelpDataset()
+			if err := handleHelpDataset(); err != nil {
+				return err
+			}
 		case "version":
-			versionUsage()
-			os.Exit(0)
+			fmt.Fprint(os.Stderr, versionUsage)
 		default:
-			fmt.Printf("Unknown command '%s'.\n", flag.Arg(1))
-			flag.Usage()
+			fmt.Fprintf(os.Stderr, "Unknown command '%s'.\n", flag.Arg(1))
+			fmt.Fprint(os.Stderr, usage)
+			return fmt.Errorf("")
 		}
 	} else {
-		flag.Usage()
+		fmt.Fprint(os.Stderr, usage)
 	}
-	os.Exit(0)
+
+	return nil
 }
 
-func handleHelpList() {
+func handleHelpList() error {
 	if flag.NArg() == 2 {
-		listUsage()
+		fmt.Fprint(os.Stderr, listUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "users" {
-		listUsersUsage()
+		fmt.Fprint(os.Stderr, listUsersUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "files" {
-		listFilesUsage()
+		fmt.Fprint(os.Stderr, listFilesUsage)
 	} else {
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		listUsage()
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
+		fmt.Fprint(os.Stderr, listUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleHelpFile() {
+func handleHelpFile() error {
 	if flag.NArg() == 2 {
-		fileUsage()
+		fmt.Fprint(os.Stderr, fileUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "ingest" {
-		fileIngestUsage()
+		fmt.Fprint(os.Stderr, fileIngestUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "accession" {
-		fileAccessionUsage()
+		fmt.Fprint(os.Stderr, fileAccessionUsage)
 	} else {
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		fileUsage()
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
+		fmt.Fprint(os.Stderr, fileUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleHelpDataset() {
+func handleHelpDataset() error {
 	if flag.NArg() == 2 {
-		datasetUsage()
+		fmt.Fprint(os.Stderr, datasetUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "create" {
-		datasetCreateUsage()
+		fmt.Fprint(os.Stderr, datasetCreateUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "release" {
-		datasetReleaseUsage()
+		fmt.Fprint(os.Stderr, datasetReleaseUsage)
 	} else {
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		datasetUsage()
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
+		fmt.Fprint(os.Stderr, datasetUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleListCommand() {
+func handleListCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Println("Error: 'list' requires a subcommand (users, files).")
-		listUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: 'list' requires a subcommand (users, files).\n")
+		fmt.Fprint(os.Stderr, listUsage)
+		return fmt.Errorf("")
 	}
 	switch flag.Arg(1) {
 	case "users":
-		checkToken(token)
+		if err := helpers.CheckTokenExpiration(token); err != nil {
+			return err
+		}
 		err := list.Users(apiURI, token)
 		if err != nil {
-			fmt.Printf("Error: failed to get users, reason: %v\n", err)
+			return fmt.Errorf("Error: failed to get users, reason: %v\n", err)
 		}
 	case "files":
-		handleListFilesCommand()
+		if err := handleListFilesCommand(); err != nil {
+			return err
+		}
 	default:
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		listUsage()
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
+		fmt.Fprint(os.Stderr, listUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleListFilesCommand() {
+func handleListFilesCommand() error {
 	listFilesCmd := flag.NewFlagSet("files", flag.ExitOnError)
 	var username string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
@@ -311,37 +311,47 @@ func handleListFilesCommand() {
 
 	// Check if the -user flag was provided
 	if username == "" {
-		fmt.Println("Error: the -user flag is required.")
-		listFilesUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: the -user flag is required.\n")
+		fmt.Fprint(os.Stderr, listFilesUsage)
+		return fmt.Errorf("")
 	}
 
-	checkToken(token)
-	err := list.Files(apiURI, token, username)
-	if err != nil {
-		fmt.Printf("Error: failed to get files, reason: %v\n", err)
+	if err := helpers.CheckTokenExpiration(token); err != nil {
+		return err
 	}
+
+	if err := list.Files(apiURI, token, username); err != nil {
+		return fmt.Errorf("Error: failed to get files, reason: %v\n", err)
+	}
+
+	return nil
 }
 
-func handleFileCommand() {
+func handleFileCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Println("Error: 'file' requires a subcommand (ingest, accession).")
-		fileUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: 'file' requires a subcommand (ingest, accession).\n")
+		fmt.Fprint(os.Stderr, fileUsage)
+		return fmt.Errorf("")
 	}
 	switch flag.Arg(1) {
 	case "ingest":
-		handleFileIngestCommand()
+		if err := handleFileIngestCommand(); err != nil {
+			return err
+		}
 	case "accession":
-		handleFileAccessionCommand()
+		if err := handleFileAccessionCommand(); err != nil {
+			return err
+		}
 	default:
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		fileUsage()
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
+		fmt.Fprint(os.Stderr, fileUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleFileIngestCommand() {
+func handleFileIngestCommand() error {
 	fileIngestCmd := flag.NewFlagSet("ingest", flag.ExitOnError)
 	var filepath, username string
 	fileIngestCmd.StringVar(&filepath, "filepath", "", "Filepath to ingest")
@@ -349,27 +359,30 @@ func handleFileIngestCommand() {
 	fileIngestCmd.Parse(flag.Args()[2:])
 
 	if filepath == "" || username == "" {
-		fmt.Println("Error: both -filepath and -user are required.")
-		fileIngestUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: both -filepath and -user are required.\n")
+		fmt.Fprint(os.Stderr, fileIngestUsage)
+		return fmt.Errorf("")
 	}
 
-	err := helpers.CheckValidChars(filepath)
-	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+	if err := helpers.CheckValidChars(filepath); err != nil {
+		return err
 	}
 
-	checkToken(token)
-	err = file.Ingest(apiURI, token, username, filepath)
+	if err := helpers.CheckTokenExpiration(token); err != nil {
+		return err
+	}
+
+	err := file.Ingest(apiURI, token, username, filepath)
 	if err != nil {
-		fmt.Printf("Error: failed to ingest file, reason: %v\n", err)
+		return fmt.Errorf("Error: failed to ingest file, reason: %v\n", err)
 	} else {
 		fmt.Println("File ingestion triggered successfully.")
 	}
+
+	return nil
 }
 
-func handleFileAccessionCommand() {
+func handleFileAccessionCommand() error {
 	fileAccessionCmd := flag.NewFlagSet("accession", flag.ExitOnError)
 	var filepath, username, accessionID string
 	fileAccessionCmd.StringVar(&filepath, "filepath", "", "Filepath to assign accession ID")
@@ -378,45 +391,55 @@ func handleFileAccessionCommand() {
 	fileAccessionCmd.Parse(flag.Args()[2:])
 
 	if filepath == "" || username == "" || accessionID == "" {
-		fmt.Println("Error: -filepath, -user, and -accession-id are required.")
-		fileAccessionUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: -filepath, -user, and -accession-id are required.\n")
+		fmt.Fprint(os.Stderr, fileAccessionUsage)
+		return fmt.Errorf("")
 	}
 
-	err := helpers.CheckValidChars(filepath)
-	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+	if err := helpers.CheckValidChars(filepath); err != nil {
+		return err
 	}
 
-	checkToken(token)
-	err = file.Accession(apiURI, token, username, filepath, accessionID)
+	if err := helpers.CheckTokenExpiration(token); err != nil {
+		return err
+	}
+
+	err := file.Accession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
-		fmt.Printf("Error: failed to assign accession ID to file, reason: %v\n", err)
+		return fmt.Errorf("Error: failed to assign accession ID to file, reason: %v\n", err)
 	} else {
 		fmt.Println("Accession ID assigned to file successfully.")
 	}
+
+	return nil
 }
 
-func handleDatasetCommand() {
+func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Println("Error: 'dataset' requires a subcommand (create, release).")
-		datasetUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: 'dataset' requires a subcommand (create, release).\n")
+		fmt.Fprint(os.Stderr, datasetUsage)
+		return fmt.Errorf("")
 	}
+
 	switch flag.Arg(1) {
 	case "create":
-		handleDatasetCreateCommand()
+		if err := handleDatasetCreateCommand(); err != nil {
+			return err
+		}
 	case "release":
-		handleDatasetReleaseCommand()
+		if err := handleDatasetReleaseCommand(); err != nil {
+			return err
+		}
 	default:
-		fmt.Printf("Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		datasetUsage()
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
+		fmt.Fprint(os.Stderr, datasetUsage)
+		return fmt.Errorf("")
 	}
+
+	return nil
 }
 
-func handleDatasetCreateCommand() {
+func handleDatasetCreateCommand() error {
 	datasetCreateCmd := flag.NewFlagSet("create", flag.ExitOnError)
 	var datasetID string
 	datasetCreateCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to create")
@@ -424,59 +447,85 @@ func handleDatasetCreateCommand() {
 	accessionIDs := datasetCreateCmd.Args() // Args() returns the non-flag arguments after parsing
 
 	if datasetID == "" || len(accessionIDs) == 0 {
-		fmt.Println("Error: -dataset-id and at least one accession ID are required.")
-		datasetCreateUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: -dataset-id and at least one accession ID are required.\n")
+		fmt.Fprint(os.Stderr, datasetCreateUsage)
+		return fmt.Errorf("")
 	}
 
-	checkToken(token)
+	if err := helpers.CheckTokenExpiration(token); err != nil {
+		return err
+	}
+
 	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
-		fmt.Printf("Error: failed to create dataset, reason: %v\n", err)
+		return fmt.Errorf("Error: failed to create dataset, reason: %v\n", err)
 	} else {
 		fmt.Println("Dataset created successfully.")
 	}
+
+	return nil
 }
 
-func handleDatasetReleaseCommand() {
+func handleDatasetReleaseCommand() error {
 	datasetReleaseCmd := flag.NewFlagSet("release", flag.ExitOnError)
 	var datasetID string
 	datasetReleaseCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to release")
 	datasetReleaseCmd.Parse(flag.Args()[2:])
 
 	if datasetID == "" {
-		fmt.Println("Error: -dataset-id is required.")
-		datasetReleaseUsage()
-		os.Exit(1)
+		fmt.Fprint(os.Stderr, "Error: -dataset-id is required.\n")
+		fmt.Fprint(os.Stderr, datasetReleaseUsage)
+		return fmt.Errorf("")
 	}
 
-	checkToken(token)
+	if err := helpers.CheckTokenExpiration(token); err != nil {
+		return err
+	}
+
 	err := dataset.Release(apiURI, token, datasetID)
 	if err != nil {
-		fmt.Printf("Error: failed to release dataset, reason: %v\n", err)
+		return fmt.Errorf("Error: failed to release dataset, reason: %v\n", err)
 	} else {
 		fmt.Println("Dataset released successfully.")
 	}
+
+	return nil
 }
 
 func main() {
-	parseFlagsAndEnv()
+	if err := parseFlagsAndEnv(); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	switch flag.Arg(0) {
 	case "help", "-h", "-help":
-		handleHelpCommand()
+		if err := handleHelpCommand(); err != nil {
+			fmt.Fprint(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "list":
-		handleListCommand()
+		if err := handleListCommand(); err != nil {
+			fmt.Fprint(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "file":
-		handleFileCommand()
+		if err := handleFileCommand(); err != nil {
+			fmt.Fprint(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "dataset":
-		handleDatasetCommand()
+		if err := handleDatasetCommand(); err != nil {
+			fmt.Fprint(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "version":
 		printVersion()
-		os.Exit(0)
 	default:
-		fmt.Printf("Unknown command '%s'.\n", flag.Arg(0))
-		flag.Usage()
+		fmt.Fprintf(os.Stderr, "Unknown command '%s'.\n", flag.Arg(0))
+		fmt.Fprint(os.Stderr, usage)
 		os.Exit(1)
 	}
+
+	os.Exit(0)
 }
