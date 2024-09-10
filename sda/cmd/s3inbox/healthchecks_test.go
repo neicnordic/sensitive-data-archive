@@ -35,9 +35,21 @@ func (suite *HealthcheckTestSuite) TearDownTest() {
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
-	url := p.getS3ReadyPath()
+	url, _ := p.getS3ReadyPath()
 	assert.NoError(suite.T(), p.httpsGetCheck(url))
 	assert.Error(suite.T(), p.httpsGetCheck("http://127.0.0.1:8888/nonexistent"), "404 should fail")
+}
+
+func (suite *HealthcheckTestSuite) TestS3URL() {
+	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+
+	_, err := p.getS3ReadyPath()
+	assert.NoError(suite.T(), err)
+
+	p.s3.URL = "://badurl"
+	url, err := p.getS3ReadyPath()
+	assert.Empty(suite.T(), url)
+	assert.Error(suite.T(), err)
 }
 
 func (suite *HealthcheckTestSuite) TestHealthchecks() {

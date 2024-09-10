@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 
@@ -54,7 +56,14 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	// Check that s3 backend responds
-	err = p.httpsGetCheck(p.getS3ReadyPath())
+	s3url, err := p.getS3ReadyPath()
+	if err != nil {
+		log.Errorf("Incorrect S3 health url: %v", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+
+		return
+	}
+	err = p.httpsGetCheck(s3url)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -78,14 +87,18 @@ func (p *Proxy) httpsGetCheck(url string) error {
 	return nil
 }
 
-func (p *Proxy) getS3ReadyPath() string {
-	s3URL := p.s3.URL
+func (p *Proxy) getS3ReadyPath() (string, error) {
+
+	s3URL, err := url.Parse(p.s3.URL)
+	if err != nil {
+		return "", err
+	}
 	if p.s3.Port != 0 {
-		s3URL = path.Join(s3URL, strconv.Itoa(p.s3.Port))
+		s3URL.Host = net.JoinHostPort(s3URL.Hostname(), strconv.Itoa(p.s3.Port))
 	}
 	if p.s3.Readypath != "" {
-		s3URL += path.Join(s3URL, p.s3.Readypath)
+		s3URL.Path = path.Join(s3URL.Path, p.s3.Readypath)
 	}
 
-	return s3URL
+	return s3URL.String(), nil
 }
