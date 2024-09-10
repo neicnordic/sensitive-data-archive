@@ -1,4 +1,4 @@
-package list
+package user
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func TestUsers(t *testing.T) {
+func TestList(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	mockHelpers.On("GetResponseBody", "http://example.com/users", "test-token").Return([]byte(`["user1", "user2"]`), nil)
 
@@ -29,21 +29,7 @@ func TestUsers(t *testing.T) {
 	defer func() { helpers.GetResponseBody = originalFunc }()
 	helpers.GetResponseBody = mockHelpers.GetResponseBody
 
-	err := Users("http://example.com", "test-token")
-	assert.NoError(t, err)
-	mockHelpers.AssertExpectations(t)
-}
-
-func TestFiles(t *testing.T) {
-	mockHelpers := new(MockHelpers)
-	mockHelpers.On("GetResponseBody", "http://example.com/users/testuser/files", "test-token").Return([]byte(`["file1", "file2"]`), nil)
-
-	// Replace the original GetResponseBody with the mock
-	originalFunc := helpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalFunc }()
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
-
-	err := Files("http://example.com", "test-token", "testuser")
+	err := List("http://example.com", "test-token")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }

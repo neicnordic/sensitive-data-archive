@@ -14,7 +14,7 @@ type RequestBodyDataset struct {
 	DatasetID    string   `json:"dataset_id"`
 }
 
-// Create creates a dataset from a list of accession IDs and the dataset ID.
+// Create creates a dataset from a list of accession IDs and a dataset ID.
 func Create(apiURI, token, datasetID string, accessionIDs []string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/dataset"
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/file"
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
-	"github.com/neicnordic/sensitive-data-archive/sda-admin/list"
+	"github.com/neicnordic/sensitive-data-archive/sda-admin/user"
 )
 
 var version = "1.0.0"
@@ -24,111 +24,104 @@ Usage:
   sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
-  list users                     List all users
-  list files -user USERNAME      List all files for a specified user
+  user list                     List all users.
+  file list -user USERNAME      List all files for a specified user.
   file ingest -filepath FILEPATH -user USERNAME
-                                 Trigger ingestion of the given file
-  file accession -filepath FILEPATH -user USERNAME -accession-id accessionID
-                                 Assign accession ID to a file
+                                Trigger ingestion of a given file.
+  file set-accession -filepath FILEPATH -user USERNAME -accession-id accessionID
+                                Assign accession ID to a file.
   dataset create -dataset-id DATASET_ID accessionID [accessionID ...]
-                                 Create a dataset from a list of accession IDs and the dataset ID
+                                Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
-                                 Release a dataset for downloading
+                                Release a dataset for downloading.
   
 Global Options:
-  -uri URI         Set the URI for the API server (optional if API_HOST is set)
-  -token TOKEN     Set the authentication token (optional if ACCESS_TOKEN is set)
+  -uri URI         Set the URI for the API server (optional if API_HOST is set).
+  -token TOKEN     Set the authentication token (optional if ACCESS_TOKEN is set).
 
 Additional Commands:
-  help             Show this help message
-  -h, -help        Show this help message
+  help             Show this help message.
+  -h, -help        Show this help message.
 `
 
-var listUsage = `
+var userUsage = `
 List Users:
-  Usage: sda-admin list users
+  Usage: sda-admin user list 
     List all users in the system.
-
-List Files:
-  Usage: sda-admin list files -user USERNAME
-    List all files for a specified user.
-  
-Options:
-  -user USERNAME    (For list files) List files owned by the specified user
-
-Use 'sda-admin help list <command>' for information on a specific list command.
 `
 
-var listUsersUsage = `
-Usage: sda-admin list users
+var userListUsage = `
+Usage: sda-admin user list 
   List all users in the system.
 `
 
-var listFilesUsage = `
-Usage: sda-admin list files -user USERNAME
-  List all files for a specified user.
-
-Options:
-  -user USERNAME    List files owned by the specified user
-`
-
 var fileUsage = `
-Ingest a File:
+List all files for a user:
+  Usage: sda-admin file list -user USERNAME
+	List all files for a specified user.
+
+Ingest a file:
   Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
     Trigger the ingestion of a given file for a specific user.
 
-Accession a File:
-  Usage: sda-admin file accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
-    Assign an accession ID to a file and associate it with a user.
+Set accession ID to a file:
+  Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
+    Assign an accession ID to a file for a given user.
 
-Common Options for 'file' Commands:
-  -filepath FILEPATH    Specify the path of the file.
-  -user USERNAME        Specify the username associated with the file.
-
-  For 'file accession' additionally:
-  -accession-id ID      Specify the accession ID to assign to the file.
+Options:
+  -user USERNAME       Specify the username associated with the file.
+  -filepath FILEPATH   Specify the path of the file to ingest.
+  -accession-id ID     Specify the accession ID to assign to the file.
 
 Use 'sda-admin help file <command>' for information on a specific command.
 `
 
-var fileIngestUsage = `
-Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
-  Trigger ingestion of the given file for a specific user.
+var fileListUsage = `
+Usage: sda-admin file list -user USERNAME
+  List all files for a specified user.
 
 Options:
-  -filepath FILEPATH    Specify the path of the file to ingest.
-  -user USERNAME        Specify the username associated with the file.
+  -user USERNAME 	Specify the username associated with the files.
+`
+
+var fileIngestUsage = `
+Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
+  Trigger the ingestion of a given file for a specific user.
+
+Options:
+  -filepath FILEPATH   Specify the path of the file to ingest.
+  -user USERNAME       Specify the username associated with the file.
 `
 
 var fileAccessionUsage = `
-Usage: sda-admin file accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
+Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
   Assign accession ID to a file and associate it with a user.
 
 Options:
-  -filepath FILEPATH    Specify the path of the file to assign the accession ID.
-  -user USERNAME        Specify the username associated with the file.
-  -accession-id ID      Specify the accession ID to assign to the file.
+  -filepath FILEPATH   Specify the path of the file to assign the accession ID.
+  -user USERNAME       Specify the username associated with the file.
+  -accession-id ID     Specify the accession ID to assign to the file.
 `
 
 var datasetUsage = `
-Create a Dataset:
+Create a dataset:
   Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
-    Create a dataset from a list of accession IDs and the dataset ID.
+    Create a dataset from a list of accession IDs and a dataset ID.
     
-Release a Dataset:
+Release a dataset:
   Usage: sda-admin dataset release -dataset-id DATASET_ID
     Release a dataset for downloading based on its dataset ID.
 
 Options:
-  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
-  [ACCESSION_ID ...]         (For dataset create) Specify one or more accession IDs to include in the dataset.
+  -dataset-id DATASET_ID   Specify the unique identifier for the dataset.
+  [ACCESSION_ID ...]       (For dataset create) Specify one or more accession IDs to include in the dataset.
 
-Use 'sda-admin help dataset <command>' for information on a specific dataset command.
+Use 'sda-admin help dataset <command>' for information on a specific command.
 `
 
 var datasetCreateUsage = `
 Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
-  Create a dataset from a list of accession IDs and the dataset ID.
+  Create a dataset from a list of accession IDs and a dataset ID.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
@@ -140,7 +133,7 @@ Usage: sda-admin dataset release -dataset-id DATASET_ID
   Release a dataset for downloading based on its dataset ID.
 
 Options:
-  -dataset-id DATASET_ID    Specify the unique identifier for the dataset to release.
+  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
 `
 
 var versionUsage = `
@@ -201,8 +194,8 @@ func parseFlagsAndEnv() error {
 func handleHelpCommand() error {
 	if flag.NArg() > 1 {
 		switch flag.Arg(1) {
-		case "list":
-			if err := handleHelpList(); err != nil {
+		case "user":
+			if err := handleHelpUser(); err != nil {
 				return err
 			}
 		case "file":
@@ -227,16 +220,14 @@ func handleHelpCommand() error {
 	return nil
 }
 
-func handleHelpList() error {
+func handleHelpUser() error {
 	if flag.NArg() == 2 {
-		fmt.Fprint(os.Stderr, listUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "users" {
-		fmt.Fprint(os.Stderr, listUsersUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "files" {
-		fmt.Fprint(os.Stderr, listFilesUsage)
+		fmt.Fprint(os.Stderr, userUsage)
+	} else if flag.NArg() > 2 && flag.Arg(2) == "list" {
+		fmt.Fprint(os.Stderr, userListUsage)
 	} else {
 		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		fmt.Fprint(os.Stderr, listUsage)
+		fmt.Fprint(os.Stderr, userUsage)
 		return fmt.Errorf("")
 	}
 
@@ -246,9 +237,11 @@ func handleHelpList() error {
 func handleHelpFile() error {
 	if flag.NArg() == 2 {
 		fmt.Fprint(os.Stderr, fileUsage)
+	} else if flag.NArg() > 2 && flag.Arg(2) == "list" {
+		fmt.Fprint(os.Stderr, fileListUsage)
 	} else if flag.NArg() > 2 && flag.Arg(2) == "ingest" {
 		fmt.Fprint(os.Stderr, fileIngestUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "accession" {
+	} else if flag.NArg() > 2 && flag.Arg(2) == "set-accession" {
 		fmt.Fprint(os.Stderr, fileAccessionUsage)
 	} else {
 		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
@@ -275,36 +268,32 @@ func handleHelpDataset() error {
 	return nil
 }
 
-func handleListCommand() error {
+func handleUserCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Fprint(os.Stderr, "Error: 'list' requires a subcommand (users, files).\n")
-		fmt.Fprint(os.Stderr, listUsage)
+		fmt.Fprint(os.Stderr, "Error: 'user' requires a subcommand (list).\n")
+		fmt.Fprint(os.Stderr, userUsage)
 		return fmt.Errorf("")
 	}
 	switch flag.Arg(1) {
-	case "users":
+	case "list":
 		if err := helpers.CheckTokenExpiration(token); err != nil {
 			return err
 		}
-		err := list.Users(apiURI, token)
+		err := user.List(apiURI, token)
 		if err != nil {
 			return fmt.Errorf("Error: failed to get users, reason: %v\n", err)
 		}
-	case "files":
-		if err := handleListFilesCommand(); err != nil {
-			return err
-		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		fmt.Fprint(os.Stderr, listUsage)
+		fmt.Fprint(os.Stderr, userUsage)
 		return fmt.Errorf("")
 	}
 
 	return nil
 }
 
-func handleListFilesCommand() error {
-	listFilesCmd := flag.NewFlagSet("files", flag.ExitOnError)
+func handleFileListCommand() error {
+	listFilesCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	var username string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
 	listFilesCmd.Parse(flag.Args()[2:])
@@ -312,7 +301,7 @@ func handleListFilesCommand() error {
 	// Check if the -user flag was provided
 	if username == "" {
 		fmt.Fprint(os.Stderr, "Error: the -user flag is required.\n")
-		fmt.Fprint(os.Stderr, listFilesUsage)
+		fmt.Fprint(os.Stderr, fileListUsage)
 		return fmt.Errorf("")
 	}
 
@@ -320,7 +309,7 @@ func handleListFilesCommand() error {
 		return err
 	}
 
-	if err := list.Files(apiURI, token, username); err != nil {
+	if err := file.List(apiURI, token, username); err != nil {
 		return fmt.Errorf("Error: failed to get files, reason: %v\n", err)
 	}
 
@@ -329,16 +318,20 @@ func handleListFilesCommand() error {
 
 func handleFileCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Fprint(os.Stderr, "Error: 'file' requires a subcommand (ingest, accession).\n")
+		fmt.Fprint(os.Stderr, "Error: 'file' requires a subcommand (list, ingest, set-accession).\n")
 		fmt.Fprint(os.Stderr, fileUsage)
 		return fmt.Errorf("")
 	}
 	switch flag.Arg(1) {
+	case "list":
+		if err := handleFileListCommand(); err != nil {
+			return err
+		}
 	case "ingest":
 		if err := handleFileIngestCommand(); err != nil {
 			return err
 		}
-	case "accession":
+	case "set-accession":
 		if err := handleFileAccessionCommand(); err != nil {
 			return err
 		}
@@ -383,7 +376,7 @@ func handleFileIngestCommand() error {
 }
 
 func handleFileAccessionCommand() error {
-	fileAccessionCmd := flag.NewFlagSet("accession", flag.ExitOnError)
+	fileAccessionCmd := flag.NewFlagSet("set-accession", flag.ExitOnError)
 	var filepath, username, accessionID string
 	fileAccessionCmd.StringVar(&filepath, "filepath", "", "Filepath to assign accession ID")
 	fileAccessionCmd.StringVar(&username, "user", "", "Username to associate with the file")
@@ -404,7 +397,7 @@ func handleFileAccessionCommand() error {
 		return err
 	}
 
-	err := file.Accession(apiURI, token, username, filepath, accessionID)
+	err := file.SetAccession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
 		return fmt.Errorf("Error: failed to assign accession ID to file, reason: %v\n", err)
 	} else {
@@ -494,29 +487,29 @@ func handleDatasetReleaseCommand() error {
 
 func main() {
 	if err := parseFlagsAndEnv(); err != nil {
-		fmt.Fprint(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	switch flag.Arg(0) {
 	case "help", "-h", "-help":
 		if err := handleHelpCommand(); err != nil {
-			fmt.Fprint(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-	case "list":
-		if err := handleListCommand(); err != nil {
-			fmt.Fprint(os.Stderr, err)
+	case "user":
+		if err := handleUserCommand(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "file":
 		if err := handleFileCommand(); err != nil {
-			fmt.Fprint(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "dataset":
 		if err := handleDatasetCommand(); err != nil {
-			fmt.Fprint(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "version":

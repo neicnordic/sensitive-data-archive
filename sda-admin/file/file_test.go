@@ -14,10 +14,32 @@ type MockHelpers struct {
 	mock.Mock
 }
 
+// Mock the GetResponseBody function
+func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
+	args := m.Called(url, token)
+
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+// Mock the PostRequest function
 func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, error) {
 	args := m.Called(url, token, jsonBody)
 
 	return args.Get(0).([]byte), args.Error(1)
+}
+
+func TestList(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	mockHelpers.On("GetResponseBody", "http://example.com/users/testuser/files", "test-token").Return([]byte(`["file1", "file2"]`), nil)
+
+	// Replace the original GetResponseBody with the mock
+	originalFunc := helpers.GetResponseBody
+	defer func() { helpers.GetResponseBody = originalFunc }()
+	helpers.GetResponseBody = mockHelpers.GetResponseBody
+
+	err := List("http://example.com", "test-token", "testuser")
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
 }
 
 func TestIngest_Success(t *testing.T) {
@@ -59,7 +81,7 @@ func TestIngest_PostRequestFailure(t *testing.T) {
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestAccession_Success(t *testing.T) {
+func TestSetAccession_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -74,12 +96,12 @@ func TestAccession_Success(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := Accession("http://example.com", token, username, filepath, accessionID)
+	err := SetAccession("http://example.com", token, username, filepath, accessionID)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestAccession_PostRequestFailure(t *testing.T) {
+func TestSetAccession_PostRequestFailure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -94,7 +116,7 @@ func TestAccession_PostRequestFailure(t *testing.T) {
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := Accession("http://example.com", token, username, filepath, accessionID)
+	err := SetAccession("http://example.com", token, username, filepath, accessionID)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)

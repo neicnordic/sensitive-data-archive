@@ -20,6 +20,24 @@ type RequestBodyFileAccession struct {
 	User        string `json:"user"`
 }
 
+// List returns all files
+func List(apiURI, token, username string) error {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return err
+	}
+	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
+
+	response, err := helpers.GetResponseBody(parsedURL.String(), token)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(response))
+
+	return nil
+}
+
 // Ingest triggers the ingestion of a given file
 func Ingest(apiURI, token, username, filepath string) error {
 	parsedURL, err := url.Parse(apiURI)
@@ -46,8 +64,8 @@ func Ingest(apiURI, token, username, filepath string) error {
 	return nil
 }
 
-// Accession assigns a given file to a given accession ID
-func Accession(apiURI, token, username, filepath, accessionID string) error {
+// SetAccession assigns an accession ID to a specified file for a given user
+func SetAccession(apiURI, token, username, filepath, accessionID string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
 		return err

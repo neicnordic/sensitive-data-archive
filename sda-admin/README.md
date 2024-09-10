@@ -18,14 +18,14 @@ Set the authentication token (optional if the environmental variable `ACCESS_TOK
 
 Use the following command to return all users with active uploads as a JSON array 
 ```sh
-sda-admin list users 
+sda-admin user list 
 ```
 
 ## List all files for a specified user
 
 Use the following command to return all files belonging to the specified user `test@dummy.org`
 ```sh
-sda-admin list files -user test@dummy.org
+sda-admin file list -user test@dummy.org
 ```
 
 ## Ingest a file
@@ -41,10 +41,10 @@ sda-admin file ingest -filepath /path/to/file.c4gh -user test@dummy.org
 Use the following command to assign an accession ID `my-accession-id-1` to a given file `/path/to/file.c4gh` that belongs to the user `test@dummy.org`
 
 ```sh
-sda-admin file accession -filepath /path/to/file.c4gh -user test@dummy.org -accession-id my-accession-id-1 
+sda-admin file set-accession -filepath /path/to/file.c4gh -user test@dummy.org -accession-id my-accession-id-1 
 ```
 
-## Create a dataset from a list of accession IDs and the dataset ID
+## Create a dataset from a list of accession IDs and a dataset ID
 
 Use the following command to create a dataset `dataset001` from accession IDs `my-accession-id-1` and `my-accession-id-2`
 
@@ -79,18 +79,18 @@ sda-admin help <command>
 
 ### Examples 
 
-To get help on the list command:
+To get help on the `file` command:
 ```sh
-sda-admin help list
+sda-admin help file
 ```
 
-To get help on the file ingest command:
+To get help on the `file ingest` command:
 
 ```sh
 sda-admin help file ingest
 ```
 
-To get help on the dataset create command:
+To get help on the `dataset create` command:
 
 ```sh
 sda-admin help dataset create
