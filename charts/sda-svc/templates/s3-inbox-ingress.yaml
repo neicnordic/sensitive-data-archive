@@ -44,13 +44,6 @@ spec:
             name: {{ template "sda.fullname" . }}-inbox
             port:
               number: {{ ternary 443 80 .Values.global.tls.enabled }}
-      - pathType: Exact
-        path: "/healthz"
-        backend:
-          service:
-            name: {{ template "sda.fullname" . }}-inbox
-            port:
-              number: {{ ternary 443 80 .Values.global.tls.enabled }}
 {{- if .Values.global.tls.enabled }}
   tls:
   - hosts:
