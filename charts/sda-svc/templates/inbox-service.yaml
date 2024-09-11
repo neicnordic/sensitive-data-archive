@@ -12,10 +12,6 @@ spec:
     port: {{ template "inboxServicePort" . }}
     targetPort: inbox
     protocol: TCP
-  - name: inbox-liveness
-    port: 8001
-    targetPort: liveness-port
-    protocol: TCP
   selector:
     app: {{ template "sda.fullname" . }}-inbox
 {{- end }}

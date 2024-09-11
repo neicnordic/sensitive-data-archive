@@ -50,7 +50,7 @@ spec:
           service:
             name: {{ template "sda.fullname" . }}-inbox
             port:
-              number: 8001
+              number: {{ ternary 443 80 .Values.global.tls.enabled }}
 {{- if .Values.global.tls.enabled }}
   tls:
   - hosts:
