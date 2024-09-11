@@ -227,14 +227,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["1.28", "1.29"]
+        version: ["1.30", "1.31"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
         exclude:
-          - version: "1.28"
+          - version: "1.30"
             tls: "false"
             storage: "posix"
-          - version: "1.29"
+          - version: "1.31"
             tls: "false"
             storage: "posix"
     steps:
