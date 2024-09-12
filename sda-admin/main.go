@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -160,7 +161,7 @@ func parseFlagsAndEnv() error {
 
 	// Custom usage message
 	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Println(usage)
 	}
 
 	// Parse global flags first
@@ -168,7 +169,7 @@ func parseFlagsAndEnv() error {
 
 	// If no command is provided, show usage
 	if flag.NArg() == 0 {
-		return fmt.Errorf(usage)
+		return errors.New(usage)
 	}
 
 	// Check environment variables if flags are not provided
@@ -209,9 +210,8 @@ func handleHelpCommand() error {
 		case "version":
 			fmt.Fprint(os.Stderr, versionUsage)
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown command '%s'.\n", flag.Arg(1))
-			fmt.Fprint(os.Stderr, usage)
-			return fmt.Errorf("")
+			return fmt.Errorf("Unknown command '%s'.\n%s", flag.Arg(1), usage)
+
 		}
 	} else {
 		fmt.Fprint(os.Stderr, usage)
@@ -226,9 +226,7 @@ func handleHelpUser() error {
 	} else if flag.NArg() > 2 && flag.Arg(2) == "list" {
 		fmt.Fprint(os.Stderr, userListUsage)
 	} else {
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		fmt.Fprint(os.Stderr, userUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
 
 	return nil
@@ -244,9 +242,7 @@ func handleHelpFile() error {
 	} else if flag.NArg() > 2 && flag.Arg(2) == "set-accession" {
 		fmt.Fprint(os.Stderr, fileAccessionUsage)
 	} else {
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		fmt.Fprint(os.Stderr, fileUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
 
 	return nil
@@ -260,9 +256,7 @@ func handleHelpDataset() error {
 	} else if flag.NArg() > 2 && flag.Arg(2) == "release" {
 		fmt.Fprint(os.Stderr, datasetReleaseUsage)
 	} else {
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(2), flag.Arg(1))
-		fmt.Fprint(os.Stderr, datasetUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
 
 	return nil
@@ -270,9 +264,7 @@ func handleHelpDataset() error {
 
 func handleUserCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Fprint(os.Stderr, "Error: 'user' requires a subcommand (list).\n")
-		fmt.Fprint(os.Stderr, userUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: 'user' requires a subcommand (list).\n%s", userUsage)
 	}
 	switch flag.Arg(1) {
 	case "list":
@@ -284,9 +276,7 @@ func handleUserCommand() error {
 			return fmt.Errorf("Error: failed to get users, reason: %v\n", err)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		fmt.Fprint(os.Stderr, userUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), userUsage)
 	}
 
 	return nil
@@ -300,9 +290,7 @@ func handleFileListCommand() error {
 
 	// Check if the -user flag was provided
 	if username == "" {
-		fmt.Fprint(os.Stderr, "Error: the -user flag is required.\n")
-		fmt.Fprint(os.Stderr, fileListUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: the -user flag is required.\n%s", fileListUsage)
 	}
 
 	if err := helpers.CheckTokenExpiration(token); err != nil {
@@ -318,9 +306,7 @@ func handleFileListCommand() error {
 
 func handleFileCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Fprint(os.Stderr, "Error: 'file' requires a subcommand (list, ingest, set-accession).\n")
-		fmt.Fprint(os.Stderr, fileUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: 'file' requires a subcommand (list, ingest, set-accession).\n%s", fileUsage)
 	}
 	switch flag.Arg(1) {
 	case "list":
@@ -336,9 +322,7 @@ func handleFileCommand() error {
 			return err
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		fmt.Fprint(os.Stderr, fileUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), fileUsage)
 	}
 
 	return nil
@@ -352,9 +336,7 @@ func handleFileIngestCommand() error {
 	fileIngestCmd.Parse(flag.Args()[2:])
 
 	if filepath == "" || username == "" {
-		fmt.Fprint(os.Stderr, "Error: both -filepath and -user are required.\n")
-		fmt.Fprint(os.Stderr, fileIngestUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: both -filepath and -user are required.\n%s", fileIngestUsage)
 	}
 
 	if err := helpers.CheckValidChars(filepath); err != nil {
@@ -384,9 +366,7 @@ func handleFileAccessionCommand() error {
 	fileAccessionCmd.Parse(flag.Args()[2:])
 
 	if filepath == "" || username == "" || accessionID == "" {
-		fmt.Fprint(os.Stderr, "Error: -filepath, -user, and -accession-id are required.\n")
-		fmt.Fprint(os.Stderr, fileAccessionUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: -filepath, -user, and -accession-id are required.\n%s", fileAccessionUsage)
 	}
 
 	if err := helpers.CheckValidChars(filepath); err != nil {
@@ -409,9 +389,7 @@ func handleFileAccessionCommand() error {
 
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
-		fmt.Fprint(os.Stderr, "Error: 'dataset' requires a subcommand (create, release).\n")
-		fmt.Fprint(os.Stderr, datasetUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: 'dataset' requires a subcommand (create, release).\n%s", datasetUsage)
 	}
 
 	switch flag.Arg(1) {
@@ -424,9 +402,7 @@ func handleDatasetCommand() error {
 			return err
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown subcommand '%s' for '%s'.\n", flag.Arg(1), flag.Arg(0))
-		fmt.Fprint(os.Stderr, datasetUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), datasetUsage)
 	}
 
 	return nil
@@ -440,9 +416,7 @@ func handleDatasetCreateCommand() error {
 	accessionIDs := datasetCreateCmd.Args() // Args() returns the non-flag arguments after parsing
 
 	if datasetID == "" || len(accessionIDs) == 0 {
-		fmt.Fprint(os.Stderr, "Error: -dataset-id and at least one accession ID are required.\n")
-		fmt.Fprint(os.Stderr, datasetCreateUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
 	}
 
 	if err := helpers.CheckTokenExpiration(token); err != nil {
@@ -466,9 +440,7 @@ func handleDatasetReleaseCommand() error {
 	datasetReleaseCmd.Parse(flag.Args()[2:])
 
 	if datasetID == "" {
-		fmt.Fprint(os.Stderr, "Error: -dataset-id is required.\n")
-		fmt.Fprint(os.Stderr, datasetReleaseUsage)
-		return fmt.Errorf("")
+		return fmt.Errorf("Error: -dataset-id is required.\n%s", datasetReleaseUsage)
 	}
 
 	if err := helpers.CheckTokenExpiration(token); err != nil {
