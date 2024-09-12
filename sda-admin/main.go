@@ -265,9 +265,6 @@ func handleUserCommand() error {
 	}
 	switch flag.Arg(1) {
 	case "list":
-		if err := helpers.CheckTokenExpiration(token); err != nil {
-			return err
-		}
 		err := user.List(apiURI, token)
 		if err != nil {
 			return fmt.Errorf("error: failed to get users, reason: %v", err)
@@ -291,10 +288,6 @@ func handleFileListCommand() error {
 	// Check if the -user flag was provided
 	if username == "" {
 		return fmt.Errorf("Error: the -user flag is required.\n%s", fileListUsage)
-	}
-
-	if err := helpers.CheckTokenExpiration(token); err != nil {
-		return err
 	}
 
 	if err := file.List(apiURI, token, username); err != nil {
@@ -346,10 +339,6 @@ func handleFileIngestCommand() error {
 		return err
 	}
 
-	if err := helpers.CheckTokenExpiration(token); err != nil {
-		return err
-	}
-
 	err := file.Ingest(apiURI, token, username, filepath)
 	if err != nil {
 		return fmt.Errorf("error: failed to ingest file, reason: %v", err)
@@ -376,10 +365,6 @@ func handleFileAccessionCommand() error {
 	}
 
 	if err := helpers.CheckValidChars(filepath); err != nil {
-		return err
-	}
-
-	if err := helpers.CheckTokenExpiration(token); err != nil {
 		return err
 	}
 
@@ -429,10 +414,6 @@ func handleDatasetCreateCommand() error {
 		return fmt.Errorf("Error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
 	}
 
-	if err := helpers.CheckTokenExpiration(token); err != nil {
-		return err
-	}
-
 	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
 		return fmt.Errorf("error: failed to create dataset, reason: %v", err)
@@ -454,10 +435,6 @@ func handleDatasetReleaseCommand() error {
 
 	if datasetID == "" {
 		return fmt.Errorf("error: -dataset-id is required.\n%s", datasetReleaseUsage)
-	}
-
-	if err := helpers.CheckTokenExpiration(token); err != nil {
-		return err
 	}
 
 	err := dataset.Release(apiURI, token, datasetID)

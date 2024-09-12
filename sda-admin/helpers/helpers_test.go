@@ -1,63 +1,13 @@
 package helpers
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
 )
-
-// generate jwts for testing the expDate
-func generateDummyToken(expDate int64) string {
-	// Generate a new private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		log.Fatalf("Failed to generate private key: %s", err)
-	}
-
-	// Create the Claims
-	claims := &jwt.StandardClaims{
-		Issuer: "test",
-	}
-	if expDate != 0 {
-		claims = &jwt.StandardClaims{
-			ExpiresAt: expDate,
-			Issuer:    "test",
-		}
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	ss, err := token.SignedString(privateKey)
-	if err != nil {
-		log.Fatalf("Failed to sign token: %s", err)
-	}
-
-	return ss
-}
-
-func TestTokenExpiration(t *testing.T) {
-	// Token without exp claim
-	token := generateDummyToken(0)
-	err := CheckTokenExpiration(token)
-	assert.EqualError(t, err, "could not parse token, reason: no expiration date")
-
-	// Token with expired date
-	token = generateDummyToken(time.Now().Unix())
-	err = CheckTokenExpiration(token)
-	assert.EqualError(t, err, "the provided access token has expired, please renew it")
-
-	// Token with valid expiration
-	token = generateDummyToken(time.Now().Add(time.Hour * 72).Unix())
-	err = CheckTokenExpiration(token)
-	assert.NoError(t, err)
-}
 
 func TestGetBody(t *testing.T) {
 	// Mock server
