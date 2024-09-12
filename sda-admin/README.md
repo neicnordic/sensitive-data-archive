@@ -16,32 +16,32 @@ Set the authentication token (optional if the environmental variable `ACCESS_TOK
 
 ## List all users
 
-Use the following command to return all users with active uploads as a JSON array 
+Use the following command to return all users with active uploads
 ```sh
 sda-admin user list 
 ```
 
 ## List all files for a specified user
 
-Use the following command to return all files belonging to the specified user `test@dummy.org`
+Use the following command to return all files belonging to the specified user `test-user@example.org`
 ```sh
-sda-admin file list -user test@dummy.org
+sda-admin file list -user test-user@example.org
 ```
 
 ## Ingest a file
 
-Use the following command to trigger the ingesting of a given file `/path/to/file.c4gh` that belongs to the user `test@dummy.org` 
+Use the following command to trigger the ingesting of a given file `/path/to/file.c4gh` that belongs to the user `test-user@example.org`
 
 ```sh
-sda-admin file ingest -filepath /path/to/file.c4gh -user test@dummy.org 
+sda-admin file ingest -filepath /path/to/file.c4gh -user test-user@example.org
 ```
 
 ## Assign an accession ID to a file
 
-Use the following command to assign an accession ID `my-accession-id-1` to a given file `/path/to/file.c4gh` that belongs to the user `test@dummy.org`
+Use the following command to assign an accession ID `my-accession-id-1` to a given file `/path/to/file.c4gh` that belongs to the user `test-user@example.org`
 
 ```sh
-sda-admin file set-accession -filepath /path/to/file.c4gh -user test@dummy.org -accession-id my-accession-id-1 
+sda-admin file set-accession -filepath /path/to/file.c4gh -user test-user@example.org -accession-id my-accession-id-1
 ```
 
 ## Create a dataset from a list of accession IDs and a dataset ID
