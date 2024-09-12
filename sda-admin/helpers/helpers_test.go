@@ -62,8 +62,11 @@ func TestTokenExpiration(t *testing.T) {
 func TestGetBody(t *testing.T) {
 	// Mock server
 	mockResponse := `{"key": "value"}`
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		rw.Write([]byte(mockResponse))
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		_, err := rw.Write([]byte(mockResponse))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -73,7 +76,7 @@ func TestGetBody(t *testing.T) {
 	assert.JSONEq(t, mockResponse, string(body))
 
 	// Test non-200 status code
-	serverError := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	serverError := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverError.Close()
@@ -85,11 +88,15 @@ func TestGetBody(t *testing.T) {
 
 func TestPostReq(t *testing.T) {
 	// Mock server
-	mockResponse := `{"key": "value"}` 
+	mockResponse := `{"key": "value"}`
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 		assert.Equal(t, "Bearer mock_token", req.Header.Get("Authorization"))
-		rw.Write([]byte(mockResponse))
+
+		_, err := rw.Write([]byte(mockResponse))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -99,7 +106,7 @@ func TestPostReq(t *testing.T) {
 	assert.JSONEq(t, mockResponse, string(body))
 
 	// Test non-200 status code
-	serverError := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	serverError := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverError.Close()

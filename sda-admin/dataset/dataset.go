@@ -57,4 +57,3 @@ func Release(apiURI, token, datasetID string) error {
 
 	return nil
 }
-

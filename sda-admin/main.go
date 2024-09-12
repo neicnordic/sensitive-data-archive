@@ -146,14 +146,6 @@ func printVersion() {
 	fmt.Printf("sda-admin version %s\n", version)
 }
 
-func checkToken(token string) error {
-	if err := helpers.CheckTokenExpiration(token); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func parseFlagsAndEnv() error {
 	// Set up flags
 	flag.StringVar(&apiURI, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
@@ -172,20 +164,22 @@ func parseFlagsAndEnv() error {
 		return errors.New(usage)
 	}
 
-	// Check environment variables if flags are not provided
-	if flag.Arg(0) != "help" {
-		if apiURI == "" {
-			apiURI = os.Getenv("API_HOST")
-			if apiURI == "" {
-				return fmt.Errorf("error: either -uri must be provided or API_HOST environment variable must be set.")
-			}
-		}
+	if flag.Arg(0) == "help" {
+		return nil
+	}
 
+	// Check environment variables if flags are not provided
+	if apiURI == "" {
+		apiURI = os.Getenv("API_HOST")
+		if apiURI == "" {
+			return fmt.Errorf("error: either -uri must be provided or API_HOST environment variable must be set")
+		}
+	}
+
+	if token == "" {
+		token = os.Getenv("ACCESS_TOKEN")
 		if token == "" {
-			token = os.Getenv("ACCESS_TOKEN")
-			if token == "" {
-				return fmt.Errorf("error: either -token must be provided or ACCESS_TOKEN environment variable must be set.")
-			}
+			return fmt.Errorf("error: either -token must be provided or ACCESS_TOKEN environment variable must be set")
 		}
 	}
 
@@ -221,11 +215,12 @@ func handleHelpCommand() error {
 }
 
 func handleHelpUser() error {
-	if flag.NArg() == 2 {
+	switch {
+	case flag.NArg() == 2:
 		fmt.Fprint(os.Stderr, userUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "list" {
+	case flag.NArg() > 2 && flag.Arg(2) == "list":
 		fmt.Fprint(os.Stderr, userListUsage)
-	} else {
+	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
 
@@ -233,15 +228,16 @@ func handleHelpUser() error {
 }
 
 func handleHelpFile() error {
-	if flag.NArg() == 2 {
+	switch {
+	case flag.NArg() == 2:
 		fmt.Fprint(os.Stderr, fileUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "list" {
+	case flag.NArg() > 2 && flag.Arg(2) == "list":
 		fmt.Fprint(os.Stderr, fileListUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "ingest" {
+	case flag.NArg() > 2 && flag.Arg(2) == "ingest":
 		fmt.Fprint(os.Stderr, fileIngestUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "set-accession" {
+	case flag.NArg() > 2 && flag.Arg(2) == "set-accession":
 		fmt.Fprint(os.Stderr, fileAccessionUsage)
-	} else {
+	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
 
@@ -249,13 +245,14 @@ func handleHelpFile() error {
 }
 
 func handleHelpDataset() error {
-	if flag.NArg() == 2 {
+	switch {
+	case flag.NArg() == 2:
 		fmt.Fprint(os.Stderr, datasetUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "create" {
+	case flag.NArg() > 2 && flag.Arg(2) == "create":
 		fmt.Fprint(os.Stderr, datasetCreateUsage)
-	} else if flag.NArg() > 2 && flag.Arg(2) == "release" {
+	case flag.NArg() > 2 && flag.Arg(2) == "release":
 		fmt.Fprint(os.Stderr, datasetReleaseUsage)
-	} else {
+	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
 
@@ -273,7 +270,7 @@ func handleUserCommand() error {
 		}
 		err := user.List(apiURI, token)
 		if err != nil {
-			return fmt.Errorf("Error: failed to get users, reason: %v\n", err)
+			return fmt.Errorf("error: failed to get users, reason: %v", err)
 		}
 	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), userUsage)
@@ -286,7 +283,10 @@ func handleFileListCommand() error {
 	listFilesCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	var username string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
-	listFilesCmd.Parse(flag.Args()[2:])
+
+	if err := listFilesCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
 
 	// Check if the -user flag was provided
 	if username == "" {
@@ -298,7 +298,7 @@ func handleFileListCommand() error {
 	}
 
 	if err := file.List(apiURI, token, username); err != nil {
-		return fmt.Errorf("Error: failed to get files, reason: %v\n", err)
+		return fmt.Errorf("error: failed to get files, reason: %v", err)
 	}
 
 	return nil
@@ -333,7 +333,10 @@ func handleFileIngestCommand() error {
 	var filepath, username string
 	fileIngestCmd.StringVar(&filepath, "filepath", "", "Filepath to ingest")
 	fileIngestCmd.StringVar(&username, "user", "", "Username to associate with the file")
-	fileIngestCmd.Parse(flag.Args()[2:])
+
+	if err := fileIngestCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
 
 	if filepath == "" || username == "" {
 		return fmt.Errorf("Error: both -filepath and -user are required.\n%s", fileIngestUsage)
@@ -349,10 +352,10 @@ func handleFileIngestCommand() error {
 
 	err := file.Ingest(apiURI, token, username, filepath)
 	if err != nil {
-		return fmt.Errorf("Error: failed to ingest file, reason: %v\n", err)
-	} else {
-		fmt.Println("File ingestion triggered successfully.")
+		return fmt.Errorf("error: failed to ingest file, reason: %v", err)
 	}
+
+	fmt.Println("File ingestion triggered successfully.")
 
 	return nil
 }
@@ -363,10 +366,13 @@ func handleFileAccessionCommand() error {
 	fileAccessionCmd.StringVar(&filepath, "filepath", "", "Filepath to assign accession ID")
 	fileAccessionCmd.StringVar(&username, "user", "", "Username to associate with the file")
 	fileAccessionCmd.StringVar(&accessionID, "accession-id", "", "Accession ID to assign")
-	fileAccessionCmd.Parse(flag.Args()[2:])
+
+	if err := fileAccessionCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
 
 	if filepath == "" || username == "" || accessionID == "" {
-		return fmt.Errorf("Error: -filepath, -user, and -accession-id are required.\n%s", fileAccessionUsage)
+		return fmt.Errorf("error: -filepath, -user, and -accession-id are required.\n%s", fileAccessionUsage)
 	}
 
 	if err := helpers.CheckValidChars(filepath); err != nil {
@@ -379,10 +385,10 @@ func handleFileAccessionCommand() error {
 
 	err := file.SetAccession(apiURI, token, username, filepath, accessionID)
 	if err != nil {
-		return fmt.Errorf("Error: failed to assign accession ID to file, reason: %v\n", err)
-	} else {
-		fmt.Println("Accession ID assigned to file successfully.")
+		return fmt.Errorf("error: failed to assign accession ID to file, reason: %v", err)
 	}
+
+	fmt.Println("Accession ID assigned to file successfully.")
 
 	return nil
 }
@@ -412,7 +418,11 @@ func handleDatasetCreateCommand() error {
 	datasetCreateCmd := flag.NewFlagSet("create", flag.ExitOnError)
 	var datasetID string
 	datasetCreateCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to create")
-	datasetCreateCmd.Parse(flag.Args()[2:])
+
+	if err := datasetCreateCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
 	accessionIDs := datasetCreateCmd.Args() // Args() returns the non-flag arguments after parsing
 
 	if datasetID == "" || len(accessionIDs) == 0 {
@@ -425,10 +435,10 @@ func handleDatasetCreateCommand() error {
 
 	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
-		return fmt.Errorf("Error: failed to create dataset, reason: %v\n", err)
-	} else {
-		fmt.Println("Dataset created successfully.")
+		return fmt.Errorf("error: failed to create dataset, reason: %v", err)
 	}
+
+	fmt.Println("Dataset created successfully.")
 
 	return nil
 }
@@ -437,10 +447,13 @@ func handleDatasetReleaseCommand() error {
 	datasetReleaseCmd := flag.NewFlagSet("release", flag.ExitOnError)
 	var datasetID string
 	datasetReleaseCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to release")
-	datasetReleaseCmd.Parse(flag.Args()[2:])
+
+	if err := datasetReleaseCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
 
 	if datasetID == "" {
-		return fmt.Errorf("Error: -dataset-id is required.\n%s", datasetReleaseUsage)
+		return fmt.Errorf("error: -dataset-id is required.\n%s", datasetReleaseUsage)
 	}
 
 	if err := helpers.CheckTokenExpiration(token); err != nil {
@@ -449,10 +462,10 @@ func handleDatasetReleaseCommand() error {
 
 	err := dataset.Release(apiURI, token, datasetID)
 	if err != nil {
-		return fmt.Errorf("Error: failed to release dataset, reason: %v\n", err)
-	} else {
-		fmt.Println("Dataset released successfully.")
+		return fmt.Errorf("error: failed to release dataset, reason: %v", err)
 	}
+
+	fmt.Println("Dataset released successfully.")
 
 	return nil
 }
