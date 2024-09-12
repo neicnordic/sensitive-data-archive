@@ -1,114 +1,104 @@
 package main
 
 import (
-	"crypto/tls"
-	"database/sql"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
-	"time"
 
-	"github.com/heptiolabs/healthcheck"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	log "github.com/sirupsen/logrus"
 )
 
-// HealthCheck registers and endpoint for healthchecking the service
-type HealthCheck struct {
-	port       int
-	DB         *sql.DB
-	s3URL      string
-	brokerURL  string
-	tlsConfig  *tls.Config
-	serverCert string
-	serverKey  string
+// CheckHealth checks and tries to repair the connections to MQ, DB and S3
+func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
+
+	// try to connect to mq, check connection and channel
+	var err error
+	if p.messenger == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+
+		return
+	}
+	if p.messenger.IsConnClosed() {
+		log.Warning("connection is closed, reconnecting...")
+		p.messenger, err = broker.NewMQ(p.messenger.Conf)
+		if err != nil {
+			log.Warning(err)
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			return
+		}
+	}
+
+	if p.messenger.Channel.IsClosed() {
+		log.Warning("channel is closed, recreating...")
+		err := p.messenger.CreateNewChannel()
+		if err != nil {
+			log.Warning(err)
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			return
+		}
+	}
+	// Ping database, reconnect if there was a connection problem
+	err = p.database.DB.Ping()
+	if err != nil {
+		log.Errorf("Database connection problem: %v", err)
+		err = p.database.Connect()
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			return
+		}
+	}
+
+	// Check that s3 backend responds
+	s3url, err := p.getS3ReadyPath()
+	if err != nil {
+		log.Errorf("Incorrect S3 health url: %v", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+
+		return
+	}
+	err = p.httpsGetCheck(s3url)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
-// NewHealthCheck creates a new healthchecker. It needs to know where to find
-// the backend S3 storage and the Message Broker so it can report readiness.
-func NewHealthCheck(port int, db *sql.DB, conf *config.Config, tlsConfig *tls.Config) *HealthCheck {
-	s3URL := conf.Inbox.S3.URL
-	if conf.Inbox.S3.Port != 0 {
-		s3URL = fmt.Sprintf("%s:%d", s3URL, conf.Inbox.S3.Port)
+// httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
+func (p *Proxy) httpsGetCheck(url string) error {
+	resp, e := p.client.Get(url)
+	if e != nil {
+		return e
 	}
-	if conf.Inbox.S3.Readypath != "" {
-		s3URL += conf.Inbox.S3.Readypath
+	_ = resp.Body.Close() // ignoring error
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("returned status %d", resp.StatusCode)
 	}
 
-	brokerURL := fmt.Sprintf("%s:%d", conf.Broker.Host, conf.Broker.Port)
-
-	serverCert := conf.Server.Cert
-	serverKey := conf.Server.Key
-
-	return &HealthCheck{port, db, s3URL, brokerURL, tlsConfig, serverCert, serverKey}
+	return nil
 }
 
-// RunHealthChecks should be run as a go routine in the main app. It registers
-// the healthcheck handler on the port specified in when creating a new
-// healthcheck.
-func (h *HealthCheck) RunHealthChecks() {
-	health := healthcheck.NewHandler()
+func (p *Proxy) getS3ReadyPath() (string, error) {
 
-	health.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(100))
-
-	health.AddReadinessCheck("S3-backend-http", h.httpsGetCheck(h.s3URL, 5000*time.Millisecond))
-
-	health.AddReadinessCheck("broker-tcp", healthcheck.TCPDialCheck(h.brokerURL, 5000*time.Millisecond))
-
-	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(h.DB, 1*time.Second))
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			// readyEndpoint does not accept method head
-			r.Method = http.MethodGet
-			health.ReadyEndpoint(w, r)
-		}
-	})
-	mux.HandleFunc("/health", health.ReadyEndpoint)
-
-	addr := ":" + strconv.Itoa(h.port)
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		IdleTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 3 * time.Second,
+	s3URL, err := url.Parse(p.s3.URL)
+	if err != nil {
+		return "", err
 	}
-	if h.serverCert != "" && h.serverKey != "" {
-		if err := server.ListenAndServeTLS(h.serverCert, h.serverKey); err != nil {
-			panic(err)
-		}
-	} else {
-		if err := server.ListenAndServe(); err != nil {
-			panic(err)
-		}
+	if p.s3.Port != 0 {
+		s3URL.Host = net.JoinHostPort(s3URL.Hostname(), strconv.Itoa(p.s3.Port))
 	}
-}
-
-func (h *HealthCheck) httpsGetCheck(url string, timeout time.Duration) healthcheck.Check {
-	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
-	cfg.RootCAs = h.tlsConfig.RootCAs
-	tr := &http.Transport{TLSClientConfig: cfg}
-	client := http.Client{
-		Transport: tr,
-		Timeout:   timeout,
-		// never follow redirects
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	if p.s3.Readypath != "" {
+		s3URL.Path = path.Join(s3URL.Path, p.s3.Readypath)
 	}
 
-	return func() error {
-		resp, e := client.Get(url)
-		if e != nil {
-			return e
-		}
-		_ = resp.Body.Close() // ignoring error
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("returned status %d", resp.StatusCode)
-		}
-
-		return nil
-	}
+	return s3URL.String(), nil
 }
