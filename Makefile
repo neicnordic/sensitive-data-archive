@@ -23,7 +23,7 @@ bootstrap: go-version-check docker-version-check
 		GO111MODULE=off go get golang.org/x/tools/cmd/goimports
 
 # build containers
-build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox
+build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox build-sda-admin
 build-postgresql:
 	@cd postgresql && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-postgres .
 build-rabbitmq:
@@ -34,6 +34,8 @@ build-sda-download:
 	@cd sda-download && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-download .
 build-sda-sftp-inbox:
 	@cd sda-sftp-inbox && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-sftp-inbox .
+build-sda-admin:
+	@cd sda-admin && go build
 
 
 go-version-check: SHELL:=/bin/bash
@@ -81,13 +83,16 @@ integrationtest-sda: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
 
 # lint go code
-lint-all: lint-sda lint-sda-download
+lint-all: lint-sda lint-sda-download lint-sda-admin
 lint-sda:
 	@echo 'Running golangci-lint in the `sda` folder'
 	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 lint-sda-download:
 	@echo 'Running golangci-lint in the `sda-download` folder'
 	@cd sda-download && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+lint-sda-admin:
+	@echo 'Running golangci-lint in the `sda-admin` folder'
+	@cd sda-admin && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
 
 # run static code tests
 test-all: test-sda test-sda-download test-sda-sftp-inbox
@@ -97,3 +102,5 @@ test-sda-download:
 	@cd sda-download && go test ./... -count=1
 test-sda-sftp-inbox:
 	@docker run --rm -v ./sda-sftp-inbox:/inbox maven:3.9.4-eclipse-temurin-21-alpine sh -c "cd /inbox && mvn test -B"
+test-sda-admin:
+	@cd sda-admin && go test ./... -count=1
