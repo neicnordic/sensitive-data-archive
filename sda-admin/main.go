@@ -20,8 +20,7 @@ var (
 )
 
 // Command-line usage
-var usage = `
-Usage:
+const usage = `Usage:
   sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
@@ -42,8 +41,7 @@ Global Options:
 
 Additional Commands:
   help             Show this help message.
-  -h, -help        Show this help message.
-`
+  -h, -help        Show this help message.`
 
 var userUsage = `
 List Users:
@@ -187,28 +185,29 @@ func parseFlagsAndEnv() error {
 }
 
 func handleHelpCommand() error {
-	if flag.NArg() > 1 {
-		switch flag.Arg(1) {
-		case "user":
-			if err := handleHelpUser(); err != nil {
-				return err
-			}
-		case "file":
-			if err := handleHelpFile(); err != nil {
-				return err
-			}
-		case "dataset":
-			if err := handleHelpDataset(); err != nil {
-				return err
-			}
-		case "version":
-			fmt.Fprint(os.Stderr, versionUsage)
-		default:
-			return fmt.Errorf("Unknown command '%s'.\n%s", flag.Arg(1), usage)
+	if flag.NArg() == 1 {
+		fmt.Println(usage)
 
+		return nil
+	}
+
+	switch flag.Arg(1) {
+	case "user":
+		if err := handleHelpUser(); err != nil {
+			return err
 		}
-	} else {
-		fmt.Fprint(os.Stderr, usage)
+	case "file":
+		if err := handleHelpFile(); err != nil {
+			return err
+		}
+	case "dataset":
+		if err := handleHelpDataset(); err != nil {
+			return err
+		}
+	case "version":
+		fmt.Println(versionUsage)
+	default:
+		return fmt.Errorf("unknown command '%s'.\n%s", flag.Arg(1), usage)
 	}
 
 	return nil
@@ -218,7 +217,7 @@ func handleHelpUser() error {
 	switch {
 	case flag.NArg() == 2:
 		fmt.Fprint(os.Stderr, userUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "list":
+	case flag.Arg(2) == "list":
 		fmt.Fprint(os.Stderr, userListUsage)
 	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
@@ -231,11 +230,11 @@ func handleHelpFile() error {
 	switch {
 	case flag.NArg() == 2:
 		fmt.Fprint(os.Stderr, fileUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "list":
+	case flag.Arg(2) == "list":
 		fmt.Fprint(os.Stderr, fileListUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "ingest":
+	case flag.Arg(2) == "ingest":
 		fmt.Fprint(os.Stderr, fileIngestUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "set-accession":
+	case flag.Arg(2) == "set-accession":
 		fmt.Fprint(os.Stderr, fileAccessionUsage)
 	default:
 		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
@@ -373,8 +372,6 @@ func handleFileAccessionCommand() error {
 		return fmt.Errorf("error: failed to assign accession ID to file, reason: %v", err)
 	}
 
-	fmt.Println("Accession ID assigned to file successfully.")
-
 	return nil
 }
 
@@ -411,15 +408,13 @@ func handleDatasetCreateCommand() error {
 	accessionIDs := datasetCreateCmd.Args() // Args() returns the non-flag arguments after parsing
 
 	if datasetID == "" || len(accessionIDs) == 0 {
-		return fmt.Errorf("Error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
+		return fmt.Errorf("error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
 	}
 
 	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
 		return fmt.Errorf("error: failed to create dataset, reason: %v", err)
 	}
-
-	fmt.Println("Dataset created successfully.")
 
 	return nil
 }
@@ -441,8 +436,6 @@ func handleDatasetReleaseCommand() error {
 	if err != nil {
 		return fmt.Errorf("error: failed to release dataset, reason: %v", err)
 	}
-
-	fmt.Println("Dataset released successfully.")
 
 	return nil
 }
