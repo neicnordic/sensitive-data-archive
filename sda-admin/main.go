@@ -220,7 +220,7 @@ func handleHelpUser() error {
 	case flag.Arg(2) == "list":
 		fmt.Fprint(os.Stderr, userListUsage)
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
 
 	return nil
@@ -237,7 +237,7 @@ func handleHelpFile() error {
 	case flag.Arg(2) == "set-accession":
 		fmt.Fprint(os.Stderr, fileAccessionUsage)
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
 
 	return nil
@@ -252,7 +252,7 @@ func handleHelpDataset() error {
 	case flag.NArg() > 2 && flag.Arg(2) == "release":
 		fmt.Fprint(os.Stderr, datasetReleaseUsage)
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
 
 	return nil
@@ -260,7 +260,7 @@ func handleHelpDataset() error {
 
 func handleUserCommand() error {
 	if flag.NArg() < 2 {
-		return fmt.Errorf("Error: 'user' requires a subcommand (list).\n%s", userUsage)
+		return fmt.Errorf("error: 'user' requires a subcommand (list).\n%s", userUsage)
 	}
 	switch flag.Arg(1) {
 	case "list":
@@ -269,7 +269,7 @@ func handleUserCommand() error {
 			return fmt.Errorf("error: failed to get users, reason: %v", err)
 		}
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), userUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), userUsage)
 	}
 
 	return nil
@@ -286,7 +286,7 @@ func handleFileListCommand() error {
 
 	// Check if the -user flag was provided
 	if username == "" {
-		return fmt.Errorf("Error: the -user flag is required.\n%s", fileListUsage)
+		return fmt.Errorf("error: the -user flag is required.\n%s", fileListUsage)
 	}
 
 	if err := file.List(apiURI, token, username); err != nil {
@@ -298,7 +298,7 @@ func handleFileListCommand() error {
 
 func handleFileCommand() error {
 	if flag.NArg() < 2 {
-		return fmt.Errorf("Error: 'file' requires a subcommand (list, ingest, set-accession).\n%s", fileUsage)
+		return fmt.Errorf("error: 'file' requires a subcommand (list, ingest, set-accession).\n%s", fileUsage)
 	}
 	switch flag.Arg(1) {
 	case "list":
@@ -314,7 +314,7 @@ func handleFileCommand() error {
 			return err
 		}
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), fileUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), fileUsage)
 	}
 
 	return nil
@@ -331,7 +331,7 @@ func handleFileIngestCommand() error {
 	}
 
 	if filepath == "" || username == "" {
-		return fmt.Errorf("Error: both -filepath and -user are required.\n%s", fileIngestUsage)
+		return fmt.Errorf("error: both -filepath and -user are required.\n%s", fileIngestUsage)
 	}
 
 	if err := helpers.CheckValidChars(filepath); err != nil {
@@ -377,7 +377,7 @@ func handleFileAccessionCommand() error {
 
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
-		return fmt.Errorf("Error: 'dataset' requires a subcommand (create, release).\n%s", datasetUsage)
+		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release).\n%s", datasetUsage)
 	}
 
 	switch flag.Arg(1) {
@@ -390,7 +390,7 @@ func handleDatasetCommand() error {
 			return err
 		}
 	default:
-		return fmt.Errorf("Unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), datasetUsage)
+		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(1), flag.Arg(0), datasetUsage)
 	}
 
 	return nil
