@@ -46,7 +46,7 @@ func Release(apiURI, token, datasetID string) error {
 	if err != nil {
 		return err
 	}
-	parsedURL.Path = path.Join(parsedURL.Path, "dataset/release", datasetID)
+	parsedURL.Path = path.Join(parsedURL.Path, "dataset/release") + "/" + datasetID
 
 	jsonBody := []byte("{}")
 	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
