@@ -20,8 +20,7 @@ var (
 )
 
 // Command-line usage
-const usage = `Usage:
-  sda-admin [-uri URI] [-token TOKEN] <command> [options]
+const usage = `Usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
   user list                     List all users.
@@ -43,19 +42,14 @@ Additional Commands:
   help             Show this help message.
   -h, -help        Show this help message.`
 
-var userUsage = `
-List Users:
+var userUsage = `List Users:
   Usage: sda-admin user list 
-    List all users in the system.
-`
+    List all users in the system with ongoing submissions.`
 
-var userListUsage = `
-Usage: sda-admin user list 
-  List all users in the system.
-`
+var userListUsage = `Usage: sda-admin user list 
+  List all users in the system with ongoing submissions.`
 
-var fileUsage = `
-List all files for a user:
+var fileUsage = `List all files for a user:
   Usage: sda-admin file list -user USERNAME
 	List all files for a specified user.
 
@@ -72,38 +66,30 @@ Options:
   -filepath FILEPATH   Specify the path of the file to ingest.
   -accession-id ID     Specify the accession ID to assign to the file.
 
-Use 'sda-admin help file <command>' for information on a specific command.
-`
+Use 'sda-admin help file <command>' for information on a specific command.`
 
-var fileListUsage = `
-Usage: sda-admin file list -user USERNAME
+var fileListUsage = `Usage: sda-admin file list -user USERNAME
   List all files for a specified user.
 
 Options:
-  -user USERNAME 	Specify the username associated with the files.
-`
+  -user USERNAME 	Specify the username associated with the files.`
 
-var fileIngestUsage = `
-Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
+var fileIngestUsage = `Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
   Trigger the ingestion of a given file for a specific user.
 
 Options:
   -filepath FILEPATH   Specify the path of the file to ingest.
-  -user USERNAME       Specify the username associated with the file.
-`
+  -user USERNAME       Specify the username associated with the file.`
 
-var fileAccessionUsage = `
-Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
+var fileAccessionUsage = `Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
   Assign accession ID to a file and associate it with a user.
 
 Options:
   -filepath FILEPATH   Specify the path of the file to assign the accession ID.
   -user USERNAME       Specify the username associated with the file.
-  -accession-id ID     Specify the accession ID to assign to the file.
-`
+  -accession-id ID     Specify the accession ID to assign to the file.`
 
-var datasetUsage = `
-Create a dataset:
+var datasetUsage = `Create a dataset:
   Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
     Create a dataset from a list of accession IDs and a dataset ID.
     
@@ -115,30 +101,23 @@ Options:
   -dataset-id DATASET_ID   Specify the unique identifier for the dataset.
   [ACCESSION_ID ...]       (For dataset create) Specify one or more accession IDs to include in the dataset.
 
-Use 'sda-admin help dataset <command>' for information on a specific command.
-`
+Use 'sda-admin help dataset <command>' for information on a specific command.`
 
-var datasetCreateUsage = `
-Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
+var datasetCreateUsage = `Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
   Create a dataset from a list of accession IDs and a dataset ID.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
-  [ACCESSION_ID ...]         (For dataset create) Specify one or more accession IDs to include in the dataset.
-`
+  [ACCESSION_ID ...]         (For dataset create) Specify one or more accession IDs to include in the dataset.`
 
-var datasetReleaseUsage = `
-Usage: sda-admin dataset release -dataset-id DATASET_ID
+var datasetReleaseUsage = `Usage: sda-admin dataset release -dataset-id DATASET_ID
   Release a dataset for downloading based on its dataset ID.
 
 Options:
-  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
-`
+  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
 
-var versionUsage = `
-Usage: sda-admin version
-  Show the version information for sda-admin.
-`
+var versionUsage = `Usage: sda-admin version
+  Show the version information for sda-admin.`
 
 func printVersion() {
 	fmt.Printf("sda-admin version %s\n", version)
@@ -216,9 +195,9 @@ func handleHelpCommand() error {
 func handleHelpUser() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Fprint(os.Stderr, userUsage)
+		fmt.Println(userUsage)
 	case flag.Arg(2) == "list":
-		fmt.Fprint(os.Stderr, userListUsage)
+		fmt.Println(userListUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
@@ -229,13 +208,13 @@ func handleHelpUser() error {
 func handleHelpFile() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Fprint(os.Stderr, fileUsage)
+		fmt.Println(fileUsage)
 	case flag.Arg(2) == "list":
-		fmt.Fprint(os.Stderr, fileListUsage)
+		fmt.Println(fileListUsage)
 	case flag.Arg(2) == "ingest":
-		fmt.Fprint(os.Stderr, fileIngestUsage)
+		fmt.Println(fileIngestUsage)
 	case flag.Arg(2) == "set-accession":
-		fmt.Fprint(os.Stderr, fileAccessionUsage)
+		fmt.Println(fileAccessionUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -246,11 +225,11 @@ func handleHelpFile() error {
 func handleHelpDataset() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Fprint(os.Stderr, datasetUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "create":
-		fmt.Fprint(os.Stderr, datasetCreateUsage)
-	case flag.NArg() > 2 && flag.Arg(2) == "release":
-		fmt.Fprint(os.Stderr, datasetReleaseUsage)
+		fmt.Println(datasetUsage)
+	case flag.Arg(2) == "create":
+		fmt.Println(datasetCreateUsage)
+	case flag.Arg(2) == "release":
+		fmt.Println(datasetReleaseUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
@@ -342,8 +321,6 @@ func handleFileIngestCommand() error {
 	if err != nil {
 		return fmt.Errorf("error: failed to ingest file, reason: %v", err)
 	}
-
-	fmt.Println("File ingestion triggered successfully.")
 
 	return nil
 }
@@ -470,8 +447,7 @@ func main() {
 	case "version":
 		printVersion()
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command '%s'.\n", flag.Arg(0))
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Fprintf(os.Stderr, "unknown command '%s'.\n%s\n", flag.Arg(0), usage)
 		os.Exit(1)
 	}
 
