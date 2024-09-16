@@ -96,7 +96,7 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.12.771</version>
+            <version>1.12.772</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -132,7 +132,7 @@
         <dependency>
             <groupId>com.hierynomus</groupId>
             <artifactId>sshj</artifactId>
-            <version>0.38.0</version>
+            <version>0.39.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
