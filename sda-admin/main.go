@@ -39,6 +39,7 @@ Global Options:
   -token TOKEN     Set the authentication token (optional if ACCESS_TOKEN is set).
 
 Additional Commands:
+  version          Show the version of sda-admin.
   help             Show this help message.
   -h, -help        Show this help message.`
 
@@ -116,11 +117,8 @@ var datasetReleaseUsage = `Usage: sda-admin dataset release -dataset-id DATASET_
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
 
-var versionUsage = `Usage: sda-admin version
-  Show the version information for sda-admin.`
-
 func printVersion() {
-	fmt.Printf("sda-admin version %s\n", version)
+	fmt.Printf("sda-admin %s\n", version)
 }
 
 func parseFlagsAndEnv() error {
@@ -141,7 +139,7 @@ func parseFlagsAndEnv() error {
 		return errors.New(usage)
 	}
 
-	if flag.Arg(0) == "help" {
+	if flag.Arg(0) == "help" || flag.Arg(0) == "version" {
 		return nil
 	}
 
@@ -183,8 +181,6 @@ func handleHelpCommand() error {
 		if err := handleHelpDataset(); err != nil {
 			return err
 		}
-	case "version":
-		fmt.Println(versionUsage)
 	default:
 		return fmt.Errorf("unknown command '%s'.\n%s", flag.Arg(1), usage)
 	}
