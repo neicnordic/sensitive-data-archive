@@ -86,7 +86,7 @@ jobs:
 
       - name: Get dependencies
         run: |
-          cd sda-download
+          cd sda
           go get -v -t -d ./...
           if [ -f Gopkg.toml ]; then
               curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
@@ -102,5 +102,43 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda/coverage.txt
+          flags: unittests
+          fail_ci_if_error: false
+
+  test_sda_admin:
+    name: Test SDA Admin
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.22']
+    steps:
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Get dependencies
+        run: |
+          cd sda-admin
+          go get -v -t -d ./...
+          if [ -f Gopkg.toml ]; then
+              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+              dep ensure
+          fi
+      - name: Test
+        run: |
+          cd sda-admin
+          go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Codecov
+        uses: codecov/codecov-action@v4.5.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./sda-admin/coverage.txt
           flags: unittests
           fail_ci_if_error: false
