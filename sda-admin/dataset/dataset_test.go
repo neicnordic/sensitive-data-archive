@@ -67,9 +67,8 @@ func TestRelease_Success(t *testing.T) {
 
 	expectedURL := "http://example.com/dataset/release/dataset-123"
 	token := "test-token"
-	jsonBody := []byte(`{}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
+	mockHelpers.On("PostRequest", expectedURL, token, []byte(nil)).Return([]byte(`{}`), nil)
 
 	err := Release("http://example.com", token, "dataset-123")
 	assert.NoError(t, err)
@@ -84,9 +83,8 @@ func TestRelease_PostRequestFailure(t *testing.T) {
 
 	expectedURL := "http://example.com/dataset/release/dataset-123"
 	token := "test-token"
-	jsonBody := []byte(`{}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
+	mockHelpers.On("PostRequest", expectedURL, token, []byte(nil)).Return([]byte(nil), errors.New("failed to send request"))
 
 	err := Release("http://example.com", token, "dataset-123")
 	assert.Error(t, err)
