@@ -7,19 +7,20 @@ on:
       - '**.go'
       - '**/go.*'
 
+env:
+  go-version: '1.23'
+
 jobs:
   lint_download:
     name: Lint download code
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        go-version: ['1.23']
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
@@ -36,13 +37,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        go-version: ['1.23']
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
@@ -59,13 +58,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        go-version: ['1.23']
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
