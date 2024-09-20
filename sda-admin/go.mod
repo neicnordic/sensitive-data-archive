@@ -1,11 +1,8 @@
 module github.com/neicnordic/sensitive-data-archive/sda-admin
 
-go 1.22.3
+go 1.23.1
 
-require (
-	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/stretchr/testify v1.9.0
-)
+require github.com/stretchr/testify v1.9.0
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

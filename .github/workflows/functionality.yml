@@ -32,7 +32,6 @@ jobs:
     strategy:
       matrix:
         storagetype: [s3, posix, s3notls]
-        go-version: ['1.22']
       fail-fast: false
     steps:
       - name: Set up Python
