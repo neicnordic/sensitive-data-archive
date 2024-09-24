@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -283,14 +284,12 @@ func TestFiles_Success(t *testing.T) {
 			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
-			FileName:                  "file1.txt",
-			FileSize:                  200,
+			EncryptedFileSize:         200,
+			EncryptedFileChecksum:     "hash",
+			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
-			Status:                    "READY",
-			CreatedAt:                 "a while ago",
-			LastModified:              "now",
 		}
 		files := []*database.FileInfo{}
 		files = append(files, &fileInfo)
@@ -316,9 +315,10 @@ func TestFiles_Success(t *testing.T) {
 	expectedStatusCode := 200
 	expectedBody := []byte(
 		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
-			`"dir/file1.txt","fileName":"file1.txt","fileSize":200,"decryptedFileSize":100,` +
-			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256",` +
-			`"fileStatus":"READY","createdAt":"a while ago","lastModified":"now"}]`)
+			`"dir/file1.txt","encryptedFileSize":200,` +
+			`"encryptedFileChecksum":"hash","encryptedFileChecksumType":"sha256",` +
+			`"decryptedFileSize":100,` +
+			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -335,15 +335,73 @@ func TestFiles_Success(t *testing.T) {
 
 }
 
+func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
+
+	// Save original to-be-mocked config
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
+
+	config.Config.App.ServeUnencryptedData = false
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// Test downloading of unencrypted file, should fail
+	Download(c)
+	response := w.Result()
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	expectedStatusCode := 400
+	expectedBody := []byte("downloading unencrypted data is not supported")
+
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
+	}
+	if !bytes.Equal(body, []byte(expectedBody)) {
+		// visual byte comparison in terminal (easier to find string differences)
+		t.Error(body)
+		t.Error([]byte(expectedBody))
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %s expected %s", string(body), string(expectedBody))
+	}
+
+	// Test downloading of unencrypted file from the s3 endpoint, should fail
+	// encrypted
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3/somepath", RawQuery: "filename=somepath"}}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+	expectedStatusCode = 400
+	expectedBody = []byte("downloading unencrypted data is not supported")
+
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %d expected %d", response.StatusCode, expectedStatusCode)
+	}
+	if !bytes.Equal(body, []byte(expectedBody)) {
+		// visual byte comparison in terminal (easier to find string differences)
+		t.Error(body)
+		t.Error([]byte(expectedBody))
+		t.Errorf("TestDownload_Fail_UnencryptedDownloadNotAllowed failed, got %s expected %s", string(body), string(expectedBody))
+	}
+
+	// Return mock config to originals
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
+}
+
 func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Save original to-be-mocked functions
 	originalCheckFilePermission := database.CheckFilePermission
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
 		return "", errors.New("file not found")
 	}
+	config.Config.App.ServeUnencryptedData = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -369,6 +427,7 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 
 	// Return mock functions to originals
 	database.CheckFilePermission = originalCheckFilePermission
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
 
 }
 
@@ -377,6 +436,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	// Save original to-be-mocked functions
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -386,6 +446,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{}
 	}
+	config.Config.App.ServeUnencryptedData = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -412,6 +473,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	// Return mock functions to originals
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
 
 }
 
@@ -421,6 +483,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -434,6 +497,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		return nil, errors.New("database error")
 	}
+	config.Config.App.ServeUnencryptedData = true
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -461,6 +525,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
 
 }
 
@@ -470,6 +535,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
 	Backend, _ = storage.NewBackend(config.Config.Archive)
 
 	// Substitute mock functions
@@ -490,6 +556,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 		return fileDetails, nil
 	}
+	config.Config.App.ServeUnencryptedData = true
 
 	// Mock request and response holders and initialize headers
 	w := httptest.NewRecorder()
@@ -522,7 +589,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
-
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
 }
 
 func Test_CalucalateCoords(t *testing.T) {
@@ -611,7 +678,8 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write([]byte{0})
 	assert.NoError(f.t, err, "Could not write response flag")
 
-	err = binary.Write(w, binary.BigEndian, int32(len(response)))
+	assert.LessOrEqual(f.t, len(response), math.MaxInt32, "Response too long")
+	err = binary.Write(w, binary.BigEndian, int32(len(response))) //nolint:gosec // we're checking the length above
 	assert.NoError(f.t, err, "Could not write response length")
 
 	_, err = w.Write(response)
@@ -625,6 +693,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
+	originalServeUnencryptedData := config.Config.App.ServeUnencryptedData
 	archive := config.Config.Archive
 	archive.Posix.Location = "."
 	Backend, _ = storage.NewBackend(archive)
@@ -667,6 +736,8 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	config.Config.Reencrypt.ClientCert = certfile.Name()
 	config.Config.Reencrypt.ClientKey = keyfile.Name()
 	config.Config.Reencrypt.Timeout = 10
+
+	config.Config.App.ServeUnencryptedData = true
 
 	// Set up crypt4gh keys
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GenerateC4GHKey()
@@ -777,6 +848,26 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
 
+	// Test encrypted download, should work even when AllowedUnencryptedDownload is false
+	config.Config.App.ServeUnencryptedData = false
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/s3-encrypted/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.App.Crypt4GHPublicKeyB64},
+		"Range": []string{"bytes=0-10"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+	config.Config.App.ServeUnencryptedData = true
+
 	// Test encrypted download without passing the key, should fail
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
@@ -796,5 +887,5 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
-
+	config.Config.App.ServeUnencryptedData = originalServeUnencryptedData
 }

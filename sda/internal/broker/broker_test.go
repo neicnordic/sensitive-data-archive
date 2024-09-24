@@ -32,15 +32,9 @@ var tMqconf = MQConf{}
 
 func TestMain(m *testing.M) {
 	certPath, _ = os.MkdirTemp("", "gocerts")
-	defer os.RemoveAll(certPath)
 	helper.MakeCerts(certPath)
 	_ = writeConf(certPath)
 
-	defer func() {
-		if r := recover(); r != nil {
-			log.Infoln("Recovered")
-		}
-	}()
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -102,12 +96,15 @@ func TestMain(m *testing.M) {
 		log.Panicf("Could not connect to rabbitmq: %s", err)
 	}
 
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(rabbitmq); err != nil {
 		log.Panicf("Could not purge resource: %s", err)
 	}
+
+	os.RemoveAll(certPath)
+	os.Exit(code)
 }
 
 func (suite *BrokerTestSuite) SetupTest() {

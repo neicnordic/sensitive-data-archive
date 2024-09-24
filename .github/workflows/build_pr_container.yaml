@@ -40,7 +40,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for sda-download
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./sda-download
           push: true
@@ -53,7 +53,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for sensitive-data-archive
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./sda
           push: true
@@ -90,7 +90,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for postgres
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./postgresql
           push: true
@@ -103,7 +103,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build container for rabbitmq
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./rabbitmq
           push: true
@@ -116,7 +116,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on postgres
-        uses: aquasecurity/trivy-action@0.21.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-postgres
           format: "sarif"
@@ -131,7 +131,7 @@ jobs:
           category: postgres
 
       - name: Run Trivy vulnerability scanner on rabbitmq
-        uses: aquasecurity/trivy-action@0.21.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-rabbitmq
           format: "sarif"
@@ -170,7 +170,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container for sda-sftp-inbox
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./sda-sftp-inbox
           push: true
@@ -183,7 +183,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on sftp-inbox
-        uses: aquasecurity/trivy-action@0.21.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ghcr.io/${{ steps.string-github-repo.outputs.lowercase }}:sha-${{ github.sha }}-sftp-inbox
           format: "sarif"
@@ -263,14 +263,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["1.28", "1.29"]
+        version: ["1.30", "1.31"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
         exclude:
-          - version: "1.28"
+          - version: "1.30"
             tls: "false"
             storage: "posix"
-          - version: "1.29"
+          - version: "1.31"
             tls: "false"
             storage: "posix"
     steps:
@@ -327,7 +327,7 @@ jobs:
       - name: Check deployment
         run: |
           sleep 30
-          for n in auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          for n in api auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
             if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
               continue
             fi
@@ -342,7 +342,7 @@ jobs:
         run: |
           kubectl get pods
           sleep 1
-          for svc in auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          for svc in api auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
             echo "## describe $svc" && kubectl describe pod -l role="$svc"
             sleep 1
             echo "## logs $svc" && kubectl logs -l role="$svc"

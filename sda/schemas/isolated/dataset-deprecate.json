@@ -1,1 +1,29 @@
-../federated/dataset-deprecate.json
+{
+    "title": "JSON schema for Local EGA dataset deprecation message interface",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/federated/dataset-deprecate.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "type",
+        "dataset_id"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "type": {
+            "$id": "#/properties/type",
+            "type": "string",
+            "title": "The message type",
+            "description": "The message type",
+            "const": "deprecate"
+        },
+        "dataset_id": {
+            "$id": "#/properties/dataset_id",
+            "type": "string",
+            "title": "The Accession identifier for the dataset",
+            "description": "The Accession identifier for the dataset",
+            "examples": [
+                "anyidentifier"
+            ]
+        }
+    }
+}

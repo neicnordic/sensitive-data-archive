@@ -634,15 +634,10 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 
-	// select all files of the user, each one annotated with its latest event
-	const query = "SELECT f.submission_file_path, e.event, f.created_at " +
-		"FROM sda.files f " +
-		"LEFT JOIN ( " +
-		"SELECT DISTINCT ON (file_id) file_id, started_at, event " +
-		"FROM sda.file_event_log " +
-		"ORDER BY file_id, started_at DESC" +
-		") e ON f.id = e.file_id " +
-		"WHERE f.submission_user = $1; "
+	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
+	const query = "SELECT f.submission_file_path, e.event, f.created_at FROM sda.files f " +
+		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
+		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
 
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
@@ -665,4 +660,63 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	}
 
 	return files, nil
+}
+
+// get the correlation ID for a user-inbox_path combination
+func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
+	var (
+		corrID string
+		err    error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		corrID, err = dbs.getCorrID(user, path)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return corrID, err
+}
+func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 and f.submission_user = $2 AND NOT EXISTS (SELECT file_id FROM sda.file_dataset WHERE file_id = f.id)"
+
+	var corrID string
+	err := db.QueryRow(query, path, user).Scan(&corrID)
+	if err != nil {
+		return "", err
+	}
+
+	return corrID, nil
+}
+
+// list all users with files not yet assigned to a dataset
+func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var users []string
+	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files WHERE id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id) ORDER BY submission_user ASC;")
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user string
+		err := rows.Scan(&user)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
 }

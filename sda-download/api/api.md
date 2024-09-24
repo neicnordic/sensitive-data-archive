@@ -19,16 +19,16 @@ The client can establish a session to bypass time-costly visa validations for fu
 
 ### Endpoints overview:
 
-**Data out API**:
+**[Data out API](#data-out-api)**:
 
 - `/metadata/datasets`
 - `/metadata/datasets/*dataset`
 - `/files/:fileid`
 
-**htsget**:
+**[File download requests, for htsget](#file-download-requests)**
 
-- `/s3/<datasetid>/<fileid>`
-- `/s3-encrypted/<datasetid>/<fileid>`
+- `/s3/*datasetid/*filepath`
+- `/s3-encrypted/*datasetid/*filepath`
 
 ### Data out API
 #### Datasets
@@ -51,21 +51,13 @@ The files contained in a dataset are listed using the `datasetName` obtained fro
 GET /metadata/datasets/{datasetName}/files
 ```
 **Scheme Parameter**
-The `?scheme=` query parameter is optional. When a dataset contains a scheme, it may sometimes encounter issues with reverse proxies.
-The scheme can be separated from the dataset name and supplied in a query parameter.
-```
-dataset := strings.Split("https://doi.org/abc/123", "://")
-len(dataset) // 2 -> scheme can be used
-dataset[0] // "https"
-dataset[1] // "doi.org/abc/123
-
-dataset := strings.Split("EGAD1000", "://")
-len(dataset) // 1 -> no scheme
-dataset[0] // "EGAD1000"
-```
+The `?scheme=` query parameter is optional. When a dataset name contains a scheme, such as `https://`, it may sometimes encounter issues with reverse proxies.
+This can be solved by separating the scheme from the dataset name and suppling it as a query parameter.
 ```
 GET /metadata/datasets/{datasetName}/files?scheme=https
 ```
+For example, given a dataset name `https://doi.org/abc/123`, one can do `GET /metadata/datasets/doi.org/abc/123/files?scheme=https`.
+ 
 ##### Response
 ```
 [
@@ -100,31 +92,29 @@ File data is downloaded using the `fileId` from `/metadata/datasets/{datasetName
 GET /files/{fileId}
 ```
 ##### Response
-Response is given as byte stream `application/octet-stream`
-```
-hello
-```
+Response is given as byte stream `application/octet-stream`.
 ##### Optional Query Parameters
 Parts of a file can be requested with specific byte ranges using `startCoordinate` and `endCoordinate` query parameters, e.g.:
 ```
 ?startCoordinate=0&endCoordinate=100
 ```
 
-### S3 requests, for htsget
+### File download requests
+These endpoints are designed for usage with [htsget](https://samtools.github.io/hts-specs/htsget.html).
+
+The `/s3` and `/s3-encrypted` endpoints accept the same parameters, described below.
+Note that the download service may be configured to only allow encrypted file downloads.
 
 **Parameters**:
 
-*Partial file retrieval*: 
 - `startCoordinate`: start byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
 - `endCoordinate`: end byte position in the file. If the request is for an encrypted file, the position will be adjusted to align with the nearest data block boundary.
 
-Headers:
+**Headers**:
 
 - `Authorization: Bearer <token>` 
-- `Range: bytes=<start>-<end>`  exact positions. Overrides parameter coordinates.
+- `Range: bytes=<start>-<end>`  exact byte positions for partial file retrieval. Overrides parameter coordinates.
 - `Client-public-key: <key>` used for re-encrypting the header of the file before sending it.
-- `Server-public-key: <key>` used in communication with htsget, for re-encrypting the header of the file.
-- `User-Agent` used in communication with htsget, to mark who is making the request. For example `htsget-search/0.6.6.`
 
 
 #### Retreive size of unencrypted file
@@ -134,6 +124,7 @@ HEAD /s3/{datasetid}/{fileid}
 ```
 ##### Response
 Returns the size of the unencrypted file, communicated in the response header `Content-Length`.
+Or, if the download service is configured to disallow unencrypted downloads, status `400` will be returned.
 
 #### Retreive unencrypted file
 ##### Request
@@ -141,7 +132,8 @@ Returns the size of the unencrypted file, communicated in the response header `C
 GET /s3/{datasetid}/{fileid}
 ```
 ##### Response
-Returns the unencrypted file.
+Returns the unencrypted file, as byte stream `application/octet-stream`.
+Or, if the download service is configured to disallow unencrypted downloads, status `400` will be returned.
 
 
 #### Retreive size of encrypted file
@@ -158,4 +150,4 @@ Returns the size of the unencrypted file, communicated in the response header `C
 GET /s3-encrypted/{datasetid}/{fileid}
 ```
 ##### Response
-Returns the unencrypted file.
+Returns the unencrypted file, as byte stream `application/octet-stream`.

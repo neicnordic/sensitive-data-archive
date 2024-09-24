@@ -10,6 +10,9 @@ spec:
   - name: reencrypt
     port: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
     targetPort: grpc
+  - name: healthcheck
+    port: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
+    targetPort: grpchealth
   selector:
     app: {{ template "sda.name" . }}-reencrypt
 {{- end }}

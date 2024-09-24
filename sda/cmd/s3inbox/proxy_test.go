@@ -128,7 +128,7 @@ func startFakeServer(port string) *FakeServer {
 	f := FakeServer{}
 	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.pinged = true
-		fmt.Fprintf(w, f.resp)
+		fmt.Fprint(w, f.resp)
 	})
 	ts := httptest.NewUnstartedServer(foo)
 	ts.Listener.Close()
@@ -499,7 +499,7 @@ func (suite *ProxyTests) TestFormatUploadFilePath() {
 	assert.EqualError(suite.T(), err, "filepath contains mixed '\\' and '/' characters")
 
 	// no mixed "\" and "/" but not allowed
-	weirdPath = `dq\sw:*?"<>|\t\sdf.c4gh`
+	weirdPath = `dq\sw:*?"<>|\t\sdf!s'(a);w@4&f=+e$,g#[]d%.c4gh`
 	_, err = formatUploadFilePath(weirdPath)
-	assert.EqualError(suite.T(), err, "filepath contains disallowed characters: :, *, ?, \", <, >, |")
+	assert.EqualError(suite.T(), err, "filepath contains disallowed characters: :, *, ?, \", <, >, |, !, ', (, ), ;, @, &, =, +, $, ,, #, [, ], %")
 }

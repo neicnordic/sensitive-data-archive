@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +14,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +33,7 @@ import (
 )
 
 var dbPort, mqPort, OIDCport int
+var BrokerAPI string
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -92,8 +97,8 @@ func TestMain(m *testing.M) {
 
 	// pulls an image, creates a container based on it and runs it
 	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "rabbitmq",
-		Tag:        "3-management-alpine",
+		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
+		Tag:        "v0.3.89-rabbitmq",
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
@@ -102,14 +107,17 @@ func TestMain(m *testing.M) {
 		}
 	})
 	if err != nil {
+		if err := pool.Purge(postgres); err != nil {
+			log.Fatalf("Could not purge resource: %s", err)
+		}
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
 	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	mqHostAndPort := rabbitmq.GetHostPort("15672/tcp")
+	BrokerAPI = rabbitmq.GetHostPort("15672/tcp")
 
-	client := http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+mqHostAndPort+"/api/users", http.NoBody)
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/", http.NoBody)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -199,7 +207,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Println("starting tests")
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgres); err != nil {
@@ -211,6 +219,8 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(code)
 }
 
 type TestSuite struct {
@@ -230,7 +240,8 @@ func (suite *TestSuite) TestShutdown() {
 		Port:     mqPort,
 		User:     "guest",
 		Password: "guest",
-		Exchange: "amq.default",
+		Exchange: "sda",
+		Vhost:    "/sda",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
@@ -263,28 +274,6 @@ func (suite *TestSuite) TestReadinessResponse() {
 	r.GET("/ready", readinessResponse)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
-
-	Conf = &config.Config{}
-	Conf.Broker = broker.MQConf{
-		Host:     "localhost",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Exchange: "amq.default",
-	}
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(suite.T(), err)
-
-	Conf.Database = database.DBConf{
-		Host:     "localhost",
-		Port:     dbPort,
-		User:     "postgres",
-		Password: "rootpasswd",
-		Database: "sda",
-		SslMode:  "disable",
-	}
-	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
-	assert.NoError(suite.T(), err)
 
 	res, err := http.Get(ts.URL + "/ready")
 	assert.NoError(suite.T(), err)
@@ -332,8 +321,8 @@ func (suite *TestSuite) TestReadinessResponse() {
 }
 
 // Initialise configuration and create jwt keys
-func (suite *TestSuite) SetupTest() {
-
+func (suite *TestSuite) SetupSuite() {
+	log.SetLevel(log.DebugLevel)
 	suite.Path = "/tmp/keys/"
 	suite.KeyName = "example.demo"
 
@@ -374,6 +363,44 @@ func (suite *TestSuite) SetupTest() {
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	assert.NoError(suite.T(), err)
 
+	Conf.Broker = broker.MQConf{
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "sda",
+		Vhost:    "/sda",
+	}
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
+
+}
+
+func (suite *TestSuite) SetupTest() {
+	Conf.Database = database.DBConf{
+		Host:     "localhost",
+		Port:     dbPort,
+		User:     "postgres",
+		Password: "rootpasswd",
+		Database: "sda",
+		SslMode:  "disable",
+	}
+	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
+	assert.NoError(suite.T(), err)
+
+	_, err = Conf.API.DB.DB.Exec("TRUNCATE sda.files CASCADE")
+	assert.NoError(suite.T(), err)
+
+	Conf.Broker = broker.MQConf{
+		Host:     "localhost",
+		Port:     mqPort,
+		User:     "guest",
+		Password: "guest",
+		Exchange: "sda",
+		Vhost:    "/sda",
+	}
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	assert.NoError(suite.T(), err)
 }
 
 func (suite *TestSuite) TestDatabasePingCheck() {
@@ -512,4 +539,650 @@ func (suite *TestSuite) TestAPIGetFiles() {
 
 func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
+}
+
+func testEndpoint(c *gin.Context) {
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func (suite *TestSuite) TestIsAdmin_NoToken() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	// no token should not be allowed
+	router.ServeHTTP(w, r)
+	badResponse := w.Result()
+	defer badResponse.Body.Close()
+	b, _ := io.ReadAll(badResponse.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, badResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "no access token supplied")
+}
+func (suite *TestSuite) TestIsAdmin_BadUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"foo", "bar"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	// non admin user should not be allowed
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+	router.ServeHTTP(w, r)
+	notAdmin := w.Result()
+	defer notAdmin.Body.Close()
+	b, _ := io.ReadAll(notAdmin.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, notAdmin.StatusCode)
+	assert.Contains(suite.T(), string(b), "not authorized")
+}
+func (suite *TestSuite) TestIsAdmin() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"foo", "bar", "dummy"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", isAdmin(), testEndpoint)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "ok")
+}
+
+func (suite *TestSuite) TestIngestFile() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: user, FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/ingest", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestIngestFile_NoUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "", FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+func (suite *TestSuite) TestIngestFile_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "foo", FilePath: filePath})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
+}
+
+func (suite *TestSuite) TestIngestFile_WrongFilePath() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type ingest struct {
+		FilePath string `json:"filepath"`
+		User     string `json:"user"`
+	}
+	ingestMsg, _ := json.Marshal(ingest{User: "dummy", FilePath: "bad/path"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/file/ingest", bytes.NewBuffer(ingestMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", isAdmin(), ingestFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "sql: no rows in result set")
+}
+
+func (suite *TestSuite) TestSetAccession() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file11.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := database.FileInfo{
+		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: filePath, User: user})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestSetAccession_WrongUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: "/inbox/dummy/file11.c4gh", User: "fooBar"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestSetAccession_WrongFormat() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/federated"
+
+	type accession struct {
+		AccessionID string `json:"accession_id"`
+		FilePath    string `json:"filepath"`
+		User        string `json:"user"`
+	}
+	aID := "API:accession-id-01"
+	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: "/inbox/dummy/file11.c4gh", User: "dummy"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", isAdmin(), setAccession)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestCreateDataset() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file12.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := database.FileInfo{
+		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	type dataset struct {
+		AccessionIDs []string `json:"accession_ids"`
+		DatasetID    string   `json:"dataset_id"`
+	}
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11", "API:accession-id-12", "API:accession-id-13"}, DatasetID: "API:dataset-01"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/create", isAdmin(), createDataset)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/mappings", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	assert.NoError(suite.T(), json.Unmarshal(body, &data), "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestCreateDataset_BadFormat() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/federated"
+
+	type dataset struct {
+		AccessionIDs []string `json:"accession_ids"`
+		DatasetID    string   `json:"dataset_id"`
+	}
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11", "API:accession-id-12", "API:accession-id-13"}, DatasetID: "API:dataset-01"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/create", isAdmin(), createDataset)
+
+	router.ServeHTTP(w, r)
+	response := w.Result()
+	defer response.Body.Close()
+
+	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
+}
+
+func (suite *TestSuite) TestReleaseDataset() {
+	// purge the queue so that the test passes when all tests are run as well as when run standalone.
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, "http://"+BrokerAPI+"/api/queues/sda/mappings/contents", http.NoBody)
+	assert.NoError(suite.T(), err, "failed to generate query")
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	res.Body.Close()
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/release/API:dataset-01", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	req, _ = http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/mappings", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err = client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 1, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestReleaseDataset_NoDataset() {
+	// purge the queue so that the test passes when all tests are run as well as when run standalone.
+	client := http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, "http://"+BrokerAPI+"/api/queues/sda/mappings/contents", http.NoBody)
+	assert.NoError(suite.T(), err, "failed to generate query")
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	res.Body.Close()
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/release/", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func (suite *TestSuite) TestListActiveUsers() {
+	testUsers := []string{"User-A", "User-B", "User-C"}
+	for _, user := range testUsers {
+		for i := 0; i < 3; i++ {
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			if err != nil {
+				suite.FailNow("failed to register file in database")
+			}
+
+			err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				suite.FailNow("failed to update satus of file in database")
+			}
+
+			stableID := fmt.Sprintf("accession_%s_0%d", user, i)
+			err = Conf.API.DB.SetAccessionID(stableID, fileID)
+			if err != nil {
+				suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+			}
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"accession_User-A_00", "accession_User-A_01", "accession_User-A_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/users", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/users", isAdmin(), listActiveUsers)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	var users []string
+	err = json.NewDecoder(okResponse.Body).Decode(&users)
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	assert.Equal(suite.T(), []string{"User-B", "User-C"}, users)
+}
+
+func (suite *TestSuite) TestListUserFiles() {
+	testUsers := []string{"user_example.org", "User-B", "User-C"}
+	for _, user := range testUsers {
+		for i := 0; i < 5; i++ {
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+			if err != nil {
+				suite.FailNow("failed to register file in database")
+			}
+
+			err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				suite.FailNow("failed to update satus of file in database")
+			}
+
+			stableID := fmt.Sprintf("accession_%s_0%d", user, i)
+			err = Conf.API.DB.SetAccessionID(stableID, fileID)
+			if err != nil {
+				suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+			}
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"accession_user_example.org_00", "accession_user_example.org_01", "accession_user_example.org_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/users/user@example.org/files", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/users/:username/files", isAdmin(), listUserFiles)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	files := []database.SubmissionFileInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&files)
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	assert.Equal(suite.T(), 2, len(files))
 }

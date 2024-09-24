@@ -24,7 +24,9 @@ VALUES (0, now(), 'Created with version'),
        (7, now(), 'Add permissions to mapper to files'),
        (8, now(), 'Add ingestion functions'),
        (9, now(), 'Add dataset event log'),
-       (10, now(), 'Create Inbox user');
+       (10, now(), 'Create Inbox user'),
+       (11, now(), 'Grant select permission to download on dataset_event_log'),
+       (12, now(), 'Add key hash');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -34,6 +36,14 @@ CREATE TABLE datasets (
     title               TEXT,
     description         TEXT,
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+);
+
+-- the keys table is used to store the information of the encryption keys
+CREATE TABLE encryption_keys (
+    key_hash          TEXT PRIMARY KEY,
+    created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+    deprecated_at     TIMESTAMP WITH TIME ZONE,
+    description       TEXT
 );
 
 -- `files` is the main table of the schema, holding the file paths, encryption
@@ -52,6 +62,7 @@ CREATE TABLE files (
 
     header               TEXT,
     encryption_method    TEXT,
+    key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users

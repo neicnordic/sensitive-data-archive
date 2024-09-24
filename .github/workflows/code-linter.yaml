@@ -7,28 +7,29 @@ on:
       - '**.go'
       - '**/go.*'
 
+env:
+  go-version: '1.23'
+
 jobs:
   lint_download:
     name: Lint download code
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        go-version: ['1.22']
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6.0.1
+        uses: golangci/golangci-lint-action@v6.1.0
         with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck -e G401,G501,G107 --timeout 5m
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck -e G401,G501,G107,G115 --timeout 5m
           working-directory: sda-download
 
   lint_sda:
@@ -36,20 +37,39 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        go-version: ['1.22']
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6.0.1
+        uses: golangci/golangci-lint-action@v6.1.0
         with:
-          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck --timeout 5m
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck -e G401,G501,G107,G115 --timeout 5m
           working-directory: sda
+
+  lint_sda_admin:
+    name: Lint sda-admin code
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Set up Go ${{ env.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go-version }}
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6.1.0
+        with:
+          args: -E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,rowserrcheck -e G401,G501,G107,G115 --timeout 5m
+          working-directory: sda-admin

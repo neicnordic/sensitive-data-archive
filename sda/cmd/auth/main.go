@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/go-oidc"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
 	"github.com/iris-contrib/middleware/cors"
 	"github.com/kataras/iris/v12"
@@ -143,7 +142,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 		if ok {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Info("Valid password entered by user")
 			claims := map[string]interface{}{
-				jwt.ExpirationKey: time.Now().UTC().Add(200 * time.Hour),
+				jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 				jwt.IssuedAtKey:   time.Now().UTC(),
 				jwt.IssuerKey:     auth.Config.JwtIssuer,
 				jwt.SubjectKey:    username,
@@ -415,11 +414,10 @@ func main() {
 	app.Get("/oidc/login", authHandler.getOIDCLogin)
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
-	publicKey, err := readPublicKeyFile(authHandler.Config.PublicFile)
+	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
-		log.Fatalf("Failed to get public key: %s", err.Error())
+		log.Fatalf("Failed to read public key: %s", err.Error())
 	}
-	authHandler.pubKey = hex.EncodeToString(publicKey[:])
 
 	// Endpoint for client login info
 	app.Get("/info", authHandler.getInfo)

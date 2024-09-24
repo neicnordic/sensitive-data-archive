@@ -242,6 +242,27 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(suite.T(), false, config.API.Session.Secure)
 	assert.Equal(suite.T(), "test", config.API.Session.Domain)
 	assert.Equal(suite.T(), 60*time.Second, config.API.Session.Expiration)
+
+	viper.Reset()
+	suite.SetupTest()
+	adminFile, err := os.CreateTemp("", "admins")
+	assert.NoError(suite.T(), err)
+	_, err = adminFile.Write([]byte(`["foo@example.com","bar@example.com","baz@example.com"]`))
+	assert.NoError(suite.T(), err)
+
+	viper.Set("admin.usersFile", adminFile.Name())
+	cFile, err := NewConfig("api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), []string{"foo@example.com", "bar@example.com", "baz@example.com"}, cFile.API.Admins)
+
+	os.Remove(adminFile.Name())
+
+	viper.Reset()
+	suite.SetupTest()
+	viper.Set("admin.users", "foo@bar.com,bar@foo.com")
+	cList, err := NewConfig("api")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), []string{"foo@bar.com", "bar@foo.com"}, cList.API.Admins)
 }
 
 func (suite *ConfigTestSuite) TestNotifyConfiguration() {
@@ -414,6 +435,7 @@ func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
 	viper.Set("auth.jwt.Issuer", "http://auth:8080")
 	viper.Set("auth.Jwt.privateKey", "nonexistent-key-file")
 	viper.Set("auth.Jwt.signatureAlg", "ES256")
+	viper.Set("auth.Jwt.tokenTTL", 168)
 	_, err = NewConfig("auth")
 	assert.ErrorContains(suite.T(), err, "no such file or directory")
 
@@ -421,6 +443,7 @@ func (suite *ConfigTestSuite) TestConfigAuth_CEGA() {
 	viper.Set("auth.Jwt.privateKey", ECPath+"/ec")
 	c, err := NewConfig("auth")
 	assert.Equal(suite.T(), c.Auth.JwtPrivateKey, fmt.Sprintf("%s/ec", ECPath))
+	assert.Equal(suite.T(), c.Auth.JwtTTL, 168)
 	assert.NoError(suite.T(), err, "unexpected failure")
 }
 

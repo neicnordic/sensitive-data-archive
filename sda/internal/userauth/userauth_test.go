@@ -111,6 +111,8 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(0)
 }
 
 func (suite *UserAuthTest) TestAlwaysAuthenticator() {

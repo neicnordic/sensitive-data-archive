@@ -76,9 +76,14 @@ Parameter | Description | Default
 `global.backupArchive.volumePath` | Path to the mounted `posix` volume. |`/backup`
 `global.backupArchive.nfsServer` | URL or IP address to a NFS server. |`""`
 `global.backupArchive.nfsPath` | Path on the NFS server for the backup archive. |`""`
+`global.api.adminFileSecret` | A secret holding a JSON file named `admin.json` containg a list of identifiers |``
+`global.api.adminUsers` | A list of identifiers of the users with admin privileges |``
+`global.api.jwtPubKeyName` | Public key used to verify the JWT. |``
+`global.api.jwtSecret` | The name of the secret holding the JWT public key |``
 `global.auth.jwtAlg` | Key type to sign the JWT, available options are RS265 & ES256, Must match the key type |`"ES256"`
 `global.auth.jwtKey` | Private key used to sign the JWT. |`""`
 `global.auth.jwtPub` | Public key ues to verify the JWT. |`""`
+`global.auth.jwtTTL` | TTL of the resigned token (hours). |`168`
 `global.auth.resignJWT` | Resign the LS-AAI JWTs. |`true`
 `global.auth.useTLS` | Run a TLS secured server. |`true`
 `global.auth.corsOrigins` | Domain name allowed for cross-domain requests. |`""`
@@ -119,6 +124,7 @@ Parameter | Description | Default
 `global.doa.outbox.s3AccessKey` | Outbox S3 Access Key | `null`
 `global.doa.outbox.s3SecretKey` | Outbox S3 Secret key | `null`
 `global.download.enabled` | Deploy the download service | `true`
+`global.download.serveUnencryptedData` | Whether the download service serves unencrypted data | `false`
 `global.download.sessionExpiration` | Session key expiration time in seconds | `28800`
 `global.download.trusted.configPath` | Path to the ISS config file | `$secrets/iss`
 `global.download.trusted.configFile` | Name of ISS config file | `iss.json`
@@ -169,6 +175,10 @@ If no shared credentials for the message broker and database are used these shou
 
 Parameter | Description | Default
 --------- | ----------- | -------
+`credentials.api.dbUser` | Database user for api | `""`
+`credentials.api.dbPassword` | Database password for api | `""`
+`credentials.api.mqUser` | Broker user for api | `""`
+`credentials.api.mqPassword` | Broker password for api | `""`
 `credentials.doa.dbUser` | Database user for doa | `""`
 `credentials.doa.dbPassword` | Database password for doa| `""`
 `credentials.download.dbUser` | Database user for download | `""`
@@ -204,6 +214,13 @@ Parameter | Description | Default
 
 Parameter | Description | Default
 --------- | ----------- | -------
+`api.replicaCount` | Desired number of replicas | `2`
+`api.annotations` | Specific annotation for the auth pod | `{}`
+`api.resources.requests.memory` | Memory request for container. |`128Mi`
+`api.resources.requests.cpu` | CPU request for container. |`100m`
+`api.resources.limits.memory` | Memory limit for container. |`256Mi`
+`api.resources.limits.cpu` | CPU limit for container. |`250m`
+`api.tls.secretName` | Secret holding the application TLS certificates |``
 `auth.replicaCount` | desired number of replicas | `2`
 `auth.annotations` | Specific annotation for the auth pod | `{}`
 `auth.resources.requests.memory` | Memory request for container. |`128Mi`

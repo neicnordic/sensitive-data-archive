@@ -140,6 +140,10 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
+      {{- if .Values.global.download.serveUnencryptedData }}
+        - name: APP_SERVEUNENCRYPTEDDATA
+          value: {{ .Values.global.download.serveUnencryptedData }}
+      {{- end }}
       {{- if .Values.global.tls.enabled }}
         - name: APP_PORT
           value: "8443"

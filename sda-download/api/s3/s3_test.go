@@ -124,31 +124,32 @@ func (suite *S3TestSuite) TestListByPrefix() {
 		DatasetID:                 "dataset1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",
-		FileName:                  "urn:file1",
-		FileSize:                  60,
+		EncryptedFileSize:         60,
+		EncryptedFileChecksum:     "hash",
+		EncryptedFileChecksumType: "sha256",
 		DecryptedFileSize:         32,
 		DecryptedFileChecksum:     "hash",
 		DecryptedFileChecksumType: "sha256",
-		Status:                    "ready",
-		CreatedAt:                 "a while ago",
-		LastModified:              "2023-04-17T14:40:12.567Z",
 	}
+
+	userID := "user1"
+
 	query := `
 		SELECT files.stable_id AS id,
 			datasets.stable_id AS dataset_id,
 			reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
-			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type,
-			log.event AS status,
-			files.created_at,
-			files.last_modified
+			sha.type AS decrypted_file_checksum_type
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
 		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
+		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
 		LEFT JOIN \(SELECT file_id, \(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event FROM sda.file_event_log GROUP BY file_id\) log ON files.id = log.file_id
 		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = \$1;
@@ -156,14 +157,13 @@ func (suite *S3TestSuite) TestListByPrefix() {
 	suite.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-			"display_file_name", "file_path", "file_name", "file_size",
+			"display_file_name", "user_id", "file_path", "file_size",
+			"decrypted_file_checksum", "decrypted_file_checksum_type",
 			"decrypted_file_size", "decrypted_file_checksum",
-			"decrypted_file_checksum_type", "file_status", "created_at",
-			"last_modified"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-			fileInfo.DisplayFileName, fileInfo.FilePath, fileInfo.FileName,
-			fileInfo.FileSize, fileInfo.DecryptedFileSize,
-			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType,
-			fileInfo.Status, fileInfo.CreatedAt, fileInfo.LastModified))
+			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
+			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
+			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
 	// Send a request through the middleware to get files for the dataset and
 	// prefix
@@ -182,7 +182,6 @@ func (suite *S3TestSuite) TestListByPrefix() {
 	expected := xml.Header +
 		"<ListBucketResult><CommonPrefixes></CommonPrefixes><Contents>" +
 		"<Key>file.txt</Key>" +
-		"<LastModified>Mon, 17 Apr 2023 14:40:12 GMT</LastModified>" +
 		"<Owner></Owner>" +
 		"<Size>32</Size>" +
 		"</Contents>" +
@@ -203,31 +202,32 @@ func (suite *S3TestSuite) TestListObjects() {
 		DatasetID:                 "dataset1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",
-		FileName:                  "urn:file1",
-		FileSize:                  60,
+		EncryptedFileSize:         60,
+		EncryptedFileChecksum:     "hash",
+		EncryptedFileChecksumType: "sha256",
 		DecryptedFileSize:         32,
 		DecryptedFileChecksum:     "hash",
 		DecryptedFileChecksumType: "sha256",
-		Status:                    "ready",
-		CreatedAt:                 "a while ago",
-		LastModified:              "2023-04-17T14:40:12.567Z",
 	}
+
+	userID := "user1"
+
 	query := `
 		SELECT files.stable_id AS id,
 			datasets.stable_id AS dataset_id,
 			reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
-			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type,
-			log.event AS status,
-			files.created_at,
-			files.last_modified
+			sha.type AS decrypted_file_checksum_type
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
 		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
+		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
 		LEFT JOIN \(SELECT file_id, \(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event FROM sda.file_event_log GROUP BY file_id\) log ON files.id = log.file_id
 		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = \$1;
@@ -235,14 +235,13 @@ func (suite *S3TestSuite) TestListObjects() {
 	suite.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-			"display_file_name", "file_path", "file_name", "file_size",
+			"display_file_name", "user_id", "file_path", "file_size",
+			"encrypted_file_checksum", "encrypted_file_checksum_type",
 			"decrypted_file_size", "decrypted_file_checksum",
-			"decrypted_file_checksum_type", "file_status", "created_at",
-			"last_modified"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
-			fileInfo.DisplayFileName, fileInfo.FilePath, fileInfo.FileName,
-			fileInfo.FileSize, fileInfo.DecryptedFileSize,
-			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType,
-			fileInfo.Status, fileInfo.CreatedAt, fileInfo.LastModified))
+			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
+			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
+			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
 	// Send a request through the middleware to get datasets
 
@@ -260,7 +259,6 @@ func (suite *S3TestSuite) TestListObjects() {
 	expected := xml.Header +
 		"<ListBucketResult><CommonPrefixes></CommonPrefixes><Contents>" +
 		"<Key>file.txt</Key>" +
-		"<LastModified>Mon, 17 Apr 2023 14:40:12 GMT</LastModified>" +
 		"<Owner></Owner>" +
 		"<Size>32</Size>" +
 		"</Contents>" +

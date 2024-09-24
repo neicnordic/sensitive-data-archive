@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -74,6 +75,7 @@ type SyncAPIConf struct {
 }
 
 type APIConf struct {
+	Admins     []string
 	CACert     string
 	ServerCert string
 	ServerKey  string
@@ -117,6 +119,7 @@ type AuthConf struct {
 	JwtIssuer       string
 	JwtPrivateKey   string
 	JwtSignatureAlg string
+	JwtTTL          int
 	Server          ServerConfig
 	S3Inbox         string
 	ResignJwt       bool
@@ -205,7 +208,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.port",
 			"broker.user",
 			"broker.password",
-			"broker.routingkey",
 			"db.host",
 			"db.port",
 			"db.user",
@@ -228,7 +230,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		if viper.GetBool("auth.resignJwt") {
-			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg"}...)
+			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
 	case "ingest":
 		requiredConfVars = []string{
@@ -465,6 +467,22 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		if viper.IsSet("admin.usersFile") {
+			admins, err := os.ReadFile(viper.GetString("admin.usersFile"))
+			if err != nil {
+				return nil, err
+			}
+
+			if err := json.Unmarshal(admins, &c.API.Admins); err != nil {
+				return nil, err
+			}
+		}
+
+		// This is mainly for convenience when testing stuff
+		if viper.IsSet("admin.users") {
+			c.API.Admins = append(c.API.Admins, strings.Split(string(viper.GetString("admin.users")), ",")...)
+		}
+		c.configSchemas()
 	case "auth":
 		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
 		c.Auth.Cega.ID = viper.GetString("auth.cega.id")
@@ -494,6 +512,7 @@ func NewConfig(app string) (*Config, error) {
 			c.Auth.JwtPrivateKey = viper.GetString("auth.jwt.privateKey")
 			c.Auth.JwtSignatureAlg = viper.GetString("auth.jwt.signatureAlg")
 			c.Auth.JwtIssuer = viper.GetString("auth.jwt.issuer")
+			c.Auth.JwtTTL = viper.GetInt("auth.jwt.tokenTTL")
 
 			if _, err := os.Stat(c.Auth.JwtPrivateKey); err != nil {
 				return nil, err

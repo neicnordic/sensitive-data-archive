@@ -94,12 +94,14 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}
 
-	_ = m.Run()
+	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgres); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+
+	os.Exit(code)
 }
 
 func (suite *DatabaseTests) SetupTest() {
@@ -116,6 +118,10 @@ func (suite *DatabaseTests) SetupTest() {
 		ClientKey:  "",
 	}
 
+	db, err := NewSDAdb(suite.dbConf)
+	assert.Nil(suite.T(), err, "got %v when creating new connection", err)
+	_, err = db.DB.Exec("TRUNCATE sda.files CASCADE")
+	assert.NoError(suite.T(), err)
 }
 
 func (suite *DatabaseTests) TearDownTest() {}

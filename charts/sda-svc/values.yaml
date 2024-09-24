@@ -34,6 +34,7 @@ global:
     deploy: true
     ingressClassName: "nginx"
     hostName:
+      api: ""
       auth: ""
       doa: ""
       download: ""
@@ -106,6 +107,11 @@ global:
   vaultSecrets: false
 
 # global configurations
+  api:
+    adminsFileSecret: ""
+    adminUsers:
+    jwtPubKeyName:
+    jwtSecret:
   archive:
     storageType: "" # s3 or posix
   # The six lines below is only used with S3 backend
@@ -147,6 +153,8 @@ global:
     jwtKey:
     # @param jwtPub, name of the public signing key
     jwtPub:
+    # @param jwtTTL, TTL of the resigned token (hours)
+    jwtTTL: 168
     # @param resignJwt, if true (or empty) the jwt will be resigned with the jwtKey
     resignJwt: false
     # @param corsOrigins, domain name of allowed origin for cross-domain requests
@@ -232,6 +240,7 @@ global:
       iss:
         - iss: "https://login.elixir-czech.org/oidc"
           jku: "https://login.elixir-czech.org/oidc/jwk"
+    serveUnencryptedData: false
 
   oidc:
     provider:  "https://login.elixir-czech.org/oidc/"
@@ -286,6 +295,12 @@ global:
 ##################################
 # service specific credentials
 credentials:
+  api:
+    dbUser: ""
+    dbPassword: ""
+    mqUser: ""
+    mqPassword: ""
+
   doa:
     dbUser: ""
     dbPassword: ""
@@ -342,6 +357,23 @@ credentials:
 
 ##################################
 # Service specific settings
+
+api:
+  name: api
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+# Extra annotations to attach to the service pods
+# This should be a multi-line string mapping directly to the a map of
+# the annotations to apply to the service pods
+  annotations: {}
+  tls:
+    secretName: ""
 
 auth:
   name: auth

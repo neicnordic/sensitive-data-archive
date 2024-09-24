@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/neicnordic/sda-download/internal/config"
@@ -29,14 +30,12 @@ type FileInfo struct {
 	DatasetID                 string `json:"datasetId"`
 	DisplayFileName           string `json:"displayFileName"`
 	FilePath                  string `json:"filePath"`
-	FileName                  string `json:"fileName"`
-	FileSize                  int64  `json:"fileSize"`
+	EncryptedFileSize         int64  `json:"encryptedFileSize"`
+	EncryptedFileChecksum     string `json:"encryptedFileChecksum"`
+	EncryptedFileChecksumType string `json:"encryptedFileChecksumType"`
 	DecryptedFileSize         int64  `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-	Status                    string `json:"fileStatus"`
-	CreatedAt                 string `json:"createdAt"`
-	LastModified              string `json:"lastModified"`
 }
 
 type DatasetInfo struct {
@@ -153,6 +152,25 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	return r, err
 }
 
+func removeUserIDPrefix(filePath, userID string) string {
+	// Construct the full prefix we expect to find (userID + "/").
+	fullPrefix := userID + "/"
+	if strings.HasPrefix(filePath, fullPrefix) {
+		return strings.TrimPrefix(filePath, fullPrefix)
+	}
+
+	return filePath
+}
+
+// processFileInfo removes any sensitive information from the file info
+func processFileInfo(fi *FileInfo, userID string) error {
+	// Remove userids from file paths
+	userID = strings.ReplaceAll(userID, "@", "_") // in filePath, @ is replaced with _
+	fi.FilePath = removeUserIDPrefix(fi.FilePath, userID)
+
+	return nil
+}
+
 // getFiles is the actual function performing work for GetFile
 func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
@@ -164,18 +182,18 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		SELECT files.stable_id AS id,
 			datasets.stable_id AS dataset_id,
 			reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+			files.submission_user AS user_id,
 			files.submission_file_path AS file_path,
-			files.archive_file_path AS file_name,
 			files.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			files.decrypted_file_size,
 			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type,
-			log.event AS status,
-			files.created_at,
-			files.last_modified
+			sha.type AS decrypted_file_checksum_type
 		FROM sda.files
 		JOIN sda.file_dataset ON file_id = files.id
 		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
+		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
 		LEFT JOIN (SELECT file_id, (ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event FROM sda.file_event_log GROUP BY file_id) log ON files.id = log.file_id
 		LEFT JOIN (SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED') sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = $1;
@@ -190,14 +208,17 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	}
 	defer rows.Close()
 
+	var userID string
+
 	// Iterate rows
 	for rows.Next() {
 
 		// Read rows into struct
 		fi := &FileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName, &fi.FilePath, &fi.FileName,
-			&fi.FileSize, &fi.DecryptedFileSize, &fi.DecryptedFileChecksum,
-			&fi.DecryptedFileChecksumType, &fi.Status, &fi.CreatedAt, &fi.LastModified)
+		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
+			&userID, &fi.FilePath,
+			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
+			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
 		if err != nil {
 			log.Error(err)
 
@@ -210,9 +231,17 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 		// so the user needs to know the size of the header when downloading in encrypted format.
 		// A way to get this could be:
 		// fd := GetFile()
-		// fi.FileSize = fi.FileSize + len(fd.Header)
+		// fi.EncryptedFileSize = fi.EncryptedFileSize + len(fd.Header)
 		// But if the header is re-encrypted or a completely new header is generated, the length
 		// needs to be conveyd to the user in some other way.
+
+		// Process file info so that we don't leak any unneccessary info.
+		err = processFileInfo(fi, userID)
+		if err != nil {
+			log.Error(err)
+
+			return nil, err
+		}
 
 		// Add structs to array
 		files = append(files, fi)
@@ -329,18 +358,18 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 		SELECT f.stable_id AS file_id,
 			d.stable_id AS dataset_id,
 			reverse(split_part(reverse(f.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+			f.submission_user AS user_id,
 			f.submission_file_path AS file_path,
-			f.archive_file_path AS file_name,
 			f.archive_file_size AS file_size,
+			lef.archive_file_checksum AS encrypted_file_checksum,
+			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
 			f.decrypted_file_size,
 			dc.checksum AS decrypted_file_checksum,
-			dc.type AS decrypted_file_checksum_type,
-			e.event AS status,
-			f.created_at,
-			f.last_modified
+			dc.type AS decrypted_file_checksum_type
 		FROM sda.files f
 		JOIN sda.file_dataset fd ON fd.file_id = f.id
 		JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN local_ega.files lef ON f.stable_id = lef.stable_id
 		LEFT JOIN (SELECT file_id,
 					(ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event
 				FROM sda.file_event_log
@@ -355,12 +384,21 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
 
+	var userID string
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DatasetID, &file.DisplayFileName, &file.FilePath, &file.FileName,
-		&file.FileSize, &file.DecryptedFileSize, &file.DecryptedFileChecksum,
-		&file.DecryptedFileChecksumType, &file.Status, &file.CreatedAt,
-		&file.LastModified)
+		&file.DatasetID, &file.DisplayFileName, &userID, &file.FilePath,
+		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
+		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
+
+	if err != nil {
+		log.Error(err)
+
+		return nil, err
+	}
+
+	// Process file info so that we don't leak any unneccessary info.
+	err = processFileInfo(file, userID)
 	if err != nil {
 		log.Error(err)
 

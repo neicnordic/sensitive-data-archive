@@ -16,12 +16,10 @@ jobs:
         id: changes
         with:
           filters: |
-            sda-auth:
-              - 'sda-auth/**'
             sda-download:
               - 'sda-download/**'
             sftp-inbox:
-            - 'sftp-inbox/**'
+            - 'sda-sftp-inbox/**'
 
   sda-download:
     needs: check_changes
@@ -34,7 +32,6 @@ jobs:
     strategy:
       matrix:
         storagetype: [s3, posix, s3notls]
-        go-version: ['1.22']
       fail-fast: false
     steps:
       - name: Set up Python
@@ -78,8 +75,8 @@ jobs:
         run: |
           cd sda-sftp-inbox/dev_utils
           bash ./make_certs.sh
-          docker-compose up certfixer
-          docker-compose up -d
+          docker compose up certfixer
+          docker compose up -d
           sleep 20
 
       - name: Run test for sftp ssh connection

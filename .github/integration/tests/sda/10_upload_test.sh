@@ -36,7 +36,7 @@ psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
 if [ "$STORAGETYPE" = "posix" ]; then
     for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
         echo "downloading $file"
-        curl -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
+        curl --retry 100 -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
         if [ ! -f "$file.c4gh" ]; then
             yes | /shared/crypt4gh encrypt -p c4gh.pub.pem -f "$file"
         fi
@@ -71,7 +71,7 @@ if [ "$STORAGETYPE" = "s3" ]; then
     pip -q install s3cmd
 
     for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
-        curl -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
+        curl --retry 100 -s -L -o /shared/$file "https://github.com/ga4gh/htsget-refserver/raw/main/data/gcp/gatk-test-data/wgs_bam/$file"
         if [ ! -f "$file.c4gh" ]; then
             yes | /shared/crypt4gh encrypt -p c4gh.pub.pem -f "$file"
         fi

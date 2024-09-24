@@ -510,11 +510,11 @@ func formatUploadFilePath(filePath string) (string, error) {
 	outPath := strings.ReplaceAll(filePath, "\\", "/")
 
 	// [\x00-\x1F\x7F] is the control character set
-	re := regexp.MustCompile(`[\\:\*\?"<>\|\x00-\x1F\x7F]`)
+	re := regexp.MustCompile(`[\\<>"\|\x00-\x1F\x7F\!\*\'\(\)\;\:\@\&\=\+\$\,\?\%\#\[\]]`)
 
-	dissallowedChars := re.FindAllString(outPath, -1)
-	if dissallowedChars != nil {
-		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(dissallowedChars, ", "))
+	disallowedChars := re.FindAllString(outPath, -1)
+	if disallowedChars != nil {
+		return outPath, fmt.Errorf("filepath contains disallowed characters: %+v", strings.Join(disallowedChars, ", "))
 	}
 
 	return outPath, nil
@@ -536,7 +536,7 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 		return
 	}
 	// write the error message to the response
-	_, err = io.WriteString(w, string(xmlData))
+	_, err = io.Writer.Write(w, xmlData)
 	if err != nil {
 		// errors are logged but otherwised ignored
 		log.Error(err)

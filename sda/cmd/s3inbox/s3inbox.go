@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -27,6 +29,7 @@ func main() {
 	// Create a function to handle panic and exit gracefully
 	defer func() {
 		if err := recover(); err != nil {
+			log.Errorf("Could not recover from %v", err)
 			log.Fatal("Could not recover, exiting")
 		}
 	}()
@@ -99,12 +102,11 @@ func main() {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
+	mux := mux.NewRouter()
 	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
-
-	http.Handle("/", proxy)
-
-	hc := NewHealthCheck(8001, sdaDB.DB, Conf, tlsProxy)
-	go hc.RunHealthChecks()
+	mux.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
+	mux.HandleFunc("/health", proxy.CheckHealth)
+	mux.PathPrefix("/").Handler(proxy)
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -112,6 +114,7 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
+		Handler:           mux,
 	}
 
 	if Conf.Server.Cert != "" && Conf.Server.Key != "" {

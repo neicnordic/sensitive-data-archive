@@ -206,6 +206,7 @@ func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, body 
 			CorrelationId:   corrID,
 			Priority:        0, // 0-9
 			Body:            body,
+			Timestamp:       time.Now(),
 			// a bunch of application/implementation-specific fields
 		},
 	)

@@ -7,10 +7,12 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -19,7 +21,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -28,6 +34,14 @@ import (
 type server struct {
 	re.UnimplementedReencryptServer
 	c4ghPrivateKey *[32]byte
+}
+
+// hServer struct is used to implement the proxy grpc health.HealthServer.
+type hServer struct {
+	healthgrpc.UnimplementedHealthServer
+	srvCert   tls.Certificate
+	srvCACert *x509.CertPool
+	srvPort   int
 }
 
 // ReencryptHeader implements reencrypt.ReEncryptHeader
@@ -55,10 +69,15 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	if len(dataEditList) > 0 { // linter doesn't like checking for nil before len
 
-		// Only do this if we're passed a data edit list
+		// Check that G115: integer overflow conversion int -> uint32 is satisfied
+		if len(dataEditList) > int(math.MaxUint32) {
+			return nil, status.Error(400, "data edit list too long")
+		}
+
+		// Only do this if we're passed a data edit whose length fits in a uint32
 		dataEditListPacket := headers.DataEditListHeaderPacket{
 			PacketType:    headers.PacketType{PacketType: headers.DataEditList},
-			NumberLengths: uint32(len(dataEditList)),
+			NumberLengths: uint32(len(dataEditList)), //nolint:gosec // we're checking the length above
 			Lengths:       dataEditList,
 		}
 		extraHeaderPackets = append(extraHeaderPackets, dataEditListPacket)
@@ -82,6 +101,55 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	return &re.ReencryptResponse{Header: newheader}, nil
 }
 
+// Check implements the healthgrpc.HealthServer Check method for the proxy grpc Health server.
+// This method probes internally the health of reencrypt's server and returns the service or
+// server status. The corresponding grpc health server serves as a proxy to the internal health
+// service of the reencrypt server so that k8s grpc probes can be used when TLS is enabled.
+func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) (*healthgrpc.HealthCheckResponse, error) {
+
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, time.Second*2)
+	defer rpcCancel()
+
+	var opts []grpc.DialOption
+	if p.srvCert.Certificate != nil {
+		creds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{p.srvCert},
+				MinVersion:   tls.VersionTLS13,
+				RootCAs:      p.srvCACert,
+			},
+		)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", "127.0.0.1", p.srvPort), opts...)
+	if err != nil {
+		log.Printf("failed to dial: %v", err)
+
+		return nil, status.Error(codes.NotFound, "unknown service")
+	}
+	defer conn.Close()
+
+	resp, err := healthgrpc.NewHealthClient(conn).Check(rpcCtx,
+		&healthgrpc.HealthCheckRequest{
+			Service: in.Service})
+	if err != nil {
+		log.Printf("failed to check: %v", err)
+
+		return nil, status.Error(codes.NotFound, "unknown service")
+	}
+
+	if resp.GetStatus() != healthgrpc.HealthCheckResponse_SERVING {
+		log.Debugf("service unhealthy (responded with %q)", resp.GetStatus().String())
+	}
+
+	return &healthgrpc.HealthCheckResponse{
+		Status: resp.GetStatus(),
+	}, nil
+}
+
 func main() {
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
@@ -103,7 +171,11 @@ func main() {
 		panic(err)
 	}
 
-	var opts []grpc.ServerOption
+	var (
+		opts       []grpc.ServerOption
+		serverCert tls.Certificate
+		caCert     *x509.CertPool
+	)
 	if conf.ReEncrypt.ServerCert != "" && conf.ReEncrypt.ServerKey != "" {
 		switch {
 		case conf.ReEncrypt.CACert != "":
@@ -114,13 +186,13 @@ func main() {
 				panic(err)
 			}
 
-			caCert := x509.NewCertPool()
+			caCert = x509.NewCertPool()
 			if !caCert.AppendCertsFromPEM(caFile) {
 				sigc <- syscall.SIGINT
 				panic("Failed to append ca certificate")
 			}
 
-			serverCert, err := tls.LoadX509KeyPair(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
+			serverCert, err = tls.LoadX509KeyPair(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
 				log.Errorf("Failed to parse certificates: %v", err)
 				sigc <- syscall.SIGINT
@@ -150,6 +222,33 @@ func main() {
 	s := grpc.NewServer(opts...)
 	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: conf.ReEncrypt.Crypt4GHKey})
 	reflection.Register(s)
+
+	// Add health service for reencrypt server
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
+	healthServer.SetServingStatus(re.Reencrypt_ServiceDesc.ServiceName, healthgrpc.HealthCheckResponse_SERVING)
+	healthgrpc.RegisterHealthServer(s, healthServer)
+
+	// Start proxy health server
+	p := grpc.NewServer()
+	healthgrpc.RegisterHealthServer(p, &hServer{srvCert: serverCert, srvCACert: caCert, srvPort: conf.ReEncrypt.Port})
+
+	healthServerListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port+1))
+	if err != nil {
+		log.Errorf("failed to listen: %v", err)
+		sigc <- syscall.SIGINT
+		panic(err)
+	}
+	go func() {
+		log.Debugf("health server listening at %v", healthServerListener.Addr())
+		if err := p.Serve(healthServerListener); err != nil {
+			log.Errorf("failed to serve: %v", err)
+			sigc <- syscall.SIGINT
+			panic(err)
+		}
+	}()
+
+	// Start reencrypt server
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Errorf("failed to serve: %v", err)

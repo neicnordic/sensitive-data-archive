@@ -1,6 +1,8 @@
 log:
   format: "json"
   level: "debug"
+admin:
+  users: "requester@demo.org"
 archive:
   type: s3
   url: "http://s3"
@@ -22,6 +24,7 @@ auth:
     issuer: "https://auth:8888"
     privateKey: /shared/keys/jwt.key
     signatureAlg: ES256
+    tokenTTL: 168
   publicFile: "/shared/c4gh.pub.pem"
   resignJwt:
   s3Inbox: "http://inbox:8000"
