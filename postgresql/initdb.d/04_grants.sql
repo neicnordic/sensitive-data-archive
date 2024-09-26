@@ -158,10 +158,29 @@ GRANT SELECT ON local_ega_ebi.file_dataset TO download;
 
 --------------------------------------------------------------------------------
 
+CREATE ROLE api;
+
+GRANT USAGE ON SCHEMA sda TO api;
+GRANT SELECT ON sda.files TO api;
+GRANT SELECT ON sda.file_dataset TO api;
+GRANT SELECT ON sda.checksums TO api;
+GRANT SELECT ON sda.file_event_log TO api;
+GRANT SELECT ON sda.encryption_keys TO api;
+GRANT INSERT ON sda.encryption_keys TO api;
+GRANT UPDATE ON sda.encryption_keys TO api;
+
+-- legacy schema
+GRANT USAGE ON SCHEMA local_ega TO api;
+GRANT USAGE ON SCHEMA local_ega_ebi TO api;
+GRANT SELECT ON local_ega.files TO api;
+GRANT SELECT ON local_ega_ebi.file TO api;
+GRANT SELECT ON local_ega_ebi.file_dataset TO api;
+
+--------------------------------------------------------------------------------
 -- lega_in permissions
-GRANT base, ingest, verify, finalize, sync TO lega_in;
+GRANT base, ingest, verify, finalize, sync, api TO lega_in;
 
 -- lega_out permissions
-GRANT mapper, download TO lega_out;
+GRANT mapper, download, api TO lega_out;
 
-GRANT base TO download, inbox, ingest, finalize, mapper, verify
+GRANT base TO api, download, inbox, ingest, finalize, mapper, verify
