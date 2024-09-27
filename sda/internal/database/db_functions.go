@@ -5,6 +5,7 @@ package database
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -779,6 +780,30 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("key hash already exists or no rows were updated")
 	}
+
+	return nil
+}
+
+func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	query := `SELECT key_hash FROM sda.encryption_keys WHERE key_hash = $1;`
+	var hashID string
+	err := db.QueryRow(query, keyHash).Scan(&hashID)
+	if err != nil {
+		return fmt.Errorf("keyhash not present in database: %v", err)
+	}
+	query = "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
+	result, err := db.Exec(query, hashID, fileID)
+	if err != nil {
+
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query, zero rows were changed")
+	}
+	log.Debugf("Successfully set key hash for file %v", fileID)
 
 	return nil
 }
