@@ -179,3 +179,8 @@ type SyncMetadata struct {
 type Metadata struct {
 	Metadata interface{}
 }
+
+type KeyhashInsertion struct {
+	Hash        string `json:"hash"`
+	Description string `json:"description"`
+}

@@ -748,3 +748,36 @@ func (dbs *SDAdb) getDatasetStatus(datasetID string) (string, error) {
 
 	return status, nil
 }
+
+// AddKeyHash adds a key hash and key description in the encryption_keys table
+func (dbs *SDAdb) AddKeyHash(keyHash, keyDescription string) error {
+	var err error
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.addKeyHash(keyHash, keyDescription)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "INSERT INTO sda.encryption_keys(key_hash, description) VALUES($1, $2) ON CONFLICT DO NOTHING;"
+
+	result, err := db.Exec(query, keyHash, keyDescription)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("key hash already exists or no rows were updated")
+	}
+
+	return nil
+}
