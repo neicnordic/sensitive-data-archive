@@ -589,3 +589,32 @@ func (suite *DatabaseTests) TestAddKey() {
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.True(suite.T(), exists, "key hash was not added to the database")
 }
+
+func (suite *DatabaseTests) TestSetKeyHash() {
+	// Test that using an unknown key hash produces an error
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	err = db.SetKeyHash("bad-keyhash", "fileid")
+	assert.ErrorContains(suite.T(), err, "keyhash not present in database")
+
+	// Register a new key and a new file
+	keyHex := `2d2d2d2d2d424547494e204352595054344748205055424c4943204b4559
+2d2d2d2d2d0a65574d394166785761626d775354627657346e736650646b
+432f6953412b3849712b6e516232555a2b6d6f3d0a2d2d2d2d2d454e4420
+4352595054344748205055424c4943204b45592d2d2d2d2d0a`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	// Test that the key hash can be set in the files table
+	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "Could not set key hash")
+
+	// Verify that the key+file was added
+	var exists bool
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.files WHERE key_hash=$1 AND id=$2)", keyHex, fileID).Scan(&exists)
+	assert.NoError(suite.T(), err, "failed to verify key hash set for file")
+	assert.True(suite.T(), exists, "key hash was not set for file in the database")
+}
