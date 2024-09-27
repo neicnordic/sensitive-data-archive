@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -386,6 +388,15 @@ func main() {
 							}
 
 							continue mainWorkLoop
+						}
+
+						// Set the file's hex encoded public key
+						log.Debugln("Compute and set key hash")
+						publicKey := keys.DerivePublicKey(*key)
+						keyhash := hex.EncodeToString(publicKey[:])
+						err = db.SetKeyHash(keyhash, fileID)
+						if err != nil {
+							log.Errorf("Key hash %s could not be set for fileID %s: (%s)", keyhash, fileID, err.Error())
 						}
 
 						log.Debugln("store header")
