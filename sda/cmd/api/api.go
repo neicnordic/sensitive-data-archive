@@ -23,9 +23,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Conf *config.Config
-var err error
-var auth *userauth.ValidateFromToken
+var (
+	Conf *config.Config
+	err  error
+	auth *userauth.ValidateFromToken
+)
 
 func main() {
 	Conf, err = config.NewConfig("api")
@@ -80,6 +82,7 @@ func setup(config *config.Config) *http.Server {
 		r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
 		r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
 		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
+		r.POST("/key/hashed", isAdmin(), addHashedKey)                 // Adds a hashed key to the database
 		r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
 		r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
 	}
@@ -413,4 +416,28 @@ func listUserFiles(c *gin.Context) {
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.JSON(200, files)
+}
+
+// addHashedKey function adds a hashed public key and its description to the database
+func addHashedKey(c *gin.Context) {
+	var keyhash schema.KeyhashInsertion
+	if err := c.BindJSON(&keyhash); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		return
+	}
+
+	err = Conf.API.DB.AddKeyHash(keyhash.Hash, keyhash.Description)
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+        return
+    }
+
+	c.Status(http.StatusOK)
 }
