@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -64,6 +65,10 @@ func main() {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
+	}
+	pubkey, err := config.GetC4GHPublicKey()
+	if err != nil {
+		log.Error(err)
 	}
 	archive, err := storage.NewBackend(conf.Archive)
 	if err != nil {
@@ -386,6 +391,14 @@ func main() {
 							}
 
 							continue mainWorkLoop
+						}
+
+						// Set the file's hex encoded public key
+						log.Debugln("Compute and set key hash")
+						keyhash := hex.EncodeToString(pubkey[:])
+						err = db.SetKeyHash(keyhash, fileID)
+						if err != nil {
+							log.Errorf("Key hash %s could not be set for fileID %s: (%s)", keyhash, fileID, err.Error())
 						}
 
 						log.Debugln("store header")
