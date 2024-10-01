@@ -292,8 +292,8 @@ services:
       - BROKER_PASSWORD=ingest
       - BROKER_USER=ingest
       - BROKER_ROUTINGKEY=ingest
-      - DB_PASSWORD=download
-      - DB_USER=download
+      - DB_PASSWORD=api
+      - DB_USER=api
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
