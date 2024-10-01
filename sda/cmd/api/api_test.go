@@ -25,6 +25,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	log "github.com/sirupsen/logrus"
@@ -1280,4 +1281,63 @@ func (suite *TestSuite) TestListUserFiles() {
 	err = json.NewDecoder(okResponse.Body).Decode(&files)
 	assert.NoError(suite.T(), err, "failed to list users from DB")
 	assert.Equal(suite.T(), 2, len(files))
+}
+
+func (suite *TestSuite) TestAddHashedKeySuccess() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.POST("/key/hashed", isAdmin(), addHashedKey)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Create a valid request body
+	keyhash := schema.KeyhashInsertion{
+		Hash:        "somehashedkey",
+		Description: "Test key description",
+	}
+	body, err := json.Marshal(keyhash)
+	assert.NoError(suite.T(), err)
+
+	req, err := http.NewRequest("POST", ts.URL+"/key/hashed", bytes.NewBuffer(body))
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+}
+
+func (suite *TestSuite) TestAddHashedKeyInvalidJSON() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.POST("/key/hashed", isAdmin(), addHashedKey)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Create an invalid request body
+	body := []byte(`{"invalid_json"}`)
+
+	req, err := http.NewRequest("POST", ts.URL+"/key/hashed", bytes.NewBuffer(body))
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, resp.StatusCode)
+	defer resp.Body.Close()
 }
