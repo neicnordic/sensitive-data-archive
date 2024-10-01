@@ -1,7 +1,26 @@
 #!/bin/sh
 set -e
 
+# install tools if missing
+if [ ! "$(command -v xxd)" ]; then
+     if [ "$(id -u)" != 0 ]; then
+         echo "xxd is missing, unable to install it"
+         exit 1
+     fi
+
+     apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
+     apt-get -o DPkg::Lock::Timeout=60 install -y xxd >/dev/null
+fi
+
+
 cd shared || true
+
+token="$(curl http://oidc:8080/tokens | jq -r '.[0]')"
+# we need to insert the key hash into the db before ingesting files
+# decode from base64, then hex encode the public key
+key="$(head -n2 /shared/sync.pub.pem | tail -n1 | base64 -d | xxd -p | tr -d '\n')"
+
+curl -k -L "http://api:8080/key/hashed" -H "Authorization: Bearer $token" -d "{\"hash\": \"$key\", \"description\": \"first key\"}"
 
 for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
     ENC_SHA=$(sha256sum "$file.c4gh" | cut -d' ' -f 1)
@@ -57,6 +76,7 @@ for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
         -d "$ingest_body" | jq
 done
 
+# TODO make sure ok even if hash is not inserted
 echo "waiting for verify to complete"
 RETRY_TIMES=0
 until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 4 ]; do
@@ -68,5 +88,11 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ |
     fi
     sleep 2
 done
+
+key_hashes="$(psql -U postgres -h postgres -d sda -At -c "select distinct key_hash from sda.files" | wc -l)"
+if [ "$key_hashes" -lt 0 ]; then
+	echo "::error::Ingested files did not have any key hashes."
+	exit 1
+fi
 
 echo "ingestion and verification test completed successfully"
