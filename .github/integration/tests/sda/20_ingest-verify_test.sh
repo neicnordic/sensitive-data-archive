@@ -69,4 +69,11 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ |
     sleep 2
 done
 
+# check that the files have key hashes assigned
+key_hashes="$(psql -U postgres -h postgres -d sda -At -c "select distinct key_hash from sda.files" | wc -l)"
+if [ "$key_hashes" -eq 0 ]; then
+	echo "::error::Ingested files did not have any key hashes."
+	exit 1
+fi
+
 echo "ingestion and verification test completed successfully"
