@@ -409,10 +409,13 @@ func addHashedKey(c *gin.Context) {
 	}
 
 	err = Conf.API.DB.AddKeyHash(keyhash.Hash, keyhash.Description)
-    if err != nil {
-        c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-        return
-    }
+	if err != nil {
+		log.Warnf("aborting! not happy %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
+		return
+	}
+
+	log.Warnf("Is happy")
 	c.Status(http.StatusOK)
 }

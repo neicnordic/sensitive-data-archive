@@ -747,10 +747,20 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 	if err != nil {
 		return err
 	}
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHash, keyDescription).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+
 		return errors.New("something went wrong with the query zero rows were changed")
 	}
+
 	return nil
 }
 
