@@ -20,7 +20,6 @@ token="$(curl http://oidc:8080/tokens | jq -r '.[0]')"
 # decode from base64, then hex encode the public key
 key="$(head -n2 /shared/sync.pub.pem | tail -n1 | base64 -d | xxd -p | tr -d '\n')"
 
-curl -k -L "http://api:8080/key/hashed" -H "Authorization: Bearer $token" -d "{\"hash\": \"$key\", \"description\": \"first key\"}"
 
 for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
     ENC_SHA=$(sha256sum "$file.c4gh" | cut -d' ' -f 1)
@@ -74,9 +73,12 @@ for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
     curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
         -H 'Content-Type: application/json;charset=UTF-8' \
         -d "$ingest_body" | jq
+
+    # Insert key hash after the ingestion of the first file has started
+    # Makes sure that ingestion works even if the key hash is there
+    curl -k -L "http://api:8080/key/hashed" -H "Authorization: Bearer $token" -d "{\"hash\": \"$key\", \"description\": \"first key\"}"
 done
 
-# TODO make sure ok even if hash is not inserted
 echo "waiting for verify to complete"
 RETRY_TIMES=0
 until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ | jq -r '.messages_ready')" -eq 4 ]; do
