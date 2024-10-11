@@ -21,6 +21,7 @@
             "type": "string",
             "title": "The Accession identifier for the dataset",
             "description": "The Accession identifier for the dataset",
+            "minLength": 2,
             "examples": [
                 "anyidentifier"
             ]
