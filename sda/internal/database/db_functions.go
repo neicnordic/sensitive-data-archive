@@ -720,3 +720,31 @@ func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
 
 	return users, nil
 }
+
+func (dbs *SDAdb) GetDatasetStatus(datasetID string) (string, error) {
+	var (
+		err    error
+		count  int
+		status string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		status, err = dbs.getDatasetStatus(datasetID)
+		count++
+	}
+
+	return status, err
+}
+func (dbs *SDAdb) getDatasetStatus(datasetID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getDatasetEvent = "SELECT event from sda.dataset_event_log WHERE dataset_id = $1 ORDER BY id DESC LIMIT 1;"
+
+	var status string
+	err := db.QueryRow(getDatasetEvent, datasetID).Scan(&status)
+	if err != nil {
+		return "", err
+	}
+
+	return status, nil
+}
