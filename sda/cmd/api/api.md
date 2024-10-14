@@ -119,6 +119,24 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     - `401` Token user is not in the list of admins.
     - `500` Internal error due to DB failure.
 
+- `/key/hashed`
+  - accepts `POST` requests with the hex hash of the key and its description
+  - registers the key hash in the database.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `409` Key hash already exists in the database.
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"hash": "key-hex-hash", "description": "this is the key description"}' https://HOSTNAME/kes/hashed
+    ```
+
+
 #### Configure Admin users
 
 The users that should have administrative access can be set in two ways:
