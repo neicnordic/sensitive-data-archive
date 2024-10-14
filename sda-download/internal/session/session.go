@@ -8,7 +8,7 @@ import (
 )
 
 // SessionCache is the in-memory storage holding session keys and interfaces containing cached data
-var SessionCache *ristretto.Cache
+var SessionCache *ristretto.Cache[string, Cache]
 
 // Cache stores the dataset permissions
 // and information whether this information has
@@ -23,10 +23,10 @@ type Cache struct {
 }
 
 // InitialiseSessionCache creates a cache manager that stores keys and values in memory
-func InitialiseSessionCache() (*ristretto.Cache, error) {
+func InitialiseSessionCache() (*ristretto.Cache[string, Cache], error) {
 	log.Debug("creating session cache")
 	sessionCache, err := ristretto.NewCache(
-		&ristretto.Config{
+		&ristretto.Config[string, Cache]{
 			// Maximum number of items in cache
 			// A recommended number is expected maximum times 10
 			// so 100,000 * 10 = 1,000,000
@@ -52,13 +52,7 @@ func InitialiseSessionCache() (*ristretto.Cache, error) {
 // Get returns a cache item from the session storage at key
 var Get = func(key string) (Cache, bool) {
 	log.Debug("get value from cache")
-	cachedItem, exists := SessionCache.Get(key)
-	var cached Cache
-	if exists {
-		// the storage is unaware of cached types, so if an item is found
-		// we must assert it is the expected interface type (Cache)
-		cached = cachedItem.(Cache)
-	}
+	cached, exists := SessionCache.Get(key)
 	log.Debugf("cache response, exists=%t, cached=%v", exists, cached)
 
 	return cached, exists
