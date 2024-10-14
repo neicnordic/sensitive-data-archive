@@ -96,7 +96,7 @@ func setup(config *config.Config) *http.Server {
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 		ReadHeaderTimeout: 20 * time.Second,
 		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      20 * time.Second,
+		WriteTimeout:      2 * time.Minute,
 	}
 
 	return srv
@@ -418,7 +418,12 @@ func listUserFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
-// addHashedKey function adds a hashed public key and its description to the database
+// addHashedKey handles the addition of a hashed key to the database.
+// It expects a JSON payload containing the key hash and its description.
+// If the JSON payload is invalid, it responds with a 400 Bad Request status.
+// If there is no row update in the database, it responds with a 409 Conflict status
+// If the database insertion fails, it responds with a 500 Internal Server Error status.
+// On success, it responds with a 200 OK status.
 func addHashedKey(c *gin.Context) {
 	var keyhash schema.KeyhashInsertion
 	if err := c.BindJSON(&keyhash); err != nil {
@@ -430,14 +435,35 @@ func addHashedKey(c *gin.Context) {
 			},
 		)
 
+		log.Errorf("Invalid JSON payload: %v", err)
+
 		return
 	}
 
 	err = Conf.API.DB.AddKeyHash(keyhash.Hash, keyhash.Description)
-    if err != nil {
-        c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-        return
-    }
+	if err != nil {
+		if strings.Contains(err.Error(), "key hash already exists") {
+			c.AbortWithStatusJSON(
+				http.StatusConflict,
+				gin.H{
+					"error":  err.Error(),
+					"status": http.StatusConflict,
+				},
+			)
+			log.Error("Key hash already exists")
+		} else {
+			c.AbortWithStatusJSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"error":  err.Error(),
+					"status": http.StatusInternalServerError,
+				},
+			)
+			log.Errorf("Database insertion failed: %v", err)
+		}
+
+		return
+	}
 
 	c.Status(http.StatusOK)
 }
