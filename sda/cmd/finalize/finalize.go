@@ -110,6 +110,11 @@ func main() {
 			case "enabled":
 			case "ready":
 				log.Infof("File with correlation ID %s is already marked as ready.", delivered.CorrelationId)
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking message, reason: %v", err)
+				}
+
+				continue
 			default:
 				log.Warnf("file with correlation ID: %s is not verified yet, stopping work", delivered.CorrelationId)
 				if err := delivered.Nack(false, true); err != nil {
