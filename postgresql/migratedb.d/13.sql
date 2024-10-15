@@ -37,6 +37,8 @@ BEGIN
     GRANT SELECT ON sda.file_event_log TO api;
     GRANT SELECT ON sda.file_dataset TO api;
     GRANT SELECT  ON sda.checksums TO api;
+    GRANT SELECT ON sda.datasets TO api;
+    GRANT SELECT ON sda.dataset_event_log TO api;
     GRANT SELECT, INSERT, UPDATE ON sda.encryption_keys TO api;
     GRANT USAGE ON SCHEMA local_ega TO api;
     GRANT USAGE ON SCHEMA local_ega_ebi TO api;
