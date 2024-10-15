@@ -116,6 +116,7 @@
             "type": "string",
             "title": "The Accession identifier",
             "description": "The Accession identifier",
+            "minLength": 2,
             "pattern": "^\\S+$",
             "examples": [
                 "anyidentifier"

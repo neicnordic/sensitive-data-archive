@@ -569,3 +569,68 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 	assert.NoError(suite.T(), err, "failed to list users from DB")
 	assert.Equal(suite.T(), 3, len(userList))
 }
+
+func (suite *DatabaseTests) TestGetDatasetStatus() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	testCases := 5
+
+	for i := 0; i < testCases; i++ {
+		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", "User-Q", i)
+		fileID, err := db.RegisterFile(filePath, "User-Q")
+		if err != nil {
+			suite.FailNow("Failed to register file")
+		}
+		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, "User-Q", "{}", "{}")
+		if err != nil {
+			suite.FailNow("Failed to update file event log")
+		}
+
+		corrID, err := db.GetCorrID("User-Q", filePath)
+		if err != nil {
+			suite.FailNow("Failed to get CorrID for file")
+		}
+		assert.Equal(suite.T(), fileID, corrID)
+
+		checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+		fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, filePath, checksum, 999}
+		err = db.SetArchived(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Archived")
+		}
+
+		err = db.SetVerified(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Verified")
+		}
+
+		stableID := fmt.Sprintf("accession_%s_0%d", "User-Q", i)
+		err = db.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	dID := "test-get-dataset-01"
+	if err := db.MapFilesToDataset(dID, []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	err = db.UpdateDatasetEvent(dID, "registered", "{\"type\": \"mapping\"}")
+	assert.NoError(suite.T(), err, "got (%v) when updating dataset event", err)
+	status, err := db.GetDatasetStatus(dID)
+	assert.NoError(suite.T(), err, "got (%v) when no error weas expected")
+	assert.Equal(suite.T(), "registered", status)
+
+	err = db.UpdateDatasetEvent(dID, "released", "{\"type\": \"mapping\"}")
+	assert.NoError(suite.T(), err, "got (%v) when updating dataset event", err)
+	status, err = db.GetDatasetStatus(dID)
+	assert.NoError(suite.T(), err, "got (%v) when no error weas expected")
+	assert.Equal(suite.T(), "released", status)
+
+	err = db.UpdateDatasetEvent(dID, "deprecated", "{\"type\": \"mapping\"}")
+	assert.NoError(suite.T(), err, "got (%v) when updating dataset event", err)
+	status, err = db.GetDatasetStatus(dID)
+	assert.NoError(suite.T(), err, "got (%v) when no error weas expected")
+	assert.Equal(suite.T(), "deprecated", status)
+}

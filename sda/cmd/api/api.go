@@ -340,9 +340,34 @@ func createDataset(c *gin.Context) {
 }
 
 func releaseDataset(c *gin.Context) {
+	datasetID := strings.TrimPrefix(c.Param("dataset"), "/")
+	ok, err := Conf.API.DB.CheckIfDatasetExists(datasetID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusNotFound, "dataset not found")
+
+		return
+	}
+
+	status, err := Conf.API.DB.GetDatasetStatus(datasetID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+	if status != "registered" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("dataset already %s", status))
+
+		return
+	}
+
 	datasetMsg := schema.DatasetRelease{
 		Type:      "release",
-		DatasetID: strings.TrimPrefix(c.Param("dataset"), "/"),
+		DatasetID: datasetID,
 	}
 	marshaledMsg, _ := json.Marshal(&datasetMsg)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
