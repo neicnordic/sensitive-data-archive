@@ -82,7 +82,7 @@ func setup(config *config.Config) *http.Server {
 		r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
 		r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
 		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
-		r.POST("/key/hashed", isAdmin(), addHashedKey)                 // Adds a hashed key to the database
+		r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)              // Adds a key hash to the database
 		r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
 		r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
 	}

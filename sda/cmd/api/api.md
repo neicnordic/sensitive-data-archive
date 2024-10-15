@@ -119,7 +119,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     - `401` Token user is not in the list of admins.
     - `500` Internal error due to DB failure.
 
-- `/key/hashed`
+- `/c4gh-keys/add`
   - accepts `POST` requests with the hex hash of the key and its description
   - registers the key hash in the database.
 
