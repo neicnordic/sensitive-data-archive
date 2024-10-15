@@ -1289,7 +1289,7 @@ func (suite *TestSuite) TestAddHashedKeySuccess() {
 	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/key/hashed", isAdmin(), addHashedKey)
+	r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1304,7 +1304,7 @@ func (suite *TestSuite) TestAddHashedKeySuccess() {
 	body, err := json.Marshal(keyhash)
 	assert.NoError(suite.T(), err)
 
-	req, err := http.NewRequest("POST", ts.URL+"/key/hashed", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/add", bytes.NewBuffer(body))
 	assert.NoError(suite.T(), err)
 	req.Header.Add("Authorization", "Bearer "+suite.Token)
 	req.Header.Add("Content-Type", "application/json")
@@ -1321,7 +1321,7 @@ func (suite *TestSuite) TestAddHashedKeyInvalidJSON() {
 	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/key/hashed", isAdmin(), addHashedKey)
+	r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1331,7 +1331,7 @@ func (suite *TestSuite) TestAddHashedKeyInvalidJSON() {
 	// Create an invalid request body
 	body := []byte(`{"invalid_json"}`)
 
-	req, err := http.NewRequest("POST", ts.URL+"/key/hashed", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/add", bytes.NewBuffer(body))
 	assert.NoError(suite.T(), err)
 	req.Header.Add("Authorization", "Bearer "+suite.Token)
 	req.Header.Add("Content-Type", "application/json")
