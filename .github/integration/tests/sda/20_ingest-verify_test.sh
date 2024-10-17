@@ -76,7 +76,14 @@ for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
 
     # Insert key hash after the ingestion of the first file has started
     # Makes sure that ingestion works even if the key hash is there
-    curl -k -L "http://api:8080/key/hashed" -H "Authorization: Bearer $token" -d "{\"hash\": \"$key\", \"description\": \"first key\"}"
+    response=$(curl -s -w "%{http_code}" -k -L "http://api:8080/key/hashed" -H "Authorization: Bearer $token" -d "{\"hash\": \"$key\", \"description\": \"first key\"}")
+    # Extract the 3 last characters, ie the status code
+    status=$(printf "%s" "$response" | tail -c 3)
+    if [ "$status" -ne "200" ] && [ "$status" -ne "409" ]; then
+        echo "Could not add key hash to database"
+        echo "$response"
+        exit 1
+     fi
 done
 
 echo "waiting for verify to complete"
