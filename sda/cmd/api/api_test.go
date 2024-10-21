@@ -1283,13 +1283,13 @@ func (suite *TestSuite) TestListUserFiles() {
 	assert.Equal(suite.T(), 2, len(files))
 }
 
-func (suite *TestSuite) TestAddHashedKeySuccess() {
+func (suite *TestSuite) TestAddC4ghHash() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
 	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)
+	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1297,8 +1297,8 @@ func (suite *TestSuite) TestAddHashedKeySuccess() {
 	assert.NoError(suite.T(), setupJwtAuth())
 
 	// Create a valid request body
-	keyhash := schema.KeyhashInsertion{
-		Hash:        "somehashedkey",
+	keyhash := schema.C4ghPubKey{
+		PubKey:      "LS0tLS1CRUdJTiBDUllQVDRHSCBQVUJMSUMgS0VZLS0tLS0KdWxGRUF6SmZZNEplUEVDZWd3YmJrVVdLNnZ2SE9SWStqMTRGdVpWVnYwND0KLS0tLS1FTkQgQ1JZUFQ0R0ggUFVCTElDIEtFWS0tLS0tCg==",
 		Description: "Test key description",
 	}
 	body, err := json.Marshal(keyhash)
@@ -1313,15 +1313,21 @@ func (suite *TestSuite) TestAddHashedKeySuccess() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()
+
+	// Isert pubkey again and expect error
+	resp2, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusConflict, resp2.StatusCode)
+	defer resp2.Body.Close()
 }
 
-func (suite *TestSuite) TestAddHashedKeyInvalidJSON() {
+func (suite *TestSuite) TestAddC4ghHash_emptyJson() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
 	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)
+	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1330,6 +1336,33 @@ func (suite *TestSuite) TestAddHashedKeyInvalidJSON() {
 
 	// Create an invalid request body
 	body := []byte(`{"invalid_json"}`)
+
+	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/add", bytes.NewBuffer(body))
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, resp.StatusCode)
+	defer resp.Body.Close()
+}
+
+func (suite *TestSuite) TestAddC4ghHash_notBase64() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Create an invalid request body
+	body := []byte(`{"pubkey": "asdkjsahfd=", "decription": ""}`)
 
 	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/add", bytes.NewBuffer(body))
 	assert.NoError(suite.T(), err)
