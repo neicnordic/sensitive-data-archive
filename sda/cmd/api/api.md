@@ -133,9 +133,8 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"hash": "key-hex-hash", "description": "this is the key description"}' https://HOSTNAME/kes/hashed
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /PATH/TO/c4gh.pub)"'", "description": "this is the key description"}' https://HOSTNAME/c4gh-keys/add
     ```
-
 
 #### Configure Admin users
 

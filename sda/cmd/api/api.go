@@ -422,10 +422,10 @@ func listUserFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
-// addHashedKey handles the addition of a hashed key to the database.
-// It expects a JSON payload containing the key hash and its description.
+// addC4ghHash handles the addition of a hashed public key to the database.
+// It expects a JSON payload containing the base64 encoded public key and its description.
 // If the JSON payload is invalid, it responds with a 400 Bad Request status.
-// If there is no row update in the database, it responds with a 409 Conflict status
+// If the hash is already in the database, it responds with a 409 Conflict status
 // If the database insertion fails, it responds with a 500 Internal Server Error status.
 // On success, it responds with a 200 OK status.
 func addC4ghHash(c *gin.Context) {
