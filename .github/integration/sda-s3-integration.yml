@@ -289,9 +289,8 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - BROKER_PASSWORD=ingest
-      - BROKER_USER=ingest
-      - BROKER_ROUTINGKEY=ingest
+      - BROKER_PASSWORD=api
+      - BROKER_USER=api
       - DB_PASSWORD=api
       - DB_USER=api
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}

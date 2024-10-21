@@ -6,18 +6,19 @@ if [ -z "$STORAGETYPE" ]; then
     exit 1
 fi
 
-# install tools if missing
-for t in curl expect jq openssh-client postgresql-client; do
-    if [ ! "$(command -v $t)" ]; then
-        if [ "$(id -u)" != 0 ]; then
-            echo "$t is missing, unable to install it"
-            exit 1
-        fi
+if [ "$STORAGETYPE" = "posix" ]; then
+    for t in curl jq openssh-client postgresql-client; do
+        if [ ! "$(command -v $t)" ]; then
+            if [ "$(id -u)" != 0 ]; then
+                echo "$t is missing, unable to install it"
+                exit 1
+            fi
 
-        apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
-        apt-get -o DPkg::Lock::Timeout=60 install -y "$t" >/dev/null
-    fi
-done
+            apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
+            apt-get -o DPkg::Lock::Timeout=60 install -y "$t" >/dev/null
+        fi
+    done
+fi
 
 cd shared || true
 
