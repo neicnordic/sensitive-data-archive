@@ -180,7 +180,7 @@ type Metadata struct {
 	Metadata interface{}
 }
 
-type KeyhashInsertion struct {
-	Hash        string `json:"hash"`
+type C4ghPubKey struct {
+	PubKey      string `json:"pubkey"`
 	Description string `json:"description"`
 }

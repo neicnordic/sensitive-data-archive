@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -82,7 +86,7 @@ func setup(config *config.Config) *http.Server {
 		r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
 		r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
 		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
-		r.POST("/c4gh-keys/add", isAdmin(), addHashedKey)              // Adds a key hash to the database
+		r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)               // Adds a key hash to the database
 		r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
 		r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
 	}
@@ -424,9 +428,9 @@ func listUserFiles(c *gin.Context) {
 // If there is no row update in the database, it responds with a 409 Conflict status
 // If the database insertion fails, it responds with a 500 Internal Server Error status.
 // On success, it responds with a 200 OK status.
-func addHashedKey(c *gin.Context) {
-	var keyhash schema.KeyhashInsertion
-	if err := c.BindJSON(&keyhash); err != nil {
+func addC4ghHash(c *gin.Context) {
+	var c4gh schema.C4ghPubKey
+	if err := c.BindJSON(&c4gh); err != nil {
 		c.AbortWithStatusJSON(
 			http.StatusBadRequest,
 			gin.H{
@@ -440,7 +444,37 @@ func addHashedKey(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.DB.AddKeyHash(keyhash.Hash, keyhash.Description)
+	b64d, err := base64.StdEncoding.DecodeString(c4gh.PubKey)
+	if err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "base64 decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		log.Errorf("Invalid JSON payload: %v", err)
+
+		return
+	}
+
+	pubKey, err := keys.ReadPublicKey(bytes.NewReader(b64d))
+	if err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "not a public key : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		log.Errorf("Invalid JSON payload: %v", err)
+
+		return
+	}
+
+	err = Conf.API.DB.AddKeyHash(hex.EncodeToString(pubKey[:]), c4gh.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "key hash already exists") {
 			c.AbortWithStatusJSON(
