@@ -641,23 +641,19 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 	assert.Equal(suite.T(), "deprecated", status)
 }
 
-func (suite *DatabaseTests) TestAddKey() {
+func (suite *DatabaseTests) TestAddKeyHash() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// Test registering a new key and its description
-	keyHex := `2d2d2d2d2d424547494e204352595054344748205055424c4943204b4559
-2d2d2d2d2d0a65574d394166785761626d775354627657346e736650646b
-432f6953412b3849712b6e516232555a2b6d6f3d0a2d2d2d2d2d454e4420
-4352595054344748205055424c4943204b45592d2d2d2d2d0a`
+	keyHex := `cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23`
 	keyDescription := "this is a test key"
-	err = db.addKeyHash(keyHex, keyDescription)
+	err = db.AddKeyHash(keyHex, keyDescription)
 	assert.NoError(suite.T(), err, "failed to register key in database")
 
 	// Verify that the key was added
 	var exists bool
-	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHex, keyDescription).
-		Scan(&exists)
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHex, keyDescription).Scan(&exists)
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.True(suite.T(), exists, "key hash was not added to the database")
 }
