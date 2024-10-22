@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -835,6 +836,38 @@ func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("key hash not found or already deprecated")
+	}
+
+	return nil
+}
+
+func (dbs *SDAdb) UpdateUserInfo(userID, name, email string, groups []string) error {
+	var (
+		err   error
+		count int
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		err = dbs.updateUserInfo(userID, name, email, groups)
+		count++
+	}
+
+	return err
+}
+func (dbs *SDAdb) updateUserInfo(userID, name, email string, groups []string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const query = "INSERT INTO sda.userinfo(id, name, email, groups) VALUES($1, $2, $3, $4)" +
+		"ON CONFLICT (id)" +
+		"DO UPDATE SET name = excluded.name, email = excluded.email, groups = excluded.groups;"
+
+	result, err := db.Exec(query, userID, name, email, pq.Array(groups))
+	if err != nil {
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
 	}
 
 	return nil
