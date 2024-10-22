@@ -74,6 +74,14 @@ CREATE TABLE files (
     CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path)
 );
 
+-- The user info is used by auth to be able to link users to their name and email
+CREATE TABLE userinfo (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT,
+    email               TEXT,
+    groups              TEXT[]
+);
+
 -- To allow for multiple checksums per file, we use a dedicated table for it
 CREATE TABLE checksums (
     id                  SERIAL PRIMARY KEY,
