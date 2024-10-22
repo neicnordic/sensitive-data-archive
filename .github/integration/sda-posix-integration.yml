@@ -182,7 +182,7 @@ services:
     container_name: tester
     command:
       - "bash"
-      - "/tests/sda/10_upload_test.sh"
+      - "/tests/sda/10.1_upload_test.sh"
     depends_on:
       inbox:
         condition: service_started

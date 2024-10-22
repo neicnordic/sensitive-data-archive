@@ -593,7 +593,13 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 		assert.Equal(suite.T(), fileID, corrID)
 
 		checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
-		fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, filePath, checksum, 999}
+		fileInfo := FileInfo{
+			fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			1234,
+			filePath,
+			checksum,
+			999,
+		}
 		err = db.SetArchived(fileInfo, fileID, corrID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
@@ -633,4 +639,21 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 	status, err = db.GetDatasetStatus(dID)
 	assert.NoError(suite.T(), err, "got (%v) when no error weas expected")
 	assert.Equal(suite.T(), "deprecated", status)
+}
+
+func (suite *DatabaseTests) TestAddKeyHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// Test registering a new key and its description
+	keyHex := `cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23`
+	keyDescription := "this is a test key"
+	err = db.AddKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+
+	// Verify that the key was added
+	var exists bool
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHex, keyDescription).Scan(&exists)
+	assert.NoError(suite.T(), err, "failed to verify key hash existence")
+	assert.True(suite.T(), exists, "key hash was not added to the database")
 }

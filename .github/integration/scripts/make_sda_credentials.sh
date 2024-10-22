@@ -14,7 +14,7 @@ apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl post
 pip install --upgrade pip > /dev/null
 pip install aiohttp Authlib joserfc requests > /dev/null
 
-for n in download finalize inbox ingest mapper sync verify; do
+for n in api download finalize inbox ingest mapper sync verify; do
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
     psql -U postgres -h postgres -d sda -c "GRANT base TO $n;"

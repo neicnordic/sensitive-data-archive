@@ -179,3 +179,8 @@ type SyncMetadata struct {
 type Metadata struct {
 	Metadata interface{}
 }
+
+type C4ghPubKey struct {
+	PubKey      string `json:"pubkey"`
+	Description string `json:"description"`
+}
