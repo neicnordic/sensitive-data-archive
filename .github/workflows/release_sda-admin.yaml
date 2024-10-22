@@ -1,0 +1,90 @@
+name: Release sda-admin
+
+on:
+    merge_group:
+    pull_request:
+      paths:
+        - 'sda-admin/.version'
+      types: [ closed ]
+    workflow_dispatch:
+
+jobs:
+  release_sda_admin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+      - name: Get version tag
+        run: |
+          VERSION=$(cat sda-admin/.version)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Create release
+        uses : softprops/action-gh-release@v2
+        with:
+          tag_name: "sda-admin-${{ env.VERSION }}"
+
+  package_sda_admin:
+    needs: [release_sda_admin]
+    permissions:
+      contents: write
+      packages: write
+    runs-on: ubuntu-latest
+    strategy:
+        matrix:
+          # List of GOOS and GOARCH pairs from `go tool dist list`
+          goosarch:
+            - "linux/amd64"
+            - "windows/amd64"
+            - "darwin/amd64"
+            - "darwin/arm64"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version:  '>=1.22'
+        id: go
+
+      - name: Get dependencies
+        run: |
+          cd sda-admin
+          go get -v -t -d ./...
+          if [ -f Gopkg.toml ]; then
+              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+              dep ensure
+          fi
+
+      - name: Get OS and arch info
+        run: |
+            GOOSARCH=${{matrix.goosarch}}
+            GOOS=${GOOSARCH%/*}
+            GOARCH=${GOOSARCH#*/}
+            VERSION=$(cat sda-admin/.version)
+            BINARY_NAME=sda-admin_${VERSION}_${GOOS}_${GOARCH}
+            echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
+            echo "GOOS=$GOOS" >> $GITHUB_ENV
+            echo "GOARCH=$GOARCH" >> $GITHUB_ENV
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Build
+        if: ${{ matrix.goosarch != 'windows/amd64' }}
+        run: |
+          cd sda-admin
+          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=$VERSION'"
+          tar -czf "$BINARY_NAME.tgz" "$BINARY_NAME" ../LICENSE
+          echo "ARTIFACT"="$BINARY_NAME.tgz" >> $GITHUB_ENV
+
+      - name: Build windows
+        if: ${{ matrix.goosarch == 'windows/amd64' }}
+        run: |
+          cd sda-admin
+          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=$VERSION'"
+          zip "$BINARY_NAME.zip" "$BINARY_NAME" ../LICENSE
+          echo "ARTIFACT"="$BINARY_NAME.zip" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        run: gh release upload "sda-admin-${{ env.VERSION }}" "sda-admin/${{ env.ARTIFACT }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
