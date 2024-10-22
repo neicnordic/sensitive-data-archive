@@ -16,6 +16,7 @@ import (
 	"github.com/kataras/iris/v12/sessions"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -263,6 +264,10 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
+	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Name, idStruct.Email, idStruct.EdupersonEntitlement)
+	if err != nil {
+		log.Warnf("Could not log user info for %s (%s, %s)", idStruct.User, idStruct.Name, idStruct.Email)
+	}
 
 	if auth.Config.ResignJwt {
 		claims := map[string]interface{}{
@@ -368,6 +373,18 @@ func main() {
 		// Initialise OIDC client
 		oauth2Config, provider = getOidcClient(config.Auth.OIDC)
 	}
+
+	// Connect to DB
+	config.Auth.DB, err = database.NewSDAdb(config.Database)
+	if err != nil {
+		log.Error(err)
+		panic(err)
+	}
+	if config.Auth.DB.Version < 8 {
+		log.Error("database schema v8 is required")
+		panic(err)
+	}
+	defer config.Auth.DB.Close()
 
 	// Create handler struct for the web server
 	authHandler := AuthHandler{
