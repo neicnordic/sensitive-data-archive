@@ -115,6 +115,7 @@ type OrchestratorConf struct {
 
 type AuthConf struct {
 	OIDC            OIDCConfig
+	DB              *database.SDAdb
 	Cega            CegaConfig
 	JwtIssuer       string
 	JwtPrivateKey   string
