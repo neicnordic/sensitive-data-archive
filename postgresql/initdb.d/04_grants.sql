@@ -170,6 +170,7 @@ GRANT SELECT ON sda.datasets TO api;
 GRANT SELECT ON sda.dataset_event_log TO api;
 GRANT INSERT ON sda.encryption_keys TO api;
 GRANT UPDATE ON sda.encryption_keys TO api;
+GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO download;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO api;
