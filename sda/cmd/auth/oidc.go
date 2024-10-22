@@ -17,6 +17,7 @@ import (
 // OIDCIdentity represents an OIDC user instance
 type OIDCIdentity struct {
 	User                 string
+	Name                 string
 	Passport             []string
 	Token                string
 	Profile              string
@@ -104,6 +105,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 	idStruct = OIDCIdentity{
 		User:                 userInfo.Subject,
+		Name:                 claims.ProfileClaim,
 		Token:                rawAccessToken,
 		Passport:             claims.PassportClaim,
 		Profile:              claims.ProfileClaim,
