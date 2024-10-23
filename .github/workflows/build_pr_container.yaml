@@ -10,6 +10,7 @@ on:
       - ".github/dependabot.yaml"
       - "charts/**"
       - "Makefile"
+      - "sda-admin/*"
 
 env:
   PR_NUMBER: ${{ github.event.number }}

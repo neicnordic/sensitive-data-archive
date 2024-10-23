@@ -12,7 +12,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/user"
 )
 
-var version = "1.0.0"
+var version = "development"
 
 var (
 	apiURI string
