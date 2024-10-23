@@ -397,6 +397,9 @@ func main() {
 						err = db.SetKeyHash(keyhash, fileID)
 						if err != nil {
 							log.Errorf("Key hash %s could not be set for fileID %s: (%s)", keyhash, fileID, err.Error())
+							if err = delivered.Nack(false, true); err != nil {
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
+							}
 
 							continue mainWorkLoop
 						}
