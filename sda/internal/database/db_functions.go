@@ -5,7 +5,6 @@ package database
 import (
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -788,14 +787,8 @@ func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	query := `SELECT key_hash FROM sda.encryption_keys WHERE key_hash = $1;`
-	var hashID string
-	err := db.QueryRow(query, keyHash).Scan(&hashID)
-	if err != nil {
-		return fmt.Errorf("keyhash not present in database: %v", err)
-	}
-	query = "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
-	result, err := db.Exec(query, hashID, fileID)
+	query := "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
+	result, err := db.Exec(query, keyHash, fileID)
 	if err != nil {
 
 		return err
