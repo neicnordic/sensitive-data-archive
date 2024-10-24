@@ -114,6 +114,7 @@ type OrchestratorConf struct {
 
 type AuthConf struct {
 	OIDC            OIDCConfig
+	DB              *database.SDAdb
 	Cega            CegaConfig
 	JwtIssuer       string
 	JwtPrivateKey   string
@@ -218,6 +219,11 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"auth.s3Inbox",
 			"auth.publicFile",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
 		}
 
 		if viper.GetString("auth.cega.id") != "" && viper.GetString("auth.cega.secret") != "" {
@@ -531,6 +537,10 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
+		err := c.configDatabase()
+		if err != nil {
+			return nil, err
+		}
 	case "finalize":
 		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
 			c.configArchive()
