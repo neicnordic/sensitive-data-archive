@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -929,4 +930,47 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 	assert.NoError(suite.T(), err, "got (%v) when listing datasets for a user", err)
 	assert.Equal(suite.T(), 2, len(datasets))
 	assert.Equal(suite.T(), "test-user-dataset-01", datasets[0].DatasetID)
+}
+
+func (suite *DatabaseTests) TestInsertUserInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// Verify that a user can be inserted
+	var groups []string
+	userID, name, email := "12334556testuser@lifescience.ru", "Test User", "test.user@example.org"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert user info: %v", err)
+	var exists bool
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.userinfo WHERE id=$1)", userID).Scan(&exists)
+	assert.NoError(suite.T(), err, "failed to verify user info existence")
+	assert.True(suite.T(), exists, "user info was not added to the database")
+
+	// Insert new information about the user
+	groups = append(groups, "appleGroup", "bananaGroup")
+	name = "newName"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert updated user info: %v", err)
+}
+
+func (suite *DatabaseTests) TestUpdateUserInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// Insert a userID
+	var groups []string
+	userID, name, email := "12334556testuser@lifescience.ru", "Test User", "test.user@example.org"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert user info: %v", err)
+	// Verify that the userID is connected to the new details
+	var numRows int
+	err = db.DB.QueryRow("SELECT COUNT(*) FROM sda.userinfo WHERE id=$1", userID).Scan(&numRows)
+	assert.NoError(suite.T(), err, "could select user info: %v", err)
+	assert.Equal(suite.T(), 1, numRows, "there should be exactly 1 row about %v in userinfo table", userID)
+	var name2 string
+	var groups2 []string
+	err = db.DB.QueryRow("SELECT name, groups FROM sda.userinfo WHERE id=$1", userID).Scan(&name2, pq.Array(&groups2))
+	assert.NoError(suite.T(), err, "could select user info: %v", err)
+	assert.Equal(suite.T(), name, name2, "user info table did not update correctly")
+	assert.Equal(suite.T(), groups, groups2, "user info table did not update correctly")
 }
