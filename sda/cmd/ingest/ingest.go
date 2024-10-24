@@ -397,6 +397,8 @@ func main() {
 						err = db.SetKeyHash(keyhash, fileID)
 						if err != nil {
 							log.Errorf("Key hash %s could not be set for fileID %s: (%s)", keyhash, fileID, err.Error())
+
+							continue mainWorkLoop
 						}
 
 						log.Debugln("store header")
