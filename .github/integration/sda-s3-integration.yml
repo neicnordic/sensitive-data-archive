@@ -348,6 +348,8 @@ services:
       - AUTH_RESIGNJWT=true
       - AUTH_CEGA_ID=test
       - AUTH_CEGA_SECRET=test
+      - DB_PASSWORD=api
+      - DB_USER=api
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8888:8080"
