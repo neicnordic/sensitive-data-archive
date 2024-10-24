@@ -6,6 +6,7 @@ import (
 	"regexp"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -656,4 +657,37 @@ func (suite *DatabaseTests) TestAddKeyHash() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHex, keyDescription).Scan(&exists)
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.True(suite.T(), exists, "key hash was not added to the database")
+}
+
+func (suite *DatabaseTests) TestInsertUserInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// Verify that a user can be inserted
+	var groups []string
+	userID, name, email := "12334556testuser@lifescience.ru", "Test User", "test.user@example.org"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert user info: %v", err)
+	var exists bool
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.userinfo WHERE id=$1)", userID).Scan(&exists)
+	assert.NoError(suite.T(), err, "failed to verify user info existence")
+	assert.True(suite.T(), exists, "user info was not added to the database")
+
+	// Insert new information about the user
+	groups = append(groups, "appleGroup", "bananaGroup")
+	name = "newName"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert updated user info: %v", err)
+
+	// Verify that the userID is connected to the new details
+	var numRows int
+	err = db.DB.QueryRow("SELECT COUNT(*) FROM sda.userinfo WHERE id=$1", userID).Scan(&numRows)
+	assert.Equal(suite.T(), 1, numRows, "there should be exactly 1 row about %v in userinfo table", userID)
+	var db_name string
+	var db_groups []string
+	err = db.DB.QueryRow("SELECT name, groups FROM sda.userinfo WHERE id=$1", userID).Scan(&db_name, pq.Array(&db_groups))
+	assert.NoError(suite.T(), err, "could select user info: %v", err)
+	assert.Equal(suite.T(), name, db_name, "user info table did not update correctly")
+	assert.Equal(suite.T(), groups, db_groups, "user info table did not update correctly")
+
 }
