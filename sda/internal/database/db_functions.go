@@ -800,7 +800,9 @@ func (dbs *SDAdb) updateUserInfo(userID, name, email string, groups []string) er
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "INSERT INTO sda.userinfo(id, name, email, groups) VALUES($1, $2, $3, $4);"
+	const query = "INSERT INTO sda.userinfo(id, name, email, groups) VALUES($1, $2, $3, $4)" +
+		"ON CONFLICT (id)" +
+		"DO UPDATE SET name = excluded.name, email = excluded.email, groups = excluded.groups;"
 
 	result, err := db.Exec(query, userID, name, email, pq.Array(groups))
 	if err != nil {
