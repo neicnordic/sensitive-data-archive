@@ -170,7 +170,6 @@ GRANT SELECT ON sda.datasets TO api;
 GRANT SELECT ON sda.dataset_event_log TO api;
 GRANT INSERT ON sda.encryption_keys TO api;
 GRANT UPDATE ON sda.encryption_keys TO api;
-GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO download;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO api;
@@ -180,10 +179,15 @@ GRANT SELECT ON local_ega_ebi.file TO api;
 GRANT SELECT ON local_ega_ebi.file_dataset TO api;
 
 --------------------------------------------------------------------------------
+CREATE ROLE auth;
+GRANT USAGE ON SCHEMA sda TO api;
+GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO auth;
+--------------------------------------------------------------------------------
+
 -- lega_in permissions
 GRANT base, ingest, verify, finalize, sync, api TO lega_in;
 
 -- lega_out permissions
 GRANT mapper, download, api TO lega_out;
 
-GRANT base TO api, download, inbox, ingest, finalize, mapper, verify
+GRANT base TO api, download, inbox, ingest, finalize, mapper, verify, auth;

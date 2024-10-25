@@ -18,6 +18,11 @@ BEGIN
         groups      TEXT[]
     );
 
+    PERFORM create_role_if_not_exists('auth');
+    GRANT USAGE ON SCHEMA sda TO auth;
+    GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO auth;
+
+    GRANT base TO api, download, inbox, ingest, finalize, mapper, verify, auth;
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;
