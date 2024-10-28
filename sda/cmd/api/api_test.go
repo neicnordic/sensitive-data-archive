@@ -1374,3 +1374,40 @@ func (suite *TestSuite) TestAddC4ghHash_notBase64() {
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.StatusCode)
 	defer resp.Body.Close()
 }
+
+func (suite *TestSuite) TestListC4ghHashes() {
+	assert.NoError(suite.T(), Conf.API.DB.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+
+	expectedResponse := database.C4ghKeyHash{
+		Hash:         "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23",
+		Description:  "this is a test key",
+		CreatedAt:    time.Now().UTC().Format(time.DateTime),
+		DeprecatedAt: "",
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	req, err := http.NewRequest("GET", ts.URL+"/c4gh-keys/list", nil)
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+
+	hashes := []database.C4ghKeyHash{}
+	err = json.NewDecoder(resp.Body).Decode(&hashes)
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	assert.Equal(suite.T(), expectedResponse, hashes[0])
+}
