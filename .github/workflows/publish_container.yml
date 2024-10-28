@@ -10,6 +10,8 @@ on:
       - "**/*.md"
       - "charts/**"
       - "Makefile"
+      - "sda-admin/**"
+      - "tools/*"
     types: [ closed ]
 
 jobs:
