@@ -18,7 +18,7 @@ for q in accession archived backup completed inbox ingest mappings verified; do
     curl -s -k -u guest:guest -X DELETE "$URI/api/queues/sda/$q/contents"
 done
 ## truncate database
-psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
+psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files, sda.encryption_keys CASCADE;"
 
 pip -q install s3cmd
 
