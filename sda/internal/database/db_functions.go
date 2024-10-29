@@ -822,3 +822,20 @@ func (dbs *SDAdb) ListKeyHashes() ([]C4ghKeyHash, error) {
 
 	return hashList, nil
 }
+
+func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "UPDATE sda.encryption_keys set deprecated_at = NOW() WHERE key_hash = $1 AND deprecated_at IS NULL;"
+	result, err := db.Exec(query, keyHash)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("key hash not found or already deprecated")
+	}
+
+	return nil
+}

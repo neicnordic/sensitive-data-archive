@@ -687,3 +687,30 @@ func (suite *DatabaseTests) TestListKeyHashes_emptyTable() {
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.Equal(suite.T(), []C4ghKeyHash{}, hashList, "fuu")
 }
+
+func (suite *DatabaseTests) TestDeprecateKeyHashes() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc32", "this is a test key"), "failed to register key in database")
+
+	assert.NoError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc32"), "failure when deprecating keyhash")
+}
+
+func (suite *DatabaseTests) TestDeprecateKeyHashes_wrongHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc11", "this is a another key"), "failed to register key in database")
+
+	assert.EqualError(suite.T(), db.DeprecateKeyHash("wr0n6h4sh"), "key hash not found or already deprecated", "failure when deprecating non existing keyhash")
+}
+
+func (suite *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54", "this is a test key"), "failed to register key in database")
+
+	assert.NoError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "failure when deprecating keyhash")
+
+	// we should not be able to change the deprecation date
+	assert.EqualError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "key hash not found or already deprecated", "failure when deprecating keyhash")
+}

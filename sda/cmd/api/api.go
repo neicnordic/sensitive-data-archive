@@ -82,14 +82,15 @@ func setup(config *config.Config) *http.Server {
 	r.GET("/files", getFiles)
 	// admin endpoints below here
 	if len(config.API.Admins) > 0 {
-		r.POST("/file/ingest", isAdmin(), ingestFile)                  // start ingestion of a file
-		r.POST("/file/accession", isAdmin(), setAccession)             // assign accession ID to a file
-		r.POST("/dataset/create", isAdmin(), createDataset)            // maps a set of files to a dataset
-		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset) // Releases a dataset to be accessible
-		r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)               // Adds a key hash to the database
-		r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)            // Lists keyhashes in the database
-		r.GET("/users", isAdmin(), listActiveUsers)                    // Lists all users
-		r.GET("/users/:username/files", isAdmin(), listUserFiles)      // Lists all unmapped files for a user
+		r.POST("/file/ingest", isAdmin(), ingestFile)                         // start ingestion of a file
+		r.POST("/file/accession", isAdmin(), setAccession)                    // assign accession ID to a file
+		r.POST("/dataset/create", isAdmin(), createDataset)                   // maps a set of files to a dataset
+		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)        // Releases a dataset to be accessible
+		r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)                      // Adds a key hash to the database
+		r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash) // Deprecate a given key hash
+		r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)                   // Lists key hashes in the database
+		r.GET("/users", isAdmin(), listActiveUsers)                           // Lists all users
+		r.GET("/users/:username/files", isAdmin(), listUserFiles)             // Lists all unmapped files for a user
 	}
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -522,4 +523,35 @@ func listC4ghHashes(c *gin.Context) {
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.JSON(200, hashes)
+}
+
+func deprecateC4ghHash(c *gin.Context) {
+	keyHash := strings.TrimPrefix(c.Param("keyHash"), "/")
+
+	hashes, err := Conf.API.DB.ListKeyHashes()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	found := false
+	for _, h := range hashes {
+		if h.Hash == keyHash {
+			found = true
+
+			break
+		}
+	}
+	if !found {
+		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Errorf("%s not found", keyHash))
+
+		return
+	}
+
+	err = Conf.API.DB.DeprecateKeyHash(keyHash)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
 }
