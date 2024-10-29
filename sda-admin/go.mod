@@ -5,6 +5,7 @@ go 1.23.1
 require (
 	github.com/neicnordic/crypt4gh v1.12.0
 	github.com/stretchr/testify v1.9.0
+	github.com/tidwall/pretty v1.2.1
 )
 
 require (

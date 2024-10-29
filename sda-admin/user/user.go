@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
+	"github.com/tidwall/pretty"
 )
 
 // List returns all users
@@ -21,7 +22,7 @@ func List(apiURI, token string) error {
 		return err
 	}
 
-	fmt.Println(string(response))
+	fmt.Print(string(pretty.Pretty(response)))
 
 	return nil
 }
