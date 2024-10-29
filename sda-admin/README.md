@@ -52,13 +52,36 @@ Use the following command to create a dataset `dataset001` from accession IDs `m
 sda-admin dataset create -dataset-id dataset001 my-accession-id-1 my-accession-id-2 
 ```
 
-
 ## Release a dataset for downloading
 
 Use the following command to release the dataset `dataset001` for downloading
 
 ```sh
 sda-admin dataset release -dataset-id dataset001
+```
+
+## Register a new c4gh key hash
+
+Add a new key hash to the system from the public key
+
+```sh
+sda-admin c4gh-hash add -filepath /path/to/c4gh.pub -description "Short description of this key"
+```
+
+## Deprecate a c4gh key hash
+
+Deprecates a key hash
+
+```sh
+sda-admin c4gh-hash deprecate -hash HASH_OF_THE_KEY_TO_DEPRECATE
+```
+
+## List all c4gh key hashes
+
+Lists all key hashes and all data about them
+
+```sh
+sda-admin c4gh-hash list
 ```
 
 ## Show version information
@@ -77,9 +100,10 @@ For detailed usage information about specific commands or options, use:
 sda-admin help <command>
 ```
 
-### Examples 
+### Examples
 
 To get help on the `file` command:
+
 ```sh
 sda-admin help file
 ```
