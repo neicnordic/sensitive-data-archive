@@ -28,13 +28,14 @@ func TestCreate_Success(t *testing.T) {
 
 	expectedURL := "http://example.com/dataset/create"
 	token := "test-token"
+	user := "test-user@example.com"
 	datasetID := "dataset-123"
 	accessionIDs := []string{"accession-1", "accession-2"}
-	jsonBody := []byte(`{"accession_ids":["accession-1","accession-2"],"dataset_id":"dataset-123"}`)
+	jsonBody := []byte(`{"accession_ids":["accession-1","accession-2"],"dataset_id":"dataset-123","user":"test-user@example.com"}`)
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := Create("http://example.com", token, datasetID, accessionIDs)
+	err := Create("http://example.com", token, datasetID, user, accessionIDs)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -47,13 +48,14 @@ func TestCreate_PostRequestFailure(t *testing.T) {
 
 	expectedURL := "http://example.com/dataset/create"
 	token := "test-token"
+	user := "test-user@example.com"
 	datasetID := "dataset-123"
 	accessionIDs := []string{"accession-1", "accession-2"}
-	jsonBody := []byte(`{"accession_ids":["accession-1","accession-2"],"dataset_id":"dataset-123"}`)
+	jsonBody := []byte(`{"accession_ids":["accession-1","accession-2"],"dataset_id":"dataset-123","user":"test-user@example.com"}`)
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := Create("http://example.com", token, datasetID, accessionIDs)
+	err := Create("http://example.com", token, datasetID, user, accessionIDs)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)

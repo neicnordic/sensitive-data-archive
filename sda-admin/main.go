@@ -29,7 +29,7 @@ Commands:
                                 Trigger ingestion of a given file.
   file set-accession -filepath FILEPATH -user USERNAME -accession-id accessionID
                                 Assign accession ID to a file.
-  dataset create -dataset-id DATASET_ID accessionID [accessionID ...]
+  dataset create -user SUBMISSION_USER -dataset-id DATASET_ID accessionID [accessionID ...]
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
                                 Release a dataset for downloading.
@@ -91,7 +91,7 @@ Options:
   -accession-id ID     Specify the accession ID to assign to the file.`
 
 var datasetUsage = `Create a dataset:
-  Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
+  Usage: sda-admin dataset create -user SUBMISSION_USER -dataset-id DATASET_ID [ACCESSION_ID ...]
     Create a dataset from a list of accession IDs and a dataset ID.
     
 Release a dataset:
@@ -104,8 +104,8 @@ Options:
 
 Use 'sda-admin help dataset <command>' for information on a specific command.`
 
-var datasetCreateUsage = `Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
-  Create a dataset from a list of accession IDs and a dataset ID.
+var datasetCreateUsage = `Usage: sda-admin dataset create -user SUBMISSION_USER -dataset-id DATASET_ID [ACCESSION_ID ...]
+  Create a dataset from a list of accession IDs and a dataset ID belonging to a given user.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
@@ -371,8 +371,9 @@ func handleDatasetCommand() error {
 
 func handleDatasetCreateCommand() error {
 	datasetCreateCmd := flag.NewFlagSet("create", flag.ExitOnError)
-	var datasetID string
+	var datasetID, username string
 	datasetCreateCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to create")
+	datasetCreateCmd.StringVar(&username, "user", "", "Username to associate with the file")
 
 	if err := datasetCreateCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
@@ -384,7 +385,11 @@ func handleDatasetCreateCommand() error {
 		return fmt.Errorf("error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
 	}
 
-	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
+	if username == "" {
+		return fmt.Errorf("error: -user is required.\n%s", datasetCreateUsage)
+	}
+
+	err := dataset.Create(apiURI, token, datasetID, username, accessionIDs)
 	if err != nil {
 		return fmt.Errorf("error: failed to create dataset, reason: %v", err)
 	}
