@@ -71,7 +71,7 @@ done
 
 # check that the files have key hashes assigned
 key_hashes="$(psql -U postgres -h postgres -d sda -At -c "select distinct key_hash from sda.files" | wc -l)"
-if [ "$key_hashes" -lt 0 ]; then
+if [ "$key_hashes" -eq 0 ]; then
 	echo "::error::Ingested files did not have any key hashes."
 	exit 1
 fi
