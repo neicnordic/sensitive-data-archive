@@ -40,7 +40,7 @@ BEGIN
     GRANT USAGE ON SCHEMA sda TO auth;
     GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO auth;
 
-    GRANT base TO api, download, inbox, ingest, finalize, mapper, verify, auth;
+    GRANT base TO auth;
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;

@@ -372,8 +372,8 @@ services:
       - AUTH_RESIGNJWT=false
       - OIDC_ID=XC56EL11xx
       - OIDC_SECRET=wHPVQaYXmdDHg
-      - DB_PASSWORD=api
-      - DB_USER=api
+      - DB_PASSWORD=auth
+      - DB_USER=auth
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8889:8080"

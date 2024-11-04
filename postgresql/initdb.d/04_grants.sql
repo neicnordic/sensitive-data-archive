@@ -180,7 +180,7 @@ GRANT SELECT ON local_ega_ebi.file_dataset TO api;
 
 --------------------------------------------------------------------------------
 CREATE ROLE auth;
-GRANT USAGE ON SCHEMA sda TO api;
+GRANT USAGE ON SCHEMA sda TO auth;
 GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO auth;
 --------------------------------------------------------------------------------
 
