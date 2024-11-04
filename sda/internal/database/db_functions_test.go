@@ -735,7 +735,17 @@ func (suite *DatabaseTests) TestInsertUserInfo() {
 	name = "newName"
 	err = db.UpdateUserInfo(userID, name, email, groups)
 	assert.NoError(suite.T(), err, "could not insert updated user info: %v", err)
+}
 
+func (suite *DatabaseTests) TestUpdateUserInfo() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// Insert a userID
+	var groups []string
+	userID, name, email := "12334556testuser@lifescience.ru", "Test User", "test.user@example.org"
+	err = db.UpdateUserInfo(userID, name, email, groups)
+	assert.NoError(suite.T(), err, "could not insert user info: %v", err)
 	// Verify that the userID is connected to the new details
 	var numRows int
 	err = db.DB.QueryRow("SELECT COUNT(*) FROM sda.userinfo WHERE id=$1", userID).Scan(&numRows)
