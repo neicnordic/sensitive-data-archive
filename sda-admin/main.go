@@ -539,7 +539,7 @@ func handleC4ghKeyHashDeprecateCommand() error {
 func handleC4ghHashListCommand() error {
 	err := c4ghkeyhash.List(apiURI, token)
 	if err != nil {
-		return fmt.Errorf("error: failed to list crypt4gh hahses, reason: %v", err)
+		return fmt.Errorf("error: failed to list crypt4gh hashes, reason: %v", err)
 	}
 
 	return nil
