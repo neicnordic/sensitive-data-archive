@@ -8,9 +8,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-
-	// Needed implicitly to enable Postgres driver
-	_ "github.com/lib/pq"
 )
 
 // DBConf stores information about how to connect to the database backend
