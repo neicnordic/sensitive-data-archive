@@ -430,8 +430,8 @@ func main() {
 		log.Error(err)
 		panic(err)
 	}
-	if config.Auth.DB.Version < 8 {
-		log.Error("database schema v8 is required")
+	if config.Auth.DB.Version < 14 {
+		log.Error("database schema v14 is required")
 		panic(err)
 	}
 	defer config.Auth.DB.Close()
