@@ -266,7 +266,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 	if auth.Config.ResignJwt {
 		claims := map[string]interface{}{
-			jwt.ExpirationKey: time.Now().UTC().Add(200 * time.Hour),
+			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
 			jwt.IssuerKey:     auth.Config.JwtIssuer,
 			jwt.SubjectKey:    idStruct.User,
