@@ -527,30 +527,9 @@ func listC4ghHashes(c *gin.Context) {
 
 func deprecateC4ghHash(c *gin.Context) {
 	keyHash := strings.TrimPrefix(c.Param("keyHash"), "/")
-
-	hashes, err := Conf.API.DB.ListKeyHashes()
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-	found := false
-	for _, h := range hashes {
-		if h.Hash == keyHash {
-			found = true
-
-			break
-		}
-	}
-	if !found {
-		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Errorf("%s not found", keyHash))
-
-		return
-	}
-
 	err = Conf.API.DB.DeprecateKeyHash(keyHash)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
 		return
 	}

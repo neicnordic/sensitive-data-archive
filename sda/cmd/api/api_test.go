@@ -1450,7 +1450,7 @@ func (suite *TestSuite) TestDeprecateC4ghHash() {
 	// a second time gives an error since the key is alreadu deprecated
 	resp2, err := client.Do(req)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), http.StatusInternalServerError, resp2.StatusCode)
+	assert.Equal(suite.T(), http.StatusBadRequest, resp2.StatusCode)
 	defer resp2.Body.Close()
 }
 
