@@ -54,6 +54,12 @@ type SubmissionFileInfo struct {
 	CreateAt  string `json:"createAt"`
 }
 
+type DatasetInfo struct {
+	DatasetID string
+	Status    string
+	Timestamp string
+}
+
 // SchemaName is the name of the remote database schema to query
 var SchemaName = "sda"
 

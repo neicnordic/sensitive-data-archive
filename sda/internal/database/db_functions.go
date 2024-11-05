@@ -857,3 +857,31 @@ func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
 
 	return nil
 }
+
+// ListDatasets lists all datasets as well as the status
+func (dbs *SDAdb) ListDatasets() ([]*DatasetInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var datasets []*DatasetInfo
+	rows, err := db.Query("SELECT dataset_id,event,event_date FROM sda.dataset_event_log WHERE (dataset_id, event_date) IN (SELECT dataset_id,max(event_date) FROM sda.dataset_event_log GROUP BY dataset_id);")
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	for rows.Next() {
+		var di DatasetInfo
+		err := rows.Scan(&di.DatasetID, &di.Status, &di.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		datasets = append(datasets, &di)
+	}
+	rows.Close()
+
+	return datasets, nil
+}
