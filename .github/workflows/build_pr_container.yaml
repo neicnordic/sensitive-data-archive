@@ -106,6 +106,9 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on postgres
         uses: aquasecurity/trivy-action@0.28.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-postgres
           format: "sarif"
@@ -121,6 +124,9 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on rabbitmq
         uses: aquasecurity/trivy-action@0.28.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
           format: "sarif"
@@ -167,6 +173,9 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on sftp-inbox
         uses: aquasecurity/trivy-action@0.28.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-sftp-inbox
           format: "sarif"
