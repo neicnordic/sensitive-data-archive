@@ -1812,6 +1812,7 @@ func (suite *TestSuite) TestListDatasets() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
+	router.GET("/datasets/list", listAllDatasets)
 	router.GET("/dataset/list", listAllDatasets)
 
 	router.ServeHTTP(w, r)

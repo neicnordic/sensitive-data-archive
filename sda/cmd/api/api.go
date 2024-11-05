@@ -105,6 +105,8 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
 	r.GET("/datasets/list", rbac(e), listDatasets)               // Lists all datasets with their status
+    r.GET("/datasets/list/:username", rbac(e), listUserDatasets) // Lists datasets with their status for a specififc user
+	r.GET("/datasets/list", rbac(e), listAllDatasets)            // Lists all datasets with their status
 	r.GET("/datasets/list/:username", rbac(e), listUserDatasets) // Lists datasets with their status for a specififc user
 	r.GET("/users", rbac(e), listActiveUsers)                    // Lists all users
 	r.GET("/users/:username/files", rbac(e), listUserFiles)      // Lists all unmapped files for a user
@@ -602,10 +604,10 @@ func deprecateC4ghHash(c *gin.Context) {
 	}
 }
 
-func listDatasets(c *gin.Context) {
+func listAllDatasets(c *gin.Context) {
 	datasets, err := Conf.API.DB.ListDatasets()
 	if err != nil {
-		log.Debugln("ListDatasets failed")
+		log.Debugln("ListAllDatasets failed")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
