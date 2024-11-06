@@ -103,6 +103,7 @@ func setup(config *config.Config) *http.Server {
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerify)          // trigger reverification of a file
 	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
 	r.GET("/datasets/list", rbac(e), listAllDatasets)            // Lists all datasets with their status
@@ -641,4 +642,44 @@ func listDatasets(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, datasets)
+}
+
+func reVerify(c *gin.Context) {
+	accessionID := strings.TrimPrefix(c.Param("accession"), "/")
+
+	reVerify, err := Conf.API.DB.GetReVerificationData(accessionID)
+	if err != nil {
+		if strings.Contains(err.Error(), "sql: no rows in result set") {
+			c.AbortWithStatusJSON(http.StatusNotFound, "accession ID not found")
+		} else {
+			log.Errorln("failed to get file data")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
+
+		return
+	}
+	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath)
+	if err != nil {
+		log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	marshaledMsg, _ := json.Marshal(&reVerify)
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+		log.Errorln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "archived", marshaledMsg)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
