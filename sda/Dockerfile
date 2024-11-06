@@ -6,7 +6,14 @@ ENV GOOS=linux
 
 COPY . .
 SHELL ["bash", "-c"]
-RUN set -ex; for p in cmd/*; do go build -buildvcs=false -o "${p/cmd\//sda-}" "./$p"; done
+RUN set -ex; \
+    for p in cmd/*; do \
+        if ls "$p"/*.go > /dev/null 2>&1; then \
+            go build -buildvcs=false -o "${p/cmd\//sda-}" "./$p"; \
+        else \
+            echo "No Go files in $p, skipping build"; \
+        fi; \
+    done
 
 FROM debian:bullseye-slim AS Debug
 
