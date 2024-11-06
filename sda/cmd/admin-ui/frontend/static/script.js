@@ -48,25 +48,20 @@ async function getData() {
 }
 
 async function fetchDataWithToken() {
-  const token = await getToken();
-  if (!token) {
-    console.error('No token retrieved');
-    return;
-  }
   try {
-    const response = await fetch('https://oidc:8090/files', {
-      method: 'GET', // or POST, PUT, etc., depending on your API
+    const response = await fetch('http://localhost:3000/api/files', {
+      method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': 'no-cors'
+        'Content-Type': 'application/json'
       }
     });
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`Response status: ${response.status}`);
     }
+
     const data = await response.json();
-    console.log('API response:', data);
+    console.log('Fetched data with token:', data);
     return data;
   } catch (error) {
     console.error('Failed to fetch data with token:', error);

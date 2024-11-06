@@ -1,0 +1,22 @@
+# docker-compose.yml
+version: '3'
+services:
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NODE_DEBUG=http
+    extra_hosts:
+      - oidc:host-gateway
+      - api:host-gateway
+    depends_on:
+      - frontend
+
+  frontend:
+    image: nginx:latest
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    ports:
+      - "5500:80"
