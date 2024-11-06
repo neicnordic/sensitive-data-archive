@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -960,3 +961,28 @@ func (dbs *SDAdb) updateUserInfo(userID, name, email string, groups []string) er
 
 	return nil
 }
+
+func (dbs *SDAdb) GetReVerificationData(accessionID string) (schema.IngestionVerification, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	reVerify := schema.IngestionVerification{ReVerify: true}
+
+	const query = "SELECT archive_file_path,id,submission_file_path,submission_user FROM sda.files where stable_id = $1;"
+	err := db.QueryRow(query, accessionID).Scan(&reVerify.ArchivePath, &reVerify.FileID, &reVerify.FilePath, &reVerify.User)
+	if err != nil {
+		return schema.IngestionVerification{}, err
+	}
+
+	var checksum schema.Checksums
+	const archiveChecksum = "SELECT type,checksum from sda.checksums WHERE file_id = $1 AND source = 'ARCHIVED';"
+	if err := db.QueryRow(archiveChecksum, reVerify.FileID).Scan(&checksum.Type, &checksum.Value); err != nil {
+		log.Errorln(err.Error())
+
+		return schema.IngestionVerification{}, err
+	}
+	checksum.Type = strings.ToLower(checksum.Type)
+	reVerify.EncryptedChecksums = append(reVerify.EncryptedChecksums, checksum)
+
+	return reVerify, nil
+}
+

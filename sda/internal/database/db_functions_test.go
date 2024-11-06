@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -980,4 +981,82 @@ func (suite *DatabaseTests) TestUpdateUserInfo_newInfo() {
 	err = db.DB.QueryRow("SELECT groups FROM sda.userinfo WHERE id=$1", userID).Scan(pq.Array(&dbgroups))
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), groups, dbgroups)
+}
+
+func (suite *DatabaseTests) TestGetReVerificationData() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	fileID, err := db.RegisterFile("/testuser/TestGetReVerificationData.c4gh", "testuser")
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987}
+	corrID := uuid.New().String()
+	if err = db.SetArchived(fileInfo, fileID, corrID); err != nil {
+		suite.FailNow("failed to archive file")
+	}
+	if err = db.SetVerified(fileInfo, fileID, corrID); err != nil {
+		suite.FailNow("failed to mark file as verified")
+	}
+	accession := "acession-001"
+	if err = db.SetAccessionID(accession, fileID); err != nil {
+		suite.FailNow("failed to set accession id for file")
+	}
+
+	data, err := db.GetReVerificationData(accession)
+	assert.NoError(suite.T(), err, "failed to get verification data")
+	assert.Equal(suite.T(), "/archive/TestGetReVerificationData.c4gh", data.ArchivePath)
+}
+
+func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	fileID, err := db.RegisterFile("/testuser/TestGetReVerificationData.c4gh", "testuser")
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987}
+	corrID := uuid.New().String()
+	if err = db.SetArchived(fileInfo, fileID, corrID); err != nil {
+		suite.FailNow("failed to archive file")
+	}
+	if err = db.SetVerified(fileInfo, fileID, corrID); err != nil {
+		suite.FailNow("failed to mark file as verified")
+	}
+	accession := "acession-001"
+	if err = db.SetAccessionID(accession, fileID); err != nil {
+		suite.FailNow("failed to set accession id for file")
+	}
+
+	data, err := db.GetReVerificationData("accession")
+	assert.EqualError(suite.T(), err, "sql: no rows in result set")
+	assert.Equal(suite.T(), schema.IngestionVerification{}, data)
 }
