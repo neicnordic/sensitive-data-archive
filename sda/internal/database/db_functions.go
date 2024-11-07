@@ -63,6 +63,37 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
+// UserFileExists checks if a file exists in the database
+// for a given user and fileID
+func (dbs *SDAdb) GetFilePathFromID(submission_user, fileID string) (string, error) {
+	var (
+		err      error
+		count    int
+		filePath string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		filePath, err = dbs.getFilePathFromID(submission_user, fileID)
+		count++
+	}
+
+	return filePath, err
+}
+func (dbs *SDAdb) getFilePathFromID(submission_user, fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFilePath = "SELECT submission_file_path from sda.files where submission_user= $1 and id = $2;"
+
+	var filePath string
+	err := db.QueryRow(getFilePath, submission_user, fileID).Scan(&filePath)
+	if err != nil {
+		return "", err
+	}
+
+	return filePath, nil
+}
+
 // UpdateFileEventLog updates the status in of the file in the database.
 // The message parameter is the rabbitmq message sent on file upload.
 func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
