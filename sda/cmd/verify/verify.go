@@ -246,8 +246,53 @@ func main() {
 			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
-			//nolint:nestif
-			if !message.ReVerify {
+			switch {
+			case message.ReVerify:
+				decrypted, err := db.GetDecryptedChecksum(message.FileID)
+				if err != nil {
+					log.Errorf("failed to get unencrypted checksum for file: %s, reson: %s", message.FilePath, err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if file.DecryptedChecksum != decrypted {
+					log.Errorf("encrypted checksum don't match for file: %s", message.FilePath)
+					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+						log.Errorf("set status ready failed, reason: (%v)", err)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%v)", err)
+						}
+
+						continue
+					}
+					if err := delivered.Ack(false); err != nil {
+						log.Errorf("Failed to ack message: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if file.Checksum != message.EncryptedChecksums[0].Value {
+					log.Errorf("encrypted checksum don't match for file: %s, expected %s, got %s", message.FilePath, message.EncryptedChecksums[0].Value, file.Checksum)
+					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+						log.Errorf("set status ready failed, reason: (%v)", err)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%v)", err)
+						}
+
+						continue
+					}
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed to ack message: (%s)", err.Error())
+				}
+
+				continue
+			default:
 				c := schema.IngestionAccessionRequest{
 					User:     message.User,
 					FilePath: message.FilePath,
