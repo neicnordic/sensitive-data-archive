@@ -18,43 +18,20 @@
   </head>
   <body class="d-flex flex-column h-100">
     <header>
-      <div id="matrix-background">
-        <canvas></canvas>
-      </div>
-  <!-- Fixed navbar -->
-  <nav class="navbar navbar-expand-md navbar-dark fixed-top">
-    <a class="navbar-brand" href="#">JAX - the Admin eXperience</a>
-    <!-- <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button> -->
-<!--     <div class="collapse navbar-collapse" id="navbarCollapse">
-      <ul class="navbar-nav mr-auto">
-        <li class="nav-item active">
-          <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#">Link</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link disabled" href="#" tabindex="-1" aria-disabled="true">Disabled</a>
-        </li>
-      </ul>
-    </div> -->
-  </nav>
+      <canvas></canvas>
+      <nav class="navbar navbar-expand-md navbar-dark fixed-top">
+        <a class="navbar-brand" href="#"><strong>JAX - the Admin eXperience</strong></a>
+      </nav>
 </header>
 
 <!-- Begin page content -->
-<main role="main" class="flex-shrink-0">
+<main class="flex-shrink-0">
   <div class="container">
     <h1 class="mt-5">Admin panel</h1>
     <p class="lead">Lorem ipsum, dolor sit amet consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
     <ul class="nav nav-tabs" id="myTab" role="tablist">
       <li class="nav-item">
-        <a class="nav-link active" id="home-tab" data-toggle="tab" href="#home" role="tab" aria-controls="home"
-          aria-selected="true">Home</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users"
+        <a class="nav-link active" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users"
           aria-selected="false">Users</a>
       </li>
       <li class="nav-item">
@@ -63,48 +40,19 @@
       </li>
     </ul>
     <div class="tab-content" id="myTabContent">
-      <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
-        <p>Home</p>
-        <div>
-          <p>hej!</p>
-          <button onclick="fetchDataWithToken()">Fetch Data</button>
-        </div>
-      </div>
-      <div class="tab-pane fade" id="users" role="tabpanel" aria-labelledby="users-tab"><p>Users</p>
+      <div class="tab-pane fade show active" id="users" role="tabpanel" aria-labelledby="users-tab">
       <div class="container">
-        <table class="table">
+        <table class="table" id="usersTable">
           <thead>
             <tr>
-              <th scope="col">#</th>
-              <th scope="col">First</th>
-              <th scope="col">Last</th>
-              <th scope="col">Handle</th>
+              <th scope="col">E-mail </th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <th scope="row">1</th>
-              <td>Mark</td>
-              <td>Otto</td>
-              <td>@mdo</td>
-            </tr>
-            <tr>
-              <th scope="row">2</th>
-              <td>Jacob</td>
-              <td>Thornton</td>
-              <td>@fat</td>
-            </tr>
-            <tr>
-              <th scope="row">3</th>
-              <td>Larry</td>
-              <td>the Bird</td>
-              <td>@twitter</td>
-            </tr>
           </tbody>
         </table>
       </div></div>
-      <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab" onload="fetchDataWithToken()">
-        <p>Files</p>
+      <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab">
         <table class="table" id="filesTable">
           <tr>
             <th>Created at</th>
