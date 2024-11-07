@@ -61,7 +61,7 @@ async function fetchDataWithToken() {
     }
 
     const data = await response.json();
-    console.log('Fetched data with token:', data);
+    console.log('Fetched data with token:', response);
     return data;
   } catch (error) {
     console.error('Failed to fetch data with token:', error);
