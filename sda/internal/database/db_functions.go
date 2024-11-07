@@ -998,3 +998,30 @@ func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 
 	return unencryptedChecksum, nil
 }
+
+func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var accessions []string
+	rows, err := db.Query("SELECT stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var accession string
+		err := rows.Scan(&accession)
+		if err != nil {
+			return nil, err
+		}
+
+		accessions = append(accessions, accession)
+	}
+
+	return accessions, nil
+}

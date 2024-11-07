@@ -103,9 +103,10 @@ func setup(config *config.Config) *http.Server {
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerify)          // trigger reverification of a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)      // trigger reverification of a file
 	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
+	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)  // Re-verify all files in the dataset
 	r.GET("/datasets/list", rbac(e), listAllDatasets)            // Lists all datasets with their status
 	r.GET("/datasets/list/:username", rbac(e), listUserDatasets) // Lists datasets with their status for a specififc user
 	r.GET("/users", rbac(e), listActiveUsers)                    // Lists all users
@@ -686,6 +687,30 @@ func reVerifyFile(c *gin.Context) {
 	c, err = reVerify(c, accessionID)
 	if err != nil {
 		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func reVerifyDataset(c *gin.Context) {
+	dataset := strings.TrimPrefix(c.Param("dataset"), "/")
+	accessions, err := Conf.API.DB.GetDatasetFiles(dataset)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	if accessions == nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, "dataset not found")
+
+		return
+	}
+
+	for _, accession := range accessions {
+		c, err = reVerify(c, accession)
+		if err != nil {
+			return
+		}
 	}
 
 	c.Status(http.StatusOK)

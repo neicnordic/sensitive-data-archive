@@ -1994,7 +1994,7 @@ func (suite *TestSuite) TestReVerifyFile() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.PUT("/file/verify/:accession", reVerify)
+	router.PUT("/file/verify/:accession", reVerifyFile)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -2031,6 +2031,112 @@ func (suite *TestSuite) TestReVerifyFile_wrongAccession() {
 
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/verify/:accession", reVerifyFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusNotFound, okResponse.StatusCode)
+}
+
+func (suite *TestSuite) TestReVerifyDataset() {
+	user := "TestReVerifyDataset"
+	for i := 0; i < 3; i++ {
+		filePath := fmt.Sprintf("/%v/TestReVerifyDataset-00%d.c4gh", user, i)
+		fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+		if err != nil {
+			suite.FailNow("failed to register file in database")
+		}
+
+		if err := Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}"); err != nil {
+			suite.FailNow("failed to update satus of file in database")
+		}
+		encSha := sha256.New()
+		_, err = encSha.Write([]byte("Checksum"))
+		if err != nil {
+			suite.FailNow("failed to calculate Checksum")
+		}
+
+		decSha := sha256.New()
+		_, err = decSha.Write([]byte("DecryptedChecksum"))
+		if err != nil {
+			suite.FailNow("failed to calculate DecryptedChecksum")
+		}
+
+		fileInfo := database.FileInfo{
+			Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+			Size:              1000,
+			Path:              filePath,
+			DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+			DecryptedSize:     948,
+		}
+		if err := Conf.API.DB.SetArchived(fileInfo, fileID, fileID); err != nil {
+			suite.FailNow("failed to mark file as Archived")
+		}
+
+		if err := Conf.API.DB.SetVerified(fileInfo, fileID, fileID); err != nil {
+			suite.FailNow("failed to mark file as Verified")
+		}
+
+		stableID := fmt.Sprintf("%s_0%d", user, i)
+		if err := Conf.API.DB.SetAccessionID(stableID, fileID); err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+		if err := Conf.API.DB.UpdateFileEventLog(fileID, "ready", fileID, "finalize", "{}", "{}"); err != nil {
+			suite.FailNowf("got (%s) when updating file status: %s", err.Error(), filePath)
+		}
+	}
+
+	if err := Conf.API.DB.MapFilesToDataset("test-dataset-01", []string{"TestReVerifyDataset_00", "TestReVerifyDataset_01", "TestReVerifyDataset_02"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/dataset/verify/test-dataset-01", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.PUT("/dataset/verify/*dataset", reVerifyDataset)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the messages shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/archived", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	client := http.Client{Timeout: 30 * time.Second}
+	res, err := client.Do(req)
+	assert.NoError(suite.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(suite.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(suite.T(), err, "failed to unmarshal response")
+	assert.Equal(suite.T(), 3, data.MessagesReady)
+}
+
+func (suite *TestSuite) TestReVerifyDataset_wrongDatasetName() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/dataset/verify/wrong_dataset", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.PUT("/dataset/verify/*dataset", reVerifyDataset)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
