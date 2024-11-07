@@ -986,3 +986,14 @@ func (dbs *SDAdb) GetReVerificationData(accessionID string) (schema.IngestionVer
 	return reVerify, nil
 }
 
+func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var unencryptedChecksum string
+	if err := db.QueryRow("SELECT checksum from sda.checksums WHERE file_id = $1 AND source = 'UNENCRYPTED';", id).Scan(&unencryptedChecksum); err != nil {
+		return "", err
+	}
+
+	return unencryptedChecksum, nil
+}
