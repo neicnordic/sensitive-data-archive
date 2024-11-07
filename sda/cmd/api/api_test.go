@@ -1936,7 +1936,7 @@ func (suite *TestSuite) TestListDatasetsAsUser() {
 	assert.Equal(suite.T(), "API:dataset-01|registered", fmt.Sprintf("%s|%s", datasets[0].DatasetID, datasets[0].Status))
 }
 
-func (suite *TestSuite) TestReVerify() {
+func (suite *TestSuite) TestReVerifyFile() {
 	user := "TestReVerify"
 	for i := 0; i < 3; i++ {
 		filePath := fmt.Sprintf("/%v/TestReVerify-00%d.c4gh", user, i)
@@ -2019,7 +2019,7 @@ func (suite *TestSuite) TestReVerify() {
 	assert.Equal(suite.T(), 1, data.MessagesReady)
 }
 
-func (suite *TestSuite) TestReVerify_wrongAccession() {
+func (suite *TestSuite) TestReVerifyFile_wrongAccession() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
@@ -2030,7 +2030,7 @@ func (suite *TestSuite) TestReVerify_wrongAccession() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/verify/:accession", reVerify)
+	router.POST("/file/verify/:accession", reVerifyFile)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()

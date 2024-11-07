@@ -643,9 +643,7 @@ func listDatasets(c *gin.Context) {
 	c.JSON(http.StatusOK, datasets)
 }
 
-func reVerify(c *gin.Context) {
-	accessionID := strings.TrimPrefix(c.Param("accession"), "/")
-
+func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 	reVerify, err := Conf.API.DB.GetReVerificationData(accessionID)
 	if err != nil {
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
@@ -655,14 +653,14 @@ func reVerify(c *gin.Context) {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 		}
 
-		return
+		return c, err
 	}
 	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath, accessionID)
 	if err != nil {
 		log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
-		return
+		return c, err
 	}
 
 	marshaledMsg, _ := json.Marshal(&reVerify)
@@ -670,13 +668,23 @@ func reVerify(c *gin.Context) {
 		log.Errorln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
-		return
+		return c, err
 	}
 
 	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "archived", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
+		return c, err
+	}
+
+	return c, nil
+}
+
+func reVerifyFile(c *gin.Context) {
+	accessionID := strings.TrimPrefix(c.Param("accession"), "/")
+	c, err = reVerify(c, accessionID)
+	if err != nil {
 		return
 	}
 
