@@ -606,7 +606,7 @@ func deprecateC4ghHash(c *gin.Context) {
 func listAllDatasets(c *gin.Context) {
 	datasets, err := Conf.API.DB.ListDatasets()
 	if err != nil {
-		log.Debugln("ListAllDatasets failed")
+		log.Errorf("ListAllDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
@@ -618,7 +618,7 @@ func listUserDatasets(c *gin.Context) {
 	username := strings.TrimPrefix(c.Param("username"), "/")
 	datasets, err := Conf.API.DB.ListUserDatasets(username)
 	if err != nil {
-		log.Debugln("ListUserDatasets failed")
+		log.Errorf("ListUserDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
@@ -635,7 +635,7 @@ func listDatasets(c *gin.Context) {
 	}
 	datasets, err := Conf.API.DB.ListUserDatasets(token.Subject())
 	if err != nil {
-		log.Debugln("ListDatasets failed")
+		log.Errorf("ListDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
