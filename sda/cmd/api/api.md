@@ -122,6 +122,22 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
     ```
 
+- `/dataset/verify/*dataset`
+  - accepts `PUT` requests with the dataset name as last part of the path`
+  - triggers reverification of all files in the dataset.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `404` Error wrong dataset name.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X PUT  https://HOSTNAME/dataset/verify/my-dataset-01
+    ```
+
 - `/datasets/list`
   - accepts `GET` requests
   - Returns all datasets together with their status and last modified timestamp.
