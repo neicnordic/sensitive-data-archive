@@ -18,12 +18,15 @@
   </head>
   <body class="d-flex flex-column h-100">
     <header>
+      <div id="matrix-background">
+        <canvas></canvas>
+      </div>
   <!-- Fixed navbar -->
-  <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+  <nav class="navbar navbar-expand-md navbar-dark fixed-top">
     <a class="navbar-brand" href="#">JAX - the Admin eXperience</a>
-    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <!-- <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
-    </button>
+    </button> -->
 <!--     <div class="collapse navbar-collapse" id="navbarCollapse">
       <ul class="navbar-nav mr-auto">
         <li class="nav-item active">
@@ -43,9 +46,8 @@
 <!-- Begin page content -->
 <main role="main" class="flex-shrink-0">
   <div class="container">
-    <h1 class="mt-5">Sticky footer with fixed navbar</h1>
-    <p class="lead">Pin a footer to the bottom of the viewport in desktop browsers with this custom HTML and CSS. A fixed navbar has been added with <code>padding-top: 60px;</code> on the <code>main &gt; .container</code>.</p>
-    <p>Back to <a href="/docs/4.3/examples/sticky-footer/">the default sticky footer</a> minus the navbar.</p>
+    <h1 class="mt-5">Admin panel</h1>
+    <p class="lead">Lorem ipsum, dolor sit amet consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
     <ul class="nav nav-tabs" id="myTab" role="tablist">
       <li class="nav-item">
         <a class="nav-link active" id="home-tab" data-toggle="tab" href="#home" role="tab" aria-controls="home"
@@ -101,14 +103,24 @@
           </tbody>
         </table>
       </div></div>
-      <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab"><p>Files</p></div>
+      <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab" onload="fetchDataWithToken()">
+        <p>Files</p>
+        <table class="table" id="filesTable">
+          <tr>
+            <th>Created at</th>
+            <th>Status</th>
+            <th>Inbox path</th>
+          </tr>
+        </table>
+      </div>
     </div>
   </div>
 </main>
 
   <footer class="footer mt-auto py-3">
     <div class="container">
-      <span class="text-muted">Place sticky footer content here.</span>
+      <span class="text-muted">JAX - the Admin eXperience</span>
+      <span class="text-muted"> Contact: x@nbis.se </span>
     </div>
   </footer>
   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
@@ -117,4 +129,8 @@
   <script src="./static/script.js"></script>
 </body>
 </html>
+
+
+
+
 
