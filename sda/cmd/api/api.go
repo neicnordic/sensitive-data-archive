@@ -27,6 +27,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type dataset struct {
+	AccessionIDs []string `json:"accession_ids"`
+	DatasetID    string   `json:"dataset_id"`
+	User         string   `json:"user"`
+}
+
 var (
 	Conf *config.Config
 	err  error
@@ -313,7 +319,7 @@ func setAccession(c *gin.Context) {
 }
 
 func createDataset(c *gin.Context) {
-	var dataset schema.DatasetMapping
+	var dataset dataset
 	if err := c.BindJSON(&dataset); err != nil {
 		c.AbortWithStatusJSON(
 			http.StatusBadRequest,
@@ -326,8 +332,52 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
-	dataset.Type = "mapping"
-	marshaledMsg, _ := json.Marshal(&dataset)
+	if len(dataset.AccessionIDs) == 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "at least one accessionID is reqired")
+
+		return
+	}
+
+	for _, stableID := range dataset.AccessionIDs {
+		inboxPath, err := Conf.API.DB.GetInboxPath(stableID)
+		if err != nil {
+			switch {
+			case err.Error() == "sql: no rows in result set":
+				log.Debugln(err.Error())
+				c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID not found: %s", stableID))
+
+				return
+			default:
+				log.Debugln(err.Error())
+				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+				return
+			}
+		}
+
+		_, err = Conf.API.DB.GetCorrID(dataset.User, inboxPath)
+		if err != nil {
+			switch {
+			case err.Error() == "sql: no rows in result set":
+				log.Debugln(err.Error())
+				c.AbortWithStatusJSON(http.StatusBadRequest, "accession ID owned by other user")
+
+				return
+			default:
+				log.Debugln(err.Error())
+				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+				return
+			}
+		}
+	}
+
+	mapping := schema.DatasetMapping{
+		Type:         "mapping",
+		AccessionIDs: dataset.AccessionIDs,
+		DatasetID:    dataset.DatasetID,
+	}
+	marshaledMsg, _ := json.Marshal(&mapping)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())

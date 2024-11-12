@@ -58,7 +58,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     ```
 
 - `/dataset/create`
-  - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>"}`
+  - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>", "user": "<SUBMISSION_USER>"}`
   - creates a dataset from the list of accession IDs and the dataset ID.
 
 - Error codes

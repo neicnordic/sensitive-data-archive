@@ -953,11 +953,7 @@ func (suite *TestSuite) TestCreateDataset() {
 	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
-	type dataset struct {
-		AccessionIDs []string `json:"accession_ids"`
-		DatasetID    string   `json:"dataset_id"`
-	}
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11", "API:accession-id-12", "API:accession-id-13"}, DatasetID: "API:dataset-01"})
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -989,16 +985,50 @@ func (suite *TestSuite) TestCreateDataset() {
 }
 
 func (suite *TestSuite) TestCreateDataset_BadFormat() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file12.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := database.FileInfo{
+		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "ready", fileID, "finalize", "{}", "{}")
+	assert.NoError(suite.T(), err, "got (%v) when marking file as ready", err)
+
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
 	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/federated"
 
-	type dataset struct {
-		AccessionIDs []string `json:"accession_ids"`
-		DatasetID    string   `json:"dataset_id"`
-	}
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11", "API:accession-id-12", "API:accession-id-13"}, DatasetID: "API:dataset-01"})
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -1009,9 +1039,122 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
-	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(suite.T(), err)
+	response.Body.Close()
 
 	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
+	assert.Contains(suite.T(), string(body), "does not match pattern")
+}
+
+func (suite *TestSuite) TestCreateDataset_MissingAccessionIDs() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{}, DatasetID: "failure", User: "dummy"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/create", isAdmin(), createDataset)
+
+	router.ServeHTTP(w, r)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(suite.T(), err)
+	response.Body.Close()
+
+	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
+	assert.Contains(suite.T(), string(body), "at least one accessionID is reqired")
+}
+
+func (suite *TestSuite) TestCreateDataset_WrongIDs() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/create", isAdmin(), createDataset)
+
+	router.ServeHTTP(w, r)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(suite.T(), err)
+	response.Body.Close()
+
+	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
+	assert.Contains(suite.T(), string(body), "accession ID not found: ")
+}
+
+func (suite *TestSuite) TestCreateDataset_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file12.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(suite.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(suite.T(), err)
+
+	fileInfo := database.FileInfo{
+		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "tester"})
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/dataset/create", isAdmin(), createDataset)
+
+	router.ServeHTTP(w, r)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(suite.T(), err)
+	response.Body.Close()
+
+	assert.Equal(suite.T(), http.StatusBadRequest, response.StatusCode)
+	assert.Contains(suite.T(), string(body), "accession ID owned by other user")
 }
 
 func (suite *TestSuite) TestReleaseDataset() {
