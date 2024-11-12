@@ -9,7 +9,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 // See README on how to get the token
 function getToken() {
-    return 'eyJ0eXAiOiJKV1QiLCJqa3UiOiJodHRwczovL29pZGM6ODA4MC9qd2siLCJhbGciOiJFUzI1NiIsImtpZCI6Ild5dGFYc2lqRkZKNWhGTGlLWWNPQl9JNVdtQVNsS3lKakdaUTJEeFJwc3cifQ.eyJzdWIiOiJkdW1teUBnZGkuZXUiLCJhdWQiOlsiYXVkMSIsImF1ZDIiXSwiYXpwIjoiYXpwIiwic2NvcGUiOiJvcGVuaWQgZ2E0Z2hfcGFzc3BvcnRfdjEiLCJpc3MiOiJodHRwczovL29pZGM6ODA4MC8iLCJleHAiOjk5OTk5OTk5OTksImlhdCI6MTU2MTYyMTkxMywianRpIjoiNmFkN2FhNDItM2U5Yy00ODMzLWJkMTYtNzY1Y2I4MGMyMTAyIn0.ilCPJ5TWyjG2JK-H7sC7QG0v-PJC_gkuEBY6qSvbZAZcGNC_Jpna-WnF64z-qvf-MosgJiCLlpXoEFfrmFHcFA'; // Replace with your token
+    return 'token';
 }
 
 app.get('/api/files', async (request, response) => {
