@@ -220,6 +220,9 @@ func TestMain(m *testing.M) {
 	if err := pool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+	// cleanup temp files
+	_ = os.RemoveAll(ECPath)
+	_ = os.RemoveAll(RSAPath)
 
 	os.Exit(code)
 }
@@ -376,7 +379,9 @@ func (suite *TestSuite) SetupSuite() {
 	assert.NoError(suite.T(), err)
 
 }
-
+func (suite *TestSuite) TearDownSuite() {
+	assert.NoError(suite.T(), os.RemoveAll(suite.Path))
+}
 func (suite *TestSuite) SetupTest() {
 	Conf.Database = database.DBConf{
 		Host:     "localhost",
@@ -1511,6 +1516,105 @@ func (suite *TestSuite) TestAddC4ghHash_notBase64() {
 	assert.NoError(suite.T(), err)
 	req.Header.Add("Authorization", "Bearer "+suite.Token)
 	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, resp.StatusCode)
+	defer resp.Body.Close()
+}
+
+func (suite *TestSuite) TestListC4ghHashes() {
+	assert.NoError(suite.T(), Conf.API.DB.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+
+	expectedResponse := database.C4ghKeyHash{
+		Hash:         "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23",
+		Description:  "this is a test key",
+		CreatedAt:    time.Now().UTC().Format(time.DateTime),
+		DeprecatedAt: "",
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	req, err := http.NewRequest("GET", ts.URL+"/c4gh-keys/list", nil)
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+
+	hashes := []database.C4ghKeyHash{}
+	err = json.NewDecoder(resp.Body).Decode(&hashes)
+	assert.NoError(suite.T(), err, "failed to list users from DB")
+	for n, h := range hashes {
+		if h.Hash == "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23" {
+			assert.Equal(suite.T(), expectedResponse, hashes[n])
+
+			break
+		}
+	}
+}
+
+func (suite *TestSuite) TestDeprecateC4ghHash() {
+	assert.NoError(suite.T(), Conf.API.DB.AddKeyHash("abc8f5cc8d936ce437a52cd9991453839581fc69ee26e0daefde6a5d2660fc23", "this is a deprecation test key"), "failed to register key in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/deprecate/abc8f5cc8d936ce437a52cd9991453839581fc69ee26e0daefde6a5d2660fc23", http.NoBody)
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	resp, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+
+	// a second time gives an error since the key is alreadu deprecated
+	resp2, err := client.Do(req)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), http.StatusBadRequest, resp2.StatusCode)
+	defer resp2.Body.Close()
+}
+
+func (suite *TestSuite) TestDeprecateC4ghHash_wrongHash() {
+	assert.NoError(suite.T(), Conf.API.DB.AddKeyHash("abc8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99", "this is a deprecation test key"), "failed to register key in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.Admins = []string{"dummy"}
+
+	r := gin.Default()
+	r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	client := &http.Client{}
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	req, err := http.NewRequest("POST", ts.URL+"/c4gh-keys/deprecate/xyz8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", http.NoBody)
+	assert.NoError(suite.T(), err)
+	req.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	resp, err := client.Do(req)
 	assert.NoError(suite.T(), err)

@@ -120,7 +120,7 @@ func (suite *DatabaseTests) SetupTest() {
 
 	db, err := NewSDAdb(suite.dbConf)
 	assert.Nil(suite.T(), err, "got %v when creating new connection", err)
-	_, err = db.DB.Exec("TRUNCATE sda.files CASCADE")
+	_, err = db.DB.Exec("TRUNCATE sda.files, sda.encryption_keys CASCADE")
 	assert.NoError(suite.T(), err)
 }
 

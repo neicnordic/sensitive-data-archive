@@ -3,6 +3,7 @@
 package database
 
 import (
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"math"
@@ -778,6 +779,62 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("key hash already exists or no rows were updated")
+	}
+
+	return nil
+}
+
+type C4ghKeyHash struct {
+	Hash         string `json:"hash"`
+	Description  string `json:"description"`
+	CreatedAt    string `json:"created_at"`
+	DeprecatedAt string `json:"deprecated_at"`
+}
+
+// ListKeyHashes lists the hashes from the encryption_keys table
+func (dbs *SDAdb) ListKeyHashes() ([]C4ghKeyHash, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "SELECT key_hash, description, created_at, deprecated_at FROM sda.encryption_keys ORDER BY created_at ASC;"
+
+	hashList := []C4ghKeyHash{}
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		h := &C4ghKeyHash{}
+		depr := sql.NullString{}
+		err := rows.Scan(&h.Hash, &h.Description, &h.CreatedAt, &depr)
+		if err != nil {
+			return nil, err
+		}
+		h.DeprecatedAt = depr.String
+
+		hashList = append(hashList, *h)
+	}
+
+	return hashList, nil
+}
+
+func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "UPDATE sda.encryption_keys set deprecated_at = NOW() WHERE key_hash = $1 AND deprecated_at IS NULL;"
+	result, err := db.Exec(query, keyHash)
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("key hash not found or already deprecated")
 	}
 
 	return nil
