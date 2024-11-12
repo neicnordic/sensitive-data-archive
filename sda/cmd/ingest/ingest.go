@@ -391,7 +391,6 @@ func main() {
 						}
 
 						// Set the file's hex encoded public key
-						log.Debugln("Compute and set key hash")
 						publicKey := keys.DerivePublicKey(*key)
 						keyhash := hex.EncodeToString(publicKey[:])
 						err = db.SetKeyHash(keyhash, fileID)
