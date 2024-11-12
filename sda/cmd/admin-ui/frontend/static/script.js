@@ -7,30 +7,27 @@ async function fetchDataWithToken() {
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`Response status: ${response.status}`);
-    }
 
     const data = await response.json();
-    console.log('Data:', data);
-    populateFilesTable(data);
-    
+    return data;
+
   } catch (error) {
-    console.error('Failed to fetch data with token:', error);
+    showAlert('alertMessage','alert-warning','There was an error fetching data.');
+    hideTable();
   }
 }
 
-function hideTable() {
-  document.getElementById('filesTable').style.display = "none";
-}
-
-function populateFilesTable(data) {
+async function populateFilesTable() {
   const table = document.getElementById('filesTable');
-  data.forEach(item => {
-    const row = table.insertRow();
-    const cell1 = row.insertCell(0);
-    const cell2 = row.insertCell(1);
-    const cell3 = row.insertCell(2);
+  table.innerHTML = '';
+  let data = await fetchDataWithToken();
+
+  if (Array.isArray(data)) {
+    data.forEach(item => {
+      const row = table.insertRow();
+      const cell1 = row.insertCell(0);
+      const cell2 = row.insertCell(1);
+      const cell3 = row.insertCell(2);
 
       switch (item.fileStatus.toLowerCase()) {
         case 'uploaded':
@@ -59,6 +56,33 @@ function populateFilesTable(data) {
       cell2.innerText = item.fileStatus;
       cell3.innerText = item.inboxPath;
     });
+  } else {
+    showAlert('alertMessage', 'alert-warning', 'There are no files to display due to an error.');
+    hideTable();
+  }
+
+  if (data.length === 0) {
+    showAlert('alertMessage', 'alert-primary', 'There are no files to display')
+    hideTable()
+  }
+
+}
+
+function hideTable() {
+  document.getElementById('filesTable').style.display = "none";
+}
+
+/**
+ * Function to show alert
+ * @id  the element's id
+ * @style  alert styles from Bootstrap f.e alert-primary, alert-warning
+ * @message the message to the user
+ */
+function showAlert(id, style, message) {
+  const alert = document.getElementById(id);
+  alert.classList.add(style);
+  alert.innerHTML = message;
+  alert.style.display = 'block';
 }
 
 function populateUsersTable() {
@@ -109,3 +133,4 @@ function matrixRainAnimation() {
 matrixRainAnimation()
 fetchDataWithToken()
 populateUsersTable()
+populateFilesTable()
