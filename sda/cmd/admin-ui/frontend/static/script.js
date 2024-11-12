@@ -20,6 +20,10 @@ async function fetchDataWithToken() {
   }
 }
 
+function hideTable() {
+  document.getElementById('filesTable').style.display = "none";
+}
+
 function populateFilesTable(data) {
   const table = document.getElementById('filesTable');
   data.forEach(item => {
@@ -28,33 +32,33 @@ function populateFilesTable(data) {
     const cell2 = row.insertCell(1);
     const cell3 = row.insertCell(2);
 
-    switch (item.fileStatus.toLowerCase()) {
-      case 'uploaded':
-      case 'submitted':
-      case 'ingested':
-      case 'archived':
-      case 'verified':
-      case 'backed up':
-      case 'ready':
-        cell2.classList.add('text-success');
-        break;
-      case 'downloaded':
-        cell2.classList.add('text-primary');
-        break;
-      case 'error':
-        cell2.classList.add('text-danger');
-        break;
-      case 'disabled':
-        cell2.classList.add('text-muted');
-        break;
-      case 'enabled':
-        cell2.classList.add('text-info');
-        break;
-    }
-    cell1.innerText = item.createAt;
-    cell2.innerText = item.fileStatus;
-    cell3.innerText = item.inboxPath;
-  });
+      switch (item.fileStatus.toLowerCase()) {
+        case 'uploaded':
+        case 'submitted':
+        case 'ingested':
+        case 'archived':
+        case 'verified':
+        case 'backed up':
+        case 'ready':
+          cell2.classList.add('text-success');
+          break;
+        case 'downloaded':
+          cell2.classList.add('text-primary');
+          break;
+        case 'error':
+          cell2.classList.add('text-danger');
+          break;
+        case 'disabled':
+          cell2.classList.add('text-muted');
+          break;
+        case 'enabled':
+          cell2.classList.add('text-info');
+          break;
+      }
+      cell1.innerText = item.createAt;
+      cell2.innerText = item.fileStatus;
+      cell3.innerText = item.inboxPath;
+    });
 }
 
 function populateUsersTable() {
