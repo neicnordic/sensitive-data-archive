@@ -5,7 +5,8 @@ main > .container {
   padding: 60px 15px 0;
 }
 .footer {
-  background-color: #f5f5f5;
+  background-color: #3b673f;
+  color: white;
 }
 .footer > .container {
   padding-right: 15px;
@@ -19,4 +20,26 @@ canvas {
   width: 100%;
   min-height: 4rem;
   object-fit: cover;
+}
+
+.nav-link, .nav-link:hover {
+  color: #495057;
+}
+
+.nav-tabs .nav-link.active {
+  font-weight: 600;
+  background-color: #b6c89f;
+}
+
+h1, h2 {
+  padding-top: 2rem;
+}
+
+a {
+  text-decoration: none;
+  color: #345530;
+}
+
+a:hover {
+  color: #262d1e;
 }

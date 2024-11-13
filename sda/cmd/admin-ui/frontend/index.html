@@ -1,20 +1,18 @@
-
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" class="h-100">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="">
-    <meta name="author" content="Mark Otto, Jacob Thornton, and Bootstrap contributors">
-    <meta name="generator" content="Jekyll v3.8.5">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="" />
+    <meta name="author" content="Mark Otto, Jacob Thornton, and Bootstrap contributors" />
+    <meta name="generator" content="Jekyll v3.8.5" />
     <title>JAX - Jointed Admin eXaminator</title>
 
-    <link rel="canonical" href="https://getbootstrap.com/docs/4.3/examples/sticky-footer-navbar/">
+    <link rel="canonical" href="https://getbootstrap.com/docs/4.3/examples/sticky-footer-navbar/" />
 
     <!-- Bootstrap core CSS -->
-    <link href="./static/bootstrap.min.css" rel="stylesheet">
-    <link href="./static/custom.css" rel="stylesheet">
-
+    <link href="./static/bootstrap.min.css" rel="stylesheet" />
+    <link href="./static/custom.css" rel="stylesheet" />
   </head>
   <body class="d-flex flex-column h-100">
     <header>
@@ -22,66 +20,75 @@
       <nav class="navbar navbar-expand-md navbar-dark fixed-top">
         <a class="navbar-brand" href="#"><strong>JAX - the Admin eXperience</strong></a>
       </nav>
-</header>
+    </header>
 
-<!-- Begin page content -->
-<main class="flex-shrink-0">
-  <div class="container">
-    <h1 class="mt-5">Admin panel</h1>
-    <p class="lead">Lorem ipsum, dolor sit amet consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
-    <ul class="nav nav-tabs" id="myTab" role="tablist">
-      <li class="nav-item">
-        <a class="nav-link active" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users"
-          aria-selected="false">Users</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="files-tab" data-toggle="tab" href="#files" role="tab" aria-controls="files"
-          aria-selected="false">Files</a>
-      </li>
-    </ul>
-    <div class="tab-content" id="myTabContent">
-      <div class="tab-pane fade show active" id="users" role="tabpanel" aria-labelledby="users-tab">
+    <!-- Begin page content -->
+    <main class="flex-shrink-0">
       <div class="container">
-        <table class="table" id="usersTable">
-          <thead>
-            <tr>
-              <th scope="col">E-mail </th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
-      </div></div>
-      <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab">
-        <div class="alert m-2" role="alert" id="alertMessage" style="display: none">
-          There are no files to display
+        <h1 class="mt-5">Admin panel</h1>
+        <a href="url">link text</a>
+        <p class="lead">Lorem ipsum, dolor sit amet consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users" aria-selected="false">Users</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="files-tab" data-toggle="tab" href="#files" role="tab" aria-controls="files" aria-selected="false">Files</a>
+          </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+          <div class="tab-pane fade show active" id="users" role="tabpanel" aria-labelledby="users-tab">
+            <div class="container ml-n3">
+              <div class="row">
+                <div class="col-8">
+                  <table class="table table-striped mt-2" id="usersTable">
+                    <thead>
+                      <tr>
+                        <th scope="col">E-mail</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div class="col"></div>
+              </div>    
+            </div>
+          </div>
+          <div class="tab-pane fade" id="files" role="tabpanel" aria-labelledby="files-tab">
+            <div class="container ml-n3">
+              <div class="row">
+                <div class="col-12 col-md-10">
+                  <div class="alert m-2" role="alert" id="alertMessage" style="display: none">There are no files to display</div>
+                  <div class="table-responsive">
+                  <table class="table table-striped mt-2" id="filesTable">
+                    <thead>
+                      <tr>
+                        <th scope="col">Created at</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Inbox path</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                  </div>
+                </div>
+                <div class="col-md-2 d-none d-md-block"></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <table class="table" id="filesTable">
-          <tr>
-            <th>Created at</th>
-            <th>Status</th>
-            <th>Inbox path</th>
-          </tr>
-        </table>
       </div>
-    </div>
-  </div>
-</main>
+    </main>
 
-  <footer class="footer mt-auto py-3">
-    <div class="container">
-      <span class="text-muted">JAX - the Admin eXperience</span>
-      <span class="text-muted"> Contact: x@nbis.se </span>
-    </div>
-  </footer>
-  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-  <script>window.jQuery || document.write('<script src="/docs/4.3/assets/js/vendor/jquery-slim.min.js"><\/script>')</script>
-  <script src="./static/bootstrap.min.js"></script>
-  <script src="./static/script.js"></script>
-</body>
+    <footer class="footer mt-auto py-3">
+      <div class="container">
+        <span>JAX - the Admin eXperience</span>
+        <span>Contact: x@nbis.se</span>
+      </div>
+    </footer>
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script>window.jQuery || document.write('<script src="/docs/4.3/assets/js/vendor/jquery-slim.min.js"><\/script>')</script>
+    <script src="./static/bootstrap.min.js"></script>
+    <script src="./static/script.js"></script>
+  </body>
 </html>
-
-
-
-
-

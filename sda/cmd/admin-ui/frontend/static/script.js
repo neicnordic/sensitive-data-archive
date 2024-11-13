@@ -7,7 +7,6 @@ async function fetchDataWithToken() {
       }
     });
 
-
     const data = await response.json();
     return data;
 
@@ -18,13 +17,12 @@ async function fetchDataWithToken() {
 }
 
 async function populateFilesTable() {
-  const table = document.getElementById('filesTable');
-  table.innerHTML = '';
+  const tableBody = document.querySelector('#filesTable tbody');
   let data = await fetchDataWithToken();
 
   if (Array.isArray(data)) {
     data.forEach(item => {
-      const row = table.insertRow();
+      const row = tableBody.insertRow();
       const cell1 = row.insertCell(0);
       const cell2 = row.insertCell(1);
       const cell3 = row.insertCell(2);
@@ -37,23 +35,22 @@ async function populateFilesTable() {
         case 'verified':
         case 'backed up':
         case 'ready':
-          cell2.classList.add('text-success');
+          cell2.innerHTML = `<span class="badge badge-pill badge-success">${item.fileStatus}</span>`;
           break;
         case 'downloaded':
-          cell2.classList.add('text-primary');
+          cell2.innerHTML = `<span class="badge badge-pill badge-primary">${item.fileStatus}</span>`;
           break;
         case 'error':
-          cell2.classList.add('text-danger');
+          cell2.innerHTML = `<span class="badge badge-pill badge-warning">${item.fileStatus}</span>`;
           break;
         case 'disabled':
-          cell2.classList.add('text-muted');
+          cell2.innerHTML = `<span class="badge badge-pill badge-light">${item.fileStatus}</span>`;
           break;
         case 'enabled':
-          cell2.classList.add('text-info');
+          cell2.innerHTML = `<span class="badge badge-pill badge-info">${item.fileStatus}</span>`;
           break;
       }
       cell1.innerText = item.createAt;
-      cell2.innerText = item.fileStatus;
       cell3.innerText = item.inboxPath;
     });
   } else {
@@ -86,11 +83,11 @@ function showAlert(id, style, message) {
 }
 
 function populateUsersTable() {
-  const table = document.getElementById('usersTable');
+  const tableBody = document.querySelector('#usersTable tbody');
   const users = ['x@x.com', 'bird@bird.com','dinosaur@dino.com' ];
 
   users.forEach(user => {
-    const row = table.insertRow();
+    const row = tableBody.insertRow();
     const cell1 = row.insertCell(0);
     cell1.innerText = user;
   });
@@ -115,11 +112,11 @@ function matrixRainAnimation() {
   }
 
   function draw() {
-    ctx.fillStyle = 'rgba(0, 0, 0, .1)';
+    ctx.fillStyle = 'rgb(0, 0, 0, .1)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < drops.length; i++) {
       let text = letters[Math.floor(Math.random() * letters.length)];
-      ctx.fillStyle = '#0f0';
+      ctx.fillStyle = '#02ff00';
       ctx.fillText(text, i * fontSize, drops[i] * fontSize);
       drops[i]++;
       if (drops[i] * fontSize > canvas.height && Math.random() > .95) {
