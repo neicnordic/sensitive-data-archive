@@ -7,7 +7,7 @@ app.use(cors());
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-// See README on how to get the toke
+// See README on how to get the token
 function getToken() {
     return 'token';
 }

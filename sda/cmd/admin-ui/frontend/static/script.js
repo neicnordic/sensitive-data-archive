@@ -50,7 +50,8 @@ async function populateFilesTable() {
           cell2.innerHTML = `<span class="badge badge-pill badge-info">${item.fileStatus}</span>`;
           break;
       }
-      cell1.innerText = item.createAt;
+
+      cell1.innerText = formatDateString(item.createAt);
       cell3.innerText = item.inboxPath;
     });
   } else {
@@ -63,6 +64,14 @@ async function populateFilesTable() {
     hideById('filesTable')
   }
 
+}
+
+function formatDateString(dateString) {
+  const [datePart, timePart] = dateString.split('T');
+  const [year, month, day] = datePart.split('-');
+  const [hour, minute, secondPart] = timePart.split(':');
+  const seconds = secondPart.split(/[.Z]/)[0];
+  return `${year}-${month}-${day}, ${hour}:${minute}:${seconds}`;
 }
 
 function hideById(id) {
