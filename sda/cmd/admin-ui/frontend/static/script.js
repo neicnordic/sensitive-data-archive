@@ -11,8 +11,8 @@ async function fetchDataWithToken() {
     return data;
 
   } catch (error) {
-    showAlert('alertMessage','alert-warning','There was an error fetching data.');
-    hideTable();
+    showAlert('filesAlert','alert-warning','There was an error fetching data.');
+    hideById('filesTable');
   }
 }
 
@@ -54,19 +54,19 @@ async function populateFilesTable() {
       cell3.innerText = item.inboxPath;
     });
   } else {
-    showAlert('alertMessage', 'alert-warning', 'There are no files to display due to an error.');
-    hideTable();
+    showAlert('filesAlert', 'alert-warning', 'There are no files to display due to an error.');
+    hideById('filesTable');
   }
 
   if (data.length === 0) {
-    showAlert('alertMessage', 'alert-primary', 'There are no files to display')
-    hideTable()
+    showAlert('filesAlert', 'alert-primary', 'There are no files to display')
+    hideById('filesTable')
   }
 
 }
 
-function hideTable() {
-  document.getElementById('filesTable').style.display = "none";
+function hideById(id) {
+  document.getElementById(id).style.display = "none";
 }
 
 /**
@@ -85,6 +85,10 @@ function showAlert(id, style, message) {
 function populateUsersTable() {
   const tableBody = document.querySelector('#usersTable tbody');
   const users = ['x@x.com', 'bird@bird.com','dinosaur@dino.com' ];
+  if (users.length === 0) {
+    showAlert('usersAlert', 'alert-primary', 'There are no users to display')
+    hideById('usersTable')
+  }
 
   users.forEach(user => {
     const row = tableBody.insertRow();

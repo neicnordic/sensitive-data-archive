@@ -31,6 +31,11 @@ canvas {
   background-color: #b6c89f;
 }
 
+.nav-link i {
+  font-size: 0.9rem;
+  color: #262d1e;
+}
+
 h1, h2 {
   padding-top: 2rem;
 }

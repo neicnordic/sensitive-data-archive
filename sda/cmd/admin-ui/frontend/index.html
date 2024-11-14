@@ -13,6 +13,8 @@
     <!-- Bootstrap core CSS -->
     <link href="./static/bootstrap.min.css" rel="stylesheet" />
     <link href="./static/custom.css" rel="stylesheet" />
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   </head>
   <body class="d-flex flex-column h-100">
     <header>
@@ -26,14 +28,13 @@
     <main class="flex-shrink-0">
       <div class="container">
         <h1 class="mt-5">Admin panel</h1>
-        <a href="url">link text</a>
-        <p class="lead">Lorem ipsum, dolor sit amet consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
+        <p class="lead">Lorem ipsum, dolor sit amet <a href="/">link text</a> consectetur adipisicing elit. Eius, exercitationem. Voluptas deleniti necessitatibus aperiam, mollitia possimus, pariatur qui nulla eum, iure porro soluta ea laudantium fugiat autem! Inventore, quibusdam veritatis.</p>
         <ul class="nav nav-tabs" id="myTab" role="tablist">
           <li class="nav-item">
-            <a class="nav-link active" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users" aria-selected="false">Users</a>
+            <a class="nav-link active" id="users-tab" data-toggle="tab" href="#users" role="tab" aria-controls="users" aria-selected="false"><i class="fa fa-users" aria-hidden="true"></i> Users</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" id="files-tab" data-toggle="tab" href="#files" role="tab" aria-controls="files" aria-selected="false">Files</a>
+            <a class="nav-link" id="files-tab" data-toggle="tab" href="#files" role="tab" aria-controls="files" aria-selected="false"><i class="fa fa-file" aria-hidden="true"></i> Files</a>
           </li>
         </ul>
         <div class="tab-content" id="myTabContent">
@@ -41,6 +42,7 @@
             <div class="container ml-n3">
               <div class="row">
                 <div class="col-8">
+                  <div class="alert m-2" role="alert" id="usersAlert" style="display: none">There are no files to display</div>
                   <table class="table table-striped mt-2" id="usersTable">
                     <thead>
                       <tr>
@@ -58,7 +60,7 @@
             <div class="container ml-n3">
               <div class="row">
                 <div class="col-12 col-md-10">
-                  <div class="alert m-2" role="alert" id="alertMessage" style="display: none">There are no files to display</div>
+                  <div class="alert m-2" role="alert" id="filesAlert" style="display: none">There are no files to display</div>
                   <div class="table-responsive">
                   <table class="table table-striped mt-2" id="filesTable">
                     <thead>
