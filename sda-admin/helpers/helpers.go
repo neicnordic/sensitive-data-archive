@@ -97,3 +97,36 @@ func CheckValidChars(filename string) error {
 
 	return nil
 }
+
+// GetReq sends a GET request to the server with a JSON body and returns the response body or an error.
+func GetReq(url, token string, jsonBody []byte) ([]byte, error) {
+	// Create a new POST request with the provided JSON body
+	req, err := http.NewRequest("GET", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
+	}
+
+	// Add headers
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	// Send the request
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request, reason: %v", err)
+	}
+	defer res.Body.Close()
+
+	// Read the response body
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body, reason: %v", err)
+	}
+
+	// Check the status code
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned status %d: %s", res.StatusCode, string(resBody))
+	}
+
+	return resBody, nil
+}

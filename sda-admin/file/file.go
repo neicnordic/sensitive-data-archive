@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
+	"github.com/tidwall/pretty"
 )
 
 type RequestBodyFileIngest struct {
@@ -33,7 +34,7 @@ func List(apiURI, token, username string) error {
 		return err
 	}
 
-	fmt.Println(string(response))
+	fmt.Print(string(pretty.Pretty(response)))
 
 	return nil
 }
