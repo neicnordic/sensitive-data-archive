@@ -4,7 +4,7 @@ on:
     merge_group:
     pull_request:
       paths:
-        - 'sda-admin/.version'
+        - "sda-admin/.version"
       types: [ closed ]
     workflow_dispatch:
 
