@@ -714,3 +714,43 @@ func (suite *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
 	// we should not be able to change the deprecation date
 	assert.EqualError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "key hash not found or already deprecated", "failure when deprecating keyhash")
 }
+
+func (suite *DatabaseTests) TestSetKeyHash() {
+	// Test that using an unknown key hash produces an error
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	// Register a new key and a new file
+	keyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc507`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	// Test that the key hash can be set in the files table
+	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "Could not set key hash")
+
+	// Verify that the key+file was added
+	var exists bool
+	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.files WHERE key_hash=$1 AND id=$2)", keyHex, fileID).Scan(&exists)
+	assert.NoError(suite.T(), err, "failed to verify key hash set for file")
+	assert.True(suite.T(), exists, "key hash was not set for file in the database")
+}
+
+func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
+	// Add key hash and file
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	keyHex := "6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc501"
+	keyDescription := "this is a test hash"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file2.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	// Ensure failure if a non existing hash is used
+	newKeyHex := "6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc502"
+	err = db.SetKeyHash(newKeyHex, fileID)
+	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
+}

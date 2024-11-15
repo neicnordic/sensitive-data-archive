@@ -784,6 +784,24 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 	return nil
 }
 
+func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	query := "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
+	result, err := db.Exec(query, keyHash, fileID)
+	if err != nil {
+
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query, zero rows were changed")
+	}
+	log.Debugf("Successfully set key hash for file %v", fileID)
+
+	return nil
+}
+
 type C4ghKeyHash struct {
 	Hash         string `json:"hash"`
 	Description  string `json:"description"`

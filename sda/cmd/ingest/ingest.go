@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -383,6 +385,19 @@ func main() {
 							body, _ := json.Marshal(fileError)
 							if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
 								log.Errorf("failed to publish message, reason: (%s)", err.Error())
+							}
+
+							continue mainWorkLoop
+						}
+
+						// Set the file's hex encoded public key
+						publicKey := keys.DerivePublicKey(*key)
+						keyhash := hex.EncodeToString(publicKey[:])
+						err = db.SetKeyHash(keyhash, fileID)
+						if err != nil {
+							log.Errorf("Key hash %s could not be set for fileID %s: (%s)", keyhash, fileID, err.Error())
+							if err = delivered.Nack(false, true); err != nil {
+								log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 							}
 
 							continue mainWorkLoop
