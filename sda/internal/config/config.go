@@ -215,7 +215,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
-			"inbox.type",
 		}
 		switch viper.GetString("inbox.type") {
 		case S3:
