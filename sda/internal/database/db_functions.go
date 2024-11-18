@@ -63,9 +63,9 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
-// UserFileExists checks if a file exists in the database
-// for a given user and fileID
-func (dbs *SDAdb) GetFilePathFromID(submission_user, fileID string) (string, error) {
+// GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
+// and that is not yet archived
+func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string, error) {
 	var (
 		err      error
 		count    int
@@ -73,17 +73,21 @@ func (dbs *SDAdb) GetFilePathFromID(submission_user, fileID string) (string, err
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, err = dbs.getFilePathFromID(submission_user, fileID)
+		filePath, err = dbs.getInboxFilePathFromID(submissionUser, fileID)
 		count++
 	}
 
 	return filePath, err
 }
-func (dbs *SDAdb) getFilePathFromID(submission_user, fileID string) (string, error) {
+func (dbs *SDAdb) getInboxFilePathFromID(submission_user, fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	const getFilePath = "SELECT submission_file_path from sda.files where submission_user= $1 and id = $2;"
+	const getFilePath = "SELECT submission_file_path from sda.files where " +
+		"submission_user= $1 and id = $2 " +
+		"AND EXISTS (SELECT 1 FROM " +
+		"(SELECT event from sda.file_event_log where file_id = $2 order by started_at desc limit 1) " +
+		"as subquery WHERE event in ('registered', 'uploaded', 'submitted', 'ingested'))"
 
 	var filePath string
 	err := db.QueryRow(getFilePath, submission_user, fileID).Scan(&filePath)
