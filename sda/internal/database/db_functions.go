@@ -79,7 +79,8 @@ func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string,
 
 	return filePath, err
 }
-func (dbs *SDAdb) getInboxFilePathFromID(submission_user, fileID string) (string, error) {
+
+func (dbs *SDAdb) getInboxFilePathFromID(submissionUser, fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
@@ -90,7 +91,7 @@ func (dbs *SDAdb) getInboxFilePathFromID(submission_user, fileID string) (string
 		"as subquery WHERE event in ('registered', 'uploaded', 'submitted', 'ingested'))"
 
 	var filePath string
-	err := db.QueryRow(getFilePath, submission_user, fileID).Scan(&filePath)
+	err := db.QueryRow(getFilePath, submissionUser, fileID).Scan(&filePath)
 	if err != nil {
 		return "", err
 	}
