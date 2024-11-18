@@ -316,7 +316,7 @@ func deleteFile(c *gin.Context) {
 
 	filePath := ""
 	// Get the file path from the fileID and submission user
-	if filePath, err = Conf.API.DB.GetFilePathFromID(submissionUser, fileID); err != nil {
+	if filePath, err = Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID); err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
 
