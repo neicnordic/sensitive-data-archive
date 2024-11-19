@@ -136,16 +136,69 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /PATH/TO/c4gh.pub)"'", "description": "this is the key description"}' https://HOSTNAME/c4gh-keys/add
     ```
 
-#### Configure Admin users
+#### Configure RBAC
 
-The users that should have administrative access can be set in two ways:
+RBAC is configure according to the JSON schema below.
+The path to the JSON file containing the RBAC policies needs to be passed through the `api.rbacFile` config definition.
 
-- As a comma separated list of user identifiers assigned to: `admin.users`.
-- As a JSON file containg a list of the user identities, the path to the file is assigned to: `admin.usersFile`. This is the recommended way.
+The `policy` section will configure access to the defined endpoints, unless specific rules are set, an endpoint will not be accessible
+
+- `action`: can be single string value i,e `GET` or a regex string with `|` as separator i.e. `(GET)|(POST)|(PUT)`. In the later case all actions in the list are allowed.
+- `paht`: have two different wildcard notations `*`, matches any value and `:` that matches a specifc named value
+- `role`: is the role that will be able to access the path, `"*"` will match any role or user.
+
+The `roles` section defines the available roles
+
+- `role`: rolename or username from the accesstoken
+- `roleBinding`: maps a user/role to another role, this makes roles work as groups which simplifies the policy definitions.
 
 ```json
-[
-"foo-user@example.com",
-"bar-user@example.com"
-]
+{
+   "policy": [
+      {
+         "role": "admin",
+         "path": "/c4gh-keys/*",
+         "action": "(GET)|(POST)|(PUT)"
+      },
+      {
+         "role": "submission",
+         "path": "/file/ingest",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/file/accession",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/users",
+         "action": "GET"
+      },
+      {
+         "role": "submission",
+         "path": "/users/:username/files",
+         "action": "GET"
+      },
+      {
+         "role": "*",
+         "path": "/files",
+         "action": "GET"
+      }
+   ],
+   "roles": [
+      {
+         "role": "admin",
+         "rolebinding": "submission"
+      },
+      {
+         "role": "dummy@example.org",
+         "rolebinding": "admin"
+      },
+      {
+         "role": "test@example.org",
+         "rolebinding": "submission"
+      }
+   ]
+}
 ```
