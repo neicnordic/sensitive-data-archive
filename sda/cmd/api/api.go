@@ -11,17 +11,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/casbin/casbin/v2"
+	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
@@ -55,8 +57,8 @@ func main() {
 
 	if err := setupJwtAuth(); err != nil {
 		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
-
 	}
+
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
@@ -83,22 +85,27 @@ func main() {
 }
 
 func setup(config *config.Config) *http.Server {
-	r := gin.Default()
-	r.GET("/ready", readinessResponse)
-	r.GET("/files", getFiles)
-	// admin endpoints below here
-	if len(config.API.Admins) > 0 {
-		r.POST("/file/ingest", isAdmin(), ingestFile)                         // start ingestion of a file
-		r.POST("/file/accession", isAdmin(), setAccession)                    // assign accession ID to a file
-		r.POST("/dataset/create", isAdmin(), createDataset)                   // maps a set of files to a dataset
-		r.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)        // Releases a dataset to be accessible
-		r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)                      // Adds a key hash to the database
-		r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash) // Deprecate a given key hash
-		r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)                   // Lists key hashes in the database
-		r.GET("/users", isAdmin(), listActiveUsers)                           // Lists all users
-		r.GET("/users/:username/files", isAdmin(), listUserFiles)             // Lists all unmapped files for a user
+	model, _ := model.NewModelFromString(jsonadapter.Model)
+	e, err := casbin.NewEnforcer(model, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
+	if err != nil {
+		shutdown()
+		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error())
 	}
 
+	r := gin.Default()
+	r.GET("/ready", readinessResponse)
+	r.GET("/files", rbac(e), getFiles)
+	// admin endpoints below here
+	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
+	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
+	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
+	// submission endpoints below here
+	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
+	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
+	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
+	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
+	r.GET("/users", rbac(e), listActiveUsers)                    // Lists all users
+	r.GET("/users/:username/files", rbac(e), listUserFiles)      // Lists all unmapped files for a user
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
@@ -179,6 +186,32 @@ func checkDB(database *database.SDAdb, timeout time.Duration) error {
 	return database.DB.PingContext(ctx)
 }
 
+func rbac(e *casbin.Enforcer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := auth.Authenticate(c.Request)
+		if err != nil {
+			log.Debugln("bad token")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+
+			return
+		}
+
+		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
+		if err != nil {
+			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+			return
+		}
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
+
+			return
+		}
+		log.Debugln("authoriozed")
+	}
+}
+
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -201,24 +234,6 @@ func getFiles(c *gin.Context) {
 
 	// Return response
 	c.JSON(200, files)
-}
-
-func isAdmin() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token, err := auth.Authenticate(c.Request)
-		if err != nil {
-			log.Debugln("bad token")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-
-			return
-		}
-		if !slices.Contains(Conf.API.Admins, token.Subject()) {
-			log.Debugf("%s is not an admin", token.Subject())
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
-
-			return
-		}
-	}
 }
 
 func ingestFile(c *gin.Context) {

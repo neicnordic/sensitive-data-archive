@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path"
 	"runtime"
@@ -18,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/casbin/casbin/v2"
+	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
@@ -25,6 +26,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
@@ -233,6 +235,7 @@ type TestSuite struct {
 	PublicPath  string
 	PrivatePath string
 	KeyName     string
+	RBAC        []byte
 	Token       string
 	User        string
 }
@@ -378,6 +381,16 @@ func (suite *TestSuite) SetupSuite() {
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
 
+	suite.RBAC = []byte(`{"policy":[{"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
+	{"role":"submission","path":"/dataset/create","action":"POST"},
+	{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
+	{"role":"submission","path":"/file/ingest","action":"POST"},
+	{"role":"submission","path":"/file/accession","action":"POST"},
+	{"role":"submission","path":"/users","action":"GET"},
+	{"role":"submission","path":"/users/:username/files","action":"GET"},
+	{"role":"*","path":"/files","action":"GET"}],
+	"roles":[{"role":"admin","rolebinding":"submission"},
+	{"role":"dummy","rolebinding":"admin"}]}`)
 }
 func (suite *TestSuite) TearDownSuite() {
 	assert.NoError(suite.T(), os.RemoveAll(suite.Path))
@@ -418,43 +431,21 @@ func (suite *TestSuite) TestDatabasePingCheck() {
 	assert.NoError(suite.T(), checkDB(db, 1*time.Second), "ping should succeed")
 }
 
-func (suite *TestSuite) TestAPIAuthenticate() {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
-	r.GET("/files", func(c *gin.Context) {
-		getFiles(c)
-	})
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-	filesURL := ts.URL + "/files"
-	client := &http.Client{}
-
-	assert.NoError(suite.T(), setupJwtAuth())
-
-	requestURL, err := url.Parse(filesURL)
-	assert.NoError(suite.T(), err)
-
-	// No credentials
-	resp, err := http.Get(requestURL.String())
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), http.StatusUnauthorized, resp.StatusCode)
-	defer resp.Body.Close()
-
-	// Valid credentials
-
-	req, err := http.NewRequest("GET", filesURL, nil)
-	assert.NoError(suite.T(), err)
-	req.Header.Add("Authorization", "Bearer "+suite.Token)
-	resp, err = client.Do(req)
-	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
-	assert.NoError(suite.T(), err)
-	defer resp.Body.Close()
-}
-
 func (suite *TestSuite) TestAPIGetFiles() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-	r.GET("/files", func(c *gin.Context) {
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
+
+	r.GET("/files", rbac(e), func(c *gin.Context) {
 		getFiles(c)
 	})
 	ts := httptest.NewServer(r)
@@ -551,56 +542,26 @@ func testEndpoint(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-func (suite *TestSuite) TestIsAdmin_NoToken() {
+func (suite *TestSuite) TestRBAC() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-	_, router := gin.CreateTestContext(w)
-	router.GET("/", isAdmin(), testEndpoint)
-
-	// no token should not be allowed
-	router.ServeHTTP(w, r)
-	badResponse := w.Result()
-	defer badResponse.Body.Close()
-	b, _ := io.ReadAll(badResponse.Body)
-	assert.Equal(suite.T(), http.StatusUnauthorized, badResponse.StatusCode)
-	assert.Contains(suite.T(), string(b), "no access token supplied")
-}
-func (suite *TestSuite) TestIsAdmin_BadUser() {
-	gin.SetMode(gin.ReleaseMode)
-	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"foo", "bar"}
-
-	// Mock request and response holders
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-	_, router := gin.CreateTestContext(w)
-	router.GET("/", isAdmin(), testEndpoint)
-
-	// non admin user should not be allowed
-	r.Header.Add("Authorization", "Bearer "+suite.Token)
-	router.ServeHTTP(w, r)
-	notAdmin := w.Result()
-	defer notAdmin.Body.Close()
-	b, _ := io.ReadAll(notAdmin.Body)
-	assert.Equal(suite.T(), http.StatusUnauthorized, notAdmin.StatusCode)
-	assert.Contains(suite.T(), string(b), "not authorized")
-}
-func (suite *TestSuite) TestIsAdmin() {
-	gin.SetMode(gin.ReleaseMode)
-	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"foo", "bar", "dummy"}
-
-	// Mock request and response holders
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
+	r := httptest.NewRequest("GET", "/c4gh-keys/list", nil)
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.GET("/", isAdmin(), testEndpoint)
+	router.GET("/c4gh-keys/list", rbac(e), testEndpoint)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -610,9 +571,105 @@ func (suite *TestSuite) TestIsAdmin() {
 	assert.Contains(suite.T(), string(b), "ok")
 }
 
+func (suite *TestSuite) TestRBAC_badUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	Conf.API.RBACpolicy = []byte(`{"policy":[{"role":"admin","path":"/admin/*","action":"(GET)|(POST)|(PUT)"}],
+	"roles":[{"role":"admin","rolebinding":"submission"},
+	{"role":"dummy","rolebinding":"submission"}]}`)
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/admin/list-users", nil)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/admin/list-users", rbac(e), testEndpoint)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusUnauthorized, okResponse.StatusCode)
+}
+
+func (suite *TestSuite) TestRBAC_noToken() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&[]byte{}))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/", rbac(e), testEndpoint)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "no access token supplied")
+}
+
+func (suite *TestSuite) TestRBAC_emptyPolicy() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&[]byte{}))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/files", nil)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/files", rbac(e), testEndpoint)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	b, _ := io.ReadAll(okResponse.Body)
+	assert.Equal(suite.T(), http.StatusUnauthorized, okResponse.StatusCode)
+	assert.Contains(suite.T(), string(b), "not authorized")
+}
 func (suite *TestSuite) TestIngestFile() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
 	assert.NoError(suite.T(), err, "failed to register file in database")
@@ -621,7 +678,6 @@ func (suite *TestSuite) TestIngestFile() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	type ingest struct {
@@ -632,9 +688,10 @@ func (suite *TestSuite) TestIngestFile() {
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/ingest", ingestFile)
+	router.POST("/file/ingest", rbac(e), ingestFile)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -670,7 +727,7 @@ func (suite *TestSuite) TestIngestFile_NoUser() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	type ingest struct {
@@ -701,7 +758,7 @@ func (suite *TestSuite) TestIngestFile_WrongUser() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	type ingest struct {
@@ -735,7 +792,7 @@ func (suite *TestSuite) TestIngestFile_WrongFilePath() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	type ingest struct {
@@ -749,7 +806,7 @@ func (suite *TestSuite) TestIngestFile_WrongFilePath() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/ingest", isAdmin(), ingestFile)
+	router.POST("/file/ingest", ingestFile)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -791,8 +848,17 @@ func (suite *TestSuite) TestSetAccession() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	type accession struct {
 		AccessionID string `json:"accession_id"`
@@ -807,7 +873,7 @@ func (suite *TestSuite) TestSetAccession() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/accession", isAdmin(), setAccession)
+	router.POST("/file/accession", rbac(e), setAccession)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -835,8 +901,17 @@ func (suite *TestSuite) TestSetAccession() {
 func (suite *TestSuite) TestSetAccession_WrongUser() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	type accession struct {
 		AccessionID string `json:"accession_id"`
@@ -851,36 +926,28 @@ func (suite *TestSuite) TestSetAccession_WrongUser() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/accession", isAdmin(), setAccession)
+	router.POST("/file/accession", rbac(e), setAccession)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
-
-	// verify that the message shows up in the queue
-	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
-	client := http.Client{Timeout: 5 * time.Second}
-	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
-	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
-	assert.NoError(suite.T(), err, "failed to query broker")
-	var data struct {
-		MessagesReady int `json:"messages_ready"`
-	}
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	assert.NoError(suite.T(), err, "failed to read response from broker")
-	err = json.Unmarshal(body, &data)
-	assert.NoError(suite.T(), err, "failed to unmarshal response")
-	assert.Equal(suite.T(), 1, data.MessagesReady)
 }
 
 func (suite *TestSuite) TestSetAccession_WrongFormat() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/federated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	type accession struct {
 		AccessionID string `json:"accession_id"`
@@ -895,29 +962,12 @@ func (suite *TestSuite) TestSetAccession_WrongFormat() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/accession", isAdmin(), setAccession)
+	router.POST("/file/accession", rbac(e), setAccession)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(suite.T(), http.StatusBadRequest, okResponse.StatusCode)
-
-	// verify that the message shows up in the queue
-	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
-	client := http.Client{Timeout: 5 * time.Second}
-	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
-	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
-	assert.NoError(suite.T(), err, "failed to query broker")
-	var data struct {
-		MessagesReady int `json:"messages_ready"`
-	}
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	assert.NoError(suite.T(), err, "failed to read response from broker")
-	err = json.Unmarshal(body, &data)
-	assert.NoError(suite.T(), err, "failed to unmarshal response")
-	assert.Equal(suite.T(), 1, data.MessagesReady)
 }
 
 func (suite *TestSuite) TestCreateDataset() {
@@ -955,8 +1005,18 @@ func (suite *TestSuite) TestCreateDataset() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
 	// Mock request and response holders
@@ -965,7 +1025,7 @@ func (suite *TestSuite) TestCreateDataset() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/create", isAdmin(), createDataset)
+	router.POST("/dataset/create", rbac(e), createDataset)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -1030,8 +1090,18 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/federated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
 	// Mock request and response holders
@@ -1040,7 +1110,7 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/create", isAdmin(), createDataset)
+	router.POST("/dataset/create", rbac(e), createDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1055,7 +1125,7 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 func (suite *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{}, DatasetID: "failure", User: "dummy"})
@@ -1065,7 +1135,7 @@ func (suite *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/create", isAdmin(), createDataset)
+	router.POST("/dataset/create", createDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1080,7 +1150,6 @@ func (suite *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 func (suite *TestSuite) TestCreateDataset_WrongIDs() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
@@ -1090,7 +1159,7 @@ func (suite *TestSuite) TestCreateDataset_WrongIDs() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/create", isAdmin(), createDataset)
+	router.POST("/dataset/create", createDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1140,7 +1209,6 @@ func (suite *TestSuite) TestCreateDataset_WrongUser() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "tester"})
@@ -1150,7 +1218,7 @@ func (suite *TestSuite) TestCreateDataset_WrongUser() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/create", isAdmin(), createDataset)
+	router.POST("/dataset/create", createDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1200,16 +1268,25 @@ func (suite *TestSuite) TestReleaseDataset() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/release/API:dataset-01", http.NoBody)
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+	router.POST("/dataset/release/*dataset", rbac(e), releaseDataset)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -1245,8 +1322,18 @@ func (suite *TestSuite) TestReleaseDataset_NoDataset() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -1254,7 +1341,7 @@ func (suite *TestSuite) TestReleaseDataset_NoDataset() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+	router.POST("/dataset/release/*dataset", rbac(e), releaseDataset)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -1265,8 +1352,18 @@ func (suite *TestSuite) TestReleaseDataset_NoDataset() {
 func (suite *TestSuite) TestReleaseDataset_BadDataset() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -1274,7 +1371,7 @@ func (suite *TestSuite) TestReleaseDataset_BadDataset() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+	router.POST("/dataset/release/*dataset", rbac(e), releaseDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1314,8 +1411,18 @@ func (suite *TestSuite) TestReleaseDataset_DeprecatedDataset() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -1323,7 +1430,7 @@ func (suite *TestSuite) TestReleaseDataset_DeprecatedDataset() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/dataset/release/*dataset", isAdmin(), releaseDataset)
+	router.POST("/dataset/release/*dataset", rbac(e), releaseDataset)
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
@@ -1360,7 +1467,16 @@ func (suite *TestSuite) TestListActiveUsers() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -1368,7 +1484,7 @@ func (suite *TestSuite) TestListActiveUsers() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.GET("/users", isAdmin(), listActiveUsers)
+	router.GET("/users", rbac(e), listActiveUsers)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -1376,7 +1492,7 @@ func (suite *TestSuite) TestListActiveUsers() {
 	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
 
 	var users []string
-	err := json.NewDecoder(okResponse.Body).Decode(&users)
+	err = json.NewDecoder(okResponse.Body).Decode(&users)
 	assert.NoError(suite.T(), err, "failed to list users from DB")
 	assert.Equal(suite.T(), []string{"User-B", "User-C"}, users)
 }
@@ -1410,7 +1526,16 @@ func (suite *TestSuite) TestListUserFiles() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -1418,7 +1543,7 @@ func (suite *TestSuite) TestListUserFiles() {
 	r.Header.Add("Authorization", "Bearer "+suite.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.GET("/users/:username/files", isAdmin(), listUserFiles)
+	router.GET("/users/:username/files", rbac(e), listUserFiles)
 
 	router.ServeHTTP(w, r)
 	okResponse := w.Result()
@@ -1434,10 +1559,19 @@ func (suite *TestSuite) TestListUserFiles() {
 func (suite *TestSuite) TestAddC4ghHash() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 
 	r := gin.Default()
-	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
+	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1472,10 +1606,19 @@ func (suite *TestSuite) TestAddC4ghHash() {
 func (suite *TestSuite) TestAddC4ghHash_emptyJson() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 	r := gin.Default()
-	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
+	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1499,10 +1642,18 @@ func (suite *TestSuite) TestAddC4ghHash_emptyJson() {
 func (suite *TestSuite) TestAddC4ghHash_notBase64() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
-
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&suite.RBAC))
+	if err != nil {
+		suite.T().Logf("failure: %v", err)
+		suite.FailNow("failed to setup RBAC enforcer")
+	}
 	r := gin.Default()
-	r.POST("/c4gh-keys/add", isAdmin(), addC4ghHash)
+	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1535,10 +1686,9 @@ func (suite *TestSuite) TestListC4ghHashes() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.GET("/c4gh-keys/list", isAdmin(), listC4ghHashes)
+	r.GET("/c4gh-keys/list", listC4ghHashes)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1571,10 +1721,9 @@ func (suite *TestSuite) TestDeprecateC4ghHash() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash)
+	r.POST("/c4gh-keys/deprecate/*keyHash", deprecateC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -1602,10 +1751,9 @@ func (suite *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.API.Admins = []string{"dummy"}
 
 	r := gin.Default()
-	r.POST("/c4gh-keys/deprecate/*keyHash", isAdmin(), deprecateC4ghHash)
+	r.POST("/c4gh-keys/deprecate/*keyHash", deprecateC4ghHash)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
