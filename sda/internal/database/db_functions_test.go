@@ -1187,3 +1187,28 @@ func (suite *DatabaseTests) TestGetDsatasetFiles() {
 	assert.NoError(suite.T(), err, "failed to get accessions for a dataset")
 	assert.Equal(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, accessions)
 }
+
+func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
+
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	user := "UserX"
+	filePath := fmt.Sprintf("/%v/Deletefile1.c4gh", user)
+	fileID, err := db.RegisterFile(filePath, user)
+	if err != nil {
+		suite.FailNow("Failed to register file")
+	}
+	err = db.UpdateFileEventLog(fileID, "uploaded", fileID, "User-z", "{}", "{}")
+	if err != nil {
+		suite.FailNow("Failed to update file event log")
+	}
+	path, err := db.getInboxFilePathFromID(user, fileID)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), path, filePath)
+
+	err = db.UpdateFileEventLog(fileID, "archived", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err)
+	_, err = db.getInboxFilePathFromID(user, fileID)
+	assert.Error(suite.T(), err)
+}
