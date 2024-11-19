@@ -33,6 +33,21 @@ func (suite *ConfigTestSuite) SetupTest() {
 	certPath, _ = os.MkdirTemp("", "gocerts")
 	helper.MakeCerts(certPath)
 
+	rbacFile, err := os.CreateTemp(certPath, "admins")
+	assert.NoError(suite.T(), err)
+	rbac := []byte(`{"policy":[
+{"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
+{"role":"submission","path":"/dataset/create","action":"POST"},
+{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
+{"role":"submission","path":"/file/ingest","action":"POST"},
+{"role":"submission","path":"/file/accession","action":"POST"}],
+"roles":[{"role":"admin","rolebinding":"submission"},
+{"role":"dummy@example.org","rolebinding":"admin"},
+{"role":"foo@example.org","rolebinding":"submission"}]}`)
+	_, err = rbacFile.Write(rbac)
+	assert.NoError(suite.T(), err)
+
+	viper.Set("api.rbacFile", rbacFile.Name())
 	viper.Set("broker.host", "testhost")
 	viper.Set("broker.port", 123)
 	viper.Set("broker.user", "testuser")
@@ -224,6 +239,8 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(suite.T(), true, config.API.Session.HTTPOnly)
 	assert.Equal(suite.T(), "api_session_key", config.API.Session.Name)
 	assert.Equal(suite.T(), -1*time.Second, config.API.Session.Expiration)
+	rbac, _ := os.ReadFile(viper.GetString("api.rbacFile"))
+	assert.Equal(suite.T(), rbac, config.API.RBACpolicy)
 
 	viper.Reset()
 	suite.SetupTest()
@@ -242,27 +259,6 @@ func (suite *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(suite.T(), false, config.API.Session.Secure)
 	assert.Equal(suite.T(), "test", config.API.Session.Domain)
 	assert.Equal(suite.T(), 60*time.Second, config.API.Session.Expiration)
-
-	viper.Reset()
-	suite.SetupTest()
-	adminFile, err := os.CreateTemp("", "admins")
-	assert.NoError(suite.T(), err)
-	_, err = adminFile.Write([]byte(`["foo@example.com","bar@example.com","baz@example.com"]`))
-	assert.NoError(suite.T(), err)
-
-	viper.Set("admin.usersFile", adminFile.Name())
-	cFile, err := NewConfig("api")
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), []string{"foo@example.com", "bar@example.com", "baz@example.com"}, cFile.API.Admins)
-
-	os.Remove(adminFile.Name())
-
-	viper.Reset()
-	suite.SetupTest()
-	viper.Set("admin.users", "foo@bar.com,bar@foo.com")
-	cList, err := NewConfig("api")
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), []string{"foo@bar.com", "bar@foo.com"}, cList.API.Admins)
 }
 
 func (suite *ConfigTestSuite) TestNotifyConfiguration() {
