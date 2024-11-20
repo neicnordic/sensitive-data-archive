@@ -108,10 +108,9 @@ global:
 
 # global configurations
   api:
-    adminsFileSecret: ""
-    adminUsers:
     jwtPubKeyName:
     jwtSecret:
+    rbacFileSecret: ""
   archive:
     storageType: "" # s3 or posix
   # The six lines below is only used with S3 backend

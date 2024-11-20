@@ -72,8 +72,8 @@ spec:
         command: ["sda-api"]
         env:
 {{- if not .Values.global.vaultSecrets }}
-        - name: API_ADMINFILE
-          value: {{ template "secretsPath" . }}/admins.json
+        - name: API_RBACFILE
+          value: {{ template "secretsPath" . }}/rbac.json
     {{- if .Values.global.tls.enabled }}
         - name: API_SERVERCERT
           value: {{ template "tlsPath" . }}/tls.crt
@@ -198,7 +198,7 @@ spec:
           mountPath: {{ include "jwtPath" . }}
     {{- end }}
     {{- if not .Values.global.vaultSecrets }}
-        - name: admins
+        - name: rbac
           mountPath: {{ template "secretsPath" . }}
     {{- end }}
     {{- if .Values.global.tls.enabled }}
@@ -207,21 +207,14 @@ spec:
     {{- end }}
       volumes:
     {{- if not .Values.global.vaultSecrets }}
-        - name: admins
+        - name: rbac
           projected:
             sources:
             - secret:
-              {{- if .Values.global.api.adminsFileSecret }}
-                name: {{ .Values.global.api.adminsFileSecret }}
+                name: {{ required "a secret containing the RBAC policy is required" .Values.global.api.rbacFileSecret }}
                 items:
-                  - key: admins.json
-                    path: admins.json
-              {{- else }}
-                name: {{ template "sda.fullname" . }}-api-admins
-                items:
-                  - key: admins.json
-                    path: admins.json
-              {{- end }}
+                  - key: rbac.json
+                    path: rbac.json
         {{- if .Values.global.api.jwtPubKeyName }}
         - name: jwt
           projected:
