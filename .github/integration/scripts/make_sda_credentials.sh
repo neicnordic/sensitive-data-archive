@@ -93,3 +93,50 @@ if [ ! -f "/shared/grpcurl" ]; then
     latest_grpculr=$(curl --retry 100 -sL https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
     curl --retry 100 -s -L "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpculr}/grpcurl_${latest_grpculr}_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/grpcurl
 fi
+
+cat >/shared/rbac.json <<EOD
+{
+   "policy": [
+      {
+         "role": "admin",
+         "path": "/c4gh-keys/*",
+         "action": "(GET)|(POST)|(PUT)"
+      },
+      {
+         "role": "submission",
+         "path": "/file/ingest",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/file/accession",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/users",
+         "action": "GET"
+      },
+      {
+         "role": "submission",
+         "path": "/users/:username/files",
+         "action": "GET"
+      },
+      {
+         "role": "*",
+         "path": "/files",
+         "action": "GET"
+      }
+   ],
+   "roles": [
+      {
+         "role": "admin",
+         "rolebinding": "submission"
+      },
+      {
+         "role": "requester@demo.org",
+         "rolebinding": "admin"
+      }
+   ]
+}
+EOD

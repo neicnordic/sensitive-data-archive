@@ -1,8 +1,8 @@
 log:
   format: "json"
   level: "debug"
-admin:
-  users: "requester@demo.org"
+api:
+  rbacFile: /shared/rbac.json
 archive:
   type: s3
   url: "http://s3"
