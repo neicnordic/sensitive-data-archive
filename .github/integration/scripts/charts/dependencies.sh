@@ -75,3 +75,66 @@ yq -i '
 .global.sync.destination.secretKey = strenv(MINIO_SECRET) |
 .releasetest.secrets.accessToken = strenv(TEST_TOKEN)
 ' .github/integration/scripts/charts/values.yaml
+
+cat >rbac.json <<EOD
+{
+   "policy": [
+      {
+         "role": "admin",
+         "path": "/c4gh-keys/*",
+         "action": "(GET)|(POST)|(PUT)"
+      },
+      {
+         "role": "submission",
+         "path": "/file/ingest",
+         "action": "POST"
+      },
+            {
+         "role": "submission",
+         "path": "/file/accession",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/dataset/create",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/dataset/release/*dataset",
+         "action": "POST"
+      },
+      {
+         "role": "submission",
+         "path": "/users",
+         "action": "GET"
+      },
+      {
+         "role": "submission",
+         "path": "/users/:username/files",
+         "action": "GET"
+      },
+      {
+         "role": "*",
+         "path": "/files",
+         "action": "GET"
+      }
+   ],
+   "roles": [
+      {
+         "role": "admin",
+         "rolebinding": "submission"
+      },
+      {
+         "role": "requester@demo.org",
+         "rolebinding": "admin"
+      },
+      {
+         "role": "dummy@example.com",
+         "rolebinding": "admin"
+      }
+   ]
+}
+EOD
+
+kubectl create secret generic api-rbac --from-file="rbac.json"

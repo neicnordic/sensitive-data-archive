@@ -14,12 +14,9 @@ global:
     issuer: ""
     clusterIssuer: "cert-issuer"
   api:
-    adminsFileSecret:
-    adminUsers:
-      - dummy@example.com
-      - requester@demo.org
     jwtPubKeyName: jwt.pub
     jwtSecret: jwk
+    rbacFileSecret: api-rbac
   archive:
     storageType: s3
     s3AccessKey: PLACEHOLDER_VALUE
