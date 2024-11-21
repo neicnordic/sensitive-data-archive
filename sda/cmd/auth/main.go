@@ -402,6 +402,18 @@ func main() {
 
 	app.Use(sess.Handler())
 
+	// Connect to DB
+	authHandler.Config.DB, err = database.NewSDAdb(config.Database)
+	if err != nil {
+		log.Error(err)
+		panic(err)
+	}
+	if authHandler.Config.DB.Version < 14 {
+		log.Error("database schema v14 is required")
+		panic(err)
+	}
+	defer authHandler.Config.DB.Close()
+
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
 
@@ -423,18 +435,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to read public key: %s", err.Error())
 	}
-
-	// Connect to DB
-	config.Auth.DB, err = database.NewSDAdb(config.Database)
-	if err != nil {
-		log.Error(err)
-		panic(err)
-	}
-	if config.Auth.DB.Version < 14 {
-		log.Error("database schema v14 is required")
-		panic(err)
-	}
-	defer config.Auth.DB.Close()
 
 	// Endpoint for client login info
 	app.Get("/info", authHandler.getInfo)
