@@ -324,7 +324,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Requires a filepath instead of fileID
-	// TODO: The remove fails randomly sometimes, maybe we should retry
+	// Note: The remove fails randomly sometimes
 	var RetryTimes = 5
 	for count := 1; count <= RetryTimes; count++ {
 		log.Warn("trying to remove file from inbox, try", count)
