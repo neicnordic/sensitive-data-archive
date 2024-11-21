@@ -138,14 +138,14 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 #### Configure RBAC
 
-RBAC is configure according to the JSON schema below.
+RBAC is configured according to the JSON schema below.
 The path to the JSON file containing the RBAC policies needs to be passed through the `api.rbacFile` config definition.
 
-The `policy` section will configure access to the defined endpoints, unless specific rules are set, an endpoint will not be accessible
+The `policy` section will configure access to the defined endpoints. Unless specific rules are set, an endpoint will not be accessible.
 
 - `action`: can be single string value i,e `GET` or a regex string with `|` as separator i.e. `(GET)|(POST)|(PUT)`. In the later case all actions in the list are allowed.
-- `paht`: have two different wildcard notations `*`, matches any value and `:` that matches a specifc named value
-- `role`: is the role that will be able to access the path, `"*"` will match any role or user.
+- `path`: the endpoint. Should be a string value with two different wildcard notations: `*`, matches any value and `:` that matches a specific named value
+- `role`: the role that will be able to access the path, `"*"` will match any role or user.
 
 The `roles` section defines the available roles
 
