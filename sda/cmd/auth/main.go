@@ -412,7 +412,6 @@ func main() {
 		log.Error("database schema v14 is required")
 		panic(err)
 	}
-	defer authHandler.Config.DB.Close()
 
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
@@ -438,6 +437,8 @@ func main() {
 
 	// Endpoint for client login info
 	app.Get("/info", authHandler.getInfo)
+
+	defer authHandler.Config.DB.Close() // needs to be after Fatalf
 
 	app.UseGlobal(globalHeaders)
 
