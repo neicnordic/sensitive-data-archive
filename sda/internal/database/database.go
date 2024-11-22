@@ -55,9 +55,9 @@ type SubmissionFileInfo struct {
 }
 
 type DatasetInfo struct {
-	DatasetID string
-	Status    string
-	Timestamp string
+	DatasetID string `json:"datasetID"`
+	Status    string `json:"status"`
+	Timestamp string `json:"timeStamp"`
 }
 
 // SchemaName is the name of the remote database schema to query
