@@ -2,7 +2,7 @@ log:
   format: "json"
   level: "debug"
 api:
-  rbacFile: /shared/rbac.json
+  rbacFile: /rbac.json
 archive:
   type: s3
   url: "http://s3"
