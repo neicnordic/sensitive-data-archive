@@ -3,7 +3,6 @@ package config
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -75,7 +74,7 @@ type SyncAPIConf struct {
 }
 
 type APIConf struct {
-	Admins     []string
+	RBACpolicy []byte
 	CACert     string
 	ServerCert string
 	ServerKey  string
@@ -204,6 +203,7 @@ func NewConfig(app string) (*Config, error) {
 	switch app {
 	case "api":
 		requiredConfVars = []string{
+			"api.rbacFile",
 			"broker.host",
 			"broker.port",
 			"broker.user",
@@ -467,20 +467,9 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		if viper.IsSet("admin.usersFile") {
-			admins, err := os.ReadFile(viper.GetString("admin.usersFile"))
-			if err != nil {
-				return nil, err
-			}
-
-			if err := json.Unmarshal(admins, &c.API.Admins); err != nil {
-				return nil, err
-			}
-		}
-
-		// This is mainly for convenience when testing stuff
-		if viper.IsSet("admin.users") {
-			c.API.Admins = append(c.API.Admins, strings.Split(string(viper.GetString("admin.users")), ",")...)
+		c.API.RBACpolicy, err = os.ReadFile(viper.GetString("api.rbacFile"))
+		if err != nil {
+			return nil, err
 		}
 		c.configSchemas()
 	case "auth":

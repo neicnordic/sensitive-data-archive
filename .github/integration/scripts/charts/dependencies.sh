@@ -75,3 +75,5 @@ yq -i '
 .global.sync.destination.secretKey = strenv(MINIO_SECRET) |
 .releasetest.secrets.accessToken = strenv(TEST_TOKEN)
 ' .github/integration/scripts/charts/values.yaml
+
+kubectl create secret generic api-rbac --from-file=".github/integration/sda/rbac.json"

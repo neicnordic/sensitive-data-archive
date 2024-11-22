@@ -76,10 +76,9 @@ Parameter | Description | Default
 `global.backupArchive.volumePath` | Path to the mounted `posix` volume. |`/backup`
 `global.backupArchive.nfsServer` | URL or IP address to a NFS server. |`""`
 `global.backupArchive.nfsPath` | Path on the NFS server for the backup archive. |`""`
-`global.api.adminFileSecret` | A secret holding a JSON file named `admin.json` containg a list of identifiers |``
-`global.api.adminUsers` | A list of identifiers of the users with admin privileges |``
 `global.api.jwtPubKeyName` | Public key used to verify the JWT. |``
 `global.api.jwtSecret` | The name of the secret holding the JWT public key |``
+`global.api.rbacFileSecret` | A secret holding a JSON file named `rbac.json` containg the RBAC policies, see example in the [api.md](https://github.com/neicnordic/sensitive-data-archive/blob/main/sda/cmd/api/api.md#configure-rbac) |``
 `global.auth.jwtAlg` | Key type to sign the JWT, available options are RS265 & ES256, Must match the key type |`"ES256"`
 `global.auth.jwtKey` | Private key used to sign the JWT. |`""`
 `global.auth.jwtPub` | Public key ues to verify the JWT. |`""`
