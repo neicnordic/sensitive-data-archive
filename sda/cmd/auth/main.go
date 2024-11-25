@@ -266,7 +266,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Profile, idStruct.Email, idStruct.EdupersonEntitlement)
 	if err != nil {
-		log.Warnf("Could not log user info for %s (%s, %s)", idStruct.User, idStruct.Name, idStruct.Email)
+		log.Warn("Could not log user info.")
 	}
 
 	if auth.Config.ResignJwt {
@@ -412,6 +412,7 @@ func main() {
 		log.Error("database schema v14 is required")
 		panic(err)
 	}
+	defer authHandler.Config.DB.Close()
 
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
@@ -432,13 +433,11 @@ func main() {
 
 	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
-		log.Fatalf("Failed to read public key: %s", err.Error())
+		log.Panicf("Failed to read public key: %s", err.Error())
 	}
 
 	// Endpoint for client login info
 	app.Get("/info", authHandler.getInfo)
-
-	defer authHandler.Config.DB.Close() // needs to be after Fatalf
 
 	app.UseGlobal(globalHeaders)
 
