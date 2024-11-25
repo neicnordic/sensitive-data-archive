@@ -105,7 +105,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on postgres
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.29.0
         env:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
@@ -123,7 +123,7 @@ jobs:
           category: postgres
 
       - name: Run Trivy vulnerability scanner on rabbitmq
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.29.0
         env:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
@@ -172,7 +172,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on sftp-inbox
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.29.0
         env:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
