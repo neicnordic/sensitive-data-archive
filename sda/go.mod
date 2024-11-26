@@ -6,17 +6,17 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.32.5
 	github.com/aws/aws-sdk-go-v2/config v1.28.5
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.46
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.38
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.67.0
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.40
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.68.0
 	github.com/aws/smithy-go v1.22.1
-	github.com/casbin/casbin/v2 v2.100.0
+	github.com/casbin/casbin/v2 v2.101.0
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/iris-contrib/middleware/cors v0.0.0-20240502084239-34f27409ce72
 	github.com/kataras/iris/v12 v12.2.11
-	github.com/lestrrat-go/jwx/v2 v2.1.2
+	github.com/lestrrat-go/jwx/v2 v2.1.3
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/mocktools/go-smtp-mock v1.10.0
@@ -30,7 +30,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.19.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.29.0
 	golang.org/x/oauth2 v0.24.0
 	google.golang.org/grpc v1.68.0
@@ -49,16 +49,16 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20240724165105-aceaa0259138 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.6 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.7 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.20 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.24 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.24 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.23 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.4.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.4.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.1 // indirect
