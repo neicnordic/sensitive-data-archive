@@ -1772,19 +1772,19 @@ func (suite *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 
 func (suite *TestSuite) TestListDatasets() {
 	for i := 0; i < 5; i++ {
-		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
+		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
 		if err != nil {
 			suite.FailNow("failed to register file in database")
 		}
 
-		stableID := fmt.Sprintf("accession_%s_0%d", "user_example.org", i)
+		stableID := fmt.Sprintf("accession_%s_0%d", "dummy", i)
 		err = Conf.API.DB.SetAccessionID(stableID, fileID)
 		if err != nil {
 			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
 		}
 	}
 
-	err = Conf.API.DB.MapFilesToDataset("API:dataset-01", []string{"accession_user_example.org_00", "accession_user_example.org_01", "accession_user_example.org_02"})
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-01", []string{"accession_dummy_00", "accession_dummy_01", "accession_dummy_02"})
 	if err != nil {
 		suite.FailNow("failed to map files to dataset")
 	}
@@ -1792,7 +1792,7 @@ func (suite *TestSuite) TestListDatasets() {
 		suite.FailNow("failed to update dataset event")
 	}
 
-	err = Conf.API.DB.MapFilesToDataset("API:dataset-02", []string{"accession_user_example.org_03", "accession_user_example.org_04"})
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-02", []string{"accession_dummy_03", "accession_dummy_04"})
 	if err != nil {
 		suite.FailNow("failed to map files to dataset")
 	}
