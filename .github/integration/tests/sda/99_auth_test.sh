@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ -n "$SYNCTEST" ]; then
+    exit 0
+fi
+
 python -m pip install --upgrade pip
 pip install tox
 
