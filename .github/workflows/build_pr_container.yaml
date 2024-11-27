@@ -229,6 +229,25 @@ jobs:
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
 
+  sda-sync:
+    needs:
+      - build_go_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            sync:
+              - "sda/cmd/sync/*"
+            sync-api:
+              - "sda/cmd/syncapi/*"
+      - name: Test sda-sync
+        run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
+        if: steps.changes.outputs.sync == 'true' || steps.changes.outputs.sync-api == 'true'
+
   chart:
     needs:
       - build_go_images
