@@ -306,7 +306,6 @@ func deleteFile(c *gin.Context) {
 	submissionUser := c.Param("username")
 	log.Warn("submission user:", submissionUser)
 
-	// TODO: Add check for the input file path
 	fileID := c.Param("file")
 	fileID = strings.TrimPrefix(fileID, "/")
 	log.Warn("submission file:", fileID)
