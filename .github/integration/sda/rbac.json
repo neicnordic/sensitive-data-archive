@@ -6,6 +6,11 @@
           "action": "(GET)|(POST)|(PUT)"
        },
        {
+         "role": "admin",
+         "path": "/file/verify/:accession",
+         "action": "PUT"
+      },
+       {
          "role": "submission",
          "path": "/datasets/*",
          "action": "GET"
