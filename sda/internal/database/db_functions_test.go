@@ -754,3 +754,179 @@ func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
 	err = db.SetKeyHash(newKeyHex, fileID)
 	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
 }
+
+func (suite *DatabaseTests) TestListDatasets() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	testCases := 10
+
+	for i := 0; i < testCases; i++ {
+		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", "User-Q", i)
+		fileID, err := db.RegisterFile(filePath, "User-Q")
+		if err != nil {
+			suite.FailNow("Failed to register file")
+		}
+		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, "User-Q", "{}", "{}")
+		if err != nil {
+			suite.FailNow("Failed to update file event log")
+		}
+
+		corrID, err := db.GetCorrID("User-Q", filePath)
+		if err != nil {
+			suite.FailNow("Failed to get CorrID for file")
+		}
+		assert.Equal(suite.T(), fileID, corrID)
+
+		checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+		fileInfo := FileInfo{
+			fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			1234,
+			filePath,
+			checksum,
+			999,
+		}
+		err = db.SetArchived(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Archived")
+		}
+
+		err = db.SetVerified(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Verified")
+		}
+
+		stableID := fmt.Sprintf("accession_%s_0%d", "User-Q", i)
+		err = db.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	if err := db.MapFilesToDataset("test-get-dataset-01", []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-01", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-01", "released", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	if err := db.MapFilesToDataset("test-get-dataset-02", []string{"accession_User-Q_03", "accession_User-Q_04", "accession_User-Q_05"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-02", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	if err := db.MapFilesToDataset("test-get-dataset-03", []string{"accession_User-Q_06", "accession_User-Q_07", "accession_User-Q_08"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-03", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-03", "released", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-get-dataset-03", "deprecated", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	datasets, err := db.ListDatasets()
+	assert.NoError(suite.T(), err, "got (%v) when listing datasets", err)
+	assert.Equal(suite.T(), "test-get-dataset-01", datasets[0].DatasetID)
+	assert.Equal(suite.T(), "registered", datasets[1].Status)
+}
+
+func (suite *DatabaseTests) TestListUserDatasets() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	user := "User-Q"
+	for i := 0; i < 6; i++ {
+		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i)
+		fileID, err := db.RegisterFile(filePath, user)
+		if err != nil {
+			suite.FailNow("Failed to register file")
+		}
+		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+		if err != nil {
+			suite.FailNow("Failed to update file event log")
+		}
+
+		corrID, err := db.GetCorrID(user, filePath)
+		if err != nil {
+			suite.FailNow("Failed to get CorrID for file")
+		}
+		assert.Equal(suite.T(), fileID, corrID)
+
+		checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+		fileInfo := FileInfo{
+			fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			1234,
+			filePath,
+			checksum,
+			999,
+		}
+		err = db.SetArchived(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Archived")
+		}
+
+		err = db.SetVerified(fileInfo, fileID, corrID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Verified")
+		}
+
+		stableID := fmt.Sprintf("accession_%s_0%d", user, i)
+		err = db.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	if err := db.MapFilesToDataset("test-user-dataset-01", []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-user-dataset-01", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-user-dataset-01", "released", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	if err := db.MapFilesToDataset("test-user-dataset-02", []string{"accession_User-Q_03", "accession_User-Q_04", "accession_User-Q_05"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-user-dataset-02", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	fileID, err := db.RegisterFile("filePath", "user")
+	if err != nil {
+		suite.FailNow("Failed to register file")
+	}
+
+	err = db.SetAccessionID("stableID", fileID)
+	if err != nil {
+		suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "stableID", fileID)
+	}
+
+	if err := db.MapFilesToDataset("test-wrong-user-dataset", []string{"stableID"}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err = db.UpdateDatasetEvent("test-wrong-user-dataset", "registered", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-wrong-user-dataset", "released", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err = db.UpdateDatasetEvent("test-wrong-user-dataset", "deprecated", "{\"type\": \"mapping\"}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	datasets, err := db.ListUserDatasets(user)
+	assert.NoError(suite.T(), err, "got (%v) when listing datasets for a user", err)
+	assert.Equal(suite.T(), 2, len(datasets))
+	assert.Equal(suite.T(), "test-user-dataset-01", datasets[0].DatasetID)
+}

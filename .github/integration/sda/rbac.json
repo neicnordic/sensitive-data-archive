@@ -6,6 +6,11 @@
           "action": "(GET)|(POST)|(PUT)"
        },
        {
+         "role": "submission",
+         "path": "/datasets/*",
+         "action": "GET"
+      },
+       {
           "role": "submission",
           "path": "/file/ingest",
           "action": "POST"
@@ -23,6 +28,11 @@
        {
           "role": "submission",
           "path": "/users/:username/files",
+          "action": "GET"
+       },
+       {
+          "role": "*",
+          "path": "/datasets",
           "action": "GET"
        },
        {

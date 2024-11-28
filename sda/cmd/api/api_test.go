@@ -1769,3 +1769,175 @@ func (suite *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.StatusCode)
 	defer resp.Body.Close()
 }
+
+func (suite *TestSuite) TestListDatasets() {
+	for i := 0; i < 5; i++ {
+		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
+		if err != nil {
+			suite.FailNow("failed to register file in database")
+		}
+
+		stableID := fmt.Sprintf("accession_%s_0%d", "dummy", i)
+		err = Conf.API.DB.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-01", []string{"accession_dummy_00", "accession_dummy_01", "accession_dummy_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-01", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-02", []string{"accession_dummy_03", "accession_dummy_04"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "released", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/datasets/list", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/datasets/list", listAllDatasets)
+	router.GET("/dataset/list", listAllDatasets)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	datasets := []database.DatasetInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&datasets)
+	assert.NoError(suite.T(), err, "failed to list datasets from DB")
+	assert.Equal(suite.T(), 2, len(datasets))
+	assert.Equal(suite.T(), "released", datasets[1].Status)
+	assert.Equal(suite.T(), "API:dataset-01|registered", fmt.Sprintf("%s|%s", datasets[0].DatasetID, datasets[0].Status))
+}
+
+func (suite *TestSuite) TestListUserDatasets() {
+	for i := 0; i < 5; i++ {
+		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
+		if err != nil {
+			suite.FailNow("failed to register file in database")
+		}
+
+		stableID := fmt.Sprintf("accession_%s_0%d", "user_example.org", i)
+		err = Conf.API.DB.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-01", []string{"accession_user_example.org_00", "accession_user_example.org_01", "accession_user_example.org_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-01", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-02", []string{"accession_user_example.org_03", "accession_user_example.org_04"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "released", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/datasets/list/user@example.org", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/datasets/list/:username", listUserDatasets)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	datasets := []database.DatasetInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&datasets)
+	assert.NoError(suite.T(), err, "failed to list datasets from DB")
+	assert.Equal(suite.T(), 2, len(datasets))
+	assert.Equal(suite.T(), "released", datasets[1].Status)
+	assert.Equal(suite.T(), "API:dataset-01|registered", fmt.Sprintf("%s|%s", datasets[0].DatasetID, datasets[0].Status))
+}
+
+func (suite *TestSuite) TestListDatasetsAsUser() {
+	for i := 0; i < 5; i++ {
+		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), suite.User)
+		if err != nil {
+			suite.FailNow("failed to register file in database")
+		}
+
+		stableID := fmt.Sprintf("accession_user_example.org_0%d", i)
+		err = Conf.API.DB.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-01", []string{"accession_user_example.org_00", "accession_user_example.org_01", "accession_user_example.org_02"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-01", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	err = Conf.API.DB.MapFilesToDataset("API:dataset-02", []string{"accession_user_example.org_03", "accession_user_example.org_04"})
+	if err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "registered", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+	if err := Conf.API.DB.UpdateDatasetEvent("API:dataset-02", "released", "{}"); err != nil {
+		suite.FailNow("failed to update dataset event")
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(suite.T(), setupJwtAuth())
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/datasets", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+suite.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/datasets", listDatasets)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(suite.T(), http.StatusOK, okResponse.StatusCode)
+
+	datasets := []database.DatasetInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&datasets)
+	assert.NoError(suite.T(), err, "failed to list datasets from DB")
+	assert.Equal(suite.T(), 2, len(datasets))
+	assert.Equal(suite.T(), "released", datasets[1].Status)
+	assert.Equal(suite.T(), "API:dataset-01|registered", fmt.Sprintf("%s|%s", datasets[0].DatasetID, datasets[0].Status))
+}

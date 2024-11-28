@@ -95,6 +95,7 @@ func setup(config *config.Config) *http.Server {
 	r := gin.Default()
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", rbac(e), getFiles)
+	r.GET("/datasets", rbac(e), listDatasets)
 	// admin endpoints below here
 	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
 	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
@@ -104,6 +105,8 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
 	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
+	r.GET("/datasets/list", rbac(e), listAllDatasets)            // Lists all datasets with their status
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets) // Lists datasets with their status for a specififc user
 	r.GET("/users", rbac(e), listActiveUsers)                    // Lists all users
 	r.GET("/users/:username/files", rbac(e), listUserFiles)      // Lists all unmapped files for a user
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -598,4 +601,44 @@ func deprecateC4ghHash(c *gin.Context) {
 
 		return
 	}
+}
+
+func listAllDatasets(c *gin.Context) {
+	datasets, err := Conf.API.DB.ListDatasets()
+	if err != nil {
+		log.Errorf("ListAllDatasets failed, reason: %s", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	c.JSON(http.StatusOK, datasets)
+}
+
+func listUserDatasets(c *gin.Context) {
+	username := strings.TrimPrefix(c.Param("username"), "/")
+	datasets, err := Conf.API.DB.ListUserDatasets(username)
+	if err != nil {
+		log.Errorf("ListUserDatasets failed, reason: %s", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	c.JSON(http.StatusOK, datasets)
+}
+
+func listDatasets(c *gin.Context) {
+	token, err := auth.Authenticate(c.Request)
+	if err != nil {
+		c.JSON(401, err.Error())
+
+		return
+	}
+	datasets, err := Conf.API.DB.ListUserDatasets(token.Subject())
+	if err != nil {
+		log.Errorf("ListDatasets failed, reason: %s", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	c.JSON(http.StatusOK, datasets)
 }

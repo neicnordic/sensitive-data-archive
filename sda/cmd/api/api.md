@@ -21,6 +21,23 @@ Endpoints:
 
   If the `token` is invalid, 401 is returned.
 
+- `/datasets`
+  - accepts `GET` requests
+  - Returns all datasets, along with their status and last modified timestamp, for which the user has submitted data.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    $curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/datasets
+    [{"DatasetID":"EGAD74900000101","Status":"deprecated","Timestamp":"2024-11-05T11:31:16.81475Z"}]
+    ```
+
 ### Admin endpoints
 
 Admin endpoints are only available to a set of whitelisted users specified in the application config.
@@ -89,8 +106,42 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
     ```
 
+- `/datasets/list`
+  - accepts `GET` requests
+  - Returns all datasets together with their status and last modified timestamp.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    $curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/datasets/list
+    [{"DatasetID":"EGAD74900000101","Status":"deprecated","Timestamp":"2024-11-05T11:31:16.81475Z"},{"DatasetID":"SYNC-001-12345","Status":"registered","Timestamp":"2024-11-05T11:31:16.965226Z"}]
+    ```
+
+- `/datasets/list/:username`
+  - accepts `GET` requests with the username name as last part of the path`
+  - Returns all datasets, along with their status and last modified timestamp,for which the user has submitted data.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/datasets/list/submission-user
+    [{"DatasetID":"EGAD74900000101","Status":"deprecated","Timestamp":"2024-11-05T11:31:16.81475Z"}]
+    ```
+
 - `/users`
-  - accepts `GET` requests`
+  - accepts `GET` requests
   - Returns all users with active uploads as a JSON array
 
     Example:
@@ -105,7 +156,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     - `500` Internal error due to DB failure.
 
 - `/users/:username/files`
-  - accepts `GET` requests`
+  - accepts `GET` requests
   - Returns all files (that are not part of a dataset) for a user with active uploads as a JSON array
 
     Example:
