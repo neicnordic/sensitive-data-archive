@@ -83,7 +83,7 @@ services:
       context: ../../sda
       target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-s3inbox ]
+    command: [sda-s3inbox]
     container_name: s3inbox
     depends_on:
       credentials:
@@ -102,6 +102,8 @@ services:
       - BROKER_ROUTINGKEY=inbox
       - DB_PASSWORD=inbox
       - DB_USER=inbox
+    extra_hosts:
+      - "localhost:host-gateway"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -112,7 +114,7 @@ services:
 
   ingest:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-ingest ]
+    command: [sda-ingest]
     container_name: ingest
     depends_on:
       credentials:
@@ -137,7 +139,7 @@ services:
 
   verify:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-verify ]
+    command: [sda-verify]
     container_name: verify
     depends_on:
       credentials:
@@ -162,7 +164,7 @@ services:
 
   finalize:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-finalize ]
+    command: [sda-finalize]
     container_name: finalize
     depends_on:
       credentials:
@@ -187,7 +189,7 @@ services:
 
   mapper:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-mapper ]
+    command: [sda-mapper]
     container_name: mapper
     depends_on:
       credentials:
@@ -224,7 +226,13 @@ services:
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:
-      test: ["CMD", "python3", "-c", 'import requests; print(requests.get(url = "http://localhost:8080/jwk").text)']
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          'import requests; print(requests.get(url = "http://localhost:8080/jwk").text)',
+        ]
       interval: 10s
       timeout: 2s
       retries: 6
@@ -237,7 +245,7 @@ services:
       - shared:/shared
 
   api:
-    command: [ sda-api ]
+    command: [sda-api]
     container_name: api
     depends_on:
       credentials:
@@ -253,6 +261,8 @@ services:
       - BROKER_USER=api
       - DB_PASSWORD=api
       - DB_USER=api
+    extra_hosts:
+      - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
@@ -264,7 +274,7 @@ services:
 
   reencrypt:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    command: [ sda-reencrypt ]
+    command: [sda-reencrypt]
     container_name: reencrypt
     depends_on:
       credentials:
@@ -282,13 +292,7 @@ services:
       credentials:
         condition: service_completed_successfully
     command:
-      [
-        "python",
-        "/cega/users.py",
-        "0.0.0.0",
-        "8443",
-        "/shared/users.json"
-      ]
+      ["python", "/cega/users.py", "0.0.0.0", "8443", "/shared/users.json"]
     environment:
       - CEGA_USERS_PASSWORD=test
       - CEGA_USERS_USER=test
@@ -300,7 +304,7 @@ services:
       - shared:/shared
 
   auth-cega:
-    command: [ sda-auth ]
+    command: [sda-auth]
     container_name: auth-cega
     depends_on:
       cega-nss:
@@ -313,6 +317,8 @@ services:
       - AUTH_CEGA_SECRET=test
       - DB_PASSWORD=auth
       - DB_USER=auth
+    extra_hosts:
+      - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8888:8080"
@@ -321,32 +327,57 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
-  auth-oidc:
-    command: [ sda-auth ]
-    container_name: auth-oidc
+  auth-aai:
+    command: [sda-auth]
+    container_name: auth-aai
     depends_on:
-      postgres:
-        condition: service_healthy
-      oidc:
-        condition: service_healthy
+      credentials:
+        condition: service_completed_successfully
+      mock-aai:
+        condition: service_started
     environment:
       - AUTH_RESIGNJWT=false
-      - OIDC_ID=XC56EL11xx
-      - OIDC_SECRET=wHPVQaYXmdDHg
-      - OIDC_PROVIDER=http://localhost:8080
-      - OIDC_REDIRECTURL=http://localhost:8889/oidc/login
       - DB_PASSWORD=auth
       - DB_USER=auth
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
-      - "8889:8080"
+      - "8801:8080"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
-
+  mock-aai:
+    container_name: ls-aai-mock
+    depends_on:
+      aai-db:
+        condition: service_healthy
+    environment:
+      - DOCKERHOST=localhost
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.2-broker2.1.10-tomcat9.0-jdk11
+    ports:
+      - "8800:8080"
+    volumes:
+      - "./sda/aai-mock:/etc/lsaai-mock"
+  aai-db:
+    container_name: ls-aai-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "aaiPass"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "aai"
+      MYSQL_USER: "aai"
+      MYSQL_PASSWORD: "aaiPass"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: mysql/mysql-server:latest
+    volumes:
+      - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
   integration_test:
     container_name: tester
     command:
@@ -356,7 +387,7 @@ services:
     depends_on:
       auth-cega:
         condition: service_started
-      auth-oidc:
+      auth-aai:
         condition: service_started
       cega-nss:
         condition: service_started
@@ -371,11 +402,11 @@ services:
       s3inbox:
         condition: service_started
       verify:
-         condition: service_started
+        condition: service_started
       api:
-         condition: service_started
+        condition: service_started
       reencrypt:
-         condition: service_started
+        condition: service_started
     extra_hosts:
       - "localhost:host-gateway"
     environment:

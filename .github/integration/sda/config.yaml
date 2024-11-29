@@ -77,17 +77,17 @@ c4gh:
     passphrase: "c4ghpass"
 
 oidc:
-  id:
-  jwkPath: /jwk
-  provider: http://oidc:8080
-  redirectUrl: http://auth_oidc:8080/oidc/login
-  secret:
+  id: XC56EL11xx
+  jwkPath: jwk
+  provider: http://localhost:8800/oidc/
+  redirectUrl: http://localhost:8801/oidc/login
+  secret: wHPVQaYXmdDHg
 
 server:
   cert: ""
   key: ""
-  jwtpubkeypath: "/shared/keys/pub/"
-  jwtpubkeyurl: "http://oidc:8080/jwk"
+  # jwtpubkeypath: "/shared/keys/pub/"
+  jwtpubkeyurl: "http://localhost:8800/oidc/jwk"
 
 sync:
   api:
