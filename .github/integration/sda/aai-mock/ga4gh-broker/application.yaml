@@ -1,0 +1,63 @@
+---
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+logging:
+  level:
+    root: info
+    cz.muni.ics: debug
+
+mock-broker:
+  enabled: True
+  issuer: http://${DOCKERHOST}:8080/oidc/
+  jku: http://${DOCKERHOST}:8800/ga4gh-broker/jwk
+  path-to-jwk-file: /etc/lsaai-mock/keys.jwks
+  visa-configs-path: /etc/lsaai-mock/ga4gh-broker/users/
+  passport-repositories: []
+# Sample configuration for repository
+#  passport-repositories:
+#  - name: REMS-LOCAL-API
+#    url: http://rems-api.local/api/permissions/{user_id}
+#    jwks: http://rems-api.local/api/jwk
+#    headers:
+#      - header: x-rems-api-key
+#        value: api-key
+#      - header: x-rems-user-id
+#        value: user-id
+
+visa-writers:
+  enabled: False
+# Uncomment to enable writing from visa sources
+#  enabled: True
+#  db:
+#    url: jdbc:mysql://localhost:3307/broker
+#    username: brokerUser
+#    password: brokerPass
+#    driver: "com.mysql.cj.jdbc.Driver"
+#  repositories:
+#    - name: Local REMS
+#      jwks: http://rems.local/api/jwk
+#      auth:
+#        api-key:
+#          api-key-header: X-visa-writer
+#          api-key-value: X-vis-writer-key
+
+passport-v1-0:
+  enabled: True
+  auth:
+    - username: "broker-aai-user"
+      password: "broker-aai-pass"
+
+passport-v1-2:
+  enabled: False
+# Uncomment to enable token-exchange integration with AAI mock
+#  enabled: True
+#  auth:
+#    introspection-client-id: broker
+#    introspection-client-secret: broker-secret
+#    introspection-uri: http://localhost:8080/oidc/introspect   
