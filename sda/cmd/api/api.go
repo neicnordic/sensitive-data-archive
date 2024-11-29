@@ -292,10 +292,8 @@ func ingestFile(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// The deleteFile function will take the user id and the file id
-// because the user id won't be in the path of the file in the future
-// therefore we need to make the list files, get the file id and then
-// call the delete file
+// The deleteFile function deletes files from the inbox and marks them as
+// discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
 
 	inbox, err := storage.NewBackend(Conf.Inbox)
