@@ -3,7 +3,8 @@ set -e
 
 cd shared || true
 
-if [ "$STORAGETYPE" = "posix" ]; then
+if [ -z "$SYNCTEST" ]; then
+    echo "sync not tested"
     exit 0
 fi
 
