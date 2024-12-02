@@ -61,6 +61,11 @@ done
 # get the fileId of the new file
 fileid="$(curl -k -L -H "Authorization: Bearer $token" -H "Content-Type: application/json" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NC12878.bam.c4gh") | .fileID')"
 
+output=$(s3cmd -c s3cfg ls s3://test_dummy.org/NC12878.bam.c4gh 2>/dev/null)
+if [ -z "$output" ] ; then
+    echo "Uploaded file not in inbox"
+    exit 1
+fi
 # delete it
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "200" ]; then
@@ -74,6 +79,11 @@ if [ "$last_event" != "disabled" ]; then
    echo "The file $fileid does not have the expected las event 'disabled', but $last_event."
 fi
 
+output=$(s3cmd -c s3cfg ls s3://test_dummy.org/NC12878.bam.c4gh 2>/dev/null)
+if [ -n "$output" ] ; then
+    echo "Deleted file is still in inbox"
+    exit 1
+fi
 
 # Try to delete an unknown file
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/badfileid")"

@@ -302,11 +302,11 @@ func deleteFile(c *gin.Context) {
 	}
 
 	submissionUser := c.Param("username")
-	log.Warn("submission user:", submissionUser)
+	log.Debug("submission user:", submissionUser)
 
 	fileID := c.Param("file")
 	fileID = strings.TrimPrefix(fileID, "/")
-	log.Warn("submission file:", fileID)
+	log.Debug("submission file:", fileID)
 	if fileID == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
 	}
