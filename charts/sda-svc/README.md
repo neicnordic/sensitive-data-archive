@@ -177,6 +177,8 @@ Parameter | Description | Default
 `credentials.api.dbUser` | Database user for api | `""`
 `credentials.api.dbPassword` | Database password for api | `""`
 `credentials.api.mqUser` | Broker user for api | `""`
+`credentials.auth.dbUser` | Database user for auth | `""`
+`credentials.auth.dbPassword` | Database password for auth | `""`
 `credentials.api.mqPassword` | Broker password for api | `""`
 `credentials.doa.dbUser` | Database user for doa | `""`
 `credentials.doa.dbPassword` | Database password for doa| `""`

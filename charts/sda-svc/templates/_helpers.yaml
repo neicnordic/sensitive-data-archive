@@ -148,6 +148,14 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/**/}}
+{{- define "dbUserAuth" -}}
+{{- ternary .Values.global.db.user .Values.credentials.auth.dbUser (empty .Values.credentials.auth.dbUser) -}}
+{{- end -}}
+{{- define "dbPassAuth" -}}
+{{- ternary .Values.global.db.password .Values.credentials.auth.dbPassword (empty .Values.credentials.auth.dbPassword) -}}
+{{- end -}}
+
+{{/**/}}
 {{- define "dbUserSync" -}}
 {{- ternary .Values.global.db.user .Values.credentials.sync.dbUser (empty .Values.credentials.sync.dbUser) -}}
 {{- end -}}

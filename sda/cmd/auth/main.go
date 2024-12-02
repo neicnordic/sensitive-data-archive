@@ -16,6 +16,7 @@ import (
 	"github.com/kataras/iris/v12/sessions"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -263,13 +264,17 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
+	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Profile, idStruct.Email, idStruct.EdupersonEntitlement)
+	if err != nil {
+		log.Warn("Could not log user info.")
+	}
 
 	if auth.Config.ResignJwt {
 		claims := map[string]interface{}{
 			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
 			jwt.IssuerKey:     auth.Config.JwtIssuer,
-			jwt.SubjectKey:    idStruct.User,
+			jwt.SubjectKey:    idStruct.Profile,
 		}
 		token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 		if err != nil {
@@ -397,6 +402,18 @@ func main() {
 
 	app.Use(sess.Handler())
 
+	// Connect to DB
+	authHandler.Config.DB, err = database.NewSDAdb(config.Database)
+	if err != nil {
+		log.Error(err)
+		panic(err)
+	}
+	if authHandler.Config.DB.Version < 14 {
+		log.Error("database schema v14 is required")
+		panic(err)
+	}
+	defer authHandler.Config.DB.Close()
+
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
 
@@ -416,7 +433,7 @@ func main() {
 
 	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
-		log.Fatalf("Failed to read public key: %s", err.Error())
+		log.Panicf("Failed to read public key: %s", err.Error())
 	}
 
 	// Endpoint for client login info

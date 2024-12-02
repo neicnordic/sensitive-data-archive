@@ -302,10 +302,14 @@ services:
     depends_on:
       cega-nss:
         condition: service_started
+      postgres:
+        condition: service_healthy
     environment:
       - AUTH_RESIGNJWT=true
       - AUTH_CEGA_ID=test
       - AUTH_CEGA_SECRET=test
+      - DB_PASSWORD=auth
+      - DB_USER=auth
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8888:8080"
@@ -318,12 +322,16 @@ services:
     command: [ sda-auth ]
     container_name: auth-oidc
     depends_on:
+      postgres:
+        condition: service_healthy
       oidc:
         condition: service_healthy
     environment:
       - AUTH_RESIGNJWT=false
       - OIDC_ID=XC56EL11xx
       - OIDC_SECRET=wHPVQaYXmdDHg
+      - DB_PASSWORD=auth
+      - DB_USER=auth
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8889:8080"

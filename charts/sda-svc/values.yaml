@@ -300,6 +300,10 @@ credentials:
     mqUser: ""
     mqPassword: ""
 
+  auth:
+    dbUser: ""
+    dbPassword: ""
+
   doa:
     dbUser: ""
     dbPassword: ""
