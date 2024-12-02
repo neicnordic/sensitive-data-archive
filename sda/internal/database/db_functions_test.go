@@ -484,7 +484,68 @@ func (suite *DatabaseTests) TestGetCorrID() {
 	err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
 	assert.NoError(suite.T(), err, "failed to update satus of file in database")
 
-	corrID, err := db.GetCorrID(user, filePath)
+	corrID, err := db.GetCorrID(user, filePath, "")
+	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
+	assert.Equal(suite.T(), fileID, corrID)
+}
+
+func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	filePath := "/testuser/file10.c4gh"
+	user := "testuser"
+
+	fileID, err := db.RegisterFile(filePath, user)
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+	if err := db.UpdateFileEventLog(fileID, "archived", fileID, user, "{}", "{}"); err != nil {
+		suite.FailNow("failed to update satus of file in database")
+	}
+
+	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, fileID, checksum, 999}
+	if err := db.SetArchived(fileInfo, fileID, fileID); err != nil {
+		suite.FailNow("failed to mark file as archived")
+	}
+	if err := db.UpdateFileEventLog(fileID, "archived", fileID, user, "{}", "{}"); err != nil {
+		suite.FailNow("failed to update satus of file in database")
+	}
+	if err = db.SetAccessionID("stableID", fileID); err != nil {
+		suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "stableID", fileID)
+	}
+
+	fileID2, err := db.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	if err := db.UpdateFileEventLog(fileID2, "uploaded", fileID2, user, "{}", "{}"); err != nil {
+		suite.FailNow("failed to update satus of file in database")
+	}
+	assert.NotEqual(suite.T(), fileID, fileID2)
+
+	corrID, err := db.GetCorrID(user, filePath, "")
+	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
+	assert.Equal(suite.T(), fileID2, corrID)
+
+}
+
+func (suite *DatabaseTests) TestGetCorrID_fileWithAccessionID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	filePath := "/testuser/file10.c4gh"
+	user := "testuser"
+
+	fileID, err := db.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	if err := db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}"); err != nil {
+		suite.FailNow("failed to update satus of file in database")
+	}
+	if err = db.SetAccessionID("stableID", fileID); err != nil {
+		suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "stableID", fileID)
+	}
+
+	corrID, err := db.GetCorrID(user, filePath, "stableID")
 	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), fileID, corrID)
 }
@@ -507,7 +568,7 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 				suite.FailNow("Failed to update file event log")
 			}
 
-			corrID, err := db.GetCorrID(user, filePath)
+			corrID, err := db.GetCorrID(user, filePath, "")
 			if err != nil {
 				suite.FailNow("Failed to get CorrID for file")
 			}
@@ -564,7 +625,7 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 			suite.FailNow("Failed to update file event log")
 		}
 
-		corrID, err := db.GetCorrID("User-Q", filePath)
+		corrID, err := db.GetCorrID("User-Q", filePath, "")
 		if err != nil {
 			suite.FailNow("Failed to get CorrID for file")
 		}
@@ -748,7 +809,7 @@ func (suite *DatabaseTests) TestListDatasets() {
 			suite.FailNow("Failed to update file event log")
 		}
 
-		corrID, err := db.GetCorrID("User-Q", filePath)
+		corrID, err := db.GetCorrID("User-Q", filePath, "")
 		if err != nil {
 			suite.FailNow("Failed to get CorrID for file")
 		}
@@ -831,7 +892,7 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 			suite.FailNow("Failed to update file event log")
 		}
 
-		corrID, err := db.GetCorrID(user, filePath)
+		corrID, err := db.GetCorrID(user, filePath, "")
 		if err != nil {
 			suite.FailNow("Failed to get CorrID for file")
 		}

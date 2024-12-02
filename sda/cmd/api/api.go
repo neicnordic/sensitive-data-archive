@@ -262,7 +262,7 @@ func ingestFile(c *gin.Context) {
 		return
 	}
 
-	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath)
+	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
 	if err != nil {
 		switch {
 		case corrID == "":
@@ -298,7 +298,7 @@ func setAccession(c *gin.Context) {
 		return
 	}
 
-	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath)
+	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
 	if err != nil {
 		switch {
 		case corrID == "":
@@ -364,28 +364,27 @@ func createDataset(c *gin.Context) {
 		if err != nil {
 			switch {
 			case err.Error() == "sql: no rows in result set":
-				log.Debugln(err.Error())
+				log.Errorln(err.Error())
 				c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID not found: %s", stableID))
 
 				return
 			default:
-				log.Debugln(err.Error())
+				log.Errorln(err.Error())
 				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 				return
 			}
 		}
-
-		_, err = Conf.API.DB.GetCorrID(dataset.User, inboxPath)
+		_, err = Conf.API.DB.GetCorrID(dataset.User, inboxPath, stableID)
 		if err != nil {
 			switch {
 			case err.Error() == "sql: no rows in result set":
-				log.Debugln(err.Error())
+				log.Errorln(err.Error())
 				c.AbortWithStatusJSON(http.StatusBadRequest, "accession ID owned by other user")
 
 				return
 			default:
-				log.Debugln(err.Error())
+				log.Errorln(err.Error())
 				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 				return
@@ -658,7 +657,7 @@ func reVerify(c *gin.Context) {
 
 		return
 	}
-	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath)
+	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath, accessionID)
 	if err != nil {
 		log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())

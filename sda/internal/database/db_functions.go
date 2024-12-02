@@ -667,14 +667,14 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 }
 
 // get the correlation ID for a user-inbox_path combination
-func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
+func (dbs *SDAdb) GetCorrID(user, path, accession string) (string, error) {
 	var (
 		corrID string
 		err    error
 	)
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		corrID, err = dbs.getCorrID(user, path)
+		corrID, err = dbs.getCorrID(user, path, accession)
 		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
 			break
 		}
@@ -683,13 +683,14 @@ func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
 
 	return corrID, err
 }
-func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
+func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 and f.submission_user = $2"
+	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e " +
+		"RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 AND f.submission_user = $2 AND COALESCE(f.stable_id, '')= $3;"
 
 	var corrID string
-	err := db.QueryRow(query, path, user).Scan(&corrID)
+	err := db.QueryRow(query, path, user, accession).Scan(&corrID)
 	if err != nil {
 		return "", err
 	}
