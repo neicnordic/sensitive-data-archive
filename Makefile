@@ -20,7 +20,7 @@ bootstrap: go-version-check docker-version-check
 		fi
 		@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
 		sh -s -- -b $$(go env GOPATH)/bin
-		GO111MODULE=off go get golang.org/x/tools/cmd/goimports
+		go install golang.org/x/tools/cmd/goimports@latest
 
 # build containers
 build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox build-sda-admin
