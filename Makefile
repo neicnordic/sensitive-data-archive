@@ -77,7 +77,7 @@ integrationtest-rabbitmq: build-rabbitmq build-sda
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml down -v --remove-orphans
 
-integrationtest-sda: build_all
+integrationtest-sda: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml run integration_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml run integration_test
