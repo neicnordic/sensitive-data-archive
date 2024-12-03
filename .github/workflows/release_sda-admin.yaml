@@ -1,12 +1,10 @@
 name: Release sda-admin
 
 on:
-    merge_group:
     pull_request:
       paths:
         - "sda-admin/.version"
       types: [ closed ]
-    workflow_dispatch:
 
 jobs:
   release_sda_admin:
