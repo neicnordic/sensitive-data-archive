@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Build containers
 docker build -t neicnordic/sda-download:latest . || exit 1

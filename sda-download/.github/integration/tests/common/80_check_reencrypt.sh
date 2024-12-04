@@ -7,7 +7,7 @@ fi
 cd dev_utils || exit 1
 
 # Get a token, set up variables
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
+token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
 
 if [ -z "$token" ]; then
     echo "Failed to obtain token"
@@ -19,15 +19,9 @@ file="dummy_data"
 expected_size=1048605
 
 # Download unencrypted full file,  check file size
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file" --output full1.bam
-
-if [ ! -f "full1.bam" ]; then
-    echo "Failed to download full1.bam"
-    exit 1
-fi
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file" --output full1.bam
 
 file_size=$(stat -c %s full1.bam)  # Get the size of the file
-
 if [ "$file_size" -ne "$expected_size" ]; then
     echo "Incorrect file size for downloaded file"
     exit 1
@@ -36,11 +30,7 @@ fi
 # Test reencrypt the file header with the client public key 
 clientkey=$(base64 -w0 client.pub.pem)
 reencryptedFile=reencrypted.bam.c4gh
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $reencryptedFile
-if [ ! -f "$reencryptedFile" ]; then
-    echo "Failed to download re-encrypted file"
-    exit 1
-fi
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $reencryptedFile
 
 expected_encrypted_size=1049205
 file_size=$(stat -c %s $reencryptedFile)
@@ -51,10 +41,13 @@ fi
 
 # Decrypt the reencrypted file and compare it with the original unencrypted file
 export C4GH_PASSPHRASE="strongpass" # passphrase for the client crypt4gh key
-if ! crypt4gh decrypt --sk client.sec.pem < $reencryptedFile > full2.bam; then
+crypt4gh decrypt -s client.sec.pem -f $reencryptedFile
+if [ ! -f "${reencryptedFile%.c4gh}" ] ; then
     echo "Failed to decrypt re-encrypted file with the client's private key"
     exit 1
 fi
+mv "${reencryptedFile%.c4gh}" full2.bam
+
 
 if ! cmp --silent full1.bam full2.bam; then
     echo "Decrypted version of $reencryptedFile and the original unencrypted file, are different"
@@ -63,7 +56,7 @@ fi
 
 # download reencrypted partial file, check file size
 partReencryptedFile=part1.bam.c4gh
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile 
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
 part_expected_size=65688
 
@@ -72,7 +65,8 @@ if [ "$file_size" -ne "$part_expected_size" ]; then
     exit 1
 fi
 
-if ! crypt4gh decrypt --sk client.sec.pem < $partReencryptedFile > part1.bam; then
+crypt4gh decrypt -s client.sec.pem -f $partReencryptedFile
+if [ ! -f "${partReencryptedFile%.c4gh}" ] ; then
     echo "Re-encrypted partial file could not be decrypted"
     exit 1
 fi
@@ -106,3 +100,5 @@ resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-P
 if [ "$resp" -ne 500 ]; then
     echo "Incorrect response with missing public key, expected 500 got $resp"
 fi
+
+echo "OK"
