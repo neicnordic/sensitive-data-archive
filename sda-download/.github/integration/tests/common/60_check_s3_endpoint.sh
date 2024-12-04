@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 TLS="True"
 [[ "$STORAGETYPE" == "s3notls" ]] && TLS="False"
 

@@ -56,11 +56,11 @@ echo "got correct response when POST method used"
 # ------------------
 # Test good token
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
+token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
 
 ## Test datasets endpoint
 
-check_dataset=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" https://localhost:8443/metadata/datasets | jq -r '.[0]')
+check_dataset=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" https://localhost:8443/metadata/datasets | jq -r '.[0]')
 
 if [ "$check_dataset" != "https://doi.example/ty009.sfrrss/600.45asasga" ]; then
     echo "dataset https://doi.example/ty009.sfrrss/600.45asasga not found"
@@ -72,7 +72,7 @@ echo "expected dataset found"
 
 ## Test datasets/files endpoint
 
-check_files=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/metadata/datasets/https://doi.example/ty009.sfrrss/600.45asasga/files" | jq -r '.[0].fileId')
+check_files=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/metadata/datasets/https://doi.example/ty009.sfrrss/600.45asasga/files" | jq -r '.[0].fileId')
 
 if [ "$check_files" != "urn:neic:001-002" ]; then
     echo "file with id urn:neic:001-002 not found"
@@ -88,10 +88,9 @@ echo "expected file found"
 C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
 export C4GH_PASSPHRASE
 
-crypt4gh decrypt --sk c4gh.sec.pem < dummy_data.c4gh > old-file.txt
+crypt4gh decrypt -s c4gh.sec.pem -f dummy_data.c4gh && mv dummy_data old-file.txt
 
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002" --output test-download.txt
-
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002" --output test-download.txt
 
 cmp --silent old-file.txt test-download.txt
 status=$?
@@ -102,7 +101,7 @@ else
     exit 1
 fi
 
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
 
 dd if=old-file.txt ibs=1 skip=0 count=2 > old-part.txt
 
@@ -115,7 +114,7 @@ else
     exit 1
 fi
 
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
 
 dd if=old-file.txt ibs=1 skip=7 count=7 > old-part2.txt
 
@@ -128,7 +127,7 @@ else
     exit 1
 fi
 
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=70000&endCoordinate=140000" --output test-part3.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=70000&endCoordinate=140000" --output test-part3.txt
 
 dd if=old-file.txt ibs=1 skip=70000 count=70000 > old-part3.txt
 
@@ -162,7 +161,7 @@ echo "got correct response when token has no permissions"
 # Test token with untrusted sources
 # for this test we attach a list of trusted sources
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[2]')
+token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[2]')
 
 ## Test datasets endpoint
 
