@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -666,14 +667,14 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 }
 
 // get the correlation ID for a user-inbox_path combination
-func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
+func (dbs *SDAdb) GetCorrID(user, path, accession string) (string, error) {
 	var (
 		corrID string
 		err    error
 	)
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		corrID, err = dbs.getCorrID(user, path)
+		corrID, err = dbs.getCorrID(user, path, accession)
 		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
 			break
 		}
@@ -682,13 +683,14 @@ func (dbs *SDAdb) GetCorrID(user, path string) (string, error) {
 
 	return corrID, err
 }
-func (dbs *SDAdb) getCorrID(user, path string) (string, error) {
+func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 and f.submission_user = $2 AND NOT EXISTS (SELECT file_id FROM sda.file_dataset WHERE file_id = f.id)"
+	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e " +
+		"RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 AND f.submission_user = $2 AND COALESCE(f.stable_id, '')= $3;"
 
 	var corrID string
-	err := db.QueryRow(query, path, user).Scan(&corrID)
+	err := db.QueryRow(query, path, user, accession).Scan(&corrID)
 	if err != nil {
 		return "", err
 	}
@@ -959,4 +961,67 @@ func (dbs *SDAdb) updateUserInfo(userID, name, email string, groups []string) er
 	}
 
 	return nil
+}
+
+func (dbs *SDAdb) GetReVerificationData(accessionID string) (schema.IngestionVerification, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	reVerify := schema.IngestionVerification{ReVerify: true}
+
+	const query = "SELECT archive_file_path,id,submission_file_path,submission_user FROM sda.files where stable_id = $1;"
+	err := db.QueryRow(query, accessionID).Scan(&reVerify.ArchivePath, &reVerify.FileID, &reVerify.FilePath, &reVerify.User)
+	if err != nil {
+		return schema.IngestionVerification{}, err
+	}
+
+	var checksum schema.Checksums
+	const archiveChecksum = "SELECT type,checksum from sda.checksums WHERE file_id = $1 AND source = 'ARCHIVED';"
+	if err := db.QueryRow(archiveChecksum, reVerify.FileID).Scan(&checksum.Type, &checksum.Value); err != nil {
+		log.Errorln(err.Error())
+
+		return schema.IngestionVerification{}, err
+	}
+	checksum.Type = strings.ToLower(checksum.Type)
+	reVerify.EncryptedChecksums = append(reVerify.EncryptedChecksums, checksum)
+
+	return reVerify, nil
+}
+
+func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var unencryptedChecksum string
+	if err := db.QueryRow("SELECT checksum from sda.checksums WHERE file_id = $1 AND source = 'UNENCRYPTED';", id).Scan(&unencryptedChecksum); err != nil {
+		return "", err
+	}
+
+	return unencryptedChecksum, nil
+}
+
+func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var accessions []string
+	rows, err := db.Query("SELECT stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var accession string
+		err := rows.Scan(&accession)
+		if err != nil {
+			return nil, err
+		}
+
+		accessions = append(accessions, accession)
+	}
+
+	return accessions, nil
 }

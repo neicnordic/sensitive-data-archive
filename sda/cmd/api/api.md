@@ -74,6 +74,22 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
     ```
 
+- `/file/verify/:accession`
+  - accepts `PUT` requests with an accession ID as the last element in the query
+  - triggers re-verification of the file with the specific accession ID.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `404` Error due to non existing accession ID.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X PUT -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
+    ```
+
 - `/dataset/create`
   - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>", "user": "<SUBMISSION_USER>"}`
   - creates a dataset from the list of accession IDs and the dataset ID.
@@ -104,6 +120,22 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
     ```bash
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
+    ```
+
+- `/dataset/verify/*dataset`
+  - accepts `PUT` requests with the dataset name as last part of the path`
+  - triggers reverification of all files in the dataset.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `404` Error wrong dataset name.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X PUT  https://HOSTNAME/dataset/verify/my-dataset-01
     ```
 
 - `/datasets/list`

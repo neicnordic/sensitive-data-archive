@@ -8,3 +8,31 @@ if [ "$result" -ne 2 ]; then
     echo "expected 4 got $result"
     exit 1
 fi
+
+## trigger re-verification of EGAF74900000001
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X PUT "http://api:8080/file/verify/EGAF74900000001")"
+if [ "$resp" != "200" ]; then
+	echo "Error when starting re-verification, expected 200 got: $resp"
+	exit 1
+fi
+
+## failure on wrong accession ID
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X PUT "http://api:8080/file/verify/EGAF74900054321")"
+if [ "$resp" != "404" ]; then
+	echo "Error when starting re-verification, expected 404 got: $resp"
+	exit 1
+fi
+
+## trigger re-verification of dataset SYNC-001-12345
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X PUT "http://api:8080/dataset/verify/SYNC-001-12345")"
+if [ "$resp" != "200" ]; then
+	echo "Error when starting re-verification of dataset, expected 200 got: $resp"
+	exit 1
+fi
+
+## expect failure of missing dataset
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X PUT "http://api:8080/dataset/verify/SYNC-999-12345")"
+if [ "$resp" != "404" ]; then
+	echo "Error when starting re-verification of missing dataset, expected 404 got: $resp"
+	exit 1
+fi
