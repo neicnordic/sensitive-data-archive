@@ -1189,7 +1189,6 @@ func (suite *DatabaseTests) TestGetDsatasetFiles() {
 }
 
 func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
-
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 

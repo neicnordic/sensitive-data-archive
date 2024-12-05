@@ -106,7 +106,7 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
 	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
-	r.DELETE("/file/:username/*file", rbac(e), deleteFile)              // Delete a file from inbox
+	r.DELETE("/file/:username/:file", rbac(e), deleteFile)              // Delete a file from inbox
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
@@ -295,7 +295,6 @@ func ingestFile(c *gin.Context) {
 // The deleteFile function deletes files from the inbox and marks them as
 // discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
-
 	inbox, err := storage.NewBackend(Conf.Inbox)
 	if err != nil {
 		log.Fatal(err)
@@ -311,9 +310,9 @@ func deleteFile(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
 	}
 
-	filePath := ""
 	// Get the file path from the fileID and submission user
-	if filePath, err = Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID); err != nil {
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
 
@@ -321,7 +320,6 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Requires a filepath instead of fileID
-	// Note: The remove fails randomly sometimes
 	var RetryTimes = 5
 	for count := 1; count <= RetryTimes; count++ {
 		log.Warn("trying to remove file from inbox, try", count)
