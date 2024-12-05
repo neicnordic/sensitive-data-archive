@@ -67,7 +67,7 @@ if [ -z "$output" ] ; then
     exit 1
 fi
 # delete it
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "200" ]; then
     echo "Error when deleting the file, expected 200 got: $resp"
     exit 1

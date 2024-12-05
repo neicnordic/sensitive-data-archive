@@ -90,7 +90,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X PUT -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
     ```
 
-- `/file/:username/*fileid`
+- `/file/:username/:fileid`
   - accepts `DELETE` requests
   - marks the file as `disabled` in the database, and deletes it from the inbox.
   - The file is identified by its id, returned by `users/:username/:files`
