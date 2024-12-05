@@ -88,7 +88,7 @@ func (dbs *SDAdb) getInboxFilePathFromID(submissionUser, fileID string) (string,
 		"submission_user= $1 and id = $2 " +
 		"AND EXISTS (SELECT 1 FROM " +
 		"(SELECT event from sda.file_event_log where file_id = $2 order by started_at desc limit 1) " +
-		"as subquery WHERE event in ('registered', 'uploaded', 'submitted', 'ingested', 'error'))"
+		"as subquery WHERE event = 'uploaded')"
 
 	var filePath string
 	err := db.QueryRow(getFilePath, submissionUser, fileID).Scan(&filePath)
