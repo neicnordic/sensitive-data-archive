@@ -35,10 +35,16 @@ Build the required Docker images for all SDA services:
 $ make build-all
 ```
 
-You can also build images for individual services by replacing `all` with the folder name (`postgresql`, `rabbitmq`, `sda`, `sda-download`, `sda-sftp-inbox`, `sda-admin`), for example
+You can also build images for individual services by replacing `all` with the folder name (`postgresql`, `rabbitmq`, `sda`, `sda-download`, `sda-sftp-inbox`), for example
 
 ```sh
 $ make build-sda
+```
+
+To build the CLI for `sda-admin`:
+
+```sh
+$ make build-sda-admin
 ```
 
 ### Running the services
