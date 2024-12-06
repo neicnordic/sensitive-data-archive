@@ -68,6 +68,21 @@ docker-version-check:
 		echo "Docker buildx does not exist can't continue"; \
 	fi;
 
+# bring up the services
+sda-s3-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml up -d
+sda-posix-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml up -d
+sda-sync-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml up -d
+
+# bring down the services
+sda-s3-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml down -v --remove-orphans
+sda-posix-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
+sda-sync-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml down -v --remove-orphans
 
 # run intrgration tests, same as being run in Github Actions during a PR
 integrationtest-postgres: build-postgresql
