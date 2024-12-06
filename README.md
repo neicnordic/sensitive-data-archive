@@ -50,23 +50,25 @@ $ make build-sda-admin
 ### Running the services
 
 #### Start services with Docker Compose
-The following command will build all required images, bring up all services using the Docker Compose file [sda-s3-integration.yml](.github/integration/sda-s3-integration.yml) (configured for S3 as the storage method) and run the integration test:
+The following command will bring up all services using the Docker Compose file [sda-s3-integration.yml](.github/integration/sda-s3-integration.yml) (configured for S3 as the storage backend):
 
 ```sh
-$ make integrationtest-sda-s3-run
+$ make sda-s3-up
 ```
 
 #### Shut down all services and clean up resources
 The following command will shut down all services and clean up all related resources:
 
 ```sh
-$ make integrationtest-sda-s3-down
+$ make sda-s3-down
 ```
 
-For the setup with POSIX as the storage method, use 
-`make integrationtest-sda-posix-run` and `make integrationtest-sda-posix-down` to start and shut down services. For the setup including the [`sync`](https://github.com/neicnordic/sda-sync) service, use `make integrationtest-sda-sync-run` and `make integrationtest-sda-sync-down` to start and shut down services.
+For the setup with POSIX as the storage backend, use 
+`make sda-posix-up` and `make sda-posix-down` to start and shut down services. 
 
-#### Running the integration tests
+For the setup including the [`sync`](https://github.com/neicnordic/sda-sync) service, use `make sda-sync-up` and `make sda-sync-down` to start and shut down services.
+
+### Running the integration tests
 This will build all required images, bring up the services, run the integration test, and then shut down services and clean up resources. The same test runs on every pull request (PR) in GitHub.
 
 - Integration test for the database:
@@ -81,17 +83,47 @@ This will build all required images, bring up the services, run the integration 
     ```sh
     make integrationtest-sda
     ```
-- Integration test for SDA using POSIX as the storage method:
+- Integration test for SDA using POSIX as the storage backend:
     ```sh
     make integrationtest-sda-posix
     ```
-- Integration test for SDA using S3 as the storage method:
+- Integration test for SDA using S3 as the storage backend:
     ```sh
     make integrationtest-sda-s3
     ```
 - Integration test for SDA including the sync service:
     ```sh
     make integrationtest-sda-sync
+    ```
+#### Running the integration tests without shutting down the services 
+This will run the integration tests and keep the services running after the tests are finished.
+
+- Integration test for SDA using POSIX as the storage backend:
+    ```sh
+    make integrationtest-sda-posix-run
+    ```
+- Integration test for SDA using S3 as the storage backend:
+    ```sh
+    make integrationtest-sda-s3-run
+    ```
+- Integration test for SDA including the sync service:
+    ```sh
+    make integrationtest-sda-sync-run
+    ```
+
+After that, you will need to shut down the services manually.
+
+- Shut down services for SDA using POSIX as the storage backend
+    ```sh
+    make integrationtest-sda-posix-down
+    ```
+- Shut down services for SDA using S3 as the storage backend
+    ```sh
+    make integrationtest-sda-s3-down
+    ```
+- Shut down services for SDA including the sync service:
+    ```sh
+    make integrationtest-sda-sync-down
     ```
 
 ### Linting the Go code
