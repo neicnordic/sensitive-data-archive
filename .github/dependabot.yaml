@@ -102,3 +102,112 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+
+## release v1 branch
+### Docker
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/postgresql"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/rabbitmq"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/sda"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/sda-doa"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/sda-download"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+  - package-ecosystem: docker
+    target-branch: release_v1
+    directory: "/sda-sftp-inbox"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+
+### JAVA
+  - package-ecosystem: maven
+    target-branch: release_v1
+    directory: "/sda-doa"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: daily
+
+  - package-ecosystem: maven
+    target-branch: release_v1
+    directory: "/sda-sftp-inbox"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: daily
+### GO
+  - package-ecosystem: gomod
+    target-branch: release_v1
+    directory: "/sda-download"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: daily
+
+  - package-ecosystem: gomod
+    target-branch: release_v1
+    directory: "/sda"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "neicnordic/sensitive-data-development-collaboration"
+    schedule:
+      interval: daily
