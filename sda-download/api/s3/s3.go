@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/api/sda"
+	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	log "github.com/sirupsen/logrus"
 )
@@ -329,7 +330,7 @@ func Download(c *gin.Context) {
 		ListBuckets(c)
 
 	case c.Param("filename") != "":
-		if strings.HasPrefix(c.Request.URL.Path, "/s3-encrypted") {
+		if config.Config.App.Crypt4GHPublicKeyB64 == "" {
 			GetEcnryptedObject(c)
 		} else {
 			GetObject(c)
