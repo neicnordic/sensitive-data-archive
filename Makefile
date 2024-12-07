@@ -20,7 +20,7 @@ bootstrap: go-version-check docker-version-check
 		fi
 		@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
 		sh -s -- -b $$(go env GOPATH)/bin
-		GO111MODULE=off go get golang.org/x/tools/cmd/goimports
+		go install golang.org/x/tools/cmd/goimports@latest
 
 # build containers
 build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox build-sda-admin
@@ -68,6 +68,21 @@ docker-version-check:
 		echo "Docker buildx does not exist can't continue"; \
 	fi;
 
+# bring up the services
+sda-s3-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml up -d
+sda-posix-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml up -d
+sda-sync-up:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml up -d
+
+# bring down the services
+sda-s3-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml down -v --remove-orphans
+sda-posix-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
+sda-sync-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml down -v --remove-orphans
 
 # run intrgration tests, same as being run in Github Actions during a PR
 integrationtest-postgres: build-postgresql
@@ -77,7 +92,7 @@ integrationtest-rabbitmq: build-rabbitmq build-sda
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml down -v --remove-orphans
 
-integrationtest-sda: build_all
+integrationtest-sda: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml run integration_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-posix-integration.yml down -v --remove-orphans
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml run integration_test
