@@ -86,6 +86,8 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
+	viper.Set("app.c4ghPrivateKeyPath", "../../dev_utils/c4gh.sec.pem")
+	viper.Set("app.c4ghPassphrase", "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -94,11 +96,11 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), 1234, c.App.Port)
 	assert.Equal(suite.T(), "test", c.App.ServerCert)
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
-	assert.NotNil(suite.T(), c.App.Crypt4GHPrivateKey)
-	assert.NotNil(suite.T(), c.App.Crypt4GHPublicKeyB64)
+	assert.NotEmpty(suite.T(), c.App.Crypt4GHPrivateKey)
+	assert.NotEmpty(suite.T(), c.App.Crypt4GHPublicKeyB64)
 	assert.Equal(suite.T(), false, c.App.ServeUnencryptedData)
 
-	// Check the key that was generated
+	// Check the private key that was loaded by checking the derived public key
 	publicKey, err := base64.StdEncoding.DecodeString(c.App.Crypt4GHPublicKeyB64)
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
 	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))

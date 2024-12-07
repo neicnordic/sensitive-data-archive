@@ -380,9 +380,17 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GenerateC4GHKey()
-	if err != nil {
-		return err
+	if viper.IsSet("app.c4ghPrivateKeyPath") {
+
+		if !viper.IsSet("app.c4ghPassphrase") {
+			return errors.New("app.c4ghPassphrase is not set")
+		}
+
+		c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GetC4GHKeys()
+		if err != nil {
+			return err
+		}
+		log.Infoln("Internal c4gh key-pair loaded")
 	}
 
 	if !slices.Contains(availableMiddlewares, c.App.Middleware) {
@@ -481,25 +489,27 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 	return wl
 }
 
-// GeneerateC4GHKey generates a keypair and returns the private key as a byte
-// array and the public key as a base64 encoded string
-func GenerateC4GHKey() ([32]byte, string, error) {
-	log.Info("creating temporary crypt4gh key")
+// GetC4GHKey reads and decrypts and returns the c4gh key
+func GetC4GHKeys() ([32]byte, string, error) {
+	keyPath := viper.GetString("app.c4ghPrivateKeyPath")
+	passphrase := viper.GetString("app.c4ghPassphrase")
 
-	public, private, err := keys.GenerateKeyPair()
-
+	// Make sure the key path and passphrase is valid
+	keyFile, err := os.Open(keyPath)
 	if err != nil {
-		log.Errorf("Error when generating keys: %v", err)
-
 		return [32]byte{}, "", err
 	}
+	private, err := keys.ReadPrivateKey(keyFile, []byte(passphrase))
+	if err != nil {
+		return [32]byte{}, "", fmt.Errorf("error when reading private key: %v", err)
+	}
+	keyFile.Close()
 
+	public := keys.DerivePublicKey(private)
 	pem := bytes.Buffer{}
 	err = keys.WriteCrypt4GHX25519PublicKey(&pem, public)
 	if err != nil {
-		log.Errorf("Error when converting public key to PEM format: %v", err)
-
-		return [32]byte{}, "", err
+		return [32]byte{}, "", fmt.Errorf("error when converting public key to PEM format: %v", err)
 	}
 
 	b64 := base64.StdEncoding.EncodeToString(pem.Bytes())
