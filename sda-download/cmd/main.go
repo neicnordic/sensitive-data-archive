@@ -49,7 +49,6 @@ func init() {
 
 	// Initialise OIDC configuration
 	details, err := auth.GetOIDCDetails(conf.OIDC.ConfigurationURL)
-	log.Info("retrieving OIDC configuration")
 	if err != nil {
 		log.Panicf("oidc init failed, reason: %v", err)
 	}
@@ -76,6 +75,11 @@ func main() {
 
 	// Start the server
 	log.Info("(5/5) Starting web server")
+
+	if config.Config.App.Crypt4GHPublicKeyB64 != "" {
+		log.Warningln("Serving unencrypted data")
+	}
+
 	if config.Config.App.ServerCert != "" && config.Config.App.ServerKey != "" {
 		log.Infof("Web server is ready to receive connections at https://%s:%d", config.Config.App.Host, config.Config.App.Port)
 		log.Fatal(srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey))
