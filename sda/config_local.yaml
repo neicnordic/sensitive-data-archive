@@ -1,0 +1,107 @@
+log:
+  format: "json"
+  level: "debug"
+api:
+  rbacFile: ../.github/integration/sda/rbac.json 
+
+archive:
+  type: s3
+  url: "http://localhost"
+  port: 19000
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "archive"
+  region: "us-east-1"
+
+auth:
+  cega:
+    authUrl: "http://localhost:8443/username/"
+    id:
+    secret:
+  infoText: "About service text"
+  infoURL: "http://example.org/about"
+  jwt:
+    issuer: "https://localhost:8888"
+    privateKey: "tmp/shared/keys/jwt.key"
+    signatureAlg: ES256
+    tokenTTL: 168
+  publicFile: "tmp/shared/c4gh.pub.pem"
+  resignJwt:
+  s3Inbox: "http://localhost:18000"
+
+backup:
+  type: s3
+  url: "http://localhost"
+  port: 19000
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "backup"
+  region: "us-east-1"
+
+inbox:
+  type: s3
+  url: "http://localhost"
+  port: 19000
+  readypath: "/minio/health/ready"
+  accessKey: "access"
+  secretKey: "secretKey"
+  bucket: "inbox"
+  region: "us-east-1"
+
+broker:
+  host: "localhost"
+  port: "15671"
+  user: ""
+  password: ""
+  vhost: "/sda"
+  exchange: "sda"
+  routingKey: ""
+  ssl: "false"
+
+db:
+  host: "localhost"
+  port: "15432"
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+c4gh:
+  filePath: "tmp/shared/c4gh.sec.pem" 
+  passphrase: "c4ghpass"
+  syncPubKeyPath: "tmp/shared/sync.pub.pem" 
+
+oidc:
+  configuration:
+    url: "http://localhost:8080/.well-known/openid-configuration"
+
+server:
+  cert: ""
+  key: ""
+  jwtpubkeypath: "tmp/shared/keys/pub/"
+  jwtpubkeyurl: "http://oidc:8080/jwk"
+
+sync:
+  api:
+    password: "pass"
+    user: "user"
+  centerPrefix: "SYNC"
+  destination:
+    type: "s3"
+    url: "http://localhost"
+    port: 19000
+    readypath: "/minio/health/ready"
+    accessKey: "access"
+    secretKey: "secretKey"
+    bucket: "sync"
+    region: "us-east-1"
+  remote:
+    host: "http://sync-api"
+    port: "8080"
+    password: "pass"
+    user: "user"
+
+schema:
+  type: "isolated"
