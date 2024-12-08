@@ -52,6 +52,7 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
       - "15672:15672"
+      - "15671:5672"
     restart: always
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
