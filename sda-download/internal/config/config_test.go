@@ -81,7 +81,6 @@ func (suite *TestSuite) TestAppConfig() {
 
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
-	viper.Set("app.serveUnencryptedData", false)
 	viper.Set("app.servercert", "test")
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
@@ -98,7 +97,6 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
 	assert.NotEmpty(suite.T(), c.App.Crypt4GHPrivateKey)
 	assert.NotEmpty(suite.T(), c.App.Crypt4GHPublicKeyB64)
-	assert.Equal(suite.T(), false, c.App.ServeUnencryptedData)
 
 	// Check the private key that was loaded by checking the derived public key
 	publicKey, err := base64.StdEncoding.DecodeString(c.App.Crypt4GHPublicKeyB64)
