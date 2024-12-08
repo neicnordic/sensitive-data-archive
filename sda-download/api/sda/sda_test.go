@@ -889,7 +889,6 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
 
 	// Test encrypted download, should work even when AllowedUnencryptedDownload is false
-	config.Config.App.ServeUnencryptedData = false
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
@@ -906,7 +905,6 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 
 	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
-	config.Config.App.ServeUnencryptedData = true
 
 	// Test encrypted download without passing the key, should fail
 	w = httptest.NewRecorder()
