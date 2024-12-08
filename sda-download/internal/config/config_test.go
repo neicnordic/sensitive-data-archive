@@ -105,6 +105,17 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
 	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
+
+	// Check false c4gh key
+	viper.Set("app.c4ghPrivateKeyPath", "some/nonexistent.key")
+	err = c.appConfig()
+	assert.ErrorContains(suite.T(), err, "no such file or directory")
+
+	// Check false c4gh key
+	viper.Set("app.c4ghPrivateKeyPath", "../../dev_utils/c4gh.sec.pem")
+	viper.Set("app.c4ghPassphrase", "blablabla")
+	err = c.appConfig()
+	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
 }
 
 func (suite *TestSuite) TestArchiveConfig() {
