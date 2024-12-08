@@ -5,14 +5,14 @@ services:
       - -c
       - |
         cp /origcerts/* /certs
-        chown -R nobody.nobody /certs/*
+        chown -R nobody:nobody /certs/*
         chmod -R 644 /certs/*
         chmod -R og-rw /certs/*-key.pem
-        chown -R 70.70 /certs/db*
+        chown -R 70:70 /certs/db*
         ls -la /certs/
 
     container_name: certfixer
-    image: alpine:latest
+    image: alpine:latest 
     volumes:
       - ./certs:/origcerts
       - certs:/certs
