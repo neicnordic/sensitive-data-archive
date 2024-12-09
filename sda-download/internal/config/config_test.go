@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -64,6 +65,16 @@ func (suite *TestSuite) TestMissingRequiredConfVar() {
 
 func (suite *TestSuite) TestAppConfig() {
 
+	// Generate a crypth4gh private key file
+	_, privateKey, err := keys.GenerateKeyPair()
+	assert.NoError(suite.T(), err)
+	tempDir := suite.T().TempDir()
+	defer os.RemoveAll(tempDir)
+	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
+	assert.NoError(suite.T(), err)
+
 	// Test fail on missing middleware
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
@@ -75,7 +86,7 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.middleware", "noexist")
 
 	c := &Map{}
-	err := c.appConfig()
+	err = c.appConfig()
 	assert.Error(suite.T(), err, "Error expected")
 	viper.Reset()
 
@@ -85,8 +96,8 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
-	viper.Set("app.c4ghPrivateKeyPath", "../../dev_utils/c4gh.sec.pem")
-	viper.Set("app.c4ghPassphrase", "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm")
+	viper.Set("app.c4ghPrivateKeyPath", privateKeyFile.Name())
+	viper.Set("app.c4ghPassphrase", "password")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -110,7 +121,7 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.ErrorContains(suite.T(), err, "no such file or directory")
 
 	// Check false c4gh key
-	viper.Set("app.c4ghPrivateKeyPath", "../../dev_utils/c4gh.sec.pem")
+	viper.Set("app.c4ghPrivateKeyPath", privateKeyFile.Name())
 	viper.Set("app.c4ghPassphrase", "blablabla")
 	err = c.appConfig()
 	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
