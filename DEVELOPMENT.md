@@ -52,10 +52,9 @@ PR_NUMBER=$(/bin/date +%F)  docker compose -f .github/integration/sda-s3-integra
 
 3. Change to the folder `sda`, then copy keys and other information from the shared folder of the container using:
 ```sh
-mkdir -p tmp
-docker cp verify:/shared tmp/
+docker cp verify:/shared /tmp/
 ```
-This will copy all data from the container's `/shared` folder to `tmp/shared` on your local machine.
+This will copy all data from the container's `/shared` folder to `/tmp/shared` on your local machine.
 
 4. Copy schemas to `/schemas` on the localhost using:
 ```sh
@@ -76,13 +75,13 @@ CONFIGFILE=config_local.yaml go run cmd/ingest/ingest.go
 6. Check if the `ingest` service works as expected by following these steps
 ```sh
 # create a test file
-seq 10 > tmp/t1.txt  
+seq 10 > /tmp/t1.txt
 
 # update the s3cmd config file
-sed -i '/host_/s/s3inbox:8000/localhost:18000/g' tmp/shared/s3cfg
+sed -i '/host_/s/s3inbox:8000/localhost:18000/g' /tmp/shared/s3cfg
 
-# upload tmp/t1.txt to s3inbox by sda-cli
-sda-cli -config tmp/shared/s3cfg upload -encrypt-with-key tmp/shared/c4gh.pub.pem tmp/t1.txt 
+# upload /tmp/t1.txt to s3inbox by sda-cli
+sda-cli -config /tmp/shared/s3cfg upload -encrypt-with-key /tmp/shared/c4gh.pub.pem /tmp/t1.txt
 
 # use sda-admin to check if t1.txt has been uploaded
 export API_HOST=http://localhost:8090
