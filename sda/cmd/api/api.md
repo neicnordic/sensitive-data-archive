@@ -105,7 +105,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE https://HOSTNAME/file/user@demo.org/123abc
+    curl -H "Authorization: Bearer $token" -X DELETE https://HOSTNAME/file/user@demo.org/123abc
     ```
 
 - `/dataset/create`
