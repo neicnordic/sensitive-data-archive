@@ -49,11 +49,10 @@ go-version-check:
 		( $${GO_VERSION_ARR[1]} -lt $${GO_VERSION_REQ[1]} ||\
 		( $${GO_VERSION_ARR[1]} -eq $${GO_VERSION_REQ[1]} && $${GO_VERSION_ARR[2]} -lt $${GO_VERSION_REQ[2]} )))\
 	]]; then\
-		echo "Version check failed. SDA requires Go $${GO_VERSION_MIN} to build."; \
+		echo "SDA requires go $${GO_VERSION_MIN} to build; found $${GO_VERSION}."; \
 		exit 1; \
-	else \
-		echo "Version check passed. Installed GO version: $${GO_VERSION}."; \
-	fi;
+	fi; \
+	echo "GO version: $${GO_VERSION}.";
 
 docker-version-check:
 	@DOCKER_VERSION=$$(docker version -f "{{.Server.Version}}" | cut -d'.' -f 1); \
@@ -70,7 +69,8 @@ docker-version-check:
 		echo "Docker buildx does not exist can't continue"; \
 		exit 1;\
 	fi; \
-	echo "Version check passed. Installed Docker version: $${DOCKER_VERSION} and Docker Compose version: $${DOCKER_COMPOSE_VERSION}.";
+	echo "Docker version: $${DOCKER_VERSION}."; \
+	echo "Docker Compose version: $${DOCKER_COMPOSE_VERSION}.";
 
 # bring up the services
 sda-s3-up:
