@@ -56,10 +56,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	Conf.API.INBOX, err = storage.NewBackend(Conf.Inbox)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	if err := setupJwtAuth(); err != nil {
 		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
@@ -106,7 +102,7 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
 	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
-	r.DELETE("/file/:username/:file", rbac(e), deleteFile)              // Delete a file from inbox
+	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
@@ -297,17 +293,22 @@ func ingestFile(c *gin.Context) {
 func deleteFile(c *gin.Context) {
 	inbox, err := storage.NewBackend(Conf.Inbox)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
 	}
 
 	submissionUser := c.Param("username")
 	log.Debug("submission user:", submissionUser)
 
-	fileID := c.Param("file")
+	fileID := c.Param("fileid")
 	fileID = strings.TrimPrefix(fileID, "/")
 	log.Debug("submission file:", fileID)
 	if fileID == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
+
+		return
 	}
 
 	// Get the file path from the fileID and submission user
