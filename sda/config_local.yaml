@@ -105,3 +105,4 @@ sync:
 
 schema:
   type: "isolated"
+  path: "schemas/isolated"
