@@ -320,21 +320,18 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	// Requires a filepath instead of fileID
 	var RetryTimes = 5
 	for count := 1; count <= RetryTimes; count++ {
-		log.Warn("trying to remove file from inbox, try", count)
 		err = inbox.RemoveFile(filePath)
-		if err != nil {
-			log.Errorf("Remove file from inbox failed, reason: %v", err)
-		}
-
-		// The GetFileSize returns zero in case of error after retrying a number of times
-		fileSize, _ := inbox.GetFileSize(filePath)
-		if fileSize == 0 {
+		if err == nil {
 			break
 		}
+		log.Errorf("Remove file from inbox failed, reason: %v", err)
+		if count == 5 {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, ("remove file from inbox failed"))
 
+			return
+		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
