@@ -143,7 +143,7 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select id from sda.file_e
    echo "waiting for ingest to complete"
    RETRY_TIMES=$((RETRY_TIMES + 1))
    if [ "$RETRY_TIMES" -eq 30 ]; then
-      echo "::error::Time out while waiting for upload to complete"
+      echo "::error::Time out while waiting for ingest to complete"
       exit 1
    fi
    sleep 2
