@@ -4,7 +4,6 @@ app:
   serverkey: "./dev_utils/certs/download-key.pem"
   port: "8443"
   middleware: "default"
-  serveUnencryptedData: true
 
 log:
   level: "debug"
