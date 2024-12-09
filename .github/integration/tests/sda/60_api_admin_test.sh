@@ -59,7 +59,7 @@ until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messag
 done
 
 # get the fileId of the new file
-fileid="$(curl -k -L -H "Authorization: Bearer $token" -H "Content-Type: application/json" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NC12878.bam.c4gh") | .fileID')"
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NC12878.bam.c4gh") | .fileID')"
 
 output=$(s3cmd -c s3cfg ls s3://test_dummy.org/NC12878.bam.c4gh 2>/dev/null)
 if [ -z "$output" ] ; then
@@ -86,7 +86,7 @@ if [ -n "$output" ] ; then
 fi
 
 # Try to delete an unknown file
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/badfileid")"
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/badfileid")"
 if [ "$resp" != "404" ]; then
     echo "Error when deleting the file, expected error got: $resp"
     exit 1
@@ -94,8 +94,8 @@ fi
 
 
 # Try to delete file of other user
-fileid="$(curl -k -L -H "Authorization: Bearer $token" -H "Content-Type: application/json" "http://api:8080/users/requester@demo.org/files" | jq -r '.[0]| .fileID')"
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/requester@demo.org/files" | jq -r '.[0]| .fileID')"
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "404" ]; then
     echo "Error when deleting the file, expected 404 got: $resp"
     exit 1
@@ -135,7 +135,7 @@ if [ "$resp" != "200" ]; then
     exit 1
 fi
 
-fileid="$(curl -k -L -H "Authorization: Bearer $token" -H "Content-Type: application/json" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
 # wait for the fail to get the correct status
 RETRY_TIMES=0
 
@@ -150,8 +150,8 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select id from sda.file_e
 done
 
 # Try to delete file not in inbox
-fileid="$(curl -k -L -H "Authorization: Bearer $token" -H "Content-Type: application/json" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "404" ]; then
 	echo "Error when deleting the file, expected 404 got: $resp"
 	exit 1
