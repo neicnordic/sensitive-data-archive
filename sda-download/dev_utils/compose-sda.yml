@@ -7,7 +7,6 @@ services:
       - |
         cp /origcerts/* /certs
         chown -R nobody:nobody /certs/*
-        chmod -R 644 /certs/*
         chmod -R og-rw /certs/*-key.pem
         chown -R 70:70 /certs/db*
         ls -la /certs/
