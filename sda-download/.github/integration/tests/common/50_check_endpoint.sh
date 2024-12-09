@@ -90,7 +90,7 @@ export C4GH_PASSPHRASE
 
 crypt4gh decrypt -s c4gh.sec.pem -f dummy_data.c4gh && mv dummy_data old-file.txt
 
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002" --output test-download.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/files/urn:neic:001-002" --output test-download.txt
 
 cmp --silent old-file.txt test-download.txt
 status=$?
@@ -101,7 +101,7 @@ else
     exit 1
 fi
 
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
 
 dd if=old-file.txt ibs=1 skip=0 count=2 > old-part.txt
 
@@ -114,7 +114,7 @@ else
     exit 1
 fi
 
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
 
 dd if=old-file.txt ibs=1 skip=7 count=7 > old-part2.txt
 
@@ -127,7 +127,7 @@ else
     exit 1
 fi
 
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002?startCoordinate=70000&endCoordinate=140000" --output test-part3.txt
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/files/urn:neic:001-002?startCoordinate=70000&endCoordinate=140000" --output test-part3.txt
 
 dd if=old-file.txt ibs=1 skip=70000 count=70000 > old-part3.txt
 
@@ -140,10 +140,19 @@ else
     exit 1
 fi
 
+# test that downloads of decrypted files from a download instance that
+# serves only encrypted files (here running at port 8443) should fail
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/files/urn:neic:001-002" --output test-download-fail.txt
+
+if ! grep -q "downloading unencrypted data is not supported" test-download-fail.txt; then
+    echo "got unexpected response when trying to download unencrypted data from encrypted endpoint"
+exit 1
+fi
+
 # ------------------
 # Test get visas failed
 
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
+token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[1]')
 
 ## Test datasets endpoint
 
@@ -174,3 +183,8 @@ if [ "$check_empty_token" != "200" ]; then
 fi
 
 echo "got correct response when token permissions from untrusted sources"
+
+# cleanup
+rm old-file.txt old-part*.txt test-download*.txt test-part*.txt
+
+echo "OK"

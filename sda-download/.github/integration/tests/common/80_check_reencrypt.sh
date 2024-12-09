@@ -18,8 +18,8 @@ dataset="https://doi.example/ty009.sfrrss/600.45asasga"
 file="dummy_data"
 expected_size=1048605
 
-# Download unencrypted full file,  check file size
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file" --output full1.bam
+# Download unencrypted full file (from download service at port 9443), check file size
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/s3/$dataset/$file" --output full1.bam
 
 file_size=$(stat -c %s full1.bam)  # Get the size of the file
 if [ "$file_size" -ne "$expected_size" ]; then
@@ -30,7 +30,7 @@ fi
 # Test reencrypt the file header with the client public key 
 clientkey=$(base64 -w0 client.pub.pem)
 reencryptedFile=reencrypted.bam.c4gh
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file" --output $reencryptedFile
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3/$dataset/$file" --output $reencryptedFile
 
 expected_encrypted_size=1049205
 file_size=$(stat -c %s $reencryptedFile)
@@ -56,7 +56,7 @@ fi
 
 # download reencrypted partial file, check file size
 partReencryptedFile=part1.bam.c4gh
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3-encrypted/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
 part_expected_size=65688
 
@@ -83,11 +83,8 @@ if ! grep -q "^THIS FILE IS JUST DUMMY DATA" part1.bam; then
     exit 1
 fi
 
-# Clean up
-rm full1.bam full2.bam part1.bam $reencryptedFile
-
 # try to download encrypted full file without sending a public key
-resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3-encrypted/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
 
 if [ "$resp" -ne 400 ]; then
     echo "Incorrect response with missing public key, expected 400 got $resp"
@@ -95,10 +92,13 @@ if [ "$resp" -ne 400 ]; then
 fi
 
 # try to download encrypted full file with a bad public key
-resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" "https://localhost:8443/s3-encrypted/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" "https://localhost:8443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
 
 if [ "$resp" -ne 500 ]; then
     echo "Incorrect response with missing public key, expected 500 got $resp"
 fi
+
+# Clean up
+rm full1.bam full2.bam part1.bam* $reencryptedFile
 
 echo "OK"
