@@ -56,12 +56,7 @@ docker cp verify:/shared /tmp/
 ```
 This will copy all data from the container's `/shared` folder to `/tmp/shared` on your local machine.
 
-4. Copy schemas to `/schemas` on the localhost using:
-```sh
-sudo rsync -arvz schemas/ /schemas/ 
-```
-
-5. Start the `ingest` service using:
+4. Start the `ingest` service using:
 ```sh
 export BROKER_PASSWORD=ingest
 export BROKER_USER=ingest
@@ -72,7 +67,7 @@ export DB_USER=ingest
 CONFIGFILE=config_local.yaml go run cmd/ingest/ingest.go
 ```
 
-6. Check if the `ingest` service works as expected by following these steps
+5. Check if the `ingest` service works as expected by following these steps
 ```sh
 # create a test file
 seq 10 > /tmp/t1.txt
