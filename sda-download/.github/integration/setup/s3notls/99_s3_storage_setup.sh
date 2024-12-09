@@ -1,6 +1,5 @@
 #!/bin/bash
-
-pip3 install s3cmd
+set -e
 
 cd dev_utils || exit 1
 

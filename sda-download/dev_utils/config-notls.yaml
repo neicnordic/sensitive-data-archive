@@ -1,6 +1,3 @@
-app:
-  serveUnencryptedData: true
-
 log:
   level: "debug"
   format: "json"
