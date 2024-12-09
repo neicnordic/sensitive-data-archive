@@ -75,9 +75,9 @@ auth_token() {
 #
 # Create s3cmd configs
 #
-
-port="8443"
-[[ "$TLS" == "False" ]] && port="8080"
+# ports 9443/9080 refer to the download instance serving unencrypted files
+port="9443"
+[[ "$TLS" == "False" ]] && port="9080"
 
 cat << EOF >s3cmd.valid
 [default]
@@ -173,6 +173,8 @@ export should_return="70"
 info 'Testing valid file download with an invalid token'
 run_test s3cmd -c s3cmd.invalid get --force "s3://$dataset/dummy_data"
 
+# cleanup
+rm s3cmd.valid s3cmd.invalid
 
 echo
 info " ----- End of S3 Tests ------------------------------------------------- "
