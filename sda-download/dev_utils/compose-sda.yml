@@ -13,7 +13,7 @@ services:
         ls -la /certs/
 
     container_name: certfixer
-    image: alpine:latest 
+    image: alpine:latest
     volumes:
       - ./certs:/origcerts
       - certs:/certs
