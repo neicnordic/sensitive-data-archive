@@ -52,7 +52,7 @@ inbox:
 
 broker:
   host: "localhost"
-  port: "15671"
+  port: "5672"
   user: ""
   password: ""
   vhost: "/sda"
