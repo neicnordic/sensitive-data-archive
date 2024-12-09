@@ -65,6 +65,7 @@ func (suite *ConfigTestSuite) SetupTest() {
 	viper.Set("inbox.accesskey", "testaccess")
 	viper.Set("inbox.secretkey", "testsecret")
 	viper.Set("inbox.bucket", "testbucket")
+	viper.Set("inbox.type", "s3")
 	viper.Set("server.jwtpubkeypath", "testpath")
 	viper.Set("log.level", "debug")
 }

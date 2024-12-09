@@ -28,7 +28,8 @@ VALUES (0, now(), 'Created with version'),
        (11, now(), 'Grant select permission to download on dataset_event_log'),
        (12, now(), 'Add key hash'),
        (13, now(), 'Create API user'),
-       (14, now(), 'Create Auth user');
+       (14, now(), 'Create Auth user'),
+       (15, now(), 'Give API user insert priviledge in logs table');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level

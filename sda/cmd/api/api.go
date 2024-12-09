@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 )
@@ -100,6 +102,7 @@ func setup(config *config.Config) *http.Server {
 	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
 	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
+	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
@@ -277,6 +280,63 @@ func ingestFile(c *gin.Context) {
 
 	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// The deleteFile function deletes files from the inbox and marks them as
+// discarded in the db. Files are identified by their ids and the user id.
+func deleteFile(c *gin.Context) {
+	inbox, err := storage.NewBackend(Conf.Inbox)
+	if err != nil {
+		log.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	submissionUser := c.Param("username")
+	log.Debug("submission user:", submissionUser)
+
+	fileID := c.Param("fileid")
+	fileID = strings.TrimPrefix(fileID, "/")
+	log.Debug("submission file:", fileID)
+	if fileID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
+
+		return
+	}
+
+	// Get the file path from the fileID and submission user
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	if err != nil {
+		log.Errorf("getting file from fileID failed, reason: (%v)", err)
+		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
+
+		return
+	}
+
+	var RetryTimes = 5
+	for count := 1; count <= RetryTimes; count++ {
+		err = inbox.RemoveFile(filePath)
+		if err == nil {
+			break
+		}
+		log.Errorf("Remove file from inbox failed, reason: %v", err)
+		if count == 5 {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, ("remove file from inbox failed"))
+
+			return
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	if err := Conf.API.DB.UpdateFileEventLog(fileID, "disabled", fileID, "api", "{}", "{}"); err != nil {
+		log.Errorf("set status deleted failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
@@ -477,6 +537,8 @@ func listActiveUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+// listUserFiles returns a list of files for a specific user
+// If the file has status disabled, the file will be skipped
 func listUserFiles(c *gin.Context) {
 	username := c.Param("username")
 	username = strings.TrimPrefix(username, "/")

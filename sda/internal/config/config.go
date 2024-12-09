@@ -83,6 +83,7 @@ type APIConf struct {
 	Session    SessionConfig
 	DB         *database.SDAdb
 	MQ         *broker.AMQPBroker
+	INBOX      storage.Backend
 }
 
 type SessionConfig struct {
@@ -214,6 +215,14 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+		}
+		switch viper.GetString("inbox.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
+		default:
+			return nil, fmt.Errorf("inbox.type not set")
 		}
 	case "auth":
 		requiredConfVars = []string{
@@ -463,6 +472,8 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		c.configInbox()
 
 		err = c.configAPI()
 		if err != nil {
