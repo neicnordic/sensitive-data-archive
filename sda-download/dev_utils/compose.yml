@@ -105,6 +105,36 @@ services:
       - "8443:8443"
     restart: always
 
+  download-unencrypted:
+    command: sda-download
+    container_name: download-unencrypted
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      mockauth:
+        condition: service_started
+      download:
+        condition: service_started
+    env_file: ./env.download
+    environment:
+      - APP_C4GHPRIVATEKEYPATH=/dev_utils/c4gh.sec.pem
+      - APP_C4GHPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
+    image: neicnordic/sda-download:latest
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./:/dev_utils/
+      - ./iss.json:/iss.json
+      - certs:/dev_utils/certs
+      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+    mem_limit: 256m
+    ports:
+      - "9443:8443"
+    restart: always
+
   reencrypt:
     image: ghcr.io/neicnordic/sensitive-data-archive:latest
     build: ../../sda
