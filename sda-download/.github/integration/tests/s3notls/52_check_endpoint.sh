@@ -75,7 +75,16 @@ export C4GH_PASSPHRASE
 
 crypt4gh decrypt -s c4gh.sec.pem -f dummy_data.c4gh && mv dummy_data old-file.txt
 
+# first try downloading from download instance serving encrypted data, should fail
 curl -s -H "Authorization: Bearer $token" "http://localhost:8080/files/urn:neic:001-002" --output test-download.txt
+
+if ! grep -q "downloading unencrypted data is not supported" "test-download.txt"; then
+    echo "wrong response when trying to download unencrypted data from encrypted endpoint"
+    exit 1
+fi
+
+# now try downloading from download instance serving unencrypted data
+curl -s -H "Authorization: Bearer $token" "http://localhost:9080/files/urn:neic:001-002" --output test-download.txt
 
 
 cmp --silent old-file.txt test-download.txt
@@ -86,7 +95,8 @@ else
     echo "Files are different"
 fi
 
-curl -s -H "Authorization: Bearer $token" "http://localhost:8080/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
+# downloading from download instance serving unencrypted data
+curl -s -H "Authorization: Bearer $token" "http://localhost:9080/files/urn:neic:001-002?startCoordinate=0&endCoordinate=2" --output test-part.txt
 
 dd if=old-file.txt ibs=1 skip=0 count=2 > old-part.txt
 
@@ -99,7 +109,8 @@ else
     exit 1
 fi
 
-curl -s -H "Authorization: Bearer $token" "http://localhost:8080/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
+# downloading from download instance serving unencrypted data
+curl -s -H "Authorization: Bearer $token" "http://localhost:9080/files/urn:neic:001-002?startCoordinate=7&endCoordinate=14" --output test-part2.txt
 
 dd if=old-file.txt ibs=1 skip=7 count=7 > old-part2.txt
 
@@ -146,3 +157,5 @@ if [ "$check_dataset" != "https://doi.example/ty009.sfrrss/600.45asasga" ]; then
 fi
 
 echo "expected dataset found for token from untrusted source"
+
+echo "OK"
