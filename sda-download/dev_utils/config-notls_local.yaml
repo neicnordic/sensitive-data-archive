@@ -1,5 +1,6 @@
 app:
   serveUnencryptedData: true
+  port: 18080
 
 log:
   level: "debug"
