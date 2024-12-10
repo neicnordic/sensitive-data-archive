@@ -1,6 +1,157 @@
 # Sensitive Data Archive
 
-`SDA` contains all components of [NeIC Sensitive Data Archive](https://neic-sda.readthedocs.io/en/latest/) It can be used as part of a [Federated EGA](https://ega-archive.org/federated) or as a isolated Sensitive Data Archive.
+The `SDA` contains all components of [NeIC Sensitive Data Archive](https://neic-sda.readthedocs.io/en/latest/). It can be used as part of a [Federated EGA](https://ega-archive.org/federated) or as a standalone Sensitive Data Archive.
 
-For more information about the different components see the readme files in the respecive folders.
-For more information on how to start developing read [Getting Started developing components of the SDA stack](/GETTINGSTARTED.md).
+For more information about the different components, please refer to the README files in their respective folders.
+
+## How to run the SDA stack 
+The following instructions outline the steps to set up and run the `SDA` services for development and testing using Docker. These steps are based on the provided [Makefile](./Makefile) commands.
+
+### Prerequisites
+Ensure you have the following installed on your system:
+
+- [`Go`](https://www.golang.org/): The required version is specified in the `sda` Dockerfile. Verify using
+    ```sh
+    $ make go-version-check
+    ```
+
+- Docker: Version 24 or higher. Verify using 
+    ```sh
+    $ make docker-version-check 
+    ```
+- Docker Compose: Version 2 or higher. For Linux, ensure the [Compose plugin](https://docs.docker.com/compose/install/linux/) is installed.
+
+In preparation for local development, it is essential to verify that `$GOPATH/bin` is part of the system PATH, as certain distributions may package outdated versions of build tools. SDA uses [Go Modules](https://github.com/golang/go/wiki/Modules), and it is advisable to clone the repository outside the `GOPATH`. After cloning, initialize the environment and obtain necessary build tools using the bootstrap command: 
+
+```sh
+$ make bootstrap
+```
+
+### Build Docker images 
+
+Build the required Docker images for all SDA services:
+
+```sh
+$ make build-all
+```
+
+You can also build images for individual services by replacing `all` with the folder name (`postgresql`, `rabbitmq`, `sda`, `sda-download`, `sda-sftp-inbox`), for example
+
+```sh
+$ make build-sda
+```
+
+To build the `sda-admin` CLI tool:
+
+```sh
+$ make build-sda-admin
+```
+
+### Running the services
+
+#### Start services with Docker Compose
+The following command will bring up all services using the Docker Compose file [sda-s3-integration.yml](.github/integration/sda-s3-integration.yml) (configured for S3 as the storage backend):
+
+```sh
+$ make sda-s3-up
+```
+
+#### Shut down all services and clean up resources
+The following command will shut down all services and clean up all related resources:
+
+```sh
+$ make sda-s3-down
+```
+
+For the setup with POSIX as the storage backend, use 
+`make sda-posix-up` and `make sda-posix-down` to start and shut down services. 
+
+For the setup including the [`sync`](https://github.com/neicnordic/sda-sync) service, use `make sda-sync-up` and `make sda-sync-down` to start and shut down services.
+
+### Running the integration tests
+This will build all required images, bring up the services, run the integration test, and then shut down services and clean up resources. The same test runs on every pull request (PR) in GitHub.
+
+- Integration test for the database:
+    ```sh
+    make integrationtest-postgres
+    ```
+- Integration test for RabbitMQ:
+    ```sh
+    make integrationtest-rabbitmq
+    ```
+- Integration test for all SDA setups (including S3, POSIX and sync):
+    ```sh
+    make integrationtest-sda
+    ```
+- Integration test for SDA using POSIX as the storage backend:
+    ```sh
+    make integrationtest-sda-posix
+    ```
+- Integration test for SDA using S3 as the storage backend:
+    ```sh
+    make integrationtest-sda-s3
+    ```
+- Integration test for SDA including the sync service:
+    ```sh
+    make integrationtest-sda-sync
+    ```
+#### Running the integration tests without shutting down the services 
+This will run the integration tests and keep the services running after the tests are finished.
+
+- Integration test for SDA using POSIX as the storage backend:
+    ```sh
+    make integrationtest-sda-posix-run
+    ```
+- Integration test for SDA using S3 as the storage backend:
+    ```sh
+    make integrationtest-sda-s3-run
+    ```
+- Integration test for SDA including the sync service:
+    ```sh
+    make integrationtest-sda-sync-run
+    ```
+
+After that, you will need to shut down the services manually.
+
+- Shut down services for SDA using POSIX as the storage backend
+    ```sh
+    make integrationtest-sda-posix-down
+    ```
+- Shut down services for SDA using S3 as the storage backend
+    ```sh
+    make integrationtest-sda-s3-down
+    ```
+- Shut down services for SDA including the sync service:
+    ```sh
+    make integrationtest-sda-sync-down
+    ```
+
+### Linting the Go code
+
+To run `golangci-lint` for all Go components:
+
+```sh
+$ make lint-all
+```
+
+To run `golangci-lint` for a specific component, replace `all` with the folder name (`sda`, `sda-auth`, `sda-download`), for example:
+
+```sh
+$ make lint-sda
+```
+
+### Running the static code tests
+
+For Go code, this means running `go test -count=1 ./...` in the target folder. For the *sftp-inbox* this calls `mvn test -B` inside a Maven container.
+
+To run the static code tests for all components:
+
+```sh
+$ make test-all
+```
+
+To run the static code tests for a specific component, replace `all` with the folder name (`sda`, `sda-admin`, `sda-download`, `sda-sftp-inbox`), for example:
+
+```sh
+$ make test-sda
+```
