@@ -32,6 +32,11 @@
        },
        {
           "role": "submission",
+          "path": "/file/*",
+          "action": "DELETE"
+       },
+       {
+          "role": "submission",
           "path": "/users",
           "action": "GET"
        },
