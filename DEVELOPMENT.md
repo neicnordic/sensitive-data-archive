@@ -8,25 +8,16 @@ This section explains how to run some of the services using `go run` instead of 
 make integrationtest-sda-s3-run 
 ```
 
-2. Change to the folder `sda-download` and then create the credentials using: 
-```sh
-pushd dev_utils
-bash make_certs.sh
-chmod 600 certs/*-key.*
-popd
-```
-
-3. Update your `/etc/hosts` file: Add the following line to ensure the service can resolve OIDC locally: 
-```
-127.0.0.1 oidc
-```
-
-4. Start the `sda-download` service using:
+2. Change to the folder `sda-download` and start the `sda-download` service using:
 ```sh
 CONFIGFILE=dev_utils/config-notls_local.yaml go run cmd/main.go
 ```
+> If the host `oidc` cannot be accessed on the local machine, update your `/etc/hosts` file by adding the following line to ensure the service can resolve `oidc` locally:
+> ```
+> 127.0.0.1 oidc
+> ```
 
-5. Check if `sda-download` works as expected using:
+3. Check if `sda-download` works as expected using:
 ```sh
 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:18080/health
 ```
