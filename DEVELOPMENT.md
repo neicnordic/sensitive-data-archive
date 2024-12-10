@@ -23,13 +23,19 @@ popd
 
 4. Start the `sda-download` service using:
 ```sh
-APP_PORT=8553 CONFIGFILE=dev_utils/config-notls_local.yaml go run cmd/main.go
+CONFIGFILE=dev_utils/config-notls_local.yaml go run cmd/main.go
 ```
 
 5. Check if `sda-download` works as expected using:
 ```sh
+curl -o /dev/null -s -w "%{http_code}\n" http://localhost:18080/health
+```
+If successful, the curl command should output the HTTP code `200`.
+
+You can further check the endpoint `/metadata/datasets` using:
+```sh
 token=$(curl -s -k http://localhost:8080/tokens | jq -r '.[0]') 
-curl -H "Authorization: Bearer $token" http://localhost:8553/metadata/datasets
+curl -H "Authorization: Bearer $token" http://localhost:18080/metadata/datasets
 ```
 If successful, the curl command should output a JSON body containing:
 ```json
@@ -40,7 +46,7 @@ If successful, the curl command should output a JSON body containing:
 ### Running other SDA services with `go run`
 Running other SDA services located in the `sda` subfolder, such as `ingest` or `verify`, differs slightly from running the `sda-download` service. Here, we'll use `ingest` as an example.
 
-1. Bring up all SDA services with the S3 backend and populate them with test data by running the following command in the root folder of the repository (this step is the same as for `sda-download`):
+1. Bring up all SDA services with the S3 backend and populate them with test data by running the following command in the root folder of the repository:
 ```sh
 make integrationtest-sda-s3-run 
 ```
