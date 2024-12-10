@@ -23,10 +23,10 @@ auth:
   infoURL: "http://example.org/about"
   jwt:
     issuer: "https://localhost:8888"
-    privateKey: "tmp/shared/keys/jwt.key"
+    privateKey: "/tmp/shared/keys/jwt.key"
     signatureAlg: ES256
     tokenTTL: 168
-  publicFile: "tmp/shared/c4gh.pub.pem"
+  publicFile: "/tmp/shared/c4gh.pub.pem"
   resignJwt:
   s3Inbox: "http://localhost:18000"
 
@@ -69,9 +69,9 @@ db:
   sslmode: "disable"
 
 c4gh:
-  filePath: "tmp/shared/c4gh.sec.pem" 
+  filePath: "/tmp/shared/c4gh.sec.pem"
   passphrase: "c4ghpass"
-  syncPubKeyPath: "tmp/shared/sync.pub.pem" 
+  syncPubKeyPath: "/tmp/shared/sync.pub.pem"
 
 oidc:
   configuration:
@@ -80,7 +80,7 @@ oidc:
 server:
   cert: ""
   key: ""
-  jwtpubkeypath: "tmp/shared/keys/pub/"
+  jwtpubkeypath: "/tmp/shared/keys/pub/"
   jwtpubkeyurl: "http://oidc:8080/jwk"
 
 sync:
