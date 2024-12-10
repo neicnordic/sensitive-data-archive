@@ -41,7 +41,7 @@ You can also build images for individual services by replacing `all` with the fo
 $ make build-sda
 ```
 
-To build the CLI for `sda-admin`:
+To build the `sda-admin` CLI tool:
 
 ```sh
 $ make build-sda-admin
