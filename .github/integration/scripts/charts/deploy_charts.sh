@@ -11,8 +11,13 @@ if [ "$3" == "true" ]; then
     MQ_PORT=5671
 fi
 
+dir=".github/integration/scripts/charts"
+if [ "$(yq e '.global.db.password' .github/integration/scripts/charts/values.yaml)" == "PLACEHOLDER_VALUE" ]; then
+    dir=/tmp
+fi
+
 if [ "$1" == "sda-db" ]; then
-    ROOTPASS=$(yq e '.global.db.password' .github/integration/scripts/charts/values.yaml)
+    ROOTPASS="$(yq e '.global.db.password' "$dir/values.yaml")"
     helm install postgres charts/sda-db \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
@@ -25,7 +30,7 @@ if [ "$1" == "sda-db" ]; then
 fi
 
 if [ "$1" == "sda-mq" ]; then
-    ADMINPASS=$(yq e '.global.broker.password' .github/integration/scripts/charts/values.yaml)
+    ADMINPASS="$(yq e '.global.broker.password' "$dir/values.yaml")"
     helm install broker charts/sda-mq \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
@@ -56,6 +61,6 @@ if [ "$1" == "sda-svc" ]; then
         --set global.sync.api.password="$sync_api_pass" \
         --set global.sync.api.user="$sync_api_user" \
         --set global.sync.remote.host="$sync_host" \
-        -f .github/integration/scripts/charts/values.yaml \
+        -f "$dir/values.yaml" \
         --wait
 fi
