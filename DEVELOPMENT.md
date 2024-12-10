@@ -41,10 +41,10 @@ If successful, the curl command should output a JSON body containing:
 
 Running any of the SDA services located in the `sda` subfolder requires that the service specific credentials and RabbitMQ configurations are set as ENVs. Here, we'll use `ingest` as an example.
 
-- Bring up all SDA services with the S3 backend and populate them with test data by running the following command in the root folder of the repository:
+- Bring up all SDA services with the S3 backend by running the following command in the root folder of the repository:
 
 ```sh
-make integrationtest-sda-s3-run 
+make sda-s3-up
 ```
 
 - When the previous command is finished, bring down the `ingest` service using:
@@ -88,11 +88,14 @@ sda-cli -config /tmp/shared/s3cfg upload -encrypt-with-key /tmp/shared/c4gh.pub.
 # use sda-admin to check if t1.txt has been uploaded
 export API_HOST=http://localhost:8090
 export ACCESS_TOKEN=$(curl -s -k http://localhost:8080/tokens | jq -r '.[0]') 
-sda-admin file list -user test@dummy.org # file t1.txt should have fileStatus 'uploaded'
+sda-admin file list -user test@dummy.org # file test_dummy.org/t1.txt.c4gh should have fileStatus 'uploaded'
+
+# register the Crypt4GH key
+curl -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /tmp/shared/c4gh.pub.pem)"'", "description": "pubkey"}' http://localhost:8090/c4gh-keys/add
 
 # use sda-admin to ingest the file t1.txt
 sda-admin file ingest -filepath test_dummy.org/t1.txt.c4gh -user test@dummy.org  
 
 # verify that t1.txt has been ingested using sda-admin
-sda-admin file list -user test@dummy.org # file t1.txt should have fileStatus 'verified'
+sda-admin file list -user test@dummy.org # file test_dummy.org/t1.txt.c4gh should have fileStatus 'verified'
 ```
