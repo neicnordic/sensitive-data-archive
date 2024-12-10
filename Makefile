@@ -52,7 +52,7 @@ go-version-check:
 		echo "SDA requires go $${GO_VERSION_MIN} to build; found $${GO_VERSION}."; \
 		exit 1; \
 	fi; \
-	echo "GO version: $${GO_VERSION}.";
+	echo "GO version: $${GO_VERSION}."
 
 docker-version-check:
 	@DOCKER_VERSION=$$(docker version -f "{{.Server.Version}}" | cut -d'.' -f 1); \
@@ -70,7 +70,7 @@ docker-version-check:
 		exit 1;\
 	fi; \
 	echo "Docker version: $${DOCKER_VERSION}."; \
-	echo "Docker Compose version: $${DOCKER_COMPOSE_VERSION}.";
+	echo "Docker Compose version: $${DOCKER_COMPOSE_VERSION}."
 
 # bring up the services
 sda-s3-up:
