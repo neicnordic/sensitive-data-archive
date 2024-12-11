@@ -220,6 +220,8 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 #### Bootstrap the dependencies
 
+This script requires [yq](https://github.com/mikefarah/yq/releases/latest) and the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest)
+
 ```sh
 bash .github/integration/scripts/charts/dependencies.sh local
 ```

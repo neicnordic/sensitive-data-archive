@@ -8,7 +8,21 @@ random-string() {
         head -c 32 /dev/urandom | base64 -w0 | tr -d '/+' | fold -w 32 | head -n 1
 }
 
-if [ -z "$1" ]; then
+if [ "$1" == "local" ]; then
+        if [ ! "$(command crypt4gh)" ]; then
+                echo "crypt4gh not installed, get it from here: https://github.com/neicnordic/crypt4gh/releases/latest"
+                exit 1
+        elif [ "$(crypt4gh --version | cut -d ' ' -f1)" == "GA4GH" ]; then
+                echo "This script requires the GO version of crypt4gh."
+                echo "Get it from here: https://github.com/neicnordic/crypt4gh/releases/latest"
+                exit 1
+        fi
+
+        if [ ! "$(command yq)" ]; then
+                echo "yq not installed, get it from here: https://github.com/mikefarah/yq/releases/latest"
+                exit 1
+        fi
+else
         sudo curl --retry 100 -sL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -o /usr/bin/yq &&
                 sudo chmod +x /usr/bin/yq
 
