@@ -933,6 +933,10 @@ func (c *Config) configSchemas() {
 	} else {
 		c.Broker.SchemasPath = "/schemas/isolated/"
 	}
+
+	if viper.IsSet("schema.path") {
+		c.Broker.SchemasPath = viper.GetString("schema.path")
+	}
 }
 
 // configS3Storage populates and returns a S3Conf from the
