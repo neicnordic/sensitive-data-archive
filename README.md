@@ -158,7 +158,7 @@ $ make test-sda
 
 ## Testing and developing the helm charts locally
 
-Developing and testing the helm charts (or other deployment manifests) requires an kubernetes environment. One of the most light weight distributions avilable is [k3d](https://k3d.io/stable/).
+Developing and testing the Helm charts (or other deployment manifests) requires a Kubernetes environment. One of the most lightweight distributions available is [k3d](https://k3d.io/stable/).
 
 ### install k3d
 
@@ -182,9 +182,9 @@ Once installed a cluster named `test-cluster` can be created as such:
 k3d cluster create test-cluster
 ```
 
-Or by using the `make k3d-create-cluster` command, creates a cluster named `k3s-default`.
+Or by using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
 
-The new cluster's connection details will automatically be merged into your default kubeconfig and activated, the command below should show the created node.
+The new cluster's connection details will automatically be merged into your default kubeconfig and activated. The command below should show the created node.
 
 ```sh
 kubectl get nodes
@@ -212,10 +212,10 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 - make k3d-deploy-dependencies - bootstrap dependencies
 - make k3d-import-images - build and import images into the default cluster named `k3s-default`
-- make k3d-deploy-postgres - deploy the sda-db chart
-- make k3d-deploy-rabbitmq - deploy the sda-mq chart
-- make k3d-deploy-sda-s3 - deploy the sda-svc chart with S3 storage
-- make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage
+- make k3d-deploy-postgres - deploy the sda-db chart without TLS
+- make k3d-deploy-rabbitmq - deploy the sda-mq chart without TLS
+- make k3d-deploy-sda-s3 - deploy the sda-svc chart with S3 storage without TLS
+- make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage without TLS
 - make k3d-cleanup-all-deployments - Remove all deployed components and dependencies
 
 #### Bootstrap the dependencies
@@ -242,7 +242,7 @@ bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$(date +%F)" fa
 Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`)
 
 ```sh
-bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$(date +%F)" false s3
+bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$(date +%F)" false s3
 ```
 
 #### Cleanup all deployed components
