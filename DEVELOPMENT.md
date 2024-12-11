@@ -59,7 +59,7 @@ docker stop ingest
 docker cp verify:/shared /tmp/
 ```
 
-This will copy all data from the container's `/shared` folder to `/tmp/shared` on your local machine, so that we have access to all the required auto generated files that will be required.
+This will copy all data from the container's `/shared` folder to `/tmp/shared` on your local machine, so that we have access to all the auto generated files that will be required.
 
 - Change to the folder `sda` and start the `ingest` service using:
 
