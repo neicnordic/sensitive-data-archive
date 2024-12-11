@@ -207,8 +207,18 @@ func Files(c *gin.Context) {
 
 // Download serves file contents as bytes
 func Download(c *gin.Context) {
+	// This conditional should always be satisfied for /s3 since the c.Param is set to  encrypted
+	// when Crypt4GHPublicKeyB64 is not set or empty, but this is not the case for calls to /files endpoint.
+	// So we need this check.
+
 	if c.Param("type") != "encrypted" && config.Config.App.Crypt4GHPublicKeyB64 == "" {
 		c.String(http.StatusBadRequest, "downloading unencrypted data is not supported")
+
+		return
+	}
+
+	if c.Param("type") != "encrypted" && c.GetHeader("Client-Public-Key") != "" {
+		c.String(http.StatusBadRequest, "downloading encrypted data is not supported")
 
 		return
 	}
@@ -404,7 +414,7 @@ func Download(c *gin.Context) {
 			fileStream = seekStream
 		}
 	default:
-		// Reencrypt header for use with our temporary key
+		// Reencrypt header for use with the loaded internal key
 		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
