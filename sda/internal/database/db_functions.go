@@ -63,6 +63,42 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
+// GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
+// and that is not yet archived
+func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string, error) {
+	var (
+		err      error
+		count    int
+		filePath string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		filePath, err = dbs.getInboxFilePathFromID(submissionUser, fileID)
+		count++
+	}
+
+	return filePath, err
+}
+
+func (dbs *SDAdb) getInboxFilePathFromID(submissionUser, fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFilePath = "SELECT submission_file_path from sda.files where " +
+		"submission_user= $1 and id = $2 " +
+		"AND EXISTS (SELECT 1 FROM " +
+		"(SELECT event from sda.file_event_log where file_id = $2 order by started_at desc limit 1) " +
+		"as subquery WHERE event = 'uploaded')"
+
+	var filePath string
+	err := db.QueryRow(getFilePath, submissionUser, fileID).Scan(&filePath)
+	if err != nil {
+		return "", err
+	}
+
+	return filePath, nil
+}
+
 // UpdateFileEventLog updates the status in of the file in the database.
 // The message parameter is the rabbitmq message sent on file upload.
 func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
@@ -672,7 +708,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	db := dbs.DB
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = "SELECT f.submission_file_path, e.event, f.created_at FROM sda.files f " +
+	const query = "SELECT f.id, f.submission_file_path, e.event, f.created_at FROM sda.files f " +
 		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
 		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
 
@@ -687,13 +723,15 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	for rows.Next() {
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
-		err := rows.Scan(&fi.InboxPath, &fi.Status, &fi.CreateAt)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &fi.Status, &fi.CreateAt)
 		if err != nil {
 			return nil, err
 		}
 
-		// Add instance of struct (file) to array
-		files = append(files, fi)
+		// Add instance of struct (file) to array if the status is not disabled
+		if fi.Status != "disabled" {
+			files = append(files, fi)
+		}
 	}
 
 	return files, nil

@@ -5,16 +5,18 @@ labels: bug
 
 ---
 
-**Describe the bug**
+## Describe the bug
 
-**Steps to reproduce**
+## Steps to reproduce
 
-**Expected behavior**
+## Expected behavior
 - [ ] <!-- Issue specific criteria -->
 - [ ] Tests verifying the fix are added
 
-**Additional context**
+## Additional context
 
-**Estimation of size**: small/medium/big
+## Estimation of size
+small/medium/big
 
-**Estimation of priority**: low/medium/high
+## Estimation of priority
+low/medium/high

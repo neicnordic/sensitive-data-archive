@@ -90,6 +90,24 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X PUT -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
     ```
 
+- `/file/:username/:fileid`
+  - accepts `DELETE` requests
+  - marks the file as `disabled` in the database, and deletes it from the inbox.
+  - The file is identified by its id, returned by `users/:username/:files`
+
+  - Response codes
+    - `200` Query execute ok.
+    - `400` File id not provided
+    - `401` Token user is not in the list of admins.
+    - `404` File not found
+    - `500` Internal error due to Inbox, DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X DELETE https://HOSTNAME/file/user@demo.org/123abc
+    ```
+
 - `/dataset/create`
   - accepts `POST` requests with JSON data with the format: `{"accession_ids": ["<FILE_ACCESSION_01>", "<FILE_ACCESSION_02>"], "dataset_id": "<DATASET_01>", "user": "<SUBMISSION_USER>"}`
   - creates a dataset from the list of accession IDs and the dataset ID.

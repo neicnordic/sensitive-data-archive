@@ -52,6 +52,7 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
     ports:
       - "15672:15672"
+      - "5672:5672"
     restart: always
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -220,6 +221,8 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
+    extra_hosts:
+      - "localhost:host-gateway"
     healthcheck:
       test: ["CMD", "python3", "-c", 'import requests; print(requests.get(url = "http://localhost:8080/jwk").text)']
       interval: 10s
@@ -330,8 +333,12 @@ services:
       - AUTH_RESIGNJWT=false
       - OIDC_ID=XC56EL11xx
       - OIDC_SECRET=wHPVQaYXmdDHg
+      - OIDC_PROVIDER=http://localhost:8080
+      - OIDC_REDIRECTURL=http://localhost:8889/oidc/login
       - DB_PASSWORD=auth
       - DB_USER=auth
+    extra_hosts:
+      - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8889:8080"
@@ -369,6 +376,8 @@ services:
          condition: service_started
       reencrypt:
          condition: service_started
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
