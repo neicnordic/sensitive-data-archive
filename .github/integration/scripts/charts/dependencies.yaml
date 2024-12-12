@@ -95,7 +95,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: oidc-server
+  name: oidc
   labels:
     app: oidc-server
 spec:
