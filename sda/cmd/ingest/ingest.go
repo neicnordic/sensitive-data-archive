@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -100,6 +101,24 @@ func main() {
 	var message schema.IngestionTrigger
 
 	go func() {
+		start := time.Now()
+		for i := 1; i > 0; i++ {
+			h, err := db.ListKeyHashes()
+			if err != nil {
+				log.Errorln(err.Error())
+			}
+			if len(h) != 0 {
+				break
+			}
+
+			time.Sleep(time.Duration(30 * time.Second))
+			if time.Since(start).Seconds() >= float64(300) {
+				log.Errorln("no crypt4gh key hash registered, restarting")
+				forever <- false
+			}
+			log.Errorln("no crypt4gh key hash registered")
+		}
+
 		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
 			log.Fatal(err)
