@@ -11,3 +11,6 @@ for name in postgres rabbitmq download; do
 done
 
 k3d image import "ghcr.io/neicnordic/sensitive-data-archive:PR$(date +%F)" -c "$1"
+
+docker build -t ghcr.io/neicnordic/sensitive-data-archive:oidc -f .github/integration/scripts/charts/Dockerfile .
+k3d image import ghcr.io/neicnordic/sensitive-data-archive:oidc -c "$1"
