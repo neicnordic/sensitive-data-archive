@@ -1,0 +1,35 @@
+app:
+  serveUnencryptedData: true
+  port: 18080
+
+log:
+  level: "debug"
+  format: "json"
+
+archive:
+  type: "s3"
+  # S3 backend
+  url: "http://localhost"
+  port: 19000
+  accesskey: "access"
+  secretkey: "secretKey"
+  bucket: "archive"
+  region: "us-east-1"
+  chunksize: 32
+
+grpc:
+  host: localhost 
+  port: 50051
+
+db:
+  host: "localhost"
+  port: 15432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+oidc:
+  # oidc configuration API must have values for "userinfo_endpoint" and "jwks_uri"
+  configuration:
+    url: "http://localhost:8080/.well-known/openid-configuration"
