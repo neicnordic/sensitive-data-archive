@@ -51,7 +51,7 @@ def _generate_token() -> Tuple:
     # See available claims here: http://www.iana.org/assignments/jwt/jwt.xhtml
     # the important claim is the "authorities"
     header = {
-        "jku": f"{HTTP_PROTOCOL}://oidc:8080/jwk",
+        "jku": f"{HTTP_PROTOCOL}://localhost:8080/jwk",
         "alg": "ES256",
         "typ": "JWT",
         "kid": ec_key1.thumbprint()
@@ -61,7 +61,7 @@ def _generate_token() -> Tuple:
         "aud": ["aud1", "aud2"],
         "azp": "azp",
         "scope": "openid ga4gh_passport_v1",
-        "iss": "https://oidc:8080/",
+        "iss": "https://localhost:8080/",
         "exp": 9999999999,
         "iat": 1561621913,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102",
@@ -71,21 +71,21 @@ def _generate_token() -> Tuple:
         "aud": ["aud2", "aud3"],
         "azp": "azp",
         "scope": "openid ga4gh_passport_v1",
-        "iss": "https://oidc:8080/",
+        "iss": "https://localhost:8080/",
         "exp": 9999999999,
         "iat": 1561621913,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102",
     }
     empty_payload = {
         "sub": "requester@demo.org",
-        "iss": "https://oidc:8080/",
+        "iss": "https://localhost:8080/",
         "exp": 99999999999,
         "iat": 1547794655,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102",
     }
     # Craft passports
     passport_terms = {
-        "iss": "https://oidc:8080/",
+        "iss": "https://localhost:8080/",
         "sub": "requester@demo.org",
         "ga4gh_visa_v1": {
             "type": "AcceptedTermsAndPolicies",
@@ -100,7 +100,7 @@ def _generate_token() -> Tuple:
     }
     # passport for dataset permissions 1
     passport_dataset1 = {
-        "iss": "https://oidc:8080/",
+        "iss": "https://localhost:8080/",
         "sub": "requester@demo.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -165,12 +165,12 @@ def _generate_token() -> Tuple:
 async def fixed_response(request: web.Request) -> web.Response:
     global HTTP_PROTOCOL
     WELL_KNOWN = {
-        "issuer": f"{HTTP_PROTOCOL}://oidc:8080",
-        "authorization_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/authorize",
-        "registration_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/register",
-        "token_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/token",
-        "userinfo_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/userinfo",
-        "jwks_uri": f"{HTTP_PROTOCOL}://oidc:8080/jwk",
+        "issuer": f"{HTTP_PROTOCOL}://localhost:8080",
+        "authorization_endpoint": f"{HTTP_PROTOCOL}://localhost:8080/authorize",
+        "registration_endpoint": f"{HTTP_PROTOCOL}://localhost:8080/register",
+        "token_endpoint": f"{HTTP_PROTOCOL}://localhost:8080/token",
+        "userinfo_endpoint": f"{HTTP_PROTOCOL}://localhost:8080/userinfo",
+        "jwks_uri": f"{HTTP_PROTOCOL}://localhost:8080/jwk",
         "response_types_supported": [
             "code",
             "id_token",
