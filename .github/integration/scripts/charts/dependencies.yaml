@@ -81,20 +81,9 @@ spec:
         fsGroup: 1000
       containers:
       - name: oidc-server
-        image: neicnordic/mock-oidc:latest
+        image: ghcr.io/neicnordic/sensitive-data-archive:oidc
         ports:
         - containerPort: 8080
-        env:
-          - name: PORT
-            value: "8080"
-          - name: HOST
-            value: oidc-server
-          - name: CLIENT_ID
-            value: DfCieZLuBU
-          - name: CLIENT_SECRET
-            value: DfCieZLuBU
-          - name: CLIENT_REDIRECT_URI
-            value: https://sda-auth/elixir/login
         resources:
           limits:
             cpu: 250m
@@ -106,7 +95,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: oidc-server
+  name: oidc
   labels:
     app: oidc-server
 spec:

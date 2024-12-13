@@ -155,3 +155,102 @@ To run the static code tests for a specific component, replace `all` with the fo
 ```sh
 $ make test-sda
 ```
+
+## Testing and developing the helm charts locally
+
+Developing and testing the Helm charts (or other deployment manifests) requires a Kubernetes environment. One of the most lightweight distributions available is [k3d](https://k3d.io/stable/).
+
+### install k3d
+
+The simplest way to install k3d is by using the official install script.
+
+- wget:
+
+```bash
+wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+```
+
+- curl:
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+```
+
+Once installed a cluster named `test-cluster` can be created as such:
+
+```sh
+k3d cluster create test-cluster
+```
+
+Or by using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
+
+The new cluster's connection details will automatically be merged into your default kubeconfig and activated. The command below should show the created node.
+
+```sh
+kubectl get nodes
+```
+
+Removing the cluster can be done using the `make k3d-delete-cluster` command or as shown below if a specific name is used during creation.
+
+```sh
+k3d cluster delete test-cluster
+```
+
+#### Install kubectl
+
+If `kubectl` is not installed, run the following command to download the latest stable version. (substitue `linux/amd64` with `darwin/arm64` if you are using a Mac).
+
+```sh
+curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+```
+
+### Deploy the components
+
+Deployment of the charts can be done as describe below in more detail, or by using the corresponding command in the [Makefile](./Makefile)
+
+#### Makefile commands
+
+- make k3d-deploy-dependencies - bootstrap dependencies
+- make k3d-import-images - build and import images into the default cluster named `k3s-default`
+- make k3d-deploy-postgres - deploy the sda-db chart without TLS
+- make k3d-deploy-rabbitmq - deploy the sda-mq chart without TLS
+- make k3d-deploy-sda-s3 - deploy the sda-svc chart with S3 storage without TLS
+- make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage without TLS
+- make k3d-cleanup-all-deployments - Remove all deployed components and dependencies
+
+#### Bootstrap the dependencies
+
+This script requires [yq](https://github.com/mikefarah/yq/releases/latest) and the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest)
+
+```sh
+bash .github/integration/scripts/charts/dependencies.sh local
+```
+
+#### Deploy the Sensitive Data Archive components
+
+Start by building the required containers using the `make build-all` command, once that has completed the images can be imported to the cluster.
+
+```sh
+bash .github/integration/scripts/charts/import_local_images.sh <CLUTER_NAME>
+```
+
+The Postgres and RabbitMQ Needs to be deployed first, the bool at the end specifies if TLS should be enabled or not for the deployes services.  
+Replace `sda-db` in the example below with the helmc hart that shuld be installed. (`sda-db` or `sda-mq`)
+
+```sh
+bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$(date +%F)" false
+```
+
+Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`)
+
+```sh
+bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$(date +%F)" false s3
+```
+
+#### Cleanup all deployed components
+
+Once the testing is concluded all deployed components can be removed.
+
+```sh
+bash .github/integration/scripts/charts/cleanup.sh
+```

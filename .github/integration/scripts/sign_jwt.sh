@@ -5,8 +5,10 @@
 
 set -o pipefail
 
-apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
-apt-get -o DPkg::Lock::Timeout=60 install -y jq xxd >/dev/null
+if [ "$(id -u)" -eq 0 ]; then
+        apt-get -o DPkg::Lock::Timeout=60 update >/dev/null
+        apt-get -o DPkg::Lock::Timeout=60 install -y jq xxd >/dev/null
+fi
 
 build_header() {
         jq -c -n \
