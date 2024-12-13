@@ -33,7 +33,7 @@ fi
 # secret for the crypt4gh keypair
 C4GHPASSPHRASE="$(random-string)"
 export C4GHPASSPHRASE
-dir=$CWD
+dir=$PWD
 if [ -n "$1" ]; then
         dir=/tmp
 fi
