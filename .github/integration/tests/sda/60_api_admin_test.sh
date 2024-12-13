@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 cd shared || true
 
@@ -41,6 +41,7 @@ fi
 
 # Reupload a file under a different name, test to delete it
 s3cmd -c s3cfg put "NA12878.bam.c4gh" s3://test_dummy.org/NC12878.bam.c4gh
+stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')
 
 echo "waiting for upload to complete"
 URI=http://rabbitmq:15672
@@ -48,15 +49,14 @@ if [ -n "$PGSSLCERT" ]; then
    URI=https://rabbitmq:15671
 fi
 RETRY_TIMES=0
-until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 4 ]; do
+
+sleep 10
+
+if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq '.messages_ready')" ]; then
    echo "waiting for upload to complete"
-   RETRY_TIMES=$((RETRY_TIMES + 1))
-   if [ "$RETRY_TIMES" -eq 30 ]; then
-      echo "::error::Time out while waiting for upload to complete"
-      exit 1
-   fi
-   sleep 2
-done
+   echo "but too bad will eexit"
+   exit 1
+fi
 
 # get the fileId of the new file
 fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NC12878.bam.c4gh") | .fileID')"
@@ -109,17 +109,13 @@ URI=http://rabbitmq:15672
 if [ -n "$PGSSLCERT" ]; then
    URI=https://rabbitmq:15671
 fi
-RETRY_TIMES=0
-until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 6 ]; do
+sleep 10
+
+if [ $((stream_size++)) -eq "$(curl -s -u guest:guest $URI/api/queues/sda/inbox | jq '.messages_ready')" ]; then
    echo "waiting for upload to complete"
-   RETRY_TIMES=$((RETRY_TIMES + 1))
-   if [ "$RETRY_TIMES" -eq 3 ]; then
-      echo "::error::Time out while waiting for upload to complete"
-      #exit 1
-      break
-   fi
-   sleep 2
-done
+   echo "sad"
+   exit 1
+fi
 
 # Ingest it
 new_payload=$(
