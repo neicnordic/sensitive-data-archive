@@ -141,9 +141,9 @@ spec:
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
       {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
-        - name: APP_C4GHPRIVATEKEYPATH
+        - name: APP_C4GH_PRIVATEKEYPATH
           value: {{ template "c4ghPath" . }}/{{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
-        - name: APP_C4GHPASSPHRASE
+        - name: APP_C4GH_PASSPHRASE
           valueFrom:
             secretKeyRef:
               name: {{ required "A secret for the transient c4gh key is required" .Values.global.download.serveDecrypted.secretName }}

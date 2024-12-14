@@ -376,10 +376,10 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	if viper.IsSet("app.c4ghPrivateKeyPath") {
+	if viper.IsSet("app.c4gh.privateKeyPath") {
 
-		if !viper.IsSet("app.c4ghPassphrase") {
-			return errors.New("app.c4ghPassphrase is not set")
+		if !viper.IsSet("app.c4gh.passphrase") {
+			return errors.New("app.c4gh.passphrase is not set")
 		}
 
 		c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GetC4GHKeys()
@@ -487,8 +487,8 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 
 // GetC4GHKey reads and decrypts and returns the c4gh key
 func GetC4GHKeys() ([32]byte, string, error) {
-	keyPath := viper.GetString("app.c4ghPrivateKeyPath")
-	passphrase := viper.GetString("app.c4ghPassphrase")
+	keyPath := viper.GetString("app.c4gh.privateKeyPath")
+	passphrase := viper.GetString("app.c4gh.passphrase")
 
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)

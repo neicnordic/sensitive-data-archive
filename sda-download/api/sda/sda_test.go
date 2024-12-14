@@ -410,8 +410,8 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 		return "", errors.New("file not found")
 	}
 
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFilePath)
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFilePath)
+	viper.Set("app.c4gh.passphrase", "password")
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GetC4GHKeys()
 	assert.NoError(t, err, "Could not load c4gh keys")
 
@@ -443,8 +443,8 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 	database.CheckFilePermission = originalCheckFilePermission
 	config.Config.App.Crypt4GHPublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.App.Crypt4GHPrivateKey = originalC4ghPrivateKeyFilepath
-	viper.Set("app.c4ghPrivateKeyPath", "")
-	viper.Set("app.c4ghPassphrase", "")
+	viper.Set("app.c4gh.privateKeyPath", "")
+	viper.Set("app.c4gh.passphrase", "")
 
 }
 
@@ -468,8 +468,8 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 		return session.Cache{}
 	}
 
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFilePath)
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFilePath)
+	viper.Set("app.c4gh.passphrase", "password")
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GetC4GHKeys()
 	assert.NoError(t, err, "Could not load c4gh keys")
 
@@ -502,8 +502,8 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	config.Config.App.Crypt4GHPublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.App.Crypt4GHPrivateKey = originalC4ghPrivateKeyFilepath
-	viper.Set("app.c4ghPrivateKeyPath", "")
-	viper.Set("app.c4ghPassphrase", "")
+	viper.Set("app.c4gh.privateKeyPath", "")
+	viper.Set("app.c4gh.passphrase", "")
 
 }
 
@@ -532,8 +532,8 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 		return nil, errors.New("database error")
 	}
 
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFilePath)
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFilePath)
+	viper.Set("app.c4gh.passphrase", "password")
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GetC4GHKeys()
 	assert.NoError(t, err, "Could not load c4gh keys")
 
@@ -567,8 +567,8 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	database.GetFile = originalGetFile
 	config.Config.App.Crypt4GHPublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.App.Crypt4GHPrivateKey = originalC4ghPrivateKeyFilepath
-	viper.Set("app.c4ghPrivateKeyPath", "")
-	viper.Set("app.c4ghPassphrase", "")
+	viper.Set("app.c4gh.privateKeyPath", "")
+	viper.Set("app.c4gh.passphrase", "")
 
 }
 
@@ -604,8 +604,8 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 		return fileDetails, nil
 	}
 
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFilePath)
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFilePath)
+	viper.Set("app.c4gh.passphrase", "password")
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GetC4GHKeys()
 	assert.NoError(t, err, "Could not load c4gh keys")
 
@@ -642,8 +642,8 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	database.GetFile = originalGetFile
 	config.Config.App.Crypt4GHPublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.App.Crypt4GHPrivateKey = originalC4ghPrivateKeyFilepath
-	viper.Set("app.c4ghPrivateKeyPath", "")
-	viper.Set("app.c4ghPassphrase", "")
+	viper.Set("app.c4gh.privateKeyPath", "")
+	viper.Set("app.c4gh.passphrase", "")
 }
 
 func Test_CalucalateCoords(t *testing.T) {
@@ -795,8 +795,8 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	config.Config.Reencrypt.ClientKey = keyfile.Name()
 	config.Config.Reencrypt.Timeout = 10
 
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFilePath)
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFilePath)
+	viper.Set("app.c4gh.passphrase", "password")
 	config.Config.App.Crypt4GHPrivateKey, config.Config.App.Crypt4GHPublicKeyB64, err = config.GetC4GHKeys()
 	assert.NoError(t, err, "Could not load c4gh keys")
 
@@ -944,8 +944,8 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	database.GetFile = originalGetFile
 	config.Config.App.Crypt4GHPublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.App.Crypt4GHPrivateKey = originalC4ghPrivateKeyFilepath
-	viper.Set("app.c4ghPrivateKeyPath", "")
-	viper.Set("app.c4ghPassphrase", "")
+	viper.Set("app.c4gh.privateKeyPath", "")
+	viper.Set("app.c4gh.passphrase", "")
 }
 
 func GenerateTestC4ghKey(t *testing.T) (string, error) {
