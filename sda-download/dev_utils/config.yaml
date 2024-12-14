@@ -4,6 +4,9 @@ app:
   serverkey: "./dev_utils/certs/download-key.pem"
   port: "8443"
   middleware: "default"
+  c4gh:
+    passphrase: ""
+    privateKeyPath:  ""
 
 log:
   level: "debug"
