@@ -239,7 +239,9 @@ global:
       iss:
         - iss: "https://login.elixir-czech.org/oidc"
           jku: "https://login.elixir-czech.org/oidc/jwk"
-    serveDecrypted: {}
+    serveDecrypted:
+      c4ghKeyFile: ""
+      secretName: ""
 
   oidc:
     provider:  "https://login.elixir-czech.org/oidc/"

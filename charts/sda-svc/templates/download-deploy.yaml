@@ -140,7 +140,7 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
-      {{- if .Values.global.download.serveDecrypted }}
+      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: APP_C4GHPRIVATEKEYPATH
           value: {{ template "c4ghPath" . }}/{{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: APP_C4GHPASSPHRASE
@@ -228,7 +228,7 @@ spec:
         resources:
 {{ toYaml .Values.download.resources | trim | indent 10 }}
         volumeMounts:
-        {{- if .Values.global.download.serveDecrypted }}
+        {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           mountPath: {{ template "c4ghPath" . }}
         {{- end }}
@@ -257,7 +257,7 @@ spec:
             secretName: {{ required "An certificate issuer or a TLS secret name is required for download" .Values.download.tls.secretName }}
         {{- end }}
       {{- end }}
-      {{- if .Values.global.download.serveDecrypted }}
+      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           secret:
             defaultMode: 0440
