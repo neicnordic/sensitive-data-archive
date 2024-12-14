@@ -228,11 +228,11 @@ spec:
         resources:
 {{ toYaml .Values.download.resources | trim | indent 10 }}
         volumeMounts:
+        {{- if not .Values.global.vaultSecrets }}
         {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           mountPath: {{ template "c4ghPath" . }}
         {{- end }}
-        {{- if not .Values.global.vaultSecrets }}
         - name: iss
           mountPath: {{ template "trustedIssPath" . }}
         {{- end }}
@@ -257,6 +257,7 @@ spec:
             secretName: {{ required "An certificate issuer or a TLS secret name is required for download" .Values.download.tls.secretName }}
         {{- end }}
       {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
       {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           secret:
@@ -266,7 +267,6 @@ spec:
             - key: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
               path: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
       {{- end }}
-      {{- if not .Values.global.vaultSecrets }}
         - name: iss
           secret:
             defaultMode: 0440
