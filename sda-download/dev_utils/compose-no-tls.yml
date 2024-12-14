@@ -88,8 +88,8 @@ services:
       - ARCHIVE_URL=http://s3
       - ARCHIVE_TYPE=s3
       - DB_HOST=db
-      - APP_C4GHPRIVATEKEYPATH=/dev_utils/c4gh.sec.pem
-      - APP_C4GHPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
+      - APP_C4GH_PRIVATEKEYPATH=/dev_utils/c4gh.sec.pem
+      - APP_C4GH_PASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
     image: neicnordic/sda-download:latest
     build:
       context: ..
