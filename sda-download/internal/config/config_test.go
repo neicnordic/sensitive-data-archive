@@ -96,8 +96,8 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFile.Name())
-	viper.Set("app.c4ghPassphrase", "password")
+	viper.Set("app.c4gh.PrivateKeyPath", privateKeyFile.Name())
+	viper.Set("app.c4gh.passphrase", "password")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -116,13 +116,13 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
 
 	// Check false c4gh key
-	viper.Set("app.c4ghPrivateKeyPath", "some/nonexistent.key")
+	viper.Set("app.c4gh.privateKeyPath", "some/nonexistent.key")
 	err = c.appConfig()
 	assert.ErrorContains(suite.T(), err, "no such file or directory")
 
 	// Check false c4gh key
-	viper.Set("app.c4ghPrivateKeyPath", privateKeyFile.Name())
-	viper.Set("app.c4ghPassphrase", "blablabla")
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFile.Name())
+	viper.Set("app.c4gh.passphrase", "blablabla")
 	err = c.appConfig()
 	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
 }
