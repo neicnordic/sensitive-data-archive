@@ -85,7 +85,7 @@ echo "expected file found"
 # Test file can be decrypted
 ## test also the files endpoint
 
-C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
+C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | tail -1 | sed -e 's/.* //' -e 's/"//g')
 export C4GH_PASSPHRASE
 
 crypt4gh decrypt -s c4gh.sec.pem -f dummy_data.c4gh && mv dummy_data old-file.txt

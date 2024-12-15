@@ -11,7 +11,7 @@ token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '
 dataset="https://doi.example/ty009.sfrrss/600.45asasga"
 file="dummy_data"
 expected_size=1048605
-C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
+C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | tail -1 | sed -e 's/.* //' -e 's/"//g')
 export C4GH_PASSPHRASE
 
 # download decrypted full file,  check file size
