@@ -376,7 +376,7 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	if viper.IsSet("app.c4gh.privateKeyPath") {
+	if viper.GetString("app.c4gh.privateKeyPath") != "" {
 
 		if !viper.IsSet("app.c4gh.passphrase") {
 			return errors.New("app.c4gh.passphrase is not set")
