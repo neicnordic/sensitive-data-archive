@@ -176,19 +176,25 @@ wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 ```
 
-Once installed a cluster named `test-cluster` can be created as such:
+#### Create a cluster
 
-```sh
-k3d cluster create test-cluster
-```
-
-Or by using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
+Once installed a cluster can be created using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
 
 The new cluster's connection details will automatically be merged into your default kubeconfig and activated. The command below should show the created node.
 
 ```sh
 kubectl get nodes
 ```
+
+The Nginx ingress controller is deployed and will bind to ports 80 and 443 of the host system. A deployed service with an ingress definition can then be targeted by setting the `Host: HOSTNAME` header for that service.
+
+```sh
+curl -H "Host: test" http://localhost/
+```
+
+For testing ingress endpoints with other applications like a web browser, the hostname in the ingress definition should have the `.127.0.0.1.nip.io` ending in order to not have to modify the `/etc/hosts` file, ex. `app.127.0.0.1.nip.io`.
+
+#### Remove the cluster
 
 Removing the cluster can be done using the `make k3d-delete-cluster` command or as shown below if a specific name is used during creation.
 
@@ -220,7 +226,7 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 #### Bootstrap the dependencies
 
-This script requires [yq](https://github.com/mikefarah/yq/releases/latest) and the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest)
+This script requires [yq](https://github.com/mikefarah/yq/releases/latest), the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest) as well as [xxd](https://manpages.org/xxd) and [jq](https://manpages.org/jq) to be installed.
 
 ```sh
 bash .github/integration/scripts/charts/dependencies.sh local
