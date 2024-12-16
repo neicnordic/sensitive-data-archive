@@ -48,13 +48,10 @@ URI=http://rabbitmq:15672
 if [ -n "$PGSSLCERT" ]; then
    URI=https://rabbitmq:15671
 fi
-RETRY_TIMES=0
-
 sleep 10
 
 if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq '.messages_ready')" ]; then
-   echo "waiting for upload to complete"
-   echo "but too bad will eexit"
+   echo "Upload did not complete successfully"
    exit 1
 fi
 
@@ -104,16 +101,11 @@ fi
 
 # Re-upload the file and use the api to ingest it, then try to delete it
 s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/NE12878.bam.c4gh
-
-URI=http://rabbitmq:15672
-if [ -n "$PGSSLCERT" ]; then
-   URI=https://rabbitmq:15671
-fi
+echo "waiting for upload to complete"
 sleep 10
 
 if [ $((stream_size++)) -eq "$(curl -s -u guest:guest $URI/api/queues/sda/inbox | jq '.messages_ready')" ]; then
-   echo "waiting for upload to complete"
-   echo "sad"
+   echo "Upload did not complete successfully"
    exit 1
 fi
 
@@ -213,3 +205,5 @@ if [ "$resp" != "404" ]; then
     echo "Trying to download a non existing file, expected 404 got: $resp"
     exit 1
 fi
+
+echo "API admin tests completed successfully"
