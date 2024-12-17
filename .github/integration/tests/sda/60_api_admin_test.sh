@@ -3,7 +3,7 @@ set -e
 cd shared || true
 
 token="$(curl http://oidc:8080/tokens | jq -r '.[0]')"
-# Upload a file and make sure it's listed
+## make sure previously uploaded files are listed
 result="$(curl -sk -L "http://api:8080/users/test@dummy.org/files" -H "Authorization: Bearer $token" | jq '. | length')"
 if [ "$result" -ne 2 ]; then
     echo "wrong number of files returned for user test@dummy.org"
@@ -41,19 +41,24 @@ fi
 
 # Reupload a file under a different name, test to delete it
 s3cmd -c s3cfg put "NA12878.bam.c4gh" s3://test_dummy.org/NC12878.bam.c4gh
-stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')
+stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq '.messages_ready')
 
-echo "waiting for upload to complete"
 URI=http://rabbitmq:15672
 if [ -n "$PGSSLCERT" ]; then
    URI=https://rabbitmq:15671
 fi
-sleep 10
+stream_size=$((stream_size + 1))
+RETRY_TIMES=0
 
-if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq '.messages_ready')" ]; then
-   echo "Upload did not complete successfully"
-   exit 1
-fi
+until [ $((stream_size)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq '.messages_ready')" ]; do
+    echo "waiting for upload to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "Upload did not complete successfully"
+        exit 1
+    fi
+    sleep 2
+done
 
 # get the fileId of the new file
 fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "NC12878.bam.c4gh") | .fileID')"
@@ -101,13 +106,18 @@ fi
 
 # Re-upload the file and use the api to ingest it, then try to delete it
 s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/NE12878.bam.c4gh
-echo "waiting for upload to complete"
-sleep 10
+stream_size=$((stream_size + 1))
+RETRY_TIMES=0
 
-if [ $((stream_size++)) -eq "$(curl -s -u guest:guest $URI/api/queues/sda/inbox | jq '.messages_ready')" ]; then
-   echo "Upload did not complete successfully"
-   exit 1
-fi
+until [ $((stream_size)) -eq "$(curl -s -u guest:guest $URI/api/queues/sda/inbox | jq '.messages_ready')" ]; do
+    echo "waiting for upload to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "Upload did not complete successfully"
+        exit 1
+    fi
+    sleep 2
+done
 
 # Ingest it
 new_payload=$(
