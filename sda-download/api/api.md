@@ -100,7 +100,7 @@ This endpoint is designed for usage with [htsget](https://samtools.github.io/hts
 
 The `/s3` endpoint accepts the parameters described below. Note that depending on the configuration of the download service, `/s3` may either serve only encrypted or decrypted files.
 
-By default,
+By default, it will serve only encrypted files unless a private c4gh key is provided to the service upon its deployment.
 
 **Parameters**:
 
