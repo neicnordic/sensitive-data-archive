@@ -102,6 +102,20 @@ def generate_token():
         "exp": 99999999999,
         "jti": "9fa600d6-4148-47c1-b708-36c4ba2e980e"
     }
+    passport_dataset_gdi = {
+        "iss": "http://129.177.177.134:8000/",
+        "sub": "requester@elixir-europe.org",
+        "ga4gh_visa_v1": {
+            "type": "ControlledAccessGrants",
+            "value": "https://www.ebi.ac.uk/ega/GDI-NO-10001",
+            "source": "https://ga4gh.org/duri/no_org",
+            "by": "dac",
+            "asserted": 1568699331
+        },
+        "iat": 1571144438,
+        "exp": 99999999999,
+        "jti": "2b322848-506b-492c-914f-47f9da967cdd"
+    }
     public_jwk = jwk.dumps(public_key, kty='RSA')
     private_jwk = jwk.dumps(pem, kty='RSA')
     dataset_encoded = jwt.encode(header, dataset_payload, private_jwk).decode('utf-8')
@@ -110,8 +124,9 @@ def generate_token():
     passport_status_encoded = jwt.encode(header, passport_status, private_jwk).decode('utf-8')
     passport_dataset1_encoded = jwt.encode(header, passport_dataset1, private_jwk).decode('utf-8')
     passport_dataset2_encoded = jwt.encode(header, passport_dataset2, private_jwk).decode('utf-8')
+    passport_dataset_gdi_encoded = jwt.encode(header, passport_dataset_gdi, private_jwk).decode('utf-8')
     return (public_jwk, dataset_encoded, empty_encoded, passport_terms_encoded, passport_status_encoded,
-            passport_dataset1_encoded, passport_dataset2_encoded)
+            passport_dataset1_encoded, passport_dataset2_encoded, passport_dataset_gdi_encoded)
 
 
 DATA = generate_token()
@@ -129,7 +144,7 @@ async def jwk_response(request):
 
 async def tokens_response(request):
     """Serve generated tokens."""
-    data = [DATA[1], DATA[2]]
+    data = [DATA[1], DATA[2], DATA[6]]
     return web.json_response(data)
 
 
@@ -143,7 +158,8 @@ async def userinfo(request):
                 DATA[3],
                 DATA[4],
                 DATA[5],
-                DATA[6]
+                DATA[6],
+                DATA[7]
             ]
         }
     return web.json_response(data)
