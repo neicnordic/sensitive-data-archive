@@ -1,7 +1,7 @@
 # API
 
 The Download API service provides functionality for downloading files from the Archive.
-It implements the [Data Out API](https://neic-sda.readthedocs.io/en/latest/dataout/#rest-api-endpoints). Further, it enables the endpoint `/s3` used for htsget and other services that need to interface with an s3-backend storage.
+It implements the [Data Out API](https://neic-sda.readthedocs.io/en/latest/dataout/#rest-api-endpoints). Further, it enables the endpoint `/s3`, which is used for htsget and other services that need to interface with an S3-backend storage.
 
 The response can be restricted to only contain a given range of a file, and the files can be returned encrypted or unencrypted, depending on the configuration of the service.
 
@@ -22,7 +22,7 @@ The client can establish a session to bypass time-costly visa validations for fu
 - `/metadata/datasets/*dataset`
 - `/files/:fileid`
 
-**[File download requests, for s3 endpoint](#file-download-requests)**
+**[File download requests, for `/s3` endpoint](#file-download-requests)**
 
 - `/s3/*datasetid/*filepath`
 
@@ -96,7 +96,7 @@ Parts of a file can be requested with specific byte ranges using `startCoordinat
 ```
 
 ### File download requests
-This endpoint is designed for usage with [htsget](https://samtools.github.io/hts-specs/htsget.html) or other external applications that interface with s3-storage backends.
+This endpoint is designed for usage with [htsget](https://samtools.github.io/hts-specs/htsget.html) or other external applications that interface with S3-storage backends.
 
 The `/s3` endpoint accepts the parameters described below. Note that depending on the configuration of the download service, `/s3` may either serve only encrypted or decrypted files.
 

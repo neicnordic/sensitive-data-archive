@@ -48,7 +48,6 @@ if [ ! -f "${reencryptedFile%.c4gh}" ] ; then
 fi
 mv "${reencryptedFile%.c4gh}" full2.bam
 
-
 if ! cmp --silent full1.bam full2.bam; then
     echo "Decrypted version of $reencryptedFile and the original unencrypted file, are different"
     exit 1
