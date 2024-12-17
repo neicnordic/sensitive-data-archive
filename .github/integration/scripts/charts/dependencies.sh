@@ -31,7 +31,7 @@ else
 fi
 
 # secret for the crypt4gh keypair
-C4GHPASSPHRASE="ZB8ko3g2P9wEgagpgqCS7vJhJoKrSUfJ"
+C4GHPASSPHRASE="$(random-string)"
 export C4GHPASSPHRASE
 dir=$PWD
 if [ -n "$1" ]; then
