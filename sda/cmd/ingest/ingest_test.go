@@ -36,13 +36,31 @@ func (suite *TestSuite) SetupTest() {
 	pubKeyList = append(pubKeyList, publicKey)
 
 	tempDir := suite.T().TempDir()
-	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
-	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
-	assert.NoError(suite.T(), err)
-	viper.Set("c4gh.filepath", fmt.Sprintf("%s/c4fg.key", tempDir))
-	viper.Set("c4gh.passphrase", "password")
 
+	// Write the first private key file
+	privateKeyFile1, err := os.Create(fmt.Sprintf("%s/c4gh1.key", tempDir))
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile1, privateKey, []byte("c4ghpass"))
+	assert.NoError(suite.T(), err)
+	privateKeyFile1.Close()
+
+	// Write the second private key file
+	privateKeyFile2, err := os.Create(fmt.Sprintf("%s/c4gh2.key", tempDir))
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile2, privateKey, []byte("c4ghpass"))
+	assert.NoError(suite.T(), err)
+	privateKeyFile2.Close()
+
+	viper.Set("c4gh.keys", []map[string]string{
+		{
+			"filePath":   fmt.Sprintf("%s/c4gh1.key", tempDir),
+			"passphrase": "c4ghpass",
+		},
+		{
+			"filePath":   fmt.Sprintf("%s/c4gh2.key", tempDir),
+			"passphrase": "c4ghpass",
+		},
+	})
 	viper.Set("broker.host", "test")
 	viper.Set("broker.port", 123)
 	viper.Set("broker.user", "test")
@@ -67,11 +85,21 @@ func (suite *TestSuite) TestTryDecrypt_wrongFile() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	key, err := config.GetC4GHKey()
-	assert.Nil(suite.T(), err)
-	b, err := tryDecrypt(key, buf)
-	assert.Nil(suite.T(), b)
-	assert.EqualError(suite.T(), err, "not a Crypt4GH file")
+	keyList, err := config.GetC4GHKeyList()
+	assert.NoError(suite.T(), err)
+
+	var decryptionSuccessful bool
+	for _, key := range keyList {
+		b, err := tryDecrypt(key, buf)
+		if b != nil || err == nil {
+			decryptionSuccessful = true
+
+			break
+		}
+		assert.EqualError(suite.T(), err, "not a Crypt4GH file")
+	}
+
+	assert.False(suite.T(), decryptionSuccessful, "Decryption should not succeed with any key")
 }
 
 func (suite *TestSuite) TestTryDecrypt() {
@@ -102,9 +130,15 @@ func (suite *TestSuite) TestTryDecrypt() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	key, err := config.GetC4GHKey()
+	keyList, err := config.GetC4GHKeyList()
 	assert.NoError(suite.T(), err)
-	header, err := tryDecrypt(key, buf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), header)
+	for _, key := range keyList {
+		header, err := tryDecrypt(key, buf)
+		if header != nil && err == nil {
+
+			break
+		}
+		assert.NoError(suite.T(), err)
+		assert.NotNil(suite.T(), header)
+	}
 }
