@@ -104,6 +104,7 @@ func main() {
 				}
 
 				for _, aID := range mappings.AccessionIDs {
+					log.Debugf("Mapped file to dataset (corr-id: %s, datasetid: %s, accessionid: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
 					fileInfo, err := db.GetFileInfoFromAccessionID(aID)
 					if err != nil {
 						log.Errorf("failed to get file info for file with stable ID: %s", aID)
