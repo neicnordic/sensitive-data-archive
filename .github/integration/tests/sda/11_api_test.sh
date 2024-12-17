@@ -52,6 +52,12 @@ if [ "$resp" != "200" ]; then
 	exit 1
 fi
 
+ts=$(date +"%F %T")
+depr="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq -r .[1].deprecated_at)"
+if [ "$depr" != "$ts" ]; then
+	echo "Error when listing key hash, expected $ts got: $depr"
+	exit 1
+fi
 
 # list key hashes
 resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq '. | length')"
@@ -64,12 +70,6 @@ manual_hash=$(sed -n '2p' /shared/c4gh.pub.pem | base64 -d -w0 | xxd -c64 -ps)
 resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq -r .[0].hash)"
 if [ "$resp" != "$manual_hash" ]; then
 	echo "Error when listing key hash, expected $manual_hash got: $resp"
-	exit 1
-fi
-ts=$(date +"%F %T")
-depr="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq -r .[1].deprecated_at)"
-if [ "$depr" != "$ts" ]; then
-	echo "Error when listing key hash, expected $ts got: $depr"
 	exit 1
 fi
 
