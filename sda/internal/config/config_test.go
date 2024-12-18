@@ -15,6 +15,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -360,6 +361,99 @@ func (suite *ConfigTestSuite) TestGetC4GHKey() {
 	pkBytes, err = GetC4GHKey()
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), pkBytes)
+
+	defer os.RemoveAll(keyPath)
+}
+
+func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_AllOK() {
+	// Generate a crypth4gh keypair
+	_, privateKey, err := keys.GenerateKeyPair()
+	assert.NoError(suite.T(), err)
+
+	keyPath, _ := os.MkdirTemp("", "key")
+	keyFile1 := keyPath + "/c4gh1.key"
+	keyFile2 := keyPath + "/c4gh2.key"
+
+	// Write the first private key file
+	keyFileWriter1, err := os.Create(keyFile1)
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter1, privateKey, []byte("test"))
+	assert.NoError(suite.T(), err)
+	keyFileWriter1.Close()
+
+	// Write the second private key file
+	keyFileWriter2, err := os.Create(keyFile2)
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter2, privateKey, []byte("test"))
+	assert.NoError(suite.T(), err)
+	keyFileWriter2.Close()
+
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: keyFile1, Passphrase: "test"},
+		{FilePath: keyFile2, Passphrase: "test"},
+	})
+
+	privateKeys, err := GetC4GHprivateKeys()
+	assert.NoError(suite.T(), err)
+	assert.Len(suite.T(), privateKeys, 2)
+
+	defer os.RemoveAll(keyPath)
+}
+
+func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_MissingKeyPath() {
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: "/non/existent/path1", Passphrase: "test"},
+	})
+
+	privateKeys, err := GetC4GHprivateKeys()
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "failed to open key file")
+	assert.Nil(suite.T(), privateKeys)
+}
+
+func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_WrongPassphrase() {
+	// Generate a crypth4gh keypair
+	_, privateKey, err := keys.GenerateKeyPair()
+	assert.NoError(suite.T(), err)
+
+	keyPath, _ := os.MkdirTemp("", "key")
+	keyFile := keyPath + "/c4gh1.key"
+
+	keyFileWriter, err := os.Create(keyFile)
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter, privateKey, []byte("test"))
+	assert.NoError(suite.T(), err)
+	keyFileWriter.Close()
+
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: keyFile, Passphrase: "wrong"},
+	})
+
+	privateKeys, err := GetC4GHprivateKeys()
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "chacha20poly1305: message authentication faile")
+	assert.Nil(suite.T(), privateKeys)
+
+	defer os.RemoveAll(keyPath)
+}
+
+func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_InvalidKey() {
+	// Generate a crypth4gh keypair
+	key := "not a valid key"
+	keyPath, _ := os.MkdirTemp("", "key")
+	keyFile := keyPath + "/c4gh1.key"
+
+	err := os.WriteFile(keyFile, []byte(key), 0600)
+	assert.NoError(suite.T(), err)
+
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: keyFile, Passphrase: "wrong"},
+	})
+
+	privateKeys, err := GetC4GHprivateKeys()
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "read of unrecognized private key format")
+	assert.Nil(suite.T(), privateKeys)
 
 	defer os.RemoveAll(keyPath)
 }
