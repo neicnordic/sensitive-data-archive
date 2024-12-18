@@ -37,30 +37,27 @@ func (suite *TestSuite) SetupTest() {
 
 	tempDir := suite.T().TempDir()
 
+	keyFile1 := fmt.Sprintf("%s/c4gh1.pub", tempDir)
+	keyFile2 := fmt.Sprintf("%s/c4gh2.pub", tempDir)
 	// Write the first private key file
-	privateKeyFile1, err := os.Create(fmt.Sprintf("%s/c4gh1.key", tempDir))
+	keyFileWriter1, err := os.Create(keyFile1)
 	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile1, privateKey, []byte("c4ghpass"))
+	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter1, privateKey, []byte("test"))
 	assert.NoError(suite.T(), err)
-	privateKeyFile1.Close()
+	keyFileWriter1.Close()
 
 	// Write the second private key file
-	privateKeyFile2, err := os.Create(fmt.Sprintf("%s/c4gh2.key", tempDir))
+	keyFileWriter2, err := os.Create(keyFile2)
 	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile2, privateKey, []byte("c4ghpass"))
+	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter2, privateKey, []byte("test"))
 	assert.NoError(suite.T(), err)
-	privateKeyFile2.Close()
+	keyFileWriter2.Close()
 
-	viper.Set("c4gh.privateKeys", []map[string]string{
-		{
-			"filePath":   fmt.Sprintf("%s/c4gh1.key", tempDir),
-			"passphrase": "c4ghpass",
-		},
-		{
-			"filePath":   fmt.Sprintf("%s/c4gh2.key", tempDir),
-			"passphrase": "c4ghpass",
-		},
+	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
+		{FilePath: keyFile1, Passphrase: "test"},
+		{FilePath: keyFile2, Passphrase: "test"},
 	})
+
 	viper.Set("broker.host", "test")
 	viper.Set("broker.port", 123)
 	viper.Set("broker.user", "test")
