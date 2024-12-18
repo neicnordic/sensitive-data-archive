@@ -62,7 +62,7 @@ func main() {
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
-	keyList, err := config.GetC4GHKeyList()
+	archiveKeyList, err := config.GetC4GHprivateKeys()
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -384,14 +384,14 @@ func main() {
 
 					//nolint:nestif
 					if bytesRead <= int64(len(readBuffer)) {
-						var successfulKey *[32]byte
+						var privateKey *[32]byte
 						var header []byte
 
-						// Iterate over keyList to try decryption
-						for _, key := range keyList {
+						// Iterate over the key list to try decryption
+						for _, key := range archiveKeyList {
 							header, err = tryDecrypt(key, readBuffer)
 							if err == nil {
-								successfulKey = key
+								privateKey = key
 
 								break
 							}
@@ -399,9 +399,9 @@ func main() {
 						}
 
 						// Check if decryption was successful with any key
-						if successfulKey == nil {
-							log.Errorf("All keys failed to decrypt the start of the file")
-							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", `{"error" : "Decryption failed with all keys"}`, string(delivered.Body)); err != nil {
+						if privateKey == nil {
+							log.Errorf("All keys failed to decrypt the submitted file")
+							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(delivered.Body)); err != nil {
 								log.Errorf("Failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 							}
 
@@ -411,8 +411,8 @@ func main() {
 
 							// Send the message to an error queue so it can be analyzed.
 							fileError := broker.InfoError{
-								Error:           "Trying to decrypt start of file failed with all keys",
-								Reason:          "Decryption failed with all keys",
+								Error:           "Trying to decrypt the submitted file failed",
+								Reason:          "Decryption failed with the available key(s)",
 								OriginalMessage: message,
 							}
 							body, _ := json.Marshal(fileError)
@@ -425,7 +425,7 @@ func main() {
 
 						// Proceed with the successful key
 						// Set the file's hex encoded public key
-						publicKey := keys.DerivePublicKey(*successfulKey)
+						publicKey := keys.DerivePublicKey(*privateKey)
 						keyhash := hex.EncodeToString(publicKey[:])
 						err = db.SetKeyHash(keyhash, fileID)
 						if err != nil {

@@ -151,7 +151,7 @@ type CORSConfig struct {
 	AllowCredentials bool
 }
 
-type KeyConfig struct {
+type C4GHprivateKeyConf struct {
 	FilePath   string `mapstructure:"filePath"`
 	Passphrase string `mapstructure:"passphrase"`
 }
@@ -367,27 +367,6 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"c4gh.filepath",
 			"c4gh.passphrase",
-		}
-		// This should be refactored once the old method for reading a single key file is removed
-		if viper.IsSet("c4gh.keys") {
-			// Check if at least one key entry has a valid filepath and passphrase
-			var keyConfigs []map[string]string
-			if err := viper.UnmarshalKey("c4gh.keys", &keyConfigs); err != nil {
-				return nil, fmt.Errorf("failed to parse key configurations: %v", err)
-			}
-
-			atLeastOneKeySet := false
-			for _, key := range keyConfigs {
-				if key["filepath"] != "" && key["passphrase"] != "" {
-					atLeastOneKeySet = true
-
-					break
-				}
-			}
-
-			if !atLeastOneKeySet {
-				return nil, fmt.Errorf("at least one valid entry in c4gh.keys must have a filepath and passphrase set")
-			}
 		}
 	case "s3inbox":
 		requiredConfVars = []string{
@@ -1092,15 +1071,15 @@ func GetC4GHKey() (*[32]byte, error) {
 	return &key, nil
 }
 
-// GetC4GHKeyList reads and decrypts keys and returns a list of c4gh keys
-func GetC4GHKeyList() ([]*[32]byte, error) {
+// GetC4GHprivateKeys reads and decrypts keys and returns a list of c4gh keys
+func GetC4GHprivateKeys() ([]*[32]byte, error) {
 	// Retrieve the list of key configurations from the YAML file
-	var keyConfigs []KeyConfig
-	if err := viper.UnmarshalKey("c4gh.keys", &keyConfigs); err != nil {
+	var keyConfigs []C4GHprivateKeyConf
+	if err := viper.UnmarshalKey("c4gh.privateKeys", &keyConfigs); err != nil {
 		return nil, fmt.Errorf("failed to parse key configurations: %v", err)
 	}
 
-	var keysList []*[32]byte
+	var privateKeys []*[32]byte
 
 	// Iterate over each key configuration
 	for _, keyConfig := range keyConfigs {
@@ -1115,10 +1094,10 @@ func GetC4GHKeyList() ([]*[32]byte, error) {
 			return nil, fmt.Errorf("failed to read private key from %s: %v", keyConfig.FilePath, err)
 		}
 
-		keysList = append(keysList, &key)
+		privateKeys = append(privateKeys, &key)
 	}
 
-	return keysList, nil
+	return privateKeys, nil
 }
 
 // GetC4GHPublicKey reads the c4gh public key

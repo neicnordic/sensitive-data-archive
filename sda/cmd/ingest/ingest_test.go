@@ -51,7 +51,7 @@ func (suite *TestSuite) SetupTest() {
 	assert.NoError(suite.T(), err)
 	privateKeyFile2.Close()
 
-	viper.Set("c4gh.keys", []map[string]string{
+	viper.Set("c4gh.privateKeys", []map[string]string{
 		{
 			"filePath":   fmt.Sprintf("%s/c4gh1.key", tempDir),
 			"passphrase": "c4ghpass",
@@ -85,7 +85,7 @@ func (suite *TestSuite) TestTryDecrypt_wrongFile() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	keyList, err := config.GetC4GHKeyList()
+	keyList, err := config.GetC4GHprivateKeys()
 	assert.NoError(suite.T(), err)
 
 	var decryptionSuccessful bool
@@ -130,12 +130,11 @@ func (suite *TestSuite) TestTryDecrypt() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	keyList, err := config.GetC4GHKeyList()
+	keyList, err := config.GetC4GHprivateKeys()
 	assert.NoError(suite.T(), err)
 	for _, key := range keyList {
 		header, err := tryDecrypt(key, buf)
 		if header != nil && err == nil {
-
 			break
 		}
 		assert.NoError(suite.T(), err)
