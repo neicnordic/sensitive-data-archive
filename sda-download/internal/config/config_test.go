@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -64,6 +65,16 @@ func (suite *TestSuite) TestMissingRequiredConfVar() {
 
 func (suite *TestSuite) TestAppConfig() {
 
+	// Generate a crypth4gh private key file
+	_, privateKey, err := keys.GenerateKeyPair()
+	assert.NoError(suite.T(), err)
+	tempDir := suite.T().TempDir()
+	defer os.RemoveAll(tempDir)
+	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
+	assert.NoError(suite.T(), err)
+	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
+	assert.NoError(suite.T(), err)
+
 	// Test fail on missing middleware
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
@@ -75,17 +86,18 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.middleware", "noexist")
 
 	c := &Map{}
-	err := c.appConfig()
+	err = c.appConfig()
 	assert.Error(suite.T(), err, "Error expected")
 	viper.Reset()
 
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
-	viper.Set("app.serveUnencryptedData", false)
 	viper.Set("app.servercert", "test")
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
+	viper.Set("app.c4gh.PrivateKeyPath", privateKeyFile.Name())
+	viper.Set("app.c4gh.passphrase", "password")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -94,15 +106,25 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), 1234, c.App.Port)
 	assert.Equal(suite.T(), "test", c.App.ServerCert)
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
-	assert.NotNil(suite.T(), c.App.Crypt4GHPrivateKey)
-	assert.NotNil(suite.T(), c.App.Crypt4GHPublicKeyB64)
-	assert.Equal(suite.T(), false, c.App.ServeUnencryptedData)
+	assert.NotEmpty(suite.T(), c.App.Crypt4GHPrivateKey)
+	assert.NotEmpty(suite.T(), c.App.Crypt4GHPublicKeyB64)
 
-	// Check the key that was generated
+	// Check the private key that was loaded by checking the derived public key
 	publicKey, err := base64.StdEncoding.DecodeString(c.App.Crypt4GHPublicKeyB64)
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
 	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
+
+	// Check false c4gh key
+	viper.Set("app.c4gh.privateKeyPath", "some/nonexistent.key")
+	err = c.appConfig()
+	assert.ErrorContains(suite.T(), err, "no such file or directory")
+
+	// Check false c4gh key
+	viper.Set("app.c4gh.privateKeyPath", privateKeyFile.Name())
+	viper.Set("app.c4gh.passphrase", "blablabla")
+	err = c.appConfig()
+	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
 }
 
 func (suite *TestSuite) TestArchiveConfig() {
