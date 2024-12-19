@@ -11,11 +11,8 @@ import (
 	"testing"
 	"time"
 
-	helper "github.com/neicnordic/sensitive-data-archive/internal/helper"
-
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -366,27 +363,14 @@ func (suite *ConfigTestSuite) TestGetC4GHKey() {
 }
 
 func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_AllOK() {
-	// Generate a crypth4gh keypair
-	_, privateKey, err := keys.GenerateKeyPair()
-	assert.NoError(suite.T(), err)
-
 	keyPath, _ := os.MkdirTemp("", "key")
 	keyFile1 := keyPath + "/c4gh1.key"
 	keyFile2 := keyPath + "/c4gh2.key"
 
-	// Write the first private key file
-	keyFileWriter1, err := os.Create(keyFile1)
+	_, err := helper.CreatePrivateKeyFile(keyFile1, "test")
 	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter1, privateKey, []byte("test"))
+	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
 	assert.NoError(suite.T(), err)
-	keyFileWriter1.Close()
-
-	// Write the second private key file
-	keyFileWriter2, err := os.Create(keyFile2)
-	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter2, privateKey, []byte("test"))
-	assert.NoError(suite.T(), err)
-	keyFileWriter2.Close()
 
 	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
 		{FilePath: keyFile1, Passphrase: "test"},
@@ -412,18 +396,11 @@ func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_MissingKeyPath() {
 }
 
 func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_WrongPassphrase() {
-	// Generate a crypth4gh keypair
-	_, privateKey, err := keys.GenerateKeyPair()
-	assert.NoError(suite.T(), err)
-
 	keyPath, _ := os.MkdirTemp("", "key")
 	keyFile := keyPath + "/c4gh1.key"
 
-	keyFileWriter, err := os.Create(keyFile)
+	_, err := helper.CreatePrivateKeyFile(keyFile, "test")
 	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter, privateKey, []byte("test"))
-	assert.NoError(suite.T(), err)
-	keyFileWriter.Close()
 
 	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
 		{FilePath: keyFile, Passphrase: "wrong"},
@@ -438,7 +415,6 @@ func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_WrongPassphrase() {
 }
 
 func (suite *ConfigTestSuite) TestGetC4GHprivateKeys_InvalidKey() {
-	// Generate a crypth4gh keypair
 	key := "not a valid key"
 	keyPath, _ := os.MkdirTemp("", "key")
 	keyFile := keyPath + "/c4gh1.key"
