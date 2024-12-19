@@ -20,6 +20,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/neicnordic/crypt4gh/keys"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -420,4 +421,28 @@ func TLScertToFile(filename string, derBytes []byte) error {
 	err = pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
 	return err
+}
+
+// CreatePrivateKeyFile creates a private key file with the given passphrase
+// and returns the generated public key.
+func CreatePrivateKeyFile(keyFile string, passphrase string) ([32]byte, error) {
+	var zeroPubKey [32]byte
+
+	publicKey, privateKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		return zeroPubKey, err
+	}
+
+	keyFileWriter, err := os.Create(keyFile)
+	if err != nil {
+		return zeroPubKey, err
+	}
+	defer keyFileWriter.Close()
+
+	// Write the private key to the file
+	if err := keys.WriteCrypt4GHX25519PrivateKey(keyFileWriter, privateKey, []byte(passphrase)); err != nil {
+		return zeroPubKey, err
+	}
+
+	return publicKey, nil
 }
