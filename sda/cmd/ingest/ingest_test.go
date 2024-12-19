@@ -32,8 +32,8 @@ func (suite *TestSuite) SetupTest() {
 	viper.Set("archive.location", archive)
 
 	tempDir := suite.T().TempDir()
-	keyFile1 := fmt.Sprintf("%s/c4gh1.pub", tempDir)
-	keyFile2 := fmt.Sprintf("%s/c4gh2.pub", tempDir)
+	keyFile1 := fmt.Sprintf("%s/c4gh1.key", tempDir)
+	keyFile2 := fmt.Sprintf("%s/c4gh2.key", tempDir)
 
 	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
 	assert.NoError(suite.T(), err)
