@@ -1,6 +1,6 @@
 #!/bin/sh
 
-for c in s3cmd jq
+for c in s3cmd jq yq
 do
     if ! command -v $c
     then
@@ -194,7 +194,7 @@ echo "expected file found"
 # Test file can be decrypted
 ## test also the files endpoint
 
-C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | tail -1 | sed -e 's/.* //' -e 's/"//g')
+C4GH_PASSPHRASE=$(yq .c4gh.passphrase config.yaml)
 export C4GH_PASSPHRASE
 
 crypt4gh decrypt --sk c4gh.sec.pem < dummy_data.c4gh > old-file.txt
