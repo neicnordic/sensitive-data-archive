@@ -151,6 +151,11 @@ type CORSConfig struct {
 	AllowCredentials bool
 }
 
+type C4GHprivateKeyConf struct {
+	FilePath   string `mapstructure:"filePath"`
+	Passphrase string `mapstructure:"passphrase"`
+}
+
 // NewConfig initializes and parses the config file and/or environment using
 // the viper library.
 func NewConfig(app string) (*Config, error) {
@@ -1064,6 +1069,34 @@ func GetC4GHKey() (*[32]byte, error) {
 	keyFile.Close()
 
 	return &key, nil
+}
+
+// GetC4GHprivateKeys reads and decrypts keys and returns a list of c4gh keys
+func GetC4GHprivateKeys() ([]*[32]byte, error) {
+	// Retrieve the list of key configurations from the YAML file
+	var keySet []C4GHprivateKeyConf
+	if err := viper.UnmarshalKey("c4gh.privateKeys", &keySet); err != nil {
+		return nil, fmt.Errorf("failed to parse key configurations: %v", err)
+	}
+
+	var privateKeys []*[32]byte
+
+	for _, entry := range keySet {
+		keyFile, err := os.Open(entry.FilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open key file %s: %v", entry.FilePath, err)
+		}
+
+		key, err := keys.ReadPrivateKey(keyFile, []byte(entry.Passphrase))
+		keyFile.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read private key from %s: %v", entry.FilePath, err)
+		}
+
+		privateKeys = append(privateKeys, &key)
+	}
+
+	return privateKeys, nil
 }
 
 // GetC4GHPublicKey reads the c4gh public key

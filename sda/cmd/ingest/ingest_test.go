@@ -9,6 +9,7 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -30,18 +31,22 @@ func (suite *TestSuite) SetupTest() {
 	defer os.RemoveAll(archive)
 	viper.Set("archive.location", archive)
 
-	// Generate a crypth4gh keypair
-	publicKey, privateKey, err := keys.GenerateKeyPair()
+	tempDir := suite.T().TempDir()
+	keyFile1 := fmt.Sprintf("%s/c4gh1.key", tempDir)
+	keyFile2 := fmt.Sprintf("%s/c4gh2.key", tempDir)
+
+	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
 	assert.NoError(suite.T(), err)
+	// Add only the first public key to the list
 	pubKeyList = append(pubKeyList, publicKey)
 
-	tempDir := suite.T().TempDir()
-	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
+	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
 	assert.NoError(suite.T(), err)
-	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
-	assert.NoError(suite.T(), err)
-	viper.Set("c4gh.filepath", fmt.Sprintf("%s/c4fg.key", tempDir))
-	viper.Set("c4gh.passphrase", "password")
+
+	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
+		{FilePath: keyFile1, Passphrase: "test"},
+		{FilePath: keyFile2, Passphrase: "test"},
+	})
 
 	viper.Set("broker.host", "test")
 	viper.Set("broker.port", 123)
@@ -67,10 +72,12 @@ func (suite *TestSuite) TestTryDecrypt_wrongFile() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	key, err := config.GetC4GHKey()
-	assert.Nil(suite.T(), err)
-	b, err := tryDecrypt(key, buf)
-	assert.Nil(suite.T(), b)
+	privateKeys, err := config.GetC4GHprivateKeys()
+	assert.NoError(suite.T(), err)
+	assert.Len(suite.T(), privateKeys, 2)
+
+	header, err := tryDecrypt(privateKeys[0], buf)
+	assert.Nil(suite.T(), header)
 	assert.EqualError(suite.T(), err, "not a Crypt4GH file")
 }
 
@@ -102,9 +109,18 @@ func (suite *TestSuite) TestTryDecrypt() {
 	buf, err := io.ReadAll(file)
 	assert.NoError(suite.T(), err)
 
-	key, err := config.GetC4GHKey()
+	privateKeys, err := config.GetC4GHprivateKeys()
 	assert.NoError(suite.T(), err)
-	header, err := tryDecrypt(key, buf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), header)
+
+	for i, key := range privateKeys {
+		header, err := tryDecrypt(key, buf)
+		switch {
+		case i == 0:
+			assert.NoError(suite.T(), err)
+			assert.NotNil(suite.T(), header)
+		default:
+			assert.Contains(suite.T(), err.Error(), "could not find matching public key heade")
+			assert.Nil(suite.T(), header)
+		}
+	}
 }

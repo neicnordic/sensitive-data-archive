@@ -62,7 +62,7 @@ func main() {
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
-	key, err := config.GetC4GHKey()
+	archiveKeyList, err := config.GetC4GHprivateKeys()
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -384,11 +384,25 @@ func main() {
 
 					//nolint:nestif
 					if bytesRead <= int64(len(readBuffer)) {
-						header, err := tryDecrypt(key, readBuffer)
-						if err != nil {
-							log.Errorf("Trying to decrypt start of file failed, reason: (%s)", err.Error())
-							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()), string(delivered.Body)); err != nil {
-								log.Errorf("failed to set ingestion status for file from message: %v", delivered.CorrelationId)
+						var privateKey *[32]byte
+						var header []byte
+
+						// Iterate over the key list to try decryption
+						for _, key := range archiveKeyList {
+							header, err = tryDecrypt(key, readBuffer)
+							if err == nil {
+								privateKey = key
+
+								break
+							}
+							log.Warnf("Decryption failed with key, trying next key. Reason: (%s)", err.Error())
+						}
+
+						// Check if decryption was successful with any key
+						if privateKey == nil {
+							log.Errorf("All keys failed to decrypt the submitted file")
+							if err := db.UpdateFileEventLog(fileID, "error", delivered.CorrelationId, "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(delivered.Body)); err != nil {
+								log.Errorf("Failed to set ingestion status for file from message: %v", delivered.CorrelationId)
 							}
 
 							if err := delivered.Ack(false); err != nil {
@@ -397,8 +411,8 @@ func main() {
 
 							// Send the message to an error queue so it can be analyzed.
 							fileError := broker.InfoError{
-								Error:           "Trying to decrypt start of file failed",
-								Reason:          err.Error(),
+								Error:           "Trying to decrypt the submitted file failed",
+								Reason:          "Decryption failed with the available key(s)",
 								OriginalMessage: message,
 							}
 							body, _ := json.Marshal(fileError)
@@ -409,8 +423,9 @@ func main() {
 							continue mainWorkLoop
 						}
 
+						// Proceed with the successful key
 						// Set the file's hex encoded public key
-						publicKey := keys.DerivePublicKey(*key)
+						publicKey := keys.DerivePublicKey(*privateKey)
 						keyhash := hex.EncodeToString(publicKey[:])
 						err = db.SetKeyHash(keyhash, fileID)
 						if err != nil {

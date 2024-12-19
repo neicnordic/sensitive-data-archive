@@ -125,3 +125,29 @@ func (suite *HelperTest) TestCreateHSToken() {
 
 	defer os.RemoveAll("dummy-folder")
 }
+
+func (suite *HelperTest) TestCreatePrivateKeyFile() {
+	tempDir, err := os.MkdirTemp("", "key")
+	assert.NoError(suite.T(), err)
+	defer os.RemoveAll(tempDir)
+
+	// Define the key file path and passphrase
+	keyFile := fmt.Sprintf("%s/c4gh.key", tempDir)
+	passphrase := "test"
+
+	// Call the function under test
+	publicKey, err := CreatePrivateKeyFile(keyFile, passphrase)
+	assert.NoError(suite.T(), err)
+
+	// Verify the file was created
+	_, err = os.Stat(keyFile)
+	assert.NoError(suite.T(), err, "Private key file should exist")
+
+	// Read and verify the file contents
+	fileContent, err := os.ReadFile(keyFile)
+	assert.NoError(suite.T(), err, "Should be able to read the private key file")
+	assert.Contains(suite.T(), string(fileContent), "BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY", "File should contain a valid private key")
+
+	// Verify the public key is not empty
+	assert.NotEqual(suite.T(), [32]byte{}, publicKey, "Public key should not be empty")
+}

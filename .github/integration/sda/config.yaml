@@ -70,6 +70,11 @@ c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
+  privateKeys:
+  - filePath: /shared/c4gh.sec.pem
+    passphrase: "c4ghpass"
+  - filePath: /shared/c4gh1.sec.pem
+    passphrase: "c4ghpass"
 
 oidc:
   id:
