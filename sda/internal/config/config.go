@@ -1074,24 +1074,23 @@ func GetC4GHKey() (*[32]byte, error) {
 // GetC4GHprivateKeys reads and decrypts keys and returns a list of c4gh keys
 func GetC4GHprivateKeys() ([]*[32]byte, error) {
 	// Retrieve the list of key configurations from the YAML file
-	var keyConfigs []C4GHprivateKeyConf
-	if err := viper.UnmarshalKey("c4gh.privateKeys", &keyConfigs); err != nil {
+	var keySet []C4GHprivateKeyConf
+	if err := viper.UnmarshalKey("c4gh.privateKeys", &keySet); err != nil {
 		return nil, fmt.Errorf("failed to parse key configurations: %v", err)
 	}
 
 	var privateKeys []*[32]byte
 
-	// Iterate over each key configuration
-	for _, keyConfig := range keyConfigs {
-		keyFile, err := os.Open(keyConfig.FilePath)
+	for _, entry := range keySet {
+		keyFile, err := os.Open(entry.FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open key file %s: %v", keyConfig.FilePath, err)
+			return nil, fmt.Errorf("failed to open key file %s: %v", entry.FilePath, err)
 		}
 
-		key, err := keys.ReadPrivateKey(keyFile, []byte(keyConfig.Passphrase))
+		key, err := keys.ReadPrivateKey(keyFile, []byte(entry.Passphrase))
 		keyFile.Close()
 		if err != nil {
-			return nil, fmt.Errorf("failed to read private key from %s: %v", keyConfig.FilePath, err)
+			return nil, fmt.Errorf("failed to read private key from %s: %v", entry.FilePath, err)
 		}
 
 		privateKeys = append(privateKeys, &key)
