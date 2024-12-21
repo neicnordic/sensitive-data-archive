@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -725,15 +726,29 @@ func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 	const query = "SELECT DISTINCT correlation_id FROM sda.file_event_log e " +
-		"RIGHT JOIN sda.files f ON e.file_id = f.id WHERE f.submission_file_path = $1 AND f.submission_user = $2 AND COALESCE(f.stable_id, '')= $3;"
-
-	var corrID string
-	err := db.QueryRow(query, path, user, accession).Scan(&corrID)
+		"RIGHT JOIN sda.files f ON e.file_id = f.id " +
+		"WHERE f.submission_file_path = $1 AND f.submission_user = $2 AND COALESCE(f.stable_id, '') = $3;"
+	rows, err := db.Query(query, path, user, accession)
 	if err != nil {
 		return "", err
 	}
+	if rows.Err() != nil {
+		return "", rows.Err()
+	}
+	defer rows.Close()
 
-	return corrID, nil
+	var corrID sql.NullString
+	for rows.Next() {
+		err := rows.Scan(&corrID)
+		if err != nil {
+			return "", err
+		}
+		if corrID.Valid {
+			return corrID.String, nil
+		}
+	}
+
+	return "", fmt.Errorf("sql: no rows in result set")
 }
 
 // list all users with files not yet assigned to a dataset
