@@ -539,7 +539,7 @@ func (suite *DatabaseTests) TestGetCorrID_wrongFilePath() {
 	fileID, err := db.RegisterFile(filePath, user)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
-	assert.NoError(suite.T(), err, "failed to update satus of file in database")
+	assert.NoError(suite.T(), err, "failed to update status of file in database")
 
 	corrID, err := db.GetCorrID(user, "/testuser/file20.c4gh", "")
 	assert.EqualError(suite.T(), err, "sql: no rows in result set")
