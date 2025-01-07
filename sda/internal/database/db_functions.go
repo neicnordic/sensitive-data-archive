@@ -732,9 +732,6 @@ func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if rows.Err() != nil {
-		return "", rows.Err()
-	}
 	defer rows.Close()
 
 	var corrID sql.NullString
@@ -746,6 +743,9 @@ func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 		if corrID.Valid {
 			return corrID.String, nil
 		}
+	}
+	if rows.Err() != nil {
+		return "", rows.Err()
 	}
 
 	return "", fmt.Errorf("sql: no rows in result set")
