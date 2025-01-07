@@ -529,6 +529,23 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 
 }
 
+func (suite *DatabaseTests) TestGetCorrID_wrongFilePath() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	filePath := "/testuser/file10.c4gh"
+	user := "testuser"
+
+	fileID, err := db.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to update status of file in database")
+
+	corrID, err := db.GetCorrID(user, "/testuser/file20.c4gh", "")
+	assert.EqualError(suite.T(), err, "sql: no rows in result set")
+	assert.Equal(suite.T(), "", corrID)
+}
+
 func (suite *DatabaseTests) TestGetCorrID_fileWithAccessionID() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
