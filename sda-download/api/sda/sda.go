@@ -208,8 +208,10 @@ func Files(c *gin.Context) {
 // Download serves file contents as bytes
 func Download(c *gin.Context) {
 	// This conditional should always be satisfied for /s3 since the c.Param is set to  encrypted
-	// when Crypt4GHPublicKeyB64 is not set or empty, but this is not the case for calls to /files endpoint.
+	// when PublicKeyB64 is not set or empty, but this is not the case for calls to /files endpoint.
+	// This is because the /files endpoint does not support encrypted files atm.
 	// So we need this check.
+	// Checking the type instead of the field S3 is better because it also provides a sanity check for the /s3 case.
 
 	if c.Param("type") != "encrypted" && config.Config.App.Crypt4GHPublicKeyB64 == "" {
 		c.String(http.StatusBadRequest, "downloading unencrypted data is not supported")
