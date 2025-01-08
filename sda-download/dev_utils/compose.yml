@@ -121,8 +121,8 @@ services:
         condition: service_started
     env_file: ./env.download
     environment:
-      - APP_C4GH_PRIVATEKEYPATH=/dev_utils/c4gh.sec.pem
-      - APP_C4GH_PASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
+      - C4GH_TRANSIENTKEYPATH=/dev_utils/c4gh.sec.pem
+      - C4GH_TRANSIENTPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
     image: neicnordic/sda-download:latest
     volumes:
       - ./config.yaml:/config.yaml

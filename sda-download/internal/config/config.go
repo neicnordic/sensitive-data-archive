@@ -37,6 +37,7 @@ type Map struct {
 	OIDC      OIDCConfig
 	Archive   storage.Conf
 	Reencrypt ReencryptConfig
+	C4GH      transientKeyConf
 }
 
 type AppConfig struct {
@@ -56,13 +57,15 @@ type AppConfig struct {
 	// Optional. Defaults to empty
 	ServerKey string
 
-	// Stores the Crypt4GH private key used internally
-	Crypt4GHPrivateKey   [32]byte
-	Crypt4GHPublicKeyB64 string
-
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+}
+
+// Stores the Crypt4GH private key used internally
+type transientKeyConf struct {
+	PrivateKey   [32]byte
+	PublicKeyB64 string
 }
 
 type SessionConfig struct {
@@ -376,13 +379,13 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	if viper.GetString("app.c4gh.privateKeyPath") != "" {
+	if viper.GetString("c4gh.transientKeyPath") != "" {
 
-		if !viper.IsSet("app.c4gh.passphrase") {
-			return errors.New("app.c4gh.passphrase is not set")
+		if !viper.IsSet("c4gh.transientPassphrase") {
+			return errors.New("c4gh.transientPassphrase is not set")
 		}
 
-		c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GetC4GHKeys()
+		c.C4GH.PrivateKey, c.C4GH.PublicKeyB64, err = GetC4GHKeys()
 		if err != nil {
 			return err
 		}
@@ -487,8 +490,8 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 
 // GetC4GHKey reads and decrypts and returns the c4gh key
 func GetC4GHKeys() ([32]byte, string, error) {
-	keyPath := viper.GetString("app.c4gh.privateKeyPath")
-	passphrase := viper.GetString("app.c4gh.passphrase")
+	keyPath := viper.GetString("c4gh.transientKeyPath")
+	passphrase := viper.GetString("c4gh.transientPassphrase")
 
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)

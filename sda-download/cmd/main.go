@@ -76,7 +76,7 @@ func main() {
 	// Start the server
 	log.Info("(5/5) Starting web server")
 
-	if config.Config.App.Crypt4GHPublicKeyB64 != "" {
+	if config.Config.C4GH.PublicKeyB64 != "" {
 		log.Warningln("Serving unencrypted data")
 	}
 

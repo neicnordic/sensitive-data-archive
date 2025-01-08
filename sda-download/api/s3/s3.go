@@ -330,7 +330,7 @@ func Download(c *gin.Context) {
 		ListBuckets(c)
 
 	case c.Param("filename") != "":
-		if config.Config.App.Crypt4GHPublicKeyB64 == "" {
+		if config.Config.C4GH.PublicKeyB64 == "" {
 			GetEcnryptedObject(c)
 		} else {
 			GetObject(c)

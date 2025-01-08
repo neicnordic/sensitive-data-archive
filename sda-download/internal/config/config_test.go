@@ -96,8 +96,8 @@ func (suite *TestSuite) TestAppConfig() {
 	viper.Set("app.serverkey", "test")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
-	viper.Set("app.c4gh.PrivateKeyPath", privateKeyFile.Name())
-	viper.Set("app.c4gh.passphrase", "password")
+	viper.Set("c4gh.transientKeyPath", privateKeyFile.Name())
+	viper.Set("c4gh.transientPassphrase", "password")
 
 	c = &Map{}
 	err = c.appConfig()
@@ -106,23 +106,23 @@ func (suite *TestSuite) TestAppConfig() {
 	assert.Equal(suite.T(), 1234, c.App.Port)
 	assert.Equal(suite.T(), "test", c.App.ServerCert)
 	assert.Equal(suite.T(), "test", c.App.ServerKey)
-	assert.NotEmpty(suite.T(), c.App.Crypt4GHPrivateKey)
-	assert.NotEmpty(suite.T(), c.App.Crypt4GHPublicKeyB64)
+	assert.NotEmpty(suite.T(), c.C4GH.PrivateKey)
+	assert.NotEmpty(suite.T(), c.C4GH.PublicKeyB64)
 
 	// Check the private key that was loaded by checking the derived public key
-	publicKey, err := base64.StdEncoding.DecodeString(c.App.Crypt4GHPublicKeyB64)
+	publicKey, err := base64.StdEncoding.DecodeString(c.C4GH.PublicKeyB64)
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
 	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))
 	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
 
 	// Check false c4gh key
-	viper.Set("app.c4gh.privateKeyPath", "some/nonexistent.key")
+	viper.Set("c4gh.transientKeyPath", "some/nonexistent.key")
 	err = c.appConfig()
 	assert.ErrorContains(suite.T(), err, "no such file or directory")
 
 	// Check false c4gh key
-	viper.Set("app.c4gh.privateKeyPath", privateKeyFile.Name())
-	viper.Set("app.c4gh.passphrase", "blablabla")
+	viper.Set("c4gh.transientKeyPath", privateKeyFile.Name())
+	viper.Set("c4gh.transientPassphrase", "blablabla")
 	err = c.appConfig()
 	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
 }
