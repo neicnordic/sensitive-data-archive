@@ -206,19 +206,17 @@ func main() {
 			}
 
 			var key *[32]byte
-			var foundKey bool
-			for _, key = range archiveKeyList {
-				size, err := headers.EncryptedSegmentSize(header, *key)
+			for _, k := range archiveKeyList {
+				size, err := headers.EncryptedSegmentSize(header, *k)
 				if (err == nil) && (size != 0) {
-					foundKey = true
+					key = k
 
 					break
 				}
-				log.Warnf("Failed to get encrypted segment size with key: %v, trying next key. Reason: %s", *key, err.Error())
 			}
 
-			if !foundKey {
-				log.Errorf("Failed to get encrypted segment size with all available key(s).")
+			if key == nil {
+				log.Errorf("no matching key found for file: %s.", message.ArchivePath)
 
 				continue
 			}
@@ -226,7 +224,7 @@ func main() {
 			mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archiveFileHash))
 			c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
 			if err != nil {
-				log.Errorf("Failed to open C4GH decryptor stream with key: %v", *key)
+				log.Errorf("failed to open c4gh decryptor stream, reson: %s", err.Error())
 
 				continue
 			}
