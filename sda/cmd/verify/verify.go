@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -204,20 +205,28 @@ func main() {
 				continue
 			}
 
-			var c4ghr *streaming.Crypt4GHReader
+			var key *[32]byte
+			var foundKey bool
+			for _, key = range archiveKeyList {
+				size, err := headers.EncryptedSegmentSize(header, *key)
+				if (err == nil) && (size != 0) {
+					foundKey = true
 
-			for _, key := range archiveKeyList {
-				// Feed data read from the archive file into archiveFileHash
-				mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archiveFileHash))
-
-				c4ghr, err = streaming.NewCrypt4GHReader(mr, *key, nil)
-				if (err == nil) && (c4ghr != nil) {
 					break
 				}
-				log.Warnf("Failed to open C4GH decryptor with key: %v, trying next key. Reason: %s", *key, err.Error())
+				log.Warnf("Failed to get encrypted segment size with key: %v, trying next key. Reason: %s", *key, err.Error())
 			}
-			if c4ghr == nil {
-				log.Errorf("Failed to open C4GH decryptor stream with all available key(s)")
+
+			if !foundKey {
+				log.Errorf("Failed to get encrypted segment size with all available key(s).")
+
+				continue
+			}
+
+			mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archiveFileHash))
+			c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
+			if err != nil {
+				log.Errorf("Failed to open C4GH decryptor stream with key: %v", *key)
 
 				continue
 			}
