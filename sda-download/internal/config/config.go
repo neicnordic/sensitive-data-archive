@@ -37,6 +37,7 @@ type Map struct {
 	OIDC      OIDCConfig
 	Archive   storage.Conf
 	Reencrypt ReencryptConfig
+	C4GH      transientKeyConf
 }
 
 type AppConfig struct {
@@ -56,15 +57,15 @@ type AppConfig struct {
 	// Optional. Defaults to empty
 	ServerKey string
 
-	// Stores the Crypt4GH private key used internally
-	Crypt4GHPrivateKey   [32]byte
-	Crypt4GHPublicKeyB64 string
-
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+}
 
-	ServeUnencryptedData bool
+// Stores the Crypt4GH private key used internally
+type transientKeyConf struct {
+	PrivateKey   [32]byte
+	PublicKeyB64 string
 }
 
 type SessionConfig struct {
@@ -241,7 +242,6 @@ func NewConfig() (*Map, error) {
 func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
-	viper.SetDefault("app.serveUnencryptedData", false)
 	viper.SetDefault("app.middleware", "default")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
@@ -371,7 +371,6 @@ func (c *Map) appConfig() error {
 	c.App.ServerCert = viper.GetString("app.servercert")
 	c.App.ServerKey = viper.GetString("app.serverkey")
 	c.App.Middleware = viper.GetString("app.middleware")
-	c.App.ServeUnencryptedData = viper.GetBool("app.serveUnencryptedData")
 
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")
@@ -380,9 +379,17 @@ func (c *Map) appConfig() error {
 	}
 
 	var err error
-	c.App.Crypt4GHPrivateKey, c.App.Crypt4GHPublicKeyB64, err = GenerateC4GHKey()
-	if err != nil {
-		return err
+	if viper.GetString("c4gh.transientKeyPath") != "" {
+
+		if !viper.IsSet("c4gh.transientPassphrase") {
+			return errors.New("c4gh.transientPassphrase is not set")
+		}
+
+		c.C4GH.PrivateKey, c.C4GH.PublicKeyB64, err = GetC4GHKeys()
+		if err != nil {
+			return err
+		}
+		log.Infoln("Internal c4gh key-pair loaded")
 	}
 
 	if !slices.Contains(availableMiddlewares, c.App.Middleware) {
@@ -481,25 +488,27 @@ func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
 	return wl
 }
 
-// GeneerateC4GHKey generates a keypair and returns the private key as a byte
-// array and the public key as a base64 encoded string
-func GenerateC4GHKey() ([32]byte, string, error) {
-	log.Info("creating temporary crypt4gh key")
+// GetC4GHKey reads and decrypts and returns the c4gh key
+func GetC4GHKeys() ([32]byte, string, error) {
+	keyPath := viper.GetString("c4gh.transientKeyPath")
+	passphrase := viper.GetString("c4gh.transientPassphrase")
 
-	public, private, err := keys.GenerateKeyPair()
-
+	// Make sure the key path and passphrase is valid
+	keyFile, err := os.Open(keyPath)
 	if err != nil {
-		log.Errorf("Error when generating keys: %v", err)
-
 		return [32]byte{}, "", err
 	}
+	private, err := keys.ReadPrivateKey(keyFile, []byte(passphrase))
+	if err != nil {
+		return [32]byte{}, "", fmt.Errorf("error when reading private key: %v", err)
+	}
+	keyFile.Close()
 
+	public := keys.DerivePublicKey(private)
 	pem := bytes.Buffer{}
 	err = keys.WriteCrypt4GHX25519PublicKey(&pem, public)
 	if err != nil {
-		log.Errorf("Error when converting public key to PEM format: %v", err)
-
-		return [32]byte{}, "", err
+		return [32]byte{}, "", fmt.Errorf("error when converting public key to PEM format: %v", err)
 	}
 
 	b64 := base64.StdEncoding.EncodeToString(pem.Bytes())

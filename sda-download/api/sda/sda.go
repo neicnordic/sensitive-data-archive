@@ -207,8 +207,20 @@ func Files(c *gin.Context) {
 
 // Download serves file contents as bytes
 func Download(c *gin.Context) {
-	if c.Param("type") != "encrypted" && !config.Config.App.ServeUnencryptedData {
+	// This conditional should always be satisfied for /s3 since the c.Param is set to  encrypted
+	// when PublicKeyB64 is not set or empty, but this is not the case for calls to /files endpoint.
+	// This is because the /files endpoint does not support encrypted files atm.
+	// So we need this check.
+	// Checking the type instead of the field S3 is better because it also provides a sanity check for the /s3 case.
+
+	if c.Param("type") != "encrypted" && config.Config.C4GH.PublicKeyB64 == "" {
 		c.String(http.StatusBadRequest, "downloading unencrypted data is not supported")
+
+		return
+	}
+
+	if c.Param("type") != "encrypted" && c.GetHeader("Client-Public-Key") != "" {
+		c.String(http.StatusBadRequest, "downloading encrypted data is not supported")
 
 		return
 	}
@@ -404,8 +416,8 @@ func Download(c *gin.Context) {
 			fileStream = seekStream
 		}
 	default:
-		// Reencrypt header for use with our temporary key
-		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.App.Crypt4GHPublicKeyB64)
+		// Reencrypt header for use with the loaded internal key
+		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.C4GH.PublicKeyB64)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
@@ -428,7 +440,7 @@ func Download(c *gin.Context) {
 			}
 		}
 
-		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.App.Crypt4GHPrivateKey, nil)
+		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.C4GH.PrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
 			log.Errorf("could not prepare file for streaming, %s", err)

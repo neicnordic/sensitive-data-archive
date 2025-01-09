@@ -1,12 +1,9 @@
 # API
 
-
 The Download API service provides functionality for downloading files from the Archive.
-It implements the [Data Out API](https://neic-sda.readthedocs.io/en/latest/dataout/#rest-api-endpoints).
+It implements the [Data Out API](https://neic-sda.readthedocs.io/en/latest/dataout/#rest-api-endpoints). Further, it enables the endpoint `/s3`, which is used for htsget and other services that need to interface with an S3-backend storage.
 
-Further, it enables the endpoints `/s3` and `/s3-encrypted`, used for htsget.
-
-The response can be restricted to only contain a given range of a file, and the files can be returned encrypted or unencrypted.
+The response can be restricted to only contain a given range of a file, and the files can be returned encrypted or unencrypted, depending on the configuration of the service.
 
 All endpoints require an `Authorization` header with an access token in the `Bearer` scheme.
 ```
@@ -25,10 +22,9 @@ The client can establish a session to bypass time-costly visa validations for fu
 - `/metadata/datasets/*dataset`
 - `/files/:fileid`
 
-**[File download requests, for htsget](#file-download-requests)**
+**[File download requests, for `/s3` endpoint](#file-download-requests)**
 
 - `/s3/*datasetid/*filepath`
-- `/s3-encrypted/*datasetid/*filepath`
 
 ### Data out API
 #### Datasets
@@ -100,10 +96,11 @@ Parts of a file can be requested with specific byte ranges using `startCoordinat
 ```
 
 ### File download requests
-These endpoints are designed for usage with [htsget](https://samtools.github.io/hts-specs/htsget.html).
+This endpoint is designed for usage with [htsget](https://samtools.github.io/hts-specs/htsget.html) or other external applications that interface with S3-storage backends.
 
-The `/s3` and `/s3-encrypted` endpoints accept the same parameters, described below.
-Note that the download service may be configured to only allow encrypted file downloads.
+The `/s3` endpoint accepts the parameters described below. Note that depending on the configuration of the download service, `/s3` may either serve only encrypted or decrypted files.
+
+By default, it will serve only encrypted files unless a private c4gh key is provided to the service upon its deployment.
 
 **Parameters**:
 

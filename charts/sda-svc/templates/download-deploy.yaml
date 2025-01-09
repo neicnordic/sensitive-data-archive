@@ -140,9 +140,14 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.global.log.level | quote }}
       {{- end }}
-      {{- if .Values.global.download.serveUnencryptedData }}
-        - name: APP_SERVEUNENCRYPTEDDATA
-          value: {{ .Values.global.download.serveUnencryptedData }}
+      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
+        - name: C4GH_TRANSIENTKEYPATH
+          value: {{ template "c4ghPath" . }}/{{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
+        - name: C4GH_TRANSIENTPASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "A secret for the transient c4gh key is required" .Values.global.download.serveDecrypted.secretName }}
+              key: passphrase
       {{- end }}
       {{- if .Values.global.tls.enabled }}
         - name: APP_PORT
@@ -224,8 +229,10 @@ spec:
 {{ toYaml .Values.download.resources | trim | indent 10 }}
         volumeMounts:
         {{- if not .Values.global.vaultSecrets }}
-        - name: c4gh
+        {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
+        - name: c4gh-transient
           mountPath: {{ template "c4ghPath" . }}
+        {{- end }}
         - name: iss
           mountPath: {{ template "trustedIssPath" . }}
         {{- end }}
@@ -251,13 +258,15 @@ spec:
         {{- end }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
-        - name: c4gh
+      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
+        - name: c4gh-transient
           secret:
             defaultMode: 0440
-            secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+            secretName: {{ required "A secret for the transient c4gh key is required" .Values.global.download.serveDecrypted.secretName }}
             items:
-            - key: {{ .Values.global.c4gh.keyFile }}
-              path: {{ .Values.global.c4gh.keyFile }}
+            - key: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
+              path: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
+      {{- end }}
         - name: iss
           secret:
             defaultMode: 0440

@@ -74,6 +74,34 @@ services:
       - "8080:8080"
     restart: always
 
+  download-unencrypted:
+    command: sda-download
+    container_name: download-unencrypted
+    depends_on:
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      mockauth:
+        condition: service_started
+    environment:
+      - ARCHIVE_URL=http://s3
+      - ARCHIVE_TYPE=s3
+      - DB_HOST=db
+      - C4GH_TRANSIENTKEYPATH=/dev_utils/c4gh.sec.pem
+      - C4GH_TRANSIENTPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
+    image: neicnordic/sda-download:latest
+    build:
+      context: ..
+    volumes:
+      - ./config-notls.yaml:/config.yaml
+      - ./:/dev_utils/
+      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+    mem_limit: 256m
+    ports:
+      - "9080:8080"
+    restart: always
+
   mockauth:
     command:
       - /bin/sh

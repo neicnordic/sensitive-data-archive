@@ -7,15 +7,15 @@ fi
 cd dev_utils || exit 1
 
 # get a token, set up variables
-token=$(curl --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
+token=$(curl -s --cacert certs/ca.pem "https://localhost:8000/tokens" | jq -r  '.[0]')
 dataset="https://doi.example/ty009.sfrrss/600.45asasga"
 file="dummy_data"
 expected_size=1048605
-C4GH_PASSPHRASE=$(grep -F passphrase config.yaml | sed -e 's/.* //' -e 's/"//g')
+C4GH_PASSPHRASE=$(yq .c4gh.passphrase config.yaml)
 export C4GH_PASSPHRASE
 
 # download decrypted full file,  check file size
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file" --output full1.bam
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/s3/$dataset/$file" --output full1.bam
 file_size=$(stat -c %s full1.bam)  # Get the size of the file
 
 if [ "$file_size" -ne "$expected_size" ]; then
@@ -24,9 +24,14 @@ if [ "$file_size" -ne "$expected_size" ]; then
 fi
 
 # test that start, end=0 returns the whole file
-curl --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=0" --output full2.bam
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/s3/$dataset/$file?startCoordinate=0&endCoordinate=0" --output full2.bam
 
 if ! cmp --silent full1.bam full2.bam; then
     echo "Full decrypted files, with and without coordinates, are different"
     exit 1
 fi
+
+# cleanup
+rm full*.bam
+
+echo "OK"

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 cd dev_utils || exit 1
 
