@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -39,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	key, err := config.GetC4GHKey()
+	archiveKeyList, err := config.GetC4GHprivateKeys()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -204,13 +205,26 @@ func main() {
 				continue
 			}
 
-			hr := bytes.NewReader(header)
-			// Feed everything read from the archive file to archiveFileHash
-			mr := io.MultiReader(hr, io.TeeReader(f, archiveFileHash))
+			var key *[32]byte
+			for _, k := range archiveKeyList {
+				size, err := headers.EncryptedSegmentSize(header, *k)
+				if (err == nil) && (size != 0) {
+					key = k
 
+					break
+				}
+			}
+
+			if key == nil {
+				log.Errorf("no matching key found for file: %s.", message.ArchivePath)
+
+				continue
+			}
+
+			mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archiveFileHash))
 			c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
 			if err != nil {
-				log.Errorf("Failed to open c4gh decryptor stream, reson: (%s)", err.Error())
+				log.Errorf("failed to open c4gh decryptor stream, reson: %s", err.Error())
 
 				continue
 			}
