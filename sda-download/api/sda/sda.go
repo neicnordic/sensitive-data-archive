@@ -291,9 +291,6 @@ func Download(c *gin.Context) {
 	}
 
 	wholeFile := true
-	if start != 0 || end != 0 {
-		wholeFile = false
-	}
 
 	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
 	if err != nil {
@@ -301,6 +298,11 @@ func Download(c *gin.Context) {
 
 		return
 	}
+
+	if start != 0 || end != 0 {
+		wholeFile = false
+	}
+
 	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
