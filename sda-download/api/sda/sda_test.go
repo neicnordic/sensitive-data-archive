@@ -670,9 +670,9 @@ func Test_CalucalateCoords(t *testing.T) {
 	assert.GreaterOrEqual(t, end, from)
 	assert.NoError(t, err)
 
-	// end should not be smaller than a header
+	// no "padding" if requesting part of the header only
 	_, end, err = calculateCoords(from, headerSize-10, "", fileDetails, "encrypted")
-	assert.GreaterOrEqual(t, end, headerSize)
+	assert.GreaterOrEqual(t, end, headerSize-10)
 	assert.NoError(t, err)
 
 	// end should not be larger than file length + header
