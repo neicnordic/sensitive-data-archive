@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -31,12 +32,31 @@ func healthResponse(c *gin.Context) {
 func Setup() *http.Server {
 	// Set up routing
 	log.Info("(2/5) Registering endpoint handlers")
-
+	if log.GetLevel() != log.DebugLevel {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	router := gin.New()
-	router.Use(
-		gin.LoggerWithWriter(gin.DefaultWriter, "/health"),
-		gin.Recovery(),
-	)
+	if log.GetLevel() == log.DebugLevel {
+		router.Use(gin.LoggerWithConfig(
+			gin.LoggerConfig{
+				Formatter: func(params gin.LogFormatterParams) string {
+					//.Format("2006-01-02 - 15:04:05")
+					s, _ := json.Marshal(map[string]any{
+						"level":       "debug",
+						"method":      params.Method,
+						"path":        params.Path,
+						"remote_addr": params.ClientIP,
+						"status_code": params.StatusCode,
+						"time":        params.TimeStamp.Format(time.RFC3339),
+					})
+
+					return string(s) + "\n"
+				},
+				Output:    gin.DefaultWriter,
+				SkipPaths: []string{"/health"},
+			},
+		))
+	}
 
 	router.HandleMethodNotAllowed = true
 
