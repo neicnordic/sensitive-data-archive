@@ -682,7 +682,8 @@ func Test_CalucalateCoords(t *testing.T) {
 
 	// param range 0-0 should give whole file
 	start, end, err = calculateCoords(0, 0, "", fileDetails, "encrypted")
-	assert.Equal(t, end-start, fullSize)
+	assert.Equal(t, int64(0), start)
+	assert.Equal(t, int64(0), end)
 	assert.NoError(t, err)
 
 	// byte range 0-1000 should return the range size, end coord inclusive
