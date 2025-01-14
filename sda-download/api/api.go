@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -40,7 +41,6 @@ func Setup() *http.Server {
 		router.Use(gin.LoggerWithConfig(
 			gin.LoggerConfig{
 				Formatter: func(params gin.LogFormatterParams) string {
-					//.Format("2006-01-02 - 15:04:05")
 					s, _ := json.Marshal(map[string]any{
 						"level":       "debug",
 						"method":      params.Method,
@@ -52,8 +52,14 @@ func Setup() *http.Server {
 
 					return string(s) + "\n"
 				},
-				Output:    gin.DefaultWriter,
-				SkipPaths: []string{"/health"},
+
+				Skip: func(c *gin.Context) bool {
+					// skip logging HEAD requests to / and all requests to /health
+					// (HEAD request to health are redirected to path "")
+					return (c.Request.Method == "HEAD" && strings.Trim(c.FullPath(), "/") == "") ||
+						c.FullPath() == "/health"
+				},
+				Output: gin.DefaultWriter,
 			},
 		))
 	}
