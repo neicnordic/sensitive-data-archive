@@ -583,6 +583,7 @@ var calculateCoords = func(start, end int64, htsget_range string, fileDetails *d
 
 	const packageSize float64 = 65536 + 28 // 64KiB+28, 28 is for chacha20_ietf_poly1305
 
+	var serveStart int64 = start
 	bodySize := int64(fileDetails.ArchiveSize)
 	dataRequestEndOffset := end - headLength
 	dataRequestOffset := start - headLength
@@ -590,8 +591,12 @@ var calculateCoords = func(start, end int64, htsget_range string, fileDetails *d
 	blockEndCoord := packageSize * math.Ceil(float64(dataRequestEndOffset)/packageSize)
 	serveEnd := int64(math.Min(float64(bodySize), blockEndCoord)) + headLength
 
-	serveStart := int64(packageSize*math.Floor(float64(dataRequestOffset)/packageSize)) + headLength
+	// Only use adjusted offset if we request data from after the header
+	// (otherwise, adding the length of the header would mean we miss out
+	// on the header itself)
+	if start > headLength {
+		serveStart = int64(packageSize*math.Floor(float64(dataRequestOffset)/packageSize)) + headLength
+	}
 
 	return serveStart, serveEnd, nil
-
 }
