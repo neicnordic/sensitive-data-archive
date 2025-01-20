@@ -84,7 +84,7 @@
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>8.5.15</version>
+            <version>8.5.17</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>
