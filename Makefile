@@ -36,6 +36,8 @@ build-sda-sftp-inbox:
 	@cd sda-sftp-inbox && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-sftp-inbox .
 build-sda-admin:
 	@cd sda-admin && go build
+build-sda-doa:
+	@cd sda-doa && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-sda-doa .
 
 
 go-version-check: SHELL:=/bin/bash
@@ -127,6 +129,8 @@ integrationtest-sda-sync-run:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml run integration_test
 integrationtest-sda-sync-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml down -v --remove-orphans
+integrationtest-sda-doa:
+	@cd sda-doa/test/run && sh run_sda_doa_tests.sh
 
 # lint go code
 lint-all: lint-sda lint-sda-download lint-sda-admin
