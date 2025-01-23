@@ -19,7 +19,7 @@ def generate_token():
     # See available claims here: https://www.iana.org/assignments/jwt/jwt.xhtml
     # the important claim is the "authorities"
     header = {
-        "jku": "http://localhost:8000/jwk",
+        "jku": "http://mockauth:8000/jwk",
         "kid": "rsa1",
         "alg": "RS256",
         "typ": "JWT"
@@ -29,14 +29,14 @@ def generate_token():
         "aud": ["aud2", "aud3"],
         "azp": "azp",
         "scope": "openid ga4gh_passport_v1",
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "exp": 9999999999,
         "iat": 1561621913,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102"
     }
     empty_payload = {
         "sub": "requester@elixir-europe.org",
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "exp": 99999999999,
         "iat": 1547794655,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102"
@@ -44,7 +44,7 @@ def generate_token():
     # Craft 4 passports, 2 for bona fide status and 2 for dataset permissions
     # passport for bona fide: terms
     passport_terms = {
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "AcceptedTermsAndPolicies",
@@ -59,7 +59,7 @@ def generate_token():
     }
     # passport for bona fide: status
     passport_status = {
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ResearcherStatus",
@@ -74,7 +74,7 @@ def generate_token():
     }
     # passport for dataset permissions 1
     passport_dataset1 = {
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -89,7 +89,7 @@ def generate_token():
     }
     # passport for dataset permissions 2
     passport_dataset2 = {
-        "iss": "http://localhost:8000/",
+        "iss": "http://mockauth:8000/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -168,7 +168,7 @@ async def userinfo(request):
 async def openid_configuration(request):
     """Mock ELIXIR AAI OpenID configuration endpoint."""
     data = {
-        "jwks_uri": "http://localhost:8000/jwk"
+        "jwks_uri": "http://mockauth:8000/jwk"
     }
     return web.json_response(data)
 

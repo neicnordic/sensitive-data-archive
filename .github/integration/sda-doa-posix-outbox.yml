@@ -1,0 +1,132 @@
+services:
+  certfixer:
+    command:
+      - /bin/sh
+      - /scripts/make_certs.sh
+    container_name: certfixer
+    image: alpine:latest
+    volumes:
+      - ./scripts:/scripts
+      - certs:/certs
+      - client_certs:/client_certs
+      - /tmp:/temp
+
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: postgres
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    ports:
+      - 5432:5432
+    environment:
+      - LEGA_IN_PASSWORD=password
+      - LEGA_OUT_PASSWORD=password
+      - POSTGRES_PASSWORD=rootpasswd
+      - POSTGRES_SERVER_CACERT=/certs/ca.crt
+      - POSTGRES_SERVER_CERT=/certs/db.crt
+      - POSTGRES_SERVER_KEY=/certs/db.key
+
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-h", "localhost", "-U", "lega_out" ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - certs:/certs
+
+  mockauth:
+    container_name: mockauth
+    image: python:3.11-slim
+    ports:
+      - 8000:8000
+    volumes:
+      - ../../sda-doa/test/mock_auth.py:/mock_auth.py
+      - client_certs:/client_certs
+    command: >
+      sh -c "pip install --upgrade pip && pip install aiohttp Authlib && python -u /mock_auth.py 0.0.0.0 8000"
+
+
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    container_name: rabbitmq
+    depends_on:
+      certfixer:
+        condition: service_completed_successfully
+    environment:
+      - RABBITMQ_SERVER_CACERT=/etc/rabbitmq/ssl/ca.crt
+      - RABBITMQ_SERVER_CERT=/etc/rabbitmq/ssl/mq.crt
+      - RABBITMQ_SERVER_KEY=/etc/rabbitmq/ssl/mq.key
+      - RABBITMQ_SERVER_VERIFY=verify_none
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    restart: always
+    volumes:
+      - certs:/etc/rabbitmq/ssl/
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - 5671:5671
+      - 25671:15671
+
+  doa:
+    container_name: doa
+    build:
+      context: ../../sda-doa
+      dockerfile: ../../sda-doa/Dockerfile
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-sda-doa
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      certfixer:
+        condition: service_completed_successfully
+    links:
+      - rabbitmq
+      - postgres
+    ports:
+      - "8080:8080"
+    environment:
+      - SSL_MODE=verify-ca
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=sda
+      - POSTGRES_PASSWORD=rootpasswd
+      - DB_INSTANCE=postgres
+      - SSL_ENABLED=false
+      - BROKER_HOST=rabbitmq
+      - BROKER_VALIDATE=false
+      - OPENID_CONFIGURATION_URL=http://mockauth:8000/openid-configuration
+      - USERINFO_ENDPOINT_URL=http://mockauth:8000/userinfo
+      - CRYPT4GH_PRIVATE_KEY_PATH=test/crypt4gh.sec.pem
+      - CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH=test/crypt4gh.pass
+      - OUTBOX_TYPE=POSIX
+      - OUTBOX_LOCATION=/outbox/%s/files/
+      - SSL_ENABLED=false
+      - ROOT_CERT_PATH=/certs/ca.crt
+      - CERT_PATH=/certs/client.crt
+      - CERT_KEY=/certs/client.der
+      - BROKER_USERNAME=guest
+
+    volumes:
+      - client_certs:/certs
+      - ../../sda-doa/test/body.enc:/test/body.enc
+      - ../../sda-doa/outbox:/outbox
+
+volumes:
+  certs:
+  client_certs:
+  rabbitmq_data:

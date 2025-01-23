@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-21-alpine as builder
+FROM maven:3-eclipse-temurin-21-alpine AS builder
 
 COPY pom.xml .
 
