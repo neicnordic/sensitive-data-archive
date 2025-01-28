@@ -60,7 +60,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v5.1.2
+        uses: codecov/codecov-action@v5.3.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda-download/coverage.txt
@@ -95,7 +95,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v5.1.2
+        uses: codecov/codecov-action@v5.3.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda/coverage.txt
@@ -130,7 +130,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v5.1.2
+        uses: codecov/codecov-action@v5.3.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda-admin/coverage.txt
