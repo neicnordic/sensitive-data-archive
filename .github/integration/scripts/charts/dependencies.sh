@@ -22,6 +22,16 @@ if [ "$1" == "local" ]; then
                 echo "yq not installed, get it from here: https://github.com/mikefarah/yq/releases/latest"
                 exit 1
         fi
+
+        if [ ! "$(command jq)" ]; then
+                echo "jq not installed"
+                exit 1
+        fi
+
+        if [ ! "$(command xxd)" ]; then
+                echo "xxd not installed"
+                exit 1
+        fi
 else
         sudo curl --retry 100 -sL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -o /usr/bin/yq &&
                 sudo chmod +x /usr/bin/yq
