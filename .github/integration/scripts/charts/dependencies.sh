@@ -9,7 +9,7 @@ random-string() {
 }
 
 if [ "$1" == "local" ]; then
-        if [ ! "$(command crypt4gh)" ]; then
+        if [ ! "$(command crypt4gh --version)" ]; then
                 echo "crypt4gh not installed, get it from here: https://github.com/neicnordic/crypt4gh/releases/latest"
                 exit 1
         elif [ "$(crypt4gh --version | cut -d ' ' -f1)" == "GA4GH" ]; then
@@ -18,8 +18,18 @@ if [ "$1" == "local" ]; then
                 exit 1
         fi
 
-        if [ ! "$(command yq)" ]; then
+        if [ ! "$(command yq --version)" ]; then
                 echo "yq not installed, get it from here: https://github.com/mikefarah/yq/releases/latest"
+                exit 1
+        fi
+
+        if [ ! "$(command jq --version)" ]; then
+                echo "jq not installed"
+                exit 1
+        fi
+
+        if [ ! "$(command xxd --version 2>&1)" ]; then
+                echo "xxd not installed"
                 exit 1
         fi
 else
