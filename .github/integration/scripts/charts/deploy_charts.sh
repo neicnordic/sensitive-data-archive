@@ -36,6 +36,7 @@ if [ "$1" == "sda-mq" ]; then
         --set image.pullPolicy=IfNotPresent \
         --set global.adminPassword="$ADMINPASS" \
         --set global.adminUser=admin \
+        --set global.ingress.hostName=broker.127.0.0.1.nip.io \
         --set global.tls.enabled="$3" \
         --set global.tls.clusterIssuer=cert-issuer \
         --set persistence.enabled=false \
