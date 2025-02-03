@@ -176,6 +176,14 @@ wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 ```
 
+#### Install kubectl
+
+If `kubectl` is not installed, run the following command to download the latest stable version. (substitue `linux/amd64` with `darwin/arm64` if you are using a Mac).
+
+```sh
+curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+```
+
 #### Create a cluster
 
 Once installed a cluster can be created using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
@@ -196,14 +204,6 @@ For testing ingress endpoints with other applications like a web browser, the ho
 #### Remove the cluster
 
 Removing the cluster can be done using the `make k3d-delete-cluster` command or as shown below if a specific name is used during creation.
-
-#### Install kubectl
-
-If `kubectl` is not installed, run the following command to download the latest stable version. (substitue `linux/amd64` with `darwin/arm64` if you are using a Mac).
-
-```sh
-curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-```
 
 ### Deploy the components
 
