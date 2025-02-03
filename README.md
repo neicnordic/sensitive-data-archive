@@ -179,7 +179,6 @@ curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 #### Create a cluster
 
 Once installed a cluster can be created using the `make k3d-create-cluster` command, you can create a cluster named `k3s-default`.
-
 The new cluster's connection details will automatically be merged into your default kubeconfig and activated. The command below should show the created node.
 
 ```sh
@@ -197,10 +196,6 @@ For testing ingress endpoints with other applications like a web browser, the ho
 #### Remove the cluster
 
 Removing the cluster can be done using the `make k3d-delete-cluster` command or as shown below if a specific name is used during creation.
-
-```sh
-k3d cluster delete test-cluster
-```
 
 #### Install kubectl
 
@@ -228,30 +223,15 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 This script requires [yq](https://github.com/mikefarah/yq/releases/latest), the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest) as well as [xxd](https://manpages.org/xxd) and [jq](https://manpages.org/jq) to be installed.
 
-```sh
-bash .github/integration/scripts/charts/dependencies.sh local
-```
+Bootstrap the dependencies with the command: `make k3d-deploy-dependencies`.
 
 #### Deploy the Sensitive Data Archive components
 
-Start by building the required containers using the `make build-all` command, once that has completed the images can be imported to the cluster.
+Start by building and importing the required containers using the `make k3d-import-images`.
 
-```sh
-bash .github/integration/scripts/charts/import_local_images.sh <CLUTER_NAME>
-```
+The Postgres and RabbitMQ Needs to be deployed first using the following commands: `make k3d-deplploy-postgres` and `make k3d-deploy-rabbitmq`.
 
-The Postgres and RabbitMQ Needs to be deployed first, the bool at the end specifies if TLS should be enabled or not for the deployes services.  
-Replace `sda-db` in the example below with the helmc hart that shuld be installed. (`sda-db` or `sda-mq`)
-
-```sh
-bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$(date +%F)" false
-```
-
-Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`)
-
-```sh
-bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$(date +%F)" false s3
-```
+Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`), `make k3d-deplpoy-sda-posix` or `make k3d-deplpoy-sda-s3`.
 
 #### Testing with ingress
 
@@ -265,8 +245,4 @@ Once everything is deployed it is posible to interact with the services using th
 
 #### Cleanup all deployed components
 
-Once the testing is concluded all deployed components can be removed.
-
-```sh
-bash .github/integration/scripts/charts/cleanup.sh
-```
+Once the testing is concluded all deployed components can be removed with the command `make k3d-cleanup-all-deployments`
