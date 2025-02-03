@@ -23,7 +23,7 @@ auth:
   jwt:
     issuer: "https://auth:8888"
     privateKey: /shared/keys/jwt.key
-    signatureAlg: ES256
+    signatureAlg: RS256
     tokenTTL: 168
   publicFile: "/shared/c4gh.pub.pem"
   resignJwt:
