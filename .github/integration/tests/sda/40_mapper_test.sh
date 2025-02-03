@@ -199,7 +199,7 @@ done
 
 
 ## Use API to list the datasets
-token="$(curl http://oidc:8080/tokens | jq -r '.[0]')"
+token="$(cat /shared/token)"
 resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/datasets/list" | jq '. | length')"
 if [ "$resp" -ne 2 ]; then
 	echo "Error when listing key hash, expected 2 entries got: $resp"
