@@ -253,6 +253,16 @@ Once the DB and MQ are installed the SDA stack can be installed, here the desire
 bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$(date +%F)" false s3
 ```
 
+#### Testing with ingress
+
+Once everything is deployed it is posible to interact with the services using the following hostnames:
+
+- api.127.0.0.1.nip.io
+- auth.127.0.0.1.nip.io
+- broker.127.0.0.1.nip.io
+- download.127.0.0.1.nip.io
+- inbox.127.0.0.1.nip.io
+
 #### Cleanup all deployed components
 
 Once the testing is concluded all deployed components can be removed.
