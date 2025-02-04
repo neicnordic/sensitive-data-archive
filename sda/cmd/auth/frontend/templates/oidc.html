@@ -38,19 +38,20 @@
             <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.}}</pre>
             {{ end }}
             {{ end }}
-            {{if .Token}}
+            {{if .ResignedToken}}
             <p class="text-center">
-              Your access token is:
+              Your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} for uploading to the Inbox is:
             </p>
-            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.Token}}</pre>
+            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.ResignedToken}}</pre>
             {{end}}
-            {{if .ExpDate}}
+            {{if .RawToken}}
             <p class="text-center">
-              Your access token expires (UTC):
+              Your access token {{if .ExpDateRaw}}(expires at {{.ExpDateRaw}} UTC){{end}} for downloading from the Archive is:
             </p>
-            <pre class="text-center" id="logintext">{{.ExpDate}}</pre>
+            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.RawToken}}</pre>
             {{end}}
-            <a href="/oidc/s3conf" class="btn btn-primary btn-block">Download inbox s3cmd credentials</a>
+            <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block">Download credentials for uploading to the Inbox</a>
+            <a href="/oidc/s3conf-download" class="btn btn-primary btn-block">Download credentials for downloading from the Archive</a>
             <a href="/" class="btn btn-primary btn-block">Continue</a>
       </div>
     </div>

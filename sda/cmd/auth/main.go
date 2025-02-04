@@ -27,7 +27,8 @@ type LoginOption struct {
 }
 
 type OIDCData struct {
-	S3Conf map[string]string
+	S3ConfInbox map[string]string
+	S3ConfDownload map[string]string
 	OIDCID OIDCIdentity
 }
 
@@ -40,7 +41,10 @@ type AuthHandler struct {
 	pubKey       string
 }
 
-func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
+// getS3Config retrieves S3 config from session flash and serves it as a
+// downloadable s3cmd file with the specified fileName. Redirects to home if
+// config is missing.
+func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName string) {
 
 	log.Infoln(ctx.Request().URL.Path)
 
@@ -52,7 +56,8 @@ func (auth AuthHandler) getInboxConfig(ctx iris.Context, authType string) {
 		return
 	}
 	s3cfmap := s3conf.(map[string]string)
-	ctx.ResponseWriter().Header().Set("Content-Disposition", "attachment; filename=s3cmd.conf")
+	ctx.ResponseWriter().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+
 	s3c := "[default]\n"
 
 	for k, v := range s3cfmap {
@@ -215,7 +220,7 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 
 // getEGAConf returns an s3config file for an oidc login
 func (auth AuthHandler) getEGAConf(ctx iris.Context) {
-	auth.getInboxConfig(ctx, "ega")
+	auth.getS3Config(ctx, "ega", "s3cmd.conf")
 }
 
 // getOIDC redirects to the oidc page defined in auth.Config
@@ -270,6 +275,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 
 	if auth.Config.ResignJwt {
+		log.Debugf("Resigning token for user %s", idStruct.User)
 		claims := map[string]interface{}{
 			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
@@ -280,14 +286,15 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 		if err != nil {
 			log.Errorf("error when generating token: %v", err)
 		}
-		idStruct.Token = token
-		idStruct.ExpDate = expDate
+		idStruct.ResignedToken = token
+		idStruct.ExpDateResigned = expDate
 	}
 
 	log.WithFields(log.Fields{"authType": "oidc", "user": idStruct.User}).Infof("User was authenticated")
-	s3conf := getS3ConfigMap(idStruct.Token, auth.Config.S3Inbox, idStruct.User)
+	s3confInbox := getS3ConfigMap(idStruct.ResignedToken, auth.Config.S3Inbox, idStruct.User)
+	s3confDownload := getS3ConfigMap(idStruct.RawToken, auth.Config.S3Inbox, idStruct.User)
 
-	return &OIDCData{S3Conf: s3conf, OIDCID: idStruct}
+	return &OIDCData{S3ConfInbox: s3confInbox, S3ConfDownload: s3confDownload, OIDCID: idStruct}
 }
 
 // getOIDCLogin renders the `oidc.html` template to the given iris context
@@ -299,13 +306,16 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	}
 
 	s := sessions.Get(ctx)
-	s.SetFlash("oidc", oidcData.S3Conf)
+	s.SetFlash("oidcInbox", oidcData.S3ConfInbox)
+	s.SetFlash("oidcDownload", oidcData.S3ConfDownload)
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
 	ctx.ViewData("User", oidcData.OIDCID.User)
 	ctx.ViewData("Passport", oidcData.OIDCID.Passport)
-	ctx.ViewData("Token", oidcData.OIDCID.Token)
-	ctx.ViewData("ExpDate", oidcData.OIDCID.ExpDate)
+	ctx.ViewData("RawToken", oidcData.OIDCID.RawToken)
+	ctx.ViewData("ResignedToken", oidcData.OIDCID.ResignedToken)
+	ctx.ViewData("ExpDateRaw", oidcData.OIDCID.ExpDateRaw)
+	ctx.ViewData("ExpDateResigned", oidcData.OIDCID.ExpDateResigned)
 
 	err := ctx.View("oidc.html")
 	if err != nil {
@@ -331,9 +341,14 @@ func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
 	}
 }
 
-// getOIDCConf returns an s3config file for an oidc login
-func (auth AuthHandler) getOIDCConf(ctx iris.Context) {
-	auth.getInboxConfig(ctx, "oidc")
+// getOIDCConfInbox returns an s3config file for uploading to the Inbox 
+func (auth AuthHandler) getOIDCConfInbox(ctx iris.Context) {
+	auth.getS3Config(ctx, "oidcInbox", "s3cmd-inbox.conf")
+}
+
+// getOIDCConfDownload returns an s3config file for downloading from the Archive 
+func (auth AuthHandler) getOIDCConfDownload(ctx iris.Context) {
+	auth.getS3Config(ctx, "oidcDownload", "s3cmd-download.conf")
 }
 
 // globalHeaders presets common response headers
@@ -427,7 +442,8 @@ func main() {
 
 	// OIDC endpoints
 	app.Get("/oidc", authHandler.getOIDC)
-	app.Get("/oidc/s3conf", authHandler.getOIDCConf)
+	app.Get("/oidc/s3conf-inbox", authHandler.getOIDCConfInbox)
+	app.Get("/oidc/s3conf-download", authHandler.getOIDCConfDownload)
 	app.Get("/oidc/login", authHandler.getOIDCLogin)
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
