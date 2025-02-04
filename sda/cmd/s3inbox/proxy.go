@@ -177,6 +177,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	// Send message to upstream and set file as uploaded in the database
+	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
 		message, err := p.CreateMessageFromRequest(r, token)
