@@ -199,6 +199,27 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			return
 		}
 
+		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
+		// different instance of s3inbox. For more details see https://github.com/NBISweden/BigPicture-Deployment/issues/283.
+		if p.fileIds[r.URL.Path] == "" {
+
+			corrID, err := p.database.GetCorrID(username, filepath, "")
+			if err != nil {
+				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve corrID from database: %v", err))
+
+				return
+			}
+
+			p.fileIds[r.URL.Path], err = p.database.GetFileID(corrID)
+			if err != nil {
+				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
+
+				return
+			}
+
+			log.Debugf("resuming work on file with fileId: %v", p.fileIds[r.URL.Path])
+		}
+
 		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
 		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
