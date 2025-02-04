@@ -18,11 +18,13 @@ import (
 type OIDCIdentity struct {
 	User                 string
 	Passport             []string
-	Token                string
+	RawToken             string
+	ResignedToken        string
 	Profile              string
 	Email                string
 	EdupersonEntitlement []string
-	ExpDate              string
+	ExpDateRaw           string
+	ExpDateResigned      string
 }
 
 // Configure an OpenID Connect aware OAuth2 client.
@@ -104,12 +106,14 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 	idStruct = OIDCIdentity{
 		User:                 userInfo.Subject,
-		Token:                rawAccessToken,
+		RawToken:             rawAccessToken,
+		ResignedToken: 	      rawAccessToken,
 		Passport:             claims.PassportClaim,
 		Profile:              claims.ProfileClaim,
 		Email:                claims.EmailClaim,
 		EdupersonEntitlement: claims.EdupersonEntitlement,
-		ExpDate:              rawExpDate,
+		ExpDateRaw:           rawExpDate,
+		ExpDateResigned:      rawExpDate,
 	}
 
 	return idStruct, err
