@@ -48,8 +48,6 @@ services:
     command: >
       sh -c "pip install --upgrade pip && pip install aiohttp Authlib && python -u /mock_auth.py 0.0.0.0 8000"
 
-
-
   rabbitmq:
     build:
       context: ../../rabbitmq
@@ -86,7 +84,6 @@ services:
     container_name: doa
     build:
       context: ../../sda-doa
-      dockerfile: ../../sda-doa/Dockerfile
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-sda-doa
     depends_on:
       postgres:
@@ -95,9 +92,6 @@ services:
         condition: service_healthy
       certfixer:
         condition: service_completed_successfully
-    links:
-      - rabbitmq
-      - postgres
     ports:
       - "8080:8080"
     environment:
@@ -124,7 +118,31 @@ services:
     volumes:
       - client_certs:/certs
       - ../../sda-doa/test/body.enc:/test/body.enc
-      - ../../sda-doa/outbox:/outbox
+      - ./test_file:/outbox
+      - ./encryption_files:/test
+
+  integration_test:
+    container_name: integration_test
+    image: maven:3.9.9-eclipse-temurin-21
+    profiles: [test]
+    volumes:
+      - ../../sda-doa:/sda-doa
+      - ../../sda-doa/settings.xml:/root/.m2/settings.xml
+      - ./test_file:/sda-doa/outbox
+      - ./tests:/tests
+      - ./encryption_files:/test
+      - client_certs:/certs
+
+    depends_on:
+      - doa
+      - mockauth
+    environment:
+      - OUTBOX_TYPE=POSIX
+
+    command:
+      - "/bin/sh"
+      - "/tests/run_scripts.sh"
+      - "/tests/doa"
 
 volumes:
   certs:
