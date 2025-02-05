@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.1</version>
+        <version>3.4.2</version>
         <relativePath/>
     </parent>
     <groupId>no.uio.ifi</groupId>
@@ -84,7 +84,7 @@
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>8.5.15</version>
+            <version>8.5.17</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>
