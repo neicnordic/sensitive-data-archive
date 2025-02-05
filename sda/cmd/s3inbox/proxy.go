@@ -201,7 +201,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		}
 
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
-		// different instance of s3inbox. For more details see https://github.com/NBISweden/BigPicture-Deployment/issues/283.
+		// different instance of s3inbox. For more details see #1358.
 		if p.fileIds[r.URL.Path] == "" {
 
 			corrID, err := p.database.GetCorrID(username, filepath, "")
