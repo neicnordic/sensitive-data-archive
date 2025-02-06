@@ -167,6 +167,9 @@ services:
       - init-bucket
     environment:
       - OUTBOX_TYPE=S3
+      - DOA_URL=http://doa:8080
+      - MOCKAUTH_URL=http://mockauth:8000
+      - MINIO_HOST=outbox
 
     command:
       - "/bin/sh"
