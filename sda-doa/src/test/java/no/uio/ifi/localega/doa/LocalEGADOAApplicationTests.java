@@ -42,6 +42,7 @@ class LocalEGADOAApplicationTests {
     private static String doaUrl;
     private static String mockauthUrl;
     private static String minioHost;
+    private static String outboxType;
 
     @SneakyThrows
     @BeforeAll
@@ -49,6 +50,7 @@ class LocalEGADOAApplicationTests {
         doaUrl = System.getenv("DOA_URL");
         mockauthUrl = System.getenv("MOCKAUTH_URL");
         minioHost = System.getenv("MINIO_HOST");
+        outboxType = System.getenv("OUTBOX_TYPE");
 
         JSONArray tokens = Unirest.get(mockauthUrl + "/tokens").asJson().getBody().getArray();
         validToken = tokens.getString(0);
@@ -182,7 +184,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestFileValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -198,7 +200,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestDatasetValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -214,7 +216,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestFileValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -230,7 +232,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestDatasetValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -246,7 +248,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestReferenceValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -262,7 +264,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestReferenceValidToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -278,7 +280,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestFileValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -294,7 +296,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestDatasetValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -310,7 +312,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestFileValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -326,7 +328,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestDatasetValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -342,7 +344,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testPOSIXExportRequestReferenceValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("S3")) {
+        if (outboxType.equals("S3")) {
             Assertions.assertTrue(true);
             return;
         }
@@ -358,7 +360,7 @@ class LocalEGADOAApplicationTests {
     @SneakyThrows
     @Test
     void testS3ExportRequestReferenceValidVisaToken() {
-        if (System.getenv("OUTBOX_TYPE").equals("POSIX")) {
+        if (outboxType.equals("POSIX")) {
             Assertions.assertTrue(true);
             return;
         }
