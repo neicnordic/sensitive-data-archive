@@ -39,11 +39,18 @@ class LocalEGADOAApplicationTests {
     private static String validToken;
     private static String invalidToken;
     private static String validVisaToken;
+    private static String doaUrl;
+    private static String mockauthUrl;
+    private static String minioHost;
 
     @SneakyThrows
     @BeforeAll
     public static void setup() {
-        JSONArray tokens = Unirest.get("http://mockauth:8000/tokens").asJson().getBody().getArray();
+        doaUrl = System.getenv("DOA_URL");
+        mockauthUrl = System.getenv("MOCKAUTH_URL");
+        minioHost = System.getenv("MINIO_HOST");
+
+        JSONArray tokens = Unirest.get(mockauthUrl + "/tokens").asJson().getBody().getArray();
         validToken = tokens.getString(0);
         invalidToken = tokens.getString(1);
         validVisaToken = tokens.getString(2);
@@ -60,19 +67,19 @@ class LocalEGADOAApplicationTests {
 
     @Test
     void testMetadataDatasetsNoToken() {
-        int status = Unirest.get("http://doa:8080/metadata/datasets").asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/metadata/datasets").asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testMetadataDatasetsInvalidToken() {
-        int status = Unirest.get("http://doa:8080/metadata/datasets").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/metadata/datasets").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testMetadataDatasetsValidToken() {
-        HttpResponse<JsonNode> response = Unirest.get("http://doa:8080/metadata/datasets").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
+        HttpResponse<JsonNode> response = Unirest.get(doaUrl + "/metadata/datasets").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.OK.value(), status);
         JSONArray datasets = response.getBody().getArray();
@@ -82,26 +89,26 @@ class LocalEGADOAApplicationTests {
 
     @Test
     void testMetadataFilesNoToken() {
-        int status = Unirest.get("http://doa:8080/metadata/datasets/EGAD00010000919/files").asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/metadata/datasets/EGAD00010000919/files").asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testMetadataFilesInvalidToken() {
-        int status = Unirest.get("http://doa:8080/metadata/datasets/EGAD00010000919/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/metadata/datasets/EGAD00010000919/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testMetadataFilesValidTokenInvalidDataset() {
-        HttpResponse<JsonNode> response = Unirest.get("http://doa:8080/metadata/datasets/EGAD00010000920/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
+        HttpResponse<JsonNode> response = Unirest.get(doaUrl + "/metadata/datasets/EGAD00010000920/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.FORBIDDEN.value(), status);
     }
 
     @Test
     void testMetadataFilesValidTokenValidDataset() {
-        HttpResponse<JsonNode> response = Unirest.get("http://doa:8080/metadata/datasets/EGAD00010000919/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
+        HttpResponse<JsonNode> response = Unirest.get(doaUrl + "/metadata/datasets/EGAD00010000919/files").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.OK.value(), status);
         Assertions.assertEquals("[{\"fileId\":\"EGAF00000000014\",\"datasetId\":\"EGAD00010000919\",\"displayFileName\":\"body.enc\",\"fileName\":\"test/body.enc\",\"fileSize\":null,\"unencryptedChecksum\":null,\"unencryptedChecksumType\":null,\"decryptedFileSize\":null,\"decryptedFileChecksum\":null,\"decryptedFileChecksumType\":null,\"fileStatus\":\"READY\"}]", response.getBody().toString());
@@ -109,26 +116,26 @@ class LocalEGADOAApplicationTests {
 
     @Test
     void testStreamingNoToken() {
-        int status = Unirest.get("http://doa:8080/files/EGAF00000000014").asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/files/EGAF00000000014").asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testStreamingInvalidToken() {
-        int status = Unirest.get("http://doa:8080/files/EGAF00000000014").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
+        int status = Unirest.get(doaUrl + "/files/EGAF00000000014").header(HttpHeaders.AUTHORIZATION, "Bearer " + invalidToken).asJson().getStatus();
         Assertions.assertEquals(HttpStatus.UNAUTHORIZED.value(), status);
     }
 
     @Test
     void testStreamingValidTokenInvalidFile() {
-        HttpResponse<JsonNode> response = Unirest.get("http://doa:8080/files/EGAF00000000015").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
+        HttpResponse<JsonNode> response = Unirest.get(doaUrl + "/files/EGAF00000000015").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asJson();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.FORBIDDEN.value(), status);
     }
 
     @Test
     void testStreamingValidTokenValidFileFullPlain() {
-        HttpResponse<byte[]> response = Unirest.get("http://doa:8080/files/EGAF00000000014").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asBytes();
+        HttpResponse<byte[]> response = Unirest.get(doaUrl + "/files/EGAF00000000014").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asBytes();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.OK.value(), status);
         Assertions.assertEquals("2aef808fb42fa7b1ba76cb16644773f9902a3fdc2569e8fdc049f38280c4577e", DigestUtils.sha256Hex(response.getBody()));
@@ -136,7 +143,7 @@ class LocalEGADOAApplicationTests {
 
     @Test
     void testStreamingValidTokenValidFileRangePlain() {
-        HttpResponse<byte[]> response = Unirest.get("http://doa:8080/files/EGAF00000000014?startCoordinate=100&endCoordinate=200").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asBytes();
+        HttpResponse<byte[]> response = Unirest.get(doaUrl + "/files/EGAF00000000014?startCoordinate=100&endCoordinate=200").header(HttpHeaders.AUTHORIZATION, "Bearer " + validToken).asBytes();
         int status = response.getStatus();
         Assertions.assertEquals(HttpStatus.OK.value(), status);
         Assertions.assertEquals("09fbeae7cce2cd410b471b0a1a265fb53dc54c66c4c7c3111b8b9b95ac0e956f", DigestUtils.sha256Hex(response.getBody()));
@@ -398,7 +405,7 @@ class LocalEGADOAApplicationTests {
     }
 
     MinioClient getMinioClient() {
-        return MinioClient.builder().endpoint("outbox", 9000, false).region("us-west-1").credentials("minio", "miniostorage").build();
+        return MinioClient.builder().endpoint(minioHost, 9000, false).region("us-west-1").credentials("minio", "miniostorage").build();
     }
 
 }
