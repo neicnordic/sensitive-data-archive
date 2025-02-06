@@ -69,9 +69,7 @@ func (suite *OIDCTests) TestGetOidcClient() {
 }
 
 func (suite *OIDCTests) TestAuthenticateWithOidc() {
-
 	// Create a code to authenticate
-
 	session, err := suite.mockServer.SessionStore.NewSession(
 		"openid email profile", "nonce", mockoidc.DefaultUser(), "", "")
 	if err != nil {
@@ -84,7 +82,9 @@ func (suite *OIDCTests) TestAuthenticateWithOidc() {
 
 	elixirIdentity, err := authenticateWithOidc(oauth2Config, provider, code, jwkURL)
 	assert.Nil(suite.T(), err, "Failed to authenticate with OIDC")
-	assert.NotEqual(suite.T(), "", elixirIdentity.Token, "Empty token returned from OIDC authentication")
+	// Ensure both RawToken and ResignedToken are not empty
+	assert.NotEqual(suite.T(), "", elixirIdentity.RawToken, "Empty RawToken returned from OIDC authentication")
+	assert.NotEqual(suite.T(), "", elixirIdentity.ResignedToken, "Empty ResignedToken returned from OIDC authentication")
 }
 
 func (suite *OIDCTests) TestValidateJwt() {
@@ -93,7 +93,7 @@ func (suite *OIDCTests) TestValidateJwt() {
 	oauth2Config, provider := getOidcClient(suite.OIDCConfig)
 	jwkURL := suite.mockServer.JWKSEndpoint()
 	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, jwkURL)
-	elixirJWT := elixirIdentity.Token
+	elixirJWT := elixirIdentity.RawToken
 
 	claims := map[string]interface{}{
 		jwt.ExpirationKey: time.Now().UTC().Add(2 * time.Hour),
@@ -146,7 +146,7 @@ func (suite *OIDCTests) TestValidateJwt() {
 	// sanity check
 	_, expDate, err := validateToken(elixirJWT, suite.mockServer.JWKSEndpoint())
 	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), expDate, elixirIdentity.ExpDate, "Returned wrong exp date but without returning errors")
+	assert.Equal(suite.T(), expDate, elixirIdentity.ExpDateRaw, "Returned wrong exp date but without returning errors")
 
 	// Not a jwk url
 	_, _, err = validateToken(elixirJWT, "http://some/jwk/endpoint")
