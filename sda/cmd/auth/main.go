@@ -27,9 +27,9 @@ type LoginOption struct {
 }
 
 type OIDCData struct {
-	S3ConfInbox map[string]string
+	S3ConfInbox    map[string]string
 	S3ConfDownload map[string]string
-	OIDCID OIDCIdentity
+	OIDCID         OIDCIdentity
 }
 
 type AuthHandler struct {
@@ -341,12 +341,12 @@ func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
 	}
 }
 
-// getOIDCConfInbox returns an s3config file for uploading to the Inbox 
+// getOIDCConfInbox returns an s3config file for uploading to the Inbox
 func (auth AuthHandler) getOIDCConfInbox(ctx iris.Context) {
 	auth.getS3Config(ctx, "oidcInbox", "s3cmd-inbox.conf")
 }
 
-// getOIDCConfDownload returns an s3config file for downloading from the Archive 
+// getOIDCConfDownload returns an s3config file for downloading from the Archive
 func (auth AuthHandler) getOIDCConfDownload(ctx iris.Context) {
 	auth.getS3Config(ctx, "oidcDownload", "s3cmd-download.conf")
 }

@@ -107,7 +107,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	idStruct = OIDCIdentity{
 		User:                 userInfo.Subject,
 		RawToken:             rawAccessToken,
-		ResignedToken: 	      rawAccessToken,
+		ResignedToken:        rawAccessToken,
 		Passport:             claims.PassportClaim,
 		Profile:              claims.ProfileClaim,
 		Email:                claims.EmailClaim,
