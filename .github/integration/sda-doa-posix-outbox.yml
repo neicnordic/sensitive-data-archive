@@ -82,9 +82,10 @@ services:
 
   doa:
     container_name: doa
+    user: root
     build:
       context: ../../sda-doa
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-sda-doa
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-doa
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,8 +119,8 @@ services:
     volumes:
       - client_certs:/certs
       - ../../sda-doa/test/body.enc:/test/body.enc
-      - ./test_file:/outbox
-      - ./encryption_files:/test
+      - test_file:/outbox
+      - encryption_files:/test
 
   integration_test:
     container_name: integration_test
@@ -128,9 +129,9 @@ services:
     volumes:
       - ../../sda-doa:/sda-doa
       - ../../sda-doa/settings.xml:/root/.m2/settings.xml
-      - ./test_file:/sda-doa/outbox
+      - test_file:/sda-doa/outbox
       - ./tests:/tests
-      - ./encryption_files:/test
+      - encryption_files:/test
       - client_certs:/certs
 
     depends_on:
@@ -148,3 +149,5 @@ volumes:
   certs:
   client_certs:
   rabbitmq_data:
+  test_file:
+  encryption_files:
