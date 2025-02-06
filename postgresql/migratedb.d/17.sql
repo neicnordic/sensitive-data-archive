@@ -8,9 +8,7 @@ DECLARE
   changes VARCHAR := 'Remove user ids from filepaths';
 BEGIN
   IF (select max(version) from sda.dbschema_version) = sourcever then
-    RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;
     RAISE NOTICE 'Changes: %', changes;
-    INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
     UPDATE sda.files
     SET submission_file_path = regexp_replace(submission_file_path, '^[^/]*/', '');    
