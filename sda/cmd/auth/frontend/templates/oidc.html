@@ -32,18 +32,18 @@
             </p>
             {{if .ResignedToken}}
             <p class="text-center">
-              Your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} for uploading to the Inbox is:
+              For <strong>uploading</strong> to the Inbox, your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} is:
             </p>
             <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.ResignedToken}}</pre>
             {{end}}
+            <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block mb-5">Download credentials to upload to the Inbox</a>
             {{if .RawToken}}
             <p class="text-center">
-              Your access token {{if .ExpDateRaw}}(expires at {{.ExpDateRaw}} UTC){{end}} for downloading from the Archive is:
+              For <strong>downloading</strong> from the Archive, your access token {{if .ExpDateRaw}}(expires at {{.ExpDateRaw}} UTC){{end}} is:
             </p>
             <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.RawToken}}</pre>
             {{end}}
-            <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block">Download credentials for uploading to the Inbox</a>
-            <a href="/oidc/s3conf-download" class="btn btn-primary btn-block">Download credentials for downloading from the Archive</a>
+            <a href="/oidc/s3conf-download" class="btn btn-primary btn-block mb-5">Download credentials to access the Archive</a>
             <a href="/" class="btn btn-primary btn-block">Continue</a>
       </div>
     </div>
