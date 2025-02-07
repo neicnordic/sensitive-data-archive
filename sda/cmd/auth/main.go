@@ -280,7 +280,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
 			jwt.IssuerKey:     auth.Config.JwtIssuer,
-			jwt.SubjectKey:    idStruct.Profile,
+			jwt.SubjectKey:    idStruct.User,
 		}
 		token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 		if err != nil {
@@ -311,6 +311,7 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
 	ctx.ViewData("User", oidcData.OIDCID.User)
+	ctx.ViewData("Profile", oidcData.OIDCID.Profile)
 	ctx.ViewData("Passport", oidcData.OIDCID.Passport)
 	ctx.ViewData("RawToken", oidcData.OIDCID.RawToken)
 	ctx.ViewData("ResignedToken", oidcData.OIDCID.ResignedToken)
