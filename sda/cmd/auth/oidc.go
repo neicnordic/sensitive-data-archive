@@ -20,7 +20,7 @@ type OIDCIdentity struct {
 	Passport             []string
 	RawToken             string
 	ResignedToken        string
-	Profile              string
+	Fullname             string
 	Email                string
 	EdupersonEntitlement []string
 	ExpDateRaw           string
@@ -94,7 +94,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	// Extract custom passports, name and email claims
 	var claims struct {
 		PassportClaim        []string `json:"ga4gh_passport_v1"`
-		ProfileClaim         string   `json:"name"`
+		FullnameClaim        string   `json:"name"`
 		EmailClaim           string   `json:"email"`
 		EdupersonEntitlement []string `json:"eduperson_entitlement"`
 	}
@@ -109,7 +109,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 		RawToken:             rawAccessToken,
 		ResignedToken:        rawAccessToken,
 		Passport:             claims.PassportClaim,
-		Profile:              claims.ProfileClaim,
+		Fullname:             claims.FullnameClaim,
 		Email:                claims.EmailClaim,
 		EdupersonEntitlement: claims.EdupersonEntitlement,
 		ExpDateRaw:           rawExpDate,
