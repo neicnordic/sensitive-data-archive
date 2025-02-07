@@ -269,7 +269,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
-	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Profile, idStruct.Email, idStruct.EdupersonEntitlement)
+	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
 	if err != nil {
 		log.Warn("Could not log user info.")
 	}
@@ -311,7 +311,7 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
 	ctx.ViewData("User", oidcData.OIDCID.User)
-	ctx.ViewData("Profile", oidcData.OIDCID.Profile)
+	ctx.ViewData("Fullname", oidcData.OIDCID.Fullname)
 	ctx.ViewData("Passport", oidcData.OIDCID.Passport)
 	ctx.ViewData("RawToken", oidcData.OIDCID.RawToken)
 	ctx.ViewData("ResignedToken", oidcData.OIDCID.ResignedToken)
