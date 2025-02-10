@@ -204,14 +204,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		// different instance of s3inbox. For more details see #1358.
 		if p.fileIds[r.URL.Path] == "" {
 
-			corrID, err := p.database.GetCorrID(username, filepath, "")
-			if err != nil {
-				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve corrID from database: %v", err))
-
-				return
-			}
-
-			p.fileIds[r.URL.Path], err = p.database.GetFileID(corrID)
+			p.fileIds[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
