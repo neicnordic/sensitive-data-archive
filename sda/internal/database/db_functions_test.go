@@ -1228,3 +1228,36 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	_, err = db.getInboxFilePathFromID(user, fileID)
 	assert.Error(suite.T(), err)
 }
+
+func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	user := "UserX"
+	filePath := fmt.Sprintf("/%v/Deletefile1.c4gh", user)
+	fileID, err := db.RegisterFile(filePath, user)
+	if err != nil {
+		suite.FailNow("Failed to register file")
+	}
+
+	// check happy path
+	fileID2, err := db.getFileIDByUserPathAndStatus(user, filePath, "registered")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), fileID, fileID2)
+
+	// update the status of the file
+	err = db.UpdateFileEventLog(fileID, "archived", fileID, user, "{}", "{}")
+	if err != nil {
+		suite.FailNow("Failed to update file event log")
+	}
+
+	// check that an error and an empty fileID are returned when the most recent status is not registered
+	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "registered")
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "", fileID2)
+
+	// check that the function works for other statuses as well
+	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "archived")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), fileID, fileID2)
+}
