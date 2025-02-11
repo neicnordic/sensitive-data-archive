@@ -113,6 +113,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
@@ -122,6 +124,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
@@ -131,6 +135,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
@@ -140,6 +146,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
@@ -149,6 +157,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
@@ -158,6 +168,8 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
+    commit-message:
+      prefix: "[release_v1]"
 
 ### JAVA
   - package-ecosystem: maven
@@ -172,6 +184,8 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: daily
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: maven
     target-branch: release_v1
@@ -185,6 +199,8 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: daily
+    commit-message:
+      prefix: "[release_v1]"
 ### GO
   - package-ecosystem: gomod
     target-branch: release_v1
@@ -198,6 +214,8 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: daily
+    commit-message:
+      prefix: "[release_v1]"
 
   - package-ecosystem: gomod
     target-branch: release_v1
@@ -211,3 +229,5 @@ updates:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
       interval: daily
+    commit-message:
+      prefix: "[release_v1]"
