@@ -1239,6 +1239,9 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	if err != nil {
 		suite.FailNow("Failed to register file")
 	}
+	// sanity check - should fail
+	_, err = db.GetFileIDByUserPathAndStatus("wrong-user", filePath, "registered")
+	assert.EqualError(suite.T(), err, "sql: no rows in result set")
 
 	// check happy path
 	fileID2, err := db.getFileIDByUserPathAndStatus(user, filePath, "registered")

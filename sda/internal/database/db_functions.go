@@ -110,7 +110,7 @@ func (dbs *SDAdb) GetFileIDByUserPathAndStatus(submissionUser, filePath, status 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
 		fileID, err = dbs.getFileIDByUserPathAndStatus(submissionUser, filePath, status)
-		if err == nil {
+		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
