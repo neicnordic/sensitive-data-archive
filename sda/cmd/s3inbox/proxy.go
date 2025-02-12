@@ -177,6 +177,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	// Send message to upstream and set file as uploaded in the database
+	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
 		message, err := p.CreateMessageFromRequest(r, token)
@@ -197,6 +198,19 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
 			return
+		}
+
+		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
+		// different instance of s3inbox. For more details see #1358.
+		if p.fileIds[r.URL.Path] == "" {
+			p.fileIds[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+			if err != nil {
+				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
+
+				return
+			}
+
+			log.Debugf("resuming work on file with fileId: %v", p.fileIds[r.URL.Path])
 		}
 
 		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])

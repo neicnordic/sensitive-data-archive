@@ -100,6 +100,45 @@ func (dbs *SDAdb) getInboxFilePathFromID(submissionUser, fileID string) (string,
 	return filePath, nil
 }
 
+// GetFileIDByUserPathAndStatus checks if a file exists in the database for a given user and submission filepath
+// and returns its fileID for the latest specified status
+func (dbs *SDAdb) GetFileIDByUserPathAndStatus(submissionUser, filePath, status string) (string, error) {
+	var (
+		err    error
+		fileID string
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		fileID, err = dbs.getFileIDByUserPathAndStatus(submissionUser, filePath, status)
+		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return fileID, err
+}
+
+func (dbs *SDAdb) getFileIDByUserPathAndStatus(submissionUser, filePath, status string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFileID = "SELECT id from sda.files " +
+		"WHERE submission_user=$1 and submission_file_path =$2 and stable_id IS null " +
+		"AND EXISTS (SELECT 1 FROM " +
+		"(SELECT event from sda.file_event_log JOIN sda.files ON sda.files.id=sda.file_event_log.file_id " +
+		"WHERE submission_user=$1 and submission_file_path =$2 order by started_at desc limit 1) " +
+		"AS subquery WHERE event = $3)"
+
+	var fileID string
+	err := db.QueryRow(getFileID, submissionUser, filePath, status).Scan(&fileID)
+	if err != nil {
+		return "", err
+	}
+
+	return fileID, nil
+}
+
 // UpdateFileEventLog updates the status in of the file in the database.
 // The message parameter is the rabbitmq message sent on file upload.
 func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
