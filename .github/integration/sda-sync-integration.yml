@@ -89,7 +89,7 @@ services:
         condition: service_completed_successfully
       minio:
         condition: service_healthy
-      oidc:
+      mock-aai:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -101,6 +101,8 @@ services:
       - BROKER_ROUTINGKEY=inbox
       - DB_PASSWORD=inbox
       - DB_USER=inbox
+    extra_hosts:
+      - "localhost:host-gateway"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -251,30 +253,42 @@ services:
     volumes:
       - ./sda/config.yaml:/config.yaml
 
-  oidc:
-    container_name: oidc
-    command:
-      - /bin/sh
-      - -c
-      - |
-        pip install --upgrade pip
-        pip install aiohttp Authlib joserfc requests
-        python -u /oidc.py
+  mock-aai:
+    container_name: ls-aai-mock
     depends_on:
-      credentials:
-        condition: service_completed_successfully
+      aai-db:
+        condition: service_healthy
+    environment:
+      - DOCKERHOST=localhost
+    extra_hosts:
+      - "localhost:host-gateway"
     healthcheck:
-      test: ["CMD", "python3", "-c", 'import requests; print(requests.get(url = "http://localhost:8080/jwk").text)']
+      test:
+        [ "CMD", "/bin/true" ]
       interval: 10s
       timeout: 2s
       retries: 6
-    image: python:3.11-slim
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.2-broker2.1.10-tomcat9.0-jdk11
     ports:
-      - "8080:8080"
-    restart: always
+      - "8800:8080"
     volumes:
-      - ./sda/oidc.py:/oidc.py
-      - shared:/shared
+      - "./sda/aai-mock:/etc/lsaai-mock"
+  aai-db:
+    container_name: ls-aai-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "aaiPass"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "aai"
+      MYSQL_USER: "aai"
+      MYSQL_PASSWORD: "aaiPass"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: mysql/mysql-server:latest
+    volumes:
+      - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
   api:
     command: [ sda-api ]
@@ -284,7 +298,7 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      oidc:
+      mock-aai:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -293,6 +307,8 @@ services:
       - BROKER_USER=api
       - DB_PASSWORD=api
       - DB_USER=api
+    extra_hosts:
+      - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
