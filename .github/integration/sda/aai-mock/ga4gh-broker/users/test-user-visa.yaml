@@ -1,0 +1,34 @@
+---
+# Identifier of the user - has to match the value of 'sub' claim in AAI
+userId: "testu@lifescience-ri.eu"
+visas:
+  - source: https://dummy.uni/
+    expires: 1893452400
+    asserted: 1683049328
+    value: "affiliate@dummy.uni"
+    type: "AffiliationAndRole"
+    by: "system"
+  - source: https://dummy.uni/
+    expires: 1893452400
+    asserted: 1683049328
+    value: "faculty@dummy.uni"
+    type: "AffiliationAndRole"
+    by: "system"
+  - source: https://dummy.uni/
+    expires: 1893452400
+    asserted: 1683049328
+    value: "https://lifescience-ri.eu/ls-login/ls-aai-aup.html"
+    type: "AcceptedTermsAndPolicies"
+    by: "system"
+  - source: https://dummy.uni/
+    expires: 1893452400
+    asserted: 1683049328
+    value: "https://doi.org/10.1038/s41431-018-0219-y"
+    type: "ResearcherStatus"
+    by: "system"
+  - source: https://dummy.uni/
+    expires: 1893452400
+    asserted: 1683049328
+    value: "urn:sampledataset:gdi:testcase"
+    type: "ControlledAccessGrants"
+    by: "system"

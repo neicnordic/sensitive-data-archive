@@ -62,7 +62,7 @@
           "rolebinding": "submission"
        },
        {
-          "role": "requester@demo.org",
+          "role": "testu@lifescience-ri.eu",
           "rolebinding": "admin"
        }
     ]

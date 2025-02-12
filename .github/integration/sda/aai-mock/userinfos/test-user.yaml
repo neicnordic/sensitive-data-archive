@@ -1,0 +1,33 @@
+web-display-name: "Test User - admin"
+
+sub: "testu@lifescience-ri.eu"
+
+name: "Test User"
+preferred-username: "testu"
+given-name: "Test"
+family-name: "User"
+middle-name: "dummy"
+nickname: "tedu"
+locale: "EN"
+
+email: "testu@dummy.uni"
+email-verified: True
+
+country: "eu"
+
+eduperson-entitlement: ["urn:geant:lifescience-ri.eu:group:researchers#lifescience-ri.eu"]
+
+voperson-external-affiliation: ["unknown@orcid.org", "affiliate@dummy.uni", "faculty@dummy.uni"]
+
+eduperson-orcid: "https://orcid.org/0000-0000-XXXX-XXXX"
+
+schac-home-organization: ["dummy.uni", "orcid.org"]
+
+eduperson-scoped-affiliation: ["affiliate@lifescience-ri.eu", "member@lifescience-ri.eu"]
+
+voperson-current-external-affiliation: ["affiliate@dummy.uni", "faculty@dummy.uni"]
+
+authenticating-entity: "https://idp.dummy.uni/mock"
+
+acr: "https://refeds.org/profile/mfa"
+authn-instant: "2023-05-01T10:15:30Z"
