@@ -1,0 +1,258 @@
+openapi: 3.0.3
+info:
+  title: SDA file download API
+  version: "1.0"
+paths:
+  /file:
+    get:
+      description: Returns the requested file to the user
+      parameters:
+        - in: header
+          description: "Public key used to re-encrypt the file header with"
+          name: public_key
+          required: true
+          schema:
+            type: string
+        - in: header
+          description: "The JWT used to authenticate the user"
+          name: token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: fileId
+          schema:
+            type: string
+          required: false
+          description: Stable ID of the file to download
+        - in: query
+          name: filePath
+          schema:
+            type: string
+          required: false
+          description: File path of the file to download
+        - in: query
+          name: end
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
+        - in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: successful operation
+        "400":
+          description: Invalid file reference
+        "401":
+          description: Authentication failure
+        "403":
+          description: The user does not have access to the dataset
+        "416":
+          description: Range Not Satisfiable
+        "500":
+          description: Internal application error
+      security:
+        - bearerAuth: []
+  /file/{fileId}:
+    get:
+      description: Returns the requested file to the user
+      parameters:
+        - in: header
+          description: "Public key used to re-encrypt the file header with"
+          name: public_key
+          required: true
+          schema:
+            type: string
+        - in: header
+          description: "The JWT used to authenticate the user"
+          name: token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: fileId
+          schema:
+            type: string
+          required: true
+          description: Stable ID of the file to download
+        - in: query
+          name: end
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
+        - in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: successful operation
+        "400":
+          description: Invalid file reference
+        "401":
+          description: Authentication failure
+        "403":
+          description: The user does not have access to the dataset
+        "500":
+          description: Internal application error
+      security:
+        - bearerAuth: []
+  /info/datasets:
+    get:
+      description: Returns a list of the datasets the user has access to, an empty list is a valid response.
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              example: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
+              schema:
+                type: array
+        "401":
+          description: Authentication failure
+      security:
+        - bearerAuth: []
+  /info/datasets/{datasetId}:
+    get:
+      description: Returns an array with metadata about the dataset
+      parameters:
+        - in: header
+          description: "Public key used to re-encrypt the file header with"
+          name: public_key
+          required: true
+          schema:
+            type: string
+        - in: header
+          description: "The JWT used to authenticate the user"
+          name: token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          schema:
+            type: string
+          required: true
+          description: Stable ID of the dataset of interest
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetInfo"
+          description: successful operation
+        "401":
+          description: Authentication failure
+        "403":
+          description: The user does not have access to the dataset
+        "500":
+          description: Internal application error
+      security:
+        - bearerAuth: []
+  /info/datasets/{datasetId}/files:
+    get:
+      description: Returns an array with metadata about all files in a dataset
+      parameters:
+        - in: header
+          description: "Public key used to re-encrypt the file header with"
+          name: public_key
+          required: true
+          schema:
+            type: string
+        - in: header
+          description: "The JWT used to authenticate the user"
+          name: token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          schema:
+            type: string
+          required: true
+          description: Stable ID of the dataset of interest
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileInfo"
+          description: successful operation
+        "401":
+          description: Authentication failure
+        "403":
+          description: The user does not have access to the dataset
+        "500":
+          description: Internal application error
+      security:
+        - bearerAuth: []
+  /ready:
+    get:
+      description: Returns the status of the application, used by the kubernets API to decide if traffic should be routed to the app
+      responses:
+        "200":
+          description: The service is operational
+        "503":
+          description: Unhealthy service
+components:
+  schemas:
+    DatasetInfo:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+          example: "2025-02-14T14:51:26.639Z"
+        files:
+          type: integer
+          format: int32
+          example: 1234
+        name:
+          type: string
+          example: aa-dataset-123456-asdfgh
+        size:
+          type: integer
+          format: int64
+          example: 6597069766656
+    FileInfo:
+      type: object
+      properties:
+        filePath:
+          type: string
+          example: "samples/controls/sample1.cram.c4gh"
+        size:
+          type: integer
+          format: int64
+          example: 56623104
+        stableId:
+          type: string
+          example: aa-file-123456-asdfgh
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
