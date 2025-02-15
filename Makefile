@@ -36,6 +36,8 @@ build-sda-sftp-inbox:
 	@cd sda-sftp-inbox && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-sftp-inbox .
 build-sda-admin:
 	@cd sda-admin && go build
+build-sda-doa:
+	@cd sda-doa && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-doa .
 
 
 go-version-check: SHELL:=/bin/bash
@@ -127,6 +129,24 @@ integrationtest-sda-sync-run:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml run integration_test
 integrationtest-sda-sync-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-sync-integration.yml down -v --remove-orphans
+
+integrationtest-sda-doa-posix: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-posix-outbox.yml run integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-posix-outbox.yml down -v --remove-orphans
+integrationtest-sda-doa-posix-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-posix-outbox.yml run integration_test
+integrationtest-sda-doa-posix-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-posix-outbox.yml down -v --remove-orphans
+
+integrationtest-sda-doa-s3: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-s3-outbox.yml run integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-s3-outbox.yml down -v --remove-orphans
+integrationtest-sda-doa-s3-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-s3-outbox.yml run integration_test
+integrationtest-sda-doa-s3-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-s3-outbox.yml down -v --remove-orphans
+
+
 
 # lint go code
 lint-all: lint-sda lint-sda-download lint-sda-admin
