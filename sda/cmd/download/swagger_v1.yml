@@ -59,14 +59,21 @@ paths:
                 type: string
                 format: binary
           description: successful operation
+        "206":
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: successful partial file delivery
         "400":
-          description: Invalid file reference
+          description: Bad request i.e start larger than end
         "401":
           description: Authentication failure
         "403":
           description: The user does not have access to the dataset
         "416":
-          description: Range Not Satisfiable
+          description: Unsatisfiable range i.e. end larger than file size
         "500":
           description: Internal application error
       security:
@@ -93,20 +100,11 @@ paths:
             type: string
           required: true
           description: Stable ID of the file to download
-        - in: query
-          name: end
+        - in: header
+          name: Range
           required: false
           schema:
-            default: 0
-            minimum: 0
-            type: integer
-        - in: query
-          name: start
-          required: false
-          schema:
-            default: 0
-            minimum: 0
-            type: integer
+            type: string
       responses:
         "200":
           content:
@@ -115,12 +113,21 @@ paths:
                 type: string
                 format: binary
           description: successful operation
+        "206":
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: successful partial file delivery
         "400":
-          description: Invalid file reference
+          description: Bad request i.e start larger than end
         "401":
           description: Authentication failure
         "403":
           description: The user does not have access to the dataset
+        "416":
+          description: Unsatisfiable range i.e. end larger than file size
         "500":
           description: Internal application error
       security:
@@ -138,6 +145,8 @@ paths:
                 type: array
         "401":
           description: Authentication failure
+        "500":
+          description: Internal application error
       security:
         - bearerAuth: []
   /info/datasets/{datasetId}:
