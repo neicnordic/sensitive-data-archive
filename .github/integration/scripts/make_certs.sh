@@ -34,6 +34,7 @@ openssl x509 -req -in "$out_dir/mq.csr" -days 1200 -CA "$out_dir/ca.crt" -CAkey 
 
 # Create client certificate
 openssl req -config "$script_dir/ssl.cnf" -new -nodes -newkey rsa:4096 -keyout "$out_dir/client.key" -out "$out_dir/client.csr" -extensions client_cert -subj "/CN=admin"
+openssl pkcs8 -topk8 -inform PEM -outform DER -in "$out_dir/client.key" -out "$out_dir/client.der" -nocrypt
 openssl x509 -req -in "$out_dir/client.csr" -days 1200 -CA "$out_dir/ca.crt" -CAkey "$out_dir/ca-key.pem" -set_serial 01 -out "$out_dir/client.crt" -extensions client_cert -extfile "$script_dir/ssl.cnf"
 
 if [ -n "$KEYSTORE_PASSWORD" ]; then
@@ -68,7 +69,9 @@ chmod 600 /certs/*.key
 cp -p "$out_dir/ca.crt" /client_certs/ca.crt
 cp -p "$out_dir/client.crt" /client_certs/
 cp -p "$out_dir/client.key" /client_certs/
+cp -p "$out_dir/client.der" /client_certs/
 chmod 600 /client_certs/*.key
+chmod 644 /client_certs/*.der
 
 # needed if testing locally
 mkdir -p /temp/certs
