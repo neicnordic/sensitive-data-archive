@@ -82,7 +82,6 @@ services:
 
   doa:
     container_name: doa
-    user: root
     build:
       context: ../../sda-doa
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-doa
