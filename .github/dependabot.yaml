@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -56,7 +56,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: "weekly"
+      interval: weekly
 
   - package-ecosystem: gomod
     directory: "/sda-download"
@@ -109,7 +109,7 @@ updates:
     target-branch: release_v1
     directory: "/postgresql"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -120,7 +120,7 @@ updates:
     target-branch: release_v1
     directory: "/rabbitmq"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -131,7 +131,7 @@ updates:
     target-branch: release_v1
     directory: "/sda"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -142,7 +142,7 @@ updates:
     target-branch: release_v1
     directory: "/sda-doa"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -153,7 +153,7 @@ updates:
     target-branch: release_v1
     directory: "/sda-download"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -164,7 +164,7 @@ updates:
     target-branch: release_v1
     directory: "/sda-sftp-inbox"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
@@ -183,7 +183,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: daily
+      interval: weekly
     commit-message:
       prefix: "[release_v1]"
 
@@ -198,7 +198,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: daily
+      interval: weekly
     commit-message:
       prefix: "[release_v1]"
 ### GO
@@ -213,7 +213,7 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: daily
+      interval: weekly
     commit-message:
       prefix: "[release_v1]"
 
@@ -228,6 +228,6 @@ updates:
     reviewers:
       - "neicnordic/sensitive-data-development-collaboration"
     schedule:
-      interval: daily
+      interval: weekly
     commit-message:
       prefix: "[release_v1]"
