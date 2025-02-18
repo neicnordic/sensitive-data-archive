@@ -8,7 +8,7 @@ paths:
       description: Returns the requested file to the user
       parameters:
         - in: header
-          description: "Public key used to re-encrypt the file header with"
+          description: "Public key used to re-encrypt the file (header) with. This should be supplied as the base64 encoding of the PEM (RFC 7468) encoding of the public key"
           name: public_key
           required: true
           schema:
@@ -30,18 +30,20 @@ paths:
           schema:
             type: string
           required: false
-          description: Stable ID of the file to download
+          description: Stable ID of the file to download. It is an error to supply both filePath and fileId
         - in: query
           name: filePath
           schema:
             type: string
           required: false
-          description: File path of the file to download
+          description: File path of the file to download. It is an error to supply both filePath and fileId
         - in: query
           name: end
+          description: 'End of requested data in the form of the 0-index of the first octet not included in the
+                                 response. That is, data delivered will have octet indices in the closed-open set
+                                 [start,end). Defaults to end of file if not set'
           required: false
           schema:
-            default: 0
             minimum: 0
             type: integer
         - in: query
