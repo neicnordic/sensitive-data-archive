@@ -308,6 +308,7 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	s := sessions.Get(ctx)
 	s.SetFlash("oidcInbox", oidcData.S3ConfInbox)
 	s.SetFlash("oidcDownload", oidcData.S3ConfDownload)
+	ctx.ViewData("cegaID", auth.Config.Cega.ID)
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
 	ctx.ViewData("User", oidcData.OIDCID.User)

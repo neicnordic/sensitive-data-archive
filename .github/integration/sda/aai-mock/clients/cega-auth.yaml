@@ -1,0 +1,8 @@
+client-name: "cega-auth"
+client-id: "XC56EL11zz"
+client-secret: "wHPVQaYXmdDHa"
+redirect-uris: ["http://localhost:8888/oidc/login"]
+token-endpoint-auth-method: "client_secret_basic"
+scope: ["openid", "profile", "email", "ga4gh_passport_v1", "eduperson_entitlement"]
+grant-types: ["authorization_code"]
+post-logout-redirect-uris: ["http://localhost:8888/oidc/login"]

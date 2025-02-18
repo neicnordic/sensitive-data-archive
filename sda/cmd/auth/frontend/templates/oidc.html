@@ -30,13 +30,15 @@
             <p class="lead text-center">
               Welcome, {{.Fullname}}!
             </p>
-            {{if .ResignedToken}}
-            <p class="text-center">
-              For <strong>uploading</strong> to the Inbox, your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} is:
-            </p>
-            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.ResignedToken}}</pre>
+            {{if (not .cegaID)}}
+              {{if .ResignedToken}}
+              <p class="text-center">
+                For <strong>uploading</strong> to the Inbox, your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} is:
+              </p>
+              <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.ResignedToken}}</pre>
+              {{end}}
+              <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block mb-5">Download credentials to upload to the Inbox</a>
             {{end}}
-            <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block mb-5">Download credentials to upload to the Inbox</a>
             {{if .RawToken}}
             <p class="text-center">
               For <strong>downloading</strong> from the Archive, your access token {{if .ExpDateRaw}}(expires at {{.ExpDateRaw}} UTC){{end}} is:

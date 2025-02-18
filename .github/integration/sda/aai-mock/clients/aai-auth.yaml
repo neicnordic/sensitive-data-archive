@@ -1,4 +1,4 @@
-client-name: "auth"
+client-name: "aai-auth"
 client-id: "XC56EL11xx"
 client-secret: "wHPVQaYXmdDHg"
 redirect-uris: ["http://localhost:8801/oidc/login"]
