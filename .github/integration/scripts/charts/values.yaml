@@ -72,10 +72,10 @@ global:
       configPath: "iss"
       configFile: "iss.json"
       iss:
-        - iss: "http://oidc:8080"
+        - iss: "http://oidc:8080/"
           jku: "http://oidc:8080/jwks"
   oidc:
-    provider: "http://oidc:8080"
+    provider: "http://oidc:8080/"
     jwkPath: "/jwks"
     id: DfCieZLuBU
     secret: DfCieZLuBU
