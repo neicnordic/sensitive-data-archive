@@ -220,7 +220,7 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 
 // getEGAConf returns an s3config file for an oidc login
 func (auth AuthHandler) getEGAConf(ctx iris.Context) {
-	auth.getS3Config(ctx, "ega", "s3cmd.conf")
+	auth.getS3Config(ctx, "ega", "s3cmd-inbox.conf")
 }
 
 // getOIDC redirects to the oidc page defined in auth.Config

@@ -31,18 +31,12 @@
               Welcome, {{.User}}!
             </p>
             {{if .Token}}
-            <p class="text-center">
-              Your access token is:
-            </p>
-            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.Token}}</pre>
+              <p class="text-center">
+                For <strong>uploading</strong> to the Inbox, your access token {{if .ExpDate}}(expires at {{.ExpDate}} UTC){{end}} is:
+              </p>
+              <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.Token}}</pre>
             {{end}}
-            {{if .ExpDate}}
-            <p class="text-center">
-              Your access token expires (UTC):
-            </p>
-            <pre class="text-center" id="logintext">{{.ExpDate}}</pre>
-            {{end}}
-            <a href="/ega/s3conf" class="btn btn-primary btn-block">Download inbox s3cmd credentials</a>
+            <a href="/ega/s3conf" class="btn btn-primary btn-block mb-5">Download credentials to upload to the Inbox</a>
             <a href="/" class="btn btn-primary btn-block">Continue</a>
       </div>
     </div>
