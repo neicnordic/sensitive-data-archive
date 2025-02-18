@@ -60,14 +60,14 @@ paths:
               schema:
                 type: string
                 format: binary
-          description: successful operation
+          description: Successful operation
         "206":
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-          description: successful partial file delivery
+          description: Successful partial file delivery
         "400":
           description: Bad request i.e start larger than end
         "401":
@@ -107,6 +107,7 @@ paths:
           required: false
           schema:
             type: string
+          description: Byte range of the file that is to be delivered
       responses:
         "200":
           content:
@@ -114,14 +115,14 @@ paths:
               schema:
                 type: string
                 format: binary
-          description: successful operation
+          description: Successful operation
         "206":
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-          description: successful partial file delivery
+          description: Successful partial file delivery
         "400":
           description: Bad request i.e start larger than end
         "401":
@@ -139,7 +140,7 @@ paths:
       description: Returns a list of the datasets the user has access to, an empty list is a valid response.
       responses:
         "200":
-          description: successful operation
+          description: Successful operation
           content:
             application/json:
               example: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
@@ -179,7 +180,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DatasetInfo"
-          description: successful operation
+          description: Successful operation
         "401":
           description: Authentication failure
         "403":
@@ -218,7 +219,7 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/FileInfo"
-          description: successful operation
+          description: Successful operation
         "401":
           description: Authentication failure
         "403":
