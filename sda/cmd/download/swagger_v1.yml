@@ -13,12 +13,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: header
-          description: "The JWT used to authenticate the user"
-          name: token
-          required: true
-          schema:
-            type: string
         - in: query
           name: dataset
           schema:
@@ -90,12 +84,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: header
-          description: "The JWT used to authenticate the user"
-          name: token
-          required: true
-          schema:
-            type: string
         - in: path
           name: fileId
           schema:
@@ -107,7 +95,8 @@ paths:
           required: false
           schema:
             type: string
-          description: Byte range of the file that is to be delivered
+          description: 0-indexed byte range of the file that is to be delivered.
+          example: "Range: bytes=20-200, 300-400"
       responses:
         "200":
           content:
@@ -230,7 +219,7 @@ paths:
         - bearerAuth: []
   /ready:
     get:
-      description: Returns the status of the application, used by the kubernets API to decide if traffic should be routed to the app
+      description: Returns the status of the application, used by the Kubernets API to decide if traffic should be routed to the app
       responses:
         "200":
           description: The service is operational
