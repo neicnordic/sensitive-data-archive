@@ -189,6 +189,47 @@ jobs:
           sarif_file: 'inbox-results.sarif'
           category: sftp-inbox
 
+
+      - name: create maven settings.xml
+        uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id":"github-fega-norway",
+              "username": "${{github.actor}}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      - name: Copy settings.xml to sda-doa root
+        shell: bash
+        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
+
+      - name: Build container for sda-doa
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sda-doa
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-doa
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-doa
+          labels: |
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner on doa
+        uses: aquasecurity/trivy-action@0.29.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-doa
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: 'inbox-results.sarif'
+          severity: "CRITICAL,HIGH"
+
   rabbitmq:
     needs:
       - build_go_images
@@ -247,6 +288,35 @@ jobs:
       - name: Test sda-sync
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
         if: steps.changes.outputs.sync == 'true' || steps.changes.outputs.sync-api == 'true'
+
+  sda-doa:
+    needs:
+      - build_java_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        storage: [s3, posix]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: create maven settings.xml
+        uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id":"github-fega-norway",
+              "username": "${{github.actor}}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      - name: Copy settings.xml to sda-doa root
+        shell: bash
+        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
+
+      - name: Test sda-doa for ${{ matrix.storage }} storage
+        run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
 
   chart:
     needs:
