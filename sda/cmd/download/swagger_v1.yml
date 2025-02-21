@@ -151,12 +151,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: header
-          description: "The JWT used to authenticate the user"
-          name: token
-          required: true
-          schema:
-            type: string
         - in: path
           name: datasetId
           schema:
@@ -185,12 +179,6 @@ paths:
         - in: header
           description: "Public key used to re-encrypt the file header with"
           name: public_key
-          required: true
-          schema:
-            type: string
-        - in: header
-          description: "The JWT used to authenticate the user"
-          name: token
           required: true
           schema:
             type: string
