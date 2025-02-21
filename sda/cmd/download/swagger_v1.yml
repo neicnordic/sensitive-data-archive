@@ -141,18 +141,12 @@ paths:
           description: Internal application error
       security:
         - bearerAuth: []
-  /info/datasets/{datasetId}:
+  /info/dataset:
     get:
       description: Returns an array with metadata about the dataset
       parameters:
-        - in: header
-          description: "Public key used to re-encrypt the file header with"
-          name: public_key
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: datasetId
+        - in: query
+          name: dataset
           schema:
             type: string
           required: true
@@ -172,18 +166,12 @@ paths:
           description: Internal application error
       security:
         - bearerAuth: []
-  /info/datasets/{datasetId}/files:
+  /info/dataset/files:
     get:
       description: Returns an array with metadata about all files in a dataset
       parameters:
-        - in: header
-          description: "Public key used to re-encrypt the file header with"
-          name: public_key
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: datasetId
+        - in: query
+          name: dataset
           schema:
             type: string
           required: true
