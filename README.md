@@ -95,6 +95,14 @@ This will build all required images, bring up the services, run the integration 
     ```sh
     make integrationtest-sda-sync
     ```
+- Integration test for SDA-DOA using POSIX as the storage backend:
+    ```sh
+    make integrationtest-sda-doa-posix
+    ```
+- Integration test for SDA-DOA using S3 as the storage backend:
+    ```sh
+    make integrationtest-sda-doa-s3
+    ```
 #### Running the integration tests without shutting down the services 
 This will run the integration tests and keep the services running after the tests are finished.
 
@@ -110,7 +118,14 @@ This will run the integration tests and keep the services running after the test
     ```sh
     make integrationtest-sda-sync-run
     ```
-
+- Integration test for SDA-DOA using POSIX as the storage backend:
+    ```sh
+    make integrationtest-sda-doa-posix-run
+    ```
+- Integration test for SDA-DOA using S3 as the storage backend:
+    ```sh
+    make integrationtest-sda-doa-s3-run
+    ```
 After that, you will need to shut down the services manually.
 
 - Shut down services for SDA using POSIX as the storage backend
@@ -124,6 +139,14 @@ After that, you will need to shut down the services manually.
 - Shut down services for SDA including the sync service:
     ```sh
     make integrationtest-sda-sync-down
+    ```
+- Shut down services for SDA-DOA using POSIX as the storage backend
+    ```sh
+    make integrationtest-sda-doa-posix-down
+    ```
+- Shut down services for SDA-DOA using S3 as the storage backend
+    ```sh
+    make integrationtest-sda-doa-s3-down
     ```
 
 ### Linting the Go code
