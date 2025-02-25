@@ -1,6 +1,11 @@
-# NeIC sda-doa Data Out API
-![Java CI](https://github.com/neicnordic/sda-doa/workflows/Java%20CI/badge.svg)
+# Overview
+The Data Out API (DOA) is a service that provides an interface for exporting datasets and files from the FEGA archive. It provides secure access to datasets and files, ensuring proper authorization and encryption.
 
+## Installation
+
+1. Navigate to github packages
+2. Select the package [https://github.com/orgs/neicnordic/packages/container/package/sensitive-data-archive](sensitive-data-archive)
+3. Find the image you want to install (tag format: `vX.X.XXX-doa`)  
 
 ## Configuration
 
@@ -53,54 +58,6 @@ Environment variables used:
 | VISA_PUBLIC_KEY_PATH                   | /etc/ega/jwt/visa.pem                                                | Path to the public key for visas JWT validation    |
 | CRYPT4GH_PRIVATE_KEY_PATH              | /etc/ega/crypt4gh/key.pem                                            | Path to the Crypt4GH private key                   |
 | CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH     | /etc/ega/crypt4gh/key.pass                                           | Path to the Crypt4GH private key passphrase        |
-| LOGSTASH_HOST                          |                                                                      | Hostname of the Logstash instance (if any)         |
-| LOGSTASH_PORT                          |                                                                      | Port of the Logstash instance (if any)             |
 
-If `LOGSTASH_HOST` or `LOGSTASH_PORT` is empty, Logstash logging will not be enabled.
 
-In addition, environment variables can be used to configure log level for different packages. Package loggers can be configured using corresponding package names, for example, to turn of logs of Spring, one can set environment variable `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK=OFF`, or to set DOA's own logs to debug: `LOGGING_LEVEL_NO_UIO_IFI=DEBUG`, etc.
-
-## Sample Docker Swarm entry
-
-```
-...
-  doa:
-    image: neicnordic/sda-doa:latest
-    ports:
-      - 443:8080
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        window: 120s
-    environment:
-      - S3_PORT
-      - KEYSTORE_PASSWORD=${SERVER_CERT_PASSWORD}
-      - DB_INSTANCE=${DB_HOST}
-      - POSTGRES_DB=${DB_DATABASE_NAME}
-      - POSTGRES_PASSWORD=${DB_LEGA_OUT_PASSWORD}
-      - S3_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - S3_SECRET_KEY=${MINIO_SECRET_KEY}
-      - LOGSTASH_HOST
-      - LOGSTASH_PORT
-    secrets:
-      - source: rootCA.pem
-        target: /etc/ega/ssl/CA.cert
-      - source: rootCA.pem
-        target: /etc/ssl/certs/ca-certificates.crt
-      - source: server.p12
-        target: /etc/ega/ssl/server.cert
-      - source: client.pem
-        target: /etc/ega/ssl/client.cert
-      - source: client-key.der
-        target: /etc/ega/ssl/client.key
-      - source: jwt.pub.pem
-        target: /etc/ega/jwt/passport.pem
-      - source: jwt.pub.pem
-        target: /etc/ega/jwt/visa.pem
-      - source: ega.sec.pem
-        target: /etc/ega/crypt4gh/key.pem
-      - source: ega.sec.pass
-        target: /etc/ega/crypt4gh/key.pass
-...
-```
+In addition, environment variables can be used to configure log level for different packages. Package loggers can be configured using corresponding package names, for example, to turn off logs of Spring, one can set environment variable `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK=OFF`, or to set DOA's own logs to debug: `LOGGING_LEVEL_NO_UIO_IFI=DEBUG`, etc.
