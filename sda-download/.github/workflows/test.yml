@@ -8,7 +8,7 @@ on:
       - "schemas/**"
 
 env:
-  go-version: '1.23'
+  go-version: '1.24'
 
 jobs:
   build:
