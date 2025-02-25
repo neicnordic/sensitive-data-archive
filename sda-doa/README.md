@@ -4,8 +4,9 @@ The Data Out API (DOA) is a service that provides an interface for exporting dat
 ## Installation
 
 1. Navigate to github packages
-2. Select the package [https://github.com/orgs/neicnordic/packages/container/package/sensitive-data-archive](sensitive-data-archive)
-3. Find the image you want to install (tag format: `vX.X.XXX-doa`)  
+2. Select the package [sensitive-data-archive](https://github.com/orgs/neicnordic/packages/container/package/sensitive-data-archive)
+3. Find the image you want to install (tag format: `vX.X.XXX-doa`)
+4. Since the image runs as the _nobody_ user, if your outbox is posix you may need to adjust the ownership and permissions of the mounted volume to ensure the container can access the files.
 
 ## Configuration
 
