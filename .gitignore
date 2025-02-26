@@ -189,3 +189,13 @@ buildNumber.properties
 # End of https://www.gitignore.io/api/java,maven,eclipse,intellij+all
 
 db/
+
+# MacOS desktop service store
+.DS_Store
+
+# crypt4gh key files
+*.pub.pem
+*.sec.pem
+
+# sda-admin binary
+sda-admin/sda-admin

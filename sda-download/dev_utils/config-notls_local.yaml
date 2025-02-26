@@ -32,4 +32,4 @@ db:
 oidc:
   # oidc configuration API must have values for "userinfo_endpoint" and "jwks_uri"
   configuration:
-    url: "http://localhost:8080/.well-known/openid-configuration"
+    url: "http://localhost:8800/oidc/.well-known/openid-configuration"

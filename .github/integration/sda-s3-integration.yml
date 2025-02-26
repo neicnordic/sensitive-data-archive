@@ -282,6 +282,9 @@ services:
       - AUTH_RESIGNJWT=true
       - AUTH_CEGA_ID=test
       - AUTH_CEGA_SECRET=test
+      - OIDC_REDIRECTURL=http://localhost:8888/oidc/login
+      - OIDC_ID=XC56EL11zz
+      - OIDC_SECRET=wHPVQaYXmdDHa
       - DB_PASSWORD=auth
       - DB_USER=auth
     extra_hosts:

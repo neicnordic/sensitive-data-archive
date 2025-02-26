@@ -28,29 +28,24 @@
     <div class="jumbotron" role="region">
       <div class="container" id="loginbox1">
             <p class="lead text-center">
-              Welcome, {{.User}}!
+              Welcome, {{.Fullname}}!
             </p>
-            {{if .Passport}}
-            <p class="text-center">
-              Your visas are the following:
-            </p>
-            {{ range .Passport }}
-            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.}}</pre>
-            {{ end }}
-            {{ end }}
-            {{if .Token}}
-            <p class="text-center">
-              Your access token is:
-            </p>
-            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.Token}}</pre>
+            {{if (not .cegaID)}}
+              {{if .ResignedToken}}
+              <p class="text-center">
+                For <strong>uploading</strong> to the Inbox, your access token {{if .ExpDateResigned}}(expires at {{.ExpDateResigned}} UTC){{end}} is:
+              </p>
+              <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.ResignedToken}}</pre>
+              {{end}}
+              <a href="/oidc/s3conf-inbox" class="btn btn-primary btn-block mb-5">Download credentials to upload to the Inbox</a>
             {{end}}
-            {{if .ExpDate}}
+            {{if .RawToken}}
             <p class="text-center">
-              Your access token expires (UTC):
+              For <strong>downloading</strong> from the Archive, your access token {{if .ExpDateRaw}}(expires at {{.ExpDateRaw}} UTC){{end}} is:
             </p>
-            <pre class="text-center" id="logintext">{{.ExpDate}}</pre>
+            <pre class="border border-secondary rounded py-2 px-3 my-4" id="logintext">{{.RawToken}}</pre>
             {{end}}
-            <a href="/oidc/s3conf" class="btn btn-primary btn-block">Download inbox s3cmd credentials</a>
+            <a href="/oidc/s3conf-download" class="btn btn-primary btn-block mb-5">Download credentials to access the Archive</a>
             <a href="/" class="btn btn-primary btn-block">Continue</a>
       </div>
     </div>
