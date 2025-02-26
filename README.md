@@ -252,9 +252,9 @@ Bootstrap the dependencies with the command: `make k3d-deploy-dependencies`.
 
 Start by building and importing the required containers using the `make k3d-import-images`.
 
-The Postgres and RabbitMQ Needs to be deployed first using the following commands: `make k3d-deplploy-postgres` and `make k3d-deploy-rabbitmq`.
+The Postgres and RabbitMQ Needs to be deployed first using the following commands: `make k3d-deploy-postgres` and `make k3d-deploy-rabbitmq`.
 
-Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`), `make k3d-deplpoy-sda-posix` or `make k3d-deplpoy-sda-s3`.
+Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`), `make k3d-deploy-sda-posix` or `make k3d-deploy-sda-s3`.
 
 #### Testing with ingress
 
