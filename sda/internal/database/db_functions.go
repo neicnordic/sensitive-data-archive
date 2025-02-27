@@ -572,9 +572,12 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 		return FileInfo{}, err
 	}
 
-	if err := db.QueryRow(checkSum, id).Scan(&info.Checksum, &info.DecryptedChecksum); err != nil {
+	var checksum, decryptedChecksum sql.NullString
+	if err := db.QueryRow(checkSum, id).Scan(&checksum, &decryptedChecksum); err != nil {
 		return FileInfo{}, err
 	}
+	info.Checksum = checksum.String
+	info.DecryptedChecksum = decryptedChecksum.String
 
 	return info, nil
 }
