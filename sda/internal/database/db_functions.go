@@ -202,34 +202,37 @@ func (dbs *SDAdb) storeHeader(header []byte, id string) error {
 }
 
 // SetArchived marks the file as 'ARCHIVED'
-func (dbs *SDAdb) SetArchived(file FileInfo, fileID, corrID string) error {
-	var (
-		err   error
-		count int
-	)
+func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
+	var err error
 
-	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.setArchived(file, fileID, corrID)
-		count++
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.setArchived(file, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
 	return err
 }
-func (dbs *SDAdb) setArchived(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setArchived(file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT sda.set_archived($1, $2, $3, $4, $5, $6);"
-	_, err := db.Exec(query,
-		fileID,
-		corrID,
-		file.Path,
-		file.Size,
-		file.Checksum,
-		"SHA256",
-	)
+	const setArchived = "UPDATE sda.files SET archive_file_path = $1, archive_file_size = $2 WHERE id = $3;"
+	if _, err := db.Exec(setArchived, file.Path, file.Size, fileID); err != nil {
+		return fmt.Errorf("setArchived error: %s", err.Error())
+	}
 
-	return err
+	log.Debugf("checksum: %s", file.Checksum)
+	const addChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := db.Exec(addChecksum, fileID, file.Checksum, "SHA256"); err != nil {
+		return fmt.Errorf("addChecksum error: %s", err.Error())
+	}
+
+	return nil
 }
 
 func (dbs *SDAdb) GetFileStatus(corrID string) (string, error) {

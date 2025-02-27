@@ -168,7 +168,7 @@ func (suite *SyncTest) TestBuildSyncDatasetJSON() {
 	fileInfo := database.FileInfo{Checksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 	corrID := uuid.New().String()
 
-	err = db.SetArchived(fileInfo, fileID, corrID)
+	err = db.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 	err = db.SetVerified(fileInfo, fileID, corrID)
 	assert.NoError(suite.T(), err, "failed to mark file as Verified")

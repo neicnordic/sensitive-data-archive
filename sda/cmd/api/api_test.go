@@ -857,7 +857,7 @@ func (suite *TestSuite) TestSetAccession() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
@@ -1011,7 +1011,7 @@ func (suite *TestSuite) TestCreateDataset() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
@@ -1090,7 +1090,7 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
@@ -1212,7 +1212,7 @@ func (suite *TestSuite) TestCreateDataset_WrongUser() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
@@ -1974,7 +1974,7 @@ func (suite *TestSuite) TestReVerifyFile() {
 			DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 			DecryptedSize:     948,
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
@@ -2076,7 +2076,7 @@ func (suite *TestSuite) TestReVerifyDataset() {
 			DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 			DecryptedSize:     948,
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
