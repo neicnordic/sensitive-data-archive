@@ -501,7 +501,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		return "ack"
 	}
 
-	if err := app.DB.SetArchived(fileInfo, fileID, correlationID); err != nil {
+	if err := app.DB.SetArchived(fileInfo, fileID); err != nil {
 		log.Errorf("SetArchived failed, reason: (%s)", err.Error())
 
 		return "nack"
