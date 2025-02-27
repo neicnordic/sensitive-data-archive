@@ -357,3 +357,45 @@ func (suite *TestSuite) TestTryDecrypt() {
 		}
 	}
 }
+
+// messages of type `cancel`
+func (suite *TestSuite) TestCancelFile() {
+	// prepare the DB entries
+	UserName := "test-cancel"
+	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", UserName)
+	fileID, err := suite.ingest.DB.RegisterFile(file1, UserName)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	corrID := uuid.New().String()
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "cancel",
+		FilePath: file1,
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.cancelFile(corrID, message))
+}
+func (suite *TestSuite) TestCancelFile_wrongCorrelationID() {
+	// prepare the DB entries
+	UserName := "test-cancel"
+	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", UserName)
+	fileID, err := suite.ingest.DB.RegisterFile(file1, UserName)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	corrID := uuid.New().String()
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "cancel",
+		FilePath: file1,
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "reject", suite.ingest.cancelFile(uuid.New().String(), message))
+}
