@@ -160,6 +160,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
 			s.SetFlash("ega", s3conf)
+
 			ctx.ViewData("infoUrl", auth.Config.InfoURL)
 			ctx.ViewData("infoText", auth.Config.InfoText)
 			ctx.ViewData("User", username)
@@ -210,7 +211,8 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 	}
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	err := ctx.View("loginform.html", EGALoginError{Reason: message})
+	ctx.ViewData("Reason", message)
+	err := ctx.View("loginform.html")
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
 
