@@ -550,3 +550,162 @@ func (suite *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 
 	assert.Equal(suite.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
 }
+func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
+	// prepare the DB entries
+	UserName := "test-ingest"
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	corrID := uuid.New().String()
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "ingest",
+		FilePath: suite.filePath,
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+
+	// fake file verification
+	sha256hash := sha256.New()
+	var fi database.FileInfo
+	fi.Checksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.DecryptedSize = 10 * 1024 * 1024
+	fi.Size = (10 * 1024 * 1024) + 456
+	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+		suite.Fail("failed to mark file as verified")
+	}
+
+	assert.Equal(suite.T(), "reject", suite.ingest.ingestFile(corrID, message))
+}
+func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
+	// prepare the DB entries
+	UserName := "test-ingest"
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	corrID := uuid.New().String()
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "ingest",
+		FilePath: suite.filePath,
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+
+	// fake file verification
+	sha256hash := sha256.New()
+	var fi database.FileInfo
+	fi.Checksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.DecryptedSize = 10 * 1024 * 1024
+	fi.Size = (10 * 1024 * 1024) + 456
+	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+		suite.Fail("failed to mark file as verified")
+	}
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+}
+func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
+	// prepare the DB entries
+	UserName := "test-ingest"
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	corrID := uuid.New().String()
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "ingest",
+		FilePath: suite.filePath,
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+
+	var firstDbChecksum string
+	const q1 = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
+	if err := suite.ingest.DB.DB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
+		suite.FailNow("failed to get checksum from database")
+	}
+
+	// fake file verification
+	verifiedSha256 := sha256.New()
+	var fi database.FileInfo
+	fi.ArchiveChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
+	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
+	fi.DecryptedSize = 10 * 1024 * 1024
+	fi.Size = (10 * 1024 * 1024) + 456
+	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+		suite.Fail("failed to mark file as verified")
+	}
+
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		suite.Fail("failed to update file event log")
+	}
+
+	// over write the encrypted file to generate new checksum
+	f, err := os.CreateTemp(suite.ingest.Conf.Inbox.Posix.Location, "")
+	if err != nil {
+		suite.FailNow("failed to create test file")
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
+	if err != nil {
+		suite.FailNow("failed to write data to test file")
+	}
+
+	_, privateKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		suite.FailNow("failed to create private c4gh key")
+	}
+
+	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.filePath))
+	if err != nil {
+		suite.FailNowf("failed to create encrypted test file: %s", err.Error())
+	}
+	defer outFile.Close()
+
+	sha256hash := sha256.New()
+	mr := io.MultiWriter(outFile, sha256hash)
+
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, suite.pubKeyList, nil)
+	if err != nil {
+		suite.FailNowf("failed to create c4gh writer: %s", err.Error())
+	}
+
+	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
+	if err != nil {
+		suite.FailNow("failed to write data to encrypted test file")
+	}
+	crypt4GHWriter.Close()
+
+	// reingestion should work
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+
+	// DB should have the new checksum
+	var dbChecksum string
+	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
+	if err := suite.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
+		suite.FailNow("failed to get checksum from database")
+	}
+
+	assert.Equal(suite.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
+
+	assert.NotEqual(suite.T(), dbChecksum, firstDbChecksum)
+}
