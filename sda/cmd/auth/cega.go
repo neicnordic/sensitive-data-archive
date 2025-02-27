@@ -11,11 +11,6 @@ import (
 	bcrypt "golang.org/x/crypto/bcrypt"
 )
 
-// EGALoginError is used to store message errors
-type EGALoginError struct {
-	Reason string
-}
-
 // CegaUserResponse captures the response list
 type CegaUserResponse struct {
 	PasswordHash string `json:"passwordHash"`
