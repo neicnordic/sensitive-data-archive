@@ -42,6 +42,8 @@ services:
     image: python:3.11-slim
     ports:
       - 8000:8000
+    environment:
+      - ISSUER_URL=http://mockauth:8000
     volumes:
       - ../../sda-doa/test/mock_auth.py:/mock_auth.py
       - client_certs:/client_certs
