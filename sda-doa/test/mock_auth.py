@@ -1,7 +1,7 @@
 """Mock OAUTH2 aiohttp.web server."""
 
 from aiohttp import web
-from authlib.jose import jwt, jwk
+from authlib.jose import jwt, JsonWebKey
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -118,15 +118,15 @@ def generate_token():
         "exp": 99999999999,
         "jti": "2b322848-506b-492c-914f-47f9da967cdd"
     }
-    public_jwk = jwk.dumps(public_key, kty='RSA')
-    private_jwk = jwk.dumps(pem, kty='RSA')
-    dataset_encoded = jwt.encode(header, dataset_payload, private_jwk).decode('utf-8')
-    empty_encoded = jwt.encode(header, empty_payload, private_jwk).decode('utf-8')
-    passport_terms_encoded = jwt.encode(header, passport_terms, private_jwk).decode('utf-8')
-    passport_status_encoded = jwt.encode(header, passport_status, private_jwk).decode('utf-8')
-    passport_dataset1_encoded = jwt.encode(header, passport_dataset1, private_jwk).decode('utf-8')
-    passport_dataset2_encoded = jwt.encode(header, passport_dataset2, private_jwk).decode('utf-8')
-    passport_dataset_gdi_encoded = jwt.encode(header, passport_dataset_gdi, private_jwk).decode('utf-8')
+    public_jwk = JsonWebKey.import_key(public_key, {'kty': 'RSA', 'kid': 'rsa1', 'use': 'sig'}).as_dict()
+    private_key_obj = JsonWebKey.import_key(pem, {'kty': 'RSA', 'kid': 'rsa1', 'use': 'sig'})
+    dataset_encoded = jwt.encode(header, dataset_payload, private_key_obj).decode('utf-8')
+    empty_encoded = jwt.encode(header, empty_payload, private_key_obj).decode('utf-8')
+    passport_terms_encoded = jwt.encode(header, passport_terms, private_key_obj).decode('utf-8')
+    passport_status_encoded = jwt.encode(header, passport_status, private_key_obj).decode('utf-8')
+    passport_dataset1_encoded = jwt.encode(header, passport_dataset1, private_key_obj).decode('utf-8')
+    passport_dataset2_encoded = jwt.encode(header, passport_dataset2, private_key_obj).decode('utf-8')
+    passport_dataset_gdi_encoded = jwt.encode(header, passport_dataset_gdi, private_key_obj).decode('utf-8')
     return (public_jwk, dataset_encoded, empty_encoded, passport_terms_encoded, passport_status_encoded,
             passport_dataset1_encoded, passport_dataset2_encoded, passport_dataset_gdi_encoded)
 
