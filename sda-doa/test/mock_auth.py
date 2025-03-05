@@ -1,14 +1,16 @@
 """Mock OAUTH2 aiohttp.web server."""
 
 from aiohttp import web
-from authlib.jose import jwt, jwk
+from authlib.jose import jwt, JsonWebKey
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+import os
 
 
 def generate_token():
     """Generate RSA Key pair to be used to sign token and the JWT Token itself."""
+    issuer_url = os.getenv('ISSUER_URL', 'http://localhost:8000')
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
     public_key = private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
                                                        format=serialization.PublicFormat.SubjectPublicKeyInfo)
@@ -19,7 +21,7 @@ def generate_token():
     # See available claims here: https://www.iana.org/assignments/jwt/jwt.xhtml
     # the important claim is the "authorities"
     header = {
-        "jku": "http://mockauth:8000/jwk",
+        "jku": f"{issuer_url}/jwk",
         "kid": "rsa1",
         "alg": "RS256",
         "typ": "JWT"
@@ -29,14 +31,14 @@ def generate_token():
         "aud": ["aud2", "aud3"],
         "azp": "azp",
         "scope": "openid ga4gh_passport_v1",
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "exp": 9999999999,
         "iat": 1561621913,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102"
     }
     empty_payload = {
         "sub": "requester@elixir-europe.org",
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "exp": 99999999999,
         "iat": 1547794655,
         "jti": "6ad7aa42-3e9c-4833-bd16-765cb80c2102"
@@ -44,7 +46,7 @@ def generate_token():
     # Craft 4 passports, 2 for bona fide status and 2 for dataset permissions
     # passport for bona fide: terms
     passport_terms = {
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "AcceptedTermsAndPolicies",
@@ -59,7 +61,7 @@ def generate_token():
     }
     # passport for bona fide: status
     passport_status = {
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ResearcherStatus",
@@ -74,7 +76,7 @@ def generate_token():
     }
     # passport for dataset permissions 1
     passport_dataset1 = {
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -89,7 +91,7 @@ def generate_token():
     }
     # passport for dataset permissions 2
     passport_dataset2 = {
-        "iss": "http://mockauth:8000/",
+        "iss": f"{issuer_url}/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -103,7 +105,7 @@ def generate_token():
         "jti": "9fa600d6-4148-47c1-b708-36c4ba2e980e"
     }
     passport_dataset_gdi = {
-        "iss": "http://129.177.177.134:8000/",
+        "iss": f"{issuer_url}/",
         "sub": "requester@elixir-europe.org",
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -116,15 +118,15 @@ def generate_token():
         "exp": 99999999999,
         "jti": "2b322848-506b-492c-914f-47f9da967cdd"
     }
-    public_jwk = jwk.dumps(public_key, kty='RSA')
-    private_jwk = jwk.dumps(pem, kty='RSA')
-    dataset_encoded = jwt.encode(header, dataset_payload, private_jwk).decode('utf-8')
-    empty_encoded = jwt.encode(header, empty_payload, private_jwk).decode('utf-8')
-    passport_terms_encoded = jwt.encode(header, passport_terms, private_jwk).decode('utf-8')
-    passport_status_encoded = jwt.encode(header, passport_status, private_jwk).decode('utf-8')
-    passport_dataset1_encoded = jwt.encode(header, passport_dataset1, private_jwk).decode('utf-8')
-    passport_dataset2_encoded = jwt.encode(header, passport_dataset2, private_jwk).decode('utf-8')
-    passport_dataset_gdi_encoded = jwt.encode(header, passport_dataset_gdi, private_jwk).decode('utf-8')
+    public_jwk = JsonWebKey.import_key(public_key, {'kty': 'RSA', 'kid': 'rsa1', 'use': 'sig'}).as_dict()
+    private_key_obj = JsonWebKey.import_key(pem, {'kty': 'RSA', 'kid': 'rsa1', 'use': 'sig'})
+    dataset_encoded = jwt.encode(header, dataset_payload, private_key_obj).decode('utf-8')
+    empty_encoded = jwt.encode(header, empty_payload, private_key_obj).decode('utf-8')
+    passport_terms_encoded = jwt.encode(header, passport_terms, private_key_obj).decode('utf-8')
+    passport_status_encoded = jwt.encode(header, passport_status, private_key_obj).decode('utf-8')
+    passport_dataset1_encoded = jwt.encode(header, passport_dataset1, private_key_obj).decode('utf-8')
+    passport_dataset2_encoded = jwt.encode(header, passport_dataset2, private_key_obj).decode('utf-8')
+    passport_dataset_gdi_encoded = jwt.encode(header, passport_dataset_gdi, private_key_obj).decode('utf-8')
     return (public_jwk, dataset_encoded, empty_encoded, passport_terms_encoded, passport_status_encoded,
             passport_dataset1_encoded, passport_dataset2_encoded, passport_dataset_gdi_encoded)
 
@@ -167,8 +169,9 @@ async def userinfo(request):
 
 async def openid_configuration(request):
     """Mock ELIXIR AAI OpenID configuration endpoint."""
+    issuer_url = os.getenv('ISSUER_URL', 'http://localhost:8000')
     data = {
-        "jwks_uri": "http://mockauth:8000/jwk"
+        "jwks_uri": f"{issuer_url}/jwk"
     }
     return web.json_response(data)
 
