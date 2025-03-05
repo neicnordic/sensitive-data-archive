@@ -36,7 +36,7 @@ Environment variables used:
 | CERT_KEY                               | /etc/ega/ssl/client.key                                              | Path to the client key for database connectivity   |
 | POSTGRES_USER                          | lega_out                                                             | Database username                                  |
 | POSTGRES_PASSWORD                      |                                                                      | Database password                                  |
-| S3_ENDPOINT                            | archive                                                                | S3 server hostname                                 |
+| S3_ENDPOINT                            | vault                                                                | S3 server hostname                                 |
 | S3_PORT                                | 443                                                                  | S3 server port                                     |
 | S3_ACCESS_KEY                          | minio                                                                | S3 access key                                      |
 | S3_SECRET_KEY                          | miniostorage                                                         | S3 secret key                                      |
@@ -59,6 +59,3 @@ Environment variables used:
 | VISA_PUBLIC_KEY_PATH                   | /etc/ega/jwt/visa.pem                                                | Path to the public key for visas JWT validation    |
 | CRYPT4GH_PRIVATE_KEY_PATH              | /etc/ega/crypt4gh/key.pem                                            | Path to the Crypt4GH private key                   |
 | CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH     | /etc/ega/crypt4gh/key.pass                                           | Path to the Crypt4GH private key passphrase        |
-
-
-In addition, environment variables can be used to configure log level for different packages. Package loggers can be configured using corresponding package names, for example, to turn off logs of Spring, one can set environment variable `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK=OFF`, or to set DOA's own logs to debug: `LOGGING_LEVEL_NO_UIO_IFI=DEBUG`, etc.
