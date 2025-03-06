@@ -12,6 +12,7 @@ import lombok.*;
 @Data
 public class ExportRequest {
 
+    @ToString.Exclude
     private String jwtToken;
     private String datasetId;
     private String fileId;
