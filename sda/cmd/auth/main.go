@@ -118,13 +118,16 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 	res, err := authenticateWithCEGA(auth.Config.Cega, username)
 
+	var statusCode int
 	if err != nil {
 		log.Error(err)
+		statusCode = 404
+	} else {
+		statusCode = res.StatusCode
+		defer res.Body.Close()
 	}
 
-	defer res.Body.Close()
-
-	switch res.StatusCode {
+	switch statusCode {
 	case 200:
 		if err != nil {
 			log.Error(err)
