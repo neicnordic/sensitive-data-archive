@@ -118,25 +118,19 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 	res, err := authenticateWithCEGA(auth.Config.Cega, username)
 
-	var statusCode int
 	if err != nil {
-		log.Error(err)
-		statusCode = 404
-	} else {
-		statusCode = res.StatusCode
-		defer res.Body.Close()
-	}
-
-	switch statusCode {
-	case 200:
-		if err != nil {
-			log.Error(err)
-
-			return
+		log.Errorf("No response from cega, error: %v", err)
+		res = &http.Response{
+			Body:       io.NopCloser(nil),
+			StatusCode: http.StatusInternalServerError,
 		}
+	}
+	defer res.Body.Close()
 
+	switch res.StatusCode {
+	case 200:
 		var ur CegaUserResponse
-		err = json.NewDecoder(res.Body).Decode(&ur)
+		err := json.NewDecoder(res.Body).Decode(&ur)
 
 		if err != nil {
 			log.Error("Failed to parse response: ", err)
