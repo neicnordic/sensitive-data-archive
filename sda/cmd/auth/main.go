@@ -118,13 +118,16 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 	res, err := authenticateWithCEGA(auth.Config.Cega, username)
 
+	var statusCode int
 	if err != nil {
 		log.Error(err)
+		statusCode = 404
+	} else {
+		statusCode = res.StatusCode
+		defer res.Body.Close()
 	}
 
-	defer res.Body.Close()
-
-	switch res.StatusCode {
+	switch statusCode {
 	case 200:
 		if err != nil {
 			log.Error(err)
@@ -160,6 +163,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
 			s.SetFlash("ega", s3conf)
+
 			ctx.ViewData("infoUrl", auth.Config.InfoURL)
 			ctx.ViewData("infoText", auth.Config.InfoText)
 			ctx.ViewData("User", username)
@@ -184,6 +188,10 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 		s.SetFlash("message", "EGA authentication server could not be contacted")
 		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 
+	case 401:
+		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate service (auth_cega_id/secret)")
+		s.SetFlash("message", "Problems connecting to EGA authentication server")
+		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 	default:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
 		s.SetFlash("message", "Provided credentials are not valid")
@@ -210,7 +218,8 @@ func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 	}
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	err := ctx.View("loginform.html", EGALoginError{Reason: message})
+	ctx.ViewData("Reason", message)
+	err := ctx.View("loginform.html")
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
 
