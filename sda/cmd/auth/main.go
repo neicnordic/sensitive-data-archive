@@ -188,6 +188,10 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 		s.SetFlash("message", "EGA authentication server could not be contacted")
 		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 
+	case 401:
+		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate service (auth_cega_id/secret)")
+		s.SetFlash("message", "Problems connecting to EGA authentication server")
+		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 	default:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
 		s.SetFlash("message", "Provided credentials are not valid")
