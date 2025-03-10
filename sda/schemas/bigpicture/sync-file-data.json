@@ -9,6 +9,7 @@
         "correlation_id",
         "decrypted_checksum",
         "file_path",
+        "header",
         "type",
         "user"
     ],
@@ -66,6 +67,7 @@
             "type": "string",
             "title": "The header of the file",
             "description": "The header of the file",
+            "minLength": 20,
             "examples": [
                 "83da723f55e04bf78e1fe8a7e8c4c4e6"
             ]
@@ -75,7 +77,7 @@
             "type": "string",
             "title": "The message type",
             "description": "The message type",
-            "const": "sync"
+            "const": "sync-data"
         },
         "user": {
             "$id": "#/properties/user",

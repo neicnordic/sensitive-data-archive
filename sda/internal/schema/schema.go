@@ -172,6 +172,12 @@ type DatasetFiles struct {
 	ShaSum   string `json:"sha256"`
 }
 
+type SyncArchiveFile struct {
+	FileID        string `json:"file_id"`
+	SyncInboxPath string `json:"sync_inbox_path"`
+	Type          string `json:"type"`
+}
+
 type SyncFileData struct {
 	AccessionID       string `json:"accession_id"`
 	ArchivePath       string `json:"archive_path"`

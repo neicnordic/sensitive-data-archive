@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -418,6 +418,20 @@ func NewConfig(app string) (*Config, error) {
 			"sync.remote.user",
 			"sync.remote.password",
 		}
+
+		switch viper.GetString("archive.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
+		}
+
+		switch viper.GetString("destination.type") {
+		case S3:
+			requiredConfVars = append(requiredConfVars, []string{"destination.url", "destination.accesskey", "destination.secretkey", "destination.bucket"}...)
+		case POSIX:
+			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
+		}
 	case "sync-api":
 		requiredConfVars = []string{
 			"broker.exchange",
@@ -653,6 +667,7 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 	case "sync":
+		c.configArchive()
 		if err := c.configBroker(); err != nil {
 			return nil, err
 		}

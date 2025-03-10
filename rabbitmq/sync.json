@@ -36,8 +36,8 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "sync_accession",
-            "routing_key": "sync_accession"
+            "destination": "sync_datasets",
+            "routing_key": "sync_datasets"
         },
         {
             "source": "sda",

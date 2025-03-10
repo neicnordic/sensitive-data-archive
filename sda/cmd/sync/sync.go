@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -17,11 +18,13 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
 var (
+	archive, syncInbox storage.Backend
 	err  error
 	db   *database.SDAdb
 	conf *config.Config
@@ -40,6 +43,14 @@ func main() {
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
+	}
+	archive, err = storage.NewBackend(conf.Archive)
+	if err != nil {
+		log.Fatalf("archive error: %s",err.Error())
+	}
+	syncInbox, err = storage.NewBackend(conf.Sync.Destination)
+	if err != nil {
+		log.Fatalf("destination error: %s",err.Error())
 	}
 
 	defer mq.Channel.Close()
@@ -67,27 +78,80 @@ func main() {
 		}
 		for delivered := range messages {
 			log.Debugf("Received a message (corr-id: %s, message: %s)",
-				delivered.CorrelationId,
-				delivered.Body)
+			delivered.CorrelationId,
+			delivered.Body)
+			var msgType struct {
+				Type string `json:"type"`
+			}
+			_ = json.Unmarshal(delivered.Body, &msgType)
+	
+			switch msgType.Type {
+			case "sync":
+				var message schema.SyncFileData
+				_ = json.Unmarshal(delivered.Body, &message)
+				if err := syncFile(message); err != nil {
+					log.Errorf("failed to sync archived file %s, reason: (%s)", message.AccessionID, err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following GetFileSize error message")
+					}
 
-			var message schema.SyncFileData
-			_ = json.Unmarshal(delivered.Body, &message)
-			if err := syncFile(message); err != nil {
-				log.Errorf("failed to sync archived file %s, reason: (%s)", message.AccessionID, err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetFileSize error message")
+					continue
 				}
 
-				continue
-			}
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
+			case "sync-archive":
+				var message schema.SyncArchiveFile
+				_ = json.Unmarshal(delivered.Body, &message)
+				if err := syncArchiveFile(message); err != nil {
+					log.Errorf("failed to sync archived file %s, reason: (%s)", message.FileID, err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following GetFileSize error message")
+					}
 
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+					continue
+				}
+
+				log.Infoln("trigger verify")
+
+				log.Debugln("move sync to archive completed")
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
 			}
 		}
 	}()
 
 	<-forever
+}
+
+func syncArchiveFile(message schema.SyncArchiveFile) error {
+	log.Debugf("syncing file: %s", message.SyncInboxPath)
+	file, err := syncInbox.NewFileReader(message.SyncInboxPath)
+	if err != nil {
+		log.Debugln("failed to open file in sync bucket")
+
+		return err
+	}
+	defer file.Close()
+
+	dest, err :=  archive.NewFileWriter(message.FileID)
+	if err != nil {
+		log.Debugln("failed to open file for writing in archive")
+
+		return err
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, file)
+	if err != nil {
+		log.Errorf("failed to copy file, reason: %v)", err)
+
+		return err
+	}
+
+	return nil
 }
 
 func syncFile(message schema.SyncFileData) error {

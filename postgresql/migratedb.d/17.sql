@@ -33,6 +33,12 @@ BEGIN
 
     PERFORM create_role_if_not_exists('sync');
     GRANT SELECT ON sda.file_dataset TO sync;
+    GRANT INSERT ON sda.file_event_log TO sync;
+    GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO sync;
+    -- Legacy grants
+    GRANT INSERT, SELECT, UPDATE ON sda.files TO sync;
+    GRANT INSERT, SELECT ON local_ega.main_to_files TO sync;
+    GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO sync;
 
     GRANT base TO sync;
 

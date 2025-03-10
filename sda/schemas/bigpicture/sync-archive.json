@@ -1,0 +1,41 @@
+{
+    "title": "JSON schema for file syncing message interface.",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/master/sda/schemas/bigpicture/sync-file.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "file_id",
+        "sync_inbox_path",
+        "type"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "file_id": {
+            "$id": "#/properties/file_path",
+            "type": "string",
+            "title": "The path to the file in the inbox",
+            "description": "The path to the file in the inbox",
+            "pattern": "^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$",
+            "examples": [
+                "ced759d1-fd19-4671-9d97-c9b102e8072f"
+            ]
+        },
+        "sync_inbox_path": {
+            "$id": "#/properties/archive_path",
+            "type": "string",
+            "title": "The path to the file in the archive",
+            "description": "The path to the file in the archive",
+            "pattern": "^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$",
+            "examples": [
+                "ced759d1-fd19-4671-9d97-c9b102e8072f"
+            ]
+        },
+        "type": {
+            "$id": "#/properties/type",
+            "type": "string",
+            "title": "The message type",
+            "description": "The message type",
+            "const": "sync-archive"
+        }
+    }
+}

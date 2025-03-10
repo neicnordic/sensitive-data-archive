@@ -128,15 +128,18 @@ GRANT UPDATE ON local_ega.files TO mapper;
 CREATE ROLE sync;
 -- uses: db.GetArchived
 GRANT USAGE ON SCHEMA sda TO sync;
-GRANT SELECT ON sda.files TO sync;
+GRANT INSERT, SELECT, UPDATE ON sda.files TO sync;
 GRANT SELECT ON sda.file_dataset TO sync;
-GRANT SELECT ON sda.file_event_log TO sync;
+GRANT INSERT, SELECT ON sda.file_event_log TO sync;
+GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO sync;
 GRANT SELECT ON sda.checksums TO sync;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO sync;
 GRANT SELECT ON local_ega.files TO sync;
 GRANT UPDATE ON local_ega.main TO sync;
+GRANT INSERT, SELECT ON local_ega.main_to_files TO sync;
+GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO sync;
 
 --------------------------------------------------------------------------------
 
@@ -193,4 +196,4 @@ GRANT base, ingest, verify, finalize, sync, api TO lega_in;
 -- lega_out permissions
 GRANT mapper, download, api TO lega_out;
 
-GRANT base TO api, download, inbox, ingest, finalize, mapper, verify, auth;
+GRANT base TO api, auth, download, inbox, ingest, finalize, mapper, sync, verify;
