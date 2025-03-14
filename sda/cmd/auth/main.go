@@ -208,27 +208,15 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 
 	s := sessions.Get(ctx)
-	message := s.GetFlashString("message")
-	if message == "" {
-		ctx.ViewData("infoUrl", auth.Config.InfoURL)
-		ctx.ViewData("infoText", auth.Config.InfoText)
-		err := ctx.View("loginform.html")
-		if err != nil {
-			log.Error("Failed to return to login form: ", err)
-
-			return
-		}
-
-		return
-	}
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	ctx.ViewData("Reason", message)
+	message := s.GetFlashString("message")
+	if message != "" {
+		ctx.ViewData("Reason", message)
+	}
 	err := ctx.View("loginform.html")
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
-
-		return
 	}
 }
 
