@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - release_v1
     paths-ignore:
       - ".gitignore"
       - "**/*.md"
