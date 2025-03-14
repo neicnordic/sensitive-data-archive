@@ -119,24 +119,23 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 	res, err := authenticateWithCEGA(auth.Config.Cega, username)
 
 	if err != nil {
-		log.Error(err)
+		log.Errorf("No response from cega, error: %v", err)
+		res = &http.Response{
+			Body:       io.NopCloser(nil),
+			StatusCode: http.StatusInternalServerError,
+		}
 	}
-
 	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 200:
-		if err != nil {
-			log.Error(err)
-
-			return
-		}
-
 		var ur CegaUserResponse
-		err = json.NewDecoder(res.Body).Decode(&ur)
+		err := json.NewDecoder(res.Body).Decode(&ur)
 
 		if err != nil {
-			log.Error("Failed to parse response: ", err)
+			log.Error("Failed to parse cega response: ", err)
+			s.SetFlash("message", "Problems connecting to EGA authentication server")
+			ctx.Redirect("/ega/login", iris.StatusSeeOther)
 
 			return
 		}
@@ -156,21 +155,31 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 			token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 			if err != nil {
 				log.Errorf("error when generating token: %v", err)
+				s.SetFlash("message", "Unexpected error, please try again.")
+				ctx.Redirect("/ega/login", iris.StatusSeeOther)
+
+				return
 			}
 
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
 			s.SetFlash("ega", s3conf)
+
 			ctx.ViewData("infoUrl", auth.Config.InfoURL)
 			ctx.ViewData("infoText", auth.Config.InfoText)
 			ctx.ViewData("User", username)
 			ctx.ViewData("Token", token)
 			ctx.ViewData("ExpDate", expDate)
-
 			err = ctx.View("ega.html")
-			if err != nil {
-				log.Error("Failed to parse response: ", err)
 
-				return
+			if err != nil {
+				log.Error("Failed to create view: ", err)
+
+				// Since the context has already started writing the response to
+				// the client, the resulting page will be ugly, but at least
+				// show an error message, and an oppertunity to log in again.
+				ctx.ViewData("Reason", "Unexpected error, please try again.")
+				err = ctx.View("loginform.html")
+				log.Error("Failed to create backup view: ", err)
 			}
 
 		} else {
@@ -179,11 +188,15 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 			ctx.Redirect("/ega/login", iris.StatusSeeOther)
 		}
 
-	case 404:
+	case 500, 502, 503:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
 		s.SetFlash("message", "EGA authentication server could not be contacted")
 		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 
+	case 401:
+		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate service (auth_cega_id/secret)")
+		s.SetFlash("message", "Problems connecting to EGA authentication server")
+		ctx.Redirect("/ega/login", iris.StatusSeeOther)
 	default:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
 		s.SetFlash("message", "Provided credentials are not valid")
@@ -195,26 +208,15 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 func (auth AuthHandler) getEGALogin(ctx iris.Context) {
 
 	s := sessions.Get(ctx)
-	message := s.GetFlashString("message")
-	if message == "" {
-		ctx.ViewData("infoUrl", auth.Config.InfoURL)
-		ctx.ViewData("infoText", auth.Config.InfoText)
-		err := ctx.View("loginform.html")
-		if err != nil {
-			log.Error("Failed to return to login form: ", err)
-
-			return
-		}
-
-		return
-	}
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
-	err := ctx.View("loginform.html", EGALoginError{Reason: message})
+	message := s.GetFlashString("message")
+	if message != "" {
+		ctx.ViewData("Reason", message)
+	}
+	err := ctx.View("loginform.html")
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
-
-		return
 	}
 }
 
