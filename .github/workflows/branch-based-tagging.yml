@@ -1,0 +1,44 @@
+name: Print version tag
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - release_v1
+    paths-ignore:
+      - ".gitignore"
+      - "**/*.md"
+      - "charts/**"
+      - "Makefile"
+      - "sda-admin/**"
+      - "tools/*"
+#    types: [ closed ]
+
+jobs:
+  tag_release:
+    name: tag version
+    outputs:
+      part: ${{ steps.bump_tag.outputs.part }}
+      tag: ${{ steps.bump_tag.outputs.tag }}
+      new_tag: ${{ steps.bump_tag.outputs.new_tag }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bump version and push tag
+        id: bump_tag
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          TAG_CONTEXT: branch
+          INITIAL_VERSION: 1.0.0
+#          CUSTOM_TAG: v1.0.0
+          DRY_RUN: true
+
+      - name: print
+        run: |
+          echo "part: ${{ steps.bump_tag.outputs.part }}"
+          echo "tag: ${{ steps.bump_tag.outputs.tag }}"
+          echo "new_tag: ${{ steps.bump_tag.outputs.new_tag }}"
