@@ -33,7 +33,6 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
           TAG_CONTEXT: branch
-          CUSTOM_TAG: v1.0.0
           DRY_RUN: true
 
       - name: print
