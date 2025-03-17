@@ -172,7 +172,7 @@ func syncFiles(stableID string) error {
 		return fmt.Errorf("failed to get archive path for file with stable ID: %s", stableID)
 	}
 
-	fileSize, err := archive.GetFileSize(archivePath)
+	fileSize, err := archive.GetFileSize(archivePath, false)
 	if err != nil {
 		return err
 	}

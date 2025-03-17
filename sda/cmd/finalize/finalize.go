@@ -244,7 +244,7 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archive.GetFileSize(filePath)
+	diskFileSize, err := archive.GetFileSize(filePath, false)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}

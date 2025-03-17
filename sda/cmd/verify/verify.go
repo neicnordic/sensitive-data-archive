@@ -157,7 +157,7 @@ func main() {
 			}
 
 			var file database.FileInfo
-			file.Size, err = archive.GetFileSize(message.ArchivePath)
+			file.Size, err = archive.GetFileSize(message.ArchivePath, false)
 			if err != nil { //nolint:nestif
 				log.Errorf("Failed to get archived file size, reson: (%s)", err.Error())
 				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {

@@ -31,7 +31,7 @@ import (
 
 // Backend defines methods to be implemented by PosixBackend, S3Backend and sftpBackend
 type Backend interface {
-	GetFileSize(filePath string) (int64, error)
+	GetFileSize(filePath string, expectDelay bool) (int64, error)
 	RemoveFile(filePath string) error
 	NewFileReader(filePath string) (io.ReadCloser, error)
 	NewFileWriter(filePath string) (io.WriteCloser, error)
@@ -114,7 +114,7 @@ func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of the file
-func (pb *posixBackend) GetFileSize(filePath string) (int64, error) {
+func (pb *posixBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 	if pb == nil {
 		return 0, fmt.Errorf("invalid posixBackend")
 	}
@@ -289,7 +289,7 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of a specific object
-func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
+func (sb *s3Backend) GetFileSize(filePath string, expectDelay bool) (int64, error) {
 	r, err := sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: &sb.Bucket,
 		Key:    &filePath,
@@ -305,10 +305,11 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 	// Retry on error up to five minutes to allow for
 	// "slow writes' or s3 eventual consistency
 	for err != nil && time.Since(start) < retryTime {
-		if strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
+		if !expectDelay && (strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:")) {
 			return 0, err
 		}
 		time.Sleep(1 * time.Second)
+
 		r, err = sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 			Bucket: &sb.Bucket,
 			Key:    &filePath,
@@ -449,7 +450,7 @@ func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of the file
-func (sfb *sftpBackend) GetFileSize(filePath string) (int64, error) {
+func (sfb *sftpBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 	if sfb == nil {
 		return 0, fmt.Errorf("invalid sftpBackend")
 	}
