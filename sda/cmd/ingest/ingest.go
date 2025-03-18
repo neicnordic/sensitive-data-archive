@@ -245,8 +245,45 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		// What if the file in the inbox is different this time?
 		// Check uploaded checksum in the DB against the checksum of the file.
 		// Would be easy if the inbox message had the checksum or that the s3inbox added the checksum to the DB.
+		file, err := app.Inbox.NewFileReader(message.FilePath)
+		if err != nil {
+			switch {
+			case strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:"):
+				log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
+				jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
+				m, _ := json.Marshal(message)
+				if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", string(jsonMsg), string(m)); err != nil {
+					log.Errorf("failed to set error status for file from message: %v, reason: %s", correlationID, err.Error())
+				}
+				// Send the message to an error queue so it can be analyzed.
+				fileError := broker.InfoError{
+					Error:           "Failed to open file to ingest",
+					Reason:          err.Error(),
+					OriginalMessage: message,
+				}
+				body, _ := json.Marshal(fileError)
+				if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
-		if fileInfo.Checksum != "" {
+					return "reject"
+				}
+
+				return "ack"
+			default:
+				return "nack"
+			}
+		}
+		defer file.Close()
+
+		inboxChecksum := sha256.New()
+		_, err = io.Copy(inboxChecksum, file)
+		if err != nil {
+			log.Errorf("failed to calculate cheksum for file: %s, reason: %s", fileID, err.Error())
+
+			return "nack"
+		}
+
+		if fileInfo.UploadedChecksum == string(inboxChecksum.Sum(nil)) && fileInfo.ArchiveChecksum != "" {
 			msg := schema.IngestionVerification{
 				User:        message.User,
 				FilePath:    message.FilePath,
