@@ -216,7 +216,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 			return
 		}
-		log.Debugln("authoriozed")
+		log.Debugln("authorized")
 	}
 }
 
