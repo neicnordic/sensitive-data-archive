@@ -224,11 +224,11 @@ func (dbs *SDAdb) setArchived(file FileInfo, fileID string) error {
 		return fmt.Errorf("setArchived error: %s", err.Error())
 	}
 
-	log.Debugf("checksum: %s", file.Checksum)
+	log.Debugf("checksum: %s", file.UploadedChecksum)
 	const addChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
 		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source)" +
 		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
-	if _, err := db.Exec(addChecksum, fileID, file.Checksum, "SHA256"); err != nil {
+	if _, err := db.Exec(addChecksum, fileID, file.UploadedChecksum, "SHA256"); err != nil {
 		return fmt.Errorf("addChecksum error: %s", err.Error())
 	}
 
@@ -319,7 +319,7 @@ func (dbs *SDAdb) setVerified(file FileInfo, fileID, corrID string) error {
 	_, err := db.Exec(completed,
 		fileID,
 		corrID,
-		file.Checksum,
+		file.ArchiveChecksum,
 		"SHA256",
 		file.DecryptedSize,
 		file.DecryptedChecksum,
@@ -566,18 +566,21 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 	const getFileID = "SELECT archive_file_path, archive_file_size from sda.files where id = $1;"
-	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted from sda.checksums where file_id = $1;"
+	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, " +
+		"MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted, " +
+		"MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums where file_id = $1;"
 	var info FileInfo
 	if err := db.QueryRow(getFileID, id).Scan(&info.Path, &info.Size); err != nil {
 		return FileInfo{}, err
 	}
 
-	var checksum, decryptedChecksum sql.NullString
-	if err := db.QueryRow(checkSum, id).Scan(&checksum, &decryptedChecksum); err != nil {
+	var archivedChecksum, decryptedChecksum, uploadedChecksum sql.NullString
+	if err := db.QueryRow(checkSum, id).Scan(&archivedChecksum, &decryptedChecksum, &uploadedChecksum); err != nil {
 		return FileInfo{}, err
 	}
-	info.Checksum = checksum.String
+	info.ArchiveChecksum = archivedChecksum.String
 	info.DecryptedChecksum = decryptedChecksum.String
+	info.UploadedChecksum = uploadedChecksum.String
 
 	return info, nil
 }
