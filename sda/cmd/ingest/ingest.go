@@ -253,7 +253,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 				FileID:      fileID,
 				ArchivePath: fileInfo.Path,
 				EncryptedChecksums: []schema.Checksums{
-					{Type: "sha256", Value: fileInfo.Checksum},
+					{Type: "sha256", Value: fileInfo.ArchiveChecksum},
 				},
 			}
 			archivedMsg, _ := json.Marshal(&msg)

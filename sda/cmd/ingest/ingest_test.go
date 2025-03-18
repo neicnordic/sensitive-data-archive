@@ -572,7 +572,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	// fake file verification
 	sha256hash := sha256.New()
 	var fi database.FileInfo
-	fi.Checksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.ArchiveChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
@@ -604,7 +604,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	// fake file verification
 	sha256hash := sha256.New()
 	var fi database.FileInfo
-	fi.Checksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi.ArchiveChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
