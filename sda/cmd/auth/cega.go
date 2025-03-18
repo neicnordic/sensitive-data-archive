@@ -7,14 +7,8 @@ import (
 	"strings"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	log "github.com/sirupsen/logrus"
 	bcrypt "golang.org/x/crypto/bcrypt"
 )
-
-// EGALoginError is used to store message errors
-type EGALoginError struct {
-	Reason string
-}
 
 // CegaUserResponse captures the response list
 type CegaUserResponse struct {
@@ -49,7 +43,7 @@ func authenticateWithCEGA(conf config.CegaConfig, username string) (*http.Respon
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", strings.TrimSuffix(conf.AuthURL, "/"), username), payload)
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	req.Header.Add("Authorization", "Basic "+getb64Credentials(conf.ID, conf.Secret))
