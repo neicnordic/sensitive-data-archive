@@ -15,6 +15,11 @@
          "path": "/dataset/*",
          "action": "(POST)|(PUT)"
       },
+      {
+         "role": "submission",
+         "path": "/dataset/*",
+         "action": "POST"
+      },
        {
          "role": "submission",
          "path": "/datasets/*",
@@ -59,6 +64,10 @@
     "roles": [
        {
           "role": "admin",
+          "rolebinding": "submission"
+       },
+       {
+          "role": "test@dummy.org",
           "rolebinding": "submission"
        },
        {
