@@ -504,6 +504,10 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	assert.NoError(suite.T(), err)
 
 	// Update the file's status and make sure only the lastest status is listed
+	err = Conf.API.DB.SetAccessionID("stableID", fileID)
+	if err != nil {
+		suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "stableID", fileID)
+	}
 	latestStatus = "ready"
 	err = Conf.API.DB.UpdateFileEventLog(fileID, latestStatus, corrID, suite.User, "{}", "{}")
 	assert.NoError(suite.T(), err, "got (%v) when trying to update file status")
@@ -513,13 +517,15 @@ func (suite *TestSuite) TestAPIGetFiles() {
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
 
 	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	assert.NoError(suite.T(), err)
+	assert.NotContains(suite.T(), string(data), "accessionID")
 
-	err = json.NewDecoder(resp.Body).Decode(&filesData)
+	err = json.Unmarshal(data, &filesData)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), len(filesData), 1)
 	assert.Equal(suite.T(), filesData[0].Status, latestStatus)
-
-	assert.NoError(suite.T(), err)
+	assert.Empty(suite.T(), filesData[0].AccessionID)
 
 	// Insert a second file and make sure it is listed
 	file2 := fmt.Sprintf("/%v/TestAPIGetFiles2.c4gh", suite.User)
@@ -1548,6 +1554,7 @@ func (suite *TestSuite) TestListUserFiles() {
 	err = json.NewDecoder(okResponse.Body).Decode(&files)
 	assert.NoError(suite.T(), err, "failed to list users from DB")
 	assert.Equal(suite.T(), 2, len(files))
+	assert.Contains(suite.T(), files[0].AccessionID, "accession_user_example.org_0")
 }
 
 func (suite *TestSuite) TestAddC4ghHash() {
