@@ -456,6 +456,8 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		assert.NoError(suite.T(), err, "failed to register file in database")
 		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
+		err = db.SetAccessionID(fmt.Sprintf("stableID-00%d", i), fileID)
+		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 		err = db.UpdateFileEventLog(fileID, "ready", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
@@ -469,6 +471,7 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 
 	for _, fileInfo := range filelist {
 		assert.Equal(suite.T(), "ready", fileInfo.Status, "incorrect file status")
+		assert.Contains(suite.T(), fileInfo.AccessionID, "stableID-00", "incorrect file accession ID")
 	}
 }
 

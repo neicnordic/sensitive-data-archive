@@ -715,7 +715,7 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 	db := dbs.DB
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = "SELECT f.id, f.submission_file_path, e.event, f.created_at FROM sda.files f " +
+	const query = "SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f " +
 		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
 		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
 
@@ -728,12 +728,14 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 
 	// Iterate rows
 	for rows.Next() {
+		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &fi.Status, &fi.CreateAt)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt)
 		if err != nil {
 			return nil, err
 		}
+			fi.AccessionID = accessionID.String
 
 		// Add instance of struct (file) to array if the status is not disabled
 		if fi.Status != "disabled" {
