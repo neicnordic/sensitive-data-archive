@@ -690,14 +690,14 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 }
 
 // GetUserFiles retrieves all the files a user submitted
-func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) GetUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
 	var err error
 
 	files := []*SubmissionFileInfo{}
 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		files, err = dbs.getUserFiles(userID)
+		files, err = dbs.getUserFiles(userID, allData)
 		if err == nil {
 			break
 		}
@@ -708,7 +708,7 @@ func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 }
 
 // getUserFiles is the actual function performing work for GetUserFiles
-func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) getUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	files := []*SubmissionFileInfo{}
@@ -735,7 +735,10 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		if allData {
 			fi.AccessionID = accessionID.String
+		}
 
 		// Add instance of struct (file) to array if the status is not disabled
 		if fi.Status != "disabled" {

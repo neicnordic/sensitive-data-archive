@@ -461,11 +461,11 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		err = db.UpdateFileEventLog(fileID, "ready", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
-	filelist, err := db.GetUserFiles("unknownuser")
+	filelist, err := db.GetUserFiles("unknownuser", true)
 	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
 
-	filelist, err = db.GetUserFiles(testUser)
+	filelist, err = db.GetUserFiles(testUser, true)
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
 
