@@ -69,7 +69,7 @@ paths:
         "200":
           description: Successful operation
         "400":
-          description: Bad key hash
+          description: Bad request bode content
         "401":
           description: Authentication failure
         "500":
@@ -142,7 +142,7 @@ paths:
           description: Internal application error
   /datasets/list/{userName}:
     get:
-      description: Lists all datasets with their status for a specific user.
+      description: Lists all datasets with their status submitted by a specific user.
       parameters:
         - in: path
           name: userName
