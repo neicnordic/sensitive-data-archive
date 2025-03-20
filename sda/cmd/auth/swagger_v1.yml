@@ -6,7 +6,7 @@ info:
 paths:
   /info:
     get:
-      description: Returns the fino JSON
+      description: Returns the info JSON
       responses:
         "200":
           content:

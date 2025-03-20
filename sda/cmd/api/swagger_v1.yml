@@ -6,7 +6,7 @@ info:
 paths:
   /c4gh-keys/add:
     post:
-      description: Registeres an crypt4gh public key hash in the database
+      description: Registers an crypt4gh public key hash in the database
       requestBody:
         content:
           application/json:
@@ -14,7 +14,7 @@ paths:
               $ref: "#/components/schemas/C4ghKeyAdd"
       responses:
         "200":
-          description: Successful operation.
+          description: Successful operation
         "400":
           description: Bad payload
         "401":
@@ -43,13 +43,15 @@ paths:
           description: Internal application error
   /c4gh-keys/list:
     get:
-      description: Returns a list of all registered encryptio ns keys and thei statuses.
+      description: Returns a list of all registered encryptions keys and their statuses.
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/C4ghKeysList"
+                type: array
+                items:
+                  $ref: "#/components/schemas/C4ghKeysList"
           description: Successful operation
         "401":
           description: Authentication failure
@@ -74,7 +76,7 @@ paths:
           description: Internal application error
   /dataset/release/{datasetID}:
     post:
-      description: Create a new dataset
+      description: Release a dataset, so that it is accessible for downloading
       parameters:
         - in: path
           name: datasetID
@@ -110,7 +112,7 @@ paths:
           description: Internal application error
   /datasets:
     get:
-      description: Lists datasets beloing to the calling userName
+      description: Lists datasets belonging to the calling userName
       responses:
         "200":
           content:
@@ -291,7 +293,7 @@ paths:
           description: Internal application error
   /users/{userName}/files:
     get:
-      description: Lists all users with ongoing submissions.
+      description: List all files belonging to the given user that is not part of a dataset.
       parameters:
         - in: path
           name: userName
