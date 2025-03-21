@@ -329,6 +329,19 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	assert.Equal(suite.T(), int64(len(writeData)), size, "Got an incorrect file size")
 
 	// make sure expectDelay=true works
+	// delete file and make sure the file size can not be retrieved anymore
+	err = s3back.RemoveFile("s3Creatable")
+	assert.Nil(suite.T(), err, "s3 RemoveFile failed when it should work")
+	_, err = s3back.GetFileSize("s3Creatable", true)
+	assert.NotNil(suite.T(), err, "s3 GetFileSize worked when it should not")
+	assert.Error(suite.T(), err)
+	// rewrite file, do not wait before retrieving file size
+	writer, err = s3back.NewFileWriter("s3Creatable")
+	assert.Nil(suite.T(), err, "s3 NewFileWriter failed when it shouldn't")
+	written, err = writer.Write(writeData)
+	assert.Equal(suite.T(), len(writeData), written, "Did not write all writeData")
+	assert.Nil(suite.T(), err, "Failure when writing to s3 writer")
+	writer.Close()
 	size, err = s3back.GetFileSize("s3Creatable", true)
 	assert.Nil(suite.T(), err, "s3 GetFileSize with expected delay failed when it should work")
 	assert.NotNil(suite.T(), size, "Got a nil size for s3")
