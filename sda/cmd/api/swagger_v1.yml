@@ -6,7 +6,7 @@ info:
 paths:
   /c4gh-keys/add:
     post:
-      description: Registers an crypt4gh public key hash in the database
+      description: Registers an crypt4gh public key in the database
       requestBody:
         content:
           application/json:
