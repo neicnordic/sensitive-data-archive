@@ -256,7 +256,7 @@ func (suite *StorageTestSuite) TestPosixBackend() {
 	assert.Equal(suite.T(), writeData, readBackBuffer[:readBack], "did not read back data as expected")
 	assert.Nil(suite.T(), err, "unexpected error when reading back data")
 
-	size, err := backend.GetFileSize("testFile")
+	size, err := backend.GetFileSize("testFile", false)
 	assert.Nil(suite.T(), err, "posix NewFileReader failed when it should work")
 	assert.NotNil(suite.T(), size, "Got a nil size for posix")
 
@@ -270,7 +270,7 @@ func (suite *StorageTestSuite) TestPosixBackend() {
 	assert.NotZero(suite.T(), buf.Len(), "Expected warning missing")
 
 	buf.Reset()
-	_, err = backend.GetFileSize("posixDoesNotExist")
+	_, err = backend.GetFileSize("posixDoesNotExist", false)
 	assert.Error(suite.T(), err, "posix GetFileSize worked when it should not")
 	assert.NotZero(suite.T(), buf.Len(), "Expected warning missing")
 
@@ -296,7 +296,7 @@ func (suite *StorageTestSuite) TestPosixBackend() {
 	assert.NotNil(suite.T(), err, "NewFileWriter worked when it should not")
 	assert.Nil(suite.T(), failWriter, "Got a Writer when expected not to")
 
-	_, err = dummyBackend.GetFileSize("/")
+	_, err = dummyBackend.GetFileSize("/", false)
 	assert.NotNil(suite.T(), err, "GetFileSize worked when it should not")
 
 	err = dummyBackend.RemoveFile("/")
@@ -323,8 +323,27 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	assert.NoError(suite.T(), err, "s3 NewFileReader failed when it should work")
 	assert.NotNil(suite.T(), reader, "Reader that should be usable is not, bailing out")
 
-	size, err := s3back.GetFileSize("s3Creatable")
+	size, err := s3back.GetFileSize("s3Creatable", false)
 	assert.Nil(suite.T(), err, "s3 GetFileSize failed when it should work")
+	assert.NotNil(suite.T(), size, "Got a nil size for s3")
+	assert.Equal(suite.T(), int64(len(writeData)), size, "Got an incorrect file size")
+
+	// make sure expectDelay=true works
+	// delete file and make sure the file size can not be retrieved anymore
+	err = s3back.RemoveFile("s3Creatable")
+	assert.Nil(suite.T(), err, "s3 RemoveFile failed when it should work")
+	_, err = s3back.GetFileSize("s3Creatable", true)
+	assert.NotNil(suite.T(), err, "s3 GetFileSize worked when it should not")
+	assert.Error(suite.T(), err)
+	// rewrite file, do not wait before retrieving file size
+	writer, err = s3back.NewFileWriter("s3Creatable")
+	assert.Nil(suite.T(), err, "s3 NewFileWriter failed when it shouldn't")
+	written, err = writer.Write(writeData)
+	assert.Equal(suite.T(), len(writeData), written, "Did not write all writeData")
+	assert.Nil(suite.T(), err, "Failure when writing to s3 writer")
+	writer.Close()
+	size, err = s3back.GetFileSize("s3Creatable", true)
+	assert.Nil(suite.T(), err, "s3 GetFileSize with expected delay failed when it should work")
 	assert.NotNil(suite.T(), size, "Got a nil size for s3")
 	assert.Equal(suite.T(), int64(len(writeData)), size, "Got an incorrect file size")
 
@@ -339,7 +358,7 @@ func (suite *StorageTestSuite) TestS3Backend() {
 	err = s3back.RemoveFile("s3Creatable")
 	assert.Nil(suite.T(), err, "s3 RemoveFile failed when it should work")
 
-	_, err = s3back.GetFileSize("s3DoesNotExist")
+	_, err = s3back.GetFileSize("s3DoesNotExist", false)
 	assert.NotNil(suite.T(), err, "s3 GetFileSize worked when it should not")
 	assert.Error(suite.T(), err)
 
@@ -377,7 +396,7 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 	assert.Nil(suite.T(), err, "sftp NewFileReader failed when it should work")
 	assert.NotNil(suite.T(), reader, "Reader that should be usable is not, bailing out")
 
-	size, err := sftpBack.GetFileSize(sftpCreatable)
+	size, err := sftpBack.GetFileSize(sftpCreatable, false)
 	assert.Nil(suite.T(), err, "sftp GetFileSize failed when it should work")
 	assert.NotNil(suite.T(), size, "Got a nil size for sftp")
 	assert.Equal(suite.T(), int64(len(writeData)), size, "Got an incorrect file size")
@@ -398,7 +417,7 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 		assert.Nil(suite.T(), err, "unexpected error when reading back data")
 	}
 
-	_, err = sftpBack.GetFileSize(sftpDoesNotExist)
+	_, err = sftpBack.GetFileSize(sftpDoesNotExist, false)
 	assert.EqualError(suite.T(), err, "failed to get file size with sftp, file does not exist")
 	reader, err = sftpBack.NewFileReader(sftpDoesNotExist)
 	assert.EqualError(suite.T(), err, "failed to open file with sftp, file does not exist")
@@ -442,7 +461,7 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 	assert.NotNil(suite.T(), err, "NewFileWriter worked when it should not")
 	assert.Nil(suite.T(), failWriter, "Got a Writer when expected not to")
 
-	_, err = dummyBackend.GetFileSize("/")
+	_, err = dummyBackend.GetFileSize("/", false)
 	assert.NotNil(suite.T(), err, "GetFileSize worked when it should not")
 
 	err = dummyBackend.RemoveFile("/")
