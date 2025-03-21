@@ -1,0 +1,33 @@
+openapi: 3.0.3
+info:
+  title: SDA auth frontend
+  version: "1.0"
+  description: This is the auth frontend for the sensitive data archive.
+paths:
+  /info:
+    get:
+      description: Returns the info JSON
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Info"
+          description: Successful operation
+components:
+  schemas:
+    Info:
+      type: object
+      properties:
+        client_id:
+          example: 7daee13a-cd72-4b92-8a59-89c0e063b20f
+          type: string
+        inbox_uri:
+          example: inbox.demo.org
+          type: string
+        oidc_uri:
+          example: https://aai.provider.org/oidc
+          type: string
+        public_key:
+          example: LS0tLS1CRUdJTiBDUllQVDRHSCBQVUJMSUMgS0VZLS0t
+          type: string
