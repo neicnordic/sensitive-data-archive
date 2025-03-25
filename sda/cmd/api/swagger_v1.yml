@@ -1,0 +1,412 @@
+openapi: 3.0.3
+info:
+  title: SDA admin API
+  version: "1.0"
+  description: This is the admin API for the sensitive data archive.
+paths:
+  /c4gh-keys/add:
+    post:
+      description: Registers an crypt4gh public key in the database
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/C4ghKeyAdd"
+      responses:
+        "200":
+          description: Successful operation
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "409":
+          description: Key hash already exists in the database.
+        "500":
+          description: Internal application error.
+  /c4gh-keys/deprecate/{keyHash}:
+    post:
+      description: Deprecate a given key hash
+      parameters:
+        - in: path
+          name: keyHash
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+        "400":
+          description: Bad key hash
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /c4gh-keys/list:
+    get:
+      description: Returns a list of all registered encryptions keys and their statuses.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/C4ghKeysList"
+          description: Successful operation
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /dataset/create:
+    post:
+      description: Create a new dataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetCreate"
+      responses:
+        "200":
+          description: Successful operation
+        "400":
+          description: Bad request body content
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /dataset/release/{datasetID}:
+    post:
+      description: Release a dataset, so that it is accessible for downloading
+      parameters:
+        - in: path
+          name: datasetID
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+        "400":
+          description: Bad dataset ID
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /dataset/verify/{datasetID}:
+    put:
+      description: Triggers reverification of all files in the dataset.
+      parameters:
+        - in: path
+          name: datasetID
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+        "400":
+          description: Bad dataset ID
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /datasets:
+    get:
+      description: Lists datasets belonging to the calling userName
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetInfo"
+          description: Successful operation
+        "500":
+          description: Internal application error
+  /datasets/list:
+    get:
+      description: Lists all datasets with their status.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetInfo"
+          description: Successful operation
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /datasets/list/{userName}:
+    get:
+      description: Lists all datasets with their status submitted by a specific user.
+      parameters:
+        - in: path
+          name: userName
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetInfo"
+          description: Successful operation
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /file/accession:
+    post:
+      description: Assigns accession ID to a given file.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileAccession"
+      responses:
+        "200":
+          description: Successful operation.
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /file/ingest:
+    post:
+      description: Trigger ingestion of a given file.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileIngest"
+      responses:
+        "200":
+          description: Successful operation.
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /file/{userName}/{fileID}:
+    delete:
+      description: Delete a file from the inbox
+      parameters:
+      - in: path
+        name: fileID
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: userName
+        schema:
+          type: string
+        required: true
+      responses:
+        "200":
+          description: Successful operation.
+        "400":
+          description: No file Id supplied
+        "401":
+          description: Authentication failure.
+        "404":
+          description: Bad user file ID combination
+        "500":
+          description: Internal application error.
+  /file/verify/{accessionID}:
+    post:
+      description: Trigger re-verification of a file with a given accession ID.
+      parameters:
+        - in: path
+          name: accessionID
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Successful operation.
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /files:
+    get:
+      description: List all files belonging to the calling user that is not part of a dataset.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileInfo"
+          description: Successful operation
+        "400":
+          description: Bad username
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /ready:
+    get:
+      description: Returns the status of the application.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                {}
+          description: The service is operational
+        "503":
+          content:
+            application/json:
+              example:
+                {}
+          description: Unhealthy service
+      security: []
+  /users:
+    get:
+      description: Lists all users with ongoing submissions.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                example: ["test.user@demo.org","demo.user@demo.org"]
+                type: array
+                items:
+                  type: string
+          description: Successful operation
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+  /users/{userName}/files:
+    get:
+      description: List all files belonging to the given user that is not part of a dataset.
+      parameters:
+        - in: path
+          name: userName
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileInfo"
+          description: Successful operation
+        "400":
+          description: Bad username
+        "401":
+          description: Authentication failure
+        "500":
+          description: Internal application error
+components:
+  schemas:
+    C4ghKeyAdd:
+      type: object
+      properties: 
+        description:
+          type: string
+          example: pubkey description
+        pubkey:
+          type: string
+          example: 19GT1JNQVRgIGNhbiBiZSBzZXQgdG8gYGpzb25gIHRvIGdldCBsb2dzIGluIEpTT04gZm9ybWF0=
+    C4ghKeysList:
+      type: object
+      properties:
+        hash:
+          type: string
+          example: cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23
+        description:
+          type: string
+          example: This is an example
+        createdAt:
+          type: string
+          example: "2025-03-01T12:13:14.123Z"
+        deprecatedAt:
+          type: string
+          example: "2025-03-02T13:14:15.123Z"
+    DatasetCreate:
+      type: object
+      properties:
+        accession_ids:
+          example: ["zz-file-123456-asdfgh", "zz-file-123456-qwerty"]
+          type: array
+          items:
+            type: string
+        dataset_id:
+          type: string
+          example: zz-dataset-123456-asdfgh
+        user:
+          type: string
+          example: test.user@dummy.org
+    DatasetInfo:
+      type: object
+      properties:
+        DatasetId:
+          type: string
+          example: zz-dataset-123456-asdfgh
+        Status:
+          type: string
+          example: registered
+        Timestamp:
+          type: string
+          example: 2025-03-30T09:10:11.321Z
+    FileAccession:
+      type: object
+      properties:
+        accession_id:
+          type: string
+          example: zz-file-123456-zxcvbn
+        filepath:
+          type: string
+          example: uploads/file-1.c4gh
+        user:
+          type: string
+          example: test.user@dummy.org
+    FileIngest:
+      type: object
+      properties:
+        filepath:
+          type: string
+          example: uploads/file-1.c4gh
+        user:
+          type: string
+          example: test.user@dummy.org
+    FileInfo:
+      type: object
+      properties:
+        FileID:
+          type: string
+          example: e996e130-c08b-4b33-98d1-9aebbbf75850
+        InboxPath:
+          type: string
+          example: uploads/file-001.c4gh
+        Status:
+          type: string
+          example: verified
+        CreatedAt:
+          type: string
+          example: "2025-03-02T13:14:15.123Z"
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
