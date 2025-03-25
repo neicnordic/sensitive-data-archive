@@ -1,0 +1,394 @@
+services:
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "/scripts/make_sda_credentials.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.11-slim
+    volumes:
+      - ../../scripts:/scripts
+      - shared:/shared
+
+  postgres:
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}-postgres
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    container_name: rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}-rabbitmq
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    restart: always
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio:RELEASE.2023-05-18T00-05-36Z
+    command: server /data  --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  s3inbox:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-s3inbox]
+    container_name: s3inbox
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      mock-aai:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=inbox
+      - BROKER_USER=inbox
+      - BROKER_ROUTINGKEY=inbox
+      - DB_PASSWORD=inbox
+      - DB_USER=inbox
+    extra_hosts:
+      - "localhost:host-gateway"
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+    ports:
+      - "18000:8000"
+      - "18001:8001"
+
+  ingest:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-ingest]
+    container_name: ingest
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=ingest
+      - BROKER_USER=ingest
+      - BROKER_QUEUE=ingest
+      - BROKER_ROUTINGKEY=archived
+      - DB_PASSWORD=ingest
+      - DB_USER=ingest
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  verify:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-verify]
+    container_name: verify
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=verify
+      - BROKER_USER=verify
+      - BROKER_QUEUE=archived
+      - BROKER_ROUTINGKEY=verified
+      - DB_PASSWORD=verify
+      - DB_USER=verify
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  finalize:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-finalize]
+    container_name: finalize
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=finalize
+      - BROKER_USER=finalize
+      - BROKER_QUEUE=accession
+      - BROKER_ROUTINGKEY=completed
+      - DB_PASSWORD=finalize
+      - DB_USER=finalize
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  mapper:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-mapper]
+    container_name: mapper
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=mapper
+      - BROKER_USER=mapper
+      - BROKER_QUEUE=mappings
+      - DB_PASSWORD=mapper
+      - DB_USER=mapper
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  api:
+    command: [sda-api]
+    container_name: api
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      mock-aai:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=api
+      - BROKER_USER=api
+      - DB_PASSWORD=api
+      - DB_USER=api
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    ports:
+      - "8090:8080"
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - ../../sda/rbac.json:/rbac.json
+      - shared:/shared
+
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    command: [sda-reencrypt]
+    container_name: reencrypt
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  cega-nss:
+    container_name: cega-nss
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    command:
+      ["python", "/cega/users.py", "0.0.0.0", "8443", "/shared/users.json"]
+    environment:
+      - CEGA_USERS_PASSWORD=test
+      - CEGA_USERS_USER=test
+    image: "egarchive/lega-base:release.v0.2.0"
+    ports:
+      - "8443:8443"
+    volumes:
+      - ../sda/users.py:/cega/users.py
+      - shared:/shared
+
+  auth-cega:
+    command: [sda-auth]
+    container_name: auth-cega
+    depends_on:
+      cega-nss:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - AUTH_RESIGNJWT=true
+      - AUTH_CEGA_ID=test
+      - AUTH_CEGA_SECRET=test
+      - OIDC_REDIRECTURL=http://localhost:8888/oidc/login
+      - OIDC_ID=XC56EL11zz
+      - OIDC_SECRET=wHPVQaYXmdDHa
+      - DB_PASSWORD=auth
+      - DB_USER=auth
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    ports:
+      - "8888:8080"
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  auth-aai:
+    command: [sda-auth]
+    container_name: auth-aai
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      mock-aai:
+        condition: service_started
+    environment:
+      - AUTH_RESIGNJWT=false
+      - DB_PASSWORD=auth
+      - DB_USER=auth
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}
+    ports:
+      - "8801:8080"
+    restart: always
+    volumes:
+      - ../../sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  mock-aai:
+    container_name: ls-aai-mock
+    depends_on:
+      aai-db:
+        condition: service_healthy
+    environment:
+      - DOCKERHOST=localhost
+    extra_hosts:
+      - "localhost:host-gateway"
+    healthcheck:
+      test:
+        [ "CMD", "/bin/true" ]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.2-broker2.1.10-tomcat9.0-jdk11
+    ports:
+      - "8800:8080"
+    volumes:
+      - ../../sda/aai-mock:/etc/lsaai-mock
+  aai-db:
+    container_name: ls-aai-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "aaiPass"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "aai"
+      MYSQL_USER: "aai"
+      MYSQL_PASSWORD: "aaiPass"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: mysql/mysql-server:latest
+    volumes:
+      - ../../sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+  integration_test:
+    container_name: tester
+    command:
+      - "/bin/sh"
+      - "/submission_tests/${TEST}.sh"
+    depends_on:
+      auth-cega:
+        condition: service_started
+      auth-aai:
+        condition: service_started
+      cega-nss:
+        condition: service_started
+      credentials:
+        condition: service_completed_successfully
+      finalize:
+        condition: service_started
+      ingest:
+        condition: service_started
+      mapper:
+        condition: service_started
+      s3inbox:
+        condition: service_started
+      verify:
+        condition: service_started
+      api:
+        condition: service_started
+      reencrypt:
+        condition: service_started
+    extra_hosts:
+      - "localhost:host-gateway"
+    environment:
+      - PGPASSWORD=rootpasswd
+      - STORAGETYPE=s3
+    image: python:3.11-slim-bullseye
+    profiles:
+      - tests
+    volumes:
+      - shared:/shared
+      - ../../tests:/tests
+      - ./:/submission_tests
+
+volumes:
+  minio_data:
+  postgres_data:
+  rabbitmq_data:
+  shared:
