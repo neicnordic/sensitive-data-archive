@@ -1,0 +1,25 @@
+name: Big test
+
+on:
+  schedule:
+    - cron: "21 21 * * 6"
+  workflow_dispatch:
+
+jobs:
+  big_test:
+    name: Test large submission
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test: ["finalize", "ingest", "mapper", "verify"]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set test env
+        run: |
+          echo "TEST=${{ matrix.test }}" >> $GITHUB_ENV
+          echo "TAG=$(curl -s https://api.github.com/repos/neicnordic/sensitive-data-archive/tags | jq -r '.[0].name')" >> $GITHUB_ENV
+      - name: Run the tests
+        run: docker compose -f .github/integration/scripts/large_submission/sda-s3.yml run integration_test
