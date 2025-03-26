@@ -311,7 +311,7 @@ func main() {
 					continue
 				}
 
-				fileSize, err := inbox.GetFileSize(message.FilePath)
+				fileSize, err := inbox.GetFileSize(message.FilePath, false)
 				if err != nil {
 					log.Errorf("Failed to get file size of file to ingest, reason: (%s)", err.Error())
 					// Nack message so the server gets notified that something is wrong and requeue the message.
@@ -496,7 +496,7 @@ func main() {
 				fileInfo := database.FileInfo{}
 				fileInfo.Path = fileID
 				fileInfo.Checksum = fmt.Sprintf("%x", hash.Sum(nil))
-				fileInfo.Size, err = archive.GetFileSize(fileID)
+				fileInfo.Size, err = archive.GetFileSize(fileID, true)
 				if err != nil {
 					log.Errorf("Couldn't get file size from archive, reason: %v)", err.Error())
 					if err = delivered.Nack(false, true); err != nil {
