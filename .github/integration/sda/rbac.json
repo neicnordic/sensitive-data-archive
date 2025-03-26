@@ -12,8 +12,8 @@
       },
       {
          "role": "admin",
-         "path": "/dataset/verify/:dataset",
-         "action": "PUT"
+         "path": "/dataset/*",
+         "action": "(POST)|(PUT)"
       },
        {
          "role": "submission",
