@@ -242,12 +242,12 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 		dataset.User = data.User
 	}
 
-	json, err := json.Marshal(dataset)
+	j, err := json.Marshal(dataset)
 	if err != nil {
 		return nil, err
 	}
 
-	return json, nil
+	return j, nil
 }
 
 func sendPOST(payload []byte) error {
@@ -279,14 +279,14 @@ func sendPOST(payload []byte) error {
 }
 
 func createHostURL(host string, port int) (string, error) {
-	url, err := url.ParseRequestURI(host)
+	u, err := url.ParseRequestURI(host)
 	if err != nil {
 		return "", err
 	}
-	if url.Port() == "" && port != 0 {
-		url.Host += fmt.Sprintf(":%d", port)
+	if u.Port() == "" && port != 0 {
+		u.Host += fmt.Sprintf(":%d", port)
 	}
-	url.Path = "/dataset"
+	u.Path = "/dataset"
 
-	return url.String(), nil
+	return u.String(), nil
 }

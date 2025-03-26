@@ -21,114 +21,114 @@ func TestUserAuthTestSuite(t *testing.T) {
 	suite.Run(t, new(HelperTest))
 }
 
-func (suite *HelperTest) SetupTest() {
+func (ht *HelperTest) SetupTest() {
 
 }
 
-func (suite *HelperTest) TestMakeFolder() {
+func (ht *HelperTest) TestMakeFolder() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
-	assert.Equal(suite.T(), "dummy-folder/private-key", privateK)
-	assert.Equal(suite.T(), "dummy-folder/public-key", publicK)
+	assert.Equal(ht.T(), "dummy-folder/private-key", privateK)
+	assert.Equal(ht.T(), "dummy-folder/public-key", publicK)
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreateRSAkeys() {
+func (ht *HelperTest) TestCreateRSAkeys() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
-	assert.Nil(suite.T(), CreateRSAkeys(privateK, publicK))
+	assert.Nil(ht.T(), CreateRSAkeys(privateK, publicK))
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestParsePrivateRSAKey() {
+func (ht *HelperTest) TestParsePrivateRSAKey() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateRSAkeys(privateK, publicK)
-	assert.Nil(suite.T(), e)
+	assert.Nil(ht.T(), e)
 	_, err := ParsePrivateRSAKey(privateK, "/rsa")
-	assert.Nil(suite.T(), err)
+	assert.Nil(ht.T(), err)
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreateRSAToken() {
+func (ht *HelperTest) TestCreateRSAToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateRSAkeys(privateK, publicK)
-	assert.Nil(suite.T(), e)
+	assert.Nil(ht.T(), e)
 	ParsedPrKey, _ := ParsePrivateRSAKey(privateK, "/rsa")
 	tok, err := CreateRSAToken(ParsedPrKey, "RS256", DefaultTokenClaims)
-	assert.Nil(suite.T(), err)
+	assert.Nil(ht.T(), err)
 
 	set := jwk.NewSet()
 	keyData, err := os.ReadFile(filepath.Join(filepath.Clean(publicK), "/rsa.pub"))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 	key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 	err = jwk.AssignKeyID(key)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), set.AddKey(key))
+	assert.NoError(ht.T(), err)
+	assert.NoError(ht.T(), set.AddKey(key))
 
 	fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreateECkeys() {
+func (ht *HelperTest) TestCreateECkeys() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
-	assert.Nil(suite.T(), CreateECkeys(privateK, publicK))
+	assert.Nil(ht.T(), CreateECkeys(privateK, publicK))
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestParsePrivateECKey() {
+func (ht *HelperTest) TestParsePrivateECKey() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateECkeys(privateK, publicK)
-	assert.Nil(suite.T(), e)
+	assert.Nil(ht.T(), e)
 
 	k, err := ParsePrivateECKey(privateK, "/ec")
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), "EC", fmt.Sprintf("%v", k.KeyType()))
+	assert.Nil(ht.T(), err)
+	assert.Equal(ht.T(), "EC", fmt.Sprintf("%v", k.KeyType()))
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreateECToken() {
+func (ht *HelperTest) TestCreateECToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateECkeys(privateK, publicK)
-	assert.Nil(suite.T(), e)
+	assert.Nil(ht.T(), e)
 	ParsedPrKey, err := ParsePrivateECKey(privateK, "/ec")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 	_, err = CreateECToken(ParsedPrKey, "ES256", DefaultTokenClaims)
-	assert.Nil(suite.T(), err)
+	assert.Nil(ht.T(), err)
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreateHSToken() {
+func (ht *HelperTest) TestCreateHSToken() {
 	key := make([]byte, 256)
 	tok, err := CreateHSToken(key, DefaultTokenClaims)
-	assert.Nil(suite.T(), err)
+	assert.Nil(ht.T(), err)
 
 	set := jwk.NewSet()
 	jwtKey, err := jwk.FromRaw(key)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 
 	err = jwk.AssignKeyID(jwtKey)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 
-	assert.NoError(suite.T(), set.AddKey(jwtKey))
+	assert.NoError(ht.T(), set.AddKey(jwtKey))
 
 	fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 
 	defer os.RemoveAll("dummy-folder")
 }
 
-func (suite *HelperTest) TestCreatePrivateKeyFile() {
+func (ht *HelperTest) TestCreatePrivateKeyFile() {
 	tempDir, err := os.MkdirTemp("", "key")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 	defer os.RemoveAll(tempDir)
 
 	// Define the key file path and passphrase
@@ -137,17 +137,17 @@ func (suite *HelperTest) TestCreatePrivateKeyFile() {
 
 	// Call the function under test
 	publicKey, err := CreatePrivateKeyFile(keyFile, passphrase)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ht.T(), err)
 
 	// Verify the file was created
 	_, err = os.Stat(keyFile)
-	assert.NoError(suite.T(), err, "Private key file should exist")
+	assert.NoError(ht.T(), err, "Private key file should exist")
 
 	// Read and verify the file contents
 	fileContent, err := os.ReadFile(keyFile)
-	assert.NoError(suite.T(), err, "Should be able to read the private key file")
-	assert.Contains(suite.T(), string(fileContent), "BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY", "File should contain a valid private key")
+	assert.NoError(ht.T(), err, "Should be able to read the private key file")
+	assert.Contains(ht.T(), string(fileContent), "BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY", "File should contain a valid private key")
 
 	// Verify the public key is not empty
-	assert.NotEqual(suite.T(), [32]byte{}, publicKey, "Public key should not be empty")
+	assert.NotEqual(ht.T(), [32]byte{}, publicKey, "Public key should not be empty")
 }

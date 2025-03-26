@@ -56,29 +56,29 @@ type posixConf struct {
 }
 
 // NewBackend initiates a storage backend
-func NewBackend(config Conf) (Backend, error) {
-	switch config.Type {
+func NewBackend(conf Conf) (Backend, error) {
+	switch conf.Type {
 	case "s3":
-		return newS3Backend(config.S3)
+		return newS3Backend(conf.S3)
 	case "sftp":
-		return newSftpBackend(config.SFTP)
+		return newSftpBackend(conf.SFTP)
 	default:
-		return newPosixBackend(config.Posix)
+		return newPosixBackend(conf.Posix)
 	}
 }
 
-func newPosixBackend(config posixConf) (*posixBackend, error) {
-	fileInfo, err := os.Stat(config.Location)
+func newPosixBackend(conf posixConf) (*posixBackend, error) {
+	fileInfo, err := os.Stat(conf.Location)
 
 	if err != nil {
 		return nil, err
 	}
 
 	if !fileInfo.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", config.Location)
+		return nil, fmt.Errorf("%s is not a directory", conf.Location)
 	}
 
-	return &posixBackend{Location: config.Location}, nil
+	return &posixBackend{Location: conf.Location}, nil
 }
 
 // NewFileReader returns an io.Reader instance
@@ -378,29 +378,29 @@ type SftpConf struct {
 	HostKey    string
 }
 
-func newSftpBackend(config SftpConf) (*sftpBackend, error) {
+func newSftpBackend(conf SftpConf) (*sftpBackend, error) {
 	// read in and parse pem key
-	key, err := os.ReadFile(config.PemKeyPath)
+	key, err := os.ReadFile(conf.PemKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read from key file, %v", err)
 	}
 
 	var signer ssh.Signer
-	if config.PemKeyPass == "" {
+	if conf.PemKeyPass == "" {
 		signer, err = ssh.ParsePrivateKey(key)
 	} else {
-		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(config.PemKeyPass))
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(conf.PemKeyPass))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key, %v", err)
 	}
 
 	// connect
-	conn, err := ssh.Dial("tcp", config.Host+":"+config.Port,
+	conn, err := ssh.Dial("tcp", conf.Host+":"+conf.Port,
 		&ssh.ClientConfig{
-			User:            config.UserName,
+			User:            conf.UserName,
 			Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-			HostKeyCallback: TrustedHostKeyCallback(config.HostKey),
+			HostKeyCallback: TrustedHostKeyCallback(conf.HostKey),
 		},
 	)
 	if err != nil {
@@ -416,7 +416,7 @@ func newSftpBackend(config SftpConf) (*sftpBackend, error) {
 	sfb := &sftpBackend{
 		Connection: conn,
 		Client:     client,
-		Conf:       &config,
+		Conf:       &conf,
 	}
 
 	_, err = client.ReadDir("./")

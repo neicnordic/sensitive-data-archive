@@ -73,8 +73,8 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
-func (p *Proxy) httpsGetCheck(url string) error {
-	resp, e := p.client.Get(url)
+func (p *Proxy) httpsGetCheck(u string) error {
+	resp, e := p.client.Get(u)
 	if e != nil {
 		return e
 	}

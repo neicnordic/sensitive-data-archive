@@ -25,38 +25,38 @@ func TestJWTTestSuite(t *testing.T) {
 	suite.Run(t, new(JWTTests))
 }
 
-func (suite *JWTTests) SetupTest() {
+func (jwtts *JWTTests) SetupTest() {
 	var err error
-	suite.TempDir, err = os.MkdirTemp(os.TempDir(), "jwt-test")
-	assert.NoError(suite.T(), err)
+	jwtts.TempDir, err = os.MkdirTemp(os.TempDir(), "jwt-test")
+	assert.NoError(jwtts.T(), err)
 
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	assert.NoError(suite.T(), err)
+	assert.NoError(jwtts.T(), err)
 	ecKeyBytes, err := jwk.EncodePEM(ecKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec", ecKeyBytes, 0600))
+	assert.NoError(jwtts.T(), err)
+	assert.NoError(jwtts.T(), os.WriteFile(jwtts.TempDir+"/ec", ecKeyBytes, 0600))
 
 	ecPubKeyBytes, err := jwk.EncodePEM(&ecKey.PublicKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
+	assert.NoError(jwtts.T(), err)
+	assert.NoError(jwtts.T(), os.WriteFile(jwtts.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	assert.NoError(suite.T(), err)
+	assert.NoError(jwtts.T(), err)
 
 	rsaKeyBytes, err := jwk.EncodePEM(rsaKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa", rsaKeyBytes, 0600))
+	assert.NoError(jwtts.T(), err)
+	assert.NoError(jwtts.T(), os.WriteFile(jwtts.TempDir+"/rsa", rsaKeyBytes, 0600))
 
 	rsaPubKeyBytes, err := jwk.EncodePEM(&rsaKey.PublicKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
+	assert.NoError(jwtts.T(), err)
+	assert.NoError(jwtts.T(), os.WriteFile(jwtts.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
 }
 
-func (suite *JWTTests) TearDownTest() {
-	os.RemoveAll(suite.TempDir)
+func (jwtts *JWTTests) TearDownTest() {
+	os.RemoveAll(jwtts.TempDir)
 }
 
-func (suite *JWTTests) TestGenerateJwtToken() {
+func (jwtts *JWTTests) TestGenerateJwtToken() {
 	type KeyAlgo struct {
 		Algorithm string
 		Keyfile   string
@@ -64,8 +64,8 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 	}
 
 	algorithms := []KeyAlgo{
-		{Algorithm: "RS256", Keyfile: suite.TempDir + "/rsa", Pubfile: suite.TempDir + "/rsa.pub"},
-		{Algorithm: "ES256", Keyfile: suite.TempDir + "/ec", Pubfile: suite.TempDir + "/ec.pub"},
+		{Algorithm: "RS256", Keyfile: jwtts.TempDir + "/rsa", Pubfile: jwtts.TempDir + "/rsa.pub"},
+		{Algorithm: "ES256", Keyfile: jwtts.TempDir + "/ec", Pubfile: jwtts.TempDir + "/ec.pub"},
 	}
 
 	claims := map[string]interface{}{
@@ -77,24 +77,24 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 
 	for _, test := range algorithms {
 		ts, expiration, err := generateJwtToken(claims, test.Keyfile, test.Algorithm)
-		assert.NoError(suite.T(), err)
-		assert.NotNil(suite.T(), ts)
+		assert.NoError(jwtts.T(), err)
+		assert.NotNil(jwtts.T(), ts)
 
 		keyData, err := os.ReadFile(test.Pubfile)
-		assert.NoError(suite.T(), err)
+		assert.NoError(jwtts.T(), err)
 		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
-		assert.NoError(suite.T(), err)
-		assert.NoError(suite.T(), jwk.AssignKeyID(key))
+		assert.NoError(jwtts.T(), err)
+		assert.NoError(jwtts.T(), jwk.AssignKeyID(key))
 		keySet := jwk.NewSet()
-		assert.NoError(suite.T(), keySet.AddKey(key))
+		assert.NoError(jwtts.T(), keySet.AddKey(key))
 
 		token, err := jwt.Parse([]byte(ts), jwt.WithKeySet(keySet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-		assert.NoError(suite.T(), err)
-		assert.Equal(suite.T(), "http://local.issuer", token.Issuer())
-		assert.Equal(suite.T(), "test@foo.bar", token.Subject())
+		assert.NoError(jwtts.T(), err)
+		assert.Equal(jwtts.T(), "http://local.issuer", token.Issuer())
+		assert.Equal(jwtts.T(), "test@foo.bar", token.Subject())
 
 		// check that the expiration string is a date
 		_, err = time.Parse("2006-01-02 15:04:05", expiration)
-		assert.Nil(suite.T(), err, "Couldn't parse expiration date for jwt")
+		assert.Nil(jwtts.T(), err, "Couldn't parse expiration date for jwt")
 	}
 }

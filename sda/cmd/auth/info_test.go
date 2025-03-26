@@ -21,37 +21,37 @@ func TestInfoTestSuite(t *testing.T) {
 	suite.Run(t, new(InfoTests))
 }
 
-func (suite *InfoTests) SetupTest() {
-	suite.TempDir, _ = os.MkdirTemp("", "key")
+func (its *InfoTests) SetupTest() {
+	its.TempDir, _ = os.MkdirTemp("", "key")
 
 	pub, _, err := keys.GenerateKeyPair()
 	if err != nil {
-		suite.FailNowf("Filed to generate crypt4gh keypair", err.Error())
+		its.FailNowf("Filed to generate crypt4gh keypair", err.Error())
 	}
 
 	buf := new(bytes.Buffer)
 	if err := keys.WriteCrypt4GHX25519PublicKey(buf, pub); err != nil {
-		suite.T().FailNow()
+		its.T().FailNow()
 	}
-	suite.pubKeyb64 = base64.StdEncoding.EncodeToString(buf.Bytes())
+	its.pubKeyb64 = base64.StdEncoding.EncodeToString(buf.Bytes())
 
-	pubKeyFile, err := os.Create(suite.TempDir + "/pub.key")
+	pubKeyFile, err := os.Create(its.TempDir + "/pub.key")
 	if err != nil {
-		suite.T().FailNow()
+		its.T().FailNow()
 	}
 
 	_, err = pubKeyFile.Write(buf.Bytes())
 	if err != nil {
-		suite.T().FailNow()
+		its.T().FailNow()
 	}
 }
 
-func (suite *InfoTests) TestReadPublicKeyFile() {
-	pubKey, err := readPublicKeyFile(suite.TempDir + "/pub.key")
-	assert.NoError(suite.T(), err, "Reading public key from disk failed")
-	assert.Equal(suite.T(), suite.pubKeyb64, pubKey)
+func (its *InfoTests) TestReadPublicKeyFile() {
+	pubKey, err := readPublicKeyFile(its.TempDir + "/pub.key")
+	assert.NoError(its.T(), err, "Reading public key from disk failed")
+	assert.Equal(its.T(), its.pubKeyb64, pubKey)
 }
 
-func (suite *InfoTests) TearDownTest() {
-	os.RemoveAll(suite.TempDir)
+func (its *InfoTests) TearDownTest() {
+	os.RemoveAll(its.TempDir)
 }
