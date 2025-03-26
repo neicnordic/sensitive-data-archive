@@ -1,0 +1,26 @@
+version: "2"
+formatters:
+  enable:
+    - gofmt
+    - goimports
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - gocritic
+    # - gosec
+    - govet
+    - nestif
+    - nlreturn
+    # - revive
+    - rowserrcheck
+    - staticcheck
+  settings:
+    gosec:
+      excludes:
+        - G107
+        - G115
+        - G302
+        - G304
+        - G401
+        - G501
