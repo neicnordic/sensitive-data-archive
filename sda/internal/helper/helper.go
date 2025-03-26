@@ -262,7 +262,6 @@ func CreateHSToken(key []byte, tokenClaims map[string]interface{}) (string, erro
 		if err := token.Set(key, value); err != nil {
 			return "failed to set claim", err
 		}
-
 	}
 
 	jwtKey, err := jwk.FromRaw(key)

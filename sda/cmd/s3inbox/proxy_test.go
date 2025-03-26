@@ -41,7 +41,6 @@ func TestProxyTestSuite(t *testing.T) {
 }
 
 func (suite *ProxyTests) SetupTest() {
-
 	// Create fake server
 	suite.fakeServer = startFakeServer("9024")
 

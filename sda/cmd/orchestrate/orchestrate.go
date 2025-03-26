@@ -201,7 +201,6 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 				continue
 			}
 		}
-
 	}
 }
 
@@ -258,7 +257,6 @@ func schemaFromInboxOperation(body []byte) (string, error) {
 	default:
 		return "", errors.New("could not recognize inbox operation")
 	}
-
 }
 
 // schemaFromDatasetOperation returns the operation done with dataset
@@ -290,7 +288,6 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 	default:
 		return "", errors.New("could not recognize inbox operation")
 	}
-
 }
 
 func ingestMessage(body []byte) ([]byte, interface{}) {

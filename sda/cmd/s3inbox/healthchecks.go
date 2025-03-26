@@ -14,7 +14,6 @@ import (
 
 // CheckHealth checks and tries to repair the connections to MQ, DB and S3
 func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
-
 	// try to connect to mq, check connection and channel
 	var err error
 	if p.messenger == nil {
@@ -88,7 +87,6 @@ func (p *Proxy) httpsGetCheck(url string) error {
 }
 
 func (p *Proxy) getS3ReadyPath() (string, error) {
-
 	s3URL, err := url.Parse(p.s3.URL)
 	if err != nil {
 		return "", err

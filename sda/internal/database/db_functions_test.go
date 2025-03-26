@@ -14,7 +14,6 @@ import (
 
 // TestRegisterFile tests that RegisterFile() behaves as intended
 func (suite *DatabaseTests) TestRegisterFile() {
-
 	// create database connection
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
@@ -38,7 +37,6 @@ func (suite *DatabaseTests) TestRegisterFile() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='registered')", fileID).Scan(&exists)
 	assert.NoError(suite.T(), err, "Failed to check if registered file event exists")
 	assert.True(suite.T(), exists, "RegisterFile() did not insert a row into sda.file_event_log with id: "+fileID)
-
 }
 
 func (suite *DatabaseTests) TestGetFileID() {
@@ -538,7 +536,6 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 	corrID, err := db.GetCorrID(user, filePath, "")
 	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), fileID2, corrID)
-
 }
 
 func (suite *DatabaseTests) TestGetCorrID_wrongFilePath() {
@@ -950,7 +947,6 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 		if err != nil {
 			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
 		}
-
 	}
 	if err := db.MapFilesToDataset("test-user-dataset-01", []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}); err != nil {
 		suite.FailNow("failed to map files to dataset")

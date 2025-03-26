@@ -83,7 +83,6 @@ func main() {
 			log.Fatalln(err)
 		}
 	}
-
 }
 
 func setup(config *config.Config) *http.Server {

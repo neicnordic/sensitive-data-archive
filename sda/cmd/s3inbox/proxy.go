@@ -508,7 +508,6 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
-
 }
 
 // FormatUploadFilePath ensures that path separators are "/", and returns error if the

@@ -129,7 +129,6 @@ func (suite *DatabaseTests) TearDownTest() {}
 // TestNewSDAdb tests creation of new database connections, as well as fetching
 // of the database schema version.
 func (suite *DatabaseTests) TestNewSDAdb() {
-
 	// test working database connection
 	db, err := NewSDAdb(suite.dbConf)
 	assert.Nil(suite.T(), err, "got %v when creating new connection", err)
@@ -151,12 +150,10 @@ func (suite *DatabaseTests) TestNewSDAdb() {
 
 	_, err = NewSDAdb(wrongConf)
 	assert.NotNil(suite.T(), err, "connection allowed with wrong credentials")
-
 }
 
 // TestConnect tests creation of new database connections
 func (suite *DatabaseTests) TestConnect() {
-
 	// test connecting to a database
 	db := SDAdb{DB: nil, Version: -1, Config: suite.dbConf}
 
@@ -197,12 +194,10 @@ func (suite *DatabaseTests) TestConnect() {
 	db.Config = wrongConf
 	err = db.Connect()
 	assert.NotNil(suite.T(), err, "connection allowed with wrong credentials")
-
 }
 
 // TestClose tests that the connection is properly closed
 func (suite *DatabaseTests) TestClose() {
-
 	// test working database connection
 	db, err := NewSDAdb(suite.dbConf)
 	assert.Nil(suite.T(), err, "got %v when creating new connection", err)

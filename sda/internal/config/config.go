@@ -1047,7 +1047,6 @@ func (c *Config) configSyncAPI() {
 	if viper.IsSet("sync.api.MappingRouting") {
 		c.SyncAPI.MappingRouting = viper.GetString("sync.api.MappingRouting")
 	}
-
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key

@@ -570,7 +570,6 @@ func main() {
 
 // tryDecrypt tries to decrypt the start of buf.
 func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
-
 	log.Debugln("Try decrypting the first data block")
 	a := bytes.NewReader(buf)
 	b, err := streaming.NewCrypt4GHReader(a, *key, nil)
@@ -578,7 +577,6 @@ func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 		log.Error(err)
 
 		return nil, err
-
 	}
 	_, err = b.ReadByte()
 	if err != nil {

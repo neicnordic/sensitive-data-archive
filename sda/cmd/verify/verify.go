@@ -137,7 +137,6 @@ func main() {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
-
 				}
 				// store full message info in case we want to fix the db entry and retry
 				infoErrorMessage := broker.InfoError{

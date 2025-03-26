@@ -287,7 +287,6 @@ func (suite *BrokerTestSuite) TestCreateNewChannel() {
 
 	assert.NoError(suite.T(), b.CreateNewChannel())
 	assert.False(suite.T(), b.Channel.IsClosed())
-
 }
 
 // Helper functions below this line
