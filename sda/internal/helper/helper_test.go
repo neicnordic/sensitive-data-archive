@@ -54,8 +54,8 @@ func (ht *HelperTest) TestCreateRSAToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateRSAkeys(privateK, publicK)
 	assert.Nil(ht.T(), e)
-	ParsedPrKey, _ := ParsePrivateRSAKey(privateK, "/rsa")
-	tok, err := CreateRSAToken(ParsedPrKey, "RS256", DefaultTokenClaims)
+	parsedPrKey, _ := ParsePrivateRSAKey(privateK, "/rsa")
+	tok, err := CreateRSAToken(parsedPrKey, "RS256", DefaultTokenClaims)
 	assert.Nil(ht.T(), err)
 
 	set := jwk.NewSet()
@@ -97,9 +97,9 @@ func (ht *HelperTest) TestCreateECToken() {
 	privateK, publicK, _ := MakeFolder("dummy-folder")
 	e := CreateECkeys(privateK, publicK)
 	assert.Nil(ht.T(), e)
-	ParsedPrKey, err := ParsePrivateECKey(privateK, "/ec")
+	parsedPrKey, err := ParsePrivateECKey(privateK, "/ec")
 	assert.NoError(ht.T(), err)
-	_, err = CreateECToken(ParsedPrKey, "ES256", DefaultTokenClaims)
+	_, err = CreateECToken(parsedPrKey, "ES256", DefaultTokenClaims)
 	assert.Nil(ht.T(), err)
 
 	defer os.RemoveAll("dummy-folder")

@@ -207,12 +207,12 @@ func (bts *BrokerTestSuite) TestNewMQNoTLS() {
 }
 
 func (bts *BrokerTestSuite) TestNewMQTLS() {
-	SslConf := tMqconf
-	SslConf.Port = tlsPort
-	SslConf.Ssl = true
-	SslConf.VerifyPeer = true
+	sslConf := tMqconf
+	sslConf.Port = tlsPort
+	sslConf.Ssl = true
+	sslConf.VerifyPeer = true
 
-	b, err := NewMQ(SslConf)
+	b, err := NewMQ(sslConf)
 	assert.NoError(bts.T(), err)
 	assert.NotNil(bts.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(bts.T(), b.Connection.IsClosed())

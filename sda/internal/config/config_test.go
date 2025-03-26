@@ -484,11 +484,11 @@ func (cts *ConfigTestSuite) TestConfigReEncryptServer() {
 func (cts *ConfigTestSuite) TestConfigAuth_CEGA() {
 	cts.SetupTest()
 
-	ECPath, _ := os.MkdirTemp("", "EC")
-	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+	ecPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ecPath, ecPath); err != nil {
 		cts.T().FailNow()
 	}
-	defer os.RemoveAll(ECPath)
+	defer os.RemoveAll(ecPath)
 
 	noConfig, err := NewConfig("auth")
 	assert.Error(cts.T(), err)
@@ -506,10 +506,10 @@ func (cts *ConfigTestSuite) TestConfigAuth_CEGA() {
 	_, err = NewConfig("auth")
 	assert.ErrorContains(cts.T(), err, "no such file or directory")
 
-	viper.Set("auth.publicFile", ECPath+"/ec.pub")
-	viper.Set("auth.Jwt.privateKey", ECPath+"/ec")
+	viper.Set("auth.publicFile", ecPath+"/ec.pub")
+	viper.Set("auth.Jwt.privateKey", ecPath+"/ec")
 	c, err := NewConfig("auth")
-	assert.Equal(cts.T(), c.Auth.JwtPrivateKey, fmt.Sprintf("%s/ec", ECPath))
+	assert.Equal(cts.T(), c.Auth.JwtPrivateKey, fmt.Sprintf("%s/ec", ecPath))
 	assert.Equal(cts.T(), c.Auth.JwtTTL, 168)
 	assert.NoError(cts.T(), err, "unexpected failure")
 }
@@ -517,18 +517,18 @@ func (cts *ConfigTestSuite) TestConfigAuth_CEGA() {
 func (cts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	cts.SetupTest()
 
-	ECPath, _ := os.MkdirTemp("", "EC")
-	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+	ecPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ecPath, ecPath); err != nil {
 		cts.T().FailNow()
 	}
-	defer os.RemoveAll(ECPath)
+	defer os.RemoveAll(ecPath)
 
 	noConfig, err := NewConfig("auth")
 	assert.Error(cts.T(), err)
 	assert.Nil(cts.T(), noConfig)
 
 	viper.Set("auth.s3Inbox", "http://inbox:8000")
-	viper.Set("auth.publicFile", ECPath+"/ec.pub")
+	viper.Set("auth.publicFile", ecPath+"/ec.pub")
 	viper.Set("oidc.id", "oidcTestID")
 	viper.Set("oidc.secret", "oidcTestIssuer")
 	_, err = NewConfig("auth")

@@ -174,8 +174,8 @@ func readinessResponse(c *gin.Context) {
 		}
 	}
 
-	if DBRes := checkDB(Conf.API.DB, 5*time.Millisecond); DBRes != nil {
-		log.Debugf("DB connection error :%v", DBRes)
+	if dbRes := checkDB(Conf.API.DB, 5*time.Millisecond); dbRes != nil {
+		log.Debugf("DB connection error :%v", dbRes)
 		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
 	}
@@ -318,8 +318,8 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	var RetryTimes = 5
-	for count := 1; count <= RetryTimes; count++ {
+	var retryTimes = 5
+	for count := 1; count <= retryTimes; count++ {
 		err = inbox.RemoveFile(filePath)
 		if err == nil {
 			break

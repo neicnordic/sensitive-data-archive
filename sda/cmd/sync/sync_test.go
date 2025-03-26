@@ -153,10 +153,10 @@ func (st *SyncTest) SetupTest() {
 
 func (st *SyncTest) TestBuildSyncDatasetJSON() {
 	st.SetupTest()
-	Conf, err := config.NewConfig("sync")
+	conf, err := config.NewConfig("sync")
 	assert.NoError(st.T(), err)
 
-	db, err = database.NewSDAdb(Conf.Database)
+	db, err = database.NewSDAdb(conf.Database)
 	assert.NoError(st.T(), err)
 
 	fileID, err := db.RegisterFile("dummy.user/test/file1.c4gh", "dummy.user")
