@@ -114,11 +114,10 @@ func (suite *TestSuite) TestTryDecrypt() {
 
 	for i, key := range privateKeys {
 		header, err := tryDecrypt(key, buf)
-		switch {
-		case i == 0:
+		if i == 0 {
 			assert.NoError(suite.T(), err)
 			assert.NotNil(suite.T(), header)
-		default:
+		} else {
 			assert.Contains(suite.T(), err.Error(), "could not find matching public key heade")
 			assert.Nil(suite.T(), header)
 		}
