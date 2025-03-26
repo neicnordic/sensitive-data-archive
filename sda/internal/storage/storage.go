@@ -352,7 +352,7 @@ func transportConfigS3(conf S3Conf) http.RoundTripper {
 	if conf.CAcert != "" {
 		cacert, e := os.ReadFile(conf.CAcert) // #nosec this file comes from our config
 		if e != nil {
-			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e)
+			log.Errorf("failed to read CAcert file to RootCAs: %v", e)
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
 			log.Debug("no certs appended, using system certs only")

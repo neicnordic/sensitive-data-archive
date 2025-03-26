@@ -58,7 +58,8 @@ func (ot *OIDCTests) TestGetOidcClient() {
 		TokenURL:  ot.mockServer.TokenEndpoint(),
 		AuthStyle: 0}
 
-	oauth2Config, provider := getOidcClient(ot.OIDCConfig)
+	oauth2Config, provider, err := getOidcClient(ot.OIDCConfig)
+	assert.Error(ot.T(), err, "set up OIDC client worked when not expected")
 	assert.Equal(ot.T(), ot.mockServer.ClientID, oauth2Config.ClientID, "ClientID was modified when creating the oauth2Config")
 	assert.Equal(ot.T(), ot.mockServer.ClientSecret, oauth2Config.ClientSecret, "ClientSecret was modified when creating the oauth2Config")
 	assert.Equal(ot.T(), ot.OIDCConfig.RedirectURL, oauth2Config.RedirectURL, "RedirectURL was modified when creating the oauth2Config")
@@ -77,7 +78,8 @@ func (ot *OIDCTests) TestAuthenticateWithOidc() {
 	code := session.SessionID
 	jwkURL := ot.mockServer.JWKSEndpoint()
 
-	oauth2Config, provider := getOidcClient(ot.OIDCConfig)
+	oauth2Config, provider, err := getOidcClient(ot.OIDCConfig)
+	assert.NoError(ot.T(), err, "failed to set up OIDC client")
 
 	elixirIdentity, err := authenticateWithOidc(oauth2Config, provider, code, jwkURL)
 	assert.Nil(ot.T(), err, "Failed to authenticate with OIDC")
@@ -89,7 +91,8 @@ func (ot *OIDCTests) TestAuthenticateWithOidc() {
 func (ot *OIDCTests) TestValidateJwt() {
 	session, err := ot.mockServer.SessionStore.NewSession("openid email profile", "nonce", mockoidc.DefaultUser(), "", "")
 	assert.NoError(ot.T(), err)
-	oauth2Config, provider := getOidcClient(ot.OIDCConfig)
+	oauth2Config, provider, err := getOidcClient(ot.OIDCConfig)
+	assert.NoError(ot.T(), err, "failed to set up OIDC client")
 	jwkURL := ot.mockServer.JWKSEndpoint()
 	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, jwkURL)
 	elixirJWT := elixirIdentity.RawToken

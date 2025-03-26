@@ -379,7 +379,10 @@ func main() {
 
 	if conf.Auth.OIDC.ID != "" && conf.Auth.OIDC.Secret != "" {
 		// Initialise OIDC client
-		oauth2Config, provider = getOidcClient(conf.Auth.OIDC)
+		oauth2Config, provider, err = getOidcClient(conf.Auth.OIDC)
+		if err != nil {
+			log.Fatalln("failed to set up OIDc client")
+		}
 	}
 
 	// Create handler struct for the web server

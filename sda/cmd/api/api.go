@@ -69,7 +69,11 @@ func main() {
 		os.Exit(0)
 	}()
 
-	srv := setup(Conf)
+	srv, err := setup(Conf)
+	if err != nil {
+		shutdown()
+		log.Fatalln(err)
+	}
 	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
 		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
@@ -85,12 +89,11 @@ func main() {
 	}
 }
 
-func setup(conf *config.Config) *http.Server {
+func setup(conf *config.Config) (*http.Server, error) {
 	m, _ := model.NewModelFromString(jsonadapter.Model)
 	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
-		shutdown()
-		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error())
+		return nil, err
 	}
 
 	r := gin.Default()
@@ -125,7 +128,7 @@ func setup(conf *config.Config) *http.Server {
 		WriteTimeout:      2 * time.Minute,
 	}
 
-	return srv
+	return srv, err
 }
 
 func setupJwtAuth() error {

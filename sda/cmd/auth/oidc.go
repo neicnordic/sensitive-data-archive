@@ -28,11 +28,11 @@ type OIDCIdentity struct {
 }
 
 // Configure an OpenID Connect aware OAuth2 client.
-func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider) {
+func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider, error) {
 	contx := context.Background()
 	provider, err := oidc.NewProvider(contx, conf.Provider)
 	if err != nil {
-		log.Fatal(err)
+		return oauth2.Config{}, nil, err
 	}
 
 	oauth2Config := oauth2.Config{
@@ -43,7 +43,7 @@ func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider) {
 		Scopes:       []string{oidc.ScopeOpenID, "ga4gh_passport_v1 profile email eduperson_entitlement"},
 	}
 
-	return oauth2Config, provider
+	return oauth2Config, provider, err
 }
 
 // Authenticate with an Oidc client.against OIDC AAI
