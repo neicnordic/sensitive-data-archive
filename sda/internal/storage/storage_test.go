@@ -140,7 +140,7 @@ func TestStorageTestSuite(t *testing.T) {
 	suite.Run(t, new(StorageTestSuite))
 }
 
-func (s *StorageTestSuite) SetupTest() {
+func (sts *StorageTestSuite) SetupTest() {
 	testS3Conf := S3Conf{
 		"http://127.0.0.1",
 		s3Port,

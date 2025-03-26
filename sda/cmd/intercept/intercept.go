@@ -106,7 +106,7 @@ func main() {
 // typeFromMessage returns the type value given a JSON structure for the message
 // supplied in body
 func typeFromMessage(body []byte) (string, error) {
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
 		return "", err

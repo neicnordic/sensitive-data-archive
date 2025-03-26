@@ -154,7 +154,7 @@ func main() {
 
 // schemaFromDatasetOperation returns the operation done with dataset supplied in body of the message
 func schemaFromDatasetOperation(body []byte) (string, error) {
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
 		return "", err

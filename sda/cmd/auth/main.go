@@ -142,7 +142,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 		if ok {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Info("Valid password entered by user")
-			claims := map[string]interface{}{
+			claims := map[string]any{
 				jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 				jwt.IssuedAtKey:   time.Now().UTC(),
 				jwt.IssuerKey:     auth.Config.JwtIssuer,
@@ -272,7 +272,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 	if auth.Config.ResignJwt {
 		log.Debugf("Resigning token for user %s", idStruct.User)
-		claims := map[string]interface{}{
+		claims := map[string]any{
 			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
 			jwt.IssuerKey:     auth.Config.JwtIssuer,

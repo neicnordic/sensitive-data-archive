@@ -38,11 +38,11 @@ type Proxy struct {
 
 // The Event struct
 type Event struct {
-	Operation string        `json:"operation"`
-	Username  string        `json:"user"`
-	Filepath  string        `json:"filepath"`
-	Filesize  int64         `json:"filesize"`
-	Checksum  []interface{} `json:"encrypted_checksums"`
+	Operation string `json:"operation"`
+	Username  string `json:"user"`
+	Filepath  string `json:"filepath"`
+	Filesize  int64  `json:"filesize"`
+	Checksum  []any  `json:"encrypted_checksums"`
 }
 
 // Checksum used in the message
@@ -478,7 +478,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 	event.Username = claims.Subject()
 	checksum.Type = "sha256"
-	event.Checksum = []interface{}{checksum}
+	event.Checksum = []any{checksum}
 	privateClaims := claims.PrivateClaims()
 	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
 
