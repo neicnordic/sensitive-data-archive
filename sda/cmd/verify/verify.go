@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5" // #nosec
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
