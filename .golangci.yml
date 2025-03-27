@@ -12,7 +12,7 @@ linters:
     - govet
     - nestif
     - nlreturn
-    # - revive
+    - revive
     - rowserrcheck
     - staticcheck
   settings:
@@ -25,3 +25,61 @@ linters:
         - G304
         - G401
         - G501
+    revive:
+      enable-all-rules: true
+      rules:
+      - name: deep-exit
+        disabled: false
+      - name: empty-lines
+        disabled: false
+      - name: import-shadowing
+        disabled: false
+      - name: unexported-naming
+        disabled: false
+      - name: flag-parameter
+        disabled: true
+      - name: confusing-results
+        disabled: true
+      - name: function-length
+        disabled: true
+      - name: max-public-structs
+        disabled: true
+      - name: use-any
+        disabled: false
+      - name: var-naming
+        disabled: true ##false
+      - name: get-return
+        disabled: true ##false
+
+      - name: exported
+        disabled: true
+      - name: line-length-limit
+        disabled: true
+      - name: use-errors-new
+        disabled: true
+      - name: package-comments
+        disabled: true
+      - name: package-comments
+        disabled: true
+
+
+
+
+      - name: redundant-import-alias
+        disabled: true
+      - name: unchecked-type-assertion
+        disabled: true
+      - name: early-return
+        disabled: true
+      - name: cyclomatic
+        disabled: true
+      - name: confusing-naming
+        disabled: true
+      - name: unused-parameter
+        disabled: true
+      - name: unused-receiver
+        disabled: true
+      - name: cognitive-complexity
+        disabled: true
+      - name: add-constant
+        disabled: true
