@@ -37,7 +37,8 @@ type Ingest struct {
 	MQ             *broker.AMQPBroker
 }
 
-func (app *Ingest) main() {
+func main() {
+	app := Ingest{}
 	var err error
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
