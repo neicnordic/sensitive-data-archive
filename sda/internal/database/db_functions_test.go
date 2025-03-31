@@ -286,6 +286,15 @@ func (suite *DatabaseTests) TestMapFilesToDataset() {
 		err := db.MapFilesToDataset(di, acs)
 		assert.NoError(suite.T(), err, "failed to map file to dataset")
 	}
+
+	// Append files to an existing dataset
+	assert.NoError(suite.T(), db.MapFilesToDataset("dataset1", accessions[9:11]), "failed to append files to a dataset")
+	var dsMembers int
+	const q1 = "SELECT count(file_id) from sda.file_dataset WHERE dataset_id = (SELECT id from sda.datasets WHERE stable_id = $1);"
+	if err := db.DB.QueryRow(q1, "dataset1").Scan(&dsMembers); err != nil {
+		suite.FailNow("failed to get dataset members from database")
+	}
+	assert.Equal(suite.T(), 5, dsMembers)
 }
 
 func (suite *DatabaseTests) TestGetInboxPath() {
