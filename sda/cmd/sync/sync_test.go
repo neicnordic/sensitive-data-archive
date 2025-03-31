@@ -165,7 +165,7 @@ func (suite *SyncTest) TestBuildSyncDatasetJSON() {
 	assert.NoError(suite.T(), err)
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
-	fileInfo := database.FileInfo{Checksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
+	fileInfo := database.FileInfo{ArchiveChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 	corrID := uuid.New().String()
 
 	err = db.SetArchived(fileInfo, fileID)
