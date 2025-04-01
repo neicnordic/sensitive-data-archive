@@ -576,7 +576,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
 		suite.Fail("failed to mark file as verified")
 	}
 
@@ -608,7 +608,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
 		suite.Fail("failed to mark file as verified")
 	}
 
@@ -650,7 +650,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum(
 	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID, corrID); err != nil {
+	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
 		suite.Fail("failed to mark file as verified")
 	}
 
