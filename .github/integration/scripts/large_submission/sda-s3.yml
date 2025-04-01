@@ -384,7 +384,6 @@ services:
       - tests
     volumes:
       - shared:/shared
-      - ../../tests:/tests
       - ./:/submission_tests
 
 volumes:

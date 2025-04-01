@@ -90,7 +90,7 @@ until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/accession
     echo "waiting for messages to be processed"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for finalize to compete the work"
+        echo "::error::Time out while waiting for finalize to complete the work"
         echo "This is currently expected"
         exit 1
     fi
