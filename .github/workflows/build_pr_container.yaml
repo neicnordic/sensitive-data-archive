@@ -1,16 +1,16 @@
 name: Build PR container
 
-#on:
-#  pull_request:
-#    paths-ignore:
-#      - ".github/integration/**"
-#      - ".github/workflows/**"
-#      - ".gitignore"
-#      - "**/*.md"
-#      - ".github/dependabot.yaml"
-#      - "charts/**"
-#      - "Makefile"
-#      - "sda-admin/**"
+on:
+  pull_request:
+    paths-ignore:
+      - ".github/integration/**"
+      - ".github/workflows/**"
+      - ".gitignore"
+      - "**/*.md"
+      - ".github/dependabot.yaml"
+      - "charts/**"
+      - "Makefile"
+      - "sda-admin/**"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
