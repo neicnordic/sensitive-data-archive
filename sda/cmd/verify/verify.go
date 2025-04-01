@@ -383,8 +383,17 @@ func main() {
 					}
 				}
 
-				if err := db.SetVerified(file, message.FileID, delivered.CorrelationId); err != nil {
+				if err := db.SetVerified(file, message.FileID); err != nil {
 					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+					log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}

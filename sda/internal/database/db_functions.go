@@ -298,35 +298,42 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 }
 
 // MarkCompleted marks the file as "COMPLETED"
-func (dbs *SDAdb) SetVerified(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) SetVerified(file FileInfo, fileID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.setVerified(file, fileID, corrID)
+		err = dbs.setVerified(file, fileID)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) setVerified(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setVerified(file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
-	db := dbs.DB
-	const completed = "SELECT sda.set_verified($1, $2, $3, $4, $5, $6, $7);"
-	_, err := db.Exec(completed,
-		fileID,
-		corrID,
-		file.ArchiveChecksum,
-		"SHA256",
-		file.DecryptedSize,
-		file.DecryptedChecksum,
-		"SHA256",
-	)
+	const verified = "UPDATE sda.files SET decrypted_file_size = $1 WHERE id = $2;"
+	if _, err := dbs.DB.Exec(verified, file.DecryptedSize, fileID); err != nil {
+		return fmt.Errorf("setVerified error: %s", err.Error())
+	}
 
-	return err
+	const addArchiveChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := dbs.DB.Exec(addArchiveChecksum, fileID, file.ArchiveChecksum, "SHA256"); err != nil {
+		return fmt.Errorf("addArchiveChecksum error: %s", err.Error())
+	}
+
+	const addUnencryptedChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := dbs.DB.Exec(addUnencryptedChecksum, fileID, file.DecryptedChecksum, "SHA256"); err != nil {
+		return fmt.Errorf("addUnencryptedChecksum error: %s", err.Error())
+	}
+
+	return nil
 }
 
 // GetArchived retrieves the location and size of archive
