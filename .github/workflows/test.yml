@@ -2,7 +2,7 @@ name: Code tests
 
 on:
   push:
-    branches-ignore: [main]
+    branches-ignore: [release_v1]
 
 jobs:
 

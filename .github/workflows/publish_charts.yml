@@ -1,13 +1,13 @@
 name: Publish charts
 
-on:
-  merge_group:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "charts/**"
-    types: [ closed ]
+#on:
+#  merge_group:
+#  pull_request:
+#    branches:
+#      - release_v1
+#    paths:
+#      - "charts/**"
+#    types: [ closed ]
 
 jobs:
   release_chart:
@@ -29,6 +29,6 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
+        uses: helm/chart-releaser-action@v1.7.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

@@ -2,9 +2,9 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [main]
+    branches: [release_v1]
   pull_request:
-    branches: [main]
+    branches: [release_v1]
     paths:
       - '**.go'
   schedule:
