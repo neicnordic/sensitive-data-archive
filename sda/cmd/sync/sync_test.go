@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/ory/dockertest/v3"
@@ -166,11 +165,10 @@ func (suite *SyncTest) TestBuildSyncDatasetJSON() {
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := database.FileInfo{ArchiveChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
-	corrID := uuid.New().String()
 
 	err = db.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(fileInfo, fileID, corrID)
+	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Verified")
 
 	accessions := []string{"ed6af454-d910-49e3-8cda-488a6f246e67"}

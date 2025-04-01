@@ -861,7 +861,7 @@ func (suite *TestSuite) TestSetAccession() {
 	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1015,7 +1015,7 @@ func (suite *TestSuite) TestCreateDataset() {
 	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1094,7 +1094,7 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1216,7 +1216,7 @@ func (suite *TestSuite) TestCreateDataset_WrongUser() {
 	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1980,7 +1980,7 @@ func (suite *TestSuite) TestReVerifyFile() {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
-		if err := Conf.API.DB.SetVerified(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetVerified(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Verified")
 		}
 
@@ -2082,7 +2082,7 @@ func (suite *TestSuite) TestReVerifyDataset() {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
-		if err := Conf.API.DB.SetVerified(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetVerified(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Verified")
 		}
 
