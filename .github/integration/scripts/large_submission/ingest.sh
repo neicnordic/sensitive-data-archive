@@ -87,7 +87,7 @@ until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/ingest | 
     echo "waiting for messages to be processed"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for ingest to compete the work"
+        echo "::error::Time out while waiting for ingest to complete the work"
         exit 1
     fi
     sleep 10
