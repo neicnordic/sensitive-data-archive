@@ -311,7 +311,7 @@ jobs:
         tls: ["true", "false"]
         storage: ["posix", "s3"]
         exclude:
-          - version: "1.30"
+          - version: "1.32"
             tls: "false"
             storage: "posix"
           - version: "1.31"
