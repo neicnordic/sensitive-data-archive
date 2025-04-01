@@ -186,7 +186,7 @@ func main() {
 					log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 				}
 			default:
-				log.Errorln("unexpected ingest message type")
+				log.Errorln("better message needed")
 				if err := delivered.Reject(false); err != nil {
 					log.Errorf("failed to reject message for reason: (%s)", err.Error())
 				}
@@ -319,6 +319,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		}
 	case "":
 		// Catch all for inboxes that doesn't update the DB
+		log.Warnln("ingesting unregisterd file")
 		fileID, err = app.DB.RegisterFile(message.FilePath, message.User)
 		if err != nil {
 			log.Errorf("InsertFile failed, reason: (%s)", err.Error())
@@ -333,13 +334,15 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			return "nack"
 		}
 	default:
+		log.Warnf("unsupported file status: %s", status)
+
 		return "reject"
 	}
 
 	file, err := app.Inbox.NewFileReader(message.FilePath)
 	if err != nil {
 		switch {
-		case strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:"):
+		case (strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:")):
 			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
 			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
 			m, _ := json.Marshal(message)
@@ -361,6 +364,8 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 			return "ack"
 		default:
+			log.Errorf("unexpected eror when opening file for reading: %s", err.Error())
+
 			return "nack"
 		}
 	}
