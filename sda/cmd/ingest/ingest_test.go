@@ -709,3 +709,17 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum(
 
 	assert.NotEqual(suite.T(), dbChecksum, firstDbChecksum)
 }
+func (suite *TestSuite) TestIngestFile_missingFile() {
+	// prepare the DB entries
+	UserName := "test-ingest"
+	corrID := uuid.New().String()
+	basepath := filepath.Dir(suite.filePath)
+
+	message := schema.IngestionTrigger{
+		Type:     "ingest",
+		FilePath: fmt.Sprintf("%s/missing.file.c4gh", basepath),
+		User:     UserName,
+	}
+
+	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+}
