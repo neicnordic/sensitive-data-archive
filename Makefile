@@ -119,7 +119,7 @@ k3d-version-check:
 k3d-create-cluster:
 	@k3d cluster create --k3s-arg "--disable=traefik@server:0" --port "80:80@loadbalancer" --port "443:443@loadbalancer"; \
 	helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace
-k3d-delete-cluster:
+k3d-delete-cluster: k3d-cleanup-all-deployments
 	@k3d cluster delete
 k3d-deploy-dependencies:
 	@bash .github/integration/scripts/charts/dependencies.sh local
@@ -135,3 +135,7 @@ k3d-deploy-sda-posix:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
 k3d-cleanup-all-deployments:
 	@bash .github/integration/scripts/charts/cleanup.sh
+k3d-deploy-all-s3: k3d-import-images k3d-deploy-dependencies k3d-deploy-postgres k3d-deploy-rabbitmq
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3
+k3d-deploy-all-posix: k3d-import-images k3d-deploy-dependencies k3d-deploy-postgres k3d-deploy-rabbitmq
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix

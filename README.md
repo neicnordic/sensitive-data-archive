@@ -218,6 +218,8 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 - make k3d-deploy-sda-s3 - deploy the sda-svc chart with S3 storage without TLS
 - make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage without TLS
 - make k3d-cleanup-all-deployments - Remove all deployed components and dependencies
+- make k3d-deploy-all-s3 - Imports all images and deploys the entire setup using S3 as storage.
+- make k3d-deploy-all-posix - Imports all images and deploys the entire setup using persistent volumes as storage.
 
 #### Bootstrap the dependencies
 
