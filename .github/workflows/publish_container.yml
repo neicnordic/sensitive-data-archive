@@ -10,6 +10,8 @@ on:
       - "**/*.md"
       - "charts/**"
       - "Makefile"
+      - "sda-admin/**"
+      - "tools/*"
     types: [ closed ]
 
 jobs:
@@ -27,11 +29,12 @@ jobs:
         fetch-depth: '0'
     - name: Bump version and push tag
       id: bump_tag
-      uses: anothrNick/github-tag-action@1.70.0
+      uses: anothrNick/github-tag-action@1.71.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         WITH_V: true
         DEFAULT_BUMP: patch
+        TAG_CONTEXT: branch
 
   push_to_registry:
     needs: tag_release
@@ -54,7 +57,7 @@ jobs:
 
       - name: Pull PR containers
         run : |
-          for t in -download -postgres -rabbitmq -sftp-inbox; do
+          for t in -download -postgres -rabbitmq -sftp-inbox -doa; do
             docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}$t
           done
           docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
@@ -84,6 +87,11 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
 
+      - name: Retag PR image for doa
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-doa ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-doa
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-doa
+
   bump_chart_version:
     needs: [tag_release, push_to_registry]
     if: ${{ needs.tag_release.outputs.tag != '' && needs.push_to_registry.result == 'success' }}
@@ -112,7 +120,7 @@ jobs:
         shell: bash
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: Bump chart version

@@ -10,6 +10,7 @@ on:
       - ".github/dependabot.yaml"
       - "charts/**"
       - "Makefile"
+      - "sda-admin/**"
 
 env:
   PR_NUMBER: ${{ github.event.number }}
@@ -104,7 +105,10 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on postgres
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.30.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-postgres
           format: "sarif"
@@ -119,7 +123,10 @@ jobs:
           category: postgres
 
       - name: Run Trivy vulnerability scanner on rabbitmq
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.30.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-rabbitmq
           format: "sarif"
@@ -165,7 +172,10 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on sftp-inbox
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.30.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
           image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-sftp-inbox
           format: "sarif"
@@ -178,6 +188,47 @@ jobs:
         with:
           sarif_file: 'inbox-results.sarif'
           category: sftp-inbox
+
+
+      - name: create maven settings.xml
+        uses: s4u/maven-settings-action@v3.1.0
+        with:
+          servers: |
+            [{
+              "id":"github-fega-norway",
+              "username": "${{github.actor}}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      - name: Copy settings.xml to sda-doa root
+        shell: bash
+        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
+
+      - name: Build container for sda-doa
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sda-doa
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-doa
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-doa
+          labels: |
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner on doa
+        uses: aquasecurity/trivy-action@0.30.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-doa
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: 'inbox-results.sarif'
+          severity: "CRITICAL,HIGH"
 
   rabbitmq:
     needs:
@@ -219,6 +270,35 @@ jobs:
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
 
+  sda-doa:
+    needs:
+      - build_java_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        storage: [s3, posix]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: create maven settings.xml
+        uses: s4u/maven-settings-action@v3.1.0
+        with:
+          servers: |
+            [{
+              "id":"github-fega-norway",
+              "username": "${{github.actor}}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      - name: Copy settings.xml to sda-doa root
+        shell: bash
+        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
+
+      - name: Test sda-doa for ${{ matrix.storage }} storage
+        run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
+
   chart:
     needs:
       - build_go_images
@@ -227,14 +307,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["1.28", "1.29"]
+        version: ["1.32", "1.31"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
         exclude:
-          - version: "1.28"
+          - version: "1.32"
             tls: "false"
             storage: "posix"
-          - version: "1.29"
+          - version: "1.31"
             tls: "false"
             storage: "posix"
     steps:
