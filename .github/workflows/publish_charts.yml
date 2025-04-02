@@ -1,13 +1,13 @@
 name: Publish charts
 
-#on:
-#  merge_group:
-#  pull_request:
-#    branches:
-#      - release_v1
-#    paths:
-#      - "charts/**"
-#    types: [ closed ]
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "charts/**"
+    types: [ closed ]
 
 jobs:
   release_chart:

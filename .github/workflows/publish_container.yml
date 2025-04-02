@@ -1,16 +1,18 @@
-#name: Publish version tag
-#on:
-#  merge_group:
-#  pull_request:
-#    branches:
-#      - release_v1
-#    paths-ignore:
-#      - ".github/**"
-#      - ".gitignore"
-#      - "**/*.md"
-#      - "charts/**"
-#      - "Makefile"
-#    types: [ closed ]
+name: Publish version tag
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ".github/**"
+      - ".gitignore"
+      - "**/*.md"
+      - "charts/**"
+      - "Makefile"
+      - "sda-admin/**"
+      - "tools/*"
+    types: [ closed ]
 
 jobs:
   tag_release:
