@@ -258,7 +258,7 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - ../sda/users.py:/cega/users.py
+      - ../../sda/users.py:/cega/users.py
       - shared:/shared
 
   auth-cega:

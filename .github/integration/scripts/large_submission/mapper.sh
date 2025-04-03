@@ -22,8 +22,7 @@ done
 ## truncate database
 psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
 
-rm /shared/accessions.txt /shared/payload /shared/message.json || true
-touch "/shared/accessions.txt"
+: >"/shared/accessions.txt"
 
 i=1
 while [ $i -le $((submission_size)) ]; do
@@ -34,6 +33,9 @@ while [ $i -le $((submission_size)) ]; do
         echo "register_file failed"
         exit 1
     fi
+
+    # This is only so that the file event logs gets a non null correlation ID.
+    psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'submitted', '$fileID', '$user', '{}');" >/dev/null
 
     accession="urn:uuid:$(uuidgen)"
     resp=$(psql -U postgres -h postgres -d sda -At -c "UPDATE sda.files SET stable_id = '$accession' WHERE id = '$fileID';")
@@ -47,38 +49,20 @@ while [ $i -le $((submission_size)) ]; do
 done
 
 ## map files to dataset
-properties=$(
-    jq -cn \
-        --argjson delivery_mode 2 \
-        --arg content_encoding UTF-8 \
-        --arg content_type application/json \
-        '$ARGS.named'
-)
-
 mapping_payload=$(
     jq -Rrcn \
-        --arg type mapping \
+        --arg user test@dummy.org \
         --arg dataset_id EGAD74900000101 \
         --slurpfile accession_ids /shared/accessions.txt \
-        '$ARGS.named|@base64'
+        '$ARGS.named'
 )
 echo "$mapping_payload" >/shared/payload
 
-mapping_body=$(
-    jq -Rcn \
-        --arg vhost test \
-        --arg name sda \
-        --argjson properties "$properties" \
-        --arg routing_key "mappings" \
-        --arg payload_encoding base64 \
-        --rawfile payload "/shared/payload" \
-        '$ARGS.named'
-)
-echo "$mapping_body" >/shared/message.json
-
-curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
-    -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "@/shared/message.json" >/dev/null
+token="$(cat /shared/token)"
+curl -s -d @/tmp/dataset \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $token" \
+    -X POST http://localhost:8090/dataset/create >/dev/null
 
 RETRY_TIMES=0
 until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/mappings | jq '.messages')" -eq 0 ]; do
