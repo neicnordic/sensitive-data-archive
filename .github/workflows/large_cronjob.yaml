@@ -1,6 +1,10 @@
 name: Big test
 
 on:
+  push:
+    paths:
+      - ".github/integration/scripts/large_submission/*"
+      - ".github/workflows/large_cronjob.yaml"
   schedule:
     - cron: "21 21 * * 6"
   workflow_dispatch:
