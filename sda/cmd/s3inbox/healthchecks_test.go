@@ -9,13 +9,21 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 type HealthcheckTestSuite struct {
-	ProxyTests
+	suite.Suite
+	S3Fakeconf storage.S3Conf // fakeserver
+	S3conf     storage.S3Conf // actual s3 container
+	DBConf     database.DBConf
+	fakeServer *FakeServer
+	MQConf     broker.MQConf
+	messenger  *broker.AMQPBroker
+	database   *database.SDAdb
 }
 
 func TestHealthTestSuite(t *testing.T) {
@@ -23,13 +31,49 @@ func TestHealthTestSuite(t *testing.T) {
 }
 
 func (suite *HealthcheckTestSuite) SetupTest() {
-	// Reuse the setup from Proxy
-	suite.ProxyTests.SetupTest()
+	suite.fakeServer = startFakeServer("9024")
+
+	// Create an s3config for the fake server
+	suite.S3Fakeconf = storage.S3Conf{
+		URL:       "http://127.0.0.1",
+		Port:      9024,
+		AccessKey: "someAccess",
+		SecretKey: "someSecret",
+		Bucket:    "buckbuck",
+		Region:    "us-east-1",
+	}
+
+	// Create a configuration for the fake MQ
+	suite.MQConf = broker.MQConf{
+		Host:     "127.0.0.1",
+		Port:     MQport,
+		User:     "guest",
+		Password: "guest",
+		Vhost:    "/",
+		Exchange: "",
+	}
+
+	suite.messenger = &broker.AMQPBroker{}
+
+	// Create a database configuration for the fake database
+	suite.DBConf = database.DBConf{
+		Host:       "127.0.0.1",
+		Port:       DBport,
+		User:       "postgres",
+		Password:   "rootpasswd",
+		Database:   "sda",
+		CACert:     "",
+		SslMode:    "disable",
+		ClientCert: "",
+		ClientKey:  "",
+	}
+
+	suite.database = &database.SDAdb{}
 }
 
 func (suite *HealthcheckTestSuite) TearDownTest() {
-	// Reuse the teardown from Proxy
-	suite.ProxyTests.TearDownTest()
+	suite.fakeServer.Close()
+	suite.database.Close()
 }
 
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
