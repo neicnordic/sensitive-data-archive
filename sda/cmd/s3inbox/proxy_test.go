@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -20,13 +21,15 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 type ProxyTests struct {
 	suite.Suite
-	S3conf     storage.S3Conf
+	S3Fakeconf storage.S3Conf // fakeserver
+	S3conf     storage.S3Conf // actual s3 container
 	DBConf     database.DBConf
 	fakeServer *FakeServer
 	MQConf     broker.MQConf
@@ -46,11 +49,20 @@ func (suite *ProxyTests) SetupTest() {
 	suite.fakeServer = startFakeServer("9024")
 
 	// Create an s3config for the fake server
-	suite.S3conf = storage.S3Conf{
+	suite.S3Fakeconf = storage.S3Conf{
 		URL:       "http://127.0.0.1",
 		Port:      9024,
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
+		Bucket:    "buckbuck",
+		Region:    "us-east-1",
+	}
+
+	suite.S3conf = storage.S3Conf{
+		URL:       "http://127.0.0.1",
+		Port:      s3Port,
+		AccessKey: "access",
+		SecretKey: "secretKey",
 		Bucket:    "buckbuck",
 		Region:    "us-east-1",
 	}
@@ -125,10 +137,15 @@ func startFakeServer(port string) *FakeServer {
 	if err != nil {
 		panic(fmt.Errorf("can't create mock server for testing: %s", err))
 	}
+	log.Warnf("fake server running")
 	f := FakeServer{}
 	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.pinged = true
-		fmt.Fprint(w, f.resp)
+		log.Warnf("hello fake will return %s", f.resp)
+		if f.resp != "" {
+			log.Warnf("fake writes %s", f.resp)
+			fmt.Fprint(w, f.resp)
+		}
 	})
 	ts := httptest.NewUnstartedServer(foo)
 	ts.Listener.Close()
@@ -173,11 +190,12 @@ func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 
 // nolint:bodyclose
 func (suite *ProxyTests) TestServeHTTP_disallowed() {
-	proxy := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
 	r, _ := http.NewRequest("", "", nil)
 	w := httptest.NewRecorder()
 
+	log.Warnf("using proxy on port %d", suite.S3Fakeconf.Port)
 	// Remove bucket disallowed
 	r.Method = "DELETE"
 	r.URL, _ = url.Parse("/asdf/")
@@ -192,6 +210,7 @@ func (suite *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(suite.T(), 403, w.Result().StatusCode)
 	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore())
 
+	log.Warnf("getting to not allowed stuff")
 	// Policy methods are not allowed
 	w = httptest.NewRecorder()
 	r.Method = "GET"
@@ -225,7 +244,7 @@ func (suite *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(suite.T(), false, suite.fakeServer.PingedAndRestore())
 
 	// Not authorized user get 401 response
-	proxy = NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
+	proxy = NewProxy(suite.S3Fakeconf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
 	w = httptest.NewRecorder()
 	r.Method = "GET"
 	r.URL, _ = url.Parse("/username/file")
@@ -259,7 +278,7 @@ func (suite *ProxyTests) TestServeHTTP_MQConnectionClosed() {
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
-	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// Test that the mq connection will be restored when needed
 	proxy.messenger.Connection.Close()
@@ -277,7 +296,7 @@ func (suite *ProxyTests) TestServeHTTP_MQChannelClosed() {
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
-	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// Test that the mq channel will be restored when needed
 	proxy.messenger.Channel.Close()
@@ -295,7 +314,7 @@ func (suite *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
-	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// Test that the correct status code is returned when mq connection can't be created
 	proxy.messenger.Conf.Port = 123456
@@ -313,7 +332,7 @@ func (suite *ProxyTests) TestServeHTTP_allowed() {
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	database, _ := database.NewSDAdb(suite.DBConf)
-	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// List files works
 	r, err := http.NewRequest("GET", "/dummy/file", nil)
@@ -419,7 +438,7 @@ func (suite *ProxyTests) TestMessageFormatting() {
 	assert.NoError(suite.T(), claims.Set("sub", "user@host.domain"))
 
 	// start proxy that denies everything
-	proxy := NewProxy(suite.S3conf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, &helper.AlwaysDeny{}, suite.messenger, suite.database, new(tls.Config))
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	msg, err := proxy.CreateMessageFromRequest(r, claims)
 	assert.Nil(suite.T(), err)
@@ -451,11 +470,15 @@ func (suite *ProxyTests) TestDatabaseConnection() {
 	assert.NoError(suite.T(), err)
 	defer messenger.Connection.Close()
 	// Start proxy that allows everything
-	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
 	// PUT a file into the system
 	filename := "/dummy/db-test-file"
-	r, _ := http.NewRequest("PUT", filename, nil)
+
+	myString := "Hello, world!"
+	stringReader := strings.NewReader(myString)
+
+	r, _ := http.NewRequest("PUT", filename, stringReader)
 	w := httptest.NewRecorder()
 	suite.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	proxy.allowedResponse(w, r, suite.token)
@@ -502,4 +525,89 @@ func (suite *ProxyTests) TestFormatUploadFilePath() {
 	weirdPath = `dq\sw:*?"<>|\t\sdf!s'(a);w@4&f=+e$,g#[]d%.c4gh`
 	_, err = formatUploadFilePath(weirdPath)
 	assert.EqualError(suite.T(), err, "filepath contains disallowed characters: :, *, ?, \", <, >, |, !, ', (, ), ;, @, &, =, +, $, ,, #, [, ], %")
+}
+
+func (suite *ProxyTests) TestCheckFileExists() {
+	filepath := "somefile"
+	suite.fakeServer.resp = "fileExists!"
+
+	database, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer database.Close()
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer messenger.Connection.Close()
+	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+
+	res, err := proxy.checkFileExists(filepath)
+	assert.True(suite.T(), res)
+	assert.Nil(suite.T(), err)
+}
+
+func (suite *ProxyTests) TestCheckFileExists2() {
+	database, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer database.Close()
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer messenger.Connection.Close()
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
+
+	filepath := "/dummy/file"
+	r, err := http.NewRequest("POST", filepath, nil)
+	assert.NoError(suite.T(), err)
+	w := httptest.NewRecorder()
+	r.Method = "PUT"
+	proxy.allowedResponse(w, r, suite.token)
+	assert.Equal(suite.T(), 200, w.Result().StatusCode)
+	res, err := proxy.checkFileExists(filepath)
+	assert.True(suite.T(), res)
+	assert.NotNil(suite.T(), err)
+	/*
+		filePath := "existingFile"
+		proxy.client.open(filePath, 0x00000001) // readonly mode toPflags(os.O_RDONLY))
+		file, err := proxy.client.Open(filePath)
+		res, err := proxy.checkFileExists(filePath)
+
+		assert.True(suite.T(), res)
+		assert.NotNil(suite.T(), err)
+	*/
+
+}
+
+func (suite *ProxyTests) TestCheckFileDoNotExists() {
+	database, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer database.Close()
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer messenger.Connection.Close()
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+
+	res, err := proxy.checkFileExists("nonexistingfilepath")
+	assert.False(suite.T(), res)
+	assert.Nil(suite.T(), err)
+
+}
+
+func (suite *ProxyTests) TestCheckFileExistsUnresponsive() {
+	database, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer database.Close()
+	messenger, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer messenger.Connection.Close()
+	s3conf := storage.S3Conf{
+		URL:       "http://localhost:40211",
+		AccessKey: "someAccess",
+		SecretKey: "someSecret",
+		Bucket:    "buckbuck",
+		Region:    "us-east-1",
+	}
+	proxy := NewProxy(s3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+
+	res, err := proxy.checkFileExists("nonexistingfilepath")
+	assert.False(suite.T(), res)
+	assert.NotNil(suite.T(), err)
+
 }

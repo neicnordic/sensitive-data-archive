@@ -33,7 +33,7 @@ func (suite *HealthcheckTestSuite) TearDownTest() {
 }
 
 func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
 	url, _ := p.getS3ReadyPath()
 	assert.NoError(suite.T(), p.httpsGetCheck(url))
@@ -41,7 +41,7 @@ func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
 }
 
 func (suite *HealthcheckTestSuite) TestS3URL() {
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
 
 	_, err := p.getS3ReadyPath()
 	assert.NoError(suite.T(), err)
@@ -57,7 +57,7 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	database, _ := database.NewSDAdb(suite.DBConf)
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
 
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
@@ -72,7 +72,7 @@ func (suite *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	database, _ := database.NewSDAdb(suite.DBConf)
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
 
 	// Check that 200 is reported
 	w := httptest.NewRecorder()
@@ -95,7 +95,7 @@ func (suite *HealthcheckTestSuite) TestNoS3Healthchecks() {
 	database, _ := database.NewSDAdb(suite.DBConf)
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
 
 	// S3 unavailable, check that 503 is reported
 	w := httptest.NewRecorder()
@@ -111,7 +111,7 @@ func (suite *HealthcheckTestSuite) TestNoMQHealthchecks() {
 	database, _ := database.NewSDAdb(suite.DBConf)
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3conf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
 
 	// Messenger unavailable, check that 503 is reported
 	p.messenger.Conf.Port = 123456
