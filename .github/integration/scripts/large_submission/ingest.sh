@@ -13,7 +13,7 @@ for t in curl jq postgresql-client uuid-runtime; do
     fi
 done
 
-submission_size=100000
+submission_size=60000
 
 ## empty all queues ##
 for q in accession archived backup completed inbox ingest mappings verified; do
