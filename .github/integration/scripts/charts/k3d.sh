@@ -16,3 +16,6 @@ sudo mv ./kubectl /usr/local/bin/kubectl
 k3d cluster create sda --image=rancher/k3s:"$k8s"-k3s1 --wait --timeout 10m
 k3d kubeconfig merge sda --kubeconfig-switch-context
 mkdir -p ~/.kube/ && cp ~/.config/kubeconfig-sda.yaml ~/.kube/config
+
+docker build -t ghcr.io/neicnordic/sensitive-data-archive:oidc -f .github/integration/scripts/charts/Dockerfile .
+k3d image import ghcr.io/neicnordic/sensitive-data-archive:oidc -c sda

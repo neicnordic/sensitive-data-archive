@@ -165,7 +165,7 @@ def _generate_token() -> Tuple:
 async def fixed_response(request: web.Request) -> web.Response:
     global HTTP_PROTOCOL
     WELL_KNOWN = {
-        "issuer": f"{HTTP_PROTOCOL}://oidc:8080",
+        "issuer": f"{HTTP_PROTOCOL}://oidc:8080/",
         "authorization_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/authorize",
         "registration_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/register",
         "token_endpoint": f"{HTTP_PROTOCOL}://oidc:8080/token",

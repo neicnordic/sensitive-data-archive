@@ -155,6 +155,8 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.global.log.level | quote }}
     {{- end }}
+        - name: SCHEMA_TYPE
+          value: {{ default "federated" .Values.global.schemaType }}
     {{- if .Values.global.api.jwtPubKeyName }}
         - name: SERVER_JWTPUBKEYPATH
           value: {{ include "jwtPath" . }}
