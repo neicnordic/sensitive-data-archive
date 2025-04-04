@@ -36,6 +36,8 @@ fi
 
 stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')
 
+token="$(cat /shared/token)"
+
 i=1
 while [ $i -le $((submission_size)) ]; do
     user="test@dummy.org"
@@ -46,37 +48,21 @@ while [ $i -le $((submission_size)) ]; do
         exit 1
     fi
 
-    properties=$(
-        jq -c -n \
-            --argjson delivery_mode 2 \
-            --arg correlation_id "$fileID" \
-            --arg content_encoding UTF-8 \
-            --arg content_type application/json \
-            '$ARGS.named'
-    )
+    # the API assumed that a file has a correlation ID so this needs to be done for now.
+    psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'submitted', '$fileID', '$user', '{}');" >/dev/null
 
     ingest_payload=$(
         jq -r -c -n \
             --arg type ingest \
             --arg user "$user" \
             --arg filepath "$inbox_path" \
-            '$ARGS.named|@base64'
-    )
-
-    ingest_body=$(
-        jq -c -n \
-            --arg vhost sda \
-            --arg name sda \
-            --argjson properties "$properties" \
-            --arg routing_key "ingest" \
-            --arg payload_encoding base64 \
-            --arg payload "$ingest_payload" \
             '$ARGS.named'
     )
 
-    curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
-        -H 'Content-Type: application/json;charset=UTF-8' \
-        -d "$ingest_body" >/dev/null
+    curl -s -X POST "http://localhost:8090/file/ingest" \
+        -H "Content-Type: application/json;charset=UTF-8" \
+        -H "Authorization: Bearer $token" \
+        -d "$ingest_payload" >/dev/null
 
     i=$((i + 1))
 done
