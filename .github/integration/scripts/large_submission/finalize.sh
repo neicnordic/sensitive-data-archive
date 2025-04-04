@@ -24,6 +24,8 @@ psql -U postgres -h postgres -d sda -At -c "TRUNCATE TABLE sda.files CASCADE;"
 
 stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')
 
+token="$(cat /shared/token)"
+
 i=1
 while [ $i -le $((submission_size)) ]; do
     user="test@dummy.org"
@@ -40,14 +42,6 @@ while [ $i -le $((submission_size)) ]; do
     fi
     psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'verified', '$fileID', 'test-user', '{\"uploaded\": \"message\"}');" >/dev/null
 
-    properties=$(
-        jq -c -n \
-            --argjson delivery_mode 2 \
-            --arg correlation_id "$fileID" \
-            --arg content_encoding UTF-8 \
-            --arg content_type application/json \
-            '$ARGS.named'
-    )
 
     DEC_SHA=$(echo $i | sha256sum | cut -d' ' -f 1)
     decrypted_checksums=$(
@@ -64,23 +58,13 @@ while [ $i -le $((submission_size)) ]; do
             --arg filepath "$inbox_path" \
             --arg accession_id "$accession_id" \
             --argjson decrypted_checksums "$decrypted_checksums" \
-            '$ARGS.named|@base64'
-    )
-
-    accession_body=$(
-        jq -c -n \
-            --arg vhost sda \
-            --arg name sda \
-            --argjson properties "$properties" \
-            --arg routing_key "accession" \
-            --arg payload_encoding base64 \
-            --arg payload "$accession_payload" \
             '$ARGS.named'
     )
 
-    curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    curl -s -X POST "http://localhost:8090/file/accession" \
         -H 'Content-Type: application/json;charset=UTF-8' \
-        -d "$accession_body" >/dev/null
+        -H "Authorization: Bearer $token" \
+        -d "$accession_payload" >/dev/null
 
     i=$((i + 1))
 done
