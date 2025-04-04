@@ -21,6 +21,7 @@ import (
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
@@ -156,8 +157,9 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		return
 	}
 
-	// register file in database if it's the start of an upload
+	// if this is an upload request
 	if p.detectRequestType(r) == Put && p.fileIds[r.URL.Path] == "" {
+		// register file in database
 		log.Debugf("registering file %v in the database", r.URL.Path)
 		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
 		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
@@ -166,6 +168,16 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 			return
 		}
+
+		// check if the file already exists, in that case send an overwrite message,
+		// so that the FEGA portal is informed that a new version of the file exists.
+		err = p.sendMessageOnOverwrite(r, rawFilepath, token)
+		if err != nil {
+			p.internalServerError(w, r, err.Error())
+
+			return
+		}
+
 	}
 
 	log.Debug("Forwarding to backend")
@@ -285,18 +297,21 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 
 func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
 	if response.StatusCode != 200 {
+
 		return false
 	}
 
 	switch req.Method {
 	case http.MethodPut:
 		if !strings.Contains(req.URL.String(), "partNumber") {
+
 			return true
 		}
 
 		return false
 	case http.MethodPost:
 		if strings.Contains(req.URL.String(), "uploadId") {
+
 			return true
 		}
 
@@ -509,6 +524,66 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
 
+}
+
+// checkFileExists makes a request to the S3 to check whether the file already
+// is uploaded. Returns a bool indicating whether the file was found.
+func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
+	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
+	client, err := storage.NewS3Client(p.s3)
+	if err != nil {
+		return false, fmt.Errorf("could not connect to s3: %v", err)
+	}
+
+	result, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: &p.s3.Bucket,
+		Key:    &filePath,
+	})
+
+	if err != nil && strings.Contains(err.Error(), "StatusCode: 404") {
+		log.Debugf("s3 could not find file %s: %s", fullPath, err.Error())
+
+		return false, nil
+	}
+
+	return result != nil, err
+}
+
+func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, token jwt.Token) error {
+
+	exist, err := p.checkFileExists(r.URL.Path)
+	if err != nil {
+
+		return err
+	}
+	if exist {
+		log.Error("create rewrite message")
+
+		username := token.Subject()
+		msg := schema.InboxRemove{
+			User:      username,
+			FilePath:  rawFilepath,
+			Operation: "remove",
+		}
+
+		privateClaims := token.PrivateClaims()
+		log.Info("user ", msg.User, " with pilot ", privateClaims["pilot"], " will overwrite file ", msg.FilePath, " at ", time.Now())
+
+		jsonMessage, err := json.Marshal(msg)
+		if err != nil {
+
+			return err
+		}
+
+		err = p.checkAndSendMessage(jsonMessage, r)
+		if err != nil {
+
+			return err
+		}
+
+	}
+
+	return nil
 }
 
 // FormatUploadFilePath ensures that path separators are "/", and returns error if the
