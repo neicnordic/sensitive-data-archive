@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
@@ -12,6 +13,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
@@ -119,6 +125,33 @@ func (suite *ProxyTests) SetupTest() {
 	if err != nil {
 		suite.T().FailNow()
 	}
+
+	s3cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(suite.S3conf.AccessKey, suite.S3conf.SecretKey, "")))
+	if err != nil {
+		suite.FailNow("bad")
+	}
+	s3Client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(fmt.Sprintf("%s:%d", suite.S3conf.URL, suite.S3conf.Port))
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(suite.S3conf.URL, "http:")
+			o.Region = suite.S3conf.Region
+			o.UsePathStyle = true
+		},
+	)
+	_, _ = s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: aws.String(suite.S3conf.Bucket)})
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Body:            strings.NewReader("This is a test"),
+		Bucket:          aws.String(suite.S3conf.Bucket),
+		Key:             aws.String("/dummy/file"),
+		ContentEncoding: aws.String("application/octet-stream"),
+	})
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), output, output)
 }
 
 func (suite *ProxyTests) TearDownTest() {
@@ -544,7 +577,7 @@ func (suite *ProxyTests) TestCheckFileExists() {
 	assert.Nil(suite.T(), err)
 }
 
-func (suite *ProxyTests) TestCheckFileExists2() {
+func (suite *ProxyTests) TestCheckFileExists_realBackend() {
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
@@ -553,29 +586,12 @@ func (suite *ProxyTests) TestCheckFileExists2() {
 	defer messenger.Connection.Close()
 	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), messenger, database, new(tls.Config))
 
-	filepath := "/dummy/file"
-	r, err := http.NewRequest("POST", filepath, nil)
-	assert.NoError(suite.T(), err)
-	w := httptest.NewRecorder()
-	r.Method = "PUT"
-	proxy.allowedResponse(w, r, suite.token)
-	assert.Equal(suite.T(), 200, w.Result().StatusCode)
-	res, err := proxy.checkFileExists(filepath)
+	res, err := proxy.checkFileExists("/dummy/file")
 	assert.True(suite.T(), res)
-	assert.NotNil(suite.T(), err)
-	/*
-		filePath := "existingFile"
-		proxy.client.open(filePath, 0x00000001) // readonly mode toPflags(os.O_RDONLY))
-		file, err := proxy.client.Open(filePath)
-		res, err := proxy.checkFileExists(filePath)
-
-		assert.True(suite.T(), res)
-		assert.NotNil(suite.T(), err)
-	*/
-
+	assert.Nil(suite.T(), err)
 }
 
-func (suite *ProxyTests) TestCheckFileDoNotExists() {
+func (suite *ProxyTests) TestCheckFileExists_nonExistingFile() {
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
@@ -586,11 +602,12 @@ func (suite *ProxyTests) TestCheckFileDoNotExists() {
 
 	res, err := proxy.checkFileExists("nonexistingfilepath")
 	assert.False(suite.T(), res)
-	assert.Nil(suite.T(), err)
-
+	assert.NotNil(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "NotFound")
 }
 
-func (suite *ProxyTests) TestCheckFileExistsUnresponsive() {
+func (suite *ProxyTests) TestCheckFileExists_unresponsive() {
+	suite.fakeServer.resp = "fileExists!"
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
@@ -609,5 +626,4 @@ func (suite *ProxyTests) TestCheckFileExistsUnresponsive() {
 	res, err := proxy.checkFileExists("nonexistingfilepath")
 	assert.False(suite.T(), res)
 	assert.NotNil(suite.T(), err)
-
 }
