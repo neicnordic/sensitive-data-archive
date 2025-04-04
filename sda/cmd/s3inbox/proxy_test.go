@@ -561,23 +561,6 @@ func (suite *ProxyTests) TestFormatUploadFilePath() {
 }
 
 func (suite *ProxyTests) TestCheckFileExists() {
-	filepath := "somefile"
-	suite.fakeServer.resp = "fileExists!"
-
-	database, err := database.NewSDAdb(suite.DBConf)
-	assert.NoError(suite.T(), err)
-	defer database.Close()
-	messenger, err := broker.NewMQ(suite.MQConf)
-	assert.NoError(suite.T(), err)
-	defer messenger.Connection.Close()
-	proxy := NewProxy(suite.S3Fakeconf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
-
-	res, err := proxy.checkFileExists(filepath)
-	assert.True(suite.T(), res)
-	assert.Nil(suite.T(), err)
-}
-
-func (suite *ProxyTests) TestCheckFileExists_realBackend() {
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
@@ -592,6 +575,8 @@ func (suite *ProxyTests) TestCheckFileExists_realBackend() {
 }
 
 func (suite *ProxyTests) TestCheckFileExists_nonExistingFile() {
+	// Check that looking for a non-existing file gives (false, nil)
+	// from checkFileExists
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
@@ -602,28 +587,33 @@ func (suite *ProxyTests) TestCheckFileExists_nonExistingFile() {
 
 	res, err := proxy.checkFileExists("nonexistingfilepath")
 	assert.False(suite.T(), res)
-	assert.NotNil(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), "NotFound")
+	assert.Nil(suite.T(), err)
 }
 
 func (suite *ProxyTests) TestCheckFileExists_unresponsive() {
-	suite.fakeServer.resp = "fileExists!"
+	// Check that errors when connecting to S3 are forwarded
+	// and that checkFileExists return (false, someError)
 	database, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
 	defer database.Close()
 	messenger, err := broker.NewMQ(suite.MQConf)
 	assert.NoError(suite.T(), err)
 	defer messenger.Connection.Close()
-	s3conf := storage.S3Conf{
-		URL:       "http://localhost:40211",
-		AccessKey: "someAccess",
-		SecretKey: "someSecret",
-		Bucket:    "buckbuck",
-		Region:    "us-east-1",
-	}
-	proxy := NewProxy(s3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+
+	// Unaccessible S3 (wrong port)
+	proxy := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	proxy.s3.Port = 1111
 
 	res, err := proxy.checkFileExists("nonexistingfilepath")
 	assert.False(suite.T(), res)
 	assert.NotNil(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "S3: HeadObject")
+
+	// Bad access key gives 403
+	proxy.s3.Port = suite.S3conf.Port
+	proxy.s3.AccessKey = "invaild"
+	res, err = proxy.checkFileExists("nonexistingfilepath")
+	assert.False(suite.T(), res)
+	assert.NotNil(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "StatusCode: 403")
 }
