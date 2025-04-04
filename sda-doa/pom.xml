@@ -13,6 +13,8 @@
     <name>localega-doa</name>
     <description>LocalEGA Data Out API</description>
 
+
+
     <properties>
         <java.version>21</java.version>
     </properties>
