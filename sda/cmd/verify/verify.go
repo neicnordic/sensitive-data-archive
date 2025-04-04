@@ -257,7 +257,7 @@ func main() {
 
 			// At this point we should do checksum comparison
 
-			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
+			file.ArchiveChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
 			switch {
@@ -289,8 +289,8 @@ func main() {
 					continue
 				}
 
-				if file.Checksum != message.EncryptedChecksums[0].Value {
-					log.Errorf("encrypted checksum don't match for file: %s, expected %s, got %s", message.FilePath, message.EncryptedChecksums[0].Value, file.Checksum)
+				if file.ArchiveChecksum != message.EncryptedChecksums[0].Value {
+					log.Errorf("encrypted checksum don't match for file: %s, expected %s, got %s", message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
 					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, reason: (%v)", err)
 						if err := delivered.Nack(false, true); err != nil {
@@ -383,8 +383,17 @@ func main() {
 					}
 				}
 
-				if err := db.SetVerified(file, message.FileID, delivered.CorrelationId); err != nil {
+				if err := db.SetVerified(file, message.FileID); err != nil {
 					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+					log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
