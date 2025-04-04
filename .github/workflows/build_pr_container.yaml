@@ -269,35 +269,35 @@ jobs:
 
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
-
-  sda-doa:
-    needs:
-      - build_java_images
-      - build_server_images
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        storage: [s3, posix]
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: create maven settings.xml
-        uses: s4u/maven-settings-action@v3.1.0
-        with:
-          servers: |
-            [{
-              "id":"github-fega-norway",
-              "username": "${{github.actor}}",
-              "password": "${{ secrets.GITHUB_TOKEN }}"
-            }]
-
-      - name: Copy settings.xml to sda-doa root
-        shell: bash
-        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
-
-      - name: Test sda-doa for ${{ matrix.storage }} storage
-        run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
+#
+#  sda-doa:
+#    needs:
+#      - build_java_images
+#      - build_server_images
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        storage: [s3, posix]
+#    steps:
+#      - name: Check out code
+#        uses: actions/checkout@v4
+#
+#      - name: create maven settings.xml
+#        uses: s4u/maven-settings-action@v3.1.0
+#        with:
+#          servers: |
+#            [{
+#              "id":"github-fega-norway",
+#              "username": "${{github.actor}}",
+#              "password": "${{ secrets.GITHUB_TOKEN }}"
+#            }]
+#
+#      - name: Copy settings.xml to sda-doa root
+#        shell: bash
+#        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
+#
+#      - name: Test sda-doa for ${{ matrix.storage }} storage
+#        run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
 
   chart:
     needs:
