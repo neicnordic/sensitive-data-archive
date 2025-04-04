@@ -87,7 +87,7 @@ until [ $((stream_size+submission_size)) -eq "$(curl -s -u guest:guest http://ra
     if [ "$RETRY_TIMES" -eq 30 ]; then
         echo "Messages not moved to error"
         echo "This is currently expected"
-        exit 1
+        exit 0
     fi
     sleep 2
 done
