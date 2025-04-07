@@ -646,6 +646,11 @@ func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
 		return err
 	}
 
+	if err := p.database.DB.Ping(); err != nil {
+		p.database.Close()
+		_ = p.database.Connect()
+	}
+
 	const setObjectSize = "UPDATE sda.files set submission_file_size = $1 where id = $2;"
 	_, err = p.database.DB.Exec(setObjectSize, *o.ContentLength, fileID)
 
