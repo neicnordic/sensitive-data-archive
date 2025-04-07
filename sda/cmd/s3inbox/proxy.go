@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
@@ -623,4 +625,29 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 		// errors are logged but otherwised ignored
 		log.Error(err)
 	}
+}
+
+func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
+	s3cfg, _ := config.LoadDefaultConfig(context.TODO(), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(p.s3.AccessKey, p.s3.SecretKey, "")))
+	client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(p.s3.URL, "http:")
+			o.Region = p.s3.Region
+			o.UsePathStyle = true
+		},
+	)
+	o, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: &p.s3.Bucket,
+		Key:    &path,
+	})
+	if err != nil {
+		return err
+	}
+
+	const setObjectSize = "UPDATE sda.files set submission_file_size = $1 where id = $2;"
+	_, err = p.database.DB.Exec(setObjectSize, *o.ContentLength, fileID)
+
+	return err
 }
