@@ -552,7 +552,6 @@ func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
 func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, token jwt.Token) error {
 	exist, err := p.checkFileExists(r.URL.Path)
 	if err != nil {
-
 		return err
 	}
 	if exist {
@@ -568,13 +567,11 @@ func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, toke
 
 		jsonMessage, err := json.Marshal(msg)
 		if err != nil {
-
 			return err
 		}
 
 		err = p.checkAndSendMessage(jsonMessage, r)
 		if err != nil {
-
 			return err
 		}
 	}
