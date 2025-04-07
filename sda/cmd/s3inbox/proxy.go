@@ -550,15 +550,12 @@ func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
 }
 
 func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, token jwt.Token) error {
-
 	exist, err := p.checkFileExists(r.URL.Path)
 	if err != nil {
 
 		return err
 	}
 	if exist {
-		log.Error("create rewrite message")
-
 		username := token.Subject()
 		msg := schema.InboxRemove{
 			User:      username,
@@ -580,7 +577,6 @@ func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, toke
 
 			return err
 		}
-
 	}
 
 	return nil
