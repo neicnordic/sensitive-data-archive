@@ -614,3 +614,68 @@ func (suite *ProxyTests) TestCheckFileExists_unresponsive() {
 	assert.NotNil(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "StatusCode: 403")
 }
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer db.Close()
+
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	assert.NoError(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+
+	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
+	var objectSize int64
+	assert.NoError(suite.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
+	assert.Equal(suite.T(), int64(14), objectSize)
+}
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	db.Close()
+	assert.NoError(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+}
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer db.Close()
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	p.s3.AccessKey = "badKey"
+	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+
+	p.s3.Port = 1234
+	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+}
