@@ -38,11 +38,11 @@ type Proxy struct {
 
 // The Event struct
 type Event struct {
-	Operation string        `json:"operation"`
-	Username  string        `json:"user"`
-	Filepath  string        `json:"filepath"`
-	Filesize  int64         `json:"filesize"`
-	Checksum  []interface{} `json:"encrypted_checksums"`
+	Operation string `json:"operation"`
+	Username  string `json:"user"`
+	Filepath  string `json:"filepath"`
+	Filesize  int64  `json:"filesize"`
+	Checksum  []any  `json:"encrypted_checksums"`
 }
 
 // Checksum used in the message
@@ -75,11 +75,11 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
-	tr := &http.Transport{TLSClientConfig: tls}
+func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-	return &Proxy{s3conf, auth, messenger, database, client, make(map[string]string)}
+	return &Proxy{s3conf, auth, messenger, db, client, make(map[string]string)}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +478,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 	event.Username = claims.Subject()
 	checksum.Type = "sha256"
-	event.Checksum = []interface{}{checksum}
+	event.Checksum = []any{checksum}
 	privateClaims := claims.PrivateClaims()
 	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
 
@@ -508,7 +508,6 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
-
 }
 
 // FormatUploadFilePath ensures that path separators are "/", and returns error if the

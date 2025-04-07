@@ -34,21 +34,21 @@ func main() {
 		}
 	}()
 
-	Conf, err := config.NewConfig("s3inbox")
+	conf, err := config.NewConfig("s3inbox")
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
 
-	tlsProxy, err := config.TLSConfigProxy(Conf)
+	tlsProxy, err := config.TLSConfigProxy(conf)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
 
-	sdaDB, err := database.NewSDAdb(Conf.Database)
+	sdaDB, err := database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -62,21 +62,21 @@ func main() {
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 
-	s3, err := storage.NewS3Client(Conf.Inbox.S3)
+	s3, err := storage.NewS3Client(conf.Inbox.S3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
 
-	err = storage.CheckS3Bucket(Conf.Inbox.S3.Bucket, s3)
+	err = storage.CheckS3Bucket(conf.Inbox.S3.Bucket, s3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
 
-	messenger, err := broker.NewMQ(Conf.Broker)
+	messenger, err := broker.NewMQ(conf.Broker)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -93,20 +93,20 @@ func main() {
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 	// Load keys for JWT verification
 	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
+		if err := auth.FetchJwtPubKeyURL(conf.Server.Jwtpubkeyurl); err != nil {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeyurl, err)
 		}
 	}
-	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
-			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
+	if conf.Server.Jwtpubkeypath != "" {
+		if err := auth.ReadJwtPubKeyPath(conf.Server.Jwtpubkeypath); err != nil {
+			log.Panicf("Error while getting key %s: %v", conf.Server.Jwtpubkeypath, err)
 		}
 	}
-	mux := mux.NewRouter()
-	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
-	mux.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
-	mux.HandleFunc("/health", proxy.CheckHealth)
-	mux.PathPrefix("/").Handler(proxy)
+	m := mux.NewRouter()
+	proxy := NewProxy(conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
+	m.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
+	m.HandleFunc("/health", proxy.CheckHealth)
+	m.PathPrefix("/").Handler(proxy)
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -114,11 +114,11 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
-		Handler:           mux,
+		Handler:           m,
 	}
 
-	if Conf.Server.Cert != "" && Conf.Server.Key != "" {
-		if err := server.ListenAndServeTLS(Conf.Server.Cert, Conf.Server.Key); err != nil {
+	if conf.Server.Cert != "" && conf.Server.Key != "" {
+		if err := server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key); err != nil {
 			panic(err)
 		}
 	} else {

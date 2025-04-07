@@ -93,7 +93,7 @@ func getUser(queue string, orgMsg []byte) string {
 		_ = json.Unmarshal(orgMsg, &notify)
 		orgMsg, _ := base64.StdEncoding.DecodeString(notify.OriginalMessage.(string))
 
-		var message map[string]interface{}
+		var message map[string]any
 		_ = json.Unmarshal(orgMsg, &message)
 
 		return fmt.Sprint(message["user"])

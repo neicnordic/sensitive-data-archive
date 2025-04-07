@@ -15,6 +15,6 @@ func TestConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (suite *TestSuite) SetupTest() {
+func (ts *TestSuite) SetupTest() {
 	viper.Set("log.level", "debug")
 }
