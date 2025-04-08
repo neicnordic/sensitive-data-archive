@@ -186,6 +186,7 @@ func main() {
 					log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 				}
 			default:
+				// will catch `reject`s, failures that should not be requeued.
 				if err := delivered.Reject(false); err != nil {
 					log.Errorf("failed to reject message for reason: (%s)", err.Error())
 				}
@@ -401,7 +402,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	for bytesRead < fileSize {
 		i, _ := io.ReadFull(file, readBuffer)
 		if i == 0 {
-			log.Debugln("this should not happen")
+			log.Errorln("readBuffer returned 0 bytes, this should not happen")
 
 			return "reject"
 		}
