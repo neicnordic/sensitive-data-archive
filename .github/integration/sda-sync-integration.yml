@@ -158,6 +158,8 @@ services:
     build:
       context: ../../rabbitmq
     container_name: rabbitmq
+    environment:
+      - BP_SYNC=true
     healthcheck:
       test:
         [
@@ -344,6 +346,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
+      - BROKER_HOST=rabbitmq
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
       - BROKER_QUEUE=sync
@@ -351,7 +354,7 @@ services:
       - DB_USER=sync
     restart: always
     volumes:
-      - ./sda/config.yaml:/config.yaml
+      - ./sda/sync-config.yaml:/config.yaml
       - shared:/shared
 
   sync-api:
@@ -364,14 +367,15 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
+      - BROKER_HOST=rabbitmq
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_EXCHANGE=sda.dead
+      - BROKER_EXCHANGE=sda
     ports:
       - "18080:8080"
     restart: always
     volumes:
-      - ./sda/config.yaml:/config.yaml
+      - ./sda/sync-config.yaml:/config.yaml
 
   sync-ctrl:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -381,8 +385,8 @@ services:
       credentials:
         condition: service_completed_successfully
       postgres:
-      rabbitmq:
         condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     environment:
       - BROKER_PASSWORD=sync
