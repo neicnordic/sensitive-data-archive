@@ -33,13 +33,9 @@ done
 ## reupload a file under a different name
 s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/NB12878.bam.c4gh
 
-## reupload a file with the same name
-s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/
-
-
 echo "waiting for upload to complete"
 RETRY_TIMES=0
-until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 6 ]; do
+until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 5 ]; do
     echo "waiting for upload to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -48,6 +44,23 @@ until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messag
     fi
     sleep 2
 done
+
+## reupload a file with the same name
+s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/
+
+## expect 2 new messages, one for deletion of the overwritten file, one for the new upload
+echo "waiting for re-upload to complete"
+RETRY_TIMES=0
+until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messages_ready"')" -eq 7 ]; do
+    echo "waiting for re-upload to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for re-upload to complete"
+        exit 1
+    fi
+    sleep 2
+done
+
 
 num_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.files;")
 if [ "$num_rows" -ne 5 ]; then
