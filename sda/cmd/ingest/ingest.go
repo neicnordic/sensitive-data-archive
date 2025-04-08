@@ -186,7 +186,6 @@ func main() {
 					log.Errorf("Failed to Nack message, reason: (%s)", err.Error())
 				}
 			default:
-				log.Errorln("better message needed")
 				if err := delivered.Reject(false); err != nil {
 					log.Errorf("failed to reject message for reason: (%s)", err.Error())
 				}
@@ -200,7 +199,7 @@ func main() {
 func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrigger) string {
 	fileUUID, err := app.DB.GetFileID(correlationID)
 	if err != nil {
-		log.Errorf("failed to get ID for file from message: %s, reason: %s", correlationID, err.Error())
+		log.Errorf("failed to get ID for file from message (correlationID: %s), reason: %s", correlationID, err.Error())
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			return "reject"
 		}
