@@ -2,11 +2,11 @@ package no.uio.ifi.localega.doa.services;
 
 import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.localega.doa.dto.File;
+import no.uio.ifi.localega.doa.model.Dataset;
 import no.uio.ifi.localega.doa.model.DatasetEventLog;
+import no.uio.ifi.localega.doa.model.DatasetReferences;
 import no.uio.ifi.localega.doa.model.LEGADataset;
-import no.uio.ifi.localega.doa.repositories.DatasetEventLogRepository;
-import no.uio.ifi.localega.doa.repositories.DatasetRepository;
-import no.uio.ifi.localega.doa.repositories.FileRepository;
+import no.uio.ifi.localega.doa.repositories.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +31,12 @@ public class MetadataService {
 
     @Autowired
     private DatasetEventLogRepository datasetEventLogRepository;
+
+    @Autowired
+    private DatasetReferencesRepository datasetReferencesRepository;
+
+    @Autowired
+    private DatasetsRepository datasetsRepository;
 
     /**
      * Returns collection of dataset IDs present in the databse.
@@ -86,6 +92,15 @@ public class MetadataService {
     public DatasetEventLog findLatestByDatasetId(String datasetId) {
         Optional<DatasetEventLog> optionalDatasetEventLog = datasetEventLogRepository.findFirstByDatasetIdOrderByEventDateDesc(datasetId);
         return optionalDatasetEventLog.orElse(null);
+    }
+
+    public DatasetReferences findByReferenceId(String referenceId) {
+        Optional<DatasetReferences> optionalDatasetReferences = Optional.ofNullable(datasetReferencesRepository.findByReferenceId(referenceId));
+        return optionalDatasetReferences.orElse(null);
+    }
+
+    public Dataset getDataset(Integer id) {
+        return datasetsRepository.findById(id).orElse(null);
     }
 
 }

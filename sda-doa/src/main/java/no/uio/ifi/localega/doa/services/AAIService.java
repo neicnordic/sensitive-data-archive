@@ -67,7 +67,7 @@ public class AAIService {
                 .collect(Collectors.toList());
 
         if (CollectionUtils.isEmpty(controlledAccessGrantsVisas)) {
-            log.info("Unauthorized access attempt: user doesn't have any valid visas. Access token: {}", accessToken);
+            log.info("Unauthorized access attempt: user doesn't have any valid visas.");
         }
 
         String subject = controlledAccessGrantsVisas.stream().findFirst().orElseThrow(RuntimeException::new).getSub();
