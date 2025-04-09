@@ -76,27 +76,52 @@ CONFIGFILE=config_local.yaml go run cmd/ingest/ingest.go
 
 - Check if the `ingest` service works as expected by following these steps
 
-```sh
-# create a test file
-seq 10 > /tmp/t1.txt
+    - Create a test file
 
-# update the s3cmd config file
-sed -i '/host_/s/s3inbox:8000/localhost:18000/g' /tmp/shared/s3cfg
+        ```sh
+        seq 10 > /tmp/t1.txt
+        ```
 
-# upload /tmp/t1.txt to s3inbox by sda-cli
-sda-cli -config /tmp/shared/s3cfg upload -encrypt-with-key /tmp/shared/c4gh.pub.pem /tmp/t1.txt
+    - Download the s3cmd config  file (`s3cmd-inbox.conf`) by logging to http://localhost:8801 with the admin user. After that update the config file by running
 
-# use sda-admin to check if t1.txt has been uploaded
-export API_HOST=http://localhost:8090
-export ACCESS_TOKEN=$(curl -s -k http://localhost:8080/tokens | jq -r '.[0]') 
-sda-admin file list -user test@dummy.org # file test_dummy.org/t1.txt.c4gh should have fileStatus 'uploaded'
+        ```sh
+        sed -i '/host_/s/inbox:8000/localhost:18000/g' s3cmd-inbox.conf
+        sed -i 's/use_https = True/use_https = False/g' s3cmd-inbox.conf
+        ```
 
-# register the Crypt4GH key
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /tmp/shared/c4gh.pub.pem)"'", "description": "pubkey"}' http://localhost:8090/c4gh-keys/add
+    - Upload the test file to S3inbox by `sda-cli`
 
-# use sda-admin to ingest the file t1.txt
-sda-admin file ingest -filepath test_dummy.org/t1.txt.c4gh -user test@dummy.org  
+        ```sh
+        sda-cli -config s3cmd-inbox.conf upload -encrypt-with-key /tmp/shared/c4gh.pub.pem /tmp/t1.txt
+        ```
 
-# verify that t1.txt has been ingested using sda-admin
-sda-admin file list -user test@dummy.org # file test_dummy.org/t1.txt.c4gh should have fileStatus 'verified'
-```
+    - Use `sda-admin` to check if the test file has been uploaded
+
+        ```sh
+        export API_HOST=http://localhost:8090
+        export ACCESS_TOKEN=$(grep access_token s3cmd-inbox.conf  | awk '{print $3}')
+        sda-admin file list -user testu@lifescience-ri.eu
+        ```
+
+        The file `testu_lifescience-ri.eu/t1.txt.c4gh` should have fileStatus `uploaded`
+
+
+    - Register the Crypt4GH key
+
+        ```sh
+        curl -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /tmp/shared/c4gh.pub.pem)"'", "description": "pubkey"}' http://localhost:8090/c4gh-keys/add
+        ```
+
+    - Ingest the file test file
+
+        ```sh
+        sda-admin file ingest -filepath testu_lifescience-ri.eu/t1.txt.c4gh -user testu@lifescience-ri.eu
+        ```
+
+    - Verify that the test file has been ingested
+
+        ```sh
+        sda-admin file list -user testu@lifescience-ri.eu
+        ```
+
+        The file `testu_lifescience-ri.eu/t1.txt.c4gh` should have fileStatus `verified`
