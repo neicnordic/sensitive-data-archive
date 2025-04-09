@@ -8,9 +8,9 @@ We thank you in advance 👍 🎉 for taking the time to contribute, whether wit
 
 - If you're unable to find an issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
 
-    - a *clear* description,
-    - as much relevant information as possible, and
-    - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
+  - a *clear* description,
+  - as much relevant information as possible, and
+  - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
 
 - If possible, prefix the issue title with a short identifier for the relevant repository component, e.g. **[ingest]**, **[postgres]** etc.
 
@@ -42,7 +42,6 @@ Before making the pull request, it is a good idea to rebase your branch onto `ma
 > NOTE:
 > In older github repositories the default branch might be called `master` instead of `main`.
 
-
 ### About git and commit messages
 
 In general it is better to commit often. Small commits are easier to roll back and also make the code easier to review.
@@ -70,7 +69,6 @@ Some tips about writing helpful commit messages:
 
 For an in-depth explanation of the above points, please see [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/).
 
-
 ### How we do code reviews
 
 A code review is initiated when someone has made a Pull Request in the appropriate repo on github.
@@ -94,13 +92,12 @@ Once at least 3 reviews from 3 different partners are positive, the Pull Request
 
 If it takes long for some partner to review code, it is common practice to try to contact them on slack to see what the problem is and if it can be resolved quickly or whether it's ok to merge.
 
-
 ----
 
 Thanks again,
 /NeIC System Developers
 
-[searching under Issues]: https://github.com/neicnordic/sensitive-data-archive/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug
-[template to report a bug]: https://github.com/neicnordic/sensitive-data-archive/issues/new?assignees=&labels=bug&projects=&template=BUG_REPORT.md
-[open Issues]: https://github.com/neicnordic/neic-sda/issues
-[template to open a new Pull Request]: https://github.com/neicnordic/neic-sda/blob/master/.github/PULL_REQUEST_TEMPLATE.md
+[searching under Issues](https://github.com/neicnordic/sensitive-data-archive/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug)
+[template to report a bug](https://github.com/neicnordic/sensitive-data-archive/issues/new?assignees=&labels=bug&projects=&template=BUG_REPORT.md)
+[open Issues](https://github.com/neicnordic/sensitive-data-archive/issues/?q=is%3Aissue%20state%3Aopen)
+[template to open a new Pull Request](https://github.com/neicnordic/sensitive-data-archive/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
