@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
+        <version>3.4.4</version>
         <relativePath/>
     </parent>
     <groupId>no.uio.ifi</groupId>
@@ -18,6 +18,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.12.1</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -79,12 +84,12 @@
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>8.5.12</version>
+            <version>8.5.17</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>8.0</version>
+            <version>8.1</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -103,15 +108,9 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>no.uio.ifi</groupId>
+            <groupId>no.elixir</groupId>
             <artifactId>crypt4gh</artifactId>
-            <version>2.5.0</version>
+            <version>3.0.21</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -122,7 +121,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>clearinghouse</artifactId>
-            <version>2.0.1</version>
+            <version>2.0.17</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -133,20 +132,14 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>2.2</version>
+            <version>2.4</version>
         </dependency>
     </dependencies>
 
     <repositories>
         <repository>
-            <id>github-clearinghouse</id>
-            <name>elixir-oslo-clearinghouse</name>
-            <url>https://maven.pkg.github.com/elixir-oslo/clearinghouse</url>
-        </repository>
-        <repository>
-            <id>github-crypt4gh</id>
-            <name>uio-bmi-Crypt4GH</name>
-            <url>https://maven.pkg.github.com/uio-bmi/crypt4gh</url>
+            <id>github-fega-norway</id>
+            <url>https://maven.pkg.github.com/ELIXIR-NO/FEGA-Norway</url>
         </repository>
     </repositories>
 
