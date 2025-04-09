@@ -27,14 +27,15 @@ If successful, the curl command should output the HTTP code `200`.
 You can further check the endpoint `/metadata/datasets` using:
 
 ```sh
-token=$(curl -s -k http://localhost:8080/tokens | jq -r '.[0]') 
 curl -H "Authorization: Bearer $token" http://localhost:18080/metadata/datasets
 ```
 
-If successful, the curl command should output a JSON body containing:
+where `token` can be obtained by logging to http://localhost:8801 with the dummy user.
+
+If successful, the curl command should output a JSON body with an empty list and with HTTP code `200`:
 
 ```json
-["EGAD74900000101"]
+[]
 ```
 
 ## Running other SDA services with `go run`
