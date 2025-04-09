@@ -411,12 +411,13 @@ func (suite *TestSuite) SetupTest() {
 	assert.NoError(suite.T(), err)
 
 	Conf.Broker = broker.MQConf{
-		Host:     "localhost",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Exchange: "sda",
-		Vhost:    "/sda",
+		Host:        "localhost",
+		Port:        mqPort,
+		User:        "guest",
+		Password:    "guest",
+		Exchange:    "sda",
+		Vhost:       "/sda",
+		SchemasPath: "../../schemas/isolated",
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	assert.NoError(suite.T(), err)
@@ -851,16 +852,16 @@ func (suite *TestSuite) TestSetAccession() {
 	assert.NoError(suite.T(), err)
 
 	fileInfo := database.FileInfo{
-		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		Size:              1000,
 		Path:              filePath,
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1005,16 +1006,16 @@ func (suite *TestSuite) TestCreateDataset() {
 	assert.NoError(suite.T(), err)
 
 	fileInfo := database.FileInfo{
-		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		Size:              1000,
 		Path:              filePath,
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1084,16 +1085,16 @@ func (suite *TestSuite) TestCreateDataset_BadFormat() {
 	assert.NoError(suite.T(), err)
 
 	fileInfo := database.FileInfo{
-		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		Size:              1000,
 		Path:              filePath,
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1206,16 +1207,16 @@ func (suite *TestSuite) TestCreateDataset_WrongUser() {
 	assert.NoError(suite.T(), err)
 
 	fileInfo := database.FileInfo{
-		Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		Size:              1000,
 		Path:              filePath,
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
-	err = Conf.API.DB.SetVerified(fileInfo, fileID, fileID)
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
 	err = Conf.API.DB.SetAccessionID("API:accession-id-11", fileID)
@@ -1968,17 +1969,18 @@ func (suite *TestSuite) TestReVerifyFile() {
 		}
 
 		fileInfo := database.FileInfo{
-			Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
-			Size:              1000,
-			Path:              filePath,
+			ArchiveChecksum:   fmt.Sprintf("%x", encSha.Sum(nil)),
 			DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 			DecryptedSize:     948,
+			Path:              filePath,
+			Size:              1000,
+			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
-		if err := Conf.API.DB.SetVerified(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetVerified(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Verified")
 		}
 
@@ -1993,7 +1995,6 @@ func (suite *TestSuite) TestReVerifyFile() {
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(suite.T(), setupJwtAuth())
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
 	// Mock request and response holders
 	w := httptest.NewRecorder()
@@ -2070,17 +2071,18 @@ func (suite *TestSuite) TestReVerifyDataset() {
 		}
 
 		fileInfo := database.FileInfo{
-			Checksum:          fmt.Sprintf("%x", encSha.Sum(nil)),
-			Size:              1000,
-			Path:              filePath,
+			ArchiveChecksum:   fmt.Sprintf("%x", encSha.Sum(nil)),
 			DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 			DecryptedSize:     948,
+			Path:              filePath,
+			Size:              1000,
+			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
 
-		if err := Conf.API.DB.SetVerified(fileInfo, fileID, fileID); err != nil {
+		if err := Conf.API.DB.SetVerified(fileInfo, fileID); err != nil {
 			suite.FailNow("failed to mark file as Verified")
 		}
 

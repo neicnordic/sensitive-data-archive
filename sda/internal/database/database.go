@@ -32,11 +32,12 @@ type SDAdb struct {
 
 // FileInfo is used by ingest for file metadata (path, size, checksum)
 type FileInfo struct {
-	Checksum          string
+	ArchiveChecksum   string
 	Size              int64
 	Path              string
 	DecryptedChecksum string
 	DecryptedSize     int64
+	UploadedChecksum  string
 }
 
 type SyncData struct {
