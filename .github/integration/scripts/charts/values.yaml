@@ -1,12 +1,13 @@
 global:
   schemaType: "isolated"
   ingress:
-    deploy: false
+    deploy: true
     hostName:
-      api: pipeline-sda-svc-api
-      auth: pipeline-sda-svc-auth
-      download: pipeline-sda-svc-download
-      s3Inbox: pipeline-sda-svc-inbox
+      api: api.127.0.0.1.nip.io
+      auth: auth.127.0.0.1.nip.io
+      download: download.127.0.0.1.nip.io
+      s3Inbox: inbox.127.0.0.1.nip.io
+      syncapi: sync-api.127.0.0.1.nip.io
   log:
     level: "debug"
   tls:
@@ -71,10 +72,10 @@ global:
       configPath: "iss"
       configFile: "iss.json"
       iss:
-        - iss: "http://oidc-server:8080"
-          jku: "http://oidc-server:8080/jwks"
+        - iss: "http://oidc:8080/"
+          jku: "http://oidc:8080/jwks"
   oidc:
-    provider: "http://oidc-server:8080"
+    provider: "http://oidc:8080/"
     jwkPath: "/jwks"
     id: DfCieZLuBU
     secret: DfCieZLuBU

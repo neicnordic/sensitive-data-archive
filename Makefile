@@ -97,3 +97,45 @@ test-sda-download:
 	@cd sda-download && go test ./... -count=1
 test-sda-sftp-inbox:
 	@docker run --rm -v ./sda-sftp-inbox:/inbox maven:3.9.4-eclipse-temurin-21-alpine sh -c "cd /inbox && mvn test -B"
+
+# local k8s with k3d
+k3d-version-check: SHELL:=/bin/bash
+k3d-version-check:
+	@K3D_VERSION=$$(k3d version | cut -d'v' -f 3 | head -n 1); \
+	IFS="." read -r -a K3D_VERSION_ARR <<< "$${K3D_VERSION}"; \
+	IFS="." read -r -a K3D_VERSION_REQ <<< 5.7.0; \
+	if [[ $${K3D_VERSION_ARR[0]} -lt $${K3D_VERSION_REQ[0]} ||\
+		( $${K3D_VERSION_ARR[0]} -eq $${K3D_VERSION_REQ[0]} &&\
+		( $${K3D_VERSION_ARR[1]} -lt $${K3D_VERSION_REQ[1]} ||\
+		( $${K3D_VERSION_ARR[1]} -eq $${K3D_VERSION_REQ[1]} && $${K3D_VERSION_ARR[2]} -lt $${K3D_VERSION_REQ[2]} )))\
+	]]; then\
+		echo "Helm chart testing requires k3d $${K3D_VERSION_MIN}.";\
+		exit 1;\
+	fi; \
+	echo "detected k3d version: $${K3D_VERSION}"
+	@if [ ! $$(command -v kubectl) ]; then\
+		echo "kubectl is missing";\
+	fi
+k3d-create-cluster:
+	@k3d cluster create --k3s-arg "--disable=traefik@server:0" --port "80:80@loadbalancer" --port "443:443@loadbalancer"; \
+	helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace
+k3d-delete-cluster: k3d-cleanup-all-deployments
+	@k3d cluster delete
+k3d-deploy-dependencies:
+	@bash .github/integration/scripts/charts/dependencies.sh local
+k3d-import-images: build-all
+	@bash .github/integration/scripts/charts/import_local_images.sh k3s-default
+k3d-deploy-postgres:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$$(date +%F)" false
+k3d-deploy-rabbitmq:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false
+k3d-deploy-sda-s3:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3
+k3d-deploy-sda-posix:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
+k3d-cleanup-all-deployments:
+	@bash .github/integration/scripts/charts/cleanup.sh
+k3d-deploy-all-s3: k3d-import-images k3d-deploy-dependencies k3d-deploy-postgres k3d-deploy-rabbitmq
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3
+k3d-deploy-all-posix: k3d-import-images k3d-deploy-dependencies k3d-deploy-postgres k3d-deploy-rabbitmq
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
