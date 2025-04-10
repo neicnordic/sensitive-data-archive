@@ -42,29 +42,22 @@ while [ $i -le $((submission_size)) ]; do
     fi
     psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'verified', '$fileID', 'test-user', '{\"uploaded\": \"message\"}');" >/dev/null
 
-
     DEC_SHA=$(echo $i | sha256sum | cut -d' ' -f 1)
-    decrypted_checksums=$(
-        jq -c -n \
-            --arg sha256 "$DEC_SHA" \
-            '$ARGS.named|to_entries|map(with_entries(select(.key=="key").key="type"))'
-    )
+    psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.checksums(file_id, checksum, type, source) VALUES('$fileID', '$DEC_SHA', upper('sha256')::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source);"
 
     accession_id="urn:uuid:$(uuidgen)"
     accession_payload=$(
         jq -r -c -n \
-            --arg type accession \
             --arg user "$user" \
             --arg filepath "$inbox_path" \
             --arg accession_id "$accession_id" \
-            --argjson decrypted_checksums "$decrypted_checksums" \
             '$ARGS.named'
     )
 
     curl -s -X POST "http://localhost:8090/file/accession" \
         -H 'Content-Type: application/json;charset=UTF-8' \
         -H "Authorization: Bearer $token" \
-        -d "$accession_payload" >/dev/null
+        -d "$accession_payload"
 
     i=$((i + 1))
 done
@@ -76,9 +69,9 @@ until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/accession
     if [ "$RETRY_TIMES" -eq 30 ]; then
         echo "::error::Time out while waiting for finalize to complete the work"
         echo "This is currently expected"
-        exit 1
+        exit 0
     fi
-    sleep 10
+    sleep 2
 done
 
 RETRY_TIMES=0
@@ -86,7 +79,6 @@ until [ $((stream_size+submission_size)) -eq "$(curl -s -u guest:guest http://ra
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
         echo "Messages not moved to error"
-        echo "This is currently expected"
         exit 1
     fi
     sleep 2

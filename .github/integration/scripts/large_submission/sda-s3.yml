@@ -173,6 +173,7 @@ services:
       - BROKER_ROUTINGKEY=completed
       - DB_PASSWORD=finalize
       - DB_USER=finalize
+      - SCHEMA_TYPE=isolated
     restart: always
     volumes:
       - ../../sda/config.yaml:/config.yaml
@@ -219,6 +220,7 @@ services:
       - BROKER_USER=api
       - DB_PASSWORD=api
       - DB_USER=api
+      - SCHEMA_TYPE=isolated
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:${TAG}

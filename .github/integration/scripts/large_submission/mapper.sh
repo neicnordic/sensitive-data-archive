@@ -59,13 +59,13 @@ mapping_payload=$(
 echo "$mapping_payload" >/shared/payload
 
 token="$(cat /shared/token)"
-curl -s -d @/tmp/dataset \
+curl -d @/shared/payload \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $token" \
-    -X POST http://localhost:8090/dataset/create >/dev/null
+    -X POST http://api:8080/dataset/create >/dev/null
 
 RETRY_TIMES=0
-until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/mappings | jq '.messages')" -eq 0 ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(file_id) FROM sda.file_dataset;")" -eq "$submission_size" ]; do
     echo "waiting for dataset be registered"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then

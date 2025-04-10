@@ -36,8 +36,6 @@ fi
 
 stream_size=$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')
 
-token="$(cat /shared/token)"
-
 i=1
 while [ $i -le $((submission_size)) ]; do
     user="test@dummy.org"
@@ -49,7 +47,7 @@ while [ $i -le $((submission_size)) ]; do
     fi
 
     # the API assumed that a file has a correlation ID so this needs to be done for now.
-    psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'submitted', '$fileID', '$user', '{}');" >/dev/null
+    psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$fileID', 'uploaded', '$fileID', '$user', '{}');" >/dev/null
 
     ingest_payload=$(
         jq -r -c -n \
