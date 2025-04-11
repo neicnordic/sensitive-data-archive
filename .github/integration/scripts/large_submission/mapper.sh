@@ -59,10 +59,18 @@ mapping_payload=$(
 echo "$mapping_payload" >/shared/payload
 
 token="$(cat /shared/token)"
-curl -d @/shared/payload \
+
+set +e
+resp=$(curl -s -d @/shared/payload \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $token" \
-    -X POST http://api:8080/dataset/create >/dev/null
+    -X POST http://api:8080/dataset/create >/dev/null)
+
+if [ "$resp" -eq 1 ]; then
+    echo "create dataset failed"
+    exit 1
+fi
+set -e
 
 RETRY_TIMES=0
 until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(file_id) FROM sda.file_dataset;")" -eq "$submission_size" ]; do
