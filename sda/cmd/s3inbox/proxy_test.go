@@ -673,13 +673,17 @@ func (suite *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 	assert.NoError(suite.T(), err)
 	assert.NotNil(suite.T(), fileID)
 
+	// Detect autentication failure
 	p.s3.AccessKey = "badKey"
 	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
 
+	// Detect unresponsive backend service
 	p.s3.Port = 1234
 	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
 }
 
+// This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
+// happens to fast so that it is not ready and returns a false 404.
 func (suite *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	db, err := database.NewSDAdb(suite.DBConf)
 	assert.NoError(suite.T(), err)
@@ -723,6 +727,7 @@ func (suite *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 
 	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
 	var objectSize int64
+	// If the S3 backend haven't had the time to process the request above correctly this will generate an error.
 	assert.NoError(suite.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
 	assert.Equal(suite.T(), int64(10*1024*1024), objectSize)
 }
