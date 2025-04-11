@@ -614,3 +614,120 @@ func (suite *ProxyTests) TestCheckFileExists_unresponsive() {
 	assert.NotNil(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "StatusCode: 403")
 }
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer db.Close()
+
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	assert.NoError(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+
+	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
+	var objectSize int64
+	assert.NoError(suite.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
+	assert.Equal(suite.T(), int64(14), objectSize)
+}
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	db.Close()
+	assert.NoError(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+}
+
+func (suite *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer db.Close()
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	// Detect autentication failure
+	p.s3.AccessKey = "badKey"
+	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+
+	// Detect unresponsive backend service
+	p.s3.Port = 1234
+	assert.Error(suite.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+}
+
+// This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
+// happens to fast so that it is not ready and returns a false 404.
+func (suite *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
+	db, err := database.NewSDAdb(suite.DBConf)
+	assert.NoError(suite.T(), err)
+	defer db.Close()
+
+	mq, err := broker.NewMQ(suite.MQConf)
+	assert.NoError(suite.T(), err)
+	defer mq.Connection.Close()
+
+	p := NewProxy(suite.S3conf, helper.NewAlwaysAllow(), suite.messenger, suite.database, new(tls.Config))
+	p.database = db
+
+	fileID, err := db.RegisterFile("/test/new_file", "test-user")
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), fileID)
+
+	s3cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(suite.S3conf.AccessKey, suite.S3conf.SecretKey, "")))
+	if err != nil {
+		suite.FailNow("bad")
+	}
+	s3Client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(fmt.Sprintf("%s:%d", suite.S3conf.URL, suite.S3conf.Port))
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(suite.S3conf.URL, "http:")
+			o.Region = suite.S3conf.Region
+			o.UsePathStyle = true
+		},
+	)
+
+	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Body:            strings.NewReader(strings.Repeat("A", 10*1024*1024)),
+		Bucket:          aws.String(suite.S3conf.Bucket),
+		Key:             aws.String("/test/new_file"),
+		ContentEncoding: aws.String("application/octet-stream"),
+	})
+	assert.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), output, output)
+
+	assert.NoError(suite.T(), p.storeObjectSizeInDB("/test/new_file", fileID))
+
+	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
+	var objectSize int64
+	// If the S3 backend haven't had the time to process the request above correctly this will generate an error.
+	assert.NoError(suite.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
+	assert.Equal(suite.T(), int64(10*1024*1024), objectSize)
+}
