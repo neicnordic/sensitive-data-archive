@@ -364,7 +364,8 @@ func main() {
 					continue
 				}
 
-				if fileInfo.DecryptedChecksum != "" && fileInfo.DecryptedChecksum == fmt.Sprintf("%x", sha256hash.Sum(nil)) {
+				switch {
+				case fileInfo.DecryptedChecksum != "" && fileInfo.DecryptedChecksum == fmt.Sprintf("%x", sha256hash.Sum(nil)):
 					log.Warnln("file already verified")
 
 					if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
@@ -375,9 +376,9 @@ func main() {
 
 						continue
 					}
-
-					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
-						log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				default:
+					if err := db.SetVerified(file, message.FileID); err != nil {
+						log.Errorf("SetVerified failed, reason: (%s)", err.Error())
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 						}
@@ -385,29 +386,14 @@ func main() {
 						continue
 					}
 
-					if err := delivered.Ack(false); err != nil {
-						log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+					if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+						log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
 					}
-
-					continue
-				}
-
-				if err := db.SetVerified(file, message.FileID); err != nil {
-					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
-					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-					}
-
-					continue
-				}
-
-				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
-					log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
-					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-					}
-
-					continue
 				}
 
 				// Send message to verified queue
