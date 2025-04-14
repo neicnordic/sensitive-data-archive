@@ -112,6 +112,14 @@ CONFIGFILE=config_local.yaml go run cmd/ingest/ingest.go
         curl -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -X POST -d '{"pubkey": "'"$( base64 -w0 /tmp/shared/c4gh.pub.pem)"'", "description": "pubkey"}' http://localhost:8090/c4gh-keys/add
         ```
 
+        If the key is already registered in the database, you may see the following error:
+
+        ```
+        {"error":"key hash already exists or no rows were updated","status":409}
+        ```
+
+        This is expected and can be safely ignored.
+
     - Ingest the file test file
 
         ```sh
