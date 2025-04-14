@@ -364,8 +364,18 @@ func main() {
 					continue
 				}
 
-				if fileInfo.DecryptedChecksum != "" {
+				if fileInfo.DecryptedChecksum != "" && fileInfo.DecryptedChecksum == fmt.Sprintf("%x", sha256hash.Sum(nil)) {
 					log.Warnln("file already verified")
+
+					if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+						log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
+						if err := delivered.Nack(false, true); err != nil {
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+						}
+
+						continue
+					}
+
 					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
 						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 						if err := delivered.Nack(false, true); err != nil {
