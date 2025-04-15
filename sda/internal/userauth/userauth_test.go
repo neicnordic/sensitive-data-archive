@@ -80,10 +80,10 @@ func TestMain(m *testing.M) {
 	}
 
 	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
-	OIDCHostAndPort := oidc.GetHostPort("8080/tcp")
+	oidcHostAndPort := oidc.GetHostPort("8080/tcp")
 
 	client := http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+	req, err := http.NewRequest(http.MethodGet, "http://"+oidcHostAndPort+"/jwk", http.NoBody)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -415,8 +415,8 @@ func (ts *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", wrongAlgToken)
 	r.URL.Path = "/username/"
-	_, WrongAlg := a.Authenticate(r)
-	assert.Contains(ts.T(), WrongAlg.Error(), "failed to find key with key ID")
+	_, wrongAlg := a.Authenticate(r)
+	assert.Contains(ts.T(), wrongAlg.Error(), "failed to find key with key ID")
 }
 
 func TestGetBearerToken(t *testing.T) {

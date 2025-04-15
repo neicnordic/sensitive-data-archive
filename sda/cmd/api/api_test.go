@@ -145,12 +145,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to rabbitmq: %s", err)
 	}
 
-	RSAPath, _ := os.MkdirTemp("", "RSA")
-	if err := helper.CreateRSAkeys(RSAPath, RSAPath); err != nil {
+	rsaPath, _ := os.MkdirTemp("", "RSA")
+	if err := helper.CreateRSAkeys(rsaPath, rsaPath); err != nil {
 		log.Panic("Failed to create RSA keys")
 	}
-	ECPath, _ := os.MkdirTemp("", "EC")
-	if err := helper.CreateECkeys(ECPath, ECPath); err != nil {
+	ecPath, _ := os.MkdirTemp("", "EC")
+	if err := helper.CreateECkeys(ecPath, ecPath); err != nil {
 		log.Panic("Failed to create EC keys")
 	}
 
@@ -179,10 +179,10 @@ func TestMain(m *testing.M) {
 	}
 
 	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
-	OIDCHostAndPort := oidc.GetHostPort("8080/tcp")
+	oidcHostAndPort := oidc.GetHostPort("8080/tcp")
 
 	client = http.Client{Timeout: 5 * time.Second}
-	req, err = http.NewRequest(http.MethodGet, "http://"+OIDCHostAndPort+"/jwk", http.NoBody)
+	req, err = http.NewRequest(http.MethodGet, "http://"+oidcHostAndPort+"/jwk", http.NoBody)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -223,8 +223,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	// cleanup temp files
-	_ = os.RemoveAll(ECPath)
-	_ = os.RemoveAll(RSAPath)
+	_ = os.RemoveAll(ecPath)
+	_ = os.RemoveAll(rsaPath)
 
 	os.Exit(code)
 }
@@ -352,9 +352,9 @@ func (s *TestSuite) SetupSuite() {
 	s.User = user
 
 	c := &config.Config{}
-	ServerConf := config.ServerConfig{}
-	ServerConf.Jwtpubkeypath = s.PublicPath
-	c.Server = ServerConf
+	serverConf := config.ServerConfig{}
+	serverConf.Jwtpubkeypath = s.PublicPath
+	c.Server = serverConf
 
 	Conf = c
 

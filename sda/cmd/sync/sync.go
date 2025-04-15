@@ -255,12 +255,12 @@ func sendPOST(payload []byte) error {
 		Timeout: 30 * time.Second,
 	}
 
-	URL, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
+	uri, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, URL, bytes.NewBuffer(payload))
+	req, err := http.NewRequest(http.MethodPost, uri, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
