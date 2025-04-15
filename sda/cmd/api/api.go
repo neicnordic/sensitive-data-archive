@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -187,7 +188,7 @@ func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if db.DB == nil {
-		return fmt.Errorf("database is nil")
+		return errors.New("database is nil")
 	}
 
 	return db.DB.PingContext(ctx)

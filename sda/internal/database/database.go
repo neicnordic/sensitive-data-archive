@@ -4,6 +4,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -117,7 +118,7 @@ func (dbs *SDAdb) Connect() error {
 	}
 
 	// default error
-	err := fmt.Errorf("failed to connect within reconnect time")
+	err := errors.New("failed to connect within reconnect time")
 
 	log.Infoln("Connecting to database")
 	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host, dbs.Config.Port, dbs.Config.Database, dbs.Config.User)

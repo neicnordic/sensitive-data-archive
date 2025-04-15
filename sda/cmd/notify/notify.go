@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/smtp"
 	"strconv"
@@ -157,5 +158,5 @@ func validator(queue, schemaPath string, delivery amqp091.Delivery) error {
 		return nil
 	}
 
-	return fmt.Errorf("Error")
+	return errors.New("Error")
 }

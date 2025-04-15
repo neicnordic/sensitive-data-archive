@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -211,7 +212,7 @@ func syncFiles(stableID string) error {
 	if err != nil || copiedSize != int64(fileSize) {
 		switch {
 		case copiedSize != int64(fileSize):
-			return fmt.Errorf("copied size does not match file size")
+			return errors.New("copied size does not match file size")
 		default:
 			return err
 		}

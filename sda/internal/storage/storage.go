@@ -84,7 +84,7 @@ func newPosixBackend(conf posixConf) (*posixBackend, error) {
 // NewFileReader returns an io.Reader instance
 func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("invalid posixBackend")
+		return nil, errors.New("invalid posixBackend")
 	}
 
 	file, err := os.Open(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -100,7 +100,7 @@ func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // NewFileWriter returns an io.Writer instance
 func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("invalid posixBackend")
+		return nil, errors.New("invalid posixBackend")
 	}
 
 	file, err := os.OpenFile(filepath.Join(filepath.Clean(pb.Location), filePath), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0640)
@@ -116,7 +116,7 @@ func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of the file
 func (pb *posixBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 	if pb == nil {
-		return 0, fmt.Errorf("invalid posixBackend")
+		return 0, errors.New("invalid posixBackend")
 	}
 
 	stat, err := os.Stat(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -132,7 +132,7 @@ func (pb *posixBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 // RemoveFile removes a file from a given path
 func (pb *posixBackend) RemoveFile(filePath string) error {
 	if pb == nil {
-		return fmt.Errorf("invalid posixBackend")
+		return errors.New("invalid posixBackend")
 	}
 
 	err := os.Remove(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -431,7 +431,7 @@ func newSftpBackend(conf SftpConf) (*sftpBackend, error) {
 // NewFileWriter returns an io.Writer instance for the sftp remote
 func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if sfb == nil {
-		return nil, fmt.Errorf("invalid sftpBackend")
+		return nil, errors.New("invalid sftpBackend")
 	}
 	// Make remote directories
 	parent := filepath.Dir(filePath)
@@ -451,7 +451,7 @@ func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of the file
 func (sfb *sftpBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 	if sfb == nil {
-		return 0, fmt.Errorf("invalid sftpBackend")
+		return 0, errors.New("invalid sftpBackend")
 	}
 
 	stat, err := sfb.Client.Lstat(filePath)
@@ -465,7 +465,7 @@ func (sfb *sftpBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 // NewFileReader returns an io.Reader instance
 func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if sfb == nil {
-		return nil, fmt.Errorf("invalid sftpBackend")
+		return nil, errors.New("invalid sftpBackend")
 	}
 
 	file, err := sfb.Client.Open(filePath)
@@ -479,7 +479,7 @@ func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // RemoveFile removes a file or an empty directory.
 func (sfb *sftpBackend) RemoveFile(filePath string) error {
 	if sfb == nil {
-		return fmt.Errorf("invalid sftpBackend")
+		return errors.New("invalid sftpBackend")
 	}
 
 	err := sfb.Client.Remove(filePath)

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -96,7 +97,7 @@ type AlwaysDeny struct{}
 
 // Authenticate does not authenticate anyone.
 func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.Token, error) {
-	return nil, fmt.Errorf("denied")
+	return nil, errors.New("denied")
 }
 
 // MakeFolder creates a folder and subfolders for the keys pair

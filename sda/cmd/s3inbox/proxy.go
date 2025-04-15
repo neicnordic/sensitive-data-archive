@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -276,7 +277,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 	var err error
 	if p.messenger == nil {
-		return fmt.Errorf("messenger is down")
+		return errors.New("messenger is down")
 	}
 	if p.messenger.IsConnClosed() {
 		log.Warning("connection is closed, reconnecting...")
@@ -587,7 +588,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 	// Check for mixed "\" and "/" in filepath. Stop and throw an error if true so that
 	// we do not end up with unintended folder structure when applying ReplaceAll below
 	if strings.Contains(filePath, "\\") && strings.Contains(filePath, "/") {
-		return filePath, fmt.Errorf("filepath contains mixed '\\' and '/' characters")
+		return filePath, errors.New("filepath contains mixed '\\' and '/' characters")
 	}
 
 	// make any windows path separators linux compatible

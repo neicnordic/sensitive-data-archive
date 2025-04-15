@@ -182,14 +182,14 @@ func parseFlagsAndEnv() error {
 	if apiURI == "" {
 		apiURI = os.Getenv("API_HOST")
 		if apiURI == "" {
-			return fmt.Errorf("error: either -uri must be provided or API_HOST environment variable must be set")
+			return errors.New("error: either -uri must be provided or API_HOST environment variable must be set")
 		}
 	}
 
 	if token == "" {
 		token = os.Getenv("ACCESS_TOKEN")
 		if token == "" {
-			return fmt.Errorf("error: either -token must be provided or ACCESS_TOKEN environment variable must be set")
+			return errors.New("error: either -token must be provided or ACCESS_TOKEN environment variable must be set")
 		}
 	}
 

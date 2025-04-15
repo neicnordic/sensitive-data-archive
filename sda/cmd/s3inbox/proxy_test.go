@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -213,7 +214,7 @@ func NewMockMessenger() *MockMessenger {
 
 func (m *MockMessenger) SendMessage(uuid string, body []byte) error {
 	if uuid == "" || body == nil {
-		return fmt.Errorf("bad message")
+		return errors.New("bad message")
 	}
 
 	return nil

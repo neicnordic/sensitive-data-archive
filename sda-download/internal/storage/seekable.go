@@ -3,6 +3,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -21,7 +22,7 @@ func (pb *posixBackend) NewFileReadSeeker(filePath string) (io.ReadSeekCloser, e
 
 	seeker, ok := reader.(io.ReadSeekCloser)
 	if !ok {
-		return nil, fmt.Errorf("Invalid posixBackend")
+		return nil, errors.New("Invalid posixBackend")
 	}
 
 	return seeker, nil
@@ -213,7 +214,7 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 		return r.currentOffset, nil
 	}
 
-	return r.currentOffset, fmt.Errorf("Bad whence")
+	return r.currentOffset, errors.New("Bad whence")
 }
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
@@ -414,7 +415,7 @@ func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		r.currentOffset = r.totalSize + offset
 	default:
-		return 0, fmt.Errorf("Unsupported whence")
+		return 0, errors.New("Unsupported whence")
 	}
 
 	return r.currentOffset, nil
@@ -442,7 +443,7 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 
 		seekable, ok := reader.(io.ReadSeeker)
 		if !ok {
-			return 0, fmt.Errorf("Expected seekable reader but changed")
+			return 0, errors.New("Expected seekable reader but changed")
 		}
 
 		_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)

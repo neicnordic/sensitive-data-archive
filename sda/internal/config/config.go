@@ -227,7 +227,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
 		default:
-			return nil, fmt.Errorf("inbox.type not set")
+			return nil, errors.New("inbox.type not set")
 		}
 	case "auth":
 		requiredConfVars = []string{
@@ -273,7 +273,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 		switch viper.GetString("inbox.type") {
@@ -282,7 +282,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
 		default:
-			return nil, fmt.Errorf("inbox.type not set")
+			return nil, errors.New("inbox.type not set")
 		}
 	case "finalize":
 		requiredConfVars = []string{
@@ -408,7 +408,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 		switch viper.GetString("sync.destination.type") {
@@ -419,7 +419,7 @@ func NewConfig(app string) (*Config, error) {
 		case SFTP:
 			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
 		default:
-			return nil, fmt.Errorf("sync.destination.type not set")
+			return nil, errors.New("sync.destination.type not set")
 		}
 	case "sync-api":
 		requiredConfVars = []string{
@@ -452,7 +452,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 	default:
@@ -508,7 +508,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		if (c.Auth.OIDC.ID == "" || c.Auth.OIDC.Secret == "") && (c.Auth.Cega.ID == "" || c.Auth.Cega.Secret == "") {
-			return nil, fmt.Errorf("neither cega or oidc login configured")
+			return nil, errors.New("neither cega or oidc login configured")
 		}
 
 		c.Auth.InfoURL = viper.GetString("auth.infoUrl")

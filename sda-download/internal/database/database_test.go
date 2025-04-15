@@ -65,7 +65,7 @@ func testLogFatalf(f string, args ...any) {
 func TestCheckAndReconnect(t *testing.T) {
 	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
 
-	mock.ExpectPing().WillReturnError(fmt.Errorf("ping fail for testing bad conn"))
+	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing bad conn"))
 
 	err := CatchPanicCheckAndReconnect(SQLdb{db, ""})
 	assert.Error(t, err, "Should have received error from checkAndReconnectOnNeeded fataling")
@@ -75,7 +75,7 @@ func CatchPanicCheckAndReconnect(db SQLdb) (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("Caught panic")
+			err = errors.New("Caught panic")
 		}
 	}()
 
@@ -92,7 +92,7 @@ func CatchNewDBPanic() (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("Caught panic")
+			err = errors.New("Caught panic")
 		}
 	}()
 
@@ -136,7 +136,7 @@ func TestNewDB(t *testing.T) {
 		return db, nil
 	}
 
-	mock.ExpectPing().WillReturnError(fmt.Errorf("ping fail for testing"))
+	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing"))
 
 	err = CatchNewDBPanic()
 

@@ -539,7 +539,7 @@ var calculateCoords = func(start, end int64, htsget_range string, fileDetails *d
 				return 0, 0, err
 			}
 			if a > b {
-				return 0, 0, fmt.Errorf("endCoordinate must be greater than startCoordinate")
+				return 0, 0, errors.New("endCoordinate must be greater than startCoordinate")
 			}
 
 			// Byte ranges are inclusive; +1 so that the last byte is included

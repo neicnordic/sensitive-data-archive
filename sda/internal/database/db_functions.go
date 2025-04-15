@@ -806,7 +806,7 @@ func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 		return "", rows.Err()
 	}
 
-	return "", fmt.Errorf("sql: no rows in result set")
+	return "", errors.New("sql: no rows in result set")
 }
 
 // list all users with files not yet assigned to a dataset
