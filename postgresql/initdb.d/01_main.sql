@@ -74,7 +74,7 @@ CREATE TABLE files (
     created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
     last_modified        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
 
-    CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path)
+    CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path, submission_user)
 );
 
 -- The user info is used by auth to be able to link users to their name and email
