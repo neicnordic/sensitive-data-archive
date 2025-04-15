@@ -44,7 +44,6 @@ func (suite *InfoTests) SetupTest() {
 	if err != nil {
 		suite.T().FailNow()
 	}
-
 }
 
 func (suite *InfoTests) TestReadPublicKeyFile() {

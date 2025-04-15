@@ -24,7 +24,6 @@ type S3TestSuite struct {
 }
 
 func (suite *S3TestSuite) SetupTest() {
-
 	var err error
 	var db *sql.DB
 
@@ -61,7 +60,6 @@ func TestS3TestSuite(t *testing.T) {
 }
 
 func (suite *S3TestSuite) TestGetBucketLocation() {
-
 	// Send a request through the middleware to get datasets
 
 	w := httptest.NewRecorder()
@@ -80,7 +78,6 @@ func (suite *S3TestSuite) TestGetBucketLocation() {
 }
 
 func (suite *S3TestSuite) TestListBuckets() {
-
 	// Setup a mock database to handle queries
 
 	query := `SELECT stable_id, created_at FROM sda.datasets WHERE stable_id = \$1`
@@ -117,7 +114,6 @@ func (suite *S3TestSuite) TestListBuckets() {
 }
 
 func (suite *S3TestSuite) TestListByPrefix() {
-
 	// Setup a mock database to handle queries
 	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
@@ -195,7 +191,6 @@ func (suite *S3TestSuite) TestListByPrefix() {
 }
 
 func (suite *S3TestSuite) TestListObjects() {
-
 	// Setup a mock database to handlequeries
 	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
@@ -272,7 +267,6 @@ func (suite *S3TestSuite) TestListObjects() {
 }
 
 func (suite *S3TestSuite) TestParseParams() {
-
 	type paramTest struct {
 		Path     string
 		Dataset  string
@@ -291,7 +285,6 @@ func (suite *S3TestSuite) TestParseParams() {
 	}
 
 	for _, params := range testParams {
-
 		// response function to check parameter parsing
 		testParseParams := func(c *gin.Context) {
 			parseParams(c)
@@ -313,7 +306,5 @@ func (suite *S3TestSuite) TestParseParams() {
 		defer response.Body.Close()
 
 		assert.Equal(suite.T(), http.StatusAccepted, response.StatusCode, "Request failed")
-
 	}
-
 }

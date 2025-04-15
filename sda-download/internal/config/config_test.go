@@ -64,7 +64,6 @@ func (suite *TestSuite) TestMissingRequiredConfVar() {
 }
 
 func (suite *TestSuite) TestAppConfig() {
-
 	// Generate a crypth4gh private key file
 	_, privateKey, err := keys.GenerateKeyPair()
 	assert.NoError(suite.T(), err)
@@ -134,11 +133,9 @@ func (suite *TestSuite) TestArchiveConfig() {
 	c := &Map{}
 	c.configArchive()
 	assert.Equal(suite.T(), "/test", c.Archive.Posix.Location)
-
 }
 
 func (suite *TestSuite) TestSessionConfig() {
-
 	viper.Set("session.expiration", 3600)
 	viper.Set("session.domain", "test")
 	viper.Set("session.secure", false)
@@ -152,11 +149,9 @@ func (suite *TestSuite) TestSessionConfig() {
 	assert.Equal(suite.T(), "test", c.Session.Domain)
 	assert.Equal(suite.T(), false, c.Session.Secure)
 	assert.Equal(suite.T(), false, c.Session.HTTPOnly)
-
 }
 
 func (suite *TestSuite) TestDatabaseConfig() {
-
 	// Test error on missing SSL vars
 	viper.Set("db.sslmode", "verify-full")
 	c := &Map{}
@@ -191,11 +186,9 @@ func (suite *TestSuite) TestDatabaseConfig() {
 	assert.Equal(suite.T(), "test", c.DB.CACert)
 	assert.Equal(suite.T(), "test", c.DB.ClientCert)
 	assert.Equal(suite.T(), "test", c.DB.ClientKey)
-
 }
 
 func (suite *TestSuite) TestOIDC() {
-
 	// Test wrong file
 	viper.Set("oidc.trusted.iss", "../../iss.json")
 	c := &Map{}
@@ -222,7 +215,6 @@ func (suite *TestSuite) TestOIDC() {
 	assert.Equal(suite.T(), "test", c.OIDC.CACert)
 	assert.Equal(suite.T(), trustedList, c.OIDC.TrustedList)
 	assert.Equal(suite.T(), whitelist, c.OIDC.Whitelist)
-
 }
 
 func (suite *TestSuite) TestConfigReencrypt() {
@@ -243,5 +235,4 @@ func (suite *TestSuite) TestConfigReencrypt() {
 	// it will fail if certificate is set to a folder
 	viper.Set("grpc.clientcert", tempDir)
 	assert.ErrorContains(suite.T(), c.configReencrypt(), "is a folder")
-
 }

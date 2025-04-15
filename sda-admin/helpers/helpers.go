@@ -87,7 +87,6 @@ func CheckValidChars(filename string) error {
 	re := regexp.MustCompile(`[\\<>"\|\x00-\x1F\x7F\!\*\'\(\)\;\:\@\&\=\+\$\,\?\%\#\[\]]`)
 	disallowedChars := re.FindAllString(filename, -1)
 	if disallowedChars != nil {
-
 		return fmt.Errorf(
 			"filepath '%v' contains disallowed characters: %+v",
 			filename,

@@ -180,5 +180,4 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 	default:
 		return "", fmt.Errorf("could not recognize mapping operation")
 	}
-
 }

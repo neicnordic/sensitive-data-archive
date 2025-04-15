@@ -49,7 +49,6 @@ func (suite *AdapterTestSuite) SetupSuite() {
 	if err != nil {
 		suite.FailNow("failed to write policy file to disk")
 	}
-
 }
 
 func (suite *AdapterTestSuite) TearDownSuite() {

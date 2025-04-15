@@ -108,7 +108,6 @@ func (suite *HealthcheckTestSuite) TestHealthchecks() {
 	resp := w.Result()
 	defer resp.Body.Close()
 	assert.Equal(suite.T(), 200, resp.StatusCode)
-
 }
 
 func (suite *HealthcheckTestSuite) TestClosedDBHealthchecks() {

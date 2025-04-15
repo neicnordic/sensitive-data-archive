@@ -162,7 +162,6 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
-
 			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
 				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
 				log.Error("Unexpected issue while creating bucket", err)
@@ -231,7 +230,6 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 
 	reader, writer := io.Pipe()
 	go func() {
-
 		_, err := sb.Uploader.Upload(&s3manager.UploadInput{
 			Body:            reader,
 			Bucket:          aws.String(sb.Bucket),
@@ -272,7 +270,6 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 			Key:    aws.String(filePath)})
 
 		time.Sleep(1 * time.Second)
-
 	}
 
 	if err != nil {

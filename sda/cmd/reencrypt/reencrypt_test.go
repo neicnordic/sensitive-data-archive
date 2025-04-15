@@ -82,7 +82,6 @@ func (suite *ReEncryptTests) SetupTest() {
 
 	suite.FileHeader, _ = hex.DecodeString("637279707434676801000000010000006c000000000000007ca283608311dacfc32703a3cc9a2b445c9a417e036ba5943e233cfc65a1f81fdcc35036a584b3f95759114f584d1e81e8cf23a9b9d1e77b9e8f8a8ee8098c2a3e9270fe6872ef9d1c948caf8423efc7ce391081da0d52a49b1e6d0706f267d6140ff12b")
 	suite.FileData, _ = hex.DecodeString("e046718f01d52c626276ce5931e10afd99330c4679b3e2a43fdf18146e85bae8eaee83")
-
 }
 
 func (suite *ReEncryptTests) TearDownTest() {
@@ -203,7 +202,6 @@ func (suite *ReEncryptTests) TestReencryptHeader_DataEditList() {
 	assert.NoError(suite.T(), err)
 	packet = header.GetDataEditListHeaderPacket()
 	assert.Nilf(suite.T(), packet, "DataEditList HeaderPacket found when not expected")
-
 }
 
 func (suite *ReEncryptTests) TestReencryptHeader_BadPubKey() {

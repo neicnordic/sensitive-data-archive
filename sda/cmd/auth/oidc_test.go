@@ -53,7 +53,6 @@ func (suite *OIDCTests) TearDownTest() {
 }
 
 func (suite *OIDCTests) TestGetOidcClient() {
-
 	expectedEndpoint := oauth2.Endpoint{
 		AuthURL:   suite.mockServer.AuthorizationEndpoint(),
 		TokenURL:  suite.mockServer.TokenEndpoint(),

@@ -20,7 +20,6 @@ import (
 // event. If the file already exists in the database, the entry is updated, but
 // a new file event is always inserted.
 func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
-
 	dbs.checkAndReconnectIfNeeded()
 
 	if dbs.Version < 4 {
@@ -551,7 +550,6 @@ func (dbs *SDAdb) updateDatasetEvent(datasetID, status, message string) error {
 	}
 
 	return nil
-
 }
 
 // GetFileInfo returns info on a ingested file
@@ -907,7 +905,6 @@ func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
 	query := "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
 	result, err := db.Exec(query, keyHash, fileID)
 	if err != nil {
-
 		return err
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

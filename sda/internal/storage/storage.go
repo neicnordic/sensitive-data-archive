@@ -314,7 +314,6 @@ func (sb *s3Backend) GetFileSize(filePath string, expectDelay bool) (int64, erro
 			Bucket: &sb.Bucket,
 			Key:    &filePath,
 		})
-
 	}
 
 	if err != nil {

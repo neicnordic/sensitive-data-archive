@@ -14,7 +14,6 @@ import (
 
 // NewFileReadSeeker returns an io.ReadSeeker instance
 func (pb *posixBackend) NewFileReadSeeker(filePath string) (io.ReadSeekCloser, error) {
-
 	reader, err := pb.NewFileReader(filePath)
 	if err != nil {
 		return nil, err
@@ -85,7 +84,6 @@ func (r *s3Reader) pruneCache() {
 	// Prune the cache
 	keepfrom := len(r.local) - 8
 	r.local = r.local[keepfrom:]
-
 }
 
 func (r *s3Reader) prefetchSize() int64 {
@@ -383,7 +381,6 @@ type seekableMultiReader struct {
 // SeekableMultiReader constructs a multireader that supports seeking. Requires
 // all passed readers to be seekable
 func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
-
 	r := make([]io.Reader, len(readers))
 	sizes := make([]int64, len(readers))
 
@@ -403,14 +400,12 @@ func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 
 		sizes[i] = size
 		totalSize += size
-
 	}
 
 	return &seekableMultiReader{r, sizes, 0, totalSize}, nil
 }
 
 func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
-
 	switch whence {
 	case io.SeekStart:
 		r.currentOffset = offset
@@ -418,21 +413,17 @@ func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 		r.currentOffset += offset
 	case io.SeekEnd:
 		r.currentOffset = r.totalSize + offset
-
 	default:
 		return 0, fmt.Errorf("Unsupported whence")
-
 	}
 
 	return r.currentOffset, nil
 }
 
 func (r *seekableMultiReader) Read(dst []byte) (int, error) {
-
 	var readerStartAt int64
 
 	for i, reader := range r.readers {
-
 		if r.currentOffset < readerStartAt {
 			// We want data from a previous reader (? HELP ?)
 			readerStartAt += r.sizes[i]

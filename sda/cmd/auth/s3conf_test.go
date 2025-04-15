@@ -25,7 +25,6 @@ func (suite *S3ConfTests) TearDownTest() {}
 
 //nolint:goconst
 func (suite *S3ConfTests) TestGetS3ConfigMap() {
-
 	// variable values
 	token := "tokenvaluestring"
 	inboxHost := "s3://inboxHost"
@@ -59,5 +58,4 @@ func (suite *S3ConfTests) TestGetS3ConfigMap() {
 	assert.Equal(suite.T(), fmt.Sprintf("%v", chunkSize), s3conf["multipart_chunk_size_mb"], fmt.Sprintf("multipart_chunk_size_mb should be %v", chunkSize))
 	assert.Equal(suite.T(), useHTTPS, s3conf["use_https"], fmt.Sprintf("use_https should be '%v'", useHTTPS))
 	assert.Equal(suite.T(), fmt.Sprintf("%v", socketTimeout), s3conf["socket_timeout"], fmt.Sprintf("socket_timeout should be %v", socketTimeout))
-
 }

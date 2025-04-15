@@ -27,7 +27,6 @@ func (suite *TestSuite) SetupTest() {
 }
 
 func TestGetUser(t *testing.T) {
-
 	archivedMsg := schema.IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to file",
@@ -54,7 +53,6 @@ func TestGetUser(t *testing.T) {
 
 	orgUser := getUser("error", infoErrorBytes)
 	assert.Equal(t, "JohnDoe", orgUser)
-
 }
 
 func TestSetSubject(t *testing.T) {

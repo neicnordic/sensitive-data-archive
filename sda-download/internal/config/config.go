@@ -380,7 +380,6 @@ func (c *Map) appConfig() error {
 
 	var err error
 	if viper.GetString("c4gh.transientKeyPath") != "" {
-
 		if !viper.IsSet("c4gh.transientPassphrase") {
 			return errors.New("c4gh.transientPassphrase is not set")
 		}

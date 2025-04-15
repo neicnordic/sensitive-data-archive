@@ -41,7 +41,6 @@ func TestInitialiseClient(t *testing.T) {
 }
 
 func TestMakeRequest_Fail_HTTPNewRequest(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalHTTPMakeRequest := HTTPNewRequest
 
@@ -68,11 +67,9 @@ func TestMakeRequest_Fail_HTTPNewRequest(t *testing.T) {
 
 	// Return mock functions to originals
 	HTTPNewRequest = originalHTTPMakeRequest
-
 }
 
 func TestMakeRequest_Fail_StatusCode(t *testing.T) {
-
 	// Create mock client
 	client := newTestClient(func(_ *http.Request) *http.Response {
 		return &http.Response{
@@ -116,11 +113,9 @@ func TestMakeRequest_Fail_StatusCode(t *testing.T) {
 
 	// Return mock functions to originals
 	HTTPNewRequest = originalHTTPMakeRequest
-
 }
 
 func TestMakeRequest_Success(t *testing.T) {
-
 	// Create mock client
 	client := newTestClient(func(_ *http.Request) *http.Response {
 		return &http.Response{
@@ -167,5 +162,4 @@ func TestMakeRequest_Success(t *testing.T) {
 
 	// Return mock functions to originals
 	HTTPNewRequest = originalHTTPMakeRequest
-
 }

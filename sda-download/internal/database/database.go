@@ -127,7 +127,6 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 		log.Debugln("Reconnecting to DB")
 		dbs.DB, _ = sqlOpen("postgres", dbs.ConnInfo)
 	}
-
 }
 
 // GetFiles retrieves the file details
@@ -212,7 +211,6 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 
 	// Iterate rows
 	for rows.Next() {
-
 		// Read rows into struct
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,

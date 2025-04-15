@@ -177,7 +177,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 			return
 		}
-
 	}
 
 	log.Debug("Forwarding to backend")
@@ -304,21 +303,18 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 
 func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
 	if response.StatusCode != 200 {
-
 		return false
 	}
 
 	switch req.Method {
 	case http.MethodPut:
 		if !strings.Contains(req.URL.String(), "partNumber") {
-
 			return true
 		}
 
 		return false
 	case http.MethodPost:
 		if strings.Contains(req.URL.String(), "uploadId") {
-
 			return true
 		}
 
@@ -530,7 +526,6 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
-
 }
 
 // checkFileExists makes a request to the S3 to check whether the file already

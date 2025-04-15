@@ -42,7 +42,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 		return nil, fmt.Errorf("error validating token keyset")
 	}
 	switch {
-
 	case r.Header.Get("X-Amz-Security-Token") != "":
 		tokenStr := r.Header.Get("X-Amz-Security-Token")
 		if tokenStr == "" {
@@ -80,7 +79,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 
 	default:
 		return nil, fmt.Errorf("no access token supplied")
-
 	}
 }
 

@@ -185,7 +185,6 @@ var GetPermissions = func(visas Visas) []string {
 
 	// Iterate visas
 	for _, v := range visas.Visa {
-
 		// Check that visa is of type ControlledAccessGrants
 		if checkVisaType(v, "ControlledAccessGrants") {
 			// Check that visa is valid and return visa token
@@ -195,7 +194,6 @@ var GetPermissions = func(visas Visas) []string {
 				datasets = getDatasets(verifiedVisa, datasets)
 			}
 		}
-
 	}
 
 	log.Debugf("matched datasets: %s", datasets)
@@ -204,7 +202,6 @@ var GetPermissions = func(visas Visas) []string {
 }
 
 func checkVisaType(visa string, visaType string) bool {
-
 	log.Debug("checking visa type")
 
 	unknownToken, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
@@ -235,7 +232,6 @@ func checkVisaType(visa string, visaType string) bool {
 	log.Debug("visa type check passed")
 
 	return true
-
 }
 
 func validateVisa(visa string) (jwt.Token, bool) {
