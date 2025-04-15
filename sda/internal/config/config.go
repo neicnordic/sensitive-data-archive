@@ -782,7 +782,7 @@ func (c *Config) configBroker() error {
 		mq.VerifyPeer = viper.GetBool("broker.verifyPeer")
 		if mq.VerifyPeer {
 			// Since verifyPeer is specified, these are required.
-			if !(viper.IsSet("broker.clientCert") && viper.IsSet("broker.clientKey")) {
+			if !viper.IsSet("broker.clientCert") && !viper.IsSet("broker.clientKey") {
 				return errors.New("when broker.verifyPeer is set both broker.clientCert and broker.clientKey is needed")
 			}
 			mq.ClientCert = viper.GetString("broker.clientCert")
@@ -818,7 +818,7 @@ func (c *Config) configDatabase() error {
 	// Optional settings
 	if db.SslMode == "verify-full" {
 		// Since verify-full is specified, these are required.
-		if !(viper.IsSet("db.clientCert") && viper.IsSet("db.clientKey")) {
+		if !viper.IsSet("db.clientCert") && !viper.IsSet("db.clientKey") {
 			return errors.New("when db.sslMode is set to verify-full both db.clientCert and db.clientKey are needed")
 		}
 	}
@@ -1119,7 +1119,7 @@ func GetC4GHPublicKey() (*[32]byte, error) {
 func (c *Config) configServer() error {
 	s := ServerConfig{}
 
-	if !(viper.IsSet("server.jwtpubkeypath") || viper.IsSet("server.jwtpubkeyurl")) {
+	if !viper.IsSet("server.jwtpubkeypath") && !viper.IsSet("server.jwtpubkeyurl") {
 		return errors.New("either server.pubkeypath or server.jwtpubkeyurl should be present to start the service")
 	}
 

@@ -348,8 +348,8 @@ func (ts *TestSuite) TestTryDecrypt() {
 
 	for i, key := range privateKeys {
 		header, err := tryDecrypt(key, buf)
-		switch {
-		case i == 0:
+		switch i {
+		case 0:
 			assert.NoError(ts.T(), err)
 			assert.NotNil(ts.T(), header)
 		default:
