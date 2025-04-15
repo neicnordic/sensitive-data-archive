@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5" // #nosec
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -229,7 +229,7 @@ func main() {
 				continue
 			}
 
-			md5hash := md5.New() // #nosec
+			md5hash := md5.New()
 			sha256hash := sha256.New()
 			stream := io.TeeReader(c4ghr, md5hash)
 

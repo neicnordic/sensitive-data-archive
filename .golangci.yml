@@ -8,7 +8,7 @@ linters:
   enable:
     - bodyclose
     - gocritic
-    # - gosec
+    - gosec
     - govet
     - nestif
     - nlreturn
@@ -18,8 +18,7 @@ linters:
   settings:
     gosec:
       excludes:
-        - G107
-        - G115
+        - G104
         - G302
         - G304
         - G401
