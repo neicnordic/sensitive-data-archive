@@ -34,7 +34,7 @@ type Proxy struct {
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
-	fileIds   map[string]string
+	fileIDs   map[string]string
 }
 
 // The Event struct
@@ -158,11 +158,11 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	// if this is an upload request
-	if p.detectRequestType(r) == Put && p.fileIds[r.URL.Path] == "" {
+	if p.detectRequestType(r) == Put && p.fileIDs[r.URL.Path] == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database", r.URL.Path)
-		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
-		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
+		p.fileIDs[r.URL.Path], err = p.database.RegisterFile(filepath, username)
+		log.Debugf("fileId: %v", p.fileIDs[r.URL.Path])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
@@ -213,33 +213,33 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
-		if p.fileIds[r.URL.Path] == "" {
-			p.fileIds[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+		if p.fileIDs[r.URL.Path] == "" {
+			p.fileIDs[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
 				return
 			}
 
-			log.Debugf("resuming work on file with fileId: %v", p.fileIds[r.URL.Path])
+			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[r.URL.Path])
 		}
 
-		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIds[r.URL.Path]); err != nil {
+		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[r.URL.Path]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
 			return
 		}
 
-		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
-		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[r.URL.Path])
+		err = p.database.UpdateFileEventLog(p.fileIDs[r.URL.Path], "uploaded", p.fileIDs[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
 
-		delete(p.fileIds, r.URL.Path)
+		delete(p.fileIDs, r.URL.Path)
 	}
 
 	// Writing non-200 to the response before the headers propagate the error
@@ -294,7 +294,7 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 		}
 	}
 
-	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+	if err := p.messenger.SendMessage(p.fileIDs[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
 
