@@ -65,10 +65,10 @@ func sanitizeString(str string) string {
 }
 
 // NewDB creates a new DB connection
-func NewDB(config config.DatabaseConfig) (*SQLdb, error) {
-	connInfo := buildConnInfo(config)
+func NewDB(conf config.DatabaseConfig) (*SQLdb, error) {
+	connInfo := buildConnInfo(conf)
 
-	log.Debugf("Connecting to DB %s:%d on database: %s with user: %s", config.Host, config.Port, config.Database, config.User)
+	log.Debugf("Connecting to DB %s:%d on database: %s with user: %s", conf.Host, conf.Port, conf.Database, conf.User)
 	db, err := sqlOpen("postgres", connInfo)
 	if err != nil {
 		log.Errorf("failed to connect to database, %s", err)
@@ -88,24 +88,24 @@ func NewDB(config config.DatabaseConfig) (*SQLdb, error) {
 }
 
 // buildConnInfo builds a connection string for the database
-func buildConnInfo(config config.DatabaseConfig) string {
+func buildConnInfo(conf config.DatabaseConfig) string {
 	connInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.Database, config.SslMode)
+		conf.Host, conf.Port, conf.User, conf.Password, conf.Database, conf.SslMode)
 
-	if config.SslMode == "disable" {
+	if conf.SslMode == "disable" {
 		return connInfo
 	}
 
-	if config.CACert != "" {
-		connInfo += fmt.Sprintf(" sslrootcert=%s", config.CACert)
+	if conf.CACert != "" {
+		connInfo += fmt.Sprintf(" sslrootcert=%s", conf.CACert)
 	}
 
-	if config.ClientCert != "" {
-		connInfo += fmt.Sprintf(" sslcert=%s", config.ClientCert)
+	if conf.ClientCert != "" {
+		connInfo += fmt.Sprintf(" sslcert=%s", conf.ClientCert)
 	}
 
-	if config.ClientKey != "" {
-		connInfo += fmt.Sprintf(" sslkey=%s", config.ClientKey)
+	if conf.ClientKey != "" {
+		connInfo += fmt.Sprintf(" sslkey=%s", conf.ClientKey)
 	}
 
 	return connInfo

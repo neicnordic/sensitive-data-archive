@@ -368,7 +368,7 @@ func addCSPheaders(ctx iris.Context) {
 
 func main() {
 	// Initialise config
-	config, err := config.NewConfig("auth")
+	conf, err := config.NewConfig("auth")
 	if err != nil {
 		log.Errorf("Failed to generate config, reason: %v", err)
 		os.Exit(1)
@@ -377,14 +377,14 @@ func main() {
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
 
-	if config.Auth.OIDC.ID != "" && config.Auth.OIDC.Secret != "" {
+	if conf.Auth.OIDC.ID != "" && conf.Auth.OIDC.Secret != "" {
 		// Initialise OIDC client
-		oauth2Config, provider = getOidcClient(config.Auth.OIDC)
+		oauth2Config, provider = getOidcClient(conf.Auth.OIDC)
 	}
 
 	// Create handler struct for the web server
 	authHandler := AuthHandler{
-		Config:       config.Auth,
+		Config:       conf.Auth,
 		OAuth2Config: oauth2Config,
 		OIDCProvider: provider,
 		htmlDir:      "./frontend/templates",
@@ -398,12 +398,12 @@ func main() {
 	// Start sessions handler in order to send flash messages
 	sess := sessions.New(sessions.Config{Cookie: "_session_id", AllowReclaim: true})
 
-	if config.Server.CORS.AllowOrigin != "" {
+	if conf.Server.CORS.AllowOrigin != "" {
 		// Set CORS context
 		corsContext := cors.New(cors.Options{
-			AllowedOrigins:   strings.Split(config.Server.CORS.AllowOrigin, ","),
-			AllowedMethods:   strings.Split(config.Server.CORS.AllowMethods, ","),
-			AllowCredentials: config.Server.CORS.AllowCredentials,
+			AllowedOrigins:   strings.Split(conf.Server.CORS.AllowOrigin, ","),
+			AllowedMethods:   strings.Split(conf.Server.CORS.AllowMethods, ","),
+			AllowCredentials: conf.Server.CORS.AllowCredentials,
 		})
 		app.Use(corsContext)
 	}
@@ -411,7 +411,7 @@ func main() {
 	app.Use(sess.Handler())
 
 	// Connect to DB
-	authHandler.Config.DB, err = database.NewSDAdb(config.Database)
+	authHandler.Config.DB, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Error(err)
 		panic(err)
@@ -450,9 +450,9 @@ func main() {
 
 	app.UseGlobal(globalHeaders)
 
-	if config.Server.Cert != "" && config.Server.Key != "" {
+	if conf.Server.Cert != "" && conf.Server.Key != "" {
 		log.Infoln("Serving content using https")
-		err = app.Run(iris.TLS("0.0.0.0:8080", config.Server.Cert, config.Server.Key))
+		err = app.Run(iris.TLS("0.0.0.0:8080", conf.Server.Cert, conf.Server.Key))
 	} else {
 		log.Infoln("Serving content using http")
 		server := &http.Server{

@@ -85,9 +85,9 @@ func main() {
 	}
 }
 
-func setup(config *config.Config) *http.Server {
-	model, _ := model.NewModelFromString(jsonadapter.Model)
-	e, err := casbin.NewEnforcer(model, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
+func setup(conf *config.Config) *http.Server {
+	m, _ := model.NewModelFromString(jsonadapter.Model)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
 		shutdown()
 		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
@@ -116,7 +116,7 @@ func setup(config *config.Config) *http.Server {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
-		Addr:              config.API.Host + ":" + fmt.Sprint(config.API.Port),
+		Addr:              conf.API.Host + ":" + fmt.Sprint(conf.API.Port),
 		Handler:           r,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
@@ -183,14 +183,14 @@ func readinessResponse(c *gin.Context) {
 	c.JSON(statusCode, "")
 }
 
-func checkDB(database *database.SDAdb, timeout time.Duration) error {
+func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if database.DB == nil {
+	if db.DB == nil {
 		return fmt.Errorf("database is nil")
 	}
 
-	return database.DB.PingContext(ctx)
+	return db.DB.PingContext(ctx)
 }
 
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {

@@ -107,7 +107,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func (suite *BrokerTestSuite) SetupTest() {
+func (ts *BrokerTestSuite) SetupTest() {
 	tMqconf = MQConf{
 		"127.0.0.1",
 		mqPort,
@@ -132,14 +132,14 @@ func TestBrokerTestSuite(t *testing.T) {
 	suite.Run(t, new(BrokerTestSuite))
 }
 
-func (suite *BrokerTestSuite) TestBuildMqURI() {
-	amqps := buildMQURI("localhost", "user", "pass", "/vhost", 5555, true)
-	assert.Equal(suite.T(), "amqps://user:pass@localhost:5555/vhost", amqps)
-	amqp := buildMQURI("localhost", "user", "pass", "/vhost", 5555, false)
-	assert.Equal(suite.T(), "amqp://user:pass@localhost:5555/vhost", amqp)
+func (ts *BrokerTestSuite) TestBuildMqURI() {
+	amqpsURL := buildMQURI("localhost", "user", "pass", "/vhost", 5555, true)
+	assert.Equal(ts.T(), "amqps://user:pass@localhost:5555/vhost", amqpsURL)
+	amqpURL := buildMQURI("localhost", "user", "pass", "/vhost", 5555, false)
+	assert.Equal(ts.T(), "amqp://user:pass@localhost:5555/vhost", amqpURL)
 }
 
-func (suite *BrokerTestSuite) TestTLSConfigBroker() {
+func (ts *BrokerTestSuite) TestTLSConfigBroker() {
 	confOK := tMqconf
 	confOK.Ssl = true
 	confOK.VerifyPeer = true
@@ -148,15 +148,15 @@ func (suite *BrokerTestSuite) TestTLSConfigBroker() {
 	confOK.ClientKey = certPath + "/tls.key"
 
 	tlsConfig, err := TLSConfigBroker(confOK)
-	assert.NoError(suite.T(), err, "Unexpected error")
-	assert.NotZero(suite.T(), tlsConfig.Certificates, "Expected warnings were missing")
-	assert.NotZero(suite.T(), tlsConfig.RootCAs, "Expected warnings were missing")
-	assert.EqualValues(suite.T(), tlsConfig.ServerName, "mq")
+	assert.NoError(ts.T(), err, "Unexpected error")
+	assert.NotZero(ts.T(), tlsConfig.Certificates, "Expected warnings were missing")
+	assert.NotZero(ts.T(), tlsConfig.RootCAs, "Expected warnings were missing")
+	assert.EqualValues(ts.T(), tlsConfig.ServerName, "mq")
 
 	noCa := confOK
 	noCa.CACert = ""
 	_, err = TLSConfigBroker(noCa)
-	assert.NoError(suite.T(), err, "Unexpected error")
+	assert.NoError(ts.T(), err, "Unexpected error")
 
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
@@ -165,23 +165,23 @@ func (suite *BrokerTestSuite) TestTLSConfigBroker() {
 	}()
 	noCa.CACert = certPath + "/tls.key"
 	_, err = TLSConfigBroker(noCa)
-	assert.NoError(suite.T(), err, "Unexpected error")
-	assert.Contains(suite.T(), buf.String(), "No certs appended, using system certs only")
+	assert.NoError(ts.T(), err, "Unexpected error")
+	assert.Contains(ts.T(), buf.String(), "No certs appended, using system certs only")
 
 	badCertConf := confOK
 	badCertConf.ClientCert = certPath + "/bar"
 	_, err = CatchTLSConfigBrokerPanic(badCertConf)
-	assert.EqualError(suite.T(), err, "open "+certPath+"/bar: no such file or directory")
+	assert.EqualError(ts.T(), err, "open "+certPath+"/bar: no such file or directory")
 
 	badKeyConf := confOK
 	badKeyConf.ClientKey = certPath + "/foo"
 	_, err = CatchTLSConfigBrokerPanic(badKeyConf)
-	assert.EqualError(suite.T(), err, "open "+certPath+"/foo: no such file or directory")
+	assert.EqualError(ts.T(), err, "open "+certPath+"/foo: no such file or directory")
 
 	noPemFile := confOK
 	noPemFile.ClientKey = "broker.go"
 	_, err = CatchTLSConfigBrokerPanic(noPemFile)
-	assert.EqualError(suite.T(), err, "tls: failed to find any PEM data in key input")
+	assert.EqualError(ts.T(), err, "tls: failed to find any PEM data in key input")
 }
 
 func CatchTLSConfigBrokerPanic(c MQConf) (cfg *tls.Config, err error) {
@@ -196,49 +196,49 @@ func CatchTLSConfigBrokerPanic(c MQConf) (cfg *tls.Config, err error) {
 	return cfg, err
 }
 
-func (suite *BrokerTestSuite) TestNewMQNoTLS() {
+func (ts *BrokerTestSuite) TestNewMQNoTLS() {
 	b, err := NewMQ(tMqconf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
-	assert.False(suite.T(), b.Connection.IsClosed())
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(ts.T(), b.Connection.IsClosed())
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func (suite *BrokerTestSuite) TestNewMQTLS() {
+func (ts *BrokerTestSuite) TestNewMQTLS() {
 	SslConf := tMqconf
 	SslConf.Port = tlsPort
 	SslConf.Ssl = true
 	SslConf.VerifyPeer = true
 
 	b, err := NewMQ(SslConf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
-	assert.False(suite.T(), b.Connection.IsClosed())
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(ts.T(), b.Connection.IsClosed())
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func (suite *BrokerTestSuite) TestSendMessage() {
+func (ts *BrokerTestSuite) TestSendMessage() {
 	b, err := NewMQ(tMqconf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
-	assert.False(suite.T(), b.Connection.IsClosed())
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(ts.T(), b.Connection.IsClosed())
 
 	err = b.SendMessage("1", "", "ingest", []byte("test message"))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	b.Channel.Close()
 	b.Connection.Close()
 }
 
-func (suite *BrokerTestSuite) TestGetMessages() {
+func (ts *BrokerTestSuite) TestGetMessages() {
 	b, err := NewMQ(tMqconf)
-	assert.NoError(suite.T(), err)
-	assert.NotNil(suite.T(), b, "NewMQ without ssl did not return a broker")
-	assert.False(suite.T(), b.Connection.IsClosed())
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), b, "NewMQ without ssl did not return a broker")
+	assert.False(ts.T(), b.Connection.IsClosed())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -259,15 +259,15 @@ func (suite *BrokerTestSuite) TestGetMessages() {
 			Body:            []byte("test message"),
 		},
 	)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	d, err := b.GetMessages("ingest")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	for message := range d {
 		if string(message.Body) == "test message" {
 			err := message.Ack(false)
-			assert.NoError(suite.T(), err)
+			assert.NoError(ts.T(), err)
 
 			break
 		}
@@ -277,16 +277,16 @@ func (suite *BrokerTestSuite) TestGetMessages() {
 	b.Connection.Close()
 }
 
-func (suite *BrokerTestSuite) TestCreateNewChannel() {
+func (ts *BrokerTestSuite) TestCreateNewChannel() {
 	b, err := NewMQ(tMqconf)
-	assert.NoError(suite.T(), err)
-	assert.False(suite.T(), b.Channel.IsClosed())
+	assert.NoError(ts.T(), err)
+	assert.False(ts.T(), b.Channel.IsClosed())
 
 	b.Channel.Close()
-	assert.True(suite.T(), b.Channel.IsClosed())
+	assert.True(ts.T(), b.Channel.IsClosed())
 
-	assert.NoError(suite.T(), b.CreateNewChannel())
-	assert.False(suite.T(), b.Channel.IsClosed())
+	assert.NoError(ts.T(), b.CreateNewChannel())
+	assert.False(ts.T(), b.Channel.IsClosed())
 }
 
 // Helper functions below this line

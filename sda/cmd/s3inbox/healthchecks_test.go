@@ -30,11 +30,11 @@ func TestHealthTestSuite(t *testing.T) {
 	suite.Run(t, new(HealthcheckTestSuite))
 }
 
-func (suite *HealthcheckTestSuite) SetupTest() {
-	suite.fakeServer = startFakeServer("9024")
+func (ts *HealthcheckTestSuite) SetupTest() {
+	ts.fakeServer = startFakeServer("9024")
 
 	// Create an s3config for the fake server
-	suite.S3Fakeconf = storage.S3Conf{
+	ts.S3Fakeconf = storage.S3Conf{
 		URL:       "http://127.0.0.1",
 		Port:      9024,
 		AccessKey: "someAccess",
@@ -44,7 +44,7 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 	}
 
 	// Create a configuration for the fake MQ
-	suite.MQConf = broker.MQConf{
+	ts.MQConf = broker.MQConf{
 		Host:     "127.0.0.1",
 		Port:     MQport,
 		User:     "guest",
@@ -53,10 +53,10 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 		Exchange: "",
 	}
 
-	suite.messenger = &broker.AMQPBroker{}
+	ts.messenger = &broker.AMQPBroker{}
 
 	// Create a database configuration for the fake database
-	suite.DBConf = database.DBConf{
+	ts.DBConf = database.DBConf{
 		Host:       "127.0.0.1",
 		Port:       DBport,
 		User:       "postgres",
@@ -68,61 +68,61 @@ func (suite *HealthcheckTestSuite) SetupTest() {
 		ClientKey:  "",
 	}
 
-	suite.database = &database.SDAdb{}
+	ts.database = &database.SDAdb{}
 }
 
-func (suite *HealthcheckTestSuite) TearDownTest() {
-	suite.fakeServer.Close()
-	suite.database.Close()
+func (ts *HealthcheckTestSuite) TearDownTest() {
+	ts.fakeServer.Close()
+	ts.database.Close()
 }
 
-func (suite *HealthcheckTestSuite) TestHttpsGetCheck() {
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
 
 	url, _ := p.getS3ReadyPath()
-	assert.NoError(suite.T(), p.httpsGetCheck(url))
-	assert.Error(suite.T(), p.httpsGetCheck("http://127.0.0.1:8888/nonexistent"), "404 should fail")
+	assert.NoError(ts.T(), p.httpsGetCheck(url))
+	assert.Error(ts.T(), p.httpsGetCheck("http://127.0.0.1:8888/nonexistent"), "404 should fail")
 }
 
-func (suite *HealthcheckTestSuite) TestS3URL() {
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, suite.messenger, suite.database, new(tls.Config))
+func (ts *HealthcheckTestSuite) TestS3URL() {
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
 
 	_, err := p.getS3ReadyPath()
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	p.s3.URL = "://badurl"
 	url, err := p.getS3ReadyPath()
-	assert.Empty(suite.T(), url)
-	assert.Error(suite.T(), err)
+	assert.Empty(ts.T(), url)
+	assert.Error(ts.T(), err)
 }
 
-func (suite *HealthcheckTestSuite) TestHealthchecks() {
+func (ts *HealthcheckTestSuite) TestHealthchecks() {
 	// Setup
-	database, _ := database.NewSDAdb(suite.DBConf)
-	messenger, err := broker.NewMQ(suite.MQConf)
-	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	db, _ := database.NewSDAdb(ts.DBConf)
+	messenger, err := broker.NewMQ(ts.MQConf)
+	assert.NoError(ts.T(), err)
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp := w.Result()
 	defer resp.Body.Close()
-	assert.Equal(suite.T(), 200, resp.StatusCode)
+	assert.Equal(ts.T(), 200, resp.StatusCode)
 }
 
-func (suite *HealthcheckTestSuite) TestClosedDBHealthchecks() {
+func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	// Setup
-	database, _ := database.NewSDAdb(suite.DBConf)
-	messenger, err := broker.NewMQ(suite.MQConf)
-	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	db, _ := database.NewSDAdb(ts.DBConf)
+	messenger, err := broker.NewMQ(ts.MQConf)
+	assert.NoError(ts.T(), err)
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// Check that 200 is reported
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp := w.Result()
 	defer resp.Body.Close()
-	assert.Equal(suite.T(), 200, resp.StatusCode)
+	assert.Equal(ts.T(), 200, resp.StatusCode)
 
 	// Close connection to DB, check that connection is restored and 200 returned
 	w = httptest.NewRecorder()
@@ -130,15 +130,15 @@ func (suite *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp = w.Result()
 	defer resp.Body.Close()
-	assert.Equal(suite.T(), 200, resp.StatusCode)
+	assert.Equal(ts.T(), 200, resp.StatusCode)
 }
 
-func (suite *HealthcheckTestSuite) TestNoS3Healthchecks() {
+func (ts *HealthcheckTestSuite) TestNoS3Healthchecks() {
 	// Setup
-	database, _ := database.NewSDAdb(suite.DBConf)
-	messenger, err := broker.NewMQ(suite.MQConf)
-	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	db, _ := database.NewSDAdb(ts.DBConf)
+	messenger, err := broker.NewMQ(ts.MQConf)
+	assert.NoError(ts.T(), err)
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// S3 unavailable, check that 503 is reported
 	w := httptest.NewRecorder()
@@ -146,23 +146,23 @@ func (suite *HealthcheckTestSuite) TestNoS3Healthchecks() {
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp := w.Result()
 	defer resp.Body.Close()
-	assert.Equal(suite.T(), 503, resp.StatusCode)
+	assert.Equal(ts.T(), 503, resp.StatusCode)
 }
 
-func (suite *HealthcheckTestSuite) TestNoMQHealthchecks() {
+func (ts *HealthcheckTestSuite) TestNoMQHealthchecks() {
 	// Setup
-	database, _ := database.NewSDAdb(suite.DBConf)
-	messenger, err := broker.NewMQ(suite.MQConf)
-	assert.NoError(suite.T(), err)
-	p := NewProxy(suite.S3Fakeconf, &helper.AlwaysAllow{}, messenger, database, new(tls.Config))
+	db, _ := database.NewSDAdb(ts.DBConf)
+	messenger, err := broker.NewMQ(ts.MQConf)
+	assert.NoError(ts.T(), err)
+	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// Messenger unavailable, check that 503 is reported
 	p.messenger.Conf.Port = 123456
 	p.messenger.Connection.Close()
-	assert.True(suite.T(), p.messenger.Connection.IsClosed())
+	assert.True(ts.T(), p.messenger.Connection.IsClosed())
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp := w.Result()
 	defer resp.Body.Close()
-	assert.Equal(suite.T(), 503, resp.StatusCode)
+	assert.Equal(ts.T(), 503, resp.StatusCode)
 }

@@ -474,12 +474,12 @@ func readTrustedIssuers(filePath string) ([]TrustedISS, error) {
 }
 
 func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
-	keys := make(map[string]bool)
+	keyMap := make(map[string]bool)
 	wl := jwk.NewMapWhitelist()
 
 	for _, value := range obj {
-		if _, ok := keys[value.JKU]; !ok {
-			keys[value.JKU] = true
+		if _, ok := keyMap[value.JKU]; !ok {
+			keyMap[value.JKU] = true
 			wl.Add(value.JKU)
 		}
 	}

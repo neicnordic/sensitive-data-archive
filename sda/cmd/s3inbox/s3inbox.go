@@ -102,11 +102,11 @@ func main() {
 			log.Panicf("Error while getting key %s: %v", Conf.Server.Jwtpubkeypath, err)
 		}
 	}
-	mux := mux.NewRouter()
+	router := mux.NewRouter()
 	proxy := NewProxy(Conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
-	mux.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
-	mux.HandleFunc("/health", proxy.CheckHealth)
-	mux.PathPrefix("/").Handler(proxy)
+	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
+	router.HandleFunc("/health", proxy.CheckHealth)
+	router.PathPrefix("/").Handler(proxy)
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -114,7 +114,7 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
-		Handler:           mux,
+		Handler:           router,
 	}
 
 	if Conf.Server.Cert != "" && Conf.Server.Key != "" {

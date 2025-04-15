@@ -30,12 +30,12 @@ type OIDCDetails struct {
 }
 
 // GetOIDCDetails requests OIDC configuration information
-func GetOIDCDetails(url string) (OIDCDetails, error) {
-	log.Debugf("requesting OIDC config from %s", url)
+func GetOIDCDetails(uri string) (OIDCDetails, error) {
+	log.Debugf("requesting OIDC config from %s", uri)
 	// Prepare response body struct
 	var u OIDCDetails
 	// Do request
-	response, err := request.MakeRequest("GET", url, nil, nil)
+	response, err := request.MakeRequest("GET", uri, nil, nil)
 	if err != nil {
 		log.Errorf("request failed, %s", err)
 
@@ -49,7 +49,7 @@ func GetOIDCDetails(url string) (OIDCDetails, error) {
 		return u, err
 	}
 	defer response.Body.Close()
-	log.Debugf("received OIDC config %s from %s", u, url)
+	log.Debugf("received OIDC config %s from %s", u, uri)
 
 	return u, nil
 }

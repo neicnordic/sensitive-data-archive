@@ -33,7 +33,7 @@ func TestUserAuthTestSuite(t *testing.T) {
 	suite.Run(t, new(UserAuthTest))
 }
 
-func (suite *UserAuthTest) SetupTest() {
+func (ts *UserAuthTest) SetupTest() {
 }
 
 func TestMain(m *testing.M) {
@@ -115,75 +115,75 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
-func (suite *UserAuthTest) TestAlwaysAuthenticator() {
+func (ts *UserAuthTest) TestAlwaysAuthenticator() {
 	a := helper.NewAlwaysAllow()
 	r, _ := http.NewRequest("Get", "/", nil)
 	_, err := a.Authenticate(r)
-	assert.Nil(suite.T(), err)
+	assert.Nil(ts.T(), err)
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_NoFile() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_NoFile() {
 	a := NewValidateFromToken(jwk.NewSet())
 	err := a.ReadJwtPubKeyPath("")
-	assert.Error(suite.T(), err)
+	assert.Error(ts.T(), err)
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_GetFile() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_GetFile() {
 	demoKeysPath := "temp-keys"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateECkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
 	a := NewValidateFromToken(jwk.NewSet())
 	err = a.ReadJwtPubKeyPath(jwtpubkeypath)
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), 2, a.Keyset.Len())
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, a.Keyset.Len())
 
 	defer os.RemoveAll(demoKeysPath)
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_WrongURL() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_WrongURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "/dummy/"
 
 	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
-	assert.Equal(suite.T(), "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
+	assert.Equal(ts.T(), "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_BadURL() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_BadURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "dummy.com/jwk"
 
 	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
-	assert.Equal(suite.T(), "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
+	assert.Equal(ts.T(), "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_GoodURL() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_GoodURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
 
 	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
-	assert.NoError(suite.T(), err, "failed to fetch remote JWK")
-	assert.Equal(suite.T(), 3, a.Keyset.Len())
+	assert.NoError(ts.T(), err, "failed to fetch remote JWK")
+	assert.Equal(ts.T(), 3, a.Keyset.Len())
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	// These tests should be possible to reuse with all correct authenticators somehow
 
 	// Create temp demo rsa key pair
 	demoKeysPath := "demo-rsa-keys"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 	a := NewValidateFromToken(jwk.NewSet())
@@ -191,11 +191,11 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateRSAKey(prKeyPath, "/rsa")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Create token and set up request defaults
 	defaultToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.DefaultTokenClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ := http.NewRequest("", "/", nil)
 	r.Host = "localhost"
@@ -204,7 +204,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.Header.Set("X-Amz-Security-Token", "notJWT")
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
-	assert.Error(suite.T(), err)
+	assert.Error(ts.T(), err)
 
 	r.Header.Set("X-Amz-Security-Token", defaultToken)
 
@@ -212,24 +212,24 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.URL.Path = "/dummy/"
 	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	token, err := a.Authenticate(r)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	privateClaims := token.PrivateClaims()
-	assert.Equal(suite.T(), privateClaims["pilot"], helper.DefaultTokenClaims["pilot"])
+	assert.Equal(ts.T(), privateClaims["pilot"], helper.DefaultTokenClaims["pilot"])
 
 	// Create and test expired Elixir token
 	expiredToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.ExpiredClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", expiredToken)
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
-	assert.Error(suite.T(), err)
+	assert.Error(ts.T(), err)
 
 	// Elixir token is not valid (e.g. issued in a future time)
 	nonValidToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.NonValidClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
@@ -237,7 +237,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.URL.Path = "/username/"
 	_, nonvalidToken := a.Authenticate(r)
 	// The error output is huge so a smaller part is compared
-	assert.Equal(suite.T(), "\"iat\" not satisfied", nonvalidToken.Error())
+	assert.Equal(ts.T(), "\"iat\" not satisfied", nonvalidToken.Error())
 
 	// Elixir tokens broken
 	r, _ = http.NewRequest("", "/", nil)
@@ -245,40 +245,40 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	r.Header.Set("X-Amz-Security-Token", defaultToken[3:])
 	r.URL.Path = "/username/"
 	_, brokenToken := a.Authenticate(r)
-	assert.Contains(suite.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
+	assert.Contains(ts.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", "random"+defaultToken)
 	r.URL.Path = "/username/"
 	_, err = a.Authenticate(r)
-	assert.Error(suite.T(), err)
+	assert.Error(ts.T(), err)
 	_, brokenToken2 := a.Authenticate(r)
-	assert.Contains(suite.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
+	assert.Contains(ts.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	// Bad issuer
 	basIss, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.WrongTokenAlgClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", basIss)
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
-	assert.Contains(suite.T(), err.Error(), "failed to get issuer from token")
+	assert.Contains(ts.T(), err.Error(), "failed to get issuer from token")
 
 	// Delete the keys when testing is done or failed
 	defer os.RemoveAll(demoKeysPath)
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-ec-keys"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateECkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
@@ -287,11 +287,11 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 
 	// Parse demo private key
 	prKeyParsed, err := helper.ParsePrivateECKey(prKeyPath, "/ec")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Create token and set up request defaults
 	defaultToken, err := helper.CreateECToken(prKeyParsed, "ES256", helper.DefaultTokenClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ := http.NewRequest("", "/", nil)
 	r.Host = "localhost"
@@ -301,22 +301,22 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.URL.Path = "/dummy/"
 	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	_, err = a.Authenticate(r)
-	assert.Nil(suite.T(), err)
+	assert.Nil(ts.T(), err)
 
 	// Create and test expired Elixir token
 	expiredToken, err := helper.CreateECToken(prKeyParsed, "ES256", helper.ExpiredClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", expiredToken)
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
-	assert.Error(suite.T(), err)
+	assert.Error(ts.T(), err)
 
 	// Elixir token is not valid
 	nonValidToken, err := helper.CreateECToken(prKeyParsed, "ES256", helper.NonValidClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
@@ -324,7 +324,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.URL.Path = "/username/"
 	_, nonvalidToken := a.Authenticate(r)
 	// The error output is huge so a smaller part is compared
-	assert.Equal(suite.T(), "\"iat\" not satisfied", nonvalidToken.Error())
+	assert.Equal(ts.T(), "\"iat\" not satisfied", nonvalidToken.Error())
 
 	// Elixir tokens broken
 	r, _ = http.NewRequest("", "/", nil)
@@ -332,38 +332,38 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_EC() {
 	r.Header.Set("X-Amz-Security-Token", defaultToken[3:])
 	r.URL.Path = "/username/"
 	_, brokenToken := a.Authenticate(r)
-	assert.Contains(suite.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
+	assert.Contains(ts.T(), brokenToken.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", "random"+defaultToken)
 	r.URL.Path = "/username/"
 	_, brokenToken2 := a.Authenticate(r)
-	assert.Contains(suite.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
+	assert.Contains(ts.T(), brokenToken2.Error(), "failed to parse jws: failed to parse JOSE headers:")
 
 	// Bad issuer
 	basIss, err := helper.CreateECToken(prKeyParsed, "ES256", helper.WrongTokenAlgClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	r, _ = http.NewRequest("", "/", nil)
 	r.Host = "localhost"
 	r.Header.Set("X-Amz-Security-Token", basIss)
 	r.URL.Path = "/dummy/"
 	_, err = a.Authenticate(r)
-	assert.Contains(suite.T(), err.Error(), "failed to get issuer from token")
+	assert.Contains(ts.T(), err.Error(), "failed to get issuer from token")
 
 	defer os.RemoveAll(demoKeysPath)
 }
 
-func (suite *UserAuthTest) TestWrongKeyType_RSA() {
+func (ts *UserAuthTest) TestWrongKeyType_RSA() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-ec-keys"
 	demoPrKeyName := "/ec"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateECkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
@@ -372,20 +372,20 @@ func (suite *UserAuthTest) TestWrongKeyType_RSA() {
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateRSAKey(prKeyPath, demoPrKeyName)
-	assert.Equal(suite.T(), "bad key format, expected RSA got EC", err.Error())
+	assert.Equal(ts.T(), "bad key format, expected RSA got EC", err.Error())
 
 	defer os.RemoveAll(demoKeysPath)
 }
 
-func (suite *UserAuthTest) TestWrongKeyType_EC() {
+func (ts *UserAuthTest) TestWrongKeyType_EC() {
 	// Create temp demo ec key pair
 	demoKeysPath := "demo-rsa-keys"
 	demoPrKeyName := "/rsa"
 	prKeyPath, pubKeyPath, err := helper.MakeFolder(demoKeysPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = helper.CreateRSAkeys(prKeyPath, pubKeyPath)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	jwtpubkeypath := demoKeysPath + "/public-key/"
 
@@ -394,20 +394,20 @@ func (suite *UserAuthTest) TestWrongKeyType_EC() {
 
 	// Parse demo private key
 	_, err = helper.ParsePrivateECKey(prKeyPath, demoPrKeyName)
-	assert.Equal(suite.T(), "bad key format, expected EC got RSA", err.Error())
+	assert.Equal(ts.T(), "bad key format, expected EC got RSA", err.Error())
 
 	defer os.RemoveAll(demoKeysPath)
 }
 
-func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
+func (ts *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	// Create random secret
 	key := make([]byte, 256)
 	_, err := rand.Read(key)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Create HS256 token
 	wrongAlgToken, err := helper.CreateHSToken(key, helper.DefaultTokenClaims)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	a := NewValidateFromToken(jwk.NewSet())
 
@@ -416,7 +416,7 @@ func (suite *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_HS() {
 	r.Header.Set("X-Amz-Security-Token", wrongAlgToken)
 	r.URL.Path = "/username/"
 	_, WrongAlg := a.Authenticate(r)
-	assert.Contains(suite.T(), WrongAlg.Error(), "failed to find key with key ID")
+	assert.Contains(ts.T(), WrongAlg.Error(), "failed to find key with key ID")
 }
 
 func TestGetBearerToken(t *testing.T) {

@@ -744,62 +744,62 @@ func (c *Config) configBackup() {
 // configBroker provides configuration for the message broker
 func (c *Config) configBroker() error {
 	// Setup broker
-	broker := broker.MQConf{}
+	mq := broker.MQConf{}
 
-	broker.Host = viper.GetString("broker.host")
-	broker.Port = viper.GetInt("broker.port")
-	broker.User = viper.GetString("broker.user")
-	broker.Password = viper.GetString("broker.password")
+	mq.Host = viper.GetString("broker.host")
+	mq.Port = viper.GetInt("broker.port")
+	mq.User = viper.GetString("broker.user")
+	mq.Password = viper.GetString("broker.password")
 
-	broker.Queue = viper.GetString("broker.queue")
+	mq.Queue = viper.GetString("broker.queue")
 
 	if viper.IsSet("broker.serverName") {
-		broker.ServerName = viper.GetString("broker.serverName")
+		mq.ServerName = viper.GetString("broker.serverName")
 	}
 
 	if viper.IsSet("broker.routingkey") {
-		broker.RoutingKey = viper.GetString("broker.routingkey")
+		mq.RoutingKey = viper.GetString("broker.routingkey")
 	}
 
 	if viper.IsSet("broker.exchange") {
-		broker.Exchange = viper.GetString("broker.exchange")
+		mq.Exchange = viper.GetString("broker.exchange")
 	}
 
 	if viper.IsSet("broker.vhost") {
 		if strings.HasPrefix(viper.GetString("broker.vhost"), "/") {
-			broker.Vhost = viper.GetString("broker.vhost")
+			mq.Vhost = viper.GetString("broker.vhost")
 		} else {
-			broker.Vhost = "/" + viper.GetString("broker.vhost")
+			mq.Vhost = "/" + viper.GetString("broker.vhost")
 		}
 	} else {
-		broker.Vhost = "/"
+		mq.Vhost = "/"
 	}
 
 	if viper.IsSet("broker.ssl") {
-		broker.Ssl = viper.GetBool("broker.ssl")
+		mq.Ssl = viper.GetBool("broker.ssl")
 	}
 
 	if viper.IsSet("broker.verifyPeer") {
-		broker.VerifyPeer = viper.GetBool("broker.verifyPeer")
-		if broker.VerifyPeer {
+		mq.VerifyPeer = viper.GetBool("broker.verifyPeer")
+		if mq.VerifyPeer {
 			// Since verifyPeer is specified, these are required.
 			if !(viper.IsSet("broker.clientCert") && viper.IsSet("broker.clientKey")) {
 				return errors.New("when broker.verifyPeer is set both broker.clientCert and broker.clientKey is needed")
 			}
-			broker.ClientCert = viper.GetString("broker.clientCert")
-			broker.ClientKey = viper.GetString("broker.clientKey")
+			mq.ClientCert = viper.GetString("broker.clientCert")
+			mq.ClientKey = viper.GetString("broker.clientKey")
 		}
 	}
 	if viper.IsSet("broker.cacert") {
-		broker.CACert = viper.GetString("broker.cacert")
+		mq.CACert = viper.GetString("broker.cacert")
 	}
 
-	broker.PrefetchCount = 2
+	mq.PrefetchCount = 2
 	if viper.IsSet("broker.prefetchCount") {
-		broker.PrefetchCount = viper.GetInt("broker.prefetchCount")
+		mq.PrefetchCount = viper.GetInt("broker.prefetchCount")
 	}
 
-	c.Broker = broker
+	c.Broker = mq
 
 	return nil
 }

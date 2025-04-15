@@ -23,16 +23,16 @@ type S3TestSuite struct {
 	Mock sqlmock.Sqlmock
 }
 
-func (suite *S3TestSuite) SetupTest() {
+func (ts *S3TestSuite) SetupTest() {
 	var err error
 	var db *sql.DB
 
 	// create mock database
 	testConnInfo := "host=localhost port=5432 user=user password=pass dbname=db sslmode=disable"
 
-	db, suite.Mock, err = sqlmock.New()
+	db, ts.Mock, err = sqlmock.New()
 	if err != nil {
-		suite.T().Fatalf("error '%s' when creating mock database connection", err)
+		ts.T().Fatalf("error '%s' when creating mock database connection", err)
 	}
 
 	database.DB = &database.SQLdb{DB: db, ConnInfo: testConnInfo}
@@ -52,14 +52,14 @@ func (suite *S3TestSuite) SetupTest() {
 	}
 }
 
-func (suite *S3TestSuite) TearDownTest() {
+func (ts *S3TestSuite) TearDownTest() {
 }
 
 func TestS3TestSuite(t *testing.T) {
 	suite.Run(t, new(S3TestSuite))
 }
 
-func (suite *S3TestSuite) TestGetBucketLocation() {
+func (ts *S3TestSuite) TestGetBucketLocation() {
 	// Send a request through the middleware to get datasets
 
 	w := httptest.NewRecorder()
@@ -69,23 +69,23 @@ func (suite *S3TestSuite) TestGetBucketLocation() {
 
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
-	assert.Nil(suite.T(), err, "failed to parse body from location response")
+	assert.Nil(ts.T(), err, "failed to parse body from location response")
 	defer response.Body.Close()
 
 	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">us-west-2</LocationConstraint>"
 
-	assert.Equal(suite.T(), expected, string(body), "Wrong location from S3")
+	assert.Equal(ts.T(), expected, string(body), "Wrong location from S3")
 }
 
-func (suite *S3TestSuite) TestListBuckets() {
+func (ts *S3TestSuite) TestListBuckets() {
 	// Setup a mock database to handle queries
 
 	query := `SELECT stable_id, created_at FROM sda.datasets WHERE stable_id = \$1`
-	suite.Mock.ExpectQuery(query).WithArgs("dataset1").
+	ts.Mock.ExpectQuery(query).WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "nyss"))
-	suite.Mock.ExpectQuery(query).WithArgs("dataset10").
+	ts.Mock.ExpectQuery(query).WithArgs("dataset10").
 		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "nyligen"))
-	suite.Mock.ExpectQuery(query).WithArgs("https://url/dataset").
+	ts.Mock.ExpectQuery(query).WithArgs("https://url/dataset").
 		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "snart"))
 
 	// Send a request through the middleware to get datasets
@@ -97,7 +97,7 @@ func (suite *S3TestSuite) TestListBuckets() {
 
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
-	assert.Nil(suite.T(), err, "failed to parse body from location response")
+	assert.Nil(ts.T(), err, "failed to parse body from location response")
 	defer response.Body.Close()
 
 	expected := xml.Header +
@@ -107,13 +107,13 @@ func (suite *S3TestSuite) TestListBuckets() {
 		"<Bucket><CreationDate>snart</CreationDate><Name>dataset1</Name></Bucket>" +
 		"</Buckets><Owner></Owner></ListAllMyBucketsResult>"
 
-	assert.Equal(suite.T(), expected, string(body), "Wrong bucket list from S3")
+	assert.Equal(ts.T(), expected, string(body), "Wrong bucket list from S3")
 
-	err = suite.Mock.ExpectationsWereMet()
-	assert.Nilf(suite.T(), err, "there were unfulfilled expectations: %s", err)
+	err = ts.Mock.ExpectationsWereMet()
+	assert.Nilf(ts.T(), err, "there were unfulfilled expectations: %s", err)
 }
 
-func (suite *S3TestSuite) TestListByPrefix() {
+func (ts *S3TestSuite) TestListByPrefix() {
 	// Setup a mock database to handle queries
 	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
@@ -150,7 +150,7 @@ func (suite *S3TestSuite) TestListByPrefix() {
 		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = \$1;
 		`
-	suite.Mock.ExpectQuery(query).
+	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
 			"display_file_name", "user_id", "file_path", "file_size",
@@ -172,7 +172,7 @@ func (suite *S3TestSuite) TestListByPrefix() {
 
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
-	assert.Nil(suite.T(), err, "failed to parse body from location response")
+	assert.Nil(ts.T(), err, "failed to parse body from location response")
 	defer response.Body.Close()
 
 	expected := xml.Header +
@@ -184,13 +184,13 @@ func (suite *S3TestSuite) TestListByPrefix() {
 		"<Name>dataset1</Name>" +
 		"</ListBucketResult>"
 
-	assert.Equal(suite.T(), expected, string(body), "Wrong object list from S3")
+	assert.Equal(ts.T(), expected, string(body), "Wrong object list from S3")
 
-	err = suite.Mock.ExpectationsWereMet()
-	assert.Nilf(suite.T(), err, "there were unfulfilled expectations: %s", err)
+	err = ts.Mock.ExpectationsWereMet()
+	assert.Nilf(ts.T(), err, "there were unfulfilled expectations: %s", err)
 }
 
-func (suite *S3TestSuite) TestListObjects() {
+func (ts *S3TestSuite) TestListObjects() {
 	// Setup a mock database to handlequeries
 	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
@@ -227,7 +227,7 @@ func (suite *S3TestSuite) TestListObjects() {
 		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
 		WHERE datasets.stable_id = \$1;
 		`
-	suite.Mock.ExpectQuery(query).
+	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
 			"display_file_name", "user_id", "file_path", "file_size",
@@ -248,7 +248,7 @@ func (suite *S3TestSuite) TestListObjects() {
 
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
-	assert.Nil(suite.T(), err, "failed to parse body from location response")
+	assert.Nil(ts.T(), err, "failed to parse body from location response")
 	defer response.Body.Close()
 
 	expected := xml.Header +
@@ -260,13 +260,13 @@ func (suite *S3TestSuite) TestListObjects() {
 		"<Name>dataset1</Name>" +
 		"</ListBucketResult>"
 
-	assert.Equal(suite.T(), expected, string(body), "Wrong object list from S3")
+	assert.Equal(ts.T(), expected, string(body), "Wrong object list from S3")
 
-	err = suite.Mock.ExpectationsWereMet()
-	assert.Nilf(suite.T(), err, "there were unfulfilled expectations: %s", err)
+	err = ts.Mock.ExpectationsWereMet()
+	assert.Nilf(ts.T(), err, "there were unfulfilled expectations: %s", err)
 }
 
-func (suite *S3TestSuite) TestParseParams() {
+func (ts *S3TestSuite) TestParseParams() {
 	type paramTest struct {
 		Path     string
 		Dataset  string
@@ -289,8 +289,8 @@ func (suite *S3TestSuite) TestParseParams() {
 		testParseParams := func(c *gin.Context) {
 			parseParams(c)
 
-			assert.Equal(suite.T(), params.Dataset, c.Param("dataset"), "Failed to parse dataset name")
-			assert.Equal(suite.T(), params.Filename, c.Param("filename"), "Failed to parse file name")
+			assert.Equal(ts.T(), params.Dataset, c.Param("dataset"), "Failed to parse dataset name")
+			assert.Equal(ts.T(), params.Filename, c.Param("filename"), "Failed to parse file name")
 			c.AbortWithStatus(http.StatusAccepted)
 		}
 
@@ -305,6 +305,6 @@ func (suite *S3TestSuite) TestParseParams() {
 		response := w.Result()
 		defer response.Body.Close()
 
-		assert.Equal(suite.T(), http.StatusAccepted, response.StatusCode, "Request failed")
+		assert.Equal(ts.T(), http.StatusAccepted, response.StatusCode, "Request failed")
 	}
 }

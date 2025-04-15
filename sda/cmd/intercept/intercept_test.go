@@ -17,7 +17,7 @@ func TestConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (suite *TestSuite) SetupTest() {
+func (ts *TestSuite) SetupTest() {
 	viper.Set("log.level", "debug")
 }
 
@@ -51,7 +51,7 @@ type missing struct {
 	FilePath string `json:"filepath"`
 }
 
-func (suite *TestSuite) TestMessageSelection_Accession() {
+func (ts *TestSuite) TestMessageSelection_Accession() {
 	msg := accession{
 		Type:        "accession",
 		User:        "foo",
@@ -65,11 +65,11 @@ func (suite *TestSuite) TestMessageSelection_Accession() {
 
 	msgType, err := typeFromMessage(message)
 
-	assert.Nil(suite.T(), err, "Unexpected error from typeFromMessage")
-	assert.Equal(suite.T(), msgType, msgAccession, "message type from message does not match expected")
+	assert.Nil(ts.T(), err, "Unexpected error from typeFromMessage")
+	assert.Equal(ts.T(), msgType, msgAccession, "message type from message does not match expected")
 }
 
-func (suite *TestSuite) TestMessageSelection_Cancel() {
+func (ts *TestSuite) TestMessageSelection_Cancel() {
 	msg := ingest{
 		Type:     "cancel",
 		User:     "foo",
@@ -79,11 +79,11 @@ func (suite *TestSuite) TestMessageSelection_Cancel() {
 
 	msgType, err := typeFromMessage(message)
 
-	assert.Nil(suite.T(), err, "Unexpected error from typeFromMessage")
-	assert.Equal(suite.T(), msgType, msgCancel, "message type from message does not match expected")
+	assert.Nil(ts.T(), err, "Unexpected error from typeFromMessage")
+	assert.Equal(ts.T(), msgType, msgCancel, "message type from message does not match expected")
 }
 
-func (suite *TestSuite) TestMessageSelection_Ingest() {
+func (ts *TestSuite) TestMessageSelection_Ingest() {
 	msg := ingest{
 		Type:     "ingest",
 		User:     "foo",
@@ -93,11 +93,11 @@ func (suite *TestSuite) TestMessageSelection_Ingest() {
 
 	msgType, err := typeFromMessage(message)
 
-	assert.Nil(suite.T(), err, "Unexpected error from typeFromMessage")
-	assert.Equal(suite.T(), msgIngest, msgType, "message type from message does not match expected")
+	assert.Nil(ts.T(), err, "Unexpected error from typeFromMessage")
+	assert.Equal(ts.T(), msgIngest, msgType, "message type from message does not match expected")
 }
 
-func (suite *TestSuite) TestMessageSelection_Mapping() {
+func (ts *TestSuite) TestMessageSelection_Mapping() {
 	msg := mapping{
 		Type:      "mapping",
 		DatasetID: "EGAD12345678900",
@@ -109,11 +109,11 @@ func (suite *TestSuite) TestMessageSelection_Mapping() {
 
 	msgType, err := typeFromMessage(message)
 
-	assert.Nil(suite.T(), err, "Unexpected error from typeFromMessage")
-	assert.Equal(suite.T(), msgMapping, msgType, "message type from message does not match expected")
+	assert.Nil(ts.T(), err, "Unexpected error from typeFromMessage")
+	assert.Equal(ts.T(), msgMapping, msgType, "message type from message does not match expected")
 }
 
-func (suite *TestSuite) TestMessageSelection_Notype() {
+func (ts *TestSuite) TestMessageSelection_Notype() {
 	msg := missing{
 		User:     "foo",
 		FilePath: "/tmp/foo",
@@ -122,6 +122,6 @@ func (suite *TestSuite) TestMessageSelection_Notype() {
 
 	msgType, err := typeFromMessage(message)
 
-	assert.Error(suite.T(), err, "Unexpected lack of error from typeFromMessage")
-	assert.Equal(suite.T(), "", msgType, "message type from message does not match expected")
+	assert.Error(ts.T(), err, "Unexpected lack of error from typeFromMessage")
+	assert.Equal(ts.T(), "", msgType, "message type from message does not match expected")
 }

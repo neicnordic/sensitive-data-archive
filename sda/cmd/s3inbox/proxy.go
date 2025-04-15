@@ -76,11 +76,11 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
-	tr := &http.Transport{TLSClientConfig: tls}
+func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-	return &Proxy{s3conf, auth, messenger, database, client, make(map[string]string)}
+	return &Proxy{s3conf, auth, messenger, db, client, make(map[string]string)}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {

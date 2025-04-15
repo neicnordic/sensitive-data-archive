@@ -54,8 +54,8 @@ func NewAdapter(source *[]byte) *Adapter {
 	return &Adapter{policy: []CasbinRule{}, source: source}
 }
 
-func (a *Adapter) LoadPolicy(model model.Model) error {
-	err := a.loadFromBuffer(model)
+func (a *Adapter) LoadPolicy(m model.Model) error {
+	err := a.loadFromBuffer(m)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (a *Adapter) LoadPolicy(model model.Model) error {
 	return nil
 }
 
-func (a *Adapter) loadFromBuffer(model model.Model) error {
+func (a *Adapter) loadFromBuffer(m model.Model) error {
 	if len(*a.source) == 0 {
 		return nil
 	}
@@ -75,13 +75,13 @@ func (a *Adapter) loadFromBuffer(model model.Model) error {
 	}
 
 	for _, p := range input.Policy {
-		if err := persist.LoadPolicyLine(fmt.Sprintf("p,%s,%s,%s", p.Role, p.Path, p.Action), model); err != nil {
+		if err := persist.LoadPolicyLine(fmt.Sprintf("p,%s,%s,%s", p.Role, p.Path, p.Action), m); err != nil {
 			return err
 		}
 	}
 
 	for _, r := range input.Roles {
-		if err := persist.LoadPolicyLine(fmt.Sprintf("g,%s,%s", r.Role, r.RoleBinding), model); err != nil {
+		if err := persist.LoadPolicyLine(fmt.Sprintf("g,%s,%s", r.Role, r.RoleBinding), m); err != nil {
 			return err
 		}
 	}
@@ -105,16 +105,16 @@ func (a *Adapter) RemoveFilteredPolicy(_ string, _ string, _ int, _ ...string) e
 }
 
 // SavePolicy saves policy
-func (a *Adapter) SavePolicy(model model.Model) error {
+func (a *Adapter) SavePolicy(m model.Model) error {
 	a.policy = []CasbinRule{}
 	var rules []CasbinRule
-	for ptype, ast := range model["p"] {
+	for ptype, ast := range m["p"] {
 		for _, rule := range ast.Policy {
 			rules = append(rules, CasbinRule{PType: ptype, V0: rule[0], V1: rule[1], V2: rule[2]})
 		}
 	}
 
-	for ptype, ast := range model["g"] {
+	for ptype, ast := range m["g"] {
 		for _, rule := range ast.Policy {
 			rules = append(rules, CasbinRule{PType: ptype, V0: rule[0], V1: rule[1]})
 		}
