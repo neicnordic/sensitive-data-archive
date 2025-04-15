@@ -91,7 +91,7 @@ func setup(config *config.Config) *http.Server {
 	e, err := casbin.NewEnforcer(model, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
 		shutdown()
-		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error())
+		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
 	}
 
 	r := gin.Default()

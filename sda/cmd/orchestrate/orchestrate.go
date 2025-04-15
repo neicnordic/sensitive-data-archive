@@ -101,7 +101,7 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 
 	messages, err := mq.GetMessages(queue)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // nolint # FIXME Fatal should only be called from main
 	}
 	for delivered := range messages {
 		log.Debugf("Received a message: %s", delivered.Body)

@@ -343,28 +343,28 @@ func MakeCerts(outDir string) {
 	// create our private and public key
 	caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	// create the CA certificate
 	caBytes, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLScertToFile(outDir+"/ca.crt", caBytes)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLSkeyToFile(outDir+"/tls.key", tlsKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	// set up our server certificate
@@ -386,12 +386,12 @@ func MakeCerts(outDir string) {
 	// create the TLS certificate
 	certBytes, err := x509.CreateCertificate(rand.Reader, certTemplate, caTemplate, &tlsKey.PublicKey, caPrivKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLScertToFile(outDir+"/tls.crt", certBytes)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 	log.Printf("certificartes written to: %s", outDir)
 }
