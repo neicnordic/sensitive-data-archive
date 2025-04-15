@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	bcrypt "golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // CegaUserResponse captures the response list
