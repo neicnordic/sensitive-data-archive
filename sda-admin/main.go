@@ -21,7 +21,7 @@ var (
 )
 
 // Command-line usage
-const usage = `Usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
+const usage = `usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
   user list                     List all users.
@@ -42,7 +42,7 @@ Global Options:
 Additional Commands:
   version          Show the version of sda-admin.
   help             Show this help message.
-  -h, -help        Show this help message.`
+  -h, -help        Show this help message`
 
 var userUsage = `List Users:
   Usage: sda-admin user list 
