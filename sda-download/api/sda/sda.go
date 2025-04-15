@@ -287,7 +287,7 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	wholeFile := true
+	wholeFile := true //nolint:staticcheck
 	if start != 0 || end != 0 {
 		wholeFile = false
 	}

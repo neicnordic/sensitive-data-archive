@@ -432,7 +432,7 @@ func (c *Map) configDatabase() error {
 	}
 	if db.SslMode == "verify-full" {
 		// Since verify-full is specified, these are required.
-		if !(viper.IsSet("db.clientCert") && viper.IsSet("db.clientKey")) {
+		if !viper.IsSet("db.clientCert") && !viper.IsSet("db.clientKey") {
 			return errors.New("when db.sslMode is set to verify-full both db.clientCert and db.clientKey are needed")
 		}
 	}

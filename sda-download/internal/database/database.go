@@ -134,7 +134,7 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	var (
 		r     []*FileInfo = nil
 		err   error       = nil
-		count int         = 0
+		count             = 0
 	)
 
 	for count < dbRetryTimes {
@@ -251,9 +251,9 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 // CheckDataset checks if dataset name exists
 var CheckDataset = func(dataset string) (bool, error) {
 	var (
-		r     bool  = false
+		r           = false
 		err   error = nil
-		count int   = 0
+		count       = 0
 	)
 
 	for count < dbRetryTimes {
@@ -291,7 +291,7 @@ var GetDatasetInfo = func(datasetID string) (*DatasetInfo, error) {
 	var (
 		d     *DatasetInfo = nil
 		err   error        = nil
-		count int          = 0
+		count              = 0
 	)
 
 	for count < dbRetryTimes {
@@ -409,9 +409,9 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 // CheckFilePermission checks if user has permissions to access the dataset the file is a part of
 var CheckFilePermission = func(fileID string) (string, error) {
 	var (
-		r     string = ""
-		err   error  = nil
-		count int    = 0
+		r           = ""
+		err   error = nil
+		count       = 0
 	)
 
 	for count < dbRetryTimes {
@@ -467,7 +467,7 @@ var GetFile = func(fileID string) (*FileDownload, error) {
 	var (
 		r     *FileDownload = nil
 		err   error         = nil
-		count int           = 0
+		count               = 0
 	)
 	for count < dbRetryTimes {
 		r, err = DB.getFile(fileID)

@@ -22,7 +22,7 @@ func (pb *posixBackend) NewFileReadSeeker(filePath string) (io.ReadSeekCloser, e
 
 	seeker, ok := reader.(io.ReadSeekCloser)
 	if !ok {
-		return nil, errors.New("Invalid posixBackend")
+		return nil, errors.New("invalid posixBackend")
 	}
 
 	return seeker, nil
@@ -176,10 +176,10 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		if offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
+			return r.currentOffset, fmt.Errorf("invalid offset %v- can't be negative when seeking from start", offset)
 		}
 		if offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
+			return r.currentOffset, fmt.Errorf("invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
 		}
 
 		r.currentOffset = offset
@@ -189,10 +189,10 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 
 	case io.SeekCurrent:
 		if r.currentOffset+offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
+			return r.currentOffset, fmt.Errorf("invalid offset %v from %v would be be before start", offset, r.currentOffset)
 		}
 		if offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
+			return r.currentOffset, fmt.Errorf("invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
 		}
 
 		r.currentOffset += offset
@@ -202,10 +202,10 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 
 	case io.SeekEnd:
 		if r.objectSize+offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
+			return r.currentOffset, fmt.Errorf("invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
 		}
 		if r.objectSize+offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
+			return r.currentOffset, fmt.Errorf("invalid offset %v from end in %v bytes object", offset, r.objectSize)
 		}
 
 		r.currentOffset = r.objectSize + offset
@@ -214,7 +214,7 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 		return r.currentOffset, nil
 	}
 
-	return r.currentOffset, errors.New("Bad whence")
+	return r.currentOffset, errors.New("bad whence")
 }
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
@@ -353,7 +353,7 @@ func (r *s3Reader) Read(dst []byte) (n int, err error) {
 	responseRange := fmt.Sprintf("bytes %d-", r.currentOffset)
 
 	if object.ContentRange == nil || !strings.HasPrefix(*object.ContentRange, responseRange) {
-		return 0, fmt.Errorf("Unexpected content range %v - expected prefix %v", object.ContentRange, responseRange)
+		return 0, fmt.Errorf("unexpected content range %v - expected prefix %v", object.ContentRange, responseRange)
 	}
 
 	b := bytes.Buffer{}
@@ -391,12 +391,12 @@ func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 	for i, reader := range readers {
 		seeker, ok := reader.(io.ReadSeeker)
 		if !ok {
-			return nil, fmt.Errorf("Reader %d to SeekableMultiReader is not seekable", i)
+			return nil, fmt.Errorf("reader %d to SeekableMultiReader is not seekable", i)
 		}
 
 		size, err := seeker.Seek(0, io.SeekEnd)
 		if err != nil {
-			return nil, fmt.Errorf("Size determination failed for reader %d to SeekableMultiReader: %v", i, err)
+			return nil, fmt.Errorf("size determination failed for reader %d to SeekableMultiReader: %v", i, err)
 		}
 
 		sizes[i] = size
@@ -415,7 +415,7 @@ func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		r.currentOffset = r.totalSize + offset
 	default:
-		return 0, errors.New("Unsupported whence")
+		return 0, errors.New("unsupported whence")
 	}
 
 	return r.currentOffset, nil
@@ -443,12 +443,12 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 
 		seekable, ok := reader.(io.ReadSeeker)
 		if !ok {
-			return 0, errors.New("Expected seekable reader but changed")
+			return 0, errors.New("expected seekable reader but changed")
 		}
 
 		_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)
 		if err != nil {
-			return 0, fmt.Errorf("Unexpected error while seeking: %v", err)
+			return 0, fmt.Errorf("unexpected error while seeking: %v", err)
 		}
 
 		n, err := seekable.Read(dst)

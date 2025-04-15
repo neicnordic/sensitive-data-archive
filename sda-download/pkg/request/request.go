@@ -56,7 +56,7 @@ var HTTPNewRequest = http.NewRequest
 var MakeRequest = func(method string, url string, headers map[string]string, body []byte) (*http.Response, error) {
 	var (
 		response *http.Response
-		count    int = 0
+		count    = 0
 	)
 
 	// Build HTTP request
