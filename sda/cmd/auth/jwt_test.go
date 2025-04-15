@@ -68,7 +68,7 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 		{Algorithm: "ES256", Keyfile: suite.TempDir + "/ec", Pubfile: suite.TempDir + "/ec.pub"},
 	}
 
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		jwt.ExpirationKey: time.Now().UTC().Add(2 * time.Hour),
 		jwt.IssuedAtKey:   time.Now().UTC(),
 		jwt.IssuerKey:     "http://local.issuer",

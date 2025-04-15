@@ -22,7 +22,7 @@ func ValidateJSON(reference string, body []byte) error {
 		return err
 	}
 
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(body, &v); err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func ValidateJSON(reference string, body []byte) error {
 	return nil
 }
 
-func getStructName(path string) interface{} {
+func getStructName(path string) any {
 	switch strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)) {
 	case "dataset-deprecate":
 		return new(DatasetDeprecate)
@@ -93,9 +93,9 @@ type DatasetRelease struct {
 }
 
 type InfoError struct {
-	Error           string      `json:"error"`
-	Reason          string      `json:"reason"`
-	OriginalMessage interface{} `json:"original-message"`
+	Error           string `json:"error"`
+	Reason          string `json:"reason"`
+	OriginalMessage any    `json:"original-message"`
 }
 
 type InboxRemove struct {
@@ -172,12 +172,12 @@ type DatasetFiles struct {
 }
 
 type SyncMetadata struct {
-	DatasetID string      `json:"dataset_id"`
-	Metadata  interface{} `json:"metadata"`
+	DatasetID string `json:"dataset_id"`
+	Metadata  any    `json:"metadata"`
 }
 
 type Metadata struct {
-	Metadata interface{}
+	Metadata any
 }
 
 type C4ghPubKey struct {

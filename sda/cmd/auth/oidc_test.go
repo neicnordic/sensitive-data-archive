@@ -95,7 +95,7 @@ func (suite *OIDCTests) TestValidateJwt() {
 	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, jwkURL)
 	elixirJWT := elixirIdentity.RawToken
 
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		jwt.ExpirationKey: time.Now().UTC().Add(2 * time.Hour),
 		jwt.IssuedAtKey:   time.Now().UTC(),
 		jwt.IssuerKey:     "http://local.issuer",

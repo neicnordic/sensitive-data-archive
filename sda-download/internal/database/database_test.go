@@ -59,7 +59,7 @@ func TestBuildConnInfo(t *testing.T) {
 }
 
 // testLogFatalf
-func testLogFatalf(f string, args ...interface{}) {
+func testLogFatalf(f string, args ...any) {
 	s := fmt.Sprintf(f, args...)
 	panic(s)
 }

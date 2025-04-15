@@ -26,14 +26,14 @@ import (
 
 // Global variables for test token creation
 var (
-	DefaultTokenClaims = map[string]interface{}{
+	DefaultTokenClaims = map[string]any{
 		"iss":   "https://dummy.ega.nbis.se",
 		"sub":   "dummy",
 		"exp":   time.Now().Add(time.Hour * 2).Unix(),
 		"pilot": "dummy-pilot",
 	}
 
-	WrongUserClaims = map[string]interface{}{
+	WrongUserClaims = map[string]any{
 		"sub":   "c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -44,7 +44,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	ExpiredClaims = map[string]interface{}{
+	ExpiredClaims = map[string]any{
 		"sub":   "dummy",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -55,7 +55,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	NonValidClaims = map[string]interface{}{
+	NonValidClaims = map[string]any{
 		"sub":   "c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -66,7 +66,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	WrongTokenAlgClaims = map[string]interface{}{
+	WrongTokenAlgClaims = map[string]any{
 		"iss":       "Online JWT Builder",
 		"iat":       time.Now().Unix(),
 		"exp":       time.Now().Add(time.Hour * 2).Unix(),
@@ -208,7 +208,7 @@ func CreateSSHKey(path string) error {
 }
 
 // CreateRSAToken creates an RSA token
-func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any) (string, error) {
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
@@ -232,7 +232,7 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]int
 }
 
 // CreateECToken creates an EC token
-func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any) (string, error) {
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
@@ -256,7 +256,7 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]inte
 }
 
 // CreateHSToken creates an HS token
-func CreateHSToken(key []byte, tokenClaims map[string]interface{}) (string, error) {
+func CreateHSToken(key []byte, tokenClaims map[string]any) (string, error) {
 	token := jwt.New()
 	for key, value := range tokenClaims {
 		if err := token.Set(key, value); err != nil {

@@ -137,7 +137,7 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 		}
 
 		var publishMsg []byte
-		var publishType interface{}
+		var publishType any
 
 		routingSchema, err := schemaNameFromQueue(routingKey, nil, conf)
 
@@ -232,7 +232,7 @@ func schemaNameFromQueue(queue string, body []byte, conf *config.Config) (string
 // schemaFromInboxOperation returns the operation done in inbox
 // supplied in body of the message
 func schemaFromInboxOperation(body []byte) (string, error) {
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
 		return "", err
@@ -264,7 +264,7 @@ func schemaFromInboxOperation(body []byte) (string, error) {
 // schemaFromDatasetOperation returns the operation done with dataset
 // supplied in body of the message
 func schemaFromDatasetOperation(body []byte) (string, error) {
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
 		return "", err
@@ -293,7 +293,7 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 
 }
 
-func ingestMessage(body []byte) ([]byte, interface{}) {
+func ingestMessage(body []byte) ([]byte, any) {
 	var message upload
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -312,7 +312,7 @@ func ingestMessage(body []byte) ([]byte, interface{}) {
 	return publish, new(trigger)
 }
 
-func finalizeMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
+func finalizeMessage(body []byte, conf *config.Config) ([]byte, any) {
 	var message request
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -335,7 +335,7 @@ func finalizeMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
 	return publish, new(finalize)
 }
 
-func mappingMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
+func mappingMessage(body []byte, conf *config.Config) ([]byte, any) {
 	var message finalize
 	if err := json.Unmarshal(body, &message); err != nil {
 		return nil, nil
@@ -355,7 +355,7 @@ func mappingMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
 	return publish, new(mapping)
 }
 
-func releaseMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
+func releaseMessage(body []byte, conf *config.Config) ([]byte, any) {
 	var message finalize
 	if err := json.Unmarshal(body, &message); err != nil {
 		return nil, nil
@@ -374,7 +374,7 @@ func releaseMessage(body []byte, conf *config.Config) ([]byte, interface{}) {
 	return publish, new(mapping)
 }
 
-func validateMsg(delivered *amqp091.Delivery, mq *broker.AMQPBroker, routingKey string, routingSchema string, publishMsg []byte, publishType interface{}) error {
+func validateMsg(delivered *amqp091.Delivery, mq *broker.AMQPBroker, routingKey string, routingSchema string, publishMsg []byte, publishType any) error {
 	err := schema.ValidateJSON(fmt.Sprintf("%s/%s.json", mq.Conf.SchemasPath, routingSchema), delivered.Body)
 	if err != nil {
 		return err
