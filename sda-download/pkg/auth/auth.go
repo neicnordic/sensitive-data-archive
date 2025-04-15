@@ -123,13 +123,12 @@ var GetToken = func(headers http.Header) (string, int, error) {
 
 	// Check that header contains a token string
 	var token string
-	if len(headerParts) == 2 {
-		token = headerParts[1]
-	} else {
+	if len(headerParts) != 2 {
 		log.Debug("authorization check failed")
 
 		return "", 400, errors.New("token string is missing from authorization header")
 	}
+	token = headerParts[1]
 	log.Debug("access token found")
 
 	return token, 0, nil

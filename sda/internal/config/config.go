@@ -180,13 +180,12 @@ func NewConfig(app string) (*Config, error) {
 	log.Infoln("reading config")
 	if err := viper.ReadInConfig(); err != nil {
 		log.Infoln(err.Error())
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Infoln("No config file found, using ENVs only")
-		} else {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.Infoln("ReadInConfig Error")
 
 			return nil, err
 		}
+		log.Infoln("No config file found, using ENVs only")
 	}
 
 	if viper.IsSet("log.format") {

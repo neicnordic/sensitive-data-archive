@@ -171,11 +171,10 @@ func NewConfig() (*Map, error) {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Infoln("No config file found, using ENVs only")
-		} else {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err
 		}
+		log.Infoln("No config file found, using ENVs only")
 	}
 	requiredConfVars := []string{
 		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
