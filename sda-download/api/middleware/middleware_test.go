@@ -23,7 +23,6 @@ const token string = "token"
 func testEndpoint(_ *gin.Context) {}
 
 func TestTokenMiddleware_Fail_GetToken(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetToken := auth.GetToken
 
@@ -60,11 +59,9 @@ func TestTokenMiddleware_Fail_GetToken(t *testing.T) {
 
 	// Return mock functions to originals
 	auth.GetToken = originalGetToken
-
 }
 
 func TestTokenMiddleware_Fail_GetVisas(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetToken := auth.GetToken
 	originalGetVisas := auth.GetVisas
@@ -106,11 +103,9 @@ func TestTokenMiddleware_Fail_GetVisas(t *testing.T) {
 	// Return mock functions to originals
 	auth.GetToken = originalGetToken
 	auth.GetVisas = originalGetVisas
-
 }
 
 func TestTokenMiddleware_Fail_GetPermissions(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetToken := auth.GetToken
 	originalGetVisas := auth.GetVisas
@@ -149,11 +144,9 @@ func TestTokenMiddleware_Fail_GetPermissions(t *testing.T) {
 	auth.GetToken = originalGetToken
 	auth.GetVisas = originalGetVisas
 	auth.GetPermissions = originalGetPermissions
-
 }
 
 func TestTokenMiddleware_Success_NoCache(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetToken := auth.GetToken
 	originalGetVisas := auth.GetVisas
@@ -215,11 +208,9 @@ func TestTokenMiddleware_Success_NoCache(t *testing.T) {
 	auth.GetVisas = originalGetVisas
 	auth.GetPermissions = originalGetPermissions
 	session.NewSessionKey = originalNewSessionKey
-
 }
 
 func TestTokenMiddleware_Success_FromCache(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetCache := session.Get
 
@@ -275,7 +266,6 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 
 	// Return mock functions to originals
 	session.Get = originalGetCache
-
 }
 
 func TestStoreDatasets(t *testing.T) {
@@ -294,11 +284,9 @@ func TestStoreDatasets(t *testing.T) {
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
 	}
-
 }
 
 func TestGetDatasets(t *testing.T) {
-
 	// Get a request context for testing if data is saved
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -314,5 +302,4 @@ func TestGetDatasets(t *testing.T) {
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
 	}
-
 }

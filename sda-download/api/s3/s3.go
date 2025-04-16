@@ -259,7 +259,6 @@ func GetEcnryptedObject(c *gin.Context) {
 // which can include slashes, so finding the separation between filename and
 // dataset name is done by comparing to accessible datasets.
 func parseParams(c *gin.Context) *gin.Context {
-
 	// When doing list requests from s3cmd, the tool will assume that the first
 	// slash delimits the bucket, and the rest is the prefix. We use this to
 	// "restore" the path in case the prefix param is set.
@@ -319,7 +318,6 @@ func Download(c *gin.Context) {
 	// S3 request types are described here:
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html
 	switch {
-
 	case strings.Contains(c.Request.URL.String(), "?location"):
 		GetBucketLocation(c)
 

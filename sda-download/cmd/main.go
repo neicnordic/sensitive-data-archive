@@ -26,7 +26,7 @@ func init() {
 
 	// Set middleware
 	// nolint:gocritic // this nolint can be removed, if you have more than one middlewares available
-	switch conf.App.Middleware {
+	switch conf.App.Middleware { //nolint:revive
 	default:
 		api.SelectedMiddleware = middleware.TokenMiddleware
 	}

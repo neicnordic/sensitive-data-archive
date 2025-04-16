@@ -595,7 +595,6 @@ func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 		log.Error(err)
 
 		return nil, err
-
 	}
 	_, err = b.ReadByte()
 	if err != nil {

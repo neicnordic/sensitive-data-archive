@@ -80,7 +80,6 @@ func doCleanup() {
 	cleanupFiles = cleanupFilesBack[0:0]
 }
 func TestNewBackend(t *testing.T) {
-
 	testConf.Type = posixType
 	p, err := NewBackend(testConf)
 	assert.Nil(t, err, "Backend posix failed")
@@ -100,7 +99,6 @@ func TestNewBackend(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-
 	err := setupFakeS3()
 
 	if err != nil {
@@ -113,7 +111,6 @@ func TestMain(m *testing.M) {
 	os.Exit(ret)
 }
 func TestPosixBackend(t *testing.T) {
-
 	defer doCleanup()
 	testConf.Type = posixType
 	backend, err := NewBackend(testConf)
@@ -187,7 +184,6 @@ func TestPosixBackend(t *testing.T) {
 	assert.NotZero(t, buf.Len(), "Expected warning missing")
 
 	buf.Reset()
-
 }
 
 func setupFakeS3() (err error) {
@@ -226,7 +222,6 @@ func setupFakeS3() (err error) {
 
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
-
 			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
 				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
 				log.Error("Unexpected issue while creating bucket: ", err)
@@ -241,7 +236,6 @@ func setupFakeS3() (err error) {
 }
 
 func TestS3Fail(t *testing.T) {
-
 	testConf.Type = s3Type
 
 	tmp := testConf.S3.URL
@@ -296,7 +290,6 @@ func TestPOSIXFail(t *testing.T) {
 }
 
 func TestS3Backend(t *testing.T) {
-
 	testConf.Type = s3Type
 	backend, err := NewBackend(testConf)
 	assert.Nil(t, err, "Backend failed")
@@ -360,5 +353,4 @@ func TestS3Backend(t *testing.T) {
 	}
 
 	log.SetOutput(os.Stdout)
-
 }

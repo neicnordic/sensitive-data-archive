@@ -171,11 +171,10 @@ func NewConfig() (*Map, error) {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Infoln("No config file found, using ENVs only")
-		} else {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err
 		}
+		log.Infoln("No config file found, using ENVs only")
 	}
 	requiredConfVars := []string{
 		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
@@ -380,7 +379,6 @@ func (c *Map) appConfig() error {
 
 	var err error
 	if viper.GetString("c4gh.transientKeyPath") != "" {
-
 		if !viper.IsSet("c4gh.transientPassphrase") {
 			return errors.New("c4gh.transientPassphrase is not set")
 		}
@@ -434,7 +432,7 @@ func (c *Map) configDatabase() error {
 	}
 	if db.SslMode == "verify-full" {
 		// Since verify-full is specified, these are required.
-		if !(viper.IsSet("db.clientCert") && viper.IsSet("db.clientKey")) {
+		if !viper.IsSet("db.clientCert") && !viper.IsSet("db.clientKey") {
 			return errors.New("when db.sslMode is set to verify-full both db.clientCert and db.clientKey are needed")
 		}
 	}
@@ -475,12 +473,12 @@ func readTrustedIssuers(filePath string) ([]TrustedISS, error) {
 }
 
 func constructWhitelist(obj []TrustedISS) *jwk.MapWhitelist {
-	keys := make(map[string]bool)
+	keyMap := make(map[string]bool)
 	wl := jwk.NewMapWhitelist()
 
 	for _, value := range obj {
-		if _, ok := keys[value.JKU]; !ok {
-			keys[value.JKU] = true
+		if _, ok := keyMap[value.JKU]; !ok {
+			keyMap[value.JKU] = true
 			wl.Add(value.JKU)
 		}
 	}

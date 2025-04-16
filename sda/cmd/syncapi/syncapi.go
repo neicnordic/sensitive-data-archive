@@ -72,7 +72,7 @@ func main() {
 	}
 }
 
-func setup(config *config.Config) *http.Server {
+func setup(conf *config.Config) *http.Server {
 	r := mux.NewRouter().SkipClean(true)
 
 	r.HandleFunc("/ready", readinessResponse).Methods("GET")
@@ -82,7 +82,7 @@ func setup(config *config.Config) *http.Server {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
-		Addr:              config.API.Host + ":" + fmt.Sprint(config.API.Port),
+		Addr:              conf.API.Host + ":" + fmt.Sprint(conf.API.Port),
 		Handler:           r,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
@@ -210,7 +210,7 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	log.Infoln(payload)
 	response, _ := json.Marshal(payload)
 

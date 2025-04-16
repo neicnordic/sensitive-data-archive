@@ -4,6 +4,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -85,7 +86,6 @@ var RetryTimes = 5
 // NewSDAdb creates a new DB connection from the given DBConf variables.
 // Currently, only postgresql connections are supported.
 func NewSDAdb(config DBConf) (*SDAdb, error) {
-
 	dbs := SDAdb{DB: nil, Version: -1, Config: config}
 
 	err := dbs.Connect()
@@ -118,7 +118,7 @@ func (dbs *SDAdb) Connect() error {
 	}
 
 	// default error
-	err := fmt.Errorf("failed to connect within reconnect time")
+	err := errors.New("failed to connect within reconnect time")
 
 	log.Infoln("Connecting to database")
 	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host, dbs.Config.Port, dbs.Config.Database, dbs.Config.User)
@@ -173,7 +173,6 @@ func (config *DBConf) PgDataSource() (string, string) {
 // getVersion fetches the database schema version. This function return -1 when
 // the version could not be fetched.
 func (dbs *SDAdb) getVersion() (int, error) {
-
 	dbs.checkAndReconnectIfNeeded()
 
 	log.Debug("Fetching database schema version")

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -83,15 +84,14 @@ func main() {
 			log.Fatalln(err)
 		}
 	}
-
 }
 
-func setup(config *config.Config) *http.Server {
-	model, _ := model.NewModelFromString(jsonadapter.Model)
-	e, err := casbin.NewEnforcer(model, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
+func setup(conf *config.Config) *http.Server {
+	m, _ := model.NewModelFromString(jsonadapter.Model)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
 		shutdown()
-		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error())
+		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
 	}
 
 	r := gin.Default()
@@ -117,7 +117,7 @@ func setup(config *config.Config) *http.Server {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
-		Addr:              config.API.Host + ":" + fmt.Sprint(config.API.Port),
+		Addr:              conf.API.Host + ":" + fmt.Sprint(conf.API.Port),
 		Handler:           r,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
@@ -175,8 +175,8 @@ func readinessResponse(c *gin.Context) {
 		}
 	}
 
-	if DBRes := checkDB(Conf.API.DB, 5*time.Millisecond); DBRes != nil {
-		log.Debugf("DB connection error :%v", DBRes)
+	if dbRes := checkDB(Conf.API.DB, 5*time.Millisecond); dbRes != nil {
+		log.Debugf("DB connection error :%v", dbRes)
 		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
 	}
@@ -184,14 +184,14 @@ func readinessResponse(c *gin.Context) {
 	c.JSON(statusCode, "")
 }
 
-func checkDB(database *database.SDAdb, timeout time.Duration) error {
+func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if database.DB == nil {
-		return fmt.Errorf("database is nil")
+	if db.DB == nil {
+		return errors.New("database is nil")
 	}
 
-	return database.DB.PingContext(ctx)
+	return db.DB.PingContext(ctx)
 }
 
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {
@@ -268,10 +268,9 @@ func ingestFile(c *gin.Context) {
 
 	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
 	if err != nil {
-		switch {
-		case corrID == "":
+		if corrID == "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		default:
+		} else {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 		}
 
@@ -320,8 +319,8 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	var RetryTimes = 5
-	for count := 1; count <= RetryTimes; count++ {
+	var retryTimes = 5
+	for count := 1; count <= retryTimes; count++ {
 		err = inbox.RemoveFile(filePath)
 		if err == nil {
 			break
@@ -361,10 +360,9 @@ func setAccession(c *gin.Context) {
 
 	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
 	if err != nil {
-		switch {
-		case corrID == "":
+		if corrID == "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		default:
+		} else {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 		}
 

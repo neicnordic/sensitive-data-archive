@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,16 +35,16 @@ type Proxy struct {
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
-	fileIds   map[string]string
+	fileIDs   map[string]string
 }
 
 // The Event struct
 type Event struct {
-	Operation string        `json:"operation"`
-	Username  string        `json:"user"`
-	Filepath  string        `json:"filepath"`
-	Filesize  int64         `json:"filesize"`
-	Checksum  []interface{} `json:"encrypted_checksums"`
+	Operation string `json:"operation"`
+	Username  string `json:"user"`
+	Filepath  string `json:"filepath"`
+	Filesize  int64  `json:"filesize"`
+	Checksum  []any  `json:"encrypted_checksums"`
 }
 
 // Checksum used in the message
@@ -76,11 +77,11 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, database *database.SDAdb, tls *tls.Config) *Proxy {
-	tr := &http.Transport{TLSClientConfig: tls}
+func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-	return &Proxy{s3conf, auth, messenger, database, client, make(map[string]string)}
+	return &Proxy{s3conf, auth, messenger, db, client, make(map[string]string)}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -158,11 +159,11 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	// if this is an upload request
-	if p.detectRequestType(r) == Put && p.fileIds[r.URL.Path] == "" {
+	if p.detectRequestType(r) == Put && p.fileIDs[r.URL.Path] == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database", r.URL.Path)
-		p.fileIds[r.URL.Path], err = p.database.RegisterFile(filepath, username)
-		log.Debugf("fileId: %v", p.fileIds[r.URL.Path])
+		p.fileIDs[r.URL.Path], err = p.database.RegisterFile(filepath, username)
+		log.Debugf("fileId: %v", p.fileIDs[r.URL.Path])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
@@ -177,7 +178,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 			return
 		}
-
 	}
 
 	log.Debug("Forwarding to backend")
@@ -214,33 +214,33 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
-		if p.fileIds[r.URL.Path] == "" {
-			p.fileIds[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+		if p.fileIDs[r.URL.Path] == "" {
+			p.fileIDs[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
 				return
 			}
 
-			log.Debugf("resuming work on file with fileId: %v", p.fileIds[r.URL.Path])
+			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[r.URL.Path])
 		}
 
-		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIds[r.URL.Path]); err != nil {
+		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[r.URL.Path]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
 			return
 		}
 
-		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
-		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[r.URL.Path])
+		err = p.database.UpdateFileEventLog(p.fileIDs[r.URL.Path], "uploaded", p.fileIDs[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
 
-		delete(p.fileIds, r.URL.Path)
+		delete(p.fileIDs, r.URL.Path)
 	}
 
 	// Writing non-200 to the response before the headers propagate the error
@@ -277,7 +277,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 	var err error
 	if p.messenger == nil {
-		return fmt.Errorf("messenger is down")
+		return errors.New("messenger is down")
 	}
 	if p.messenger.IsConnClosed() {
 		log.Warning("connection is closed, reconnecting...")
@@ -295,7 +295,7 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 		}
 	}
 
-	if err := p.messenger.SendMessage(p.fileIds[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+	if err := p.messenger.SendMessage(p.fileIDs[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
 
@@ -304,21 +304,18 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 
 func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
 	if response.StatusCode != 200 {
-
 		return false
 	}
 
 	switch req.Method {
 	case http.MethodPut:
 		if !strings.Contains(req.URL.String(), "partNumber") {
-
 			return true
 		}
 
 		return false
 	case http.MethodPost:
 		if strings.Contains(req.URL.String(), "uploadId") {
-
 			return true
 		}
 
@@ -500,7 +497,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 	event.Filepath = strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 	event.Username = claims.Subject()
 	checksum.Type = "sha256"
-	event.Checksum = []interface{}{checksum}
+	event.Checksum = []any{checksum}
 	privateClaims := claims.PrivateClaims()
 	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
 
@@ -530,7 +527,6 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
-
 }
 
 // checkFileExists makes a request to the S3 to check whether the file already
@@ -592,7 +588,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 	// Check for mixed "\" and "/" in filepath. Stop and throw an error if true so that
 	// we do not end up with unintended folder structure when applying ReplaceAll below
 	if strings.Contains(filePath, "\\") && strings.Contains(filePath, "/") {
-		return filePath, fmt.Errorf("filepath contains mixed '\\' and '/' characters")
+		return filePath, errors.New("filepath contains mixed '\\' and '/' characters")
 	}
 
 	// make any windows path separators linux compatible

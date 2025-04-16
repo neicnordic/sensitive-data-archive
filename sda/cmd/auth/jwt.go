@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-func generateJwtToken(tokenClaims map[string]interface{}, keyPath, alg string) (string, string, error) {
+func generateJwtToken(tokenClaims map[string]any, keyPath, alg string) (string, string, error) {
 	prKey, err := os.ReadFile(filepath.Clean(keyPath))
 	if err != nil {
 		return "", "", err

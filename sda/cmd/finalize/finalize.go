@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -250,7 +251,7 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("file size in archive does not match database for archive file")
+		return errors.New("file size in archive does not match database for archive file")
 	}
 
 	file, err := archive.NewFileReader(filePath)
