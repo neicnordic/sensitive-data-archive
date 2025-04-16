@@ -225,6 +225,13 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			log.Debugf("resuming work on file with fileId: %v", p.fileIds[r.URL.Path])
 		}
 
+		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIds[r.URL.Path]); err != nil {
+			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
+			p.internalServerError(w, r, "storeObjectSizeInDB failed")
+
+			return
+		}
+
 		log.Debugf("marking file %v as 'uploaded' in database", p.fileIds[r.URL.Path])
 		err = p.database.UpdateFileEventLog(p.fileIds[r.URL.Path], "uploaded", p.fileIds[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
@@ -623,4 +630,29 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 		// errors are logged but otherwised ignored
 		log.Error(err)
 	}
+}
+
+func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
+	client, err := storage.NewS3Client(p.s3)
+	if err != nil {
+		return err
+	}
+
+	o, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: &p.s3.Bucket,
+		Key:    &path,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := p.database.DB.Ping(); err != nil {
+		p.database.Close()
+		_ = p.database.Connect()
+	}
+
+	const setObjectSize = "UPDATE sda.files set submission_file_size = $1 where id = $2;"
+	_, err = p.database.DB.Exec(setObjectSize, *o.ContentLength, fileID)
+
+	return err
 }
