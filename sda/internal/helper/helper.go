@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -445,4 +446,12 @@ func CreatePrivateKeyFile(keyFile string, passphrase string) ([32]byte, error) {
 	}
 
 	return publicKey, nil
+}
+
+func AnonymizeFilepath(filepath string, username string) string {
+	return strings.ReplaceAll(filepath, strings.Replace(username, "@", "_", 1)+"/", "")
+}
+
+func UnanonymizeFilepath(filepath string, username string) string {
+	return strings.Replace(username, "@", "_", 1) + "/" + filepath
 }

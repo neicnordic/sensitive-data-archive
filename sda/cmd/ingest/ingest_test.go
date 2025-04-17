@@ -169,6 +169,7 @@ type TestSuite struct {
 	filePath   string
 	pubKeyList [][32]byte
 	ingest     Ingest
+	UserName   string
 }
 
 func (suite *TestSuite) SetupSuite() {
@@ -232,9 +233,11 @@ func (suite *TestSuite) SetupSuite() {
 	if err := suite.ingest.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
 		suite.FailNow("failed to register the public key")
 	}
+
+	suite.UserName = "test-ingest"
 }
 
-func (suite *TestSuite) TearDownSuite() {
+func (suite *TestSuite) TearDownTest() {
 	_ = os.RemoveAll(suite.ingest.Conf.Archive.Posix.Location)
 	_ = os.RemoveAll(suite.ingest.Conf.Inbox.Posix.Location)
 }
@@ -251,7 +254,13 @@ func (suite *TestSuite) SetupTest() {
 		suite.FailNow("failed to create temp folder")
 	}
 
-	f, err := os.CreateTemp(suite.ingest.Conf.Inbox.Posix.Location, "")
+	// Ensure a folder with the user name exists
+	err = os.Mkdir(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.UserName), 0755)
+	if err != nil {
+		suite.FailNow("failed to create temp folder")
+	}
+
+	f, err := os.CreateTemp(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.UserName), "")
 	if err != nil {
 		suite.FailNow("failed to create test file")
 	}
@@ -404,38 +413,36 @@ func (suite *TestSuite) TestCancelFile_wrongCorrelationID() {
 // messages of type `ingest`
 func (suite *TestSuite) TestIngestFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
 }
 func (suite *TestSuite) TestIngestFile_secondTime() {
-	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	// prepare the DB entrie
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -444,30 +451,29 @@ func (suite *TestSuite) TestIngestFile_secondTime() {
 	assert.Equal(suite.T(), "reject", suite.ingest.ingestFile(corrID, message))
 }
 func (suite *TestSuite) TestIngestFile_unknownInboxType() {
-	UserName := "test-ingest-unknown"
+
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(uuid.New().String(), message))
 }
 func (suite *TestSuite) TestIngestFile_reingestCancelledFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -480,19 +486,19 @@ func (suite *TestSuite) TestIngestFile_reingestCancelledFile() {
 }
 func (suite *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -518,7 +524,7 @@ func (suite *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 		suite.FailNow("failed to create private c4gh key")
 	}
 
-	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.filePath))
+	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.UserName, suite.filePath))
 	if err != nil {
 		suite.FailNowf("failed to create encrypted test file: %s", err.Error())
 	}
@@ -552,19 +558,19 @@ func (suite *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 }
 func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -584,19 +590,19 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
 }
 func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -620,19 +626,19 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 }
 func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
+
+	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, suite.UserName)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
+	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, suite.UserName, "{}", "{}"); err != nil {
 		suite.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: suite.filePath,
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
@@ -675,7 +681,7 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum(
 		suite.FailNow("failed to create private c4gh key")
 	}
 
-	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.filePath))
+	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.UserName, suite.filePath))
 	if err != nil {
 		suite.FailNowf("failed to create encrypted test file: %s", err.Error())
 	}
@@ -711,14 +717,14 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum(
 }
 func (suite *TestSuite) TestIngestFile_missingFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
+
 	corrID := uuid.New().String()
 	basepath := filepath.Dir(suite.filePath)
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: fmt.Sprintf("%s/missing.file.c4gh", basepath),
-		User:     UserName,
+		User:     suite.UserName,
 	}
 
 	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
