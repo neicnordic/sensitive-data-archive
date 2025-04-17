@@ -137,13 +137,18 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/../bigpicture/file-sync.json", Conf.Broker.SchemasPath), b); err != nil {
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("eror on JSON validation: %s", err.Error()))
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("error on JSON validation: %s", err.Error()))
 
 		return
 	}
 
 	if err := parseDatasetMessage(b); err != nil {
+		log.Errorf("error on parsing dataset message: %v", err)
+		// respondWithError(w, http.StatusInternalServerError, "error while processing message")
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("testing"))
+
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
