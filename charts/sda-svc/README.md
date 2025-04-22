@@ -3,12 +3,18 @@
 Source repositories:
 
 - [https://github.com/neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
-- [https://github.com/neicnordic/sda-doa](https://github.com/neicnordic/sda-doa)
 
 ## Installing the Chart
 
 Edit the values.yaml file and specify the relevant parts of the `global` section.
 If no shared credentials for the broker and database are used, the credentials for each service shuld be set in the `credentials` section.
+
+Note that the secrets containing the crypth4gh keypair as well as any JWt signing keys needs to be created manually before the chart is deployed.
+
+```cmd
+kubectl create secret generic c4gh --from-file="<PATH_TO_C4GH_KEY>" --from-file="<PATH_TO_C4GH_PUBLIC_KEY>" --from-literal=passphrase="<C4GHPASSPHRASE>"
+kubectl create secret generic jwk --from-file="<PATH_TO_JWT_KEY>" --from-file="<PATH_TO_JWT_PUBLIC_KEY>"
+```
 
 ### Configuration
 
@@ -103,6 +109,7 @@ Parameter | Description | Default
 `global.c4gh.keyFile` | Private C4GH key. |`c4gh.key`
 `global.c4gh.passphrase` | Passphrase for the private C4GH key. |`""`
 `global.c4gh.publicFile` | Public key corresponding to the private key, provided in /info endpoint. |`""`
+`global.c4gh.secretName` | The name of the secret holding the crypt4gh keypair | `""`
 `global.db.host` | Hostname for the database. |`""`
 `global.db.name` | Database to connect to. |`lega`
 `global.db.passIngest` | Password used for `data in` services. |`""`
