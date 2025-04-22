@@ -453,5 +453,5 @@ func AnonymizeFilepath(fp string, username string) string {
 }
 
 func UnanonymizeFilepath(fp string, username string) string {
-	return strings.Replace(username, "@", "_", 1) + "/" + fp
+	return filepath.Join(strings.Replace(username, "@", "_", 1), fp)
 }
