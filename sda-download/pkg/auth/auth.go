@@ -30,12 +30,12 @@ type OIDCDetails struct {
 }
 
 // GetOIDCDetails requests OIDC configuration information
-func GetOIDCDetails(url string) (OIDCDetails, error) {
-	log.Debugf("requesting OIDC config from %s", url)
+func GetOIDCDetails(uri string) (OIDCDetails, error) {
+	log.Debugf("requesting OIDC config from %s", uri)
 	// Prepare response body struct
 	var u OIDCDetails
 	// Do request
-	response, err := request.MakeRequest("GET", url, nil, nil)
+	response, err := request.MakeRequest("GET", uri, nil, nil)
 	if err != nil {
 		log.Errorf("request failed, %s", err)
 
@@ -49,7 +49,7 @@ func GetOIDCDetails(url string) (OIDCDetails, error) {
 		return u, err
 	}
 	defer response.Body.Close()
-	log.Debugf("received OIDC config %s from %s", u, url)
+	log.Debugf("received OIDC config %s from %s", u, uri)
 
 	return u, nil
 }
@@ -123,13 +123,12 @@ var GetToken = func(headers http.Header) (string, int, error) {
 
 	// Check that header contains a token string
 	var token string
-	if len(headerParts) == 2 {
-		token = headerParts[1]
-	} else {
+	if len(headerParts) != 2 {
 		log.Debug("authorization check failed")
 
 		return "", 400, errors.New("token string is missing from authorization header")
 	}
+	token = headerParts[1]
 	log.Debug("access token found")
 
 	return token, 0, nil
@@ -185,7 +184,6 @@ var GetPermissions = func(visas Visas) []string {
 
 	// Iterate visas
 	for _, v := range visas.Visa {
-
 		// Check that visa is of type ControlledAccessGrants
 		if checkVisaType(v, "ControlledAccessGrants") {
 			// Check that visa is valid and return visa token
@@ -195,7 +193,6 @@ var GetPermissions = func(visas Visas) []string {
 				datasets = getDatasets(verifiedVisa, datasets)
 			}
 		}
-
 	}
 
 	log.Debugf("matched datasets: %s", datasets)
@@ -204,7 +201,6 @@ var GetPermissions = func(visas Visas) []string {
 }
 
 func checkVisaType(visa string, visaType string) bool {
-
 	log.Debug("checking visa type")
 
 	unknownToken, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
@@ -235,7 +231,6 @@ func checkVisaType(visa string, visaType string) bool {
 	log.Debug("visa type check passed")
 
 	return true
-
 }
 
 func validateVisa(visa string) (jwt.Token, bool) {

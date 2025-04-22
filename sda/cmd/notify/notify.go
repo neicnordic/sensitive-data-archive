@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/smtp"
 	"strconv"
@@ -93,7 +94,7 @@ func getUser(queue string, orgMsg []byte) string {
 		_ = json.Unmarshal(orgMsg, &notify)
 		orgMsg, _ := base64.StdEncoding.DecodeString(notify.OriginalMessage.(string))
 
-		var message map[string]interface{}
+		var message map[string]any
 		_ = json.Unmarshal(orgMsg, &message)
 
 		return fmt.Sprint(message["user"])
@@ -157,5 +158,5 @@ func validator(queue, schemaPath string, delivery amqp091.Delivery) error {
 		return nil
 	}
 
-	return fmt.Errorf("Error")
+	return errors.New("Error")
 }

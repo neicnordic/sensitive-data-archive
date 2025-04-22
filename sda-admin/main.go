@@ -21,7 +21,7 @@ var (
 )
 
 // Command-line usage
-const usage = `Usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
+const usage = `usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
 
 Commands:
   user list                     List all users.
@@ -42,7 +42,7 @@ Global Options:
 Additional Commands:
   version          Show the version of sda-admin.
   help             Show this help message.
-  -h, -help        Show this help message.`
+  -h, -help        Show this help message`
 
 var userUsage = `List Users:
   Usage: sda-admin user list 
@@ -182,14 +182,14 @@ func parseFlagsAndEnv() error {
 	if apiURI == "" {
 		apiURI = os.Getenv("API_HOST")
 		if apiURI == "" {
-			return fmt.Errorf("error: either -uri must be provided or API_HOST environment variable must be set")
+			return errors.New("error: either -uri must be provided or API_HOST environment variable must be set")
 		}
 	}
 
 	if token == "" {
 		token = os.Getenv("ACCESS_TOKEN")
 		if token == "" {
-			return fmt.Errorf("error: either -token must be provided or ACCESS_TOKEN environment variable must be set")
+			return errors.New("error: either -token must be provided or ACCESS_TOKEN environment variable must be set")
 		}
 	}
 

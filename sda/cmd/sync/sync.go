@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -211,7 +212,7 @@ func syncFiles(stableID string) error {
 	if err != nil || copiedSize != int64(fileSize) {
 		switch {
 		case copiedSize != int64(fileSize):
-			return fmt.Errorf("copied size does not match file size")
+			return errors.New("copied size does not match file size")
 		default:
 			return err
 		}
@@ -242,12 +243,12 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 		dataset.User = data.User
 	}
 
-	json, err := json.Marshal(dataset)
+	datasetJSON, err := json.Marshal(dataset)
 	if err != nil {
 		return nil, err
 	}
 
-	return json, nil
+	return datasetJSON, nil
 }
 
 func sendPOST(payload []byte) error {
@@ -255,12 +256,12 @@ func sendPOST(payload []byte) error {
 		Timeout: 30 * time.Second,
 	}
 
-	URL, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
+	uri, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, URL, bytes.NewBuffer(payload))
+	req, err := http.NewRequest(http.MethodPost, uri, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
@@ -279,14 +280,14 @@ func sendPOST(payload []byte) error {
 }
 
 func createHostURL(host string, port int) (string, error) {
-	url, err := url.ParseRequestURI(host)
+	uri, err := url.ParseRequestURI(host)
 	if err != nil {
 		return "", err
 	}
-	if url.Port() == "" && port != 0 {
-		url.Host += fmt.Sprintf(":%d", port)
+	if uri.Port() == "" && port != 0 {
+		uri.Host += fmt.Sprintf(":%d", port)
 	}
-	url.Path = "/dataset"
+	uri.Path = "/dataset"
 
-	return url.String(), nil
+	return uri.String(), nil
 }

@@ -40,41 +40,41 @@ func TestC4gh(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (suite *TestSuite) SetupSuite() {
-	suite.tempFolder = "/tmp/keys/"
-	err := os.MkdirAll(suite.tempFolder, 0750)
+func (ts *TestSuite) SetupSuite() {
+	ts.tempFolder = "/tmp/keys/"
+	err := os.MkdirAll(ts.tempFolder, 0750)
 	if err != nil {
-		suite.T().FailNow()
+		ts.T().FailNow()
 	}
 
 	pub, _, err := keys.GenerateKeyPair()
 	if err != nil {
-		suite.T().FailNow()
+		ts.T().FailNow()
 	}
 
 	buf := new(bytes.Buffer)
 	if err := keys.WriteCrypt4GHX25519PublicKey(buf, pub); err != nil {
-		suite.T().FailNow()
+		ts.T().FailNow()
 	}
 
-	suite.b64String = base64.StdEncoding.EncodeToString(buf.Bytes())
+	ts.b64String = base64.StdEncoding.EncodeToString(buf.Bytes())
 
-	pubKeyFile, err := os.Create(suite.tempFolder + "/pub.key")
+	pubKeyFile, err := os.Create(ts.tempFolder + "/pub.key")
 	if err != nil {
-		suite.T().FailNow()
+		ts.T().FailNow()
 	}
-	suite.pubkeyPath = suite.tempFolder + "/pub.key"
+	ts.pubkeyPath = ts.tempFolder + "/pub.key"
 
 	_, err = pubKeyFile.Write(buf.Bytes())
 	if err != nil {
-		suite.T().FailNow()
+		ts.T().FailNow()
 	}
 }
-func (suite *TestSuite) TearDownSuite() {
-	os.RemoveAll(suite.tempFolder)
+func (ts *TestSuite) TearDownSuite() {
+	os.RemoveAll(ts.tempFolder)
 }
 
-func (suite *TestSuite) TestAdd() {
+func (ts *TestSuite) TestAdd() {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -84,21 +84,21 @@ func (suite *TestSuite) TestAdd() {
 	token := "test-token"
 
 	payload := C4ghPubKey{
-		PubKey:      suite.b64String,
+		PubKey:      ts.b64String,
 		Description: "test description",
 	}
 	jsonBody, err := json.Marshal(payload)
 	if err != nil {
-		suite.T().Fail()
+		ts.T().Fail()
 	}
 
 	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
 
-	assert.NoError(suite.T(), Add("http://example.com", token, suite.pubkeyPath, "test description"))
-	mockHelpers.AssertExpectations(suite.T())
+	assert.NoError(ts.T(), Add("http://example.com", token, ts.pubkeyPath, "test description"))
+	mockHelpers.AssertExpectations(ts.T())
 }
 
-func (suite *TestSuite) TestDeprecate() {
+func (ts *TestSuite) TestDeprecate() {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -108,11 +108,11 @@ func (suite *TestSuite) TestDeprecate() {
 	token := "test-token"
 	mockHelpers.On("PostRequest", expectedURL, token, []byte(`{}`)).Return([]byte(`{}`), nil)
 
-	assert.NoError(suite.T(), Deprecate("http://example.com", token, "6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc507"))
-	mockHelpers.AssertExpectations(suite.T())
+	assert.NoError(ts.T(), Deprecate("http://example.com", token, "6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc507"))
+	mockHelpers.AssertExpectations(ts.T())
 }
 
-func (suite *TestSuite) TestList() {
+func (ts *TestSuite) TestList() {
 	mockHelpers := new(MockHelpers)
 	mockHelpers.On("GetResponseBody", "http://example.com/c4gh-keys/list", "test-token").Return([]byte(`[{"hash":"cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23","description":"this is a test key","created_at":"2009-11-10 23:00:00","deprecated_at":""}]`), nil)
 	originalFunc := helpers.GetResponseBody
@@ -120,6 +120,6 @@ func (suite *TestSuite) TestList() {
 	helpers.GetResponseBody = mockHelpers.GetResponseBody
 
 	err := List("http://example.com", "test-token")
-	assert.NoError(suite.T(), err)
-	mockHelpers.AssertExpectations(suite.T())
+	assert.NoError(ts.T(), err)
+	mockHelpers.AssertExpectations(ts.T())
 }

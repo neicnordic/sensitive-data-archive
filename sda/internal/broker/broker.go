@@ -44,9 +44,9 @@ type MQConf struct {
 // The empty interface allows for appending various json msgs but also broken json msgs as strings.
 // It is ok as long as we do not need to access fields in the msg, which we don't.
 type InfoError struct {
-	Error           string      `json:"error"`
-	Reason          string      `json:"reason"`
-	OriginalMessage interface{} `json:"original-message"`
+	Error           string `json:"error"`
+	Reason          string `json:"reason"`
+	OriginalMessage any    `json:"original-message"`
 }
 
 // buildMQURI builds the MQ connection URI

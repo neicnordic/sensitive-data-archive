@@ -4,6 +4,7 @@ package storage
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,7 +75,7 @@ func newPosixBackend(config posixConf) (*posixBackend, error) {
 // NewFileReader returns an io.Reader instance
 func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("Invalid posixBackend")
+		return nil, errors.New("invalid posixBackend")
 	}
 
 	file, err := os.Open(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -90,7 +91,7 @@ func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // NewFileWriter returns an io.Writer instance
 func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if pb == nil {
-		return nil, fmt.Errorf("Invalid posixBackend")
+		return nil, errors.New("invalid posixBackend")
 	}
 
 	file, err := os.OpenFile(filepath.Join(filepath.Clean(pb.Location), filePath), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0640)
@@ -106,7 +107,7 @@ func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of the file
 func (pb *posixBackend) GetFileSize(filePath string) (int64, error) {
 	if pb == nil {
-		return 0, fmt.Errorf("Invalid posixBackend")
+		return 0, errors.New("invalid posixBackend")
 	}
 
 	stat, err := os.Stat(filepath.Join(filepath.Clean(pb.Location), filePath))
@@ -162,10 +163,9 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
-
 			if aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou &&
 				aerr.Code() != s3.ErrCodeBucketAlreadyExists {
-				log.Error("Unexpected issue while creating bucket", err)
+				log.Error("unexpected issue while creating bucket", err)
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func newS3Backend(config S3Conf) (*s3Backend, error) {
 // NewFileReader returns an io.Reader instance
 func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 	if sb == nil {
-		return nil, fmt.Errorf("Invalid s3Backend")
+		return nil, errors.New("invalid s3Backend")
 	}
 
 	r, err := sb.Client.GetObject(&s3.GetObjectInput{
@@ -226,12 +226,11 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 // NewFileWriter uploads the contents of an io.Reader to a S3 bucket
 func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	if sb == nil {
-		return nil, fmt.Errorf("Invalid s3Backend")
+		return nil, errors.New("invalid s3Backend")
 	}
 
 	reader, writer := io.Pipe()
 	go func() {
-
 		_, err := sb.Uploader.Upload(&s3manager.UploadInput{
 			Body:            reader,
 			Bucket:          aws.String(sb.Bucket),
@@ -250,7 +249,7 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 // GetFileSize returns the size of a specific object
 func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 	if sb == nil {
-		return 0, fmt.Errorf("Invalid s3Backend")
+		return 0, errors.New("invalid s3Backend")
 	}
 
 	r, err := sb.Client.HeadObject(&s3.HeadObjectInput{
@@ -272,7 +271,6 @@ func (sb *s3Backend) GetFileSize(filePath string) (int64, error) {
 			Key:    aws.String(filePath)})
 
 		time.Sleep(1 * time.Second)
-
 	}
 
 	if err != nil {
@@ -299,7 +297,7 @@ func transportConfigS3(config S3Conf) http.RoundTripper {
 	if config.Cacert != "" {
 		cacert, e := os.ReadFile(config.Cacert) // #nosec this file comes from our config
 		if e != nil {
-			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e)
+			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
 			log.Debug("no certs appended, using system certs only")

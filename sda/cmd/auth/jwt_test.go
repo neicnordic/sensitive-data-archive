@@ -25,38 +25,38 @@ func TestJWTTestSuite(t *testing.T) {
 	suite.Run(t, new(JWTTests))
 }
 
-func (suite *JWTTests) SetupTest() {
+func (ts *JWTTests) SetupTest() {
 	var err error
-	suite.TempDir, err = os.MkdirTemp(os.TempDir(), "jwt-test")
-	assert.NoError(suite.T(), err)
+	ts.TempDir, err = os.MkdirTemp(os.TempDir(), "jwt-test")
+	assert.NoError(ts.T(), err)
 
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	ecKeyBytes, err := jwk.EncodePEM(ecKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec", ecKeyBytes, 0600))
+	assert.NoError(ts.T(), err)
+	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/ec", ecKeyBytes, 0600))
 
 	ecPubKeyBytes, err := jwk.EncodePEM(&ecKey.PublicKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
+	assert.NoError(ts.T(), err)
+	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	rsaKeyBytes, err := jwk.EncodePEM(rsaKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa", rsaKeyBytes, 0600))
+	assert.NoError(ts.T(), err)
+	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/rsa", rsaKeyBytes, 0600))
 
 	rsaPubKeyBytes, err := jwk.EncodePEM(&rsaKey.PublicKey)
-	assert.NoError(suite.T(), err)
-	assert.NoError(suite.T(), os.WriteFile(suite.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
+	assert.NoError(ts.T(), err)
+	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
 }
 
-func (suite *JWTTests) TearDownTest() {
-	os.RemoveAll(suite.TempDir)
+func (ts *JWTTests) TearDownTest() {
+	os.RemoveAll(ts.TempDir)
 }
 
-func (suite *JWTTests) TestGenerateJwtToken() {
+func (ts *JWTTests) TestGenerateJwtToken() {
 	type KeyAlgo struct {
 		Algorithm string
 		Keyfile   string
@@ -64,11 +64,11 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 	}
 
 	algorithms := []KeyAlgo{
-		{Algorithm: "RS256", Keyfile: suite.TempDir + "/rsa", Pubfile: suite.TempDir + "/rsa.pub"},
-		{Algorithm: "ES256", Keyfile: suite.TempDir + "/ec", Pubfile: suite.TempDir + "/ec.pub"},
+		{Algorithm: "RS256", Keyfile: ts.TempDir + "/rsa", Pubfile: ts.TempDir + "/rsa.pub"},
+		{Algorithm: "ES256", Keyfile: ts.TempDir + "/ec", Pubfile: ts.TempDir + "/ec.pub"},
 	}
 
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		jwt.ExpirationKey: time.Now().UTC().Add(2 * time.Hour),
 		jwt.IssuedAtKey:   time.Now().UTC(),
 		jwt.IssuerKey:     "http://local.issuer",
@@ -76,25 +76,25 @@ func (suite *JWTTests) TestGenerateJwtToken() {
 	}
 
 	for _, test := range algorithms {
-		ts, expiration, err := generateJwtToken(claims, test.Keyfile, test.Algorithm)
-		assert.NoError(suite.T(), err)
-		assert.NotNil(suite.T(), ts)
+		t, expiration, err := generateJwtToken(claims, test.Keyfile, test.Algorithm)
+		assert.NoError(ts.T(), err)
+		assert.NotNil(ts.T(), t)
 
 		keyData, err := os.ReadFile(test.Pubfile)
-		assert.NoError(suite.T(), err)
+		assert.NoError(ts.T(), err)
 		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
-		assert.NoError(suite.T(), err)
-		assert.NoError(suite.T(), jwk.AssignKeyID(key))
+		assert.NoError(ts.T(), err)
+		assert.NoError(ts.T(), jwk.AssignKeyID(key))
 		keySet := jwk.NewSet()
-		assert.NoError(suite.T(), keySet.AddKey(key))
+		assert.NoError(ts.T(), keySet.AddKey(key))
 
-		token, err := jwt.Parse([]byte(ts), jwt.WithKeySet(keySet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-		assert.NoError(suite.T(), err)
-		assert.Equal(suite.T(), "http://local.issuer", token.Issuer())
-		assert.Equal(suite.T(), "test@foo.bar", token.Subject())
+		token, err := jwt.Parse([]byte(t), jwt.WithKeySet(keySet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		assert.NoError(ts.T(), err)
+		assert.Equal(ts.T(), "http://local.issuer", token.Issuer())
+		assert.Equal(ts.T(), "test@foo.bar", token.Subject())
 
 		// check that the expiration string is a date
 		_, err = time.Parse("2006-01-02 15:04:05", expiration)
-		assert.Nil(suite.T(), err, "Couldn't parse expiration date for jwt")
+		assert.Nil(ts.T(), err, "Couldn't parse expiration date for jwt")
 	}
 }

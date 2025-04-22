@@ -180,13 +180,12 @@ func NewConfig(app string) (*Config, error) {
 	log.Infoln("reading config")
 	if err := viper.ReadInConfig(); err != nil {
 		log.Infoln(err.Error())
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Infoln("No config file found, using ENVs only")
-		} else {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.Infoln("ReadInConfig Error")
 
 			return nil, err
 		}
+		log.Infoln("No config file found, using ENVs only")
 	}
 
 	if viper.IsSet("log.format") {
@@ -227,7 +226,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
 		default:
-			return nil, fmt.Errorf("inbox.type not set")
+			return nil, errors.New("inbox.type not set")
 		}
 	case "auth":
 		requiredConfVars = []string{
@@ -273,7 +272,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 		switch viper.GetString("inbox.type") {
@@ -282,7 +281,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
 		default:
-			return nil, fmt.Errorf("inbox.type not set")
+			return nil, errors.New("inbox.type not set")
 		}
 	case "finalize":
 		requiredConfVars = []string{
@@ -408,7 +407,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 		switch viper.GetString("sync.destination.type") {
@@ -419,7 +418,7 @@ func NewConfig(app string) (*Config, error) {
 		case SFTP:
 			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
 		default:
-			return nil, fmt.Errorf("sync.destination.type not set")
+			return nil, errors.New("sync.destination.type not set")
 		}
 	case "sync-api":
 		requiredConfVars = []string{
@@ -452,7 +451,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, fmt.Errorf("archive.type not set")
+			return nil, errors.New("archive.type not set")
 		}
 
 	default:
@@ -508,7 +507,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		if (c.Auth.OIDC.ID == "" || c.Auth.OIDC.Secret == "") && (c.Auth.Cega.ID == "" || c.Auth.Cega.Secret == "") {
-			return nil, fmt.Errorf("neither cega or oidc login configured")
+			return nil, errors.New("neither cega or oidc login configured")
 		}
 
 		c.Auth.InfoURL = viper.GetString("auth.infoUrl")
@@ -744,62 +743,62 @@ func (c *Config) configBackup() {
 // configBroker provides configuration for the message broker
 func (c *Config) configBroker() error {
 	// Setup broker
-	broker := broker.MQConf{}
+	mq := broker.MQConf{}
 
-	broker.Host = viper.GetString("broker.host")
-	broker.Port = viper.GetInt("broker.port")
-	broker.User = viper.GetString("broker.user")
-	broker.Password = viper.GetString("broker.password")
+	mq.Host = viper.GetString("broker.host")
+	mq.Port = viper.GetInt("broker.port")
+	mq.User = viper.GetString("broker.user")
+	mq.Password = viper.GetString("broker.password")
 
-	broker.Queue = viper.GetString("broker.queue")
+	mq.Queue = viper.GetString("broker.queue")
 
 	if viper.IsSet("broker.serverName") {
-		broker.ServerName = viper.GetString("broker.serverName")
+		mq.ServerName = viper.GetString("broker.serverName")
 	}
 
 	if viper.IsSet("broker.routingkey") {
-		broker.RoutingKey = viper.GetString("broker.routingkey")
+		mq.RoutingKey = viper.GetString("broker.routingkey")
 	}
 
 	if viper.IsSet("broker.exchange") {
-		broker.Exchange = viper.GetString("broker.exchange")
+		mq.Exchange = viper.GetString("broker.exchange")
 	}
 
 	if viper.IsSet("broker.vhost") {
 		if strings.HasPrefix(viper.GetString("broker.vhost"), "/") {
-			broker.Vhost = viper.GetString("broker.vhost")
+			mq.Vhost = viper.GetString("broker.vhost")
 		} else {
-			broker.Vhost = "/" + viper.GetString("broker.vhost")
+			mq.Vhost = "/" + viper.GetString("broker.vhost")
 		}
 	} else {
-		broker.Vhost = "/"
+		mq.Vhost = "/"
 	}
 
 	if viper.IsSet("broker.ssl") {
-		broker.Ssl = viper.GetBool("broker.ssl")
+		mq.Ssl = viper.GetBool("broker.ssl")
 	}
 
 	if viper.IsSet("broker.verifyPeer") {
-		broker.VerifyPeer = viper.GetBool("broker.verifyPeer")
-		if broker.VerifyPeer {
+		mq.VerifyPeer = viper.GetBool("broker.verifyPeer")
+		if mq.VerifyPeer {
 			// Since verifyPeer is specified, these are required.
-			if !(viper.IsSet("broker.clientCert") && viper.IsSet("broker.clientKey")) {
+			if !viper.IsSet("broker.clientCert") && !viper.IsSet("broker.clientKey") {
 				return errors.New("when broker.verifyPeer is set both broker.clientCert and broker.clientKey is needed")
 			}
-			broker.ClientCert = viper.GetString("broker.clientCert")
-			broker.ClientKey = viper.GetString("broker.clientKey")
+			mq.ClientCert = viper.GetString("broker.clientCert")
+			mq.ClientKey = viper.GetString("broker.clientKey")
 		}
 	}
 	if viper.IsSet("broker.cacert") {
-		broker.CACert = viper.GetString("broker.cacert")
+		mq.CACert = viper.GetString("broker.cacert")
 	}
 
-	broker.PrefetchCount = 2
+	mq.PrefetchCount = 2
 	if viper.IsSet("broker.prefetchCount") {
-		broker.PrefetchCount = viper.GetInt("broker.prefetchCount")
+		mq.PrefetchCount = viper.GetInt("broker.prefetchCount")
 	}
 
-	c.Broker = broker
+	c.Broker = mq
 
 	return nil
 }
@@ -819,7 +818,7 @@ func (c *Config) configDatabase() error {
 	// Optional settings
 	if db.SslMode == "verify-full" {
 		// Since verify-full is specified, these are required.
-		if !(viper.IsSet("db.clientCert") && viper.IsSet("db.clientKey")) {
+		if !viper.IsSet("db.clientCert") && !viper.IsSet("db.clientKey") {
 			return errors.New("when db.sslMode is set to verify-full both db.clientCert and db.clientKey are needed")
 		}
 	}
@@ -1047,7 +1046,6 @@ func (c *Config) configSyncAPI() {
 	if viper.IsSet("sync.api.MappingRouting") {
 		c.SyncAPI.MappingRouting = viper.GetString("sync.api.MappingRouting")
 	}
-
 }
 
 // GetC4GHKey reads and decrypts and returns the c4gh key
@@ -1121,7 +1119,7 @@ func GetC4GHPublicKey() (*[32]byte, error) {
 func (c *Config) configServer() error {
 	s := ServerConfig{}
 
-	if !(viper.IsSet("server.jwtpubkeypath") || viper.IsSet("server.jwtpubkeyurl")) {
+	if !viper.IsSet("server.jwtpubkeypath") && !viper.IsSet("server.jwtpubkeyurl") {
 		return errors.New("either server.pubkeypath or server.jwtpubkeyurl should be present to start the service")
 	}
 

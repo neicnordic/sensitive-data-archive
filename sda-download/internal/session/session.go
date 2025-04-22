@@ -74,7 +74,6 @@ var NewSessionKey = func() string {
 	var sessionKey string
 	exists := true
 	for exists {
-
 		// Generate the key
 		key := uuid.New().String()
 		sessionKey = key

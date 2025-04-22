@@ -32,7 +32,7 @@ func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider) {
 	contx := context.Background()
 	provider, err := oidc.NewProvider(contx, conf.Provider)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	oauth2Config := oauth2.Config{

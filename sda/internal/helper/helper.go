@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -26,14 +27,14 @@ import (
 
 // Global variables for test token creation
 var (
-	DefaultTokenClaims = map[string]interface{}{
+	DefaultTokenClaims = map[string]any{
 		"iss":   "https://dummy.ega.nbis.se",
 		"sub":   "dummy",
 		"exp":   time.Now().Add(time.Hour * 2).Unix(),
 		"pilot": "dummy-pilot",
 	}
 
-	WrongUserClaims = map[string]interface{}{
+	WrongUserClaims = map[string]any{
 		"sub":   "c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -44,7 +45,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	ExpiredClaims = map[string]interface{}{
+	ExpiredClaims = map[string]any{
 		"sub":   "dummy",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -55,7 +56,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	NonValidClaims = map[string]interface{}{
+	NonValidClaims = map[string]any{
 		"sub":   "c5773f41d17d27bd53b1e6794aedc32d7906e779@elixir-europe.org",
 		"aud":   "15137645-3153-4d49-9ddb-594027cd4ca7",
 		"azp":   "15137645-3153-4d49-9ddb-594027cd4ca7",
@@ -66,7 +67,7 @@ var (
 		"jti":   "5e6c6d24-42eb-408e-ba20-203904e388a1",
 	}
 
-	WrongTokenAlgClaims = map[string]interface{}{
+	WrongTokenAlgClaims = map[string]any{
 		"iss":       "Online JWT Builder",
 		"iat":       time.Now().Unix(),
 		"exp":       time.Now().Add(time.Hour * 2).Unix(),
@@ -96,7 +97,7 @@ type AlwaysDeny struct{}
 
 // Authenticate does not authenticate anyone.
 func (u *AlwaysDeny) Authenticate(_ *http.Request) (jwt.Token, error) {
-	return nil, fmt.Errorf("denied")
+	return nil, errors.New("denied")
 }
 
 // MakeFolder creates a folder and subfolders for the keys pair
@@ -208,7 +209,7 @@ func CreateSSHKey(path string) error {
 }
 
 // CreateRSAToken creates an RSA token
-func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any) (string, error) {
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
@@ -232,7 +233,7 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]int
 }
 
 // CreateECToken creates an EC token
-func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]interface{}) (string, error) {
+func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any) (string, error) {
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
@@ -256,13 +257,12 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]inte
 }
 
 // CreateHSToken creates an HS token
-func CreateHSToken(key []byte, tokenClaims map[string]interface{}) (string, error) {
+func CreateHSToken(key []byte, tokenClaims map[string]any) (string, error) {
 	token := jwt.New()
 	for key, value := range tokenClaims {
 		if err := token.Set(key, value); err != nil {
 			return "failed to set claim", err
 		}
-
 	}
 
 	jwtKey, err := jwk.FromRaw(key)
@@ -343,28 +343,28 @@ func MakeCerts(outDir string) {
 	// create our private and public key
 	caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	// create the CA certificate
 	caBytes, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLScertToFile(outDir+"/ca.crt", caBytes)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLSkeyToFile(outDir+"/tls.key", tlsKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	// set up our server certificate
@@ -386,12 +386,12 @@ func MakeCerts(outDir string) {
 	// create the TLS certificate
 	certBytes, err := x509.CreateCertificate(rand.Reader, certTemplate, caTemplate, &tlsKey.PublicKey, caPrivKey)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 
 	err = TLScertToFile(outDir+"/tls.crt", certBytes)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(err) // nolint # FIXME Fatal should only be called from main
 	}
 	log.Printf("certificartes written to: %s", outDir)
 }

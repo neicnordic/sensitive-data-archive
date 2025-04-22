@@ -45,7 +45,6 @@ type AuthHandler struct {
 // downloadable s3cmd file with the specified fileName. Redirects to home if
 // config is missing.
 func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName string) {
-
 	log.Infoln(ctx.Request().URL.Path)
 
 	s := sessions.Get(ctx)
@@ -75,7 +74,6 @@ func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName 
 
 // getMain returns the index.html page
 func (auth AuthHandler) getMain(ctx iris.Context) {
-
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
 	err := ctx.View("index.html")
@@ -88,7 +86,6 @@ func (auth AuthHandler) getMain(ctx iris.Context) {
 
 // getLoginOptions returns the available login providers as JSON
 func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
-
 	var response []LoginOption
 	// Only add the OIDC option if it has both id and secret
 	if auth.Config.OIDC.ID != "" && auth.Config.OIDC.Secret != "" {
@@ -109,7 +106,6 @@ func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 
 // postEGA handles post requests for logging in using EGA
 func (auth AuthHandler) postEGA(ctx iris.Context) {
-
 	s := sessions.Get(ctx)
 
 	userform := ctx.FormValues()
@@ -146,7 +142,7 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 		if ok {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Info("Valid password entered by user")
-			claims := map[string]interface{}{
+			claims := map[string]any{
 				jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 				jwt.IssuedAtKey:   time.Now().UTC(),
 				jwt.IssuerKey:     auth.Config.JwtIssuer,
@@ -181,7 +177,6 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 				err = ctx.View("loginform.html")
 				log.Error("Failed to create backup view: ", err)
 			}
-
 		} else {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Invalid password entered by user")
 			s.SetFlash("message", "Provided credentials are not valid")
@@ -206,7 +201,6 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 // getEGALogin returns the EGA login form
 func (auth AuthHandler) getEGALogin(ctx iris.Context) {
-
 	s := sessions.Get(ctx)
 	ctx.ViewData("infoUrl", auth.Config.InfoURL)
 	ctx.ViewData("infoText", auth.Config.InfoText)
@@ -278,7 +272,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 	if auth.Config.ResignJwt {
 		log.Debugf("Resigning token for user %s", idStruct.User)
-		claims := map[string]interface{}{
+		claims := map[string]any{
 			jwt.ExpirationKey: time.Now().UTC().Add(time.Duration(auth.Config.JwtTTL) * time.Hour),
 			jwt.IssuedAtKey:   time.Now().UTC(),
 			jwt.IssuerKey:     auth.Config.JwtIssuer,
@@ -301,7 +295,6 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 // getOIDCLogin renders the `oidc.html` template to the given iris context
 func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
-
 	oidcData := auth.elixirLogin(ctx)
 	if oidcData == nil {
 		return
@@ -331,7 +324,6 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 
 // getOIDCCORSLogin returns the oidc data as JSON to the given iris context
 func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
-
 	oidcData := auth.elixirLogin(ctx)
 	if oidcData == nil {
 		return
@@ -357,14 +349,12 @@ func (auth AuthHandler) getOIDCConfDownload(ctx iris.Context) {
 
 // globalHeaders presets common response headers
 func globalHeaders(ctx iris.Context) {
-
 	ctx.ResponseWriter().Header().Set("X-Content-Type-Options", "nosniff")
 	ctx.Next()
 }
 
 // addCSPheaders implements CSP and recommended complementary policies
 func addCSPheaders(ctx iris.Context) {
-
 	ctx.ResponseWriter().Header().Set("Content-Security-Policy", "default-src 'self';"+
 		"script-src-elem 'self';"+
 		"img-src 'self' data:;"+
@@ -377,9 +367,8 @@ func addCSPheaders(ctx iris.Context) {
 }
 
 func main() {
-
 	// Initialise config
-	config, err := config.NewConfig("auth")
+	conf, err := config.NewConfig("auth")
 	if err != nil {
 		log.Errorf("Failed to generate config, reason: %v", err)
 		os.Exit(1)
@@ -388,14 +377,14 @@ func main() {
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
 
-	if config.Auth.OIDC.ID != "" && config.Auth.OIDC.Secret != "" {
+	if conf.Auth.OIDC.ID != "" && conf.Auth.OIDC.Secret != "" {
 		// Initialise OIDC client
-		oauth2Config, provider = getOidcClient(config.Auth.OIDC)
+		oauth2Config, provider = getOidcClient(conf.Auth.OIDC)
 	}
 
 	// Create handler struct for the web server
 	authHandler := AuthHandler{
-		Config:       config.Auth,
+		Config:       conf.Auth,
 		OAuth2Config: oauth2Config,
 		OIDCProvider: provider,
 		htmlDir:      "./frontend/templates",
@@ -409,12 +398,12 @@ func main() {
 	// Start sessions handler in order to send flash messages
 	sess := sessions.New(sessions.Config{Cookie: "_session_id", AllowReclaim: true})
 
-	if config.Server.CORS.AllowOrigin != "" {
+	if conf.Server.CORS.AllowOrigin != "" {
 		// Set CORS context
 		corsContext := cors.New(cors.Options{
-			AllowedOrigins:   strings.Split(config.Server.CORS.AllowOrigin, ","),
-			AllowedMethods:   strings.Split(config.Server.CORS.AllowMethods, ","),
-			AllowCredentials: config.Server.CORS.AllowCredentials,
+			AllowedOrigins:   strings.Split(conf.Server.CORS.AllowOrigin, ","),
+			AllowedMethods:   strings.Split(conf.Server.CORS.AllowMethods, ","),
+			AllowCredentials: conf.Server.CORS.AllowCredentials,
 		})
 		app.Use(corsContext)
 	}
@@ -422,7 +411,7 @@ func main() {
 	app.Use(sess.Handler())
 
 	// Connect to DB
-	authHandler.Config.DB, err = database.NewSDAdb(config.Database)
+	authHandler.Config.DB, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Error(err)
 		panic(err)
@@ -461,12 +450,10 @@ func main() {
 
 	app.UseGlobal(globalHeaders)
 
-	if config.Server.Cert != "" && config.Server.Key != "" {
-
+	if conf.Server.Cert != "" && conf.Server.Key != "" {
 		log.Infoln("Serving content using https")
-		err = app.Run(iris.TLS("0.0.0.0:8080", config.Server.Cert, config.Server.Key))
+		err = app.Run(iris.TLS("0.0.0.0:8080", conf.Server.Cert, conf.Server.Key))
 	} else {
-
 		log.Infoln("Serving content using http")
 		server := &http.Server{
 			Addr:              "0.0.0.0:8080",

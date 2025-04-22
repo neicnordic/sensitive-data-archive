@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5" // #nosec
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -137,7 +137,6 @@ func main() {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
-
 				}
 				// store full message info in case we want to fix the db entry and retry
 				infoErrorMessage := broker.InfoError{
@@ -229,7 +228,7 @@ func main() {
 				continue
 			}
 
-			md5hash := md5.New() // #nosec
+			md5hash := md5.New()
 			sha256hash := sha256.New()
 			stream := io.TeeReader(c4ghr, md5hash)
 

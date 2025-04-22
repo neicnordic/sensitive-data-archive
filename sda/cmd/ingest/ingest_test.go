@@ -171,22 +171,22 @@ type TestSuite struct {
 	ingest     Ingest
 }
 
-func (suite *TestSuite) SetupSuite() {
+func (ts *TestSuite) SetupSuite() {
 	viper.Set("log.level", "debug")
-	tempDir := suite.T().TempDir()
+	tempDir := ts.T().TempDir()
 	keyFile1 := fmt.Sprintf("%s/c4gh1.key", tempDir)
 	keyFile2 := fmt.Sprintf("%s/c4gh2.key", tempDir)
 
 	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
 	if err != nil {
-		suite.FailNow("Failed to create c4gh key")
+		ts.FailNow("Failed to create c4gh key")
 	}
 	// Add only the first public key to the list
-	suite.pubKeyList = append(suite.pubKeyList, publicKey)
+	ts.pubKeyList = append(ts.pubKeyList, publicKey)
 
 	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
 	if err != nil {
-		suite.FailNow("Failed to create c4gh key")
+		ts.FailNow("Failed to create c4gh key")
 	}
 
 	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
@@ -212,362 +212,362 @@ func (suite *TestSuite) SetupSuite() {
 	viper.Set("inbox.location", "/tmp/")
 	viper.Set("schema.path", "../../schemas/isolated/")
 
-	suite.ingest.Conf, err = config.NewConfig("ingest")
+	ts.ingest.Conf, err = config.NewConfig("ingest")
 	if err != nil {
-		suite.FailNowf("failed to init config: %s", err.Error())
+		ts.FailNowf("failed to init config: %s", err.Error())
 	}
-	suite.ingest.DB, err = database.NewSDAdb(suite.ingest.Conf.Database)
+	ts.ingest.DB, err = database.NewSDAdb(ts.ingest.Conf.Database)
 	if err != nil {
-		suite.FailNowf("failed to setup database connection: %s", err.Error())
+		ts.FailNowf("failed to setup database connection: %s", err.Error())
 	}
-	suite.ingest.MQ, err = broker.NewMQ(suite.ingest.Conf.Broker)
+	ts.ingest.MQ, err = broker.NewMQ(ts.ingest.Conf.Broker)
 	if err != nil {
-		suite.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
+		ts.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
 	}
-	suite.ingest.ArchiveKeyList, err = config.GetC4GHprivateKeys()
+	ts.ingest.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil {
-		suite.FailNow("no private keys configured")
+		ts.FailNow("no private keys configured")
 	}
 
-	if err := suite.ingest.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
-		suite.FailNow("failed to register the public key")
+	if err := ts.ingest.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
+		ts.FailNow("failed to register the public key")
 	}
 }
 
-func (suite *TestSuite) TearDownSuite() {
-	_ = os.RemoveAll(suite.ingest.Conf.Archive.Posix.Location)
-	_ = os.RemoveAll(suite.ingest.Conf.Inbox.Posix.Location)
+func (ts *TestSuite) TearDownSuite() {
+	_ = os.RemoveAll(ts.ingest.Conf.Archive.Posix.Location)
+	_ = os.RemoveAll(ts.ingest.Conf.Inbox.Posix.Location)
 }
 
-func (suite *TestSuite) SetupTest() {
+func (ts *TestSuite) SetupTest() {
 	var err error
-	suite.ingest.Conf.Archive.Posix.Location, err = os.MkdirTemp("", "archive")
+	ts.ingest.Conf.Archive.Posix.Location, err = os.MkdirTemp("", "archive")
 	if err != nil {
-		suite.FailNow("failed to create temp folder")
+		ts.FailNow("failed to create temp folder")
 	}
 
-	suite.ingest.Conf.Inbox.Posix.Location, err = os.MkdirTemp("", "inbox")
+	ts.ingest.Conf.Inbox.Posix.Location, err = os.MkdirTemp("", "inbox")
 	if err != nil {
-		suite.FailNow("failed to create temp folder")
+		ts.FailNow("failed to create temp folder")
 	}
 
-	f, err := os.CreateTemp(suite.ingest.Conf.Inbox.Posix.Location, "")
+	f, err := os.CreateTemp(ts.ingest.Conf.Inbox.Posix.Location, "")
 	if err != nil {
-		suite.FailNow("failed to create test file")
+		ts.FailNow("failed to create test file")
 	}
 	defer f.Close()
 
 	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to test file")
+		ts.FailNow("failed to write data to test file")
 	}
 
 	outFileName := f.Name() + ".c4gh"
 	outFile, err := os.Create(outFileName)
 	if err != nil {
-		suite.FailNow("failed to create encrypted test file")
+		ts.FailNow("failed to create encrypted test file")
 	}
 	defer outFile.Close()
 
 	_, privateKey, err := keys.GenerateKeyPair()
 	if err != nil {
-		suite.FailNow("failed to create private c4gh key")
+		ts.FailNow("failed to create private c4gh key")
 	}
 
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, suite.pubKeyList, nil)
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, ts.pubKeyList, nil)
 	if err != nil {
-		suite.FailNow("failed to create c4gh writer")
+		ts.FailNow("failed to create c4gh writer")
 	}
 
 	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to encrypted test file")
+		ts.FailNow("failed to write data to encrypted test file")
 	}
 	crypt4GHWriter.Close()
 
-	suite.filePath = filepath.Base(outFileName)
+	ts.filePath = filepath.Base(outFileName)
 
-	suite.ingest.Archive, err = storage.NewBackend(suite.ingest.Conf.Archive)
+	ts.ingest.Archive, err = storage.NewBackend(ts.ingest.Conf.Archive)
 	if err != nil {
-		suite.FailNow("failed to setup archive backend")
+		ts.FailNow("failed to setup archive backend")
 	}
-	suite.ingest.Inbox, err = storage.NewBackend(suite.ingest.Conf.Inbox)
+	ts.ingest.Inbox, err = storage.NewBackend(ts.ingest.Conf.Inbox)
 	if err != nil {
-		suite.FailNow("failed to setup inbox backend")
+		ts.FailNow("failed to setup inbox backend")
 	}
 }
-func (suite *TestSuite) TestTryDecrypt_wrongFile() {
-	tempDir := suite.T().TempDir()
+func (ts *TestSuite) TestTryDecrypt_wrongFile() {
+	tempDir := ts.T().TempDir()
 	err := os.WriteFile(fmt.Sprintf("%s/dummy.file", tempDir), []byte("hello\ngo\n"), 0600)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	file, err := os.Open(fmt.Sprintf("%s/dummy.file", tempDir))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	defer file.Close()
 	buf, err := io.ReadAll(file)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(suite.T(), err)
-	assert.Len(suite.T(), privateKeys, 2)
+	assert.NoError(ts.T(), err)
+	assert.Len(ts.T(), privateKeys, 2)
 
 	header, err := tryDecrypt(privateKeys[0], buf)
-	assert.Nil(suite.T(), header)
-	assert.EqualError(suite.T(), err, "not a Crypt4GH file")
+	assert.Nil(ts.T(), header)
+	assert.EqualError(ts.T(), err, "not a Crypt4GH file")
 }
-func (suite *TestSuite) TestTryDecrypt() {
+func (ts *TestSuite) TestTryDecrypt() {
 	_, signingKey, err := keys.GenerateKeyPair()
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// encrypt test file
-	tempDir := suite.T().TempDir()
+	tempDir := ts.T().TempDir()
 	unencryptedFile, err := os.CreateTemp(tempDir, "unencryptedFile-")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	err = os.WriteFile(unencryptedFile.Name(), []byte("content"), 0600)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	encryptedFile, err := os.CreateTemp(tempDir, "encryptedFile-")
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(encryptedFile, signingKey, suite.pubKeyList, nil)
-	assert.NoError(suite.T(), err)
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(encryptedFile, signingKey, ts.pubKeyList, nil)
+	assert.NoError(ts.T(), err)
 
 	_, err = io.Copy(crypt4GHWriter, unencryptedFile)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	crypt4GHWriter.Close()
 
 	file, err := os.Open(encryptedFile.Name())
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	defer file.Close()
 	buf, err := io.ReadAll(file)
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	for i, key := range privateKeys {
 		header, err := tryDecrypt(key, buf)
-		switch {
-		case i == 0:
-			assert.NoError(suite.T(), err)
-			assert.NotNil(suite.T(), header)
+		switch i {
+		case 0:
+			assert.NoError(ts.T(), err)
+			assert.NotNil(ts.T(), header)
 		default:
-			assert.Contains(suite.T(), err.Error(), "could not find matching public key heade")
-			assert.Nil(suite.T(), header)
+			assert.Contains(ts.T(), err.Error(), "could not find matching public key heade")
+			assert.Nil(ts.T(), header)
 		}
 	}
 }
 
 // messages of type `cancel`
-func (suite *TestSuite) TestCancelFile() {
+func (ts *TestSuite) TestCancelFile() {
 	// prepare the DB entries
-	UserName := "test-cancel"
-	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", UserName)
-	fileID, err := suite.ingest.DB.RegisterFile(file1, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-cancel"
+	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
+	fileID, err := ts.ingest.DB.RegisterFile(file1, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "cancel",
 		FilePath: file1,
-		User:     UserName,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.cancelFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(corrID, message))
 }
-func (suite *TestSuite) TestCancelFile_wrongCorrelationID() {
+func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 	// prepare the DB entries
-	UserName := "test-cancel"
-	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", UserName)
-	fileID, err := suite.ingest.DB.RegisterFile(file1, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-cancel"
+	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", userName)
+	fileID, err := ts.ingest.DB.RegisterFile(file1, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "cancel",
 		FilePath: file1,
-		User:     UserName,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "reject", suite.ingest.cancelFile(uuid.New().String(), message))
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(uuid.New().String(), message))
 }
 
 // messages of type `ingest`
-func (suite *TestSuite) TestIngestFile() {
+func (ts *TestSuite) TestIngestFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 }
-func (suite *TestSuite) TestIngestFile_secondTime() {
+func (ts *TestSuite) TestIngestFile_secondTime() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	// file is already in `archived` state
-	assert.Equal(suite.T(), "reject", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(corrID, message))
 }
-func (suite *TestSuite) TestIngestFile_unknownInboxType() {
-	UserName := "test-ingest-unknown"
+func (ts *TestSuite) TestIngestFile_unknownInboxType() {
+	userName := "test-ingest-unknown"
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(uuid.New().String(), message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(uuid.New().String(), message))
 }
-func (suite *TestSuite) TestIngestFile_reingestCancelledFile() {
+func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 }
-func (suite *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
+func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	// over write the encrypted file to generate new checksum
-	f, err := os.CreateTemp(suite.ingest.Conf.Inbox.Posix.Location, "")
+	f, err := os.CreateTemp(ts.ingest.Conf.Inbox.Posix.Location, "")
 	if err != nil {
-		suite.FailNow("failed to create test file")
+		ts.FailNow("failed to create test file")
 	}
 	defer f.Close()
 
 	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to test file")
+		ts.FailNow("failed to write data to test file")
 	}
 
 	_, privateKey, err := keys.GenerateKeyPair()
 	if err != nil {
-		suite.FailNow("failed to create private c4gh key")
+		ts.FailNow("failed to create private c4gh key")
 	}
 
-	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.filePath))
+	outFile, err := os.Create(path.Join(ts.ingest.Conf.Inbox.Posix.Location, ts.filePath))
 	if err != nil {
-		suite.FailNowf("failed to create encrypted test file: %s", err.Error())
+		ts.FailNowf("failed to create encrypted test file: %s", err.Error())
 	}
 	defer outFile.Close()
 
 	sha256hash := sha256.New()
 	mr := io.MultiWriter(outFile, sha256hash)
 
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, suite.pubKeyList, nil)
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, ts.pubKeyList, nil)
 	if err != nil {
-		suite.FailNowf("failed to create c4gh writer: %s", err.Error())
+		ts.FailNowf("failed to create c4gh writer: %s", err.Error())
 	}
 
 	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to encrypted test file")
+		ts.FailNow("failed to write data to encrypted test file")
 	}
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
 	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := suite.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
-		suite.FailNow("failed to get checksum from database")
+	if err := ts.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
+		ts.FailNow("failed to get checksum from database")
 	}
 
-	assert.Equal(suite.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
+	assert.Equal(ts.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
 }
-func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
+func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
@@ -576,30 +576,30 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
-		suite.Fail("failed to mark file as verified")
+	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+		ts.Fail("failed to mark file as verified")
 	}
 
-	assert.Equal(suite.T(), "reject", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(corrID, message))
 }
-func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
+func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
@@ -608,39 +608,39 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
-		suite.Fail("failed to mark file as verified")
+	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 }
-func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
+func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	// prepare the DB entries
-	UserName := "test-ingest"
-	fileID, err := suite.ingest.DB.RegisterFile(suite.filePath, UserName)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	userName := "test-ingest"
+	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, UserName, "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
-		FilePath: suite.filePath,
-		User:     UserName,
+		FilePath: ts.filePath,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	var firstDbChecksum string
 	const q1 = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := suite.ingest.DB.DB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
-		suite.FailNow("failed to get checksum from database")
+	if err := ts.ingest.DB.DB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
+		ts.FailNow("failed to get checksum from database")
 	}
 
 	// fake file verification
@@ -650,76 +650,76 @@ func (suite *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum(
 	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := suite.ingest.DB.SetVerified(fi, fileID); err != nil {
-		suite.Fail("failed to mark file as verified")
+	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = suite.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
-		suite.Fail("failed to update file event log")
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
 	}
 
 	// over write the encrypted file to generate new checksum
-	f, err := os.CreateTemp(suite.ingest.Conf.Inbox.Posix.Location, "")
+	f, err := os.CreateTemp(ts.ingest.Conf.Inbox.Posix.Location, "")
 	if err != nil {
-		suite.FailNow("failed to create test file")
+		ts.FailNow("failed to create test file")
 	}
 	defer f.Close()
 
 	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to test file")
+		ts.FailNow("failed to write data to test file")
 	}
 
 	_, privateKey, err := keys.GenerateKeyPair()
 	if err != nil {
-		suite.FailNow("failed to create private c4gh key")
+		ts.FailNow("failed to create private c4gh key")
 	}
 
-	outFile, err := os.Create(path.Join(suite.ingest.Conf.Inbox.Posix.Location, suite.filePath))
+	outFile, err := os.Create(path.Join(ts.ingest.Conf.Inbox.Posix.Location, ts.filePath))
 	if err != nil {
-		suite.FailNowf("failed to create encrypted test file: %s", err.Error())
+		ts.FailNowf("failed to create encrypted test file: %s", err.Error())
 	}
 	defer outFile.Close()
 
 	sha256hash := sha256.New()
 	mr := io.MultiWriter(outFile, sha256hash)
 
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, suite.pubKeyList, nil)
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, ts.pubKeyList, nil)
 	if err != nil {
-		suite.FailNowf("failed to create c4gh writer: %s", err.Error())
+		ts.FailNowf("failed to create c4gh writer: %s", err.Error())
 	}
 
 	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
 	if err != nil {
-		suite.FailNow("failed to write data to encrypted test file")
+		ts.FailNow("failed to write data to encrypted test file")
 	}
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
 	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := suite.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
-		suite.FailNow("failed to get checksum from database")
+	if err := ts.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
+		ts.FailNow("failed to get checksum from database")
 	}
 
-	assert.Equal(suite.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
+	assert.Equal(ts.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
 
-	assert.NotEqual(suite.T(), dbChecksum, firstDbChecksum)
+	assert.NotEqual(ts.T(), dbChecksum, firstDbChecksum)
 }
-func (suite *TestSuite) TestIngestFile_missingFile() {
+func (ts *TestSuite) TestIngestFile_missingFile() {
 	// prepare the DB entries
-	UserName := "test-ingest"
+	userName := "test-ingest"
 	corrID := uuid.New().String()
-	basepath := filepath.Dir(suite.filePath)
+	basepath := filepath.Dir(ts.filePath)
 
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
 		FilePath: fmt.Sprintf("%s/missing.file.c4gh", basepath),
-		User:     UserName,
+		User:     userName,
 	}
 
-	assert.Equal(suite.T(), "ack", suite.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
 }

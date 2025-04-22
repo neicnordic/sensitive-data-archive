@@ -14,7 +14,6 @@ import (
 )
 
 func TestGetOIDCDetails_Fail_MakeRequest(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -46,7 +45,6 @@ func TestGetOIDCDetails_Fail_MakeRequest(t *testing.T) {
 }
 
 func TestGetOIDCDetails_Fail_JSONDecode(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -86,7 +84,6 @@ func TestGetOIDCDetails_Fail_JSONDecode(t *testing.T) {
 }
 
 func TestGetOIDCDetails_Success(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -125,7 +122,6 @@ func TestGetOIDCDetails_Success(t *testing.T) {
 }
 
 func TestGetToken_Fail_EmptyHeader(t *testing.T) {
-
 	// Test case
 	header := http.Header{}
 	header.Add("Authorization", "")
@@ -145,11 +141,9 @@ func TestGetToken_Fail_EmptyHeader(t *testing.T) {
 	if err.Error() != expectedError {
 		t.Errorf("TestGetToken_Fail_EmptyHeader failed, expected %s, received %s", expectedError, err.Error())
 	}
-
 }
 
 func TestGetToken_X_Amz_Security_token(t *testing.T) {
-
 	// Expected results
 	expectedToken := "token"
 	expectedCode := 0
@@ -168,11 +162,9 @@ func TestGetToken_X_Amz_Security_token(t *testing.T) {
 	if err != nil {
 		t.Errorf("TestGetToken_X_Amz_Security_token failed, expected nil, received %v", err)
 	}
-
 }
 
 func TestGetToken_Fail_WrongScheme(t *testing.T) {
-
 	// Test case
 	header := http.Header{}
 	header.Add("Authorization", "Basic token")
@@ -192,11 +184,9 @@ func TestGetToken_Fail_WrongScheme(t *testing.T) {
 	if err.Error() != expectedError {
 		t.Errorf("TestGetToken_Fail_EmptyHeader failed, expected %s, received %s", expectedError, err.Error())
 	}
-
 }
 
 func TestGetToken_Fail_MissingToken(t *testing.T) {
-
 	// Test case
 	header := http.Header{}
 	header.Add("Authorization", "Bearer")
@@ -216,11 +206,9 @@ func TestGetToken_Fail_MissingToken(t *testing.T) {
 	if err.Error() != expectedError {
 		t.Errorf("TestGetToken_Fail_EmptyHeader failed, expected %s, received %s", expectedError, err.Error())
 	}
-
 }
 
 func TestGetToken_Success(t *testing.T) {
-
 	// Test case
 	header := http.Header{}
 	header.Add("Authorization", "Bearer token")
@@ -239,11 +227,9 @@ func TestGetToken_Success(t *testing.T) {
 	if err != nil {
 		t.Errorf("TestGetToken_Fail_EmptyHeader failed, expected nil, received %v", err)
 	}
-
 }
 
 func TestGetVisas_Fail_MakeRequest(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -268,11 +254,9 @@ func TestGetVisas_Fail_MakeRequest(t *testing.T) {
 
 	// Return mock functions to originals
 	request.MakeRequest = originalMakeRequest
-
 }
 
 func TestGetVisas_Fail_JSONDecode(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -305,11 +289,9 @@ func TestGetVisas_Fail_JSONDecode(t *testing.T) {
 
 	// Return mock functions to originals
 	request.MakeRequest = originalMakeRequest
-
 }
 
 func TestGetVisas_Success(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalMakeRequest := request.MakeRequest
 
@@ -342,11 +324,9 @@ func TestGetVisas_Success(t *testing.T) {
 
 	// Return mock functions to originals
 	request.MakeRequest = originalMakeRequest
-
 }
 
 func TestValidateTrustedIss(t *testing.T) {
-
 	// this also tests checkIss
 	trustedList := []config.TrustedISS([]config.TrustedISS{{ISS: "https://demo.example", JKU: "https://mockauth:8000/idp/profile/oidc/keyset"}, {ISS: "https://demo1.example", JKU: "https://mockauth:8000/idp/profile/oidc/keyset"}})
 
@@ -364,7 +344,6 @@ func TestValidateTrustedIss(t *testing.T) {
 }
 
 func TestValidateTrustedIssNoConfig(t *testing.T) {
-
 	ok := validateTrustedIss(nil, "https://demo.example", "https://mockauth:8000/idp/profile/oidc/keyset")
 
 	assert.True(t, ok, "this should be true")

@@ -68,7 +68,6 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	dataEditList := in.GetDataeditlist()
 
 	if len(dataEditList) > 0 { // linter doesn't like checking for nil before len
-
 		// Check that G115: integer overflow conversion int -> uint32 is satisfied
 		if len(dataEditList) > int(math.MaxUint32) {
 			return nil, status.Error(400, "data edit list too long")
@@ -106,7 +105,6 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 // server status. The corresponding grpc health server serves as a proxy to the internal health
 // service of the reencrypt server so that k8s grpc probes can be used when TLS is enabled.
 func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) (*healthgrpc.HealthCheckResponse, error) {
-
 	rpcCtx, rpcCancel := context.WithTimeout(ctx, time.Second*2)
 	defer rpcCancel()
 

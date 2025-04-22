@@ -23,7 +23,7 @@ type TestSuite struct {
 	suite.Suite
 }
 
-func (suite *TestSuite) SetupTest() {
+func (ts *TestSuite) SetupTest() {
 	viper.Set("db.host", "test")
 	viper.Set("db.user", "test")
 	viper.Set("db.password", "test")
@@ -33,7 +33,7 @@ func (suite *TestSuite) SetupTest() {
 	viper.Set("oidc.configuration.url", "test")
 }
 
-func (suite *TestSuite) TearDownTest() {
+func (ts *TestSuite) TearDownTest() {
 	viper.Reset()
 }
 
@@ -41,39 +41,38 @@ func TestConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (suite *TestSuite) TestConfigFile() {
+func (ts *TestSuite) TestConfigFile() {
 	viper.Set("configFile", "test")
 	config, err := NewConfig()
-	assert.Nil(suite.T(), config)
-	assert.Error(suite.T(), err)
-	assert.Equal(suite.T(), "test", viper.ConfigFileUsed())
+	assert.Nil(ts.T(), config)
+	assert.Error(ts.T(), err)
+	assert.Equal(ts.T(), "test", viper.ConfigFileUsed())
 }
 
-func (suite *TestSuite) TestMissingRequiredConfVar() {
+func (ts *TestSuite) TestMissingRequiredConfVar() {
 	for _, requiredConfVar := range requiredConfVars {
 		requiredConfVarValue := viper.Get(requiredConfVar)
 		viper.Set(requiredConfVar, nil)
 		expectedError := fmt.Errorf("%s not set", requiredConfVar)
 		config, err := NewConfig()
-		assert.Nil(suite.T(), config)
-		if assert.Error(suite.T(), err) {
-			assert.Equal(suite.T(), expectedError, err)
+		assert.Nil(ts.T(), config)
+		if assert.Error(ts.T(), err) {
+			assert.Equal(ts.T(), expectedError, err)
 		}
 		viper.Set(requiredConfVar, requiredConfVarValue)
 	}
 }
 
-func (suite *TestSuite) TestAppConfig() {
-
+func (ts *TestSuite) TestAppConfig() {
 	// Generate a crypth4gh private key file
 	_, privateKey, err := keys.GenerateKeyPair()
-	assert.NoError(suite.T(), err)
-	tempDir := suite.T().TempDir()
+	assert.NoError(ts.T(), err)
+	tempDir := ts.T().TempDir()
 	defer os.RemoveAll(tempDir)
 	privateKeyFile, err := os.Create(fmt.Sprintf("%s/c4fg.key", tempDir))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 	err = keys.WriteCrypt4GHX25519PrivateKey(privateKeyFile, privateKey, []byte("password"))
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Test fail on missing middleware
 	viper.Set("app.host", "test")
@@ -87,7 +86,7 @@ func (suite *TestSuite) TestAppConfig() {
 
 	c := &Map{}
 	err = c.appConfig()
-	assert.Error(suite.T(), err, "Error expected")
+	assert.Error(ts.T(), err, "Error expected")
 	viper.Reset()
 
 	viper.Set("app.host", "test")
@@ -101,44 +100,42 @@ func (suite *TestSuite) TestAppConfig() {
 
 	c = &Map{}
 	err = c.appConfig()
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "test", c.App.Host)
-	assert.Equal(suite.T(), 1234, c.App.Port)
-	assert.Equal(suite.T(), "test", c.App.ServerCert)
-	assert.Equal(suite.T(), "test", c.App.ServerKey)
-	assert.NotEmpty(suite.T(), c.C4GH.PrivateKey)
-	assert.NotEmpty(suite.T(), c.C4GH.PublicKeyB64)
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "test", c.App.Host)
+	assert.Equal(ts.T(), 1234, c.App.Port)
+	assert.Equal(ts.T(), "test", c.App.ServerCert)
+	assert.Equal(ts.T(), "test", c.App.ServerKey)
+	assert.NotEmpty(ts.T(), c.C4GH.PrivateKey)
+	assert.NotEmpty(ts.T(), c.C4GH.PublicKeyB64)
 
 	// Check the private key that was loaded by checking the derived public key
 	publicKey, err := base64.StdEncoding.DecodeString(c.C4GH.PublicKeyB64)
-	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
+	assert.Nilf(ts.T(), err, "Incorrect public c4gh key generated (error in base64 encoding)")
 	_, err = keys.ReadPublicKey(bytes.NewReader(publicKey))
-	assert.Nilf(suite.T(), err, "Incorrect public c4gh key generated (bad key)")
+	assert.Nilf(ts.T(), err, "Incorrect public c4gh key generated (bad key)")
 
 	// Check false c4gh key
 	viper.Set("c4gh.transientKeyPath", "some/nonexistent.key")
 	err = c.appConfig()
-	assert.ErrorContains(suite.T(), err, "no such file or directory")
+	assert.ErrorContains(ts.T(), err, "no such file or directory")
 
 	// Check false c4gh key
 	viper.Set("c4gh.transientKeyPath", privateKeyFile.Name())
 	viper.Set("c4gh.transientPassphrase", "blablabla")
 	err = c.appConfig()
-	assert.ErrorContains(suite.T(), err, "chacha20poly1305: message authentication failed")
+	assert.ErrorContains(ts.T(), err, "chacha20poly1305: message authentication failed")
 }
 
-func (suite *TestSuite) TestArchiveConfig() {
+func (ts *TestSuite) TestArchiveConfig() {
 	viper.Set("archive.type", POSIX)
 	viper.Set("archive.location", "/test")
 
 	c := &Map{}
 	c.configArchive()
-	assert.Equal(suite.T(), "/test", c.Archive.Posix.Location)
-
+	assert.Equal(ts.T(), "/test", c.Archive.Posix.Location)
 }
 
-func (suite *TestSuite) TestSessionConfig() {
-
+func (ts *TestSuite) TestSessionConfig() {
 	viper.Set("session.expiration", 3600)
 	viper.Set("session.domain", "test")
 	viper.Set("session.secure", false)
@@ -148,26 +145,24 @@ func (suite *TestSuite) TestSessionConfig() {
 
 	c := &Map{}
 	c.sessionConfig()
-	assert.Equal(suite.T(), time.Duration(3600*time.Second), c.Session.Expiration)
-	assert.Equal(suite.T(), "test", c.Session.Domain)
-	assert.Equal(suite.T(), false, c.Session.Secure)
-	assert.Equal(suite.T(), false, c.Session.HTTPOnly)
-
+	assert.Equal(ts.T(), time.Duration(3600*time.Second), c.Session.Expiration)
+	assert.Equal(ts.T(), "test", c.Session.Domain)
+	assert.Equal(ts.T(), false, c.Session.Secure)
+	assert.Equal(ts.T(), false, c.Session.HTTPOnly)
 }
 
-func (suite *TestSuite) TestDatabaseConfig() {
-
+func (ts *TestSuite) TestDatabaseConfig() {
 	// Test error on missing SSL vars
 	viper.Set("db.sslmode", "verify-full")
 	c := &Map{}
 	err := c.configDatabase()
-	assert.Error(suite.T(), err, "Error expected")
+	assert.Error(ts.T(), err, "Error expected")
 
 	// Test no error on SSL disabled
 	viper.Set("db.sslmode", "disable")
 	c = &Map{}
 	err = c.configDatabase()
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Test pass on SSL vars set
 	viper.Set("db.host", "test")
@@ -182,30 +177,28 @@ func (suite *TestSuite) TestDatabaseConfig() {
 
 	c = &Map{}
 	err = c.configDatabase()
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "test", c.DB.Host)
-	assert.Equal(suite.T(), 1234, c.DB.Port)
-	assert.Equal(suite.T(), "test", c.DB.User)
-	assert.Equal(suite.T(), "test", c.DB.Password)
-	assert.Equal(suite.T(), "test", c.DB.Database)
-	assert.Equal(suite.T(), "test", c.DB.CACert)
-	assert.Equal(suite.T(), "test", c.DB.ClientCert)
-	assert.Equal(suite.T(), "test", c.DB.ClientKey)
-
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "test", c.DB.Host)
+	assert.Equal(ts.T(), 1234, c.DB.Port)
+	assert.Equal(ts.T(), "test", c.DB.User)
+	assert.Equal(ts.T(), "test", c.DB.Password)
+	assert.Equal(ts.T(), "test", c.DB.Database)
+	assert.Equal(ts.T(), "test", c.DB.CACert)
+	assert.Equal(ts.T(), "test", c.DB.ClientCert)
+	assert.Equal(ts.T(), "test", c.DB.ClientKey)
 }
 
-func (suite *TestSuite) TestOIDC() {
-
+func (ts *TestSuite) TestOIDC() {
 	// Test wrong file
 	viper.Set("oidc.trusted.iss", "../../iss.json")
 	c := &Map{}
 	err := c.configureOIDC()
-	assert.Error(suite.T(), err, "Error expected")
+	assert.Error(ts.T(), err, "Error expected")
 
 	viper.Set("oidc.trusted.iss", "../../dev_utils/iss.json")
 	c = &Map{}
 	err = c.configureOIDC()
-	assert.NoError(suite.T(), err)
+	assert.NoError(ts.T(), err)
 
 	// Test pass OIDC config
 	viper.Set("oidc.trusted.iss", "../../dev_utils/iss.json")
@@ -217,31 +210,29 @@ func (suite *TestSuite) TestOIDC() {
 	whitelist := jwk.NewMapWhitelist().Add("https://mockauth:8000/idp/profile/oidc/keyset")
 	c = &Map{}
 	err = c.configureOIDC()
-	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "test", c.OIDC.ConfigurationURL)
-	assert.Equal(suite.T(), "test", c.OIDC.CACert)
-	assert.Equal(suite.T(), trustedList, c.OIDC.TrustedList)
-	assert.Equal(suite.T(), whitelist, c.OIDC.Whitelist)
-
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "test", c.OIDC.ConfigurationURL)
+	assert.Equal(ts.T(), "test", c.OIDC.CACert)
+	assert.Equal(ts.T(), trustedList, c.OIDC.TrustedList)
+	assert.Equal(ts.T(), whitelist, c.OIDC.Whitelist)
 }
 
-func (suite *TestSuite) TestConfigReencrypt() {
-	tempDir := suite.T().TempDir()
+func (ts *TestSuite) TestConfigReencrypt() {
+	tempDir := ts.T().TempDir()
 	c := &Map{}
 	viper.Set("grpc.host", "localhost")
-	assert.NoError(suite.T(), c.configReencrypt())
-	assert.Equal(suite.T(), 50051, c.Reencrypt.Port)
+	assert.NoError(ts.T(), c.configReencrypt())
+	assert.Equal(ts.T(), 50051, c.Reencrypt.Port)
 
 	// fail if set file doesn't exists
 	viper.Set("grpc.clientcert", "/tmp/abracadabra")
-	assert.ErrorContains(suite.T(), c.configReencrypt(), "no such file or directory")
+	assert.ErrorContains(ts.T(), c.configReencrypt(), "no such file or directory")
 
 	// any existing flle will make it pass
 	viper.Set("grpc.clientcert", "config_test.go")
-	assert.NoError(suite.T(), c.configReencrypt())
+	assert.NoError(ts.T(), c.configReencrypt())
 
 	// it will fail if certificate is set to a folder
 	viper.Set("grpc.clientcert", tempDir)
-	assert.ErrorContains(suite.T(), c.configReencrypt(), "is a folder")
-
+	assert.ErrorContains(ts.T(), c.configReencrypt(), "is a folder")
 }

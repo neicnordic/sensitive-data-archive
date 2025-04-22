@@ -7,7 +7,6 @@ import (
 )
 
 func TestSetup(t *testing.T) {
-
 	// Create web server app
 	config.Config.App.Host = "localhost"
 	config.Config.App.Port = 8080

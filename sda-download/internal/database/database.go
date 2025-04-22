@@ -65,10 +65,10 @@ func sanitizeString(str string) string {
 }
 
 // NewDB creates a new DB connection
-func NewDB(config config.DatabaseConfig) (*SQLdb, error) {
-	connInfo := buildConnInfo(config)
+func NewDB(conf config.DatabaseConfig) (*SQLdb, error) {
+	connInfo := buildConnInfo(conf)
 
-	log.Debugf("Connecting to DB %s:%d on database: %s with user: %s", config.Host, config.Port, config.Database, config.User)
+	log.Debugf("Connecting to DB %s:%d on database: %s with user: %s", conf.Host, conf.Port, conf.Database, conf.User)
 	db, err := sqlOpen("postgres", connInfo)
 	if err != nil {
 		log.Errorf("failed to connect to database, %s", err)
@@ -88,24 +88,24 @@ func NewDB(config config.DatabaseConfig) (*SQLdb, error) {
 }
 
 // buildConnInfo builds a connection string for the database
-func buildConnInfo(config config.DatabaseConfig) string {
+func buildConnInfo(conf config.DatabaseConfig) string {
 	connInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.Database, config.SslMode)
+		conf.Host, conf.Port, conf.User, conf.Password, conf.Database, conf.SslMode)
 
-	if config.SslMode == "disable" {
+	if conf.SslMode == "disable" {
 		return connInfo
 	}
 
-	if config.CACert != "" {
-		connInfo += fmt.Sprintf(" sslrootcert=%s", config.CACert)
+	if conf.CACert != "" {
+		connInfo += fmt.Sprintf(" sslrootcert=%s", conf.CACert)
 	}
 
-	if config.ClientCert != "" {
-		connInfo += fmt.Sprintf(" sslcert=%s", config.ClientCert)
+	if conf.ClientCert != "" {
+		connInfo += fmt.Sprintf(" sslcert=%s", conf.ClientCert)
 	}
 
-	if config.ClientKey != "" {
-		connInfo += fmt.Sprintf(" sslkey=%s", config.ClientKey)
+	if conf.ClientKey != "" {
+		connInfo += fmt.Sprintf(" sslkey=%s", conf.ClientKey)
 	}
 
 	return connInfo
@@ -127,7 +127,6 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 		log.Debugln("Reconnecting to DB")
 		dbs.DB, _ = sqlOpen("postgres", dbs.ConnInfo)
 	}
-
 }
 
 // GetFiles retrieves the file details
@@ -135,7 +134,7 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	var (
 		r     []*FileInfo = nil
 		err   error       = nil
-		count int         = 0
+		count             = 0
 	)
 
 	for count < dbRetryTimes {
@@ -212,7 +211,6 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 
 	// Iterate rows
 	for rows.Next() {
-
 		// Read rows into struct
 		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
@@ -253,9 +251,9 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 // CheckDataset checks if dataset name exists
 var CheckDataset = func(dataset string) (bool, error) {
 	var (
-		r     bool  = false
+		r           = false
 		err   error = nil
-		count int   = 0
+		count       = 0
 	)
 
 	for count < dbRetryTimes {
@@ -293,7 +291,7 @@ var GetDatasetInfo = func(datasetID string) (*DatasetInfo, error) {
 	var (
 		d     *DatasetInfo = nil
 		err   error        = nil
-		count int          = 0
+		count              = 0
 	)
 
 	for count < dbRetryTimes {
@@ -411,9 +409,9 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 // CheckFilePermission checks if user has permissions to access the dataset the file is a part of
 var CheckFilePermission = func(fileID string) (string, error) {
 	var (
-		r     string = ""
-		err   error  = nil
-		count int    = 0
+		r           = ""
+		err   error = nil
+		count       = 0
 	)
 
 	for count < dbRetryTimes {
@@ -469,7 +467,7 @@ var GetFile = func(fileID string) (*FileDownload, error) {
 	var (
 		r     *FileDownload = nil
 		err   error         = nil
-		count int           = 0
+		count               = 0
 	)
 	for count < dbRetryTimes {
 		r, err = DB.getFile(fileID)
