@@ -364,7 +364,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 			return "ack"
 		default:
-			log.Errorf("unexpected eror when opening file for reading: %s", err.Error())
+			log.Errorf("unexpected error when opening file for reading: %s", err.Error())
 
 			return "nack"
 		}
