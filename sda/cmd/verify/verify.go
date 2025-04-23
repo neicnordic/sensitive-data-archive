@@ -364,19 +364,7 @@ func main() {
 					continue
 				}
 
-				switch {
-				case fileInfo.DecryptedChecksum != "" && fileInfo.DecryptedChecksum == fmt.Sprintf("%x", sha256hash.Sum(nil)):
-					log.Warnln("file already verified")
-
-					if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
-						log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
-						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-						}
-
-						continue
-					}
-				default:
+				if fileInfo.DecryptedChecksum != fmt.Sprintf("%x", sha256hash.Sum(nil)) {
 					if err := db.SetVerified(file, message.FileID); err != nil {
 						log.Errorf("SetVerified failed, reason: (%s)", err.Error())
 						if err := delivered.Nack(false, true); err != nil {
@@ -385,15 +373,17 @@ func main() {
 
 						continue
 					}
+				} else {
+					log.Warnln("file already verified")
+				}
 
-					if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
-						log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
-						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-						}
-
-						continue
+				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+					log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
+
+					continue
 				}
 
 				// Send message to verified queue
