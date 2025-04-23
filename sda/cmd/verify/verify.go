@@ -374,7 +374,7 @@ func main() {
 						continue
 					}
 				} else {
-					log.Warnln("file already verified")
+					log.Infof("file with correlation id: %s is already verified", delivered.CorrelationId)
 				}
 
 				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
