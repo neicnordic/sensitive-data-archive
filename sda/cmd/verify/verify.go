@@ -344,51 +344,37 @@ func main() {
 
 					continue
 				}
-				switch status {
-				case "disabled":
+
+				if status == "disabled" {
 					log.Infof("file with correlation ID: %s is disabled, stopping verification", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
 						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
-				case "enabled":
-					fileInfo, err := db.GetFileInfo(message.FileID)
-					if err != nil {
-						log.Errorf("failed to get info for file: %s", message.FileID)
+				}
+
+				fileInfo, err := db.GetFileInfo(message.FileID)
+				if err != nil {
+					log.Errorf("failed to get info for file: %s", message.FileID)
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if fileInfo.DecryptedChecksum != fmt.Sprintf("%x", sha256hash.Sum(nil)) {
+					if err := db.SetVerified(file, message.FileID); err != nil {
+						log.Errorf("SetVerified failed, reason: (%s)", err.Error())
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 						}
 
 						continue
 					}
-
-					if fileInfo.DecryptedChecksum != "" {
-						log.Debugln("file already verified")
-						if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
-							log.Errorf("failed to publish message, reason: (%s)", err.Error())
-							if err := delivered.Nack(false, true); err != nil {
-								log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-							}
-
-							continue
-						}
-
-						if err := delivered.Ack(false); err != nil {
-							log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-						}
-
-						continue
-					}
-				}
-
-				if err := db.SetVerified(file, message.FileID); err != nil {
-					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
-					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-					}
-
-					continue
+				} else {
+					log.Infof("file with correlation id: %s is already verified", delivered.CorrelationId)
 				}
 
 				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
