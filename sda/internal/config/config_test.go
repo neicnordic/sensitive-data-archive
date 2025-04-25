@@ -226,8 +226,14 @@ func (ts *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Error(ts.T(), err)
 	assert.Nil(ts.T(), config)
 
-	// testing deafult values
+	// testing default values
 	ts.SetupTest()
+	keyPath, _ := os.MkdirTemp("", "key")
+	keyFile := keyPath + "/c4gh.key"
+	_, err = helper.CreatePrivateKeyFile(keyFile, "test")
+	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	viper.Set("c4gh.passphrase", "test")
+	assert.NoError(ts.T(), err)
 	config, err = NewConfig("api")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
@@ -248,6 +254,8 @@ func (ts *ConfigTestSuite) TestAPIConfiguration() {
 	viper.Set("api.session.secure", false)
 	viper.Set("api.session.domain", "test")
 	viper.Set("api.session.expiration", 60)
+	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	viper.Set("c4gh.passphrase", "test")
 
 	config, err = NewConfig("api")
 	assert.NotNil(ts.T(), config)
@@ -258,6 +266,8 @@ func (ts *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(ts.T(), false, config.API.Session.Secure)
 	assert.Equal(ts.T(), "test", config.API.Session.Domain)
 	assert.Equal(ts.T(), 60*time.Second, config.API.Session.Expiration)
+
+	defer os.RemoveAll(keyPath)
 }
 
 func (ts *ConfigTestSuite) TestNotifyConfiguration() {
