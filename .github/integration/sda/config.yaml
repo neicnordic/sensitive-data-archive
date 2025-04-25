@@ -13,6 +13,10 @@ archive:
   bucket: "archive"
   region: "us-east-1"
 
+grpc:
+  host: "reencrypt"
+  port: 50051
+
 auth:
   cega:
     authUrl: "http://cega-nss:8443/username/"
