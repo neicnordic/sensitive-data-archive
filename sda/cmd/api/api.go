@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -22,14 +24,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type dataset struct {
@@ -104,16 +111,18 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
 	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                  // start ingestion of a file
-	r.POST("/file/accession", rbac(e), setAccession)             // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)      // trigger reverification of a file
-	r.POST("/dataset/create", rbac(e), createDataset)            // maps a set of files to a dataset
-	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset) // Releases a dataset to be accessible
-	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)  // Re-verify all files in the dataset
-	r.GET("/datasets/list", rbac(e), listAllDatasets)            // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets) // Lists datasets with their status for a specififc user
-	r.GET("/users", rbac(e), listActiveUsers)                    // Lists all users
-	r.GET("/users/:username/files", rbac(e), listUserFiles)      // Lists all unmapped files for a user
+	r.POST("/file/ingest", rbac(e), ingestFile)                   // start ingestion of a file
+	r.POST("/file/accession", rbac(e), setAccession)              // assign accession ID to a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)       // trigger reverification of a file
+	r.POST("/dataset/create", rbac(e), createDataset)             // maps a set of files to a dataset
+	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)  // Releases a dataset to be accessible
+	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)   // Re-verify all files in the dataset
+	r.GET("/datasets/list", rbac(e), listAllDatasets)             // Lists all datasets with their status
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)  // Lists datasets with their status for a specififc user
+	r.GET("/users", rbac(e), listActiveUsers)                     // Lists all users
+	r.GET("/users/:username/files", rbac(e), listUserFiles)       // Lists all unmapped files for a user
+	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile) // Download a file for a user
+
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
@@ -311,7 +320,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID, true)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -342,6 +351,205 @@ func deleteFile(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// reencryptHeader re-encrypts the header of a file using the public key
+// provided in the request header and returns the new header. The function uses
+// gRPC to communicate with the re-encrypt service and handles TLS configuration
+// if needed. The function also handles the case where the CA certificate is
+// provided for secure communication.
+func reencryptHeader(oldHeader []byte, reEncKey string) ([]byte, error) {
+	var opts []grpc.DialOption
+	switch {
+	case Conf.ReEncrypt.ServerKey != "" && Conf.ReEncrypt.ServerCert != "":
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+			rootCAs = x509.NewCertPool()
+		}
+		if Conf.ReEncrypt.CACert != "" {
+			cacertByte, err := os.ReadFile(Conf.ReEncrypt.CACert)
+			if err != nil {
+				log.Errorf("Failed to read CA certificate file, reason: %s", err)
+
+				return nil, err
+			}
+			ok := rootCAs.AppendCertsFromPEM(cacertByte)
+			if !ok {
+				log.Errorf("Failed to append CA certificate to rootCAs")
+
+				return nil, errors.New("failed to append CA certificate to cert pool")
+			}
+		}
+
+		certs, err := tls.LoadX509KeyPair(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
+		if err != nil {
+			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
+
+			return nil, err
+		}
+		clientCreds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				MinVersion:   tls.VersionTLS13,
+				RootCAs:      rootCAs,
+			},
+		)
+
+		opts = append(opts, grpc.WithTransportCredentials(clientCreds))
+	default:
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	address := fmt.Sprintf("%s:%d", Conf.ReEncrypt.Host, Conf.ReEncrypt.Port)
+	log.Debugf("Address of the reencrypt service: %s", address)
+
+	conn, err := grpc.NewClient(address, opts...)
+	if err != nil {
+		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	defer conn.Close()
+
+	timeoutDuration := time.Duration(Conf.ReEncrypt.Timeout) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	defer cancel()
+
+	c := reencrypt.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reEncKey})
+	if err != nil {
+		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+
+	return res.Header, nil
+}
+
+// The downloadFile function download a file re-encrypted with the public key
+// provided in the request header from the inbox. It retrieves the file path
+// from the database using the file ID and user ID.
+func downloadFile(c *gin.Context) {
+	inbox, err := storage.NewBackend(Conf.Inbox)
+	if err != nil {
+		log.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	// Extract the username and file ID from the URL parameters.
+	submissionUser := c.Param("username")
+	fileID := c.Param("fileid")
+	submissionUser = strings.TrimPrefix(submissionUser, "/")
+	fileID = strings.TrimPrefix(fileID, "/")
+
+	if fileID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
+
+		return
+	}
+
+	// Retrieve the actual file path for the user's file.
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID, false)
+	if err != nil {
+		log.Errorf("getting file path from fileID (%s) failed, reason: (%v)", fileID, err)
+		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in the inbox")
+
+		return
+	}
+
+	// Get inbox file handle
+	file, err := inbox.NewFileReader(filePath)
+	if err != nil {
+		log.Errorf("could not find inbox file %s, %s", filePath, err)
+		c.String(http.StatusInternalServerError, "inbox error")
+
+		return
+	}
+
+	// get the header of the crypt4gh file
+	headerConsumed := false
+	header, err := Conf.API.DB.GetHeader(fileID)
+	if err != nil {
+		log.Debugf("failed to get header for fileID %s from the database, reason: %v", fileID, err)
+		log.Debugln("trying to read header from the file")
+
+		header, err = headers.ReadHeader(file)
+		headerConsumed = true
+		if err != nil {
+			log.Debugf("failed to read header for fileID %s, reason: %v", fileID, err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+			return
+		}
+	}
+
+	decryptedChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileID)
+	if err != nil {
+		log.Debugf("Warning: failed to get decrypted checksum for fileID %s, reason: %v", fileID, err)
+	}
+
+	// Get the public key from the request header.
+	reEncKey := c.GetHeader("Client-Public-Key")
+	if reEncKey == "" {
+		c.String(http.StatusBadRequest, "client public key is not provided in the header")
+
+		return
+	}
+
+	// Set the headers for the response.
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
+	c.Header("ETag", fmt.Sprintf("decryptedChecksum: %s", decryptedChecksum))
+
+	newHeader, err := reencryptHeader(header, reEncKey)
+	if err != nil {
+		log.Errorf("failed to reencrypt header, reason: %v", err)
+		c.String(http.StatusInternalServerError, "failed to reencrypt header")
+
+		return
+	}
+
+	// Skip the original header in the file if it hasn't been consumed yet.
+	if !headerConsumed {
+		headerLength := int64(len(header))
+		_, err = io.CopyN(io.Discard, file, headerLength)
+		if err != nil {
+			log.Errorf("failed to skip original header, reason: %v", err)
+			c.String(http.StatusInternalServerError, "failed to skip original header")
+
+			return
+		}
+	}
+
+	fileStream := io.MultiReader(bytes.NewReader(newHeader), file)
+
+	err = sendStream(c.Writer, fileStream)
+	if err != nil {
+		log.Errorf("error occurred while sending stream: %v", err)
+		c.String(http.StatusInternalServerError, "an error occurred")
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// sendStream streams file contents from a reader
+var sendStream = func(w http.ResponseWriter, file io.Reader) error {
+	n, err := io.Copy(w, file)
+	if err != nil {
+		log.Errorf("file streaming failed, reason: %v", err)
+		http.Error(w, "file streaming failed", http.StatusInternalServerError)
+
+		return err
+	}
+
+	log.Debugf("Sent %d bytes", n)
+
+	return nil
 }
 
 func setAccession(c *gin.Context) {

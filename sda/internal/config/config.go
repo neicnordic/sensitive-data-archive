@@ -54,6 +54,7 @@ type Config struct {
 type ReEncConfig struct {
 	APIConf
 	Crypt4GHKey *[32]byte
+	Timeout     int
 }
 
 type Sync struct {
@@ -493,6 +494,11 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
+
+		err = c.configReEncryptServer()
+		if err != nil {
+			return nil, err
+		}
 	case "auth":
 		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
 		c.Auth.Cega.ID = viper.GetString("auth.cega.id")
@@ -901,6 +907,7 @@ func (c *Config) configOrchestrator() {
 }
 
 func (c *Config) configReEncryptServer() (err error) {
+	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
 	if viper.IsSet("grpc.host") {
 		c.ReEncrypt.Host = viper.GetString("grpc.host")
 	}
@@ -915,6 +922,9 @@ func (c *Config) configReEncryptServer() (err error) {
 	}
 	if viper.IsSet("grpc.serverkey") {
 		c.ReEncrypt.ServerKey = viper.GetString("grpc.serverkey")
+	}
+	if viper.IsSet("grpc.timeout") {
+		c.ReEncrypt.Timeout = viper.GetInt("grpc.timeout")
 	}
 
 	if c.ReEncrypt.ServerCert != "" && c.ReEncrypt.ServerKey != "" {
