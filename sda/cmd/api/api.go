@@ -46,9 +46,10 @@ type dataset struct {
 }
 
 var (
-	Conf *config.Config
-	err  error
-	auth *userauth.ValidateFromToken
+	Conf                *config.Config
+	err                 error
+	auth                *userauth.ValidateFromToken
+	reencryptHeaderFunc = reencryptHeader // for testing purposes
 )
 
 func main() {
@@ -504,7 +505,7 @@ func downloadFile(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
 	c.Header("ETag", fmt.Sprintf("decryptedChecksum: %s", decryptedChecksum))
 
-	newHeader, err := reencryptHeader(header, reEncKey)
+	newHeader, err := reencryptHeaderFunc(header, reEncKey)
 	if err != nil {
 		log.Errorf("failed to reencrypt header, reason: %v", err)
 		c.String(http.StatusInternalServerError, "failed to reencrypt header")
