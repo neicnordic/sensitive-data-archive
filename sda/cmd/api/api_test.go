@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
+	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -31,6 +34,7 @@ import (
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -229,6 +233,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+type ClientKey struct {
+	PubKey       [32]byte
+	PrivKeyPath  string
+	PubKeyBase64 string
+}
+
 type TestSuite struct {
 	suite.Suite
 	Path        string
@@ -238,6 +248,8 @@ type TestSuite struct {
 	RBAC        []byte
 	Token       string
 	User        string
+	PubKeyList  [][32]byte
+	ClientKey   ClientKey
 }
 
 func (s *TestSuite) TestShutdown() {
@@ -388,12 +400,50 @@ func (s *TestSuite) SetupSuite() {
 	{"role":"submission","path":"/file/accession","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
+	{"role":"submission","path":"/users/:username/file/*","action":"GET"},
 	{"role":"*","path":"/files","action":"GET"}],
 	"roles":[{"role":"admin","rolebinding":"submission"},
 	{"role":"dummy","rolebinding":"admin"}]}`)
+
+	c.ReEncrypt.Host = "localhost"
+	c.ReEncrypt.Port = 50051
+	c.ReEncrypt.Crypt4GHKey, _ = config.GetC4GHKey()
+
+	Conf.Inbox.Posix.Location, err = os.MkdirTemp("", "inbox")
+	if err != nil {
+		s.FailNow("failed to create temp folder")
+	}
+
+	keyFile1 := fmt.Sprintf("%s/c4gh1.key", s.Path)
+	keyFile2 := fmt.Sprintf("%s/c4gh2.key", s.Path)
+
+	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
+	if err != nil {
+		s.FailNow("Failed to create c4gh key")
+	}
+	// Add only the first public key to the list
+	s.PubKeyList = append(s.PubKeyList, publicKey)
+
+	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
+	if err != nil {
+		s.FailNow("Failed to create c4gh key")
+	}
+
+	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
+		{FilePath: keyFile1, Passphrase: "test"},
+		{FilePath: keyFile2, Passphrase: "test"},
+	})
+
+	s.ClientKey.PrivKeyPath = fmt.Sprintf("%s/client.key", s.Path)
+	s.ClientKey.PubKey, err = helper.CreatePrivateKeyFile(s.ClientKey.PrivKeyPath, "test")
+	if err != nil {
+		s.FailNow("Failed to create c4gh key")
+	}
+	s.ClientKey.PubKeyBase64 = base64.StdEncoding.EncodeToString(s.ClientKey.PubKey[:])
 }
 func (s *TestSuite) TearDownSuite() {
 	assert.NoError(s.T(), os.RemoveAll(s.Path))
+	assert.NoError(s.T(), os.RemoveAll(Conf.Inbox.Posix.Location))
 }
 func (s *TestSuite) SetupTest() {
 	Conf.Database = database.DBConf{
@@ -2151,4 +2201,150 @@ func (s *TestSuite) TestReVerifyDataset_wrongDatasetName() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(s.T(), http.StatusNotFound, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestDownloadFileSuccess() {
+	origReencryptHeaderFunc := reencryptHeaderFunc
+	reencryptHeaderFunc = func(oldHeader []byte, reEncKey string) ([]byte, error) {
+		return oldHeader, nil
+	}
+	defer func() { reencryptHeaderFunc = origReencryptHeaderFunc }()
+
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.Default()
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	r.GET("/users/:username/file/:fileid", rbac(e), func(c *gin.Context) {
+		downloadFile(c)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	assert.NoError(s.T(), setupJwtAuth())
+
+	err = os.MkdirAll(path.Join(Conf.Inbox.Posix.Location, s.User), 0750)
+	assert.NoError(s.T(), err, "failed to create inbox directory")
+
+	// Create a test file in the inbox directory
+	fileContent := []byte("This is the content of the test file.")
+	contentReader := bytes.NewReader(fileContent)
+	testFilePath := path.Join(Conf.Inbox.Posix.Location, s.User, "test_download.c4gh")
+
+	outFile, err := os.Create(testFilePath)
+	if err != nil {
+		s.FailNow("failed to create encrypted test file")
+	}
+	defer outFile.Close()
+
+	_, privateKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		s.FailNow("failed to create private c4gh key")
+	}
+
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, s.PubKeyList, nil)
+	if err != nil {
+		s.FailNow("failed to create c4gh writer")
+	}
+
+	_, err = io.Copy(crypt4GHWriter, contentReader)
+	if err != nil {
+		s.FailNow("failed to write predefined data to encrypted test file")
+	}
+	crypt4GHWriter.Close()
+
+	defer os.Remove(testFilePath)
+	log.Debugf("test file created: %s", testFilePath)
+
+	// Now read back the entire encrypted file and store it as expectedContent.
+	encryptedFile, err := os.Open(testFilePath)
+	if err != nil {
+		s.FailNow("failed to open encrypted test file for reading")
+	}
+	defer encryptedFile.Close()
+
+	expectedContent, err := io.ReadAll(encryptedFile)
+	if err != nil {
+		s.FailNow("failed to read encrypted test file")
+	}
+	encryptedFile.Close()
+
+	// Register the file in the database
+	filePath := fmt.Sprintf("/%v/test_download.c4gh", s.User)
+	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	// Mock request to download the file
+	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, fileID)
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	assert.NoError(s.T(), err)
+	req.Header.Set("Authorization", "Bearer "+s.Token)
+	req.Header.Set("Client-Public-Key", s.ClientKey.PubKeyBase64)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	assert.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
+	assert.Equal(s.T(), "application/octet-stream", resp.Header.Get("Content-Type"))
+
+	// Check the content of the response
+	actualContent, err := io.ReadAll(resp.Body)
+	assert.NoError(s.T(), err, "failed to read response body")
+	assert.Equal(s.T(), expectedContent, actualContent)
+}
+
+func (s *TestSuite) TestDownloadFile_FileNotExist() {
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.Default()
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	r.GET("/users/:username/file/:fileid", rbac(e), func(c *gin.Context) {
+		downloadFile(c)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	assert.NoError(s.T(), setupJwtAuth())
+
+	// Register a file in the database (but don't create the actual file)
+	filePath := fmt.Sprintf("/%v/nonexistent.c4gh", s.User)
+	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	// Mock request to download the file
+	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, fileID)
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	assert.NoError(s.T(), err)
+	req.Header.Set("Authorization", "Bearer "+s.Token)
+	req.Header.Set("Client-Public-Key", "base64-key-string")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	assert.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	assert.Equal(s.T(), http.StatusInternalServerError, resp.StatusCode)
 }
