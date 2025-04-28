@@ -66,6 +66,42 @@ if [ -z "$output" ] ; then
     echo "Uploaded file not in inbox"
     exit 1
 fi
+
+# download the file, re-encrypted with the client key
+clientPubKey="$(base64 -w0 /shared/client.pub.pem)"
+outFile="download_reenc_NA12878.bam.c4gh"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
+if [ "$resp" != "200" ]; then
+    echo "Error when downloading the file, expected 200 got: $resp"
+    exit 1
+fi
+
+# decrypt the downloaded file
+export C4GH_PASSPHRASE=c4ghpass
+if [ ! -f "$outFile" ]; then
+    echo "downloaded file $outFile not found"
+    exit 1
+fi
+if [ ! -f "/shared/client.sec.pem" ]; then
+    echo "client key not found"
+    exit 1
+fi
+if ! /shared/crypt4gh decrypt -f "$outFile" -s "/shared/client.sec.pem"; then
+    echo "decrypting file $outFile failed"
+    exit 1
+fi
+
+# check the file content
+decryptedFile="${outFile%.*}"
+if [ ! -f "$decryptedFile" ]; then
+    echo "decrypted file ${decryptedFile} not found"
+    exit 1
+fi
+if ! cmp -s "$decryptedFile" "NA12878.bam" ; then
+   echo "downloaded file is different from the original one"
+   exit 1
+fi
+
 # delete it
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "200" ]; then
@@ -82,6 +118,13 @@ fi
 output=$(s3cmd -c s3cfg ls s3://test_dummy.org/NC12878.bam.c4gh 2>/dev/null)
 if [ -n "$output" ] ; then
     echo "Deleted file is still in inbox"
+    exit 1
+fi
+
+# Try to download the file that has been deleted
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
+if [ "$resp" != "500" ]; then
+    echo "Trying to download a non existing file, expected 500 got: $resp"
     exit 1
 fi
 
