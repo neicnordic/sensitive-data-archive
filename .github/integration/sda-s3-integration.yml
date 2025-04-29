@@ -319,31 +319,6 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
-  auth-aai-evil:
-    command: [sda-auth]
-    #container_name: auth-aai
-    depends_on:
-      credentials:
-        condition: service_completed_successfully
-      mock-aai:
-        condition: service_started
-    environment:
-      - AUTH_RESIGNJWT=false
-      - DB_PASSWORD=auth
-      - DB_USER=auth
-      - OIDC_REDIRECTURL=http://localhost:8802/oidc/login
-      - OIDC_ID=auth-evil
-      - OIDC_SECRET=oauqnbcuzyg
-    extra_hosts:
-      - "localhost:host-gateway"
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
-    ports:
-      - "8802:8080"
-    restart: always
-    volumes:
-      - ./sda/config.yaml:/config.yaml
-      - shared:/shared
-
   mock-aai:
     container_name: ls-aai-mock
     depends_on:
