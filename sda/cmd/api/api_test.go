@@ -400,7 +400,7 @@ func (s *TestSuite) SetupSuite() {
 	{"role":"submission","path":"/file/accession","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
-	{"role":"submission","path":"/users/:username/file/*","action":"GET"},
+	{"role":"submission","path":"/users/:username/file/:fileid","action":"GET"},
 	{"role":"*","path":"/files","action":"GET"}],
 	"roles":[{"role":"admin","rolebinding":"submission"},
 	{"role":"dummy","rolebinding":"admin"}]}`)
@@ -2203,7 +2203,7 @@ func (s *TestSuite) TestReVerifyDataset_wrongDatasetName() {
 	assert.Equal(s.T(), http.StatusNotFound, okResponse.StatusCode)
 }
 
-func (s *TestSuite) TestDownloadFileSuccess() {
+func (s *TestSuite) TestDownloadFile() {
 	origReencryptHeaderFunc := reencryptHeaderFunc
 	reencryptHeaderFunc = func(oldHeader []byte, reEncKey string) ([]byte, error) {
 		return oldHeader, nil
@@ -2305,7 +2305,7 @@ func (s *TestSuite) TestDownloadFileSuccess() {
 	assert.Equal(s.T(), expectedContent, actualContent)
 }
 
-func (s *TestSuite) TestDownloadFile_FileNotExist() {
+func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	m, err := model.NewModelFromString(jsonadapter.Model)
