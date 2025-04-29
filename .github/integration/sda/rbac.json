@@ -47,7 +47,7 @@
        },
        {
           "role": "submission",
-          "path": "/users/:username/file/*",
+          "path": "/users/:username/file/:fileid",
           "action": "GET"
        },
        {
