@@ -2339,7 +2339,8 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	assert.NoError(s.T(), err)
 	req.Header.Set("Authorization", "Bearer "+s.Token)
-	req.Header.Set("Client-Public-Key", "base64-key-string")
+	req.Header.Set("Client-Public-Key", s.ClientKey.PubKeyBase64)
+	log.Debugf("public key: %s", s.ClientKey.PubKeyBase64)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
