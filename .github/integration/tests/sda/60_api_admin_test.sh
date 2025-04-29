@@ -123,8 +123,8 @@ fi
 
 # Try to download the file that has been deleted
 resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
-if [ "$resp" != "500" ]; then
-    echo "Trying to download a non existing file, expected 500 got: $resp"
+if [ "$resp" != "404" ]; then
+    echo "Trying to download a non existing file, expected 404 got: $resp"
     exit 1
 fi
 
