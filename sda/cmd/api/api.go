@@ -28,6 +28,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
@@ -436,6 +437,12 @@ func downloadFile(c *gin.Context) {
 	c4ghPubKey := c.GetHeader("Client-Public-Key")
 	if c4ghPubKey == "" {
 		c.String(http.StatusBadRequest, "client public key is not provided in the header")
+
+		return
+	}
+
+	if !helper.IsValidC4GHPubKey(c4ghPubKey) {
+		c.String(http.StatusBadRequest, "client public key is not valid")
 
 		return
 	}
