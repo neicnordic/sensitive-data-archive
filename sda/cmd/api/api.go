@@ -47,10 +47,13 @@ type dataset struct {
 }
 
 var (
-	Conf                *config.Config
-	err                 error
-	auth                *userauth.ValidateFromToken
-	reencryptHeaderFunc = reencryptHeader // for testing purposes
+	Conf                      *config.Config
+	err                       error
+	auth                      *userauth.ValidateFromToken
+	reencryptHeaderFunc       = reencryptHeader // for testing purposes
+	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
+		return c.ReencryptHeader(ctx, in, opts...) // for testing purposes
+	}
 )
 
 func main() {
@@ -360,7 +363,7 @@ func deleteFile(c *gin.Context) {
 // gRPC to communicate with the re-encrypt service and handles TLS configuration
 // if needed. The function also handles the case where the CA certificate is
 // provided for secure communication.
-func reencryptHeader(oldHeader []byte, reEncKey string) ([]byte, error) {
+func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case Conf.ReEncrypt.ServerKey != "" && Conf.ReEncrypt.ServerCert != "":
@@ -419,7 +422,7 @@ func reencryptHeader(oldHeader []byte, reEncKey string) ([]byte, error) {
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
-	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: reEncKey})
+	res, err := grpcReencryptHeaderClient(c, ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
 	if err != nil {
 		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
 
