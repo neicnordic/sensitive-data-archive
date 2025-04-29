@@ -42,6 +42,13 @@ import (
 var dbPort, mqPort, OIDCport int
 var BrokerAPI string
 
+// Mock Reader that returns an error
+type errorReader struct{}
+
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		m.Run()
@@ -2348,4 +2355,32 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	defer resp.Body.Close()
 
 	assert.Equal(s.T(), http.StatusInternalServerError, resp.StatusCode)
+}
+
+func (s *TestSuite) TestSendStream() {
+	// Create a mock ResponseWriter
+	recorder := httptest.NewRecorder()
+
+	data := []byte("This is some test data.")
+	reader := bytes.NewReader(data)
+
+	err := sendStream(recorder, reader)
+
+	s.NoError(err, "sendStream should not return an error on success")
+	s.Equal(http.StatusOK, recorder.Code, "Response status code should be OK")
+	s.Equal(data, recorder.Body.Bytes(), "Response body should match the streamed data")
+}
+
+func (s *TestSuite) TestSendStream_copyError() {
+	// Create a mock ResponseWriter
+	recorder := httptest.NewRecorder()
+
+	// Create a mock Reader that will return an error on Read
+	errReader := &errorReader{}
+
+	err := sendStream(recorder, errReader)
+
+	s.Error(err, "sendStream should return an error if io.Copy fails")
+	s.Equal(http.StatusInternalServerError, recorder.Code, "Response status code should be Internal Server Error")
+	s.Equal("file streaming failed\n", recorder.Body.String(), "Response body should contain the error message")
 }
