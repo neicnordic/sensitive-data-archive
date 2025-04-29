@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +32,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
@@ -37,6 +40,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
 )
 
 var dbPort, mqPort, OIDCport int
@@ -2212,7 +2216,7 @@ func (s *TestSuite) TestReVerifyDataset_wrongDatasetName() {
 
 func (s *TestSuite) TestDownloadFile() {
 	origReencryptHeaderFunc := reencryptHeaderFunc
-	reencryptHeaderFunc = func(oldHeader []byte, reEncKey string) ([]byte, error) {
+	reencryptHeaderFunc = func(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 		return oldHeader, nil
 	}
 	defer func() { reencryptHeaderFunc = origReencryptHeaderFunc }()
@@ -2383,4 +2387,48 @@ func (s *TestSuite) TestSendStream_copyError() {
 	s.Error(err, "sendStream should return an error if io.Copy fails")
 	s.Equal(http.StatusInternalServerError, recorder.Code, "Response status code should be Internal Server Error")
 	s.Equal("file streaming failed\n", recorder.Body.String(), "Response body should contain the error message")
+}
+
+func (s *TestSuite) TestReencryptHeader() {
+	expectedNewHeader := []byte("expected reencrypted header data")
+
+	origGrpcReencryptHeaderClient := grpcReencryptHeaderClient
+	defer func() { grpcReencryptHeaderClient = origGrpcReencryptHeaderClient }()
+
+	// Mock the function to simulate the gRPC response
+	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
+		mockResp := &reencrypt.ReencryptResponse{
+			Header: expectedNewHeader,
+		}
+
+		return mockResp, nil
+	}
+
+	oldHeader := []byte("some header data")
+	c4ghPubKey := "some public key"
+
+	newHeader, err := reencryptHeader(oldHeader, c4ghPubKey)
+	s.Require().NoError(err)
+	s.Require().NotNil(newHeader)
+
+	s.Assert().Equal(expectedNewHeader, newHeader, "The reencrypted header does not match the expected value.")
+}
+
+func (s *TestSuite) TestReencryptHeader_gRPCServiceError() {
+	expectedError := errors.New("failed to reencrypt header")
+
+	// Mock the grpcReencryptHeaderClient function to return the error
+	origGrpcReencryptHeaderClient := grpcReencryptHeaderClient
+	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
+		return nil, expectedError
+	}
+	defer func() { grpcReencryptHeaderClient = origGrpcReencryptHeaderClient }()
+
+	oldHeader := []byte("some header data")
+	c4ghPubKey := "some public key"
+	newHeader, err := reencryptHeader(oldHeader, c4ghPubKey)
+
+	s.Require().Error(err)
+	s.Require().Nil(newHeader)
+	s.Require().EqualError(err, expectedError.Error())
 }
