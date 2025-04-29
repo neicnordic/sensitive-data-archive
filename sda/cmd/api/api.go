@@ -454,12 +454,6 @@ func downloadFile(c *gin.Context) {
 	submissionUser = strings.TrimPrefix(submissionUser, "/")
 	fileID = strings.TrimPrefix(fileID, "/")
 
-	if fileID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
-
-		return
-	}
-
 	// Retrieve the actual file path for the user's file.
 	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
 	if err != nil {
