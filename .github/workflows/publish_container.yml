@@ -3,7 +3,7 @@ on:
   merge_group:
   pull_request:
     branches:
-      - main
+      - release_v1
     paths-ignore:
       - ".github/**"
       - ".gitignore"
@@ -125,7 +125,7 @@ jobs:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: Bump chart version
           author: neicnordic <neicnordic@users.noreply.github.com>
-          base: main
+          base: release_v1
           branch: bump
           delete-branch: true
           title: '[charts] Bump version'
