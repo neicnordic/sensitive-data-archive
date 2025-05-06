@@ -23,7 +23,7 @@ bootstrap: go-version-check docker-version-check
 		go install golang.org/x/tools/cmd/goimports@latest
 
 # build containers
-build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox build-sda-admin
+build-all: build-postgresql build-rabbitmq build-sda build-sda-download build-sda-sftp-inbox
 build-postgresql:
 	@cd postgresql && docker build -t ghcr.io/neicnordic/sensitive-data-archive:PR$$(date +%F)-postgres .
 build-rabbitmq:
@@ -145,7 +145,7 @@ integrationtest-sda-doa-s3-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-doa-s3-outbox.yml down -v --remove-orphans
 
 # lint go code
-lint-all: lint-sda lint-sda-download lint-sda-admin
+lint-all: lint-sda lint-sda-download
 lint-sda:
 	@echo 'Running golangci-lint in the `sda` folder'
 	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
