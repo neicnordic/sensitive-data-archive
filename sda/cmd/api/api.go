@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -36,7 +35,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -366,50 +364,13 @@ func deleteFile(c *gin.Context) {
 func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
-	case Conf.ReEncrypt.ServerKey != "" && Conf.ReEncrypt.ServerCert != "":
-		rootCAs, err := x509.SystemCertPool()
-		if err != nil {
-			log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
-			rootCAs = x509.NewCertPool()
-		}
-		if Conf.ReEncrypt.CACert != "" {
-			cacertByte, err := os.ReadFile(Conf.ReEncrypt.CACert)
-			if err != nil {
-				log.Errorf("Failed to read CA certificate file, reason: %s", err)
-
-				return nil, err
-			}
-			ok := rootCAs.AppendCertsFromPEM(cacertByte)
-			if !ok {
-				log.Errorf("Failed to append CA certificate to rootCAs")
-
-				return nil, errors.New("failed to append CA certificate to cert pool")
-			}
-		}
-
-		certs, err := tls.LoadX509KeyPair(Conf.ReEncrypt.ServerCert, Conf.ReEncrypt.ServerKey)
-		if err != nil {
-			log.Errorf("Failed to load client key pair for reencrypt, reason: %s", err)
-
-			return nil, err
-		}
-		clientCreds := credentials.NewTLS(
-			&tls.Config{
-				Certificates: []tls.Certificate{certs},
-				MinVersion:   tls.VersionTLS13,
-				RootCAs:      rootCAs,
-			},
-		)
-
-		opts = append(opts, grpc.WithTransportCredentials(clientCreds))
+	case Conf.API.Grpc.ClientCreds != nil:
+		opts = append(opts, grpc.WithTransportCredentials(Conf.API.Grpc.ClientCreds))
 	default:
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	address := fmt.Sprintf("%s:%d", Conf.ReEncrypt.Host, Conf.ReEncrypt.Port)
-	log.Debugf("Address of the reencrypt service: %s", address)
-
-	conn, err := grpc.NewClient(address, opts...)
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", Conf.API.Grpc.Host, Conf.API.Grpc.Port), opts...)
 	if err != nil {
 		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
 
@@ -417,15 +378,12 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	}
 	defer conn.Close()
 
-	timeoutDuration := time.Duration(Conf.ReEncrypt.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(Conf.API.Grpc.Timeout)*time.Second)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
-	res, err := grpcReencryptHeaderClient(c, ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
 	if err != nil {
-		log.Errorf("Failed response from the reencrypt service, reason: %s", err)
-
 		return nil, err
 	}
 
