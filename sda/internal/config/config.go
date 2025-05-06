@@ -98,6 +98,7 @@ type APIConf struct {
 	DB         *database.SDAdb
 	MQ         *broker.AMQPBroker
 	INBOX      storage.Backend
+	Grpc       Grpc
 }
 
 type SessionConfig struct {
@@ -233,6 +234,7 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+			"grpc.host",
 		}
 		switch viper.GetString("inbox.type") {
 		case S3:
@@ -508,7 +510,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 		c.configSchemas()
 
-		err = c.configReEncryptServer()
+		c.API.Grpc, err = configReEncryptClient()
 		if err != nil {
 			return nil, err
 		}
