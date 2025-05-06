@@ -42,7 +42,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestBuildConnInfo(t *testing.T) {
-
 	s := buildConnInfo(testPgconf)
 
 	assert.Equalf(t, s, testConnInfo, "Bad string for verify-full: '%s' while expecting '%s'", s, testConnInfo)
@@ -55,31 +54,28 @@ func TestBuildConnInfo(t *testing.T) {
 	assert.Equalf(t, s,
 		"host=localhost port=42 user=user password=password dbname=database sslmode=disable",
 		"Bad string for disable: %s", s)
-
 }
 
 // testLogFatalf
-func testLogFatalf(f string, args ...interface{}) {
+func testLogFatalf(f string, args ...any) {
 	s := fmt.Sprintf(f, args...)
 	panic(s)
 }
 
 func TestCheckAndReconnect(t *testing.T) {
-
 	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
 
-	mock.ExpectPing().WillReturnError(fmt.Errorf("ping fail for testing bad conn"))
+	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing bad conn"))
 
 	err := CatchPanicCheckAndReconnect(SQLdb{db, ""})
 	assert.Error(t, err, "Should have received error from checkAndReconnectOnNeeded fataling")
-
 }
 
 func CatchPanicCheckAndReconnect(db SQLdb) (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("Caught panic")
+			err = errors.New("Caught panic")
 		}
 	}()
 
@@ -96,7 +92,7 @@ func CatchNewDBPanic() (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("Caught panic")
+			err = errors.New("Caught panic")
 		}
 	}()
 
@@ -106,7 +102,6 @@ func CatchNewDBPanic() (err error) {
 }
 
 func TestNewDB(t *testing.T) {
-
 	// Test failure first
 
 	sqlOpen = func(_ string, _ string) (*sql.DB, error) {
@@ -141,7 +136,7 @@ func TestNewDB(t *testing.T) {
 		return db, nil
 	}
 
-	mock.ExpectPing().WillReturnError(fmt.Errorf("ping fail for testing"))
+	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing"))
 
 	err = CatchNewDBPanic()
 
@@ -162,7 +157,6 @@ func TestNewDB(t *testing.T) {
 
 	err = mock.ExpectationsWereMet()
 	assert.Nilf(t, err, "there were unfulfilled expectations: %s", err)
-
 }
 
 // Helper function for "simple" sql tests
@@ -187,7 +181,6 @@ func sqlTesterHelper(t *testing.T, f func(sqlmock.Sqlmock, *SQLdb) error) error 
 
 func TestClose(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		mock.ExpectClose()
 		testDb.Close()
 
@@ -199,7 +192,6 @@ func TestClose(t *testing.T) {
 
 func TestCheckFilePermission(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := "dataset1"
 		query := `
 			SELECT datasets.stable_id FROM sda.file_dataset
@@ -230,7 +222,6 @@ func TestCheckFilePermission(t *testing.T) {
 
 func TestCheckDataset(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := true
 		query := `SELECT stable_id FROM sda.datasets WHERE stable_id = \$1`
 		mock.ExpectQuery(query).
@@ -256,7 +247,6 @@ func TestCheckDataset(t *testing.T) {
 
 func TestGetDatasetInfo(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := &DatasetInfo{
 			DatasetID: "dataset1",
 			CreatedAt: "now",
@@ -285,7 +275,6 @@ func TestGetDatasetInfo(t *testing.T) {
 
 func TestGetDatasetFileInfo(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := &FileInfo{
 			FileID:                    "file1",
 			DatasetID:                 "dataset1",
@@ -355,7 +344,6 @@ func TestGetDatasetFileInfo(t *testing.T) {
 
 func TestGetFile(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := &FileDownload{
 			ArchivePath:       "file.txt",
 			ArchiveSize:       32,
@@ -403,7 +391,6 @@ func TestGetFile(t *testing.T) {
 
 func TestGetFiles(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-
 		expected := []*FileInfo{}
 		fileInfo := &FileInfo{
 			FileID:                    "file1",

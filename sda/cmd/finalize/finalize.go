@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -244,13 +245,13 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archive.GetFileSize(filePath)
+	diskFileSize, err := archive.GetFileSize(filePath, false)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
 
 	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("file size in archive does not match database for archive file")
+		return errors.New("file size in archive does not match database for archive file")
 	}
 
 	file, err := archive.NewFileReader(filePath)

@@ -170,7 +170,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func (suite *SyncTest) SetupSuite() {
+func (s *SyncTest) SetupTest() {
 	viper.Set("log.level", "debug")
 	viper.Set("archive.type", "posix")
 	viper.Set("archive.location", "../../dev_utils")
@@ -212,7 +212,7 @@ func (suite *SyncTest) TearDownSuite() {
 	os.RemoveAll(keyPath)
 }
 
-func (suite *SyncTest) TestSendPOST() {
+func (s *SyncTest) TestSendPOST() {
 	r := http.NewServeMux()
 	r.HandleFunc("/ingest", func(w http.ResponseWriter, r *http.Request) {
 		username, _, ok := r.BasicAuth()

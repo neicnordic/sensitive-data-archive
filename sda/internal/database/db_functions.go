@@ -20,7 +20,6 @@ import (
 // event. If the file already exists in the database, the entry is updated, but
 // a new file event is always inserted.
 func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
-
 	dbs.checkAndReconnectIfNeeded()
 
 	if dbs.Version < 4 {
@@ -202,34 +201,37 @@ func (dbs *SDAdb) storeHeader(header []byte, id string) error {
 }
 
 // SetArchived marks the file as 'ARCHIVED'
-func (dbs *SDAdb) SetArchived(file FileInfo, fileID, corrID string) error {
-	var (
-		err   error
-		count int
-	)
+func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
+	var err error
 
-	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.setArchived(file, fileID, corrID)
-		count++
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.setArchived(file, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
 	return err
 }
-func (dbs *SDAdb) setArchived(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setArchived(file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT sda.set_archived($1, $2, $3, $4, $5, $6);"
-	_, err := db.Exec(query,
-		fileID,
-		corrID,
-		file.Path,
-		file.Size,
-		file.Checksum,
-		"SHA256",
-	)
+	const setArchived = "UPDATE sda.files SET archive_file_path = $1, archive_file_size = $2 WHERE id = $3;"
+	if _, err := db.Exec(setArchived, file.Path, file.Size, fileID); err != nil {
+		return fmt.Errorf("setArchived error: %s", err.Error())
+	}
 
-	return err
+	log.Debugf("checksum: %s", file.UploadedChecksum)
+	const addChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := db.Exec(addChecksum, fileID, file.UploadedChecksum, "SHA256"); err != nil {
+		return fmt.Errorf("addChecksum error: %s", err.Error())
+	}
+
+	return nil
 }
 
 func (dbs *SDAdb) GetFileStatus(corrID string) (string, error) {
@@ -295,35 +297,42 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 }
 
 // MarkCompleted marks the file as "COMPLETED"
-func (dbs *SDAdb) SetVerified(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) SetVerified(file FileInfo, fileID string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.setVerified(file, fileID, corrID)
+		err = dbs.setVerified(file, fileID)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) setVerified(file FileInfo, fileID, corrID string) error {
+func (dbs *SDAdb) setVerified(file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
-	db := dbs.DB
-	const completed = "SELECT sda.set_verified($1, $2, $3, $4, $5, $6, $7);"
-	_, err := db.Exec(completed,
-		fileID,
-		corrID,
-		file.Checksum,
-		"SHA256",
-		file.DecryptedSize,
-		file.DecryptedChecksum,
-		"SHA256",
-	)
+	const verified = "UPDATE sda.files SET decrypted_file_size = $1 WHERE id = $2;"
+	if _, err := dbs.DB.Exec(verified, file.DecryptedSize, fileID); err != nil {
+		return fmt.Errorf("setVerified error: %s", err.Error())
+	}
 
-	return err
+	const addArchiveChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := dbs.DB.Exec(addArchiveChecksum, fileID, file.ArchiveChecksum, "SHA256"); err != nil {
+		return fmt.Errorf("addArchiveChecksum error: %s", err.Error())
+	}
+
+	const addUnencryptedChecksum = "INSERT INTO sda.checksums(file_id, checksum, type, source)" +
+		"VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source)" +
+		"ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;"
+	if _, err := dbs.DB.Exec(addUnencryptedChecksum, fileID, file.DecryptedChecksum, "SHA256"); err != nil {
+		return fmt.Errorf("addUnencryptedChecksum error: %s", err.Error())
+	}
+
+	return nil
 }
 
 // GetArchived retrieves the location and size of archive
@@ -541,7 +550,6 @@ func (dbs *SDAdb) updateDatasetEvent(datasetID, status, message string) error {
 	}
 
 	return nil
-
 }
 
 // GetFileInfo returns info on a ingested file
@@ -563,15 +571,21 @@ func (dbs *SDAdb) getFileInfo(id string) (FileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 	const getFileID = "SELECT archive_file_path, archive_file_size from sda.files where id = $1;"
-	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted from sda.checksums where file_id = $1;"
+	const checkSum = "SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived, " +
+		"MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted, " +
+		"MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums where file_id = $1;"
 	var info FileInfo
 	if err := db.QueryRow(getFileID, id).Scan(&info.Path, &info.Size); err != nil {
 		return FileInfo{}, err
 	}
 
-	if err := db.QueryRow(checkSum, id).Scan(&info.Checksum, &info.DecryptedChecksum); err != nil {
+	var archivedChecksum, decryptedChecksum, uploadedChecksum sql.NullString
+	if err := db.QueryRow(checkSum, id).Scan(&archivedChecksum, &decryptedChecksum, &uploadedChecksum); err != nil {
 		return FileInfo{}, err
 	}
+	info.ArchiveChecksum = archivedChecksum.String
+	info.DecryptedChecksum = decryptedChecksum.String
+	info.UploadedChecksum = uploadedChecksum.String
 
 	return info, nil
 }
@@ -690,14 +704,14 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 }
 
 // GetUserFiles retrieves all the files a user submitted
-func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) GetUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
 	var err error
 
 	files := []*SubmissionFileInfo{}
 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		files, err = dbs.getUserFiles(userID)
+		files, err = dbs.getUserFiles(userID, allData)
 		if err == nil {
 			break
 		}
@@ -708,14 +722,14 @@ func (dbs *SDAdb) GetUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 }
 
 // getUserFiles is the actual function performing work for GetUserFiles
-func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) getUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = "SELECT f.id, f.submission_file_path, e.event, f.created_at FROM sda.files f " +
+	const query = "SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f " +
 		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
 		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
 
@@ -728,11 +742,16 @@ func (dbs *SDAdb) getUserFiles(userID string) ([]*SubmissionFileInfo, error) {
 
 	// Iterate rows
 	for rows.Next() {
+		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &fi.Status, &fi.CreateAt)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt)
 		if err != nil {
 			return nil, err
+		}
+
+		if allData {
+			fi.AccessionID = accessionID.String
 		}
 
 		// Add instance of struct (file) to array if the status is not disabled
@@ -787,7 +806,7 @@ func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
 		return "", rows.Err()
 	}
 
-	return "", fmt.Errorf("sql: no rows in result set")
+	return "", errors.New("sql: no rows in result set")
 }
 
 // list all users with files not yet assigned to a dataset
@@ -886,7 +905,6 @@ func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
 	query := "UPDATE sda.files SET key_hash = $1 WHERE id = $2;"
 	result, err := db.Exec(query, keyHash, fileID)
 	if err != nil {
-
 		return err
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

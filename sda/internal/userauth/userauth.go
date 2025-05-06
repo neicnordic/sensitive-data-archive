@@ -2,6 +2,7 @@ package userauth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -39,14 +40,13 @@ func NewValidateFromToken(keyset jwk.Set) *ValidateFromToken {
 func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 	// Verify signature by parsing the token with the given key
 	if u == nil {
-		return nil, fmt.Errorf("error validating token keyset")
+		return nil, errors.New("error validating token keyset")
 	}
 	switch {
-
 	case r.Header.Get("X-Amz-Security-Token") != "":
 		tokenStr := r.Header.Get("X-Amz-Security-Token")
 		if tokenStr == "" {
-			return nil, fmt.Errorf("no access token supplied")
+			return nil, errors.New("no access token supplied")
 		}
 		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 		if err != nil {
@@ -79,8 +79,7 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 		return token, nil
 
 	default:
-		return nil, fmt.Errorf("no access token supplied")
-
+		return nil, errors.New("no access token supplied")
 	}
 }
 
@@ -155,10 +154,10 @@ func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 func readTokenFromHeader(authStr string) (string, error) {
 	headerParts := strings.Split(authStr, " ")
 	if headerParts[0] != "Bearer" {
-		return "", fmt.Errorf("authorization scheme must be bearer")
+		return "", errors.New("authorization scheme must be bearer")
 	}
 	if len(headerParts) != 2 || headerParts[1] == "" {
-		return "", fmt.Errorf("token string is missing from authorization header")
+		return "", errors.New("token string is missing from authorization header")
 	}
 
 	return headerParts[1], nil

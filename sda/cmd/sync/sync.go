@@ -25,9 +25,9 @@ import (
 
 var (
 	archive, syncInbox storage.Backend
-	err  error
-	db   *database.SDAdb
-	conf *config.Config
+	err                error
+	db                 *database.SDAdb
+	conf               *config.Config
 )
 
 func main() {
@@ -46,11 +46,11 @@ func main() {
 	}
 	archive, err = storage.NewBackend(conf.Archive)
 	if err != nil {
-		log.Fatalf("archive error: %s",err.Error())
+		log.Fatalf("archive error: %s", err.Error())
 	}
 	syncInbox, err = storage.NewBackend(conf.Sync.Destination)
 	if err != nil {
-		log.Fatalf("destination error: %s",err.Error())
+		log.Fatalf("destination error: %s", err.Error())
 	}
 
 	defer mq.Channel.Close()
@@ -78,13 +78,13 @@ func main() {
 		}
 		for delivered := range messages {
 			log.Debugf("Received a message (corr-id: %s, message: %s)",
-			delivered.CorrelationId,
-			delivered.Body)
+				delivered.CorrelationId,
+				delivered.Body)
 			var msgType struct {
 				Type string `json:"type"`
 			}
 			_ = json.Unmarshal(delivered.Body, &msgType)
-	
+
 			switch msgType.Type {
 			case "sync":
 				var message schema.SyncFileData
@@ -136,7 +136,7 @@ func syncArchiveFile(message schema.SyncArchiveFile) error {
 	}
 	defer file.Close()
 
-	dest, err :=  archive.NewFileWriter(message.FileID)
+	dest, err := archive.NewFileWriter(message.FileID)
 	if err != nil {
 		log.Debugln("failed to open file for writing in archive")
 

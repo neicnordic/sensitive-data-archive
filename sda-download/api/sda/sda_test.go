@@ -35,7 +35,6 @@ import (
 )
 
 func TestDatasets(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 
@@ -72,11 +71,9 @@ func TestDatasets(t *testing.T) {
 
 	// Return mock functions to originals
 	middleware.GetCacheFromContext = originalGetCacheFromContext
-
 }
 
 func TestFind_Found(t *testing.T) {
-
 	// Test case
 	datasets := []string{"dataset1", "dataset2", "dataset3"}
 
@@ -89,11 +86,9 @@ func TestFind_Found(t *testing.T) {
 	if found != expectedFound {
 		t.Errorf("TestFind_Found failed, got %t expected %t", found, expectedFound)
 	}
-
 }
 
 func TestFind_NotFound(t *testing.T) {
-
 	// Test case
 	datasets := []string{"dataset1", "dataset2", "dataset3"}
 
@@ -106,11 +101,9 @@ func TestFind_NotFound(t *testing.T) {
 	if found != expectedFound {
 		t.Errorf("TestFind_Found failed, got %t expected %t", found, expectedFound)
 	}
-
 }
 
 func TestGetFiles_Fail_Database(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFilesDB := database.GetFiles
@@ -147,11 +140,9 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 	// Return mock functions to originals
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFiles = originalGetFilesDB
-
 }
 
 func TestGetFiles_Fail_NotFound(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 
@@ -186,7 +177,6 @@ func TestGetFiles_Fail_NotFound(t *testing.T) {
 }
 
 func TestGetFiles_Success(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFilesDB := database.GetFiles
@@ -229,11 +219,9 @@ func TestGetFiles_Success(t *testing.T) {
 	// Return mock functions to originals
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFiles = originalGetFilesDB
-
 }
 
 func TestFiles_Fail(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetFiles := getFiles
 
@@ -272,11 +260,9 @@ func TestFiles_Fail(t *testing.T) {
 
 	// Return mock functions to originals
 	getFiles = originalGetFiles
-
 }
 
 func TestFiles_Success(t *testing.T) {
-
 	// Save original to-be-mocked functions
 	originalGetFiles := getFiles
 
@@ -335,11 +321,9 @@ func TestFiles_Success(t *testing.T) {
 
 	// Return mock functions to originals
 	getFiles = originalGetFiles
-
 }
 
 func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
-
 	// Save original to-be-mocked config
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	config.Config.C4GH.PublicKeyB64 = ""
@@ -396,7 +380,6 @@ func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
 }
 
 func TestDownload_Fail_FileNotFound(t *testing.T) {
-
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
 
@@ -445,11 +428,9 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
 	viper.Set("c4gh.transientPassphrase", "")
-
 }
 
 func TestDownload_Fail_NoPermissions(t *testing.T) {
-
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
 
@@ -504,11 +485,9 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
 	viper.Set("c4gh.transientPassphrase", "")
-
 }
 
 func TestDownload_Fail_GetFile(t *testing.T) {
-
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
 
@@ -569,11 +548,9 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
 	viper.Set("c4gh.transientPassphrase", "")
-
 }
 
 func TestDownload_Fail_OpenFile(t *testing.T) {
-
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
 
@@ -742,7 +719,6 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestDownload_Whole_Range_Encrypted(t *testing.T) {
-
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
 

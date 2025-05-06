@@ -9,7 +9,6 @@ import (
 )
 
 func TestNewSessionKey(t *testing.T) {
-
 	// Initialise a cache for testing
 	cache, _ := InitialiseSessionCache()
 	SessionCache = cache
@@ -24,11 +23,9 @@ func TestNewSessionKey(t *testing.T) {
 	if len(key) != expectedLen {
 		t.Errorf("TestNewSessionKey failed, expected key length %d but received %d", expectedLen, len(key))
 	}
-
 }
 
 func TestGetSetCache_Found(t *testing.T) {
-
 	// Set expiration time
 	config.Config.Session.Expiration = time.Duration(60 * time.Second)
 
@@ -50,11 +47,9 @@ func TestGetSetCache_Found(t *testing.T) {
 	if expectedExists != exists {
 		t.Errorf("TestGetSetCache_Found failed, expected %t but received %t", expectedExists, exists)
 	}
-
 }
 
 func TestGetSetCache_NotFound(t *testing.T) {
-
 	// Set expiration time
 	config.Config.Session.Expiration = time.Duration(60 * time.Second)
 
@@ -76,5 +71,4 @@ func TestGetSetCache_NotFound(t *testing.T) {
 	if expectedExists != exists {
 		t.Errorf("TestGetSetCache_NotFound failed, expected %t but received %t", expectedExists, exists)
 	}
-
 }

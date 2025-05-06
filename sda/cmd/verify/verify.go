@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5" // #nosec
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -137,7 +137,6 @@ func main() {
 				log.Errorf("GetHeader failed for file with ID: %v, readon: %v", message.FileID, err.Error())
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed to nack following getheader error message")
-
 				}
 				// store full message info in case we want to fix the db entry and retry
 				infoErrorMessage := broker.InfoError{
@@ -157,7 +156,7 @@ func main() {
 			}
 
 			var file database.FileInfo
-			file.Size, err = archive.GetFileSize(message.ArchivePath)
+			file.Size, err = archive.GetFileSize(message.ArchivePath, false)
 			if err != nil { //nolint:nestif
 				log.Errorf("Failed to get archived file size, reson: (%s)", err.Error())
 				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
@@ -229,7 +228,7 @@ func main() {
 				continue
 			}
 
-			md5hash := md5.New() // #nosec
+			md5hash := md5.New()
 			sha256hash := sha256.New()
 			stream := io.TeeReader(c4ghr, md5hash)
 
@@ -257,7 +256,7 @@ func main() {
 
 			// At this point we should do checksum comparison
 
-			file.Checksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
+			file.ArchiveChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 			file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
 			switch {
@@ -289,8 +288,8 @@ func main() {
 					continue
 				}
 
-				if file.Checksum != message.EncryptedChecksums[0].Value {
-					log.Errorf("encrypted checksum don't match for file: %s, expected %s, got %s", message.FilePath, message.EncryptedChecksums[0].Value, file.Checksum)
+				if file.ArchiveChecksum != message.EncryptedChecksums[0].Value {
+					log.Errorf("encrypted checksum don't match for file: %s, expected %s, got %s", message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
 					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, reason: (%v)", err)
 						if err := delivered.Nack(false, true); err != nil {
@@ -383,8 +382,17 @@ func main() {
 					}
 				}
 
-				if err := db.SetVerified(file, message.FileID, delivered.CorrelationId); err != nil {
+				if err := db.SetVerified(file, message.FileID); err != nil {
 					log.Errorf("SetVerified failed, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, true); err != nil {
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+					log.Errorf("failed to set event log status for file: %s", delivered.CorrelationId)
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}

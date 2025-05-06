@@ -40,7 +40,7 @@ encrypted_checksums=$(
         --arg md5 "$(echo "aa" | md5sum | cut -d ' ' -f1)" \
         '$ARGS.named|to_entries|map(with_entries(select(.key=="key").key="type"))'
 )
-    
+
 bad_file_payload=$(
     jq -r -c -n \
         --arg type ingest \
@@ -72,7 +72,6 @@ if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/
     exit 1
 fi
 
-
 missing_file_payload=$(
     jq -r -c -n \
         --arg type ingest \
@@ -80,6 +79,16 @@ missing_file_payload=$(
         --arg filepath test_dummy.org/missing.file.c4gh \
         --argjson encrypted_checksums "$encrypted_checksums" \
         '$ARGS.named|@base64'
+)
+
+CORRID=${CORRID//a/b}
+properties=$(
+    jq -c -n \
+        --argjson delivery_mode 2 \
+        --arg correlation_id "$CORRID" \
+        --arg content_encoding UTF-8 \
+        --arg content_type application/json \
+        '$ARGS.named'
 )
 
 missing_file=$(
@@ -98,7 +107,6 @@ curl -s -u guest:guest 'http://rabbitmq:15672/api/exchanges/sda/sda/publish' \
     -d "$missing_file" | jq
 
 sleep 10
-
 
 if [ $((stream_size++)) -eq "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/error_stream | jq '.messages_ready')" ]; then
     echo "missing file not moved to error"

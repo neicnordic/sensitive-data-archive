@@ -1,0 +1,15 @@
+[default]
+access_key=test@dummy.org
+secret_key=test@dummy.org
+access_token="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InJzYTEifQ.eyJhdWQiOiJYQzU2RUwxMXh4IiwiZXhwIjoiMTc0NDI0MzIwMCIsImlhdCI6IjE3NDQwNzA0MDAiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0Iiwic3ViIjoidGVzdEBkdW1teS5vcmcifQ.Lz3b5v53NaKBAsZzMhhLGBJ5wDTqGsBWcSO09LekyF2wJ0dzKGIo3Z1a6zjEb1kAUCUJKpeWjI4bpkAM_T1EgmXmCBDHvcF4D9bQnoxVpCMDaDXhdcI8CDfwT4rcmDXV4Y5z7xKj6q9U19wtw-NOgq7A1wkIOJ3FVULd4edUi8yUnDVfSkyFfgPBOsRG9updLRlXn8aBdMkoJ7BwYvV_TJCgtgxJRdEROwsmJB3MUkpRB1YIjMlHJCppvEP-QbCYKoCdgkX8f0Sy-lgsoTqMSdEb6MQcRuLQ4TD-0mQ3WJWWDiVd0btOi-Kg8q6wTLuuKhBGJ-tlXVYmZONtAEKTyA"
+check_ssl_certificate = False
+check_ssl_hostname = False
+encoding = UTF-8
+encrypt = False
+guess_mime_type = True
+host_base = s3inbox:8000
+host_bucket = s3inbox:8000
+human_readable_sizes = true
+multipart_chunk_size_mb = 50
+use_https = False
+socket_timeout = 30

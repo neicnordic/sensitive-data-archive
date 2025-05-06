@@ -22,12 +22,11 @@ func TestConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
-func (suite *TestSuite) SetupTest() {
+func (ts *TestSuite) SetupTest() {
 	viper.Set("log.level", "debug")
 }
 
 func TestGetUser(t *testing.T) {
-
 	archivedMsg := schema.IngestionVerification{
 		User:        "JohnDoe",
 		FilePath:    "path/to file",
@@ -54,7 +53,6 @@ func TestGetUser(t *testing.T) {
 
 	orgUser := getUser("error", infoErrorBytes)
 	assert.Equal(t, "JohnDoe", orgUser)
-
 }
 
 func TestSetSubject(t *testing.T) {

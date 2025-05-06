@@ -15,9 +15,7 @@ import (
 )
 
 func TestSeekableBackend(t *testing.T) {
-
 	for _, backendType := range []string{posixType, s3Type} {
-
 		testConf.Type = backendType
 
 		backend, err := NewBackend(testConf)
@@ -94,7 +92,6 @@ func TestSeekableBackend(t *testing.T) {
 
 			_, err = seeker.Seek(0, 4)
 			assert.NotNil(t, err, "Seek didn't fail when it should")
-
 		}
 
 		offset, err := seeker.Seek(15, io.SeekStart)
@@ -171,7 +168,6 @@ func TestSeekableBackend(t *testing.T) {
 }
 
 func TestS3SeekablePrefetchSize(t *testing.T) {
-
 	testConf.Type = s3Type
 	chunkSize := testConf.S3.Chunksize
 	testConf.S3.Chunksize = 5 * 1024 * 1024
@@ -297,7 +293,6 @@ func TestS3SeekableSpecial(t *testing.T) {
 }
 
 func TestSeekableMultiReader(t *testing.T) {
-
 	readers := make([]io.Reader, 10)
 	for i := 0; i < 10; i++ {
 		readers[i] = bytes.NewReader(writeData)

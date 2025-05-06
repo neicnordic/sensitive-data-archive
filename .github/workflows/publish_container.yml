@@ -34,6 +34,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         WITH_V: true
         DEFAULT_BUMP: patch
+        TAG_CONTEXT: branch
 
   push_to_registry:
     needs: tag_release

@@ -1,0 +1,10 @@
+[
+    {
+        "username": "dummy@example.com",
+        "uid": 1,
+        "passwordHash": "$2b$12$1gyKIjBc9/cT0MYkXX24xe1LjEUjNwgL4rEk8fDoO.vDQZzWkqrn.",
+        "gecos": "dummy user",
+        "sshPublicKey": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOvegY/X2n3hBM4XqKRRZOxSasqfZ24YTxMC2mxhE4bL root@8c3fef93951b"],
+        "enabled": null
+    }
+]

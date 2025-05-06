@@ -20,7 +20,6 @@ const requestContextKey = "requestContextKey"
 // The datasets are stored into a session cache for subsequent requests, and also
 // to the current request context for use in the endpoints.
 func TokenMiddleware() gin.HandlerFunc {
-
 	return func(c *gin.Context) {
 		// Check if dataset permissions are cached to session
 		sessionCookie, err := c.Cookie(config.Config.Session.Name)
@@ -84,7 +83,6 @@ func TokenMiddleware() gin.HandlerFunc {
 		// Forward request to the next endpoint handler
 		c.Next()
 	}
-
 }
 
 // GetCacheFromContext is a helper function that endpoints can use to get data
