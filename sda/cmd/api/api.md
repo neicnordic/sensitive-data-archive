@@ -235,7 +235,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -H "Client-Public-Key: $base64_encoded_public_key" -X GET  https://HOSTNAME/users/submitter@example.org/file/123abc
+    curl -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $base64_encoded_public_key" -X GET  https://HOSTNAME/users/submitter@example.org/file/c2acecc6-f208-441c-877a-2670e4cbb040
     ```
 
 - `/c4gh-keys/add`
