@@ -121,10 +121,10 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)  // Releases a dataset to be accessible
 	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)   // Re-verify all files in the dataset
 	r.GET("/datasets/list", rbac(e), listAllDatasets)             // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)  // Lists datasets with their status for a specififc user
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)  // Lists datasets with their status for a specific user
 	r.GET("/users", rbac(e), listActiveUsers)                     // Lists all users
 	r.GET("/users/:username/files", rbac(e), listUserFiles)       // Lists all unmapped files for a user
-	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile) // Download a file for a user
+	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile) // Download a file from a users inbox
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -372,7 +372,7 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 
 	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", Conf.API.Grpc.Host, Conf.API.Grpc.Port), opts...)
 	if err != nil {
-		log.Errorf("Failed to connect to the reencrypt service, reason: %s", err)
+		log.Errorf("failed to connect to the reencrypt service, reason: %s", err)
 
 		return nil, err
 	}
@@ -541,7 +541,7 @@ func createDataset(c *gin.Context) {
 	}
 
 	if len(dataset.AccessionIDs) == 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "at least one accessionID is reqired")
+		c.AbortWithStatusJSON(http.StatusBadRequest, "at least one accessionID is required")
 
 		return
 	}
