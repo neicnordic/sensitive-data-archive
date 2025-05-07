@@ -2300,7 +2300,7 @@ func (s *TestSuite) TestDownloadFile() {
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	assert.NoError(s.T(), err)
 	req.Header.Set("Authorization", "Bearer "+s.Token)
-	req.Header.Set("Client-Public-Key", s.ClientKey.PubKeyBase64)
+	req.Header.Set("C4GH-Public-Key", s.ClientKey.PubKeyBase64)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -2359,34 +2359,6 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	defer resp.Body.Close()
 
 	assert.Equal(s.T(), http.StatusInternalServerError, resp.StatusCode)
-}
-
-func (s *TestSuite) TestSendStream() {
-	// Create a mock ResponseWriter
-	recorder := httptest.NewRecorder()
-
-	data := []byte("This is some test data.")
-	reader := bytes.NewReader(data)
-
-	err := sendStream(recorder, reader)
-
-	s.NoError(err, "sendStream should not return an error on success")
-	s.Equal(http.StatusOK, recorder.Code, "Response status code should be OK")
-	s.Equal(data, recorder.Body.Bytes(), "Response body should match the streamed data")
-}
-
-func (s *TestSuite) TestSendStream_copyError() {
-	// Create a mock ResponseWriter
-	recorder := httptest.NewRecorder()
-
-	// Create a mock Reader that will return an error on Read
-	errReader := &errorReader{}
-
-	err := sendStream(recorder, errReader)
-
-	s.Error(err, "sendStream should return an error if io.Copy fails")
-	s.Equal(http.StatusInternalServerError, recorder.Code, "Response status code should be Internal Server Error")
-	s.Equal("file streaming failed\n", recorder.Body.String(), "Response body should contain the error message")
 }
 
 func (s *TestSuite) TestReencryptHeader() {
