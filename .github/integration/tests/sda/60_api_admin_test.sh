@@ -70,7 +70,7 @@ fi
 # download the file, re-encrypted with the client key
 clientPubKey="$(base64 -w0 /shared/client.pub.pem)"
 outFile="download_reenc_NA12878.bam.c4gh"
-resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
 if [ "$resp" != "200" ]; then
     echo "Error when downloading the file, expected 200 got: $resp"
     exit 1
@@ -122,7 +122,7 @@ if [ -n "$output" ] ; then
 fi
 
 # Try to download the file that has been deleted
-resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
 if [ "$resp" != "404" ]; then
     echo "Trying to download a non existing file, expected 404 got: $resp"
     exit 1
