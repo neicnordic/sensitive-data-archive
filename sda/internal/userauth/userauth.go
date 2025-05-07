@@ -8,26 +8,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 )
-
-var configAuth *config.Config
-
-func init() {
-	// initialize config
-	var err error
-	configAuth, err = config.NewConfig("auth")
-	if err != nil {
-		log.Debugf("failed to get auth config, reason: %v", err)
-	}
-}
 
 // Authenticator is an interface that takes care of authenticating users to the
 // S3 proxy. It contains only one method, Authenticate.
@@ -71,11 +58,6 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
 		}
 
-		err = checkAudience(token)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check audience (%v)", err)
-		}
-
 		return token, nil
 
 	case r.Header.Get("Authorization") != "":
@@ -94,35 +76,11 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
 		}
 
-		err = checkAudience(token)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check audience (%v)", err)
-		}
-
 		return token, nil
 
 	default:
 		return nil, errors.New("no access token supplied")
 	}
-}
-
-// check if "aud" field in token matches OIDC client ID
-func checkAudience(token jwt.Token) error {
-
-	// check if the OIDC client ID is present in the token
-	audList := token.Audience()
-	correctAud := configAuth.Auth.OIDC.ID
-
-	if correctAud == "" {
-		return fmt.Errorf("OIDC client ID is not set in the config, aborting")
-	}
-
-	if !slices.Contains(audList, correctAud) {
-		return fmt.Errorf("access token from wrong OIDC client. Expected: %v Received: %v",
-			correctAud, audList)
-	}
-
-	return nil
 }
 
 // Function for reading the ega key in []byte
