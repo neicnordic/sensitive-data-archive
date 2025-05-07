@@ -1,4 +1,4 @@
-FROM "golang:${GOLANG_VERSION:-1.22}-bullseye" AS Build
+FROM "golang:${GOLANG_VERSION:-1.24}-bullseye" AS Build
 ENV GO111MODULE=on
 ENV GOPATH=$PWD
 ENV CGO_ENABLED=0
