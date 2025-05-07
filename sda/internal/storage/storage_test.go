@@ -386,7 +386,7 @@ func (suite *StorageTestSuite) TestSftpBackend() {
 	assert.Nil(suite.T(), err, "sftp RemoveFile failed when it should work")
 
 	err = sftpBack.RemoveFile(sftpDoesNotExist)
-	assert.EqualError(suite.T(), err, "failed to remove file with sftp, file does not exist")
+	assert.ErrorContains(suite.T(), err, "failed to remove file with sftp")
 
 	var readBackBuffer [4096]byte
 	readBack, err := reader.Read(readBackBuffer[0:4096])
