@@ -6,14 +6,16 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -37,7 +39,6 @@ import (
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
@@ -46,11 +47,31 @@ import (
 var dbPort, mqPort, OIDCport int
 var BrokerAPI string
 
-// Mock Reader that returns an error
-type errorReader struct{}
+type server struct {
+	reencrypt.UnimplementedReencryptServer
+	c4ghPrivateKey *[32]byte
+}
 
-func (e *errorReader) Read(p []byte) (n int, err error) {
-	return 0, io.ErrUnexpectedEOF
+func (s *server) ReencryptHeader(ctx context.Context, req *reencrypt.ReencryptRequest) (*reencrypt.ReencryptResponse, error) {
+	// Mock response based on your needs
+	mockedResponse := &reencrypt.ReencryptResponse{
+		Header: []byte("predefined header response"),
+	}
+
+	return mockedResponse, nil
+}
+
+func splitHostPort(addr string) (string, int, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid address format: %w", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid port in address '%s': %w", addr, err)
+	}
+
+	return host, port, nil
 }
 
 func TestMain(m *testing.M) {
@@ -244,23 +265,36 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-type ClientKey struct {
-	PubKey       [32]byte
-	PrivKeyPath  string
-	PubKeyBase64 string
+type UserKey struct {
+	PublicKey      [32]byte
+	PrivateKey     [32]byte
+	PrivateKeyPath string
+	PubKeyBase64   string
+}
+
+type GrpcListener struct {
+	Listener   net.Listener
+	gs         *grpc.Server
+	serverOpts []grpc.ServerOption
 }
 
 type TestSuite struct {
 	suite.Suite
-	Path        string
-	PublicPath  string
-	PrivatePath string
-	KeyName     string
-	RBAC        []byte
-	Token       string
-	User        string
-	PubKeyList  [][32]byte
-	ClientKey   ClientKey
+	Path         string
+	PublicPath   string
+	PrivatePath  string
+	KeyName      string
+	RBAC         []byte
+	Token        string
+	User         string
+	PubKeyList   [][32]byte
+	PrivateKey   *[32]byte
+	UserKey      UserKey
+	FileData     []byte
+	FileHeader   []byte
+	GoodC4ghFile string
+	BadC4ghFile  string
+	GrpcListener GrpcListener
 }
 
 func (s *TestSuite) TestShutdown() {
@@ -416,45 +450,100 @@ func (s *TestSuite) SetupSuite() {
 	"roles":[{"role":"admin","rolebinding":"submission"},
 	{"role":"dummy","rolebinding":"admin"}]}`)
 
-	c.ReEncrypt.Host = "localhost"
-	c.ReEncrypt.Port = 50051
-	c.ReEncrypt.Crypt4GHKey, _ = config.GetC4GHKey()
-
 	Conf.Inbox.Posix.Location, err = os.MkdirTemp("", "inbox")
 	if err != nil {
 		s.FailNow("failed to create temp folder")
 	}
 
-	keyFile1 := fmt.Sprintf("%s/c4gh1.key", s.Path)
-	keyFile2 := fmt.Sprintf("%s/c4gh2.key", s.Path)
-
-	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
+	s.UserKey.PublicKey, s.UserKey.PrivateKey, err = keys.GenerateKeyPair()
 	if err != nil {
-		s.FailNow("Failed to create c4gh key")
-	}
-	// Add only the first public key to the list
-	s.PubKeyList = append(s.PubKeyList, publicKey)
-
-	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
-	if err != nil {
-		s.FailNow("Failed to create c4gh key")
+		s.T().FailNow()
 	}
 
-	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
-		{FilePath: keyFile1, Passphrase: "test"},
-		{FilePath: keyFile2, Passphrase: "test"},
-	})
-
-	s.ClientKey.PrivKeyPath = fmt.Sprintf("%s/client.key", s.Path)
-	s.ClientKey.PubKey, err = helper.CreatePrivateKeyFile(s.ClientKey.PrivKeyPath, "test")
+	s.UserKey.PrivateKeyPath = s.Path + "/user.key"
+	key, err := os.Create(s.UserKey.PrivateKeyPath)
 	if err != nil {
-		s.FailNow("Failed to create c4gh key")
+		s.T().FailNow()
 	}
-	s.ClientKey.PubKeyBase64 = base64.StdEncoding.EncodeToString(s.ClientKey.PubKey[:])
+	if err := keys.WriteCrypt4GHX25519PrivateKey(key, s.UserKey.PrivateKey, []byte("password")); err != nil {
+		s.T().FailNow()
+	}
+
+	buf := new(bytes.Buffer)
+	if err := keys.WriteCrypt4GHX25519PublicKey(buf, s.UserKey.PublicKey); err != nil {
+		s.T().FailNow()
+	}
+	s.UserKey.PubKeyBase64 = base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	Conf.API.Grpc = config.Grpc{
+		Host:    "localhost",
+		Port:    50051,
+		Timeout: 30,
+	}
+
+	s.FileHeader, _ = hex.DecodeString("637279707434676801000000010000006c000000000000007ca283608311dacfc32703a3cc9a2b445c9a417e036ba5943e233cfc65a1f81fdcc35036a584b3f95759114f584d1e81e8cf23a9b9d1e77b9e8f8a8ee8098c2a3e9270fe6872ef9d1c948caf8423efc7ce391081da0d52a49b1e6d0706f267d6140ff12b")
+	s.FileData, _ = hex.DecodeString("e046718f01d52c626276ce5931e10afd99330c4679b3e2a43fdf18146e85bae8eaee83")
+
+	err = os.MkdirAll(path.Join(Conf.Inbox.Posix.Location, s.User), 0750)
+	assert.NoError(s.T(), err, "failed to create inbox directory")
+
+	// Create test files in the inbox
+	fileContent := []byte("This is the content of the test file.")
+	contentReader := bytes.NewReader(fileContent)
+	s.GoodC4ghFile = path.Join(Conf.Inbox.Posix.Location, s.User, "test_download.c4gh")
+	s.BadC4ghFile = path.Join(Conf.Inbox.Posix.Location, s.User, "badc4ghfile.c4gh")
+
+	outFile, err := os.Create(s.GoodC4ghFile)
+	if err != nil {
+		s.FailNow("failed to create encrypted test file")
+	}
+	defer outFile.Close()
+
+	_, privateKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		s.FailNow("failed to create private c4gh key")
+	}
+
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, s.PubKeyList, nil)
+	if err != nil {
+		s.FailNow("failed to create c4gh writer")
+	}
+
+	_, err = io.Copy(crypt4GHWriter, contentReader)
+	if err != nil {
+		s.FailNow("failed to write predefined data to encrypted test file")
+	}
+	crypt4GHWriter.Close()
+
+	err = os.WriteFile(s.BadC4ghFile, []byte("bad c4gh content"), 0600)
+	if err != nil {
+		s.FailNow("failed to write content to file")
+	}
+
+	// create a gPRC listener for tests using the reencrypt service
+	s.GrpcListener.Listener, err = net.Listen("tcp", "localhost:0")
+	if err != nil {
+		s.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s.GrpcListener.gs = grpc.NewServer(opts...)
+		reencrypt.RegisterReencryptServer(s.GrpcListener.gs, &server{c4ghPrivateKey: Conf.ReEncrypt.Crypt4GHKey})
+		if err := s.GrpcListener.gs.Serve(s.GrpcListener.Listener); err != nil {
+			s.T().Fail()
+		}
+	}()
 }
 func (s *TestSuite) TearDownSuite() {
 	assert.NoError(s.T(), os.RemoveAll(s.Path))
 	assert.NoError(s.T(), os.RemoveAll(Conf.Inbox.Posix.Location))
+	if s.GrpcListener.gs != nil {
+		s.GrpcListener.gs.GracefulStop()
+	}
+	if s.GrpcListener.Listener != nil {
+		s.GrpcListener.Listener.Close()
+	}
 }
 func (s *TestSuite) SetupTest() {
 	Conf.Database = database.DBConf{
@@ -1223,7 +1312,7 @@ func (s *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 	response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
-	assert.Contains(s.T(), string(body), "at least one accessionID is reqired")
+	assert.Contains(s.T(), string(body), "at least one accessionID is required")
 }
 
 func (s *TestSuite) TestCreateDataset_WrongIDs() {
@@ -2215,81 +2304,23 @@ func (s *TestSuite) TestReVerifyDataset_wrongDatasetName() {
 }
 
 func (s *TestSuite) TestDownloadFile() {
-	origReencryptHeaderFunc := reencryptHeaderFunc
-	reencryptHeaderFunc = func(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
-		return oldHeader, nil
+	mockServerAddress := s.GrpcListener.Listener.Addr().String()
+	Conf.API.Grpc.Host, Conf.API.Grpc.Port, err = splitHostPort(mockServerAddress)
+	if err != nil {
+		s.T().Fatal("failed to split host and port:", err)
 	}
-	defer func() { reencryptHeaderFunc = origReencryptHeaderFunc }()
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-	m, err := model.NewModelFromString(jsonadapter.Model)
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC model")
-	}
-	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC enforcer")
-	}
 
-	r.GET("/users/:username/file/:fileid", rbac(e), func(c *gin.Context) {
+	r.GET("/users/:username/file/:fileid", func(c *gin.Context) {
 		downloadFile(c)
 	})
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	assert.NoError(s.T(), setupJwtAuth())
-
-	err = os.MkdirAll(path.Join(Conf.Inbox.Posix.Location, s.User), 0750)
-	assert.NoError(s.T(), err, "failed to create inbox directory")
-
-	// Create a test file in the inbox directory
-	fileContent := []byte("This is the content of the test file.")
-	contentReader := bytes.NewReader(fileContent)
-	testFilePath := path.Join(Conf.Inbox.Posix.Location, s.User, "test_download.c4gh")
-
-	outFile, err := os.Create(testFilePath)
-	if err != nil {
-		s.FailNow("failed to create encrypted test file")
-	}
-	defer outFile.Close()
-
-	_, privateKey, err := keys.GenerateKeyPair()
-	if err != nil {
-		s.FailNow("failed to create private c4gh key")
-	}
-
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, s.PubKeyList, nil)
-	if err != nil {
-		s.FailNow("failed to create c4gh writer")
-	}
-
-	_, err = io.Copy(crypt4GHWriter, contentReader)
-	if err != nil {
-		s.FailNow("failed to write predefined data to encrypted test file")
-	}
-	crypt4GHWriter.Close()
-
-	defer os.Remove(testFilePath)
-	log.Debugf("test file created: %s", testFilePath)
-
-	// Now read back the entire encrypted file and store it as expectedContent.
-	encryptedFile, err := os.Open(testFilePath)
-	if err != nil {
-		s.FailNow("failed to open encrypted test file for reading")
-	}
-	defer encryptedFile.Close()
-
-	expectedContent, err := io.ReadAll(encryptedFile)
-	if err != nil {
-		s.FailNow("failed to read encrypted test file")
-	}
-	encryptedFile.Close()
-
 	// Register the file in the database
-	filePath := fmt.Sprintf("/%v/test_download.c4gh", s.User)
+	filePath := fmt.Sprintf("/%s/%s", s.User, filepath.Base(s.GoodC4ghFile))
 	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
@@ -2299,8 +2330,7 @@ func (s *TestSuite) TestDownloadFile() {
 	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, fileID)
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	assert.NoError(s.T(), err)
-	req.Header.Set("Authorization", "Bearer "+s.Token)
-	req.Header.Set("C4GH-Public-Key", s.ClientKey.PubKeyBase64)
+	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -2311,32 +2341,70 @@ func (s *TestSuite) TestDownloadFile() {
 	assert.Equal(s.T(), "application/octet-stream", resp.Header.Get("Content-Type"))
 
 	// Check the content of the response
-	actualContent, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	assert.NoError(s.T(), err, "failed to read response body")
-	assert.Equal(s.T(), expectedContent, actualContent)
+	assert.Contains(s.T(), string(body), "predefined header respons")
 }
 
-func (s *TestSuite) TestDownloadFile_fileNotExist() {
-	gin.SetMode(gin.ReleaseMode)
+func (s *TestSuite) TestDownloadFile_badPublicKey() {
 	r := gin.Default()
-	m, err := model.NewModelFromString(jsonadapter.Model)
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC model")
-	}
-	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC enforcer")
-	}
-
-	r.GET("/users/:username/file/:fileid", rbac(e), func(c *gin.Context) {
+	r.GET("/users/:username/file/:fileid", func(c *gin.Context) {
 		downloadFile(c)
 	})
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	assert.NoError(s.T(), setupJwtAuth())
+	// Mock request to download a file
+	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, "d35a6b53-a5d8-4b1b-921f-0a2829b8d2f2")
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	assert.NoError(s.T(), err)
+	req.Header.Set("C4GH-Public-Key", "invalid_key")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	assert.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(s.T(), err)
+
+	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(s.T(), string(body), "bad public key")
+}
+
+func (s *TestSuite) TestDownloadFile_fileIDNotExist() {
+	r := gin.Default()
+	r.GET("/users/:username/file/:fileid", func(c *gin.Context) {
+		downloadFile(c)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	// Mock a request to download a file
+	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, "d35a6b53-a5d8-4b1b-921f-0a2829b8d2f2")
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	assert.NoError(s.T(), err)
+	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	assert.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(s.T(), err)
+
+	assert.Equal(s.T(), http.StatusNotFound, resp.StatusCode)
+	assert.Contains(s.T(), string(body), "failed to retrieve inbox file path")
+}
+
+func (s *TestSuite) TestDownloadFile_fileNotExist() {
+	r := gin.Default()
+	r.GET("/users/:username/file/:fileid", func(c *gin.Context) {
+		downloadFile(c)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
 
 	// Register a file in the database (but don't create the actual file)
 	filePath := fmt.Sprintf("/%v/nonexistent.c4gh", s.User)
@@ -2349,58 +2417,80 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, fileID)
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	assert.NoError(s.T(), err)
-	req.Header.Set("Authorization", "Bearer "+s.Token)
-	req.Header.Set("Client-Public-Key", s.ClientKey.PubKeyBase64)
-	log.Debugf("public key: %s", s.ClientKey.PubKeyBase64)
+	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(s.T(), err)
+
 	assert.Equal(s.T(), http.StatusInternalServerError, resp.StatusCode)
+	assert.Contains(s.T(), string(body), "failed to read inbox file")
+}
+
+func (s *TestSuite) TestDownloadFile_badC4ghFile() {
+	r := gin.Default()
+	r.GET("/users/:username/file/:fileid", func(c *gin.Context) {
+		downloadFile(c)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	// Register a file in the database (but don't create the actual file)
+	filePath := fmt.Sprintf("/%s/%s", s.User, filepath.Base(s.BadC4ghFile))
+	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	// Mock request to download the file
+	downloadURL := fmt.Sprintf("%s/users/%s/file/%s", ts.URL, s.User, fileID)
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	assert.NoError(s.T(), err)
+	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	assert.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(s.T(), err)
+
+	assert.Equal(s.T(), http.StatusInternalServerError, resp.StatusCode)
+	assert.Contains(s.T(), string(body), "failed to read the start of the file")
 }
 
 func (s *TestSuite) TestReencryptHeader() {
-	expectedNewHeader := []byte("expected reencrypted header data")
-
-	origGrpcReencryptHeaderClient := grpcReencryptHeaderClient
-	defer func() { grpcReencryptHeaderClient = origGrpcReencryptHeaderClient }()
-
-	// Mock the function to simulate the gRPC response
-	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
-		mockResp := &reencrypt.ReencryptResponse{
-			Header: expectedNewHeader,
-		}
-
-		return mockResp, nil
+	mockServerAddress := s.GrpcListener.Listener.Addr().String()
+	log.Debugf("Mock server address: %s", mockServerAddress)
+	Conf.API.Grpc.Host, Conf.API.Grpc.Port, err = splitHostPort(mockServerAddress)
+	if err != nil {
+		s.T().Fatal("failed to split host and port:", err)
 	}
 
-	oldHeader := []byte("some header data")
-	c4ghPubKey := "some public key"
+	// Call the function under test
+	newHeader, err := reencryptHeader(s.FileHeader, s.UserKey.PubKeyBase64)
+	if err != nil {
+		s.T().Fatal("reencryptHeader failed:", err)
+	}
 
-	newHeader, err := reencryptHeader(oldHeader, c4ghPubKey)
-	s.Require().NoError(err)
-	s.Require().NotNil(newHeader)
-
-	s.Assert().Equal(expectedNewHeader, newHeader, "The reencrypted header does not match the expected value.")
+	// Validate the returned header
+	expectedHeader := []byte("predefined header response")
+	assert.Equal(s.T(), expectedHeader, newHeader, "returned header does not match the expected header")
 }
 
-func (s *TestSuite) TestReencryptHeader_gRPCServiceError() {
-	expectedError := errors.New("failed to reencrypt header")
+func (s *TestSuite) TestReencryptHeader_failedToConnect() {
+	// Mock the server address to an invalid one
+	Conf.API.Grpc.Host, Conf.API.Grpc.Port, _ = splitHostPort("localhost:9999")
 
-	// Mock the grpcReencryptHeaderClient function to return the error
-	origGrpcReencryptHeaderClient := grpcReencryptHeaderClient
-	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
-		return nil, expectedError
+	newHeader, err := reencryptHeader(s.FileHeader, s.UserKey.PubKeyBase64)
+	if err == nil {
+		s.T().Fatal("Expected an error due to failed connection, but got nil")
 	}
-	defer func() { grpcReencryptHeaderClient = origGrpcReencryptHeaderClient }()
-
-	oldHeader := []byte("some header data")
-	c4ghPubKey := "some public key"
-	newHeader, err := reencryptHeader(oldHeader, c4ghPubKey)
-
-	s.Require().Error(err)
-	s.Require().Nil(newHeader)
-	s.Require().EqualError(err, expectedError.Error())
+	assert.Equal(s.T(), newHeader, []uint8([]byte(nil)), "expected header to be nil")
+	assert.ErrorContains(s.T(), err, "connection refused")
 }

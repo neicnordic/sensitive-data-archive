@@ -45,13 +45,9 @@ type dataset struct {
 }
 
 var (
-	Conf                      *config.Config
-	err                       error
-	auth                      *userauth.ValidateFromToken
-	reencryptHeaderFunc       = reencryptHeader // for testing purposes
-	grpcReencryptHeaderClient = func(c reencrypt.ReencryptClient, ctx context.Context, in *reencrypt.ReencryptRequest, opts ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
-		return c.ReencryptHeader(ctx, in, opts...) // for testing purposes
-	}
+	Conf *config.Config
+	err  error
+	auth *userauth.ValidateFromToken
 )
 
 func main() {
@@ -399,16 +395,16 @@ func downloadFile(c *gin.Context) {
 
 	pubKey, err := base64.StdEncoding.DecodeString(c4ghPubKey)
 	if err != nil || len(pubKey) == 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "bad public key")
 		log.Errorf("bad public key, error: %v", err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, "bad public key")
 
 		return
 	}
 
 	inbox, err := storage.NewBackend(Conf.Inbox)
 	if err != nil {
-		log.Error(err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		log.Errorf("failed to initialize inbox backend, reason: %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
 
 		return
 	}
@@ -420,7 +416,7 @@ func downloadFile(c *gin.Context) {
 		fileID,
 	)
 	if err != nil {
-		log.Errorf("getting file path from fileID (%s) failed, reason: (%v)", fileID, err)
+		log.Errorf("getting file path from fileID (%s) failed, reason: %v", fileID, err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "failed to retrieve inbox file path")
 
 		return
@@ -429,8 +425,8 @@ func downloadFile(c *gin.Context) {
 	// Get inbox file handle
 	file, err := inbox.NewFileReader(filePath)
 	if err != nil {
-		log.Errorf("could not find inbox file %s, %s", filePath, err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
+		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
 
 		return
 	}
@@ -438,13 +434,13 @@ func downloadFile(c *gin.Context) {
 	// get the header of the crypt4gh file
 	header, err := headers.ReadHeader(file)
 	if err != nil {
-		log.Debugf("failed to read header for fileID %s, reason: %v", fileID, err)
+		log.Errorf("failed to read header for fileID %s, reason: %v", fileID, err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read the start of the file")
 
 		return
 	}
 
-	newHeader, err := reencryptHeaderFunc(header, c4ghPubKey)
+	newHeader, err := reencryptHeader(header, c4ghPubKey)
 	if err != nil {
 		log.Errorf("failed to reencrypt header, reason: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to reencrypt header")
@@ -457,17 +453,13 @@ func downloadFile(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("filename: %v", path.Base(filePath)))
 
 	reader := io.MultiReader(bytes.NewReader(newHeader), file)
-	n, err := io.Copy(c.Writer, reader)
+	_, err = io.Copy(c.Writer, reader)
 	if err != nil {
-		log.Errorf("error occurred while sending stream: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error":   "failed to stream data to client",
-			"details": err.Error(),
-		})
+		log.Errorf("error occurred while sending stream, reason: %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to stream data to client")
 
 		return
 	}
-	log.Debugf("Sent %d bytes", n)
 
 	c.Status(http.StatusOK)
 }
