@@ -168,6 +168,8 @@ Parameter | Description | Default
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
+`global.reencrypt.host` | gRPC host for reencryption |`""`
+`global.reencrypt.port` | port number of the gRPC host for reencryption |`"50051"`
 
 ### Credentials
 
