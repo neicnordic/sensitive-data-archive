@@ -147,6 +147,8 @@ spec:
           value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
         - name: DB_PORT
           value: {{ .Values.global.db.port | quote }}
+        - name: GRPC_HOST
+          value: {{ required "A valid grpc host is required" .Values.global.reencrypt.host | quote }}
         - name: INBOX_TYPE
       {{- if eq "s3" .Values.global.inbox.storageType }}
           value: "s3"
