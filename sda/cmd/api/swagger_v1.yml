@@ -331,7 +331,12 @@ paths:
           required: true
       responses:
         "200":
-          description: Successful operation.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: Successful operation
         "400":
           description: User public key not provided or not valid.
         "401":
