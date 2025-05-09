@@ -450,7 +450,7 @@ func downloadFile(c *gin.Context) {
 
 	// Set the headers for the response.
 	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", fmt.Sprintf("filename: %v", path.Base(filePath)))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", path.Base(filePath)))
 
 	reader := io.MultiReader(bytes.NewReader(newHeader), file)
 	_, err = io.Copy(c.Writer, reader)
