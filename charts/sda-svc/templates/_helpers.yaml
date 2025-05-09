@@ -101,6 +101,10 @@ Create chart name and version as used by the chart label.
   {{- .Values.global.secretsPath -}}
 {{- end -}}
 
+{{- define "configPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.confFilePath) (empty .Values.global.confFilePath) -}}
+{{- end -}}
+
 {{- define "c4ghPath" -}}
 {{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.c4ghPath) (empty .Values.global.c4ghPath) -}}
 {{- end -}}

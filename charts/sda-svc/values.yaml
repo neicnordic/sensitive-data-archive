@@ -9,7 +9,7 @@ global:
 # Path where the sensitive files can be found, default is "/.secrets".
 # TLS certificates or C4GH key locations can be set using global.tlsPath or global.c4ghPath respectively,
 # this path will be a subpath to the secretsPath.
-  secretsPath: /.secrets
+  secretsPath: "/.secrets"
   c4ghPath: "c4gh"
   tlsPath: "tls"
   jwtPath: "jwt"
@@ -195,7 +195,9 @@ global:
     publicFile: ""
     passphrase: ""
     backupPubKey: ""
-
+    privateKeys:
+    - keyName:
+      passphrase:
   db:
     host: ""
     name: "sda"
