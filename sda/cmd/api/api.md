@@ -222,7 +222,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/users/:username/file/:fileid`
   - accepts `GET` requests.
-  - download a file from the inbox, re-encrypted with the client’s public key provided in the request header.
+  - downloads a file from the inbox, re-encrypted with the client’s public key provided in the request header.
   - the public key provided in the header should be `base64` encoded.
 
   - Error codes
