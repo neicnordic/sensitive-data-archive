@@ -1,7 +1,3 @@
-# linter modules to be included/excluded
-LINT_INCLUDE=-E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck
-LINT_EXCLUDE=-e G401,G501,G107
-
 help:
 	@echo 'Welcome!'
 	@echo ''

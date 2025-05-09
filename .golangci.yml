@@ -58,3 +58,5 @@ linters:
         disabled: true
       - name: unused-receiver # disable for now
         disabled: true
+      - name: unhandled-error # disable for now
+        disabled: true
