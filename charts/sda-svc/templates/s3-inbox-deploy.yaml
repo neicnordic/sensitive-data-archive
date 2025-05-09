@@ -190,14 +190,16 @@ spec:
         - name: SERVER_KEY
           value: {{ include "tlsPath" . }}/tls.key
       {{- end }}
-        {{- if.Values.global.auth.jwtPub }}
+      {{- if .Values.global.auth.jwtPub }}
         - name: SERVER_JWTPUBKEYPATH
           value: {{ include "jwtPath" . }}
-        {{- end }}
-        {{- if not .Values.global.auth.resignJwt }}
+      {{- end }}
+      {{- if .Values.global.auth.resignJwt }}
+        {{- $_ := required "The signing pub key is required for s3inbox when auth resigns tokens" .Values.global.auth.jwtPub }}
+      {{- else }}
         - name: SERVER_JWTPUBKEYURL
           value: {{ .Values.global.oidc.provider }}{{ .Values.global.oidc.jwkPath }}
-        {{- end }}
+      {{- end }}
       {{- if .Values.global.log.format }}
         - name: LOG_FORMAT
           value: {{ .Values.global.log.format | quote }}
