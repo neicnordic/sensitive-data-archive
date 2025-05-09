@@ -102,6 +102,14 @@ if ! cmp -s "$decryptedFile" "NA12878.bam" ; then
    exit 1
 fi
 
+# download file as a non admin user should fail
+token_nonAdmin=$(grep 'access_token' /shared/s3cfg | sed -E 's/access_token="?([^"]+)"?/\1/')
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token_nonAdmin" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -o $outFile)"
+if [ "$resp" != "401" ]; then
+    echo "Error when downloading the file, expected 401 got: $resp"
+    exit 1
+fi
+
 # delete it
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "200" ]; then
