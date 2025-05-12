@@ -90,124 +90,8 @@ spec:
 {{- toYaml .Values.global.extraSecurityContext | nindent 10 -}}
 {{- end }}
         env:
-      {{- if not .Values.global.vaultSecrets }}
-        - name: INBOX_ACCESSKEY
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-s3inbox-keys
-                key: s3InboxAccessKey
-        - name: INBOX_SECRETKEY
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-s3inbox-keys
-                key: s3InboxSecretKey
-        - name: BROKER_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-inbox
-                key: mqPassword
-        - name: BROKER_USER
-          value: {{ include "mqUserInbox" . | quote }}
-        - name: DB_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-inbox
-                key: dbPassword
-        - name: DB_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-inbox
-                key: dbUser
-      {{- else }}
-        - name: SERVER_CONFFILE
+        - name: CONFIGFILE
           value: {{ include "confFile" .}}
-      {{- end }}
-        - name: INBOX_URL
-          value: {{ .Values.global.inbox.s3Url | quote }}
-      {{- if .Values.global.inbox.s3Port }}
-        - name: INBOX_PORT
-          value: {{ .Values.global.inbox.s3Port | quote }}
-      {{- end }}
-      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
-        - name: INBOX_CACERT
-          value: "{{ include "tlsPath" . }}/ca.crt"
-      {{- end }}
-      {{- if .Values.global.inbox.s3Region }}
-        - name: INBOX_REGION
-          value: {{ .Values.global.inbox.s3Region | quote }}
-      {{- end }}
-        - name: INBOX_BUCKET
-          value: {{ .Values.global.inbox.s3Bucket | quote }}
-      {{- if .Values.global.inbox.s3ReadyPath }}
-        - name: INBOX_READYPATH
-          value: {{ .Values.global.inbox.s3ReadyPath }}
-      {{- end }}
-        - name: BROKER_HOST
-          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
-        - name: BROKER_PORT
-          value: {{ .Values.global.broker.port | quote }}
-        - name: BROKER_VHOST
-          value: {{ include "brokerVhost" . | quote }}
-        - name: BROKER_EXCHANGE
-          value: {{ default "sda" .Values.global.broker.exchange }}
-        - name: BROKER_ROUTINGKEY
-          value: "inbox"
-        - name: BROKER_SSL
-          value: {{ .Values.global.tls.enabled | quote }}
-      {{- if .Values.global.tls.enabled }}
-        - name: BROKER_VERIFYPEER
-          value: {{ .Values.global.broker.verifyPeer | quote }}
-        - name: BROKER_CACERT
-          value: {{ include "tlsPath" . }}/ca.crt
-        {{- if .Values.global.broker.verifyPeer }}
-        - name: BROKER_CLIENTCERT
-          value: {{ include "tlsPath" . }}/tls.crt
-        - name: BROKER_CLIENTKEY
-          value: {{ include "tlsPath" . }}/tls.key
-        {{- end }}
-      {{- end }}
-       {{- if .Values.global.tls.enabled }}
-        - name: DB_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-      {{- if ne "verify-none" .Values.global.db.sslMode }}
-        - name: DB_CLIENTCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: DB_CLIENTKEY
-          value: {{ template "tlsPath" . }}/tls.key
-      {{- end }}
-    {{- end }}
-        - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
-        - name: DB_HOST
-          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.global.db.port | quote }}
-        - name: DB_SSLMODE
-          value: {{ template "dbSSLmode" . }}
-      {{- if .Values.global.tls.enabled }}
-        - name: SERVER_CERT
-          value: {{ include "tlsPath" . }}/tls.crt
-        - name: SERVER_KEY
-          value: {{ include "tlsPath" . }}/tls.key
-      {{- end }}
-      {{- if .Values.global.auth.jwtPub }}
-        - name: SERVER_JWTPUBKEYPATH
-          value: {{ include "jwtPath" . }}
-      {{- end }}
-      {{- if .Values.global.auth.resignJwt }}
-        {{- $_ := required "The signing pub key is required for s3inbox when auth resigns tokens" .Values.global.auth.jwtPub }}
-      {{- else }}
-        - name: SERVER_JWTPUBKEYURL
-          value: {{ .Values.global.oidc.provider }}{{ .Values.global.oidc.jwkPath }}
-      {{- end }}
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
         ports:
         - name: inbox
           containerPort: 8000
@@ -233,9 +117,13 @@ spec:
         - name: tls
           mountPath: {{ include "tlsPath" . }}
       {{- end }}
-      {{- if .Values.global.auth.jwtPub }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
+        {{- if or .Values.global.auth.jwtPub .Values.global.oidc.jwtPub }}
         - name: jwt
           mountPath: {{ include "jwtPath" . }}
+        {{- end }}
       {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
@@ -250,15 +138,18 @@ spec:
             secretName: {{ required "An certificate issuer or a TLS secret name is required for s3inbox" .Values.s3Ibox.tls.secretName }}
         {{- end }}
       {{- end }}
-      {{- if .Values.global.auth.jwtPub }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-inbox
+        {{- if or .Values.global.auth.jwtPub .Values.global.oidc.jwtPub }}
         - name: jwt
-          projected:
-            sources:
-            - secret:
-                name: {{ .Values.global.auth.jwtSecret }}
-                items:
-                  - key: {{ required "The name of the JWT signing key is needed" .Values.global.auth.jwtPub }}
-                    path: "{{ .Values.global.ingress.hostName.auth }}.pub"
+          secret:
+            defaultMode: 0440
+            secretName: {{ ternary .Values.global.auth.jwtSecret .Values.global.oidc.jwtSecret .Values.global.auth.resignJwt }}
+
+        {{- end }}
       {{- end }}
       restartPolicy: Always
 {{- end }}
