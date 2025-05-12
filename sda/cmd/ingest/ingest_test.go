@@ -169,13 +169,18 @@ type TestSuite struct {
 	filePath   string
 	pubKeyList [][32]byte
 	ingest     Ingest
+	tempDir    string
 }
 
 func (ts *TestSuite) SetupSuite() {
+	var err error
 	viper.Set("log.level", "debug")
-	tempDir := ts.T().TempDir()
-	keyFile1 := fmt.Sprintf("%s/c4gh1.key", tempDir)
-	keyFile2 := fmt.Sprintf("%s/c4gh2.key", tempDir)
+	ts.tempDir, err = os.MkdirTemp("", "c4gh-keys")
+	if err != nil {
+		ts.FailNow("Failed to create temp directory")
+	}
+	keyFile1 := fmt.Sprintf("%s/c4gh1.key", ts.tempDir)
+	keyFile2 := fmt.Sprintf("%s/c4gh2.key", ts.tempDir)
 
 	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
 	if err != nil {
@@ -237,6 +242,7 @@ func (ts *TestSuite) SetupSuite() {
 func (ts *TestSuite) TearDownSuite() {
 	_ = os.RemoveAll(ts.ingest.Conf.Archive.Posix.Location)
 	_ = os.RemoveAll(ts.ingest.Conf.Inbox.Posix.Location)
+	_ = os.RemoveAll(ts.tempDir)
 }
 
 func (ts *TestSuite) SetupTest() {
@@ -295,6 +301,11 @@ func (ts *TestSuite) SetupTest() {
 	if err != nil {
 		ts.FailNow("failed to setup inbox backend")
 	}
+
+	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
+		{FilePath: filepath.Join(ts.tempDir, "c4gh1.key"), Passphrase: "test"},
+		{FilePath: filepath.Join(ts.tempDir, "c4gh2.key"), Passphrase: "test"},
+	})
 }
 func (ts *TestSuite) TestTryDecrypt_wrongFile() {
 	tempDir := ts.T().TempDir()
@@ -345,6 +356,7 @@ func (ts *TestSuite) TestTryDecrypt() {
 
 	privateKeys, err := config.GetC4GHprivateKeys()
 	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, len(privateKeys))
 
 	for i, key := range privateKeys {
 		header, err := tryDecrypt(key, buf)
@@ -353,7 +365,7 @@ func (ts *TestSuite) TestTryDecrypt() {
 			assert.NoError(ts.T(), err)
 			assert.NotNil(ts.T(), header)
 		default:
-			assert.Contains(ts.T(), err.Error(), "could not find matching public key heade")
+			assert.Contains(ts.T(), err.Error(), "could not find matching public key header")
 			assert.Nil(ts.T(), header)
 		}
 	}
@@ -722,4 +734,10 @@ func (ts *TestSuite) TestIngestFile_missingFile() {
 	}
 
 	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+}
+func (ts *TestSuite) TestDetectMisingC4GHKeys() {
+	viper.Set("c4gh.privateKeys", "")
+	privateKeys, err := config.GetC4GHprivateKeys()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 0, len(privateKeys))
 }
