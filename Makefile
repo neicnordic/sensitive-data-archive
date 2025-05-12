@@ -1,7 +1,3 @@
-# linter modules to be included/excluded
-LINT_INCLUDE=-E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck
-LINT_EXCLUDE=-e G401,G501,G107
-
 help:
 	@echo 'Welcome!'
 	@echo ''
@@ -152,13 +148,13 @@ integrationtest-sda-doa-s3-down:
 lint-all: lint-sda lint-sda-download lint-sda-admin
 lint-sda:
 	@echo 'Running golangci-lint in the `sda` folder'
-	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda && golangci-lint run
 lint-sda-download:
 	@echo 'Running golangci-lint in the `sda-download` folder'
-	@cd sda-download && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda-download && golangci-lint run
 lint-sda-admin:
 	@echo 'Running golangci-lint in the `sda-admin` folder'
-	@cd sda-admin && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda-admin && golangci-lint run
 
 # run static code tests
 test-all: test-sda test-sda-download test-sda-sftp-inbox
