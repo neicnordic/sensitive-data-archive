@@ -51,26 +51,8 @@ spec:
           seccompProfile:
             type: "RuntimeDefault"
         env:
-        - name: C4GH_FILEPATH
-          value: {{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}
-      {{- if not .Values.global.vaultSecrets }}
-        - name: C4GH_PASSPHRASE
-          valueFrom:
-            secretKeyRef:
-              name: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
-              key: passphrase
-      {{- else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
-      {{- if .Values.global.tls.enabled}}
-        - name: GRPC_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-        - name: GRPC_SERVERCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: GRPC_SERVERKEY
-          value: {{ template "tlsPath" . }}/tls.key
-      {{- end }}
         ports:
           - name: grpc
             containerPort: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
@@ -86,6 +68,8 @@ spec:
 {{ toYaml .Values.reencrypt.resources | trim | indent 10 }}
         volumeMounts:
         {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
         - name: c4gh
           mountPath: {{ template "c4ghPath" . }}
         {{- end }}
@@ -95,6 +79,10 @@ spec:
         {{- end }}
       volumes:
       {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-reencrypt
         - name: c4gh
           secret:
             defaultMode: 0440
