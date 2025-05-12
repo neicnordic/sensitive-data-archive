@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -75,10 +76,9 @@ func main() {
 		panic(err)
 	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
-	if err != nil {
-		log.Error(err)
+	if err != nil || len(app.ArchiveKeyList) == 0 {
 		sigc <- syscall.SIGINT
-		panic(err)
+		panic(errors.New("no C4GH private keys configured"))
 	}
 	app.Archive, err = storage.NewBackend(app.Conf.Archive)
 	if err != nil {
