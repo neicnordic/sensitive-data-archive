@@ -25,6 +25,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
@@ -319,8 +320,8 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	var retryTimes = 5
-	for count := 1; count <= retryTimes; count++ {
+	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
+	for count := 1; count <= 5; count++ {
 		err = inbox.RemoveFile(filePath)
 		if err == nil {
 			break
