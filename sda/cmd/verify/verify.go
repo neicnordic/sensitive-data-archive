@@ -41,8 +41,8 @@ func main() {
 		log.Fatal(err)
 	}
 	archiveKeyList, err := config.GetC4GHprivateKeys()
-	if err != nil {
-		log.Fatal(err)
+	if err != nil || len(archiveKeyList) == 0 {
+		log.Fatal("no C4GH private keys configured")
 	}
 
 	defer mq.Channel.Close()
