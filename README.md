@@ -72,6 +72,7 @@ Create a `settings.xml` file in the root directory (next to the Dockerfile in /s
 </settings>
 ```
 Replace `YOUR_GITHUB_USERNAME` and `YOUR_GITHUB_PERSONAL_ACCESS_TOKEN` with your actual GitHub username and personal access token, respectively. The personal access token should have the `read:packages` scope.
+
 ```sh
 $ make build-sda-doa
 ```
