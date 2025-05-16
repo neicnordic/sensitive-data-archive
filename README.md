@@ -49,10 +49,6 @@ $ make build-sda-admin
 
 To build the `sda-doa`:
 
-```sh
-$ make build-sda-doa
-```
-
 SDA-DOA uses two JARs hosted on Github Packages. To build the Docker image successfully , you need to provide authentication credentials to access the GitHub package registry.
 ####  Required Setup: `settings.xml`
 
