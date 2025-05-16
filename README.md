@@ -47,6 +47,32 @@ To build the `sda-admin` CLI tool:
 $ make build-sda-admin
 ```
 
+To build the `sda-doa`:
+
+SDA-DOA uses two JARs hosted on Github Packages. To build the Docker image successfully , you need to provide authentication credentials to access the GitHub package registry.
+####  Required Setup: `settings.xml`
+
+Create a `settings.xml` file in the root directory (next to the Dockerfile in /sda-doa), and include the following content:
+
+```xml
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <servers>
+    <server>
+      <id>github-fega-norway</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>YOUR_GITHUB_PERSONAL_ACCESS_TOKEN</password>
+    </server>
+  </servers>
+</settings>
+```
+Replace `YOUR_GITHUB_USERNAME` and `YOUR_GITHUB_PERSONAL_ACCESS_TOKEN` with your actual GitHub username and personal access token, respectively. The personal access token should have the `read:packages` scope.
+
+```sh
+$ make build-sda-doa
+```
+
 ### Running the services
 
 #### Start services with Docker Compose
