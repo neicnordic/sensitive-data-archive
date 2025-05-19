@@ -260,11 +260,14 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 #### Makefile commands
 
-- make k3d-deploy-dependencies - bootstrap dependencies
+- make k3d-deploy-dependencies-federated - bootstrap dependencies, F-EGA use case
+- make k3d-deploy-dependencies-isolated - bootstrap dependencies, standalone use case
 - make k3d-import-images - build and import images into the default cluster named `k3s-default`
 - make k3d-deploy-postgres - deploy the sda-db chart without TLS
-- make k3d-deploy-rabbitmq - deploy the sda-mq chart without TLS
-- make k3d-deploy-sda-s3 - deploy the sda-svc chart with S3 storage without TLS
+- make k3d-deploy-rabbitmq-federated - deploy the sda-mq chart without TLS, F-EGA use case
+- make k3d-deploy-rabbitmq-isolated - deploy the sda-mq chart without TLS, standalone use case
+- make k3d-deploy-sda-s3-federated - deploy the sda-svc chart with S3 storage without TLS, F-EGA use case
+- make k3d-deploy-sda-s3-isolated - deploy the sda-svc chart with S3 storage without TLS, standalone use case
 - make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage without TLS
 - make k3d-cleanup-all-deployments - Remove all deployed components and dependencies
 
@@ -272,15 +275,15 @@ Deployment of the charts can be done as describe below in more detail, or by usi
 
 This script requires [yq](https://github.com/mikefarah/yq/releases/latest), the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest) as well as [xxd](https://manpages.org/xxd) and [jq](https://manpages.org/jq) to be installed.
 
-Bootstrap the dependencies with the command: `make k3d-deploy-dependencies`.
+Bootstrap the dependencies with the command: `make k3d-deploy-dependencies-[federated|isolated]`.
 
 #### Deploy the Sensitive Data Archive components
 
 Start by building and importing the required containers using the `make k3d-import-images`.
 
-The Postgres and RabbitMQ Needs to be deployed first using the following commands: `make k3d-deploy-postgres` and `make k3d-deploy-rabbitmq`.
+The Postgres and RabbitMQ Needs to be deployed first using the following commands: `make k3d-deploy-postgres` and `make k3d-deploy-rabbitmq-[federated|isolated]`.
 
-Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`), `make k3d-deploy-sda-posix` or `make k3d-deploy-sda-s3`.
+Once the DB and MQ are installed the SDA stack can be installed, here the desired storage backend needs to specified as well (`posix` or `s3`), `make k3d-deploy-sda-posix` or `make k3d-deploy-sda-s3-[federated|isolated]`.
 
 #### Testing with ingress
 

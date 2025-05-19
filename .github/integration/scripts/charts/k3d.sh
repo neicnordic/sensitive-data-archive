@@ -13,9 +13,11 @@ curl --retry 100 -sLO https://dl.k8s.io/release/"$k8s"/bin/linux/amd64/kubectl
 chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
 
-k3d cluster create sda --image=rancher/k3s:"$k8s"-k3s1 --wait --timeout 10m
+k3d cluster create sda --image=rancher/k3s:"$k8s"-k3s1 --wait --timeout 10m --k3s-arg "--disable=traefik@server:0" --port "80:80@loadbalancer" --port "443:443@loadbalancer"
 k3d kubeconfig merge sda --kubeconfig-switch-context
 mkdir -p ~/.kube/ && cp ~/.config/kubeconfig-sda.yaml ~/.kube/config
 
 docker build -t ghcr.io/neicnordic/sensitive-data-archive:oidc -f .github/integration/scripts/charts/Dockerfile .
 k3d image import ghcr.io/neicnordic/sensitive-data-archive:oidc -c sda
+
+helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --version 4.11.6
