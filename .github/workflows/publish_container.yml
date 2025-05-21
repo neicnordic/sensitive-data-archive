@@ -128,7 +128,7 @@ jobs:
           base: release_v1
           branch: bump
           delete-branch: true
-          title: '[charts] Bump version'
+          title: '[release_v1][charts] Bump version'
           body: |
             Bump the appVersion to: ${{ needs.tag_release.outputs.tag }}
           labels: |
