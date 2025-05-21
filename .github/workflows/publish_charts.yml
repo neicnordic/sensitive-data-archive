@@ -4,7 +4,7 @@ on:
   merge_group:
   pull_request:
     branches:
-      - main
+      - release_v1
     paths:
       - "charts/**"
     types: [ closed ]
