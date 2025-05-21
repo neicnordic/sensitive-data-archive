@@ -126,7 +126,7 @@ jobs:
           commit-message: Bump chart version
           author: neicnordic <neicnordic@users.noreply.github.com>
           base: release_v1
-          branch: bump
+          branch: bump-release-v1
           delete-branch: true
           title: '[release_v1][charts] Bump version'
           body: |
