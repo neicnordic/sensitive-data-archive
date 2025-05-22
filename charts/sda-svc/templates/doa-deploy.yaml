@@ -93,7 +93,7 @@ spec:
             type: "RuntimeDefault"
         env:
         - name: KEYSTORE_PASSWORD
-          value: {{ required "Keystore password is required" .Values.sftpInbox.keystorePass | quote }}
+          value: {{ required "Keystore password is required" .Values.global.doa.keystorePass | quote }}
         volumeMounts:
         - name: tls-certs
           mountPath: /tls-certs
@@ -102,7 +102,7 @@ spec:
     {{- end }}
       containers:
       - name: doa
-        image: "{{ .Values.doa.repository }}:{{ .Values.doa.imageTag }}"
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-doa"
         imagePullPolicy: {{ .Values.image.imagePullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -198,7 +198,7 @@ spec:
         - name: KEYSTORE_PATH
           value: {{ ternary (print "/etc/ssl/certs/java/doa.p12") (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.keyStore) (empty .Values.global.pkiService) }}
         - name: KEYSTORE_PASSWORD
-          value: {{ .Values.doa.keystorePass | quote }}
+          value: {{ .Values.global.doa.keystorePass | quote }}
         - name: ROOT_CERT_PATH
           value: {{ ternary (print "/etc/ssl/certs/java/ca.crt" ) (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.cacert) (empty .Values.global.pkiService) }}
         - name: CERT_PATH
@@ -211,6 +211,8 @@ spec:
           value: "{{ template "c4ghPath" . }}/passphrase"
         - name: OPENID_CONFIGURATION_URL
           value: "{{ .Values.global.oidc.provider }}/.well-known/openid-configuration"
+        - name: USERINFO_ENDPOINT_URL
+          value: "{{ .Values.global.oidc.provider }}/userinfo"
         - name: OUTBOX_ENABLED
           value: {{ .Values.global.doa.outbox.enabled | quote }}
       {{- if .Values.global.doa.outbox.enabled }}

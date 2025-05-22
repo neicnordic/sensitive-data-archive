@@ -207,6 +207,7 @@ global:
 
   doa:
     enabled: false
+    keystorePass: "changeit"
     outbox:
       enabled: false
       # MQ queue name for files/datasets export requests
@@ -394,9 +395,6 @@ auth:
 
 doa:
   name: doa
-  repository: ghcr.io/neicnordic/sda-doa
-  imageTag: v1.6.62
-  imagePullPolicy: IfNotPresent
   replicaCount: 2
   resources:
     requests:
@@ -405,9 +403,6 @@ doa:
     limits:
       memory: "1024Mi"
       cpu: "2000m"
-  debugPort: 1234
-  logpath: "/tmp/logs"
-  keystorePass: "changeit"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
