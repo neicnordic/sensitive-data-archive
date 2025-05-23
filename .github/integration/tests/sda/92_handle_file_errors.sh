@@ -45,7 +45,7 @@ bad_file_payload=$(
     jq -r -c -n \
         --arg type ingest \
         --arg user test@dummy.org \
-        --arg filepath test_dummy.org/bad.file.c4gh \
+        --arg filepath bad.file.c4gh \
         --argjson encrypted_checksums "$encrypted_checksums" \
         '$ARGS.named|@base64'
 )
@@ -76,12 +76,14 @@ missing_file_payload=$(
     jq -r -c -n \
         --arg type ingest \
         --arg user test@dummy.org \
-        --arg filepath test_dummy.org/missing.file.c4gh \
+        --arg filepath missing.file.c4gh \
         --argjson encrypted_checksums "$encrypted_checksums" \
         '$ARGS.named|@base64'
 )
 
-CORRID=${CORRID//a/b}
+FILEID=$(psql -U postgres -h postgres -d sda -At -c "SELECT DISTINCT(file_id) FROM sda.file_event_log WHERE correlation_id = '$CORRID';")
+psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$FILEID', 'uploaded', '$CORRID', 'test@dummy.org', '{\"uploaded\": \"message\"}');"
+
 properties=$(
     jq -c -n \
         --argjson delivery_mode 2 \
@@ -133,7 +135,7 @@ truncated_file_payload=$(
     jq -r -c -n \
         --arg type ingest \
         --arg user test@dummy.org \
-        --arg filepath test_dummy.org/truncated.c4gh \
+        --arg filepath truncated.c4gh \
         --argjson encrypted_checksums "$encrypted_checksums" \
         '$ARGS.named|@base64'
 )
