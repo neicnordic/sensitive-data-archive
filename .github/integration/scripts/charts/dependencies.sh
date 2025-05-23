@@ -99,6 +99,10 @@ if [ "$1" == "local" ]; then
 fi
 
 ## update values file with all credentials
+if [ "$2" == "federated" ]; then
+        yq -i '.global.schemaType = federated' "$values_file"
+fi
+
 yq -i '
 .global.archive.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.archive.s3SecretKey = strenv(MINIO_SECRET) |
@@ -106,6 +110,7 @@ yq -i '
 .global.backupArchive.s3SecretKey = strenv(MINIO_SECRET) |
 .global.broker.password = strenv(MQPASSWORD) |
 .global.c4gh.passphrase = strenv(C4GHPASSPHRASE) |
+.global.c4gh.privateKeys[0].passphrase = strenv(C4GHPASSPHRASE) |
 .global.db.password = strenv(PGPASSWORD) |
 .global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.inbox.s3SecretKey = strenv(MINIO_SECRET) |
@@ -115,3 +120,17 @@ yq -i '
 ' "$values_file"
 
 kubectl create secret generic api-rbac --from-file=".github/integration/sda/rbac.json"
+
+cat >/tmp/users.json <<EOD
+[
+    {
+        "username": "dummy@example.com",
+        "uid": 1,
+        "passwordHash": "\$2b\$12\$1gyKIjBc9/cT0MYkXX24xe1LjEUjNwgL4rEk8fDoO.vDQZzWkqrn.",
+        "gecos": "dummy user",
+        "sshPublicKey": [],
+        "enabled": null
+    }
+]
+EOD
+kubectl create configmap cega-nss --from-file=".github/integration/sda/users.py" --from-file="/tmp/users.json"
