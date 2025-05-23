@@ -54,133 +54,30 @@ spec:
           seccompProfile:
             type: "RuntimeDefault"
         env:
-        - name: BROKER_EXCHANGE
-          value: {{ default "sda" .Values.global.broker.exchange }}
-        - name: BROKER_QUEUE
-          value: "mappings"
-        - name: BROKER_HOST
-          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
-        - name: BROKER_PORT
-          value: {{ .Values.global.broker.port | quote }}
-        - name: BROKER_PREFETCHCOUNT
-          value: {{ .Values.global.broker.prefetchCount | quote }}
-        - name: BROKER_VHOST
-          value: {{ .Values.global.broker.vhost | quote }}
-        - name: BROKER_SERVERNAME
-          value: {{ .Values.global.broker.host | quote }}
-        - name: BROKER_SSL
-          value: {{ .Values.global.tls.enabled | quote }}
-      {{- if .Values.global.tls.enabled }}
-        - name: BROKER_VERIFYPEER
-          value: {{ .Values.global.broker.verifyPeer | quote }}
-        - name: BROKER_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-        {{- if .Values.global.broker.verifyPeer }}
-        - name: BROKER_CLIENTCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: BROKER_CLIENTKEY
-          value: {{ template "tlsPath" . }}/tls.key
-        {{- end }}
-      {{- end }}
-      {{- if .Values.global.tls.enabled }}
-        - name: DB_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-        {{- if ne "verify-none" .Values.global.db.sslMode }}
-        - name: DB_CLIENTCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: DB_CLIENTKEY
-          value: {{ template "tlsPath" . }}/tls.key
-        {{- end }}
-      {{- end }}
-        - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
-        - name: DB_HOST
-          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.global.db.port | quote }}
-        - name: DB_SSLMODE
-          value: {{ template "dbSSLmode" . }}
-        - name: INBOX_TYPE
-      {{- if eq "s3" .Values.global.inbox.storageType }}
-          value: "s3"
-        - name: INBOX_BUCKET
-          value: {{ required "S3 inbox bucket missing" .Values.global.inbox.s3Bucket }}
-      {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
-        - name: INBOX_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-      {{- end }}
-        - name: INBOX_REGION
-          value: {{ default "us-east-1" .Values.global.inbox.s3Region }}
-        - name: INBOX_URL
-          value: {{ required "S3 inbox URL missing" .Values.global.inbox.s3Url }}
-      {{- if .Values.global.inbox.s3Port }}
-        - name: INBOX_PORT
-          value: {{ .Values.global.inbox.s3Port | quote }}
-      {{- end }}
-      {{- else }}
-          value: "posix"
-        - name: INBOX_LOCATION
-          value: "{{ .Values.global.inbox.path }}/"
-      {{- end }}
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
-        - name: SCHEMA_TYPE
-          value: {{ default "federated" .Values.global.schemaType }}
-      {{- if not .Values.global.vaultSecrets }}
-        - name: BROKER_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-mapper
-                key: mqPassword
-        - name: BROKER_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-mapper
-                key: mqUser
-        - name: DB_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-mapper
-                key: dbPassword
-        - name: DB_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-mapper
-                key: dbUser
-      {{- if eq "s3" .Values.global.inbox.storageType }}
-        - name: INBOX_ACCESSKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3inbox-keys
-              key: s3InboxAccessKey
-        - name: INBOX_SECRETKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3inbox-keys
-              key: s3InboxSecretKey
-      {{- end }}
-      {{- else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
         resources:
 {{ toYaml .Values.mapper.resources | trim | indent 10 }}
         volumeMounts:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
         {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
           mountPath: {{ template "tlsPath" . }}
         {{- end }}
-        {{- if eq "posix" .Values.global.inbox.storageType }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.inbox.storageType }}
         - name: inbox
           mountPath: {{ .Values.global.inbox.path | quote }}
-        {{- end }}
+      {{- end }}
       volumes:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-mapper
+      {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
         {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
