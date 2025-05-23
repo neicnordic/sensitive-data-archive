@@ -59,6 +59,7 @@ func (ts *ConfigTestSuite) SetupTest() {
 	viper.Set("db.user", "test")
 	viper.Set("db.password", "test")
 	viper.Set("db.database", "test")
+	viper.Set("grpc.host", "reencrypt")
 	viper.Set("inbox.url", "testurl")
 	viper.Set("inbox.accesskey", "testaccess")
 	viper.Set("inbox.secretkey", "testsecret")
@@ -226,7 +227,7 @@ func (ts *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Error(ts.T(), err)
 	assert.Nil(ts.T(), config)
 
-	// testing deafult values
+	// testing default values
 	ts.SetupTest()
 	config, err = NewConfig("api")
 	assert.NotNil(ts.T(), config)
@@ -240,6 +241,7 @@ func (ts *ConfigTestSuite) TestAPIConfiguration() {
 	assert.Equal(ts.T(), -1*time.Second, config.API.Session.Expiration)
 	rbac, _ := os.ReadFile(viper.GetString("api.rbacFile"))
 	assert.Equal(ts.T(), rbac, config.API.RBACpolicy)
+	assert.Equal(ts.T(), "reencrypt", config.API.Grpc.Host)
 
 	viper.Reset()
 	ts.SetupTest()
@@ -481,6 +483,23 @@ func (ts *ConfigTestSuite) TestConfigReEncryptServer() {
 	assert.Equal(ts.T(), certPath+"/tls.crt", config.ReEncrypt.ServerCert)
 }
 
+func (ts *ConfigTestSuite) TestConfigReEncryptClient() {
+	ts.SetupTest()
+	conf, err := configReEncryptClient()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "reencrypt", conf.Host)
+	assert.Nil(ts.T(), conf.ClientCreds)
+}
+
+func (ts *ConfigTestSuite) TestConfigReEncryptClient_withTLS() {
+	viper.Set("grpc.CACert", certPath+"/ca.crt")
+	viper.Set("grpc.clientCert", certPath+"/tls.crt")
+	viper.Set("grpc.clientKey", certPath+"/tls.key")
+	conf, err := configReEncryptClient()
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), conf.ClientCreds)
+	assert.Equal(ts.T(), 50443, conf.Port)
+}
 func (ts *ConfigTestSuite) TestConfigAuth_CEGA() {
 	ts.SetupTest()
 

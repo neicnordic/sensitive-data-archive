@@ -156,3 +156,65 @@ if [ "$resp" != "404" ]; then
 	echo "Error when deleting the file, expected 404 got: $resp"
 	exit 1
 fi
+
+# Test downloading the file from the inbox
+# Reupload a file under a different name, test to download it
+s3cmd -c s3cfg put "NA12878.bam.c4gh" s3://test_dummy.org/NC12878.bam.c4gh
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NC12878.bam.c4gh") | .fileID')"
+
+output=$(s3cmd -c s3cfg ls s3://test_dummy.org/NC12878.bam.c4gh 2>/dev/null)
+if [ -z "$output" ] ; then
+    echo "Uploaded file NC12878.bam.c4gh not found in inbox"
+    exit 1
+fi
+
+# download the file, re-encrypted with the client key
+clientPubKey="$(base64 -w0 /shared/client.pub.pem)"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -JO)"
+if [ "$resp" != "200" ]; then
+    echo "Error when downloading the file, expected 200 got: $resp"
+    exit 1
+fi
+
+# decrypt the downloaded file
+export C4GH_PASSPHRASE=c4ghpass
+if [ ! -f "NC12878.bam.c4gh" ]; then
+    echo "downloaded file NC12878.bam.c4gh not found"
+    exit 1
+fi
+if [ ! -f "/shared/client.sec.pem" ]; then
+    echo "client key not found"
+    exit 1
+fi
+
+# copy the file to avoid overwriting the original
+if ! /shared/crypt4gh decrypt -f "NC12878.bam.c4gh" -s "/shared/client.sec.pem" ; then
+    echo "decrypting file NC12878.bam.c4gh failed"
+    exit 1
+fi
+
+# check the file content
+if [ ! -f "NC12878.bam" ]; then
+    echo "decrypted file NC12878.bam not found"
+    exit 1
+fi
+if ! cmp -s "NC12878.bam" "NA12878.bam" ; then
+   echo "downloaded file is different from the original one"
+   exit 1
+fi
+
+# download file as a non admin user should fail
+token_nonAdmin=$(grep 'access_token' /shared/s3cfg | sed -E 's/access_token="?([^"]+)"?/\1/')
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token_nonAdmin" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$fileid" -JO)"
+if [ "$resp" != "401" ]; then
+    echo "Error when downloading the file, expected 401 got: $resp"
+    exit 1
+fi
+
+# download a non existing file should fail
+badfileid="badfileid"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$badfileid" -JO)"
+if [ "$resp" != "404" ]; then
+    echo "Trying to download a non existing file, expected 404 got: $resp"
+    exit 1
+fi

@@ -315,6 +315,36 @@ paths:
           description: Authentication failure
         "500":
           description: Internal application error
+  /users/{userName}/file/{fileID}:
+    get:
+      description: Download a file from the inbox re-encrypted with the user public key.
+      parameters:
+        - in: path
+          name: userName
+          schema:
+            type: string
+          required: true
+        - in: path
+          name: fileID
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: Successful operation
+        "400":
+          description: User public key not provided or not valid.
+        "401":
+          description: Authentication failure.
+        "404":
+          description: File not found.
+        "500":
+          description: Internal application error.
 components:
   schemas:
     C4ghKeyAdd:
