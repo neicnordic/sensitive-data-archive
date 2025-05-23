@@ -992,9 +992,6 @@ func (c *Config) configReEncryptServer() (err error) {
 	if viper.IsSet("grpc.serverkey") {
 		c.ReEncrypt.ServerKey = viper.GetString("grpc.serverkey")
 	}
-	if viper.IsSet("grpc.timeout") {
-		c.ReEncrypt.Timeout = viper.GetInt("grpc.timeout")
-	}
 
 	if c.ReEncrypt.ServerCert != "" && c.ReEncrypt.ServerKey != "" {
 		c.ReEncrypt.Port = 50443
