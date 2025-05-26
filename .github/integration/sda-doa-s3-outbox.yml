@@ -99,7 +99,7 @@ services:
 
   init-bucket:
     container_name: init-bucket
-    image: minio/mc
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     depends_on:
       outbox:
         condition: service_healthy
@@ -107,7 +107,6 @@ services:
       /bin/sh -c "
       /usr/bin/mc config host add s3 http://outbox:9000 minio miniostorage;
       /usr/bin/mc mb s3/lega;
-      exit 0;
       "
 
   doa:
@@ -138,7 +137,6 @@ services:
       - CRYPT4GH_PRIVATE_KEY_PATH=test/crypt4gh.sec.pem
       - CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH=test/crypt4gh.pass
       - OUTBOX_TYPE=S3
-      - SSL_ENABLED=false
       - ROOT_CERT_PATH=/certs/ca.crt
       - CERT_PATH=/certs/client.crt
       - CERT_KEY=/certs/client.der
@@ -165,9 +163,12 @@ services:
       - client_certs:/certs
 
     depends_on:
-      - doa
-      - mockauth
-      - init-bucket
+      doa:
+        condition: service_started
+      mockauth:
+        condition: service_started
+      init-bucket:
+        condition: service_completed_successfully
     environment:
       - OUTBOX_TYPE=S3
       - DOA_URL=http://doa:8080
