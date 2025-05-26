@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -51,9 +52,22 @@ type Config struct {
 	Auth         AuthConf
 }
 
+type Grpc struct {
+	CACert      string
+	ClientCert  string
+	ClientKey   string
+	ClientCreds credentials.TransportCredentials
+	ServerCert  string
+	ServerKey   string
+	Host        string
+	Port        int
+	Timeout     int
+}
+
 type ReEncConfig struct {
-	APIConf
+	Grpc
 	Crypt4GHKey *[32]byte
+	Timeout     int
 }
 
 type Sync struct {
@@ -84,6 +98,7 @@ type APIConf struct {
 	DB         *database.SDAdb
 	MQ         *broker.AMQPBroker
 	INBOX      storage.Backend
+	Grpc       Grpc
 }
 
 type SessionConfig struct {
@@ -219,6 +234,7 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+			"grpc.host",
 		}
 		switch viper.GetString("inbox.type") {
 		case S3:
@@ -493,6 +509,11 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
+
+		c.API.Grpc, err = configReEncryptClient()
+		if err != nil {
+			return nil, err
+		}
 	case "auth":
 		c.Auth.Cega.AuthURL = viper.GetString("auth.cega.authUrl")
 		c.Auth.Cega.ID = viper.GetString("auth.cega.id")
@@ -900,10 +921,65 @@ func (c *Config) configOrchestrator() {
 	}
 }
 
-func (c *Config) configReEncryptServer() (err error) {
-	if viper.IsSet("grpc.host") {
-		c.ReEncrypt.Host = viper.GetString("grpc.host")
+func configReEncryptClient() (Grpc, error) {
+	var grpc Grpc
+	grpc.Host = viper.GetString("grpc.host")
+	grpc.Port = 50051
+	if viper.IsSet("grpc.port") {
+		grpc.Port = viper.GetInt("grpc.port")
 	}
+
+	grpc.Timeout = 30
+	if viper.IsSet("grpc.timeout") {
+		grpc.Timeout = viper.GetInt("grpc.timeout")
+	}
+
+	if viper.IsSet("grpc.clientcert") && viper.IsSet("grpc.clientkey") {
+		grpc.Port = 50443
+		switch {
+		case viper.IsSet("grpc.cacert"):
+			cacertByte, err := os.ReadFile(viper.GetString("grpc.cacert"))
+			if err != nil {
+				return Grpc{}, fmt.Errorf("failed to read CA certificate file, reason: %s", err.Error())
+			}
+
+			caCert := x509.NewCertPool()
+			if !caCert.AppendCertsFromPEM(cacertByte) {
+				return Grpc{}, errors.New("failed to append CA certificate to cert pool")
+			}
+
+			certs, err := tls.LoadX509KeyPair(viper.GetString("grpc.clientcert"), viper.GetString("grpc.clientkey"))
+			if err != nil {
+				return Grpc{}, errors.New("Failed to load client key pair for reencrypt")
+			}
+
+			grpc.ClientCreds = credentials.NewTLS(
+				&tls.Config{
+					Certificates: []tls.Certificate{certs},
+					MinVersion:   tls.VersionTLS13,
+					RootCAs:      caCert,
+				},
+			)
+		default:
+			certs, err := tls.LoadX509KeyPair(viper.GetString("grpc.clientcert"), viper.GetString("grpc.clientkey"))
+			if err != nil {
+				return Grpc{}, errors.New("Failed to load client key pair for reencrypt")
+			}
+
+			grpc.ClientCreds = credentials.NewTLS(
+				&tls.Config{
+					Certificates: []tls.Certificate{certs},
+					MinVersion:   tls.VersionTLS13,
+				},
+			)
+		}
+	}
+
+	return grpc, nil
+}
+
+func (c *Config) configReEncryptServer() (err error) {
+	c.ReEncrypt.Port = 50051
 	if viper.IsSet("grpc.port") {
 		c.ReEncrypt.Port = viper.GetInt("grpc.port")
 	}

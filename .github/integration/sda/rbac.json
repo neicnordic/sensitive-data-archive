@@ -46,6 +46,11 @@
           "action": "GET"
        },
        {
+          "role": "submission",
+          "path": "/users/:username/file/:fileid",
+          "action": "GET"
+       },
+       {
           "role": "*",
           "path": "/datasets",
           "action": "GET"
