@@ -30,7 +30,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: minio/minio:RELEASE.2021-11-24T23-19-33Z
+    image: minio/minio
     ports:
       - "9000:9000"
 
