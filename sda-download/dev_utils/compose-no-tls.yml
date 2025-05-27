@@ -42,7 +42,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc config host add s3 http://s3:9000 access secretkey;
+      /usr/bin/mc alias set add s3 http://s3:9000 access secretkey;
       /usr/bin/mc mb s3/archive;
       exit 0;
       "
