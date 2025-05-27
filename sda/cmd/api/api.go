@@ -423,8 +423,13 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	// Get inbox file handle
-	file, err := inbox.NewFileReader(filePath)
+	// Get inbox file handle #noqa
+	file, err := inbox.NewFileReader(
+		helper.UnanonymizeFilepath(
+			filePath,
+			strings.TrimPrefix(c.Param("username"), "/"),
+		),
+	)
 	if err != nil {
 		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
