@@ -25,6 +25,7 @@ global:
     s3Url: "http://minio.minio"
     s3Bucket: "archive"
     s3Port: 9000
+    s3ReadyPath: "/minio/health/ready"
     existingClaim: archive-pvc
   backupArchive:
     storageType: "s3"
@@ -33,6 +34,7 @@ global:
     s3Url: "http://minio.minio"
     s3Bucket: "backup"
     s3Port: 9000
+    s3ReadyPath: "/minio/health/ready"
     existingClaim: backup-pvc
   auth:
     jwtSecret: jwk
@@ -49,6 +51,7 @@ global:
     username: "admin"
     password: PLACEHOLDER_VALUE
   cega:
+    host: https://cega-nss:8443/username
     password: PLACEHOLDER_VALUE
     user: PLACEHOLDER_VALUE
   c4gh:
@@ -57,6 +60,9 @@ global:
     publicFile: c4gh.pub.pem
     passphrase: PLACEHOLDER_VALUE
     syncPubKey: c4gh.pub.pem
+    privateKeys:
+      - keyName: c4gh.sec.pem
+        passphrase: PLACEHOLDER_VALUE
   db:
     host: "postgres-sda-db"
     user: "postgres"
@@ -90,8 +96,8 @@ global:
     port: 50443
   sync:
     api:
-      password: ""
-      user: ""
+      password: "apiuser"
+      user: "apipass"
     brokerQueue: "mapping_stream"
     centerPrefix: "SYNC"
     destination:
@@ -104,7 +110,7 @@ global:
       bucket: "sync"
       region: "us-east-1"
     remote:
-      host: ""
+      host: "http://remote-sync"
       port: "8080"
       password: "pass"
       user: "user"
@@ -127,7 +133,7 @@ finalize:
 ingest:
   resources: null
 intercept:
-  deploy: false
+  resources: null
 mapper:
   resources: null
 releasetest:

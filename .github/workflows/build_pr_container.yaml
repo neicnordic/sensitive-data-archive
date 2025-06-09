@@ -326,6 +326,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        deployment: ["federated", "isolated"]
         version: ["1.30", "1.31"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
@@ -353,7 +354,7 @@ jobs:
         shell: bash
 
       - name: Deploy external services
-        run: bash .github/integration/scripts/charts/dependencies.sh
+        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}}
         shell: bash
 
       - name: Deploy DB
@@ -368,7 +369,7 @@ jobs:
 
       - name: Deploy MQ
         id: deployMQ
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}} ${{matrix.deployment}}
         shell: bash
       - name: debug
         if: failure() && steps.deployMQ.outcome == 'failure'
@@ -378,7 +379,7 @@ jobs:
           kubectl logs broker-sda-mq-0
 
       - name: Deploy pipeline
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}} ${{matrix.deployment}}
         shell: bash
 
       - name: Check deployment
@@ -405,4 +406,10 @@ jobs:
             echo "## logs $svc" && kubectl logs -l role="$svc"
             sleep 1
           done
+          if [ ${{matrix.deployment}} == "federated" ]; then
+            echo "## describe intercept" && kubectl describe pod -l role=intercept
+            sleep 1
+            echo "## logs intercept" && kubectl logs -l role=intercept
+            sleep 1
+          fi
         shell: bash

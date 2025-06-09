@@ -141,3 +141,62 @@ spec:
     requests:
       storage: 1G
   storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cega-nss
+spec:
+  selector:
+    matchLabels:
+      app: cega-nss
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: cega-nss
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsGroup: 1000
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cega-nss
+        image: egarchive/lega-base:release.v0.2.0
+        command: ["python", "/cega/users.py", "0.0.0.0", "8443", "/cega/users.json"]
+        env:
+          - name: CEGA_USERS_PASSWORD
+            value: test
+          - name: CEGA_USERS_USER
+            value: test
+        ports:
+        - containerPort: 8443
+        resources:
+          limits:
+            cpu: 250m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+          - mountPath: /cega
+            name: app
+      volumes:
+        - name: app
+          configMap:
+            name: cega-nss
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cega-nss
+  labels:
+    app: cega-nss
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8443
+    targetPort: 8443
+  selector:
+    app: cega-nss

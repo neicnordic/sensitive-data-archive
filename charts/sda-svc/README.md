@@ -168,6 +168,8 @@ Parameter | Description | Default
 `global.tls.enabled` | Use TLS for all connections. |`true`
 `global.tls.issuer` | Issuer for TLS certificate creation. |`""`
 `global.tls.clusterIssuer` | ClusterIssuer for TLS certificate creation. |`""`
+`global.reencrypt.host` | gRPC host for reencryption |`""`
+`global.reencrypt.port` | port number of the gRPC host for reencryption |`"50051"`
 
 ### Credentials
 
@@ -236,8 +238,6 @@ Parameter | Description | Default
 `sync.resources.limits.cpu` | CPU limit for sync container. |`250m`
 `sync.deploy` | Set to true if the sync service should be active | `false`
 `doa.replicaCount` | desired number of replicas | `2`
-`doa.repository` | dataedge container image repository | `neicnordic/sda-doa`
-`doa.imageTag` | dataedge container image version | `"latest"`
 `doa.keystorePass` | keystore password | `changeit`
 `doa.annotations` | Specific annotation for the doa pod | `{}`
 `doa.resources.requests.memory` | Memory request for dataedge container. |`128Mi`
@@ -264,7 +264,6 @@ Parameter | Description | Default
 `ingest.resources.limits.cpu` | CPU limit for ingest container. |`2000m`
 `intercept.replicaCount` | desired number of intercept workers | `1`
 `intercept.annotations` | Specific annotation for the intercept pod | `{}`
-`intercept.deploy` | Set to false in a non federated deployment | `true`
 `intercept.resources.requests.memory` | Memory request for intercept container. |`32Mi`
 `intercept.resources.requests.cpu` | CPU request for intercept container. |`100m`
 `intercept.resources.limits.memory` | Memory limit for intercept container. |`128Mi`

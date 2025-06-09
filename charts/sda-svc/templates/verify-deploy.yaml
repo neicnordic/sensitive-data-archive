@@ -55,136 +55,14 @@ spec:
           seccompProfile:
             type: "RuntimeDefault"
         env:
-        - name: ARCHIVE_TYPE
-      {{- if eq "s3" .Values.global.archive.storageType }}
-          value: "s3"
-        - name: ARCHIVE_URL
-          value: {{ required "S3 archive URL missing" .Values.global.archive.s3Url }}
-      {{- if .Values.global.archive.s3Port }}
-        - name: ARCHIVE_PORT
-          value: {{ .Values.global.archive.s3Port | quote }}
-      {{- end }}
-        - name: ARCHIVE_BUCKET
-          value: {{ required "S3 archive bucket missing" .Values.global.archive.s3Bucket }}
-        - name: ARCHIVE_REGION
-          value: {{ default "us-east-1" .Values.global.archive.s3Region }}
-        - name: ARCHIVE_CHUNKSIZE
-          value: {{ .Values.global.archive.s3ChunkSize | quote }}
-        {{- if and .Values.global.archive.s3CaFile .Values.global.tls.enabled }}
-        - name: ARCHIVE_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-        {{- end }}
-      {{- else }}
-          value: "posix"
-        - name: ARCHIVE_LOCATION
-          value: "{{ .Values.global.archive.volumePath }}"
-      {{- end }}
-        - name: BROKER_SSL
-          value: {{ .Values.global.tls.enabled | quote }}
-      {{- if .Values.global.tls.enabled }}
-        - name: BROKER_VERIFYPEER
-          value: {{ .Values.global.broker.verifyPeer | quote }}
-        - name: BROKER_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-        {{- if .Values.global.broker.verifyPeer }}
-        - name: BROKER_CLIENTCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: BROKER_CLIENTKEY
-          value: {{ template "tlsPath" . }}/tls.key
-        {{- end }}
-      {{- end }}
-        - name: BROKER_EXCHANGE
-          value: {{ default "sda" .Values.global.broker.exchange }}
-        - name: BROKER_HOST
-          value: {{ required "A valid MQ host is required" .Values.global.broker.host | quote }}
-        - name: BROKER_PORT
-          value: {{ .Values.global.broker.port | quote }}
-        - name: BROKER_PREFETCHCOUNT
-          value: {{ .Values.global.broker.prefetchCount | quote }}
-        - name: BROKER_QUEUE
-          value: "archived"
-        - name: BROKER_ROUTINGKEY
-          value: "verified"
-      {{- if .Values.global.broker.serverName }}
-        - name: BROKER_SERVERNAME
-          value: {{ .Values.global.broker.serverName | quote }}
-      {{- end }}
-        - name: BROKER_VHOST
-          value: {{ .Values.global.broker.vhost | quote }}
-        - name: C4GH_FILEPATH
-          value: {{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}
-    {{- if .Values.global.tls.enabled }}
-        - name: DB_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
-      {{- if ne "verify-none" .Values.global.db.sslMode }}
-        - name: DB_CLIENTCERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: DB_CLIENTKEY
-          value: {{ template "tlsPath" . }}/tls.key
-      {{- end }}
-    {{- end }}
-        - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
-        - name: DB_HOST
-          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.global.db.port | quote }}
-        - name: DB_SSLMODE
-          value: {{ template "dbSSLmode" . }}
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
-      {{- if not .Values.global.vaultSecrets }}
-        {{- if eq "s3" .Values.global.archive.storageType }}
-        - name: ARCHIVE_ACCESSKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3archive-keys
-              key: s3ArchiveAccessKey
-        - name: ARCHIVE_SECRETKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3archive-keys
-              key: s3ArchiveSecretKey
-        {{- end }}
-        - name: BROKER_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-verify
-                key: mqPassword
-        - name: BROKER_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-verify
-                key: mqUser
-        - name: C4GH_PASSPHRASE
-          valueFrom:
-            secretKeyRef:
-              name: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
-              key: passphrase
-        - name: DB_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-verify
-                key: dbPassword
-        - name: DB_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-verify
-                key: dbUser
-      {{- else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
         resources:
 {{ toYaml .Values.verify.resources | trim | indent 10 }}
         volumeMounts:
         {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
         - name: c4gh
           mountPath: {{ template "c4ghPath" . }}
         {{- end }}
@@ -210,6 +88,10 @@ spec:
         {{- end }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-ingest
         - name: c4gh
           secret:
             defaultMode: 0440

@@ -16,4 +16,6 @@ helm uninstall broker || true
 helm uninstall postgres || true
 
 kubectl delete secrets api-rbac broker-sda-mq-certs broker-sda-mq-test-certs postgres-sda-db-certs postgres-sda-db-test-certs || true
-rm /tmp/values.yaml /tmp/c4gh.pub.pem /tmp/c4gh.sec.pem /tmp/jwt.key /tmp/jwt.pub
+kubectl delete deployment.apps/cega-nss || true
+kubectl delete cm cega-nss || true
+rm /tmp/values.yaml /tmp/c4gh.pub.pem /tmp/c4gh.sec.pem /tmp/jwt.key /tmp/jwt.pub /tmp/users.json || true

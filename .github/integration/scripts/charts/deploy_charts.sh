@@ -7,8 +7,10 @@ if [ -z "$2" ]; then
 fi
 
 MQ_PORT=5672
+PROTOCOL=http
 if [ "$3" == "true" ]; then
     MQ_PORT=5671
+    PROTOCOL=https
 fi
 
 dir=".github/integration/scripts/charts"
@@ -42,6 +44,10 @@ if [ "$1" == "sda-mq" ]; then
         --set persistence.enabled=false \
         --set resources=null \
         --wait
+
+    if [ "$4" == "federated" ]; then
+        curl -kL -u "admin:$ADMINPASS" -X PUT "$PROTOCOL://broker.127.0.0.1.nip.io/api/queues/sda/from_cega"
+    fi
 fi
 
 if [ "$1" == "sda-svc" ]; then
@@ -52,6 +58,7 @@ if [ "$1" == "sda-svc" ]; then
         sync_api_user=user
     fi
     helm install pipeline charts/sda-svc \
+        --set global.schemaType="$5" \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
         --set global.tls.enabled="$3" \

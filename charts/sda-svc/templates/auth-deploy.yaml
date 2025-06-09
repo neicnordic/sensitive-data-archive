@@ -72,124 +72,8 @@ spec:
 {{- end }}
         command: ["sda-auth"]
         env:
-      {{- if not .Values.global.vaultSecrets }}
-        {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
-        - name: OIDC_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-auth
-              key: oidcID
-        - name: OIDC_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-auth
-              key: oidcSecret
-        {{- end }}
-        {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
-        - name: AUTH_CEGA_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-auth
-              key: cegaID
-        - name: AUTH_CEGA_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-auth
-              key: cegaSecret
-        {{- end }}
-      {{- else }}
-        - name: SERVER_CONFFILE
+        - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
-        {{- if or ( eq "federated" .Values.global.schemaType) ( eq "" .Values.global.schemaType) }}
-        - name: AUTH_CEGA_AUTHURL
-          value: {{ .Values.global.cega.host | quote }}
-        {{- end }}
-        {{- if .Values.global.auth.corsOrigins }}
-        - name: AUTH_CORS_ORIGINS
-          value: {{ .Values.global.auth.corsOrigins | quote }}
-        - name: AUTH_CORS_METHODS
-          value: {{ .Values.global.auth.corsMethods | quote }}
-        - name: AUTH_CORS_CREDENTIALS
-          value: {{ .Values.global.auth.corsCreds | quote }}
-        {{- end }}
-        - name: AUTH_INFOTEXT
-          value: {{ .Values.global.auth.infoText }}
-        - name: AUTH_INFOURL
-          value: {{ .Values.global.auth.inforURL }}
-      {{- if .Values.global.auth.resignJwt }}
-        - name: AUTH_JWT_ISSUER
-        {{- if .Values.global.tls.enabled }}
-          value: "https://{{ .Values.global.ingress.hostName.auth }}"
-        {{- else }}
-          value: "http://{{ .Values.global.ingress.hostName.auth }}"
-        {{- end }}
-        - name: AUTH_JWT_PRIVATEKEY
-          value: "{{ template "jwtPath" . }}/{{ .Values.global.auth.jwtKey }}"
-        - name: AUTH_JWT_SIGNATUREALG
-          value: {{ .Values.global.auth.jwtAlg }}
-        - name: AUTH_JWT_TOKENTTL
-          value: {{ .Values.global.auth.jwtTTL | quote }}
-      {{- end }}
-        - name: AUTH_PUBLICFILE
-          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.publicFile }}"
-        - name: AUTH_RESIGNJWT
-          value: {{ .Values.global.auth.resignJwt | quote }}
-        - name: AUTH_S3INBOX
-          value: {{ .Values.global.ingress.hostName.s3Inbox }}
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
-        {{- if and (ne "" .Values.global.oidc.id) (ne "" .Values.global.oidc.secret) }}
-        - name: OIDC_REDIRECTURL
-          value: {{ template "authRedirect" .}}
-        - name: OIDC_PROVIDER
-          value: "{{ .Values.global.oidc.provider }}"
-        - name: OIDC_JWKPATH
-          value: {{ .Values.global.oidc.jwkPath | quote }}
-        {{- end }}
-        {{- if .Values.global.tls.enabled}}
-        - name: SERVER_CERT
-          value: {{ template "tlsPath" . }}/tls.crt
-        - name: SERVER_KEY
-          value: {{ template "tlsPath" . }}/tls.key
-        {{- end }}
-    {{- if .Values.global.tls.enabled }}
-        - name: DB_CACERT
-          value: {{ include "tlsPath" . }}/ca.crt
-        {{- if ne "verify-none" .Values.global.db.sslMode }}
-        - name: DB_CLIENTCERT
-          value: {{ include "tlsPath" . }}/tls.crt
-        - name: DB_CLIENTKEY
-          value: {{ include "tlsPath" . }}/tls.key
-        {{- end }}
-        - name: DB_SSLMODE
-          value: {{ .Values.global.db.sslMode | quote }}
-    {{- else }}
-        - name: DB_SSLMODE
-          value: "disable"
-    {{- end }}
-        - name: DB_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-api
-                key: dbPassword
-        - name: DB_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-api
-                key: dbUser
-        - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
-        - name: DB_HOST
-          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.global.db.port | quote }}
         ports:
         - name: auth
           containerPort: 8080
@@ -226,11 +110,14 @@ spec:
           mountPath: {{ template "jwtPath" . }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
         - name: c4gh
           mountPath: {{ template "c4ghPath" . }}
       {{- end }}
       volumes:
-      {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
+      {{- if not .Values.global.vaultSecrets }}
+        {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
         - name: jwt
           projected:
             defaultMode: 0440
@@ -240,8 +127,11 @@ spec:
                 items:
                   - key: {{ required "The name of the JWT signing key is needed" .Values.global.auth.jwtKey }}
                     path: {{ .Values.global.auth.jwtKey }}
-      {{- end }}
-      {{- if not .Values.global.vaultSecrets }}
+        {{- end }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-auth
         - name: c4gh
           secret:
             defaultMode: 0440

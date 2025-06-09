@@ -199,6 +199,8 @@ func (s *SyncTest) TestSendPOST() {
 		username, _, ok := r.BasicAuth()
 		if ok && username == "foo" {
 			w.WriteHeader(http.StatusUnauthorized)
+
+			return
 		}
 
 		w.WriteHeader(http.StatusOK)

@@ -69,128 +69,8 @@ spec:
             type: "RuntimeDefault"
         command: ["sda-download"]
         env:
-        - name: ARCHIVE_TYPE
-      {{- if eq "s3" .Values.global.archive.storageType }}
-          value: "s3"
-        - name: ARCHIVE_URL
-          value: {{ required "S3 archive URL missing" .Values.global.archive.s3Url }}
-        {{- if .Values.global.archive.s3Port }}
-        - name: ARCHIVE_PORT
-          value: {{ .Values.global.archive.s3Port | quote }}
-        {{- end }}
-        - name: ARCHIVE_BUCKET
-          value: {{ required "S3 archive bucket missing" .Values.global.archive.s3Bucket }}
-        - name: ARCHIVE_REGION
-          value: {{ default "us-east-1" .Values.global.archive.s3Region }}
-        - name: ARCHIVE_CHUNKSIZE
-          value: {{ .Values.global.archive.s3ChunkSize | quote }}
-        {{- if .Values.global.archive.s3CaFile }}
-        - name: ARCHIVE_CACERT
-          value: {{ template "tlsPath" . }}/{{ .Values.global.archive.s3CaFile }}
-        {{- end }}
-      {{- else }}
-          value: "posix"
-        - name: ARCHIVE_LOCATION
-          value: "{{ .Values.global.archive.volumePath }}"
-      {{- end }}
-        - name: OIDC_CONFIGURATION_URL
-          value: "{{ .Values.global.oidc.provider | trimSuffix "/" }}/.well-known/openid-configuration"
-      {{- if .Values.global.download.trusted.iss }}
-        - name: OIDC_TRUSTED_ISS
-          value: {{ include "trustedIssPath" . }}/{{ default "iss.json" .Values.global.download.trusted.configFile }}
-      {{- end }}
-      {{- if .Values.global.tls.enabled }}
-        - name: DB_CACERT
-          value: {{ include "tlsPath" . }}/ca.crt
-        {{- if ne "verify-none" .Values.global.db.sslMode }}
-        - name: DB_CLIENTCERT
-          value: {{ include "tlsPath" . }}/tls.crt
-        - name: DB_CLIENTKEY
-          value: {{ include "tlsPath" . }}/tls.key
-        {{- end }}
-        - name: DB_SSLMODE
-          value: {{ .Values.global.db.sslMode | quote }}
-      {{- else }}
-        - name: DB_SSLMODE
-          value: "disable"
-      {{- end }}
-        - name: DB_DATABASE
-          value: {{ default "lega" .Values.global.db.name | quote }}
-        - name: DB_HOST
-          value: {{ required "A valid DB host is required" .Values.global.db.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.global.db.port | quote }}
-      {{- if .Values.global.tls.enabled }}
-        - name: GRPC_CACERT
-          value: {{ include "tlsPath" . }}/ca.crt
-        - name: GRPC_CLIENTCERT
-          value: {{ include "tlsPath" . }}/tls.crt
-        - name: GRPC_CLIENTKEY
-          value: {{ include "tlsPath" . }}/tls.key
-      {{- end }}
-        - name: GRPC_HOST
-          value: {{ required "A valid grpc host is required" .Values.global.reencrypt.host | quote }}
-        - name: GRPC_PORT
-          value: {{ .Values.global.reencrypt.port | quote }}
-      {{- if .Values.global.log.format }}
-        - name: LOG_FORMAT
-          value: {{ .Values.global.log.format | quote }}
-      {{- end }}
-      {{- if .Values.global.log.level }}
-        - name: LOG_LEVEL
-          value: {{ .Values.global.log.level | quote }}
-      {{- end }}
-      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
-        - name: C4GH_TRANSIENTKEYPATH
-          value: {{ template "c4ghPath" . }}/{{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
-        - name: C4GH_TRANSIENTPASSPHRASE
-          valueFrom:
-            secretKeyRef:
-              name: {{ required "A secret for the transient c4gh key is required" .Values.global.download.serveDecrypted.secretName }}
-              key: passphrase
-      {{- end }}
-      {{- if .Values.global.tls.enabled }}
-        - name: APP_PORT
-          value: "8443"
-        - name: APP_SERVERCERT
-          value: "{{ template "tlsPath" . }}/tls.crt"
-        - name: APP_SERVERKEY
-          value: "{{ template "tlsPath" . }}/tls.key"
-      {{- else }}
-        - name: SESSION_SECURE
-          value: "false"
-      {{- end }}
-        - name: SESSION_DOMAIN
-          value: {{ .Values.global.ingress.hostName.download | quote }}
-        - name: SESSION_EXPIRATION
-          value: {{ .Values.global.download.sessionExpiration | quote }}
-      {{- if not .Values.global.vaultSecrets }}
-        {{- if eq "s3" .Values.global.archive.storageType }}
-        - name: ARCHIVE_ACCESSKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3archive-keys
-              key: s3ArchiveAccessKey
-        - name: ARCHIVE_SECRETKEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "sda.fullname" . }}-s3archive-keys
-              key: s3ArchiveSecretKey
-        {{- end }}
-        - name: DB_PASSWORD
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-download
-                key: dbPassword
-        - name: DB_USER
-          valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-download
-                key: dbUser
-      {{- else }}
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
-      {{- end }}
         ports:
         - name: download
           containerPort: {{ ternary 8443 8080 .Values.global.tls.enabled }}
@@ -228,22 +108,24 @@ spec:
         resources:
 {{ toYaml .Values.download.resources | trim | indent 10 }}
         volumeMounts:
-        {{- if not .Values.global.vaultSecrets }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
         {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           mountPath: {{ template "c4ghPath" . }}
         {{- end }}
         - name: iss
           mountPath: {{ template "trustedIssPath" . }}
-        {{- end }}
-        {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+      {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
           mountPath: {{ template "tlsPath" . }}
-        {{- end }}
-        {{- if eq "posix" .Values.global.archive.storageType }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
           mountPath: {{ .Values.global.archive.volumePath | quote }}
-        {{- end }}
+      {{- end }}
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
@@ -258,7 +140,11 @@ spec:
         {{- end }}
       {{- end }}
       {{- if not .Values.global.vaultSecrets }}
-      {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-download
+        {{- if .Values.global.download.serveDecrypted.c4ghKeyFile }}
         - name: c4gh-transient
           secret:
             defaultMode: 0440
@@ -266,7 +152,7 @@ spec:
             items:
             - key: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
               path: {{ .Values.global.download.serveDecrypted.c4ghKeyFile }}
-      {{- end }}
+        {{- end }}
         - name: iss
           secret:
             defaultMode: 0440

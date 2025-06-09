@@ -1,7 +1,3 @@
-# linter modules to be included/excluded
-LINT_INCLUDE=-E bodyclose,gocritic,gofmt,gosec,govet,nestif,nlreturn,revive,rowserrcheck
-LINT_EXCLUDE=-e G401,G501,G107
-
 help:
 	@echo 'Welcome!'
 	@echo ''
@@ -152,13 +148,13 @@ integrationtest-sda-doa-s3-down:
 lint-all: lint-sda lint-sda-download lint-sda-admin
 lint-sda:
 	@echo 'Running golangci-lint in the `sda` folder'
-	@cd sda && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda && golangci-lint run
 lint-sda-download:
 	@echo 'Running golangci-lint in the `sda-download` folder'
-	@cd sda-download && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda-download && golangci-lint run
 lint-sda-admin:
 	@echo 'Running golangci-lint in the `sda-admin` folder'
-	@cd sda-admin && golangci-lint run $(LINT_INCLUDE) $(LINT_EXCLUDE)
+	@cd sda-admin && golangci-lint run
 
 # run static code tests
 test-all: test-sda test-sda-download test-sda-sftp-inbox
@@ -194,16 +190,22 @@ k3d-create-cluster:
 	helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace
 k3d-delete-cluster:
 	@k3d cluster delete
-k3d-deploy-dependencies:
-	@bash .github/integration/scripts/charts/dependencies.sh local
+k3d-deploy-dependencies-federated:
+	@bash .github/integration/scripts/charts/dependencies.sh local federated
+k3d-deploy-dependencies-isolated:
+	@bash .github/integration/scripts/charts/dependencies.sh local isolated
 k3d-import-images: build-all
 	@bash .github/integration/scripts/charts/import_local_images.sh k3s-default
 k3d-deploy-postgres:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$$(date +%F)" false
-k3d-deploy-rabbitmq:
-	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false
-k3d-deploy-sda-s3:
-	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3
+k3d-deploy-rabbitmq-federated:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false federated
+k3d-deploy-rabbitmq-isolated:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false isolated
+k3d-deploy-sda-s3-federated:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3 federated
+k3d-deploy-sda-s3-isolated:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3 isolated
 k3d-deploy-sda-posix:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
 k3d-cleanup-all-deployments:

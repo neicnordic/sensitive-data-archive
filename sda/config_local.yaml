@@ -3,6 +3,11 @@ log:
   level: "debug"
 api:
   rbacFile: ../.github/integration/sda/rbac.json 
+  port: 8090
+
+grpc:
+  host: "localhost"
+  port: 50051
 
 archive:
   type: s3
@@ -86,7 +91,7 @@ server:
   cert: ""
   key: ""
   jwtpubkeypath: "/tmp/shared/keys/pub/"
-  jwtpubkeyurl: "http://oidc:8080/jwk"
+  jwtpubkeyurl: "http://localhost:8800/oidc/jwk"
 
 sync:
   api:
