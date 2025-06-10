@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
+
 import java.util.Set;
 
 /**
@@ -38,9 +39,14 @@ public class MetadataController {
     @SuppressWarnings("unchecked")
     @GetMapping("/datasets")
     public ResponseEntity<?> datasets() {
-        log.info("User has permissions to list datasets");
-        Set<String> datasetIds = (Set<String>) request.getAttribute(AAIAspect.DATASETS);
-        return ResponseEntity.ok(metadataService.datasets(datasetIds));
+        try {
+            log.info("User has permissions to list datasets");
+            Set<String> datasetIds = (Set<String>) request.getAttribute(AAIAspect.DATASETS);
+            return ResponseEntity.ok(metadataService.datasets(datasetIds));
+        } catch (Exception e) {
+            log.error("Error in listing datasets", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error while listing datasets: " + e.getMessage());
+        }
     }
 
     /**
@@ -52,13 +58,18 @@ public class MetadataController {
     @SuppressWarnings("unchecked")
     @GetMapping("/datasets/{datasetId}/files")
     public ResponseEntity<?> files(@PathVariable(value = "datasetId") String datasetId) {
-        Set<String> datasetIds = (Set<String>) request.getAttribute(AAIAspect.DATASETS);
-        if (!datasetIds.contains(datasetId)) {
-            log.info("User doesn't have permissions to list files in the requested dataset: {}", datasetId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        try {
+            Set<String> datasetIds = (Set<String>) request.getAttribute(AAIAspect.DATASETS);
+            if (!datasetIds.contains(datasetId)) {
+                log.info("User doesn't have permissions to list files in the requested dataset: {}", datasetId);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            log.info("User has permissions to list files in the requested dataset: {}", datasetId);
+            return ResponseEntity.ok(metadataService.files(datasetId));
+        } catch (Exception e) {
+            log.error("Error in listing files in the dataset: {}", datasetId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error while listing files in the dataset: " + e.getMessage());
         }
-        log.info("User has permissions to list files in the requested dataset: {}", datasetId);
-        return ResponseEntity.ok(metadataService.files(datasetId));
     }
 
 }
