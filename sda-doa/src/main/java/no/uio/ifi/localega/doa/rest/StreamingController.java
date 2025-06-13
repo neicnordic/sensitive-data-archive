@@ -59,6 +59,9 @@ public class StreamingController {
         } catch (AuthException e) {
             log.info("User doesn't have permissions to download requested file: {}", fileId);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (Exception e) {
+            log.error("Error in streaming file: {}", fileId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error in streaming file: " + e.getMessage());
         }
     }
 
