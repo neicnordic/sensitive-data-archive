@@ -1,0 +1,72 @@
+name: Scan Images
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ".github/**"
+      - ".gitignore"
+      - "**/*.md"
+      - "charts/**"
+      - "Makefile"
+      - "sda-admin/**"
+      - "tools/*"
+    types: [ closed ]
+
+jobs:
+  scan-all:
+    if: github.event.pull_request.merged == true
+    name: Scan ${{ matrix.image-name }} Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      matrix:
+        image-name: [ 'download', 'postgres', 'rabbitmq', 'sftp-inbox', 'doa' ]
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.31.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-${{ matrix.image-name }}
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: '${{ matrix.image-name }}-results.sarif'
+          severity: "CRITICAL,HIGH"
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: '${{ matrix.image-name }}-results.sarif'
+          category: ${{ matrix.image-name }}
+  scan-sda:
+    if: github.event.pull_request.merged == true
+    name: Scan SDA Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.31.0
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: 'sda-results.sarif'
+          severity: "CRITICAL,HIGH"
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'sda-results.sarif'
+          category: sda
