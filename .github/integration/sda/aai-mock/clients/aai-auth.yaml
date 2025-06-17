@@ -6,3 +6,6 @@ token-endpoint-auth-method: "client_secret_basic"
 scope: ["openid", "profile", "email", "ga4gh_passport_v1", "eduperson_entitlement"]
 grant-types: ["authorization_code"]
 post-logout-redirect-uris: ["http://localhost:8801/oidc/login"]
+
+# How many seconds is the access token valid #30days
+access-token-validity-seconds: 2592000
