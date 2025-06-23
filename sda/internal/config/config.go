@@ -194,9 +194,9 @@ func NewConfig(app string) (*Config, error) {
 	}
 	log.Debugf("Attempting to read configuration...")
 	if err := viper.ReadInConfig(); err != nil {
-		log.Debugf("Error reading config : %v", err.Error())
+		log.Debugf("Error reading config : %v", err)
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			log.Warnf("ReadInConfig Error : %v", err.Error())
+			log.Warnf("ReadInConfig Error : %v", err)
 
 			return nil, err
 		}
