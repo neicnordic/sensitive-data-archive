@@ -183,7 +183,7 @@ func NewConfig(app string) (*Config, error) {
 
 	if viper.IsSet("configPath") {
 		cp := viper.GetString("configPath")
-		log.Infof("configPath: %s", cp)
+		log.Debugf("configPath: %s", cp)
 		if !strings.HasSuffix(cp, "/") {
 			cp += "/"
 		}
@@ -192,21 +192,21 @@ func NewConfig(app string) (*Config, error) {
 	if viper.IsSet("configFile") {
 		viper.SetConfigFile(viper.GetString("configFile"))
 	}
-	log.Infoln("reading config")
+	log.Debugf("Attempting to read configuration...")
 	if err := viper.ReadInConfig(); err != nil {
-		log.Infoln(err.Error())
+		log.Debugf("Error reading config : %v", err)
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			log.Infoln("ReadInConfig Error")
+			log.Warnf("ReadInConfig Error : %v", err)
 
 			return nil, err
 		}
-		log.Infoln("No config file found, using ENVs only")
+		log.Debugf("No config file found, using ENVs only")
 	}
 
 	if viper.IsSet("log.format") {
 		if viper.GetString("log.format") == "json" {
 			log.SetFormatter(&log.JSONFormatter{})
-			log.Info("The logs format is set to JSON")
+			log.Debugf("The logs format is set to JSON")
 		}
 	}
 
@@ -214,7 +214,7 @@ func NewConfig(app string) (*Config, error) {
 		stringLevel := viper.GetString("log.level")
 		intLevel, err := log.ParseLevel(stringLevel)
 		if err != nil {
-			log.Infof("Log level '%s' not supported, setting to 'trace'", stringLevel)
+			log.Debugf("Log level '%s' not supported, setting to 'trace'", stringLevel)
 			intLevel = log.TraceLevel
 		}
 		log.SetLevel(intLevel)
