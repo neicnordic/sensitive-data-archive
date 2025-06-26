@@ -742,7 +742,7 @@ func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
 	db := dbs.DB
 
 	var users []string
-	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files WHERE id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id) ORDER BY submission_user ASC;")
+	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files f1 WHERE NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f1.id = d.file_id) ORDER BY submission_user ASC;")
 	if err != nil {
 		return nil, err
 	}
