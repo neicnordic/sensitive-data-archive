@@ -114,7 +114,7 @@ func TestNewDB(t *testing.T) {
 	err := CatchNewDBPanic()
 
 	if err == nil {
-		t.Errorf("NewDB did not report error when it should.")
+		t.Error("NewDB did not report error when it should.")
 	}
 
 	db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
