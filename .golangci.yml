@@ -52,6 +52,8 @@ linters:
         disabled: true
       - name: package-comments
         disabled: true
+      - name: redundant-test-main-exit # disable for now (non-critical, needs checking)
+        disabled: true
       - name: unchecked-type-assertion # disable for now
         disabled: true
       - name: unused-parameter # disable for now

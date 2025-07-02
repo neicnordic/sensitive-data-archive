@@ -260,7 +260,7 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 	// nolint:bodyclose
 	for _, c := range w.Result().Cookies() {
 		if c.Name == config.Config.Session.Name {
-			t.Errorf("TestTokenMiddleware_Success_FromCache failed, got a session cookie, when should not have")
+			t.Error("TestTokenMiddleware_Success_FromCache failed, got a session cookie, when should not have")
 		}
 	}
 
