@@ -1,0 +1,68 @@
+{{- if .Values.jobs.removeUserName }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sda.fullname" . }}-remove-user-name-job
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ template "sda.fullname" . }}-remove-user-name-job
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ template "sda.fullname" . }}-remove-user-name-job
+        command: ["/usr/local/bin/psql"]
+        args: [
+          "-qc",
+          "UPDATE sda.files SET submission_file_path = REPLACE(submission_file_path, CONCAT(REPLACE(submission_user, '@', '_'),'/'), '');"
+        ]
+        env:
+        - name: PGDATABASE
+          value: {{ .Values.global.db.name }}
+        - name: PGHOST
+          value: {{ .Values.global.db.host }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "password" .Values.global.db.admin.passKey }}
+        {{- if .Values.global.db.port }}
+        - name: PGPORT
+          value: {{ .Values.global.db.port | quote }}
+        {{- end }}
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "username" .Values.global.db.admin.userKey }}
+        image: {{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-postgres
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 72
+        runAsGroup: 72
+        fsGroup: 72
+{{- end }}

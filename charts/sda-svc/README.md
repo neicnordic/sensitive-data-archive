@@ -23,6 +23,11 @@ When upgrading from a V1 release *both* `upgradeFromV1` and `setKeyHash` should 
 
 Unless the same queries are being executed manually by a database administrator a `Basic authentication Secret` containing the credentials to perform the upgrade needs to be created.
 
+### To 3.0.0
+
+This version adds a Job that cleans up the submission file paths in the database. Ensure that there is no ongoing work by either scaling down all deplpoyments to zero or uninstalling the chart before upgrade.
+Unless the same query is being exiecuted manually by a database adminitstrator a `Basic authentication Secret` containg the credentials to perform the upgrade needs to be created as well.
+
 ### Configuration
 
 The following table lists the configurable parameters of the `sda-svc` chart and their default values.
@@ -30,7 +35,7 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 Parameter | Description | Default
 --------- | ----------- | -------
 `image.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
-`image.tag` | Tag version to deploy | ``
+`image.tag` | Tag version to deploy | `chart appVersion`
 `image.pullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
 `global.secretsPath` | Path where the sensitive files can be found | `/.secrets`
 `global.c4ghPath` | This path will be a subpath to the secretsPath | `c4gh`
