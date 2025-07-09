@@ -741,3 +741,30 @@ func (ts *TestSuite) TestDetectMisingC4GHKeys() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 0, len(privateKeys))
 }
+
+func (ts *TestSuite) TestRegisterC4ghKey_newDeployment() {
+	_, err := ts.ingest.DB.DB.Exec("TRUNCATE sda.encryption_keys CASCADE;")
+	assert.NoError(ts.T(), err)
+
+	privateKeys, err := config.GetC4GHprivateKeys()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, len(privateKeys))
+
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+
+	kh, err := ts.ingest.DB.ListKeyHashes()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, len(kh))
+}
+
+func (ts *TestSuite) TestRegisterC4ghKey_existingEntry() {
+	privateKeys, err := config.GetC4GHprivateKeys()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, len(privateKeys))
+
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+
+	kh, err := ts.ingest.DB.ListKeyHashes()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 1, len(kh))
+}
