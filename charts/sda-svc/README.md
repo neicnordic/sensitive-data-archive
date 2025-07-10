@@ -10,6 +10,15 @@ Source repositories:
 Edit the values.yaml file and specify the relevant parts of the `global` section.
 If no shared credentials for the broker and database are used, the credentials for each service shuld be set in the `credentials` section.
 
+## Upgrading an existing Release to a new major version
+
+A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an incompatible breaking change needing manual actions.
+
+### To 3.0.0
+
+This version adds a Job that cleans up the submission file paths in the database. Ensure that there is no ongoing work by either scaling down all deplpoyments to zero or uninstalling the chart before upgrade.
+Unless the same query is being exiecuted manually by a database adminitstrator a `Basic authentication Secret` containg the credentials to perform the upgrade needs to be created as well.
+
 ### Configuration
 
 The following table lists the configurable parameters of the `sda-svc` chart and their default values.
@@ -17,7 +26,7 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 Parameter | Description | Default
 --------- | ----------- | -------
 `image.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
-`image.tag` | Tag version to deploy | ``
+`image.tag` | Tag version to deploy | `chart appVersion`
 `image.pullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
 `global.secretsPath` | Path where the sensitive files can be found | `/.secrets`
 `global.c4ghPath` | This path will be a subpath to the secretsPath | `c4gh`
@@ -102,6 +111,9 @@ Parameter | Description | Default
 `global.c4gh.keyFile` | Private C4GH key. |`c4gh.key`
 `global.c4gh.passphrase` | Passphrase for the private C4GH key. |`""`
 `global.c4gh.publicFile` | Public key corresponding to the private key, provided in /info endpoint. |`""`
+`global.db.admin.secretName` | Name of the secret that holds the database admin credentials. |`""`
+`global.db.admin.passKey` | Key in the secret that holds the password. |`""`
+`global.db.admin.userkey` | Key in the secret that holds the username. |`""`
 `global.db.host` | Hostname for the database. |`""`
 `global.db.name` | Database to connect to. |`lega`
 `global.db.passIngest` | Password used for `data in` services. |`""`

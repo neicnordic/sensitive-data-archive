@@ -199,6 +199,12 @@ global:
     - keyName:
       passphrase:
   db:
+    admin:
+  # These credentials need at least dbOwner permissions
+  # in order to perform schema migrations.
+      secretName: ""
+      passKey: ""
+      userKey: ""
     host: ""
     name: "sda"
     user: ""
@@ -617,3 +623,7 @@ verify:
   annotations: {}
   tls:
     secretName: ""
+
+jobs:
+# remove the username from the submission file path in the database
+  removeUserName: true
