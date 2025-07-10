@@ -119,12 +119,7 @@ func setup(conf *config.Config) *http.Server {
 					return string(s) + "\n"
 				},
 
-				Skip: func(c *gin.Context) bool {
-					// skip logging HEAD requests to / and all requests to /health
-					// (HEAD request to health are redirected to path "")
-					return (c.Request.Method == "HEAD" && strings.Trim(c.FullPath(), "/") == "") ||
-						c.FullPath() == "/health"
-				},
+				SkipPaths: []string{"/ready"},
 				Output: gin.DefaultWriter,
 			},
 		))
