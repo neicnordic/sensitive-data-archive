@@ -119,8 +119,8 @@ func setup(conf *config.Config) *http.Server {
 					return string(s) + "\n"
 				},
 
+				Output:    gin.DefaultWriter,
 				SkipPaths: []string{"/ready"},
-				Output: gin.DefaultWriter,
 			},
 		))
 	}
