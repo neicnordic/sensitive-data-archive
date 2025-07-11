@@ -1,0 +1,92 @@
+{{- if .Values.jobs.setKeyHash }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sda.fullname" . }}-set-key-hash-job
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ template "sda.fullname" . }}-set-key-hash-job
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ template "sda.fullname" . }}-set-key-hash-job
+        command: ["/usr/local/bin/psql"]
+        args: [
+          "-qf",
+          "/migratedb/set-key-hash.sql"
+        ]
+        env:
+        - name: PGDATABASE
+          value: {{ .Values.global.db.name }}
+        - name: PGHOST
+          value: {{ .Values.global.db.host }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "password" .Values.global.db.admin.passKey }}
+        {{- if .Values.global.db.port }}
+        - name: PGPORT
+          value: {{ .Values.global.db.port | quote }}
+        {{- end }}
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "username" .Values.global.db.admin.userKey }}
+        image: {{ .Values.jobs.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        volumeMounts:
+        - name: sql
+          mountPath: /migratedb
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 72
+        runAsGroup: 72
+        fsGroup: 72
+      volumes:
+      - name: sql
+        configMap:
+          name: set-key-hash
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: set-key-hash
+data:
+  set-key-hash.sql: |
+    DO
+    $$
+    BEGIN
+      IF (select max(version) from sda.dbschema_version) > 11 then
+        RAISE NOTICE 'Fixing c4gh key references';
+        UPDATE sda.files SET key_hash = (SELECT key_hash FROM sda.encryption_keys WHERE deprecated_at IS NULL ORDER BY created_at ASC LIMIT 1)
+        WHERE header IS NOT NULL AND key_hash IS NULL;
+      END IF;
+    END
+    $$
+{{- end }}
