@@ -137,8 +137,8 @@ spec:
             defaultMode: 0440
             secretName: {{ required "A secret for the C4GH public key is needed" .Values.global.c4gh.secretName }}
             items:
-              - key: {{ required "The C4GH public key is needed" .Values.global.c4gh.publicFile }}
-                path: {{ .Values.global.c4gh.publicFile }}
+              - key: {{ required "The C4GH public key is needed" .Values.global.c4gh.publicKey }}
+                path: {{ .Values.global.c4gh.publicKey }}
       {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls

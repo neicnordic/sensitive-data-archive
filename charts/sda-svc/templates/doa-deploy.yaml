@@ -206,7 +206,7 @@ spec:
         - name: CERT_KEY
           value: {{ ternary (printf "/etc/ssl/certs/java/tls.key.der" ) (printf "%s/%s" .Values.global.secretsPath .Values.doa.tls.keyFile) (empty .Values.global.pkiService) }}
         - name: CRYPT4GH_PRIVATE_KEY_PATH
-          value: "{{ template "c4ghPath" . }}/{{ .Values.global.c4gh.keyFile }}"
+          value: "{{ template "c4ghPath" . }}/{{ (first .Values.global.c4gh.privateKeys).keyName }}"
         - name: CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH
           value: "{{ template "c4ghPath" . }}/passphrase"
         - name: OPENID_CONFIGURATION_URL
@@ -315,9 +315,19 @@ spec:
                     path: {{ .Values.global.oidc.pubKey }}
       {{- end }}
         - name: c4gh-key
-          secret:
-            secretName: {{ .Values.global.c4gh.secretName }}
+          projected:
             defaultMode: 0440
+            sources:
+            - secret:
+                name: {{ .Values.global.c4gh.secretName }}
+                items:
+                  - key: {{ (first .Values.global.c4gh.privateKeys).keyName }}
+                    path: {{ (first .Values.global.c4gh.privateKeys).keyName }}
+            - secret:
+                name: {{ template "sda.fullname" . }}-doa
+                items:
+                  - key: c4ghPassphrase
+                    path: passphrase
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
