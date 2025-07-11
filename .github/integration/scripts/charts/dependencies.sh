@@ -109,7 +109,6 @@ yq -i '
 .global.backupArchive.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.backupArchive.s3SecretKey = strenv(MINIO_SECRET) |
 .global.broker.password = strenv(MQPASSWORD) |
-.global.c4gh.passphrase = strenv(C4GHPASSPHRASE) |
 .global.c4gh.privateKeys[0].passphrase = strenv(C4GHPASSPHRASE) |
 .global.db.password = strenv(PGPASSWORD) |
 .global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
