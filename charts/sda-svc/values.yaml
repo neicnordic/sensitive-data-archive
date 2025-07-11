@@ -198,6 +198,12 @@ global:
     syncPubKey:
     syncPubKeyData:
   db:
+    admin:
+  # These credentials need at least dbOwner permissions
+  # in order to perform schema migrations.
+      secretName: ""
+      passKey: ""
+      userKey: ""
     host: ""
     name: "sda"
     user: ""
@@ -616,3 +622,7 @@ verify:
   annotations: {}
   tls:
     secretName: ""
+
+jobs:
+  image: postgres:15.4-alpine
+  setKeyHash: false
