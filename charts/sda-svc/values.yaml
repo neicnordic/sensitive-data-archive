@@ -188,16 +188,15 @@ global:
     password: ""
 
   c4gh:
-    secretName: ""
-  # name of the c4gh key file.
-    keyFile: ""
-  # name of the public file, required for testing
-    publicFile: ""
-    passphrase: ""
-    backupPubKey: ""
+    secretName:
+    publicKey:
+    publicKeyData:
     privateKeys:
     - keyName:
       passphrase:
+      keyData:
+    syncPubKey:
+    syncPubKeyData:
   db:
     host: ""
     name: "sda"
