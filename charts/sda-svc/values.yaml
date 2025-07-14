@@ -626,3 +626,4 @@ verify:
 jobs:
   image: postgres:15.4-alpine
   setKeyHash: false
+  upgradeFomV1: false
