@@ -1,0 +1,115 @@
+{{- if .Values.jobs.upgradeFomV1 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sda.fullname" . }}-upgrade-from-v1-job
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ template "sda.fullname" . }}-upgrade-from-v1-job
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ template "sda.fullname" . }}-upgrade-from-v1-job
+        command: ["/usr/local/bin/psql"]
+        args: [
+          "-qf",
+          "/migratedb/upgrade-from-v1.sql"
+        ]
+        env:
+        - name: PGDATABASE
+          value: {{ .Values.global.db.name }}
+        - name: PGHOST
+          value: {{ .Values.global.db.host }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "password" .Values.global.db.admin.passKey }}
+        {{- if .Values.global.db.port }}
+        - name: PGPORT
+          value: {{ .Values.global.db.port | quote }}
+        {{- end }}
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "username" .Values.global.db.admin.userKey }}
+        image: {{ .Values.jobs.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        volumeMounts:
+        - name: sql
+          mountPath: /migratedb
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 72
+        runAsGroup: 72
+        fsGroup: 72
+      volumes:
+      - name: sql
+        configMap:
+          name: upgrade-from-v1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upgrade-from-v1
+data:
+  upgrade-from-v1.sql: |
+    DO
+    $$
+    BEGIN
+      IF (select max(version) from sda.dbschema_version) = 11 then
+        RAISE NOTICE 'Doing migration from schema version 11 to 17';
+
+        INSERT INTO sda.dbschema_version VALUES(12, now(), 'Add key hash table');
+        CREATE TABLE IF NOT EXISTS sda.encryption_keys (
+            key_hash          TEXT PRIMARY KEY,
+            created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            deprecated_at     TIMESTAMP WITH TIME ZONE,
+            description       TEXT
+        );
+        ALTER TABLE sda.files ADD COLUMN IF NOT EXISTS key_hash TEXT,
+        ADD CONSTRAINT fk_files_key_hash FOREIGN KEY (key_hash) REFERENCES sda.encryption_keys(key_hash);
+
+        INSERT INTO sda.dbschema_version VALUES(14, now(), 'Add userinfo table');
+        CREATE TABLE IF NOT EXISTS sda.userinfo (
+            id          TEXT PRIMARY KEY,
+            name        TEXT,
+            email       TEXT,
+            groups      TEXT[]
+        );
+
+        INSERT INTO sda.dbschema_version VALUES(17, now(), 'Add submission user to constraint');
+        ALTER TABLE sda.files DROP CONSTRAINT unique_ingested;
+        ALTER TABLE sda.files ADD CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path, submission_user);
+
+      ELSE
+        RAISE NOTICE 'Schema migration from 11 does not apply now, skipping';
+      END IF;
+    END
+    $$
+{{- end }}

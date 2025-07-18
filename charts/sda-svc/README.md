@@ -10,6 +10,19 @@ Source repositories:
 Edit the values.yaml file and specify the relevant parts of the `global` section.
 If no shared credentials for the broker and database are used, the credentials for each service shuld be set in the `credentials` section.
 
+While it is possible to deploy this chart with the crypt4gh keys included in the values file as base64 encoded strings, it is advisable to create the secret containing the crypt4gh keys manually.
+
+## Upgrading an existing Release to a new version
+
+A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an incompatible breaking change needing manual actions.
+
+### To 3.0.0
+
+This version adds Jobs that migrates the dtabase schema from a V1 release and sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.  
+When upgrading from a V1 release *both* `upgradeFomV1` and `setKeyHash` should be run.
+
+Unless the same queries are being exiecuted manually by a database adminitstrator a `Basic authentication Secret` containg the credentials to perform the upgrade needs to be created.
+
 ### Configuration
 
 The following table lists the configurable parameters of the `sda-svc` chart and their default values.
@@ -99,9 +112,15 @@ Parameter | Description | Default
 `global.cega.host` | Full URI to the EGA user authentication service. |`""`
 `global.cega.user` | Username for the EGA user authentication service. |`""`
 `global.cega.password` | Password for the EGA user authentication service. |`""`
-`global.c4gh.keyFile` | Private C4GH key. |`c4gh.key`
-`global.c4gh.passphrase` | Passphrase for the private C4GH key. |`""`
-`global.c4gh.publicFile` | Public key corresponding to the private key, provided in /info endpoint. |`""`
+`global.c4gh.privateKeys` | List of Private C4GH keys. |``
+`global.c4gh.privateKeys.0.keyData` | The private crypt4gh key provided as a base64 encoded string. |`""`
+`global.c4gh.privateKeys.0.keyName` | Filename of the private C4GH key. |`""`
+`global.c4gh.privateKeys.0.passphrase` | Passphrase for the private C4GH key. |`""`
+`global.c4gh.publicKey` | Public key corresponding to the private key, provided in /info endpoint. |`""`
+`global.c4gh.publicKeyData` | Public key corresponding to the private key, provided as a base64 encoded string. |`""`
+`global.db.admin.secretName` | Name of the secret that holds the database admin credentials. |`""`
+`global.db.admin.passKey` | Key in the secret that holds the password. |`""`
+`global.db.admin.userkey` | Key in the secret that holds the username. |`""`
 `global.db.host` | Hostname for the database. |`""`
 `global.db.name` | Database to connect to. |`lega`
 `global.db.passIngest` | Password used for `data in` services. |`""`
@@ -303,3 +322,9 @@ Parameter | Description | Default
 `releasetest.repository` | inbox container image repository | `neicnordic/sda-helm-test-support`
 `releasetest.imageTag` | inbox container image version | `latest`
 `releasetest.imagePullPolicy` | inbox container image pull policy | `Always`
+
+### Jobs
+
+`jobs.image` | Container image used for running the DB migration jobs | `postgres:15.4-alpine`
+`jobs.setKeyHash` | Populate the key_hash table after migration from V1 | `false`
+`jobs.upgradeFomV1` | Upgrade database schema from a version 1 release. | `false`
