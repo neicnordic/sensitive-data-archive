@@ -15,7 +15,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -80,6 +79,11 @@ func main() {
 		sigc <- syscall.SIGINT
 		panic(errors.New("no C4GH private keys configured"))
 	}
+
+	if err := app.registerC4GHKey(); err != nil {
+		panic(err)
+	}
+
 	app.Archive, err = storage.NewBackend(app.Conf.Archive)
 	if err != nil {
 		log.Error(err)
@@ -112,24 +116,6 @@ func main() {
 	log.Info("starting ingest service")
 
 	go func() {
-		start := time.Now()
-		for i := 1; i > 0; i++ {
-			h, err := app.DB.ListKeyHashes()
-			if err != nil {
-				log.Errorln(err.Error())
-			}
-			if len(h) != 0 {
-				break
-			}
-
-			time.Sleep(time.Duration(30 * time.Second))
-			if time.Since(start).Seconds() >= float64(300) {
-				log.Errorln("no crypt4gh key hash registered, restarting")
-				forever <- false
-			}
-			log.Errorln("no crypt4gh key hash registered")
-		}
-
 		messages, err := app.MQ.GetMessages(app.Conf.Broker.Queue)
 		if err != nil {
 			log.Panic(err)
@@ -195,6 +181,23 @@ func main() {
 	}()
 
 	<-forever
+}
+
+func (app *Ingest) registerC4GHKey() error {
+	h, err := app.DB.ListKeyHashes()
+	if err != nil {
+		return err
+	}
+	if len(h) == 0 {
+		for num, key := range app.ArchiveKeyList {
+			publicKey := keys.DerivePublicKey(*key)
+			if err := app.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), fmt.Sprintf("bootstrapped key: %d", num)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrigger) string {

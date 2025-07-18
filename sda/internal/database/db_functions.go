@@ -731,7 +731,7 @@ func (dbs *SDAdb) getUserFiles(userID string, allData bool) ([]*SubmissionFileIn
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = "SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f " +
 		"LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1 " +
-		"AND f.id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id); "
+		"AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);"
 
 	// nolint:rowserrcheck
 	rows, err := db.Query(query, userID)
@@ -815,7 +815,7 @@ func (dbs *SDAdb) ListActiveUsers() ([]string, error) {
 	db := dbs.DB
 
 	var users []string
-	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files WHERE id NOT IN (SELECT f.id FROM sda.files f RIGHT JOIN sda.file_dataset d ON f.id = d.file_id) ORDER BY submission_user ASC;")
+	rows, err := db.Query("SELECT DISTINCT submission_user FROM sda.files f WHERE NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id) ORDER BY submission_user ASC;")
 	if err != nil {
 		return nil, err
 	}
