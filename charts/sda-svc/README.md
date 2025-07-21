@@ -18,10 +18,10 @@ A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an 
 
 ### To 3.0.0
 
-This version adds Jobs that migrates the dtabase schema from a V1 release and sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.  
-When upgrading from a V1 release *both* `upgradeFomV1` and `setKeyHash` should be run.
+This version adds Jobs that migrates the database schema from a V1 release and sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.  
+When upgrading from a V1 release *both* `upgradeFromV1` and `setKeyHash` should be run.
 
-Unless the same queries are being exiecuted manually by a database adminitstrator a `Basic authentication Secret` containg the credentials to perform the upgrade needs to be created.
+Unless the same queries are being executed manually by a database administrator a `Basic authentication Secret` containing the credentials to perform the upgrade needs to be created.
 
 ### Configuration
 
@@ -327,4 +327,4 @@ Parameter | Description | Default
 
 `jobs.image` | Container image used for running the DB migration jobs | `postgres:15.4-alpine`
 `jobs.setKeyHash` | Populate the key_hash table after migration from V1 | `false`
-`jobs.upgradeFomV1` | Upgrade database schema from a version 1 release. | `false`
+`jobs.upgradeFromV1` | Upgrade database schema from a version 1 release. | `false`

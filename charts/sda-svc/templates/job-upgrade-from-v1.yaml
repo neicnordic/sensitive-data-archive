@@ -1,4 +1,4 @@
-{{- if .Values.jobs.upgradeFomV1 }}
+{{- if .Values.jobs.upgradeFromV1 }}
 apiVersion: batch/v1
 kind: Job
 metadata:
