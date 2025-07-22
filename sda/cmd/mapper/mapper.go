@@ -142,6 +142,8 @@ func main() {
 
 					continue
 				}
+			default:
+				log.Errorf("unknown mappping type, %s", mappings.Type)
 			}
 
 			if err := delivered.Ack(false); err != nil {
