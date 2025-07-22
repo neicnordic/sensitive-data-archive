@@ -2,7 +2,7 @@
 set -ex
 
 YQ_VERSION="v4.20.1"
-C4GH_VERSION="$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')"
+C4GH_VERSION="v1.14.0"
 
 random-string() {
         head -c 32 /dev/urandom | base64 -w0 | tr -d '/+' | fold -w 32 | head -n 1
