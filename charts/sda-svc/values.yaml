@@ -188,17 +188,22 @@ global:
     password: ""
 
   c4gh:
-    secretName: ""
-  # name of the c4gh key file.
-    keyFile: ""
-  # name of the public file, required for testing
-    publicFile: ""
-    passphrase: ""
-    backupPubKey: ""
+    secretName:
+    publicKey:
+    publicKeyData:
     privateKeys:
     - keyName:
       passphrase:
+      keyData:
+    syncPubKey:
+    syncPubKeyData:
   db:
+    admin:
+  # These credentials need at least dbOwner permissions
+  # in order to perform schema migrations.
+      secretName: ""
+      passKey: ""
+      userKey: ""
     host: ""
     name: "sda"
     user: ""
@@ -617,3 +622,8 @@ verify:
   annotations: {}
   tls:
     secretName: ""
+
+jobs:
+  image: postgres:15.4-alpine
+  setKeyHash: false
+  upgradeFromV1: false

@@ -111,8 +111,8 @@ spec:
             defaultMode: 0440
             secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
             items:
-            - key: {{ .Values.global.c4gh.keyFile }}
-              path: {{ .Values.global.c4gh.keyFile }}
+            - key: {{ (first .Values.global.c4gh.privateKeys).keyName }}
+              path: {{ (first .Values.global.c4gh.privateKeys).keyName }}
             - key: {{ .Values.global.c4gh.syncPubKey }}
               path: {{ .Values.global.c4gh.syncPubKey }}
         - name: config
