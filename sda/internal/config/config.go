@@ -319,6 +319,8 @@ func NewConfig(app string) (*Config, error) {
 			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
+		default:
+			return nil, errors.New("archive.type not set")
 		}
 
 		switch viper.GetString("backup.type") {
@@ -326,6 +328,8 @@ func NewConfig(app string) (*Config, error) {
 			requiredConfVars = append(requiredConfVars, []string{"backup.url", "backup.accesskey", "backup.secretkey", "backup.bucket"}...)
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
+		default:
+			return nil, errors.New("backup.type not set")
 		}
 	case "intercept":
 		requiredConfVars = []string{
@@ -355,6 +359,8 @@ func NewConfig(app string) (*Config, error) {
 			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
+		default:
+			return nil, errors.New("inbox.type not set")
 		}
 	case "notify":
 		requiredConfVars = []string{
@@ -671,7 +677,9 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configArchive()
-		c.configSync()
+		if err := c.configSync(); err != nil {
+			return nil, err
+		}
 		c.configSchemas()
 	case "sync-api":
 		if err := c.configBroker(); err != nil {
@@ -698,6 +706,8 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+	default:
+		return nil, errors.New("unknown app name")
 	}
 
 	return c, nil
@@ -1085,7 +1095,7 @@ func (c *Config) configSMTP() {
 }
 
 // configSync provides configuration for the sync destination storage
-func (c *Config) configSync() {
+func (c *Config) configSync() error {
 	switch viper.GetString("sync.destination.type") {
 	case S3:
 		c.Sync.Destination.Type = S3
@@ -1096,6 +1106,8 @@ func (c *Config) configSync() {
 	case POSIX:
 		c.Sync.Destination.Type = POSIX
 		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
+	default:
+		return errors.New("sync.destination.type not set")
 	}
 
 	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
@@ -1105,6 +1117,8 @@ func (c *Config) configSync() {
 	c.Sync.RemotePassword = viper.GetString("sync.remote.password")
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
 	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
+
+	return nil
 }
 
 // configSync provides configuration for the outgoing sync settings

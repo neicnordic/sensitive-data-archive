@@ -186,7 +186,6 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 		go r.prefetchAt(r.currentOffset)
 
 		return offset, nil
-
 	case io.SeekCurrent:
 		if r.currentOffset+offset < 0 {
 			return r.currentOffset, fmt.Errorf("invalid offset %v from %v would be be before start", offset, r.currentOffset)
@@ -199,7 +198,6 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 		go r.prefetchAt(r.currentOffset)
 
 		return r.currentOffset, nil
-
 	case io.SeekEnd:
 		if r.objectSize+offset < 0 {
 			return r.currentOffset, fmt.Errorf("invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
@@ -212,9 +210,9 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 		go r.prefetchAt(r.currentOffset)
 
 		return r.currentOffset, nil
+	default:
+		return r.currentOffset, errors.New("bad whence")
 	}
-
-	return r.currentOffset, errors.New("bad whence")
 }
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
