@@ -56,13 +56,11 @@ global:
     user: PLACEHOLDER_VALUE
   c4gh:
     secretName: c4gh
-    keyFile: c4gh.sec.pem
-    publicFile: c4gh.pub.pem
-    passphrase: PLACEHOLDER_VALUE
-    syncPubKey: c4gh.pub.pem
+    publicKey: c4gh.pub.pem
     privateKeys:
       - keyName: c4gh.sec.pem
         passphrase: PLACEHOLDER_VALUE
+    syncPubKey: c4gh.pub.pem
   db:
     host: "postgres-sda-db"
     user: "postgres"

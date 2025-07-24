@@ -200,6 +200,10 @@ func processQueue(mq *broker.AMQPBroker, queue string, routingKey string, conf *
 
 				continue
 			}
+		default:
+			log.Errorln("unknown raouting key")
+
+			continue
 		}
 	}
 }

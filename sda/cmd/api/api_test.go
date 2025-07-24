@@ -697,6 +697,8 @@ func (s *TestSuite) TestAPIGetFiles() {
 			assert.Equal(s.T(), fileInfo.Status, latestStatus)
 		case file2:
 			assert.Equal(s.T(), fileInfo.Status, "registered")
+		default:
+			s.Fail("unknown inbox path")
 		}
 	}
 	assert.NoError(s.T(), err)

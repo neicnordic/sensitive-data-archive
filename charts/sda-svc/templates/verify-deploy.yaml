@@ -96,9 +96,6 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
-            items:
-            - key: {{ .Values.global.c4gh.keyFile }}
-              path: {{ .Values.global.c4gh.keyFile }}
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive

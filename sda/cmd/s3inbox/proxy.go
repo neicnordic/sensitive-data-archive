@@ -382,18 +382,24 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
 		case strings.Contains(r.URL.String(), "?location") || strings.Contains(r.URL.String(), "&prefix"):
 			r.URL.Path = "/" + bucket + "/"
 			log.Debug("new Path: ", r.URL.Path)
+		default:
+			r.URL.Path = "/" + bucket + "/"
 		}
 	case http.MethodPost:
 		r.URL.Path = "/" + bucket + r.URL.Path
 		log.Debug("new Path: ", r.URL.Path)
 	case http.MethodPut:
 		r.URL.Path = "/" + bucket + r.URL.Path
-		log.Debug("new Path: ", r.URL.Path)
+		log.Info("new PUT Path: ", r.URL.Path)
 	case http.MethodDelete:
 		if strings.Contains(r.URL.String(), "?uploadId") {
 			// abort multipart upload
 			r.URL.Path = "/" + bucket + r.URL.Path
 		}
+	default:
+		log.Errorf("unknown request: %s", r.Method)
+
+		return errors.New("unknown request method")
 	}
 	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
 
