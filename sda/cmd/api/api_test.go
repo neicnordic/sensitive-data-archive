@@ -712,6 +712,162 @@ func testEndpoint(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
+func (s *TestSuite) TestGinLogLevelDebug() {
+	// Capture log output from gin in a buffer
+	var buf bytes.Buffer
+	gin.DefaultWriter = &buf
+	gin.DefaultErrorWriter = &buf
+
+	conf, err := config.NewConfig("api")
+	if err != nil {
+		s.FailNow("failure when generating config: %v", err)
+	}
+	log.SetLevel(log.DebugLevel)
+	srv := setup(conf)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			s.T().Logf("failure: %v", err)
+			s.FailNow("failure from API server")
+		}
+	}()
+
+	// Allow some time for startup
+	time.Sleep(500 * time.Millisecond)
+
+	assert.NoError(s.T(), setupJwtAuth())
+
+	// Send a request towards previously started *http.Server
+	client := http.Client{Timeout: 5 * time.Second}
+	r, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%d/files", conf.API.Host, conf.API.Port), nil)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to create new request instance")
+	}
+
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	_, err = client.Do(r) // nolint: bodyclose
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to execute HTTP request")
+	}
+
+	// Allow logs to flush
+	time.Sleep(500 * time.Millisecond)
+	logOutput := buf.String()
+
+	// Remove leading and/or trailing newlines and spaces
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	assert.Greater(s.T(), len(lines), 0)
+
+	// Pick the last produced output from GIN
+	logOutput = lines[len(lines)-1]
+	assert.Contains(s.T(), logOutput, "[GIN]")
+
+	buf.Reset()
+	r, err = http.NewRequest("GET", fmt.Sprintf("http://%s:%d/ready", conf.API.Host, conf.API.Port), nil)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to create new request instance for /ready")
+	}
+
+	_, err = client.Do(r) // nolint: bodyclose
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to execute HTTP request to /ready")
+	}
+
+	// Allow logs to flush
+	time.Sleep(500 * time.Millisecond)
+	logOutput = buf.String()
+
+	lines = strings.Split(strings.TrimSpace(logOutput), "\n")
+	fmt.Println("lines      : ", lines)
+	fmt.Println("len(lines) : ", len(lines))
+	if len(lines) > 1 {
+		assert.NotContains(s.T(), logOutput[len(logOutput)-1], "[GIN]")
+	} else {
+		s.T().Log("No log output from /ready, considered fine on log level info")
+	}
+}
+
+func (s *TestSuite) TestGinLogLevelInfo() {
+	// Capture log output from gin in a buffer
+	var buf bytes.Buffer
+	gin.DefaultWriter = &buf
+	gin.DefaultErrorWriter = &buf
+
+	conf, err := config.NewConfig("api")
+	if err != nil {
+		s.FailNow("failure when generating config: %v", err)
+	}
+	log.SetLevel(log.InfoLevel)
+	srv := setup(conf)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			s.T().Logf("failure: %v", err)
+			s.FailNow("failure from API server")
+		}
+	}()
+
+	// Allow some time for startup
+	time.Sleep(500 * time.Millisecond)
+
+	assert.NoError(s.T(), setupJwtAuth())
+
+	// Send a request towards previously started *http.Server
+	client := http.Client{Timeout: 5 * time.Second}
+	r, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%d/files", conf.API.Host, conf.API.Port), nil)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to create new request instance")
+	}
+
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	_, err = client.Do(r) // nolint: bodyclose
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to execute HTTP request")
+	}
+
+	// Allow logs to flush
+	time.Sleep(500 * time.Millisecond)
+	logOutput := buf.String()
+
+	// Remove leading and/or trailing newlines and spaces
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	assert.Greater(s.T(), len(lines), 0)
+
+	// Pick the last produced output from GIN
+	logOutput = lines[len(lines)-1]
+	assert.NotContains(s.T(), logOutput, "[GIN]")
+
+	buf.Reset()
+	r, err = http.NewRequest("GET", fmt.Sprintf("http://%s:%d/ready", conf.API.Host, conf.API.Port), nil)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to create new request instance for /ready")
+	}
+
+	_, err = client.Do(r) // nolint: bodyclose
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to execute HTTP request to /ready")
+	}
+
+	// Allow logs to flush
+	time.Sleep(500 * time.Millisecond)
+	logOutput = buf.String()
+
+	lines = strings.Split(strings.TrimSpace(logOutput), "\n")
+	fmt.Println("lines      : ", lines)
+	fmt.Println("len(lines) : ", len(lines))
+	if len(lines) > 1 {
+		assert.NotContains(s.T(), logOutput[len(logOutput)-1], "[GIN]")
+	} else {
+		s.T().Log("No log output from /ready, considered fine on log level info")
+	}
+}
+
 func (s *TestSuite) TestRBAC() {
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(s.T(), setupJwtAuth())

@@ -100,7 +100,39 @@ func setup(conf *config.Config) *http.Server {
 		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
 	}
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	// Enable default Gin logger in debug mode for detailed request logging during development
+	if log.GetLevel() == log.DebugLevel {
+		r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+			SkipPaths: []string{"/ready"},
+		}))
+	}
+
+	// Enable structured JSON logging in info mode for clean, parseable logs in production
+	if log.GetLevel() == log.InfoLevel {
+		r.Use(gin.LoggerWithConfig(
+			gin.LoggerConfig{
+				Formatter: func(params gin.LogFormatterParams) string {
+					s, _ := json.Marshal(map[string]any{
+						"level":       "info",
+						"method":      params.Method,
+						"path":        params.Path,
+						"remote_addr": params.ClientIP,
+						"status_code": params.StatusCode,
+						"time":        params.TimeStamp.Format(time.RFC3339),
+					})
+
+					return string(s) + "\n"
+				},
+
+				Output:    gin.DefaultWriter,
+				SkipPaths: []string{"/ready"},
+			},
+		))
+	}
+
 	r.GET("/ready", readinessResponse)
 	r.GET("/files", rbac(e), getFiles)
 	r.GET("/datasets", rbac(e), listDatasets)
