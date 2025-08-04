@@ -167,8 +167,7 @@ upload () {
 	# subdirectory of the user's S3 bucket.
 	#
 	if [ "$#" -gt 0 ]; then
-		"$SDA_CLI" upload \
-			-config "$S3_CONFIG" \
+		"$SDA_CLI" -config "$S3_CONFIG" upload \
 			${target_dir+-targetDir "$target_dir"} \
 			"$@"
 	fi
