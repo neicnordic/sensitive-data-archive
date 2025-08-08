@@ -91,7 +91,7 @@ spec:
         - name: config
           secret:
             defaultMode: 0440
-            secretName: {{ template "sda.fullname" . }}-ingest
+            secretName: {{ template "sda.fullname" . }}-verify
         - name: c4gh
           secret:
             defaultMode: 0440
