@@ -91,6 +91,14 @@ spec:
           requests:
             cpu: 100m
             memory: 128Mi
+        volumeMounts:
+          - mountPath: /shared/keys
+            name: jwt
+      volumes:
+        - name: jwt
+          secret:
+            defaultMode: 288
+            secretName: jwk
 ---
 apiVersion: v1
 kind: Service
