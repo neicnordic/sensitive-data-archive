@@ -1,6 +1,6 @@
 apiVersion: v2
 name: sda-svc
-version: 3.0.2
+version: 3.0.3
 appVersion: v2.1.7
 kubeVersion: '>= 1.26.0'
 description: Components for Sensitive Data Archive (SDA) installation
