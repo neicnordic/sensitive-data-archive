@@ -110,7 +110,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>crypt4gh</artifactId>
-            <version>3.0.29</version>
+            <version>3.0.31</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
