@@ -173,3 +173,9 @@ func (ts *HelperTest) TestUnanonymizeFilepath() {
 	newPath := UnanonymizeFilepath(filePath, userName)
 	assert.Equal(ts.T(), filepath.Join(strings.Replace(userName, "@", "_", 1), filePath), newPath)
 }
+func (ts *HelperTest) TestUnanonymizeFilepath_oldMessage() {
+	filePath := "test.user_demo.org/main_folder/sub_folder/file.name"
+	userName := "test.user@demo.org"
+	newPath := UnanonymizeFilepath(filePath, userName)
+	assert.Equal(ts.T(), filePath, newPath)
+}
