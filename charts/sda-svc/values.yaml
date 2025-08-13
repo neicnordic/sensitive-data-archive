@@ -625,5 +625,6 @@ verify:
 
 jobs:
   image: postgres:15.4-alpine
+  removeUserName: true
   setKeyHash: false
   upgradeFromV1: false
