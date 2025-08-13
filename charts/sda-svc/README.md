@@ -172,7 +172,7 @@ Parameter | Description | Default
 `global.inbox.s3ReadyPath` | Endpoint to verify that the inbox is respondig. |`""`
 `global.sync.api.password` | Password for authenticating to the syncAPI server | `null`
 `global.sync.api.user` | User for authenticating to the syncAPI server | `null`
-`global.sync.brokerQueue` | Queue to read messages from | `sync`
+`global.sync.brokerQueue` | Queue to read messages from | `mapping_stream`
 `global.sync.centerPrefix` | Prefix for locally generated datasets | `null`
 `global.sync.destination.storageType` | Storage type for the sync destination, currently only supports S3 | `s3`
 `global.sync.destination.accesskey` | Access key to S3 sync destination | `null`

@@ -69,6 +69,9 @@
        {
           "role": "testu@lifescience-ri.eu",
           "rolebinding": "admin"
-       }
+       }, {
+        "role": "requester@demo.org",
+        "rolebinding": "admin"
+      }
     ]
  }
