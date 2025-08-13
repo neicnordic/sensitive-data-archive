@@ -25,7 +25,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v3
@@ -69,7 +69,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v3
@@ -149,7 +149,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v3
@@ -238,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Test rabbitmq federation
         run: docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Test postgres 
         run: docker compose -f .github/integration/postgres.yml run tests
@@ -265,7 +265,7 @@ jobs:
         storage: ["posix", "s3"]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Test sensitive-data-archive
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
@@ -276,7 +276,7 @@ jobs:
       - build_server_images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -299,7 +299,7 @@ jobs:
         storage: [s3, posix]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: create maven settings.xml
         uses: s4u/maven-settings-action@v3.1.0
@@ -339,7 +339,7 @@ jobs:
             storage: "posix"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Helm
         uses: azure/setup-helm@v4
