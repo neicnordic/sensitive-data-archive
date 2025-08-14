@@ -398,6 +398,7 @@ func main() {
 					log.Errorf("failed to Ack message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				}
 			}
+			log.Infof("Successfully verified the file, corr-id: %s, filepath: %s", delivered.CorrelationId, message.FilePath)
 		}
 	}()
 
