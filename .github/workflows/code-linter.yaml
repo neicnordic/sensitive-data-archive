@@ -11,7 +11,28 @@ env:
   go-version: '1.24'
 
 jobs:
+  check_changes:
+    outputs:
+      sda-download: ${{ steps.changes.outputs.sda-download }}
+      sda-admin: ${{ steps.changes.outputs.sda-admin }}
+      sda: ${{ steps.changes.outputs.sda }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            sda-download:
+              - 'sda-download/**'
+            sda-admin:
+            - 'sda-admin/**'
+            sda:
+            - 'sda/**'
+
   lint_sda_download:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda-download == 'true'
     name: Lint download code
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +52,8 @@ jobs:
           working-directory: sda-download
 
   lint_sda:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda == 'true'
     name: Lint sda code
     runs-on: ubuntu-latest
     steps:
@@ -50,6 +73,8 @@ jobs:
           working-directory: sda
 
   lint_sda_admin:
+    needs: check_changes
+    if: needs.check_changes.outputs.sda-admin == 'true'
     name: Lint sda-admin code
     runs-on: ubuntu-latest
     steps:
