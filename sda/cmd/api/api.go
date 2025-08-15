@@ -23,6 +23,7 @@ import (
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -234,10 +235,26 @@ func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	return db.DB.PingContext(ctx)
 }
 
+func auditLog(token jwt.Token, c *gin.Context) {
+	var bodyBytes []byte
+	bodyBytes, _ = io.ReadAll(c.Request.Body)
+	// Reading the request body also consumes it, this restores the request to the original state before read
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	log.WithFields(log.Fields{
+		"audit":  true,
+		"user":   token.Subject(),
+		"method": c.Request.Method,
+		"path":   c.Request.URL.Path,
+		"route":  c.FullPath(),
+		"body":   string(bodyBytes),
+	}).Info("incoming request")
+}
+
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := auth.Authenticate(c.Request)
 		if err != nil {
+			auditLog(token, c)
 			log.Debugln("bad token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 
@@ -246,6 +263,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
 		if err != nil {
+			auditLog(token, c)
 			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 
@@ -256,6 +274,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 			return
 		}
+		auditLog(token, c)
 		log.Debugln("authorized")
 	}
 }
