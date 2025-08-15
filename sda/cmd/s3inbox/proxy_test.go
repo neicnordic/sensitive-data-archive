@@ -468,12 +468,13 @@ func (s *ProxyTests) TestMessageFormatting() {
 	r.Header.Set("x-amz-content-sha256", "checksum")
 
 	claims := jwt.New()
-	assert.NoError(s.T(), claims.Set("sub", "user@host.domain"))
+	user := "user@host.domain"
+	assert.NoError(s.T(), claims.Set("sub", user))
 
 	// start proxy that denies everything
 	proxy := NewProxy(s.S3Fakeconf, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	msg, err := proxy.CreateMessageFromRequest(r, claims)
+	msg, err := proxy.CreateMessageFromRequest(r, claims, user)
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 
@@ -489,7 +490,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r, jwt.New())
+	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), msg.Username)
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 	assert.Equal(s.T(), "upload", msg.Operation)
@@ -507,7 +508,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 
 	// PUT a file into the system
 	filename := "/dummy/db-test-file"
-
+	anonymFilename := "db-test-file"
 	stringReader := strings.NewReader("a brand new string")
 	r, _ := http.NewRequest("PUT", filename, stringReader)
 	w := httptest.NewRecorder()
@@ -526,7 +527,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	// Check that the file is in the database
 	var fileID string
 	query := "SELECT id FROM sda.files WHERE submission_file_path = $1;"
-	err = db.DB.QueryRow(query, filename[1:]).Scan(&fileID)
+	err = db.DB.QueryRow(query, anonymFilename).Scan(&fileID)
 	assert.Nil(s.T(), err, "Failed to query database")
 	assert.NotNil(s.T(), fileID, "File not found in database")
 

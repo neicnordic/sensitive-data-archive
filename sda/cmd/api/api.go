@@ -28,6 +28,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
@@ -359,8 +360,8 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	var retryTimes = 5
-	for count := 1; count <= retryTimes; count++ {
+	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
+	for count := 1; count <= 5; count++ {
 		err = inbox.RemoveFile(filePath)
 		if err == nil {
 			break
@@ -454,8 +455,13 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	// Get inbox file handle
-	file, err := inbox.NewFileReader(filePath)
+	// Get inbox file handle #noqa
+	file, err := inbox.NewFileReader(
+		helper.UnanonymizeFilepath(
+			filePath,
+			strings.TrimPrefix(c.Param("username"), "/"),
+		),
+	)
 	if err != nil {
 		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
