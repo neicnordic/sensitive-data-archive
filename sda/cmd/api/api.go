@@ -45,9 +45,10 @@ type dataset struct {
 }
 
 var (
-	Conf *config.Config
-	err  error
-	auth *userauth.ValidateFromToken
+	Conf        *config.Config
+	err         error
+	auth        *userauth.ValidateFromToken
+	auditLogger *log.Logger
 )
 
 func main() {
@@ -234,11 +235,21 @@ func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	return db.DB.PingContext(ctx)
 }
 
+func auditLog(auditFields log.Fields) {
+	auditFields["audit"] = true
+	Conf.API.AuditLogger.WithFields(auditFields).Info("Incoming audit event")
+}
+
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := auth.Authenticate(c.Request)
 		if err != nil {
-			log.Debugln("bad token")
+			if Conf.API.AuditLogger != nil {
+				auditLog(log.Fields{
+					"authentication error": err.Error(),
+					"path":                 c.Request.URL.Path,
+				})
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 
 			return
@@ -246,15 +257,36 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
 		if err != nil {
+			if Conf.API.AuditLogger != nil {
+				auditLog(log.Fields{
+					"authorization": "error (err.Error())",
+					"user":          token.Subject(),
+					"path":          c.Request.URL.Path,
+				})
+			}
 			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 
 			return
 		}
 		if !ok {
+			if Conf.API.AuditLogger != nil {
+				auditLog(log.Fields{
+					"authorization": "failed",
+					"user":          token.Subject(),
+					"path":          c.Request.URL.Path,
+				})
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
 
 			return
+		}
+
+		if Conf.API.AuditLogger != nil {
+			auditLog(log.Fields{
+				"user": token.Subject(),
+				"path": c.Request.URL.Path,
+			})
 		}
 		log.Debugln("authorized")
 	}
