@@ -23,6 +23,7 @@ import (
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -49,6 +50,8 @@ var (
 	err  error
 	auth *userauth.ValidateFromToken
 )
+
+var auditLogger = log.New()
 
 func main() {
 	Conf, err = config.NewConfig("api")
@@ -109,6 +112,10 @@ func setup(conf *config.Config) *http.Server {
 			SkipPaths: []string{"/ready"},
 		}))
 	}
+
+	auditLogger.SetFormatter(&log.JSONFormatter{})
+	auditLogger.SetOutput(os.Stdout)
+	auditLogger.SetLevel(log.TraceLevel)
 
 	// Enable structured JSON logging in info mode for clean, parseable logs in production
 	if log.GetLevel() == log.InfoLevel {
@@ -234,10 +241,24 @@ func checkDB(db *database.SDAdb, timeout time.Duration) error {
 	return db.DB.PingContext(ctx)
 }
 
+func auditLog(token jwt.Token, c *gin.Context) {
+	if token == nil {
+		log.Warn("Empty JWT token instance")
+
+		return
+	}
+	auditLogger.WithFields(log.Fields{
+		"audit": true,
+		"user":  token.Subject(),
+		"path":  c.Request.URL.Path,
+	}).Info("incoming audit event")
+}
+
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := auth.Authenticate(c.Request)
 		if err != nil {
+			auditLog(token, c)
 			log.Debugln("bad token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 
@@ -246,6 +267,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
 		if err != nil {
+			auditLog(token, c)
 			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 
@@ -256,6 +278,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 			return
 		}
+		auditLog(token, c)
 		log.Debugln("authorized")
 	}
 }
