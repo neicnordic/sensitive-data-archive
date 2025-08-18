@@ -1140,3 +1140,34 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 
 	return accessions, nil
 }
+
+// GetIngestInfo() retrieves the ingest information needed to ingest file from the admin-api
+func (dbs *SDAdb) GetIngestInfo(fileUUID string) (IngestInfo, error) {
+	var (
+		i   IngestInfo
+		err error
+	)
+
+	for count := 0; count <= RetryTimes; count++ {
+		i, err = dbs.getIngestInfo(fileUUID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return i, err
+}
+
+// getSyncData is the actual function performing work for GetSyncData
+func (dbs *SDAdb) getIngestInfo(fileUUID string) (IngestInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT submission_user, submission_file_path from sda.files WHERE id = $1;"
+	var info IngestInfo
+	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&info.User, &info.InboxPath); err != nil {
+		return IngestInfo{}, err
+	}
+
+	return info, nil
+}
