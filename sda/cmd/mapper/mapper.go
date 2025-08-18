@@ -92,7 +92,7 @@ func main() {
 			case "mapping":
 				log.Debug("Mapping type operation, mapping files to dataset")
 				if err := db.MapFilesToDataset(mappings.DatasetID, mappings.AccessionIDs); err != nil {
-					log.Errorf("failed to map files to dataset, reason: %v", err)
+					log.Errorf("failed to map files to dataset, dataset-id: %s, reason: %v", mappings.DatasetID, err)
 
 					// Nack message so the server gets notified that something is wrong and requeue the message
 					if err := delivered.Nack(false, true); err != nil {
@@ -110,7 +110,7 @@ func main() {
 					}
 					err = inbox.RemoveFile(filePath)
 					if err != nil {
-						log.Errorf("Remove file from inbox failed, reason: %v", err)
+						log.Errorf("Remove file from inbox failed, corr-id: %s, reason: %v", delivered.CorrelationId, err)
 					}
 				}
 
@@ -143,7 +143,7 @@ func main() {
 					continue
 				}
 			default:
-				log.Errorf("unknown mappping type, %s", mappings.Type)
+				log.Errorf("unknown mapping type, %s", mappings.Type)
 			}
 
 			if err := delivered.Ack(false); err != nil {
