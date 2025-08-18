@@ -22,7 +22,7 @@
       },
        {
           "role": "submission",
-          "path": "/file/ingest",
+          "path": "/file/ingest/*",
           "action": "POST"
        },
        {

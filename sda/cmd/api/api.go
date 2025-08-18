@@ -110,7 +110,7 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
 	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                   // start ingestion of a file
+	r.POST("/file/ingest/:fileid", rbac(e), ingestFile)           // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)              // assign accession ID to a file
 	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)       // trigger reverification of a file
 	r.POST("/dataset/create", rbac(e), createDataset)             // maps a set of files to a dataset
@@ -254,19 +254,26 @@ func getFiles(c *gin.Context) {
 
 func ingestFile(c *gin.Context) {
 	var ingest schema.IngestionTrigger
-	if err := c.BindJSON(&ingest); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
+	fileID := c.Param("fileid")
 
+	if fileID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is not provided")
 		return
 	}
 
+	// Get the user and the inbox filepath
+	ingestInfo, err := Conf.API.DB.GetIngestInfo(fileID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
+		return
+	}
+
+	// Information needed for the ingest message
 	ingest.Type = "ingest"
+	ingest.User = ingestInfo.User
+	ingest.FilePath = ingestInfo.InboxPath
+
+	// Marshal ingest message
 	marshaledMsg, _ := json.Marshal(&ingest)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -274,21 +281,12 @@ func ingestFile(c *gin.Context) {
 		return
 	}
 
-	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
-	if err != nil {
-		if corrID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		} else {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
-
-		return
-	}
-
+	// In this case the file id and the correlation id are the same.
+	// TODO: change the file id with the correlation id if they are not the same in GDI
+	corrID := fileID
 	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
 		return
 	}
 
