@@ -172,7 +172,7 @@ k3d-version-check: SHELL:=/bin/bash
 k3d-version-check:
 	@K3D_VERSION=$$(k3d version | cut -d'v' -f 3 | head -n 1); \
 	IFS="." read -r -a K3D_VERSION_ARR <<< "$${K3D_VERSION}"; \
-	IFS="." read -r -a K3D_VERSION_REQ <<< 5.7.0; \
+	IFS="." read -r -a K3D_VERSION_REQ <<< 5.8.0; \
 	if [[ $${K3D_VERSION_ARR[0]} -lt $${K3D_VERSION_REQ[0]} ||\
 		( $${K3D_VERSION_ARR[0]} -eq $${K3D_VERSION_REQ[0]} &&\
 		( $${K3D_VERSION_ARR[1]} -lt $${K3D_VERSION_REQ[1]} ||\
