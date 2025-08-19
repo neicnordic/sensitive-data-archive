@@ -389,7 +389,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 	m, _ := json.Marshal(message)
 	if err = app.DB.UpdateFileEventLog(fileID, "submitted", correlationID, "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to set ingestion status for file from message, file-id: %s, corr-id: %s, reason: %s", fileID, correlationID, err.Error())
+		log.Errorf("failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 	}
 
 	// 4MiB readbuffer, this must be large enough that we get the entire header and the first 64KiB datablock
@@ -444,7 +444,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 				log.Errorf("All keys failed to decrypt the submitted file, file-id: %s", fileID)
 				m, _ := json.Marshal(message)
 				if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(m)); err != nil {
-					log.Errorf("Failed to set ingestion status for file from message, file-id: %s, corr-id: %s, reason: %s", fileID, correlationID, err.Error())
+					log.Errorf("Failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 				}
 
 				// Send the message to an error queue so it can be analyzed.
@@ -532,17 +532,17 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		return "nack"
 	}
 
-	log.Debugf("Wrote archived file (file-id: %s, corr-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)", fileID, correlationID, message.User, message.FilePath, fileID, fileInfo.Size)
+	log.Debugf("Wrote archived file (file-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)", fileID, message.User, message.FilePath, fileID, fileInfo.Size)
 
 	status, err = app.DB.GetFileStatus(correlationID)
 	if err != nil {
-		log.Errorf("failed to get file status, file-id: %s, corr-id: %s, reason: (%s)", fileID, correlationID, err.Error())
+		log.Errorf("failed to get file status, file-id: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
 	}
 
 	if status == "disabled" {
-		log.Infof("file is disabled, stopping ingestion, file-id: %s, corr-id: %s", fileID, correlationID)
+		log.Infof("file is disabled, stopping ingestion, file-id: %s", fileID)
 
 		return "ack"
 	}
@@ -554,11 +554,11 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	}
 
 	if err := app.DB.UpdateFileEventLog(fileID, "archived", correlationID, "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to set event log status for file, file-id: %s, corr-id: %s, reason: %s", fileID, correlationID, err.Error())
+		log.Errorf("failed to set event log status for file, file-id: %s, reason: %s", fileID, err.Error())
 
 		return "nack"
 	}
-	log.Debugf("File marked as archived (file-id: %s, corr-id: %s, user: %s, filepath: %s)", fileID, correlationID, message.User, message.FilePath)
+	log.Debugf("File marked as archived (file-id: %s, user: %s, filepath: %s)", fileID, message.User, message.FilePath)
 
 	// Send message to archived
 	msg := schema.IngestionVerification{
