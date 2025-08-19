@@ -180,7 +180,7 @@ func main() {
 
 				continue
 			case "same":
-				log.Infoln("file already has a stable ID, marking it as ready, file-id: " + fileID)
+				log.Infof("file already has a stable ID, marking it as ready, file-id: %s", fileID)
 			default:
 				if conf.Backup.Type != "" && conf.Archive.Type != "" {
 					if err = backupFile(delivered); err != nil {
