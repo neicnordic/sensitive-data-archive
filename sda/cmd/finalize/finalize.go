@@ -78,7 +78,7 @@ func main() {
 			if err != nil {
 				log.Errorf("validation of incoming message (ingestion-accession) failed, corr-id: %s, reason: %v ", delivered.CorrelationId, err)
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
 
 				continue
@@ -91,7 +91,7 @@ func main() {
 			if err != nil {
 				log.Errorf("failed to get file status, corr-id: %s, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, corr-id: %s, reason: (%v)", delivered.CorrelationId, err)
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 
 				continue
@@ -101,7 +101,7 @@ func main() {
 			case "disabled":
 				log.Infof("file with corr-id: %s is disabled, stop the work", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
 
 				continue
@@ -111,14 +111,14 @@ func main() {
 			case "ready":
 				log.Infof("File with corr-id: %s is already marked as ready.", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking message, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+					log.Errorf("Failed acking message, reason: %v", err)
 				}
 
 				continue
 			default:
 				log.Warnf("file with corr-id: %s is not verified yet, stop the work", delivered.CorrelationId)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
 
 				continue
@@ -128,7 +128,7 @@ func main() {
 			if err != nil {
 				log.Errorf("failed to get fileID for file, corr-id: %s, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, corr-id: %s, reason: (%v)", delivered.CorrelationId, err)
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 
 				continue
@@ -152,7 +152,7 @@ func main() {
 			if err != nil {
 				log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", fileID, err)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", fileID, err)
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 
 				continue
@@ -163,7 +163,7 @@ func main() {
 				log.Debugf("Seems accession ID already exists (file-id: %s, corr-id: %s, accession-id: %s", fileID, delivered.CorrelationId, message.AccessionID)
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
-					Error:           "There is a conflict regarding the file accessionID, file-id: " + fileID,
+					Error:           "There is a conflict regarding the file accessionID",
 					Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
 					OriginalMessage: message,
 				}
@@ -171,11 +171,11 @@ func main() {
 
 				// Send the message to an error queue so it can be analyzed.
 				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%v)", fileID, delivered.CorrelationId, err)
+					log.Errorf("failed to publish message, reason: %v", err)
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, file-id: %s, reason: (%v)", fileID, err)
+					log.Errorf("failed to Ack message, reason: %v", err)
 				}
 
 				continue
@@ -186,7 +186,7 @@ func main() {
 					if err = backupFile(delivered); err != nil {
 						log.Errorf("Failed to backup file, file-id: %s, corr-id: %v, reason: %v", fileID, delivered.CorrelationId, err)
 						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", fileID, err)
+							log.Errorf("failed to Nack message, reason: %v", err)
 						}
 
 						continue
@@ -196,7 +196,7 @@ func main() {
 				if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
 					log.Errorf("Failed to set accessionID for file, file-id: %s, corr-id: %v, reason: %v", fileID, delivered.CorrelationId, err)
 					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", fileID, err)
+						log.Errorf("failed to Nack message, reason: %v", err)
 					}
 
 					continue
@@ -207,23 +207,23 @@ func main() {
 			if err := db.UpdateFileEventLog(fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
 				log.Errorf("set status ready failed, file-id: %s, corr-id: %s, reason: (%v)", fileID, delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", fileID, err)
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 
 				continue
 			}
 
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
-				log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%v)", fileID, delivered.CorrelationId, err)
+				log.Errorf("failed to publish message, reason: %v", err)
 				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", fileID, err)
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 
 				continue
 			}
 
 			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, file-id: %s, reason: (%v)", fileID, err)
+				log.Errorf("failed to Ack message, reason: %v", err)
 			}
 		}
 	}()
