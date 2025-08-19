@@ -5,8 +5,6 @@ COPY pom.xml .
 RUN mkdir -p /root/.m2 && \
     mkdir /root/.m2/repository
 
-COPY settings.xml /root/.m2
-
 RUN mvn dependency:go-offline --no-transfer-progress
 
 COPY src/ /src/

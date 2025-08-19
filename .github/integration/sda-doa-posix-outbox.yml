@@ -130,7 +130,6 @@ services:
     volumes:
       - ../../sda-doa/src:/sda-doa/src
       - ../../sda-doa/pom.xml:/sda-doa/pom.xml
-      - ../../sda-doa/settings.xml:/root/.m2/settings.xml
       - test_file:/sda-doa/outbox
       - ./tests:/tests
       - encryption_files:/test
