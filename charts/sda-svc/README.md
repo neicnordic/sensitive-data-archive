@@ -239,6 +239,8 @@ Parameter | Description | Default
 --------- | ----------- | -------
 `api.replicaCount` | Desired number of replicas | `2`
 `api.annotations` | Specific annotation for the auth pod | `{}`
+`api.livenessProbe` | Liveness definition for the api pod. |`{}`
+`api.readinessProbe` | Rediness definition for the api pod. |`{}`
 `api.resources.requests.memory` | Memory request for container. |`128Mi`
 `api.resources.requests.cpu` | CPU request for container. |`100m`
 `api.resources.limits.memory` | Memory limit for container. |`256Mi`
@@ -246,19 +248,17 @@ Parameter | Description | Default
 `api.tls.secretName` | Secret holding the application TLS certificates |``
 `auth.replicaCount` | desired number of replicas | `2`
 `auth.annotations` | Specific annotation for the auth pod | `{}`
+`auth.livenessProbe` | Liveness definition for the auth pod. |`{}`
+`auth.readinessProbe` | Rediness definition for the auth pod. |`{}`
 `auth.resources.requests.memory` | Memory request for container. |`128Mi`
 `auth.resources.requests.cpu` | CPU request for container. |`100m`
 `auth.resources.limits.memory` | Memory limit for container. |`256Mi`
 `auth.resources.limits.cpu` | CPU limit for container. |`250m`
-`sync.annotations` | Specific annotation for the sync pod | `{}`
-`sync.resources.requests.memory` | Memory request for sync container. |`128Mi`
-`sync.resources.requests.cpu` | CPU request for sync container. |`100m`
-`sync.resources.limits.memory` | Memory limit for sync container. |`256Mi`
-`sync.resources.limits.cpu` | CPU limit for sync container. |`250m`
-`sync.deploy` | Set to true if the sync service should be active | `false`
 `doa.replicaCount` | desired number of replicas | `2`
 `doa.keystorePass` | keystore password | `changeit`
 `doa.annotations` | Specific annotation for the doa pod | `{}`
+`doa.livenessProbe` | Liveness definition for the doa pod. |`{}`
+`doa.readinessProbe` | Rediness definition for the doa pod. |`{}`
 `doa.resources.requests.memory` | Memory request for dataedge container. |`128Mi`
 `doa.resources.requests.cpu` | CPU request for dataedge container. |`100m`
 `doa.resources.limits.memory` | Memory limit for dataedge container. |`1024Mi`
@@ -266,6 +266,8 @@ Parameter | Description | Default
 `download.replicaCount` | desired number of replicas | `2`
 `download.keystorePass` | keystore password | `changeit`
 `download.annotations` | Specific annotation for the dataedge pod | `{}`
+`download.livenessProbe` | Liveness definition for the download pod. |`{}`
+`download.readinessProbe` | Rediness definition for the download pod. |`{}`
 `download.resources.requests.memory` | Memory request for dataedge container. |`256Mi`
 `download.resources.requests.cpu` | CPU request for dataedge container. |`100m`
 `download.resources.limits.memory` | Memory limit for dataedge container. |`512Mi`
@@ -289,6 +291,8 @@ Parameter | Description | Default
 `intercept.resources.limits.cpu` | CPU limit for intercept container. |`2000m`
 `s3Inbox.replicaCount`| desired number of S3inbox containers | `2`
 `s3Inbox.annotations` | Specific annotation for the S3inbox pod | `{}`
+`s3Inbox.livenessProbe` | Liveness definition for the s3Inbox pod. |`{}`
+`s3Inbox.readinessProbe` | Rediness definition for the S3inbox pod. |`{}`
 `s3Inbox.resources.requests.memory` | Memory request for s3Inbox container. |`128Mi`
 `s3Inbox.resources.requests.cpu` | CPU request for s3Inbox container. |`100m`
 `s3Inbox.resources.limits.memory` | Memory limit for s3Inbox container. |`1024Mi`
@@ -297,18 +301,22 @@ Parameter | Description | Default
 `sftpInbox.keystorePass` | sftp inbox keystore password | `changeit`
 `sftpInbox.nodeHostname` | Node name if the sftp inbox  needs to be deployed on a specific node | `""`
 `sftpInbox.annotations` | Specific annotation for the sftp inbox pod | `{}`
+`sftpInbox.livenessProbe` | Liveness definition for the sftpInbox pod. |`{}`
+`sftpInbox.readinessProbe` | Rediness definition for the sftpInbox pod. |`{}`
 `sftpInbox.resources.requests.memory` | Memory request for sftpInbox container. |`128Mi`
 `sftpInbox.resources.requests.cpu` | CPU request for sftpInbox container. |`100m`
 `sftpInbox.resources.limits.memory` | Memory limit for sftpInbox container. |`256Mi`
 `sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. |`250m`
-`sync.replicaCount`| desired number of sync containers | `1`
 `sync.annotations` | Specific annotation for the sync pod | `{}`
+`sync.deploy` | Set to true if the sync service should be active | `false`
+`sync.replicaCount`| desired number of sync containers | `1`
 `sync.resources.requests.memory` | Memory request for sync container. |`128Mi`
 `sync.resources.requests.cpu` | CPU request for sync container. |`100m`
 `sync.resources.limits.memory` | Memory limit for sync container. |`512Mi`
 `sync.resources.limits.cpu` | CPU limit for sync container. |`500m`
 `syncAPI.replicaCount`| desired number of syncAPI containers | `1`
 `syncAPI.annotations` | Specific annotation for the syncAPI pod | `{}`
+`syncAPI.readinessProbe` | Rediness definition for the syncAPI pod. |`{}`
 `syncAPI.resources.requests.memory` | Memory request for syncAPI container. |`64Mi`
 `syncAPI.resources.requests.cpu` | CPU request for syncAPI container. |`100m`
 `syncAPI.resources.limits.memory` | Memory limit for syncAPI container. |`256Mi`

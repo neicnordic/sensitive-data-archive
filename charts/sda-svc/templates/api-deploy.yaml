@@ -78,25 +78,9 @@ spec:
           containerPort: 8080
           protocol: TCP
         livenessProbe:
-          httpGet:
-            port: api
-            path: /ready
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
-            httpHeaders:
-            - name: Host
-              value: {{ .Values.global.ingress.hostName.api }}
-          initialDelaySeconds: 20
-          periodSeconds: 10
+{{ toYaml .Values.api.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          httpGet:
-            port: api
-            path: /ready
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
-            httpHeaders:
-            - name: Host
-              value: {{ .Values.global.ingress.hostName.api }}
-          initialDelaySeconds: 20
-          periodSeconds: 10
+{{ toYaml .Values.api.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.api.resources | trim | indent 10 }}
         volumeMounts:

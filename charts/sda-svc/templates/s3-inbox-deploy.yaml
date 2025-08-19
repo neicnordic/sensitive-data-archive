@@ -97,19 +97,9 @@ spec:
           containerPort: 8000
           protocol: TCP
         livenessProbe:
-          httpGet:
-            path: /health
-            port: inbox
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
-          failureThreshold: 1
-          periodSeconds: 10
+{{ toYaml .Values.s3Inbox.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          httpGet:
-            path: /health
-            port: inbox
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled ) }}
-          failureThreshold: 1
-          periodSeconds: 5
+{{ toYaml .Values.s3Inbox.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.s3Inbox.resources | trim | indent 10 }}
         volumeMounts:

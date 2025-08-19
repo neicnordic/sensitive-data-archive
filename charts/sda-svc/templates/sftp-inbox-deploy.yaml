@@ -154,21 +154,9 @@ spec:
           containerPort: 2222
           protocol: TCP
         livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - netstat -an | grep -q ':2222 '
-          initialDelaySeconds: 120
-          periodSeconds: 5
+{{ toYaml .Values.sftpInbox.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - netstat -an | grep -q ':2222 '
-          initialDelaySeconds: 30
-          periodSeconds: 5
+{{ toYaml .Values.sftpInbox.readinessProbe | trim | indent 10 }}
         volumeMounts:
         - name: inbox
           mountPath: "/ega/inbox"
