@@ -99,14 +99,14 @@ func main() {
 				log.Errorf("validation of incoming message (dataset-mapping) failed, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed in sync service, corr-id: " + delivered.CorrelationId,
+					Error:           "Message validation failed in sync service",
 					Reason:          err.Error(),
 					OriginalMessage: string(delivered.Body),
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%v)", err)
 				}
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("failed to Ack message, reason: (%s)", err.Error())

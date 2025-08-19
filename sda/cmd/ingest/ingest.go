@@ -129,17 +129,17 @@ func main() {
 				log.Errorf("validation of incoming message (ingestion-trigger) failed, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed, corr-id: " + delivered.CorrelationId,
+					Error:           "Message validation failed",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: %v", err)
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
 
 				continue
@@ -158,23 +158,23 @@ func main() {
 			default:
 				log.Errorln("unexpected ingest message type")
 				if err := delivered.Reject(false); err != nil {
-					log.Errorf("failed to reject message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to reject message, reason: %v", err)
 				}
 			}
 
 			switch ackNack {
 			case "ack":
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to ack message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to ack message, reason: %v", err)
 				}
 			case "nack":
 				if err = delivered.Nack(false, false); err != nil {
-					log.Errorf("Failed to Nack message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to Nack message, reason: %v", err)
 				}
 			default:
 				// will catch `reject`s, failures that should not be requeued.
 				if err := delivered.Reject(false); err != nil {
-					log.Errorf("failed to reject message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to reject message, reason: %v", err)
 				}
 			}
 		}
@@ -261,13 +261,13 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 				}
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
-					Error:           "Failed to open file to ingest, file-id: " + fileID,
+					Error:           "Failed to open file to ingest",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
 				if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, file-id: %s, reason: (%s)", fileID, err.Error())
+					log.Errorf("failed to publish message, reason: %v", err)
 
 					return "reject"
 				}
@@ -313,7 +313,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			}
 
 			if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
-				log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", fileID, correlationID, err.Error())
+				log.Errorf("failed to publish message, reason: %v", err)
 
 				return "reject"
 			}
@@ -354,13 +354,13 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			}
 			// Send the message to an error queue so it can be analyzed.
 			fileError := broker.InfoError{
-				Error:           "Failed to open file to ingest, file-id: " + fileID,
+				Error:           "Failed to open file to ingest",
 				Reason:          err.Error(),
 				OriginalMessage: message,
 			}
 			body, _ := json.Marshal(fileError)
 			if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", fileID, correlationID, err.Error())
+				log.Errorf("failed to publish message, reason: %v", err)
 
 				return "reject"
 			}
@@ -449,13 +449,13 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
-					Error:           "Trying to decrypt the submitted file failed, file-id: " + fileID,
+					Error:           "Trying to decrypt the submitted file failed",
 					Reason:          "Decryption failed with the available key(s)",
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
 				if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", fileID, correlationID, err.Error())
+					log.Errorf("failed to publish message, reason: %v", err)
 				}
 
 				return "ack"
@@ -581,7 +581,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 	if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
 		// TODO fix resend mechanism
-		log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", fileID, correlationID, err.Error())
+		log.Errorf("failed to publish message, reason: %v", err)
 
 		return "reject"
 	}

@@ -81,10 +81,10 @@ func main() {
 			if routingKey == "" {
 				log.Debugf("msg type: %s", msgType)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "undeliverable", delivered.Body); err != nil {
-					log.Errorf("failed to publish message, corr-id: %s, reason: (%v)", delivered.CorrelationId, err)
+					log.Errorf("failed to publish message, reason: (%v)", err)
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to ack message, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+					log.Errorf("failed to ack message for reason: %v", err)
 				}
 
 				continue
@@ -92,10 +92,10 @@ func main() {
 
 			log.Infof("Routing message (corr-id: %s, routingkey: %s)", delivered.CorrelationId, routingKey)
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, routingKey, delivered.Body); err != nil {
-				log.Errorf("failed to publish message, corr-id: %s, reason: (%v)", delivered.CorrelationId, err)
+				log.Errorf("failed to publish message, reason: (%v)", err)
 			}
 			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to ack message, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+				log.Errorf("failed to ack message for reason: %v", err)
 			}
 		}
 	}()

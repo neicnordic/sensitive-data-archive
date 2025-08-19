@@ -77,17 +77,17 @@ func main() {
 				log.Errorf("validation of incoming message (ingestion-verification) failed, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed, corr-id: " + delivered.CorrelationId,
+					Error:           "Message validation failed",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: %v", err)
 				}
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to Ack message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("Failed to Ack message, reason: %v", err)
 				}
 
 				// Restart on new message
@@ -107,18 +107,18 @@ func main() {
 				log.Errorf("failed to get file status, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Getheader failed, corr-id: " + delivered.CorrelationId,
+					Error:           "Getheader failed",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -126,7 +126,7 @@ func main() {
 			if status == "disabled" {
 				log.Infof("file with corr-id: %s is disabled, stopping verification", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -136,11 +136,11 @@ func main() {
 			if err != nil {
 				log.Errorf("GetHeader failed for file with ID: %v, reason: %v", message.FileID, err.Error())
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to nack following getheader error message, file ID: %s", message.FileID)
+					log.Errorf("Failed to nack following getheader error message")
 				}
 				// store full message info in case we want to fix the db entry and retry
 				infoErrorMessage := broker.InfoError{
-					Error:           "Getheader failed, file-id: " + message.FileID,
+					Error:           "Getheader failed",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
@@ -149,7 +149,7 @@ func main() {
 
 				// Send the message to an error queue so it can be analyzed.
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -167,18 +167,18 @@ func main() {
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to Ack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+					log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
 				}
 
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
-					Error:           "Failed to get archived file size, file-id: " + message.FileID,
+					Error:           "Failed to get archived file size",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -190,14 +190,14 @@ func main() {
 				log.Errorf("Failed to open archived file, file-id: %s, reason: %v ", message.FileID, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Failed to open archived file, file-id: " + message.FileID,
+					Error:           "Failed to open archived file",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
 				// Restart on new message
@@ -237,18 +237,18 @@ func main() {
 
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
-					Error:           "Failed to verify archived file, file-id: " + message.FileID,
+					Error:           "Failed to verify archived file",
 					Reason:          err.Error(),
 					OriginalMessage: message,
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("Failed to publish error message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("Failed to publish error message, reason: (%s)", err.Error())
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to ack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+					log.Errorf("Failed to ack message, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -265,7 +265,7 @@ func main() {
 				if err != nil {
 					log.Errorf("failed to get unencrypted checksum for file, file-id: %s, reason: %s", message.FileID, err.Error())
 					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -276,13 +276,13 @@ func main() {
 					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", message.FileID, err)
+							log.Errorf("failed to Nack message, reason: (%v)", err)
 						}
 
 						continue
 					}
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed to ack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+						log.Errorf("Failed to ack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -293,7 +293,7 @@ func main() {
 					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, file-id: %s, reason: (%v)", message.FileID, err)
+							log.Errorf("failed to Nack message, reason: (%v)", err)
 						}
 
 						continue
@@ -301,7 +301,7 @@ func main() {
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed to ack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+					log.Errorf("Failed to ack message, reason: (%s)", err.Error())
 				}
 
 				continue
@@ -328,18 +328,18 @@ func main() {
 					log.Errorf("failed to get file status, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 					// Send the message to an error queue so it can be analyzed.
 					infoErrorMessage := broker.InfoError{
-						Error:           "Getheader failed, corr-id: " + delivered.CorrelationId,
+						Error:           "Getheader failed",
 						Reason:          err.Error(),
 						OriginalMessage: message,
 					}
 
 					body, _ := json.Marshal(infoErrorMessage)
 					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 					}
 
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed acking canceled work, corr-id:%s, reason: (%s)", delivered.CorrelationId, err.Error())
+						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -348,7 +348,7 @@ func main() {
 				if status == "disabled" {
 					log.Infof("file with corr-id: %s is disabled, stopping verification", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
-						log.Errorf("Failed acking canceled work, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -358,7 +358,7 @@ func main() {
 				if err != nil {
 					log.Errorf("failed to get info for file, file-id: %s", message.FileID)
 					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -368,7 +368,7 @@ func main() {
 					if err := db.SetVerified(file, message.FileID); err != nil {
 						log.Errorf("SetVerified failed, file-id: %s, reason: (%s)", message.FileID, err.Error())
 						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+							log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 						}
 
 						continue
@@ -380,7 +380,7 @@ func main() {
 				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
 					log.Errorf("failed to set event log status for file, file-id: %s", message.FileID)
 					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, file-id: %s, reason: (%s)", message.FileID, err.Error())
+						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 					}
 
 					continue
@@ -389,13 +389,13 @@ func main() {
 				// Send message to verified queue
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
 					// TODO fix resend mechanism
-					log.Errorf("failed to publish message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
 					continue
 				}
 
 				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, file-id: %s, corr-id: %s, reason: (%s)", message.FileID, delivered.CorrelationId, err.Error())
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 				}
 			}
 			log.Infof("Successfully verified the file, file-id: %s, filepath: %s", message.FileID, message.FilePath)
