@@ -322,7 +322,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		}
 	case "":
 		// Catch all for inboxes that doesn't update the DB
-		log.Warnln("ingesting unregistered file, corr-id: " + correlationID)
+		log.Warnf("ingesting unregistered file, corr-id: %s", correlationID)
 		fileID, err = app.DB.RegisterFile(message.FilePath, message.User)
 		if err != nil {
 			log.Errorf("InsertFile failed, corr-id: %s, reason: (%s)", correlationID, err.Error())
@@ -405,7 +405,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	for bytesRead < fileSize {
 		i, _ := io.ReadFull(file, readBuffer)
 		if i == 0 {
-			log.Errorln("readBuffer returned 0 bytes, this should not happen, file-id: " + fileID)
+			log.Errorf("readBuffer returned 0 bytes, this should not happen, file-id: %s", fileID)
 
 			return "reject"
 		}
