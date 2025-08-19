@@ -160,7 +160,7 @@ func main() {
 
 			switch accessionIDExists {
 			case "duplicate":
-				log.Debugf("Seems accession ID already exists (file-id: %s, corr-id: %s, accession-id: %s", fileID, delivered.CorrelationId, message.AccessionID)
+				log.Debugf("Seems accession ID already exists (file-id: %s, accession-id: %s", fileID, message.AccessionID)
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
 					Error:           "There is a conflict regarding the file accessionID",
@@ -184,7 +184,7 @@ func main() {
 			default:
 				if conf.Backup.Type != "" && conf.Archive.Type != "" {
 					if err = backupFile(delivered); err != nil {
-						log.Errorf("Failed to backup file, file-id: %s, corr-id: %v, reason: %v", fileID, delivered.CorrelationId, err)
+						log.Errorf("failed to backup file, file-id: %s, reason: %v", fileID, err)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: %v", err)
 						}
@@ -194,7 +194,7 @@ func main() {
 				}
 
 				if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
-					log.Errorf("Failed to set accessionID for file, file-id: %s, corr-id: %v, reason: %v", fileID, delivered.CorrelationId, err)
+					log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", fileID, err)
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: %v", err)
 					}
@@ -205,7 +205,7 @@ func main() {
 
 			// Mark file as "ready"
 			if err := db.UpdateFileEventLog(fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
-				log.Errorf("set status ready failed, file-id: %s, corr-id: %s, reason: (%v)", fileID, delivered.CorrelationId, err)
+				log.Errorf("set status ready failed, file-id: %s, reason: %v", fileID, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
 				}
