@@ -42,20 +42,21 @@ Endpoints:
 
 Admin endpoints are only available to a set of whitelisted users specified in the application config.
 
-- `/file/ingest`
-  - accepts `POST` requests with JSON data with the format: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+- `/file/ingest/:fileid`
+  - accepts `POST` requests
   - triggers the ingestion of the file.
 
   - Error codes
     - `200` Query execute ok.
-    - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+    - `400` Error due to bad request (no fileid given)
     - `401` Token user is not in the list of admins.
+    - `404` The given <fileid> does not exist
     - `500` Internal error due to DB or MQ failures.
 
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/ingest
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST https://HOSTNAME/file/ingest/UUID
     ```
 
 - `/file/accession`
@@ -281,7 +282,7 @@ The `roles` section defines the available roles
       },
       {
          "role": "submission",
-         "path": "/file/ingest",
+         "path": "/file/ingest/*",
          "action": "POST"
       },
       {
