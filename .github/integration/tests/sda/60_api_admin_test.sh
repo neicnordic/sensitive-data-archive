@@ -121,21 +121,16 @@ until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/inbox | jq -r '."messag
    sleep 2
 done
 
-# Ingest it
-new_payload=$(
-jq -c -n \
-	--arg filepath "test_dummy.org/NE12878.bam.c4gh" \
-	--arg user "test@dummy.org" \
-	'$ARGS.named'
-)
+# Find the uuid
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
 
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$new_payload" "http://api:8080/file/ingest")"
+# Ingest it
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/file/ingest/$fileid")"
 if [ "$resp" != "200" ]; then
     echo "Error when requesting to ingesting file, expected 200 got: $resp"
     exit 1
 fi
 
-fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/NE12878.bam.c4gh") | .fileID')"
 # wait for the fail to get the correct status
 RETRY_TIMES=0
 
