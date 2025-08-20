@@ -373,6 +373,21 @@ credentials:
 api:
   name: api
   replicaCount: 2
+  livenessProbe:
+    # httpGet:
+    #   port: api
+    #   path: /ready
+    #   scheme: "HTTPS"
+    # initialDelaySeconds: 20
+    # periodSeconds: 60
+    # timeoutSeconds: 30
+  readinessProbe:
+    httpGet:
+      port: api
+      path: /ready
+      scheme: "HTTPS"
+    periodSeconds: 10
+    timeoutSeconds: 9
   resources:
     requests:
       memory: "128Mi"
@@ -390,6 +405,22 @@ api:
 auth:
   name: auth
   replicaCount: 2
+  livenessProbe:
+    # httpGet:
+    #   port: auth
+    #   path: /
+    #   scheme: "HTTPS"
+    #   httpHeaders:
+    # initialDelaySeconds: 20
+    # periodSeconds: 60
+    # timeoutSeconds: 30
+  readinessProbe:
+    httpGet:
+      port: auth
+      path: /
+      scheme: "HTTPS"
+    periodSeconds: 10
+    timeoutSeconds: 9
   resources:
     requests:
       memory: "128Mi"
@@ -408,6 +439,15 @@ doa:
   name: doa
   imagePullPolicy: IfNotPresent
   replicaCount: 2
+  livenessProbe:
+    # tcpSocket:
+    #   port: doa
+    # initialDelaySeconds: 120
+    # periodSeconds: 30
+  readinessProbe:
+    tcpSocket:
+      port: doa
+    periodSeconds: 15
   resources:
     requests:
       memory: "256Mi"
@@ -428,6 +468,21 @@ doa:
 download:
   name: download
   replicaCount: 2
+  livenessProbe:
+    # httpGet:
+    #   path: /health
+    #   port: download
+    #   scheme: "HTTPS"
+    # initialDelaySeconds: 20
+    # periodSeconds: 60
+    # timeoutSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: download
+      scheme: "HTTPS"
+    periodSeconds: 10
+    timeoutSeconds: 9
   resources:
     requests:
       memory: "256Mi"
@@ -511,6 +566,12 @@ mapper:
 
 reencrypt:
   replicaCount: 1
+  readinessProbe:
+    periodSeconds: 10
+    timeoutSeconds: 2
+    grpc:
+      port: 50443
+      service: "reencrypt.Reencrypt"
   resources:
     requests:
       memory: "128Mi"
@@ -528,6 +589,22 @@ reencrypt:
 s3Inbox:
   name: s3Inbox
   replicaCount: 2
+  livenessProbe:
+    # httpGet:
+    #   path: /health
+    #   port: inbox
+    #   scheme: "HTTPS"
+    # failureThreshold: 1
+    # periodSeconds: 60
+    # timeoutSeconds: 55
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: inbox
+      scheme: "HTTPS"
+    failureThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 9
   resources:
     requests:
       memory: "128Mi"
@@ -545,6 +622,22 @@ s3Inbox:
 sftpInbox:
   name: sftpInbox
   replicaCount: 2
+  livenessProbe:
+    # exec:
+    #   command:
+    #   - /bin/sh
+    #   - -c
+    #   - netstat -an | grep -q ':2222 '
+    # initialDelaySeconds: 120
+    # periodSeconds: 30
+    # timeoutSeconds: 25
+  readinessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - netstat -an | grep -q ':2222 '
+    periodSeconds: 5
   resources:
     requests:
       memory: "128Mi"
@@ -581,6 +674,10 @@ sync:
 syncapi:
   name: sync-api
   replicaCount: 1
+  readinessProbe:
+    tcpSocket:
+      port: syncapi
+    periodSeconds: 5
   resources:
     requests:
       memory: "64Mi"

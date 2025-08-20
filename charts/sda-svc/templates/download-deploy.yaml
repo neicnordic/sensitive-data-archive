@@ -76,35 +76,9 @@ spec:
           containerPort: {{ ternary 8443 8080 .Values.global.tls.enabled }}
           protocol: TCP
         livenessProbe:
-          httpGet:
-            port: download
-            path: /health
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
-            httpHeaders:
-            - name: Host
-              value: {{ .Values.global.ingress.hostName.download }}
-          initialDelaySeconds: 20
-          periodSeconds: 10
+{{ toYaml .Values.download.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          httpGet:
-            port: download
-            path: /health
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
-            httpHeaders:
-            - name: Host
-              value: {{ .Values.global.ingress.hostName.download }}
-          initialDelaySeconds: 20
-          periodSeconds: 10
-        startupProbe:
-          httpGet:
-            path: /health
-            port: download
-            scheme: {{ ternary "HTTPS" "HTTP" ( .Values.global.tls.enabled) }}
-            httpHeaders:
-            - name: Host
-              value: {{ .Values.global.ingress.hostName.download }}
-          failureThreshold: 30
-          periodSeconds: 10
+{{ toYaml .Values.download.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.download.resources | trim | indent 10 }}
         volumeMounts:

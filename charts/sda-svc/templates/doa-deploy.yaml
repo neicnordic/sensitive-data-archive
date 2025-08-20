@@ -257,15 +257,9 @@ spec:
           containerPort: 8080
           protocol: TCP
         livenessProbe:
-          tcpSocket:
-            port: doa
-          initialDelaySeconds: 120
-          periodSeconds: 30
+{{ toYaml .Values.doa.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          tcpSocket:
-            port: doa
-          initialDelaySeconds: 30
-          periodSeconds: 15
+{{ toYaml .Values.doa.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.doa.resources | trim | indent 10 }}
         volumeMounts:

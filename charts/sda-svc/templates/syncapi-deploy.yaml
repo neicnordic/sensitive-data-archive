@@ -80,10 +80,7 @@ spec:
           containerPort: 8080
           protocol: TCP
         readinessProbe:
-          tcpSocket:
-            port: syncapi
-          initialDelaySeconds: 10
-          periodSeconds: 5
+{{ toYaml .Values.syncapi.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.syncapi.resources | trim | indent 10 }}
         volumeMounts:
