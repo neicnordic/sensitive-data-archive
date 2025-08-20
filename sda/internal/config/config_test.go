@@ -37,7 +37,7 @@ func (ts *ConfigTestSuite) SetupTest() {
 {"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
 {"role":"submission","path":"/dataset/create","action":"POST"},
 {"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
-{"role":"submission","path":"/file/ingest","action":"POST"},
+{"role":"submission","path":"/file/ingest/*","action":"POST"},
 {"role":"submission","path":"/file/accession","action":"POST"}],
 "roles":[{"role":"admin","rolebinding":"submission"},
 {"role":"dummy@example.org","rolebinding":"admin"},

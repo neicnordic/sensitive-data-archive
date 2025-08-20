@@ -32,7 +32,7 @@ func (ts *AdapterTestSuite) SetupSuite() {
 	ts.DefaultPolicy = []byte(`{"policy":[{"role":"admin","path":"/keys/*","action":"(GET)|(POST)|(PUT)"},
 		{"role":"submission","path":"/dataset/create","action":"POST"},
 		{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
-		{"role":"submission","path":"/file/ingest","action":"POST"},
+		{"role":"submission","path":"/file/ingest/:fileid","action":"POST"},
 		{"role":"submission","path":"/file/accession","action":"POST"}],
 		"roles":[{"role":"admin","rolebinding":"submission"},
 		{"role":"dummy@example.org","rolebinding":"admin"},
@@ -40,7 +40,7 @@ func (ts *AdapterTestSuite) SetupSuite() {
 	ts.ExpectedPolicy = [][]string{{"admin", "/keys/*", "(GET)|(POST)|(PUT)"},
 		{"submission", "/dataset/create", "POST"},
 		{"submission", "/dataset/release/*dataset", "POST"},
-		{"submission", "/file/ingest", "POST"},
+		{"submission", "/file/ingest/:fileid", "POST"},
 		{"submission", "/file/accession", "POST"}}
 	ts.ExpectedGroups = [][]string{{"admin", "submission"}, {"dummy@example.org", "admin"}, {"foo@example.org", "submission"}}
 
