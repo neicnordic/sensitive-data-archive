@@ -33,7 +33,18 @@ jobs:
       with:
         languages: ${{ matrix.language }}
 
+    - name: Build sda-doa
+      if: ${{ matrix.language == 'java' }}
+      working-directory: ./sda-doa
+      run: mvn clean install -DskipTests
+
+    - name: Build sda-sftp-inbox
+      if: ${{ matrix.language == 'java' }}
+      working-directory: ./sda-sftp-inbox
+      run: mvn clean install -DskipTests
+
     - name: Autobuild
+      if: ${{ matrix.language == 'go' }}
       uses: github/codeql-action/autobuild@v3
 
     - name: Perform CodeQL Analysis
