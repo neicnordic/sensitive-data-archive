@@ -2,11 +2,14 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [main]
+    branches:
+        - main
   pull_request:
-    branches: [main]
+    branches:
+        - main
     paths:
       - '**.go'
+      - '**.java'
   schedule:
     - cron: '0 15 * * 4'
 
@@ -14,6 +17,11 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'java', 'go' ]
 
     steps:
     - name: Checkout repository
@@ -23,10 +31,12 @@ jobs:
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
-        languages: go
+        languages: ${{ matrix.language }}
 
     - name: Autobuild
       uses: github/codeql-action/autobuild@v3
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
