@@ -136,13 +136,6 @@
         </dependency>
     </dependencies>
 
-    <repositories>
-        <repository>
-            <id>github-fega-norway</id>
-            <url>https://maven.pkg.github.com/ELIXIR-NO/FEGA-Norway</url>
-        </repository>
-    </repositories>
-
     <build>
         <plugins>
             <plugin>

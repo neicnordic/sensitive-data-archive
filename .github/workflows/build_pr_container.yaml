@@ -189,21 +189,6 @@ jobs:
           sarif_file: 'inbox-results.sarif'
           category: sftp-inbox
 
-
-      - name: create maven settings.xml
-        uses: s4u/maven-settings-action@v3.1.0
-        with:
-          servers: |
-            [{
-              "id":"github-fega-norway",
-              "username": "${{github.actor}}",
-              "password": "${{ secrets.GITHUB_TOKEN }}"
-            }]
-
-      - name: Copy settings.xml to sda-doa root
-        shell: bash
-        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
-
       - name: Build container for sda-doa
         uses: docker/build-push-action@v6
         with:
@@ -300,20 +285,6 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v5
-
-      - name: create maven settings.xml
-        uses: s4u/maven-settings-action@v3.1.0
-        with:
-          servers: |
-            [{
-              "id":"github-fega-norway",
-              "username": "${{github.actor}}",
-              "password": "${{ secrets.GITHUB_TOKEN }}"
-            }]
-
-      - name: Copy settings.xml to sda-doa root
-        shell: bash
-        run: cp /home/runner/.m2/settings.xml ./sda-doa/settings.xml
 
       - name: Test sda-doa for ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
