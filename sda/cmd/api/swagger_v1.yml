@@ -179,14 +179,15 @@ paths:
           description: Authentication failure.
         "500":
           description: Internal application error.
-  /file/ingest:
+  /file/ingest/{fileID}:
     post:
       description: Trigger ingestion of a given file.
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/FileIngest"
+      parameters:
+      - in: path
+        name: fileID
+        schema:
+          type: string
+        required: true
       responses:
         "200":
           description: Successful operation.
@@ -194,6 +195,8 @@ paths:
           description: Bad payload
         "401":
           description: Authentication failure.
+        "404":
+          description: Not found
         "500":
           description: Internal application error.
   /file/{userName}/{fileID}:
@@ -403,15 +406,6 @@ components:
         accession_id:
           type: string
           example: zz-file-123456-zxcvbn
-        filepath:
-          type: string
-          example: uploads/file-1.c4gh
-        user:
-          type: string
-          example: test.user@dummy.org
-    FileIngest:
-      type: object
-      properties:
         filepath:
           type: string
           example: uploads/file-1.c4gh
