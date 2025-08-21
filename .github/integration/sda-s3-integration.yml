@@ -334,7 +334,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.2-broker2.1.10-tomcat9.0-jdk11
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.3-broker2.1.13-tomcat9.0-jdk21
     ports:
       - "8800:8080"
     volumes:
