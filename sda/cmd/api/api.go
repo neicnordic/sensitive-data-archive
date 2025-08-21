@@ -317,35 +317,17 @@ func getFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
+// ingestFile function sends the ingest message
+// to the broker
 func ingestFile(c *gin.Context) {
-	var ingest schema.IngestionTrigger
-	if err := c.BindJSON(&ingest); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
+	ingest, corrID, err := msgInfoFilePath(c)
+	if err != nil {
 		return
 	}
 
-	ingest.Type = "ingest"
 	marshaledMsg, _ := json.Marshal(&ingest)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-
-	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
-	if err != nil {
-		if corrID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		} else {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
 
 		return
 	}
@@ -358,6 +340,40 @@ func ingestFile(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// ingestMsgFilePath parses the JSON payload from the request to construct an ingestion trigger message.
+// It validates the payload and retrieves the correlation ID for the file using the user and file path.
+// Returns the parsed ingestion trigger struct, the correlation ID, and an error if any occurred.
+func ingestMsgFilePath(c *gin.Context) (schema.IngestionTrigger, string, error) {
+	var ingest schema.IngestionTrigger
+	// Bind ingest and payload
+	if err := c.BindJSON(&ingest); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		return schema.IngestionTrigger{}, "", err
+	}
+	// Find the correlation id of the file
+	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
+	if err != nil {
+		if corrID == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		} else {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
+
+		return schema.IngestionTrigger{}, "", err
+	}
+	// Add type in message payload
+	ingest.Type = "ingest"
+
+	return ingest, corrID, nil
 }
 
 // The deleteFile function deletes files from the inbox and marks them as
