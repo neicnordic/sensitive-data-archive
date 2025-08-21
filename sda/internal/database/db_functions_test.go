@@ -1285,3 +1285,33 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileID2)
 }
+
+func (suite *DatabaseTests) TestGetUserAndPathFromUUID_Found() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Register a file to get a valid UUID
+	filePath := "/dummy_user.org/Dummy_folder/dummyfile.c4gh"
+	user := "dummy@user.org"
+	fileID, err := db.RegisterFile(filePath, user)
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	info, err := db.GetUserAndPathFromUUID(fileID)
+	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
+	assert.Equal(suite.T(), user, info.User)
+	assert.Equal(suite.T(), filePath, info.InboxPath)
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetUserAndPathFromUUID_NotFound() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Use a non-existent UUID
+	invalidUUID := "abc-123"
+	info, err := db.GetUserAndPathFromUUID(invalidUUID)
+	assert.Error(suite.T(), err, "expected error for non-existent UUID")
+	assert.Empty(suite.T(), info.User)
+	assert.Empty(suite.T(), info.InboxPath)
+	db.Close()
+}
