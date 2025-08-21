@@ -320,7 +320,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
 		default:
-			return nil, errors.New("archive.type not set")
+			log.Warnln(" archive not configured, backup will not be performed.")
 		}
 
 		switch viper.GetString("backup.type") {
@@ -329,7 +329,7 @@ func NewConfig(app string) (*Config, error) {
 		case POSIX:
 			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
 		default:
-			return nil, errors.New("backup.type not set")
+			log.Warnln(" backup destination not configured, backup will not be performed.")
 		}
 	case "intercept":
 		requiredConfVars = []string{
