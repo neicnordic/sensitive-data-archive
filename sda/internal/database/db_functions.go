@@ -1174,3 +1174,34 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 
 	return accessions, nil
 }
+
+// GetUserAndPathFromUUID() retrieves user and path by giving the file UUID
+func (dbs *SDAdb) GetUserAndPathFromUUID(fileUUID string) (IngestInfo, error) {
+	var (
+		i   IngestInfo
+		err error
+	)
+
+	for count := 0; count <= RetryTimes; count++ {
+		i, err = dbs.getUserAndPathFromUUID(fileUUID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return i, err
+}
+
+// getUserAndPathFromUUID() is the actual function performing work for GetUserAndPathFromUUID
+func (dbs *SDAdb) getUserAndPathFromUUID(fileUUID string) (IngestInfo, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = "SELECT submission_user, submission_file_path from sda.files WHERE id = $1;"
+	var info IngestInfo
+	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&info.User, &info.InboxPath); err != nil {
+		return IngestInfo{}, err
+	}
+
+	return info, nil
+}
