@@ -250,7 +250,7 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)\n", diskFileSize, fileSize)
+		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, fileSize)
 	}
 
 	file, err := archive.NewFileReader(filePath)
