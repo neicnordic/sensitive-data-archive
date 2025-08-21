@@ -110,7 +110,7 @@ func main() {
 					}
 					err = inbox.RemoveFile(filePath)
 					if err != nil {
-						log.Errorf("Remove file from inbox failed, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+						log.Errorf("Remove file from inbox failed, reason: %v", err)
 					}
 				}
 

@@ -76,7 +76,7 @@ func main() {
 			log.Debugf("Received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-accession) failed, corr-id: %s, reason: %v ", delivered.CorrelationId, err)
+				log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", delivered.CorrelationId, err)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
@@ -89,7 +89,7 @@ func main() {
 			// If the file has been canceled by the uploader, don't spend time working on it.
 			status, err := db.GetFileStatus(delivered.CorrelationId)
 			if err != nil {
-				log.Errorf("failed to get file status, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+				log.Errorf("failed to get file status, correlation-id: %s, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
 				}
@@ -99,7 +99,7 @@ func main() {
 
 			switch status {
 			case "disabled":
-				log.Infof("file with corr-id: %s is disabled, stop the work", delivered.CorrelationId)
+				log.Infof("file with correlation-id: %s is disabled, aborting work", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
@@ -109,14 +109,14 @@ func main() {
 			case "verified":
 			case "enabled":
 			case "ready":
-				log.Infof("File with corr-id: %s is already marked as ready.", delivered.CorrelationId)
+				log.Infof("File with correlation-id: %s is already marked as ready.", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking message, reason: %v", err)
 				}
 
 				continue
 			default:
-				log.Warnf("file with corr-id: %s is not verified yet, stop the work", delivered.CorrelationId)
+				log.Warnf("file with correlation-id: %s is not verified yet, aborting work", delivered.CorrelationId)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
@@ -126,7 +126,7 @@ func main() {
 
 			fileID, err := db.GetFileID(delivered.CorrelationId)
 			if err != nil {
-				log.Errorf("failed to get fileID for file, corr-id: %s, reason: %v", delivered.CorrelationId, err)
+				log.Errorf("failed to get fileID for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
 				}
@@ -143,7 +143,7 @@ func main() {
 			completeMsg, _ := json.Marshal(&c)
 			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), completeMsg)
 			if err != nil {
-				log.Errorf("Validation of outgoing message failed, file-id: %s, reason: (%v)", fileID, err)
+				log.Errorf("Validation of outgoing message ingestion-completion failed, reason: (%v). Message body: %s\n", err, string(completeMsg))
 
 				continue
 			}
@@ -160,7 +160,7 @@ func main() {
 
 			switch accessionIDExists {
 			case "duplicate":
-				log.Debugf("Seems accession ID already exists (file-id: %s, accession-id: %s", fileID, message.AccessionID)
+				log.Errorf("Accession ID already exists in the system. (accession-id: %s)\n", message.AccessionID)
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
 					Error:           "There is a conflict regarding the file accessionID",
@@ -250,7 +250,7 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("file size in archive does not match database, disk size: %d, db size: %d", diskFileSize, fileSize)
+		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)\n", diskFileSize, fileSize)
 	}
 
 	file, err := archive.NewFileReader(filePath)

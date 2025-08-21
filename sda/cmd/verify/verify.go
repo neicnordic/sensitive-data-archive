@@ -74,7 +74,7 @@ func main() {
 			log.Debugf("received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-verification) failed, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+				log.Errorf("validation of incoming message (ingestion-verification) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Message validation failed",
@@ -104,7 +104,7 @@ func main() {
 			// If the file has been canceled by the uploader, don't spend time working on it.
 			status, err := db.GetFileStatus(delivered.CorrelationId)
 			if err != nil {
-				log.Errorf("failed to get file status, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+				log.Errorf("failed to get file status, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Getheader failed",
@@ -124,7 +124,7 @@ func main() {
 				continue
 			}
 			if status == "disabled" {
-				log.Infof("file with corr-id: %s is disabled, stopping verification", delivered.CorrelationId)
+				log.Infof("file with correlation-id: %s is disabled, stopping verification", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
@@ -325,7 +325,7 @@ func main() {
 				}
 				status, err := db.GetFileStatus(delivered.CorrelationId)
 				if err != nil {
-					log.Errorf("failed to get file status, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to get file status, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 					// Send the message to an error queue so it can be analyzed.
 					infoErrorMessage := broker.InfoError{
 						Error:           "Getheader failed",
@@ -346,7 +346,7 @@ func main() {
 				}
 
 				if status == "disabled" {
-					log.Infof("file with corr-id: %s is disabled, stopping verification", delivered.CorrelationId)
+					log.Infof("file with correlation-id: %s is disabled, stopping verification", delivered.CorrelationId)
 					if err := delivered.Ack(false); err != nil {
 						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}

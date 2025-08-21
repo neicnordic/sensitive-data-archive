@@ -126,7 +126,7 @@ func main() {
 			message := schema.IngestionTrigger{}
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.Conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-trigger) failed, corr-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+				log.Errorf("validation of incoming message (ingestion-trigger) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Message validation failed",
@@ -203,7 +203,7 @@ func (app *Ingest) registerC4GHKey() error {
 func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrigger) string {
 	fileID, err := app.DB.GetFileID(correlationID)
 	if err != nil {
-		log.Errorf("failed to get file-id for file from message (corr-id: %s), reason: %s", correlationID, err.Error())
+		log.Errorf("failed to get file-id for file from message (correlation-id: %s), reason: %s", correlationID, err.Error())
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			return "reject"
 		}
@@ -213,7 +213,7 @@ func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrig
 
 	m, _ := json.Marshal(message)
 	if err := app.DB.UpdateFileEventLog(fileID, "disabled", correlationID, "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to set event log status for file, corr-id: %s", correlationID)
+		log.Errorf("failed to set event log status for file, correlation-id: %s", correlationID)
 
 		return "nack"
 	}
@@ -225,7 +225,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	var fileID string
 	status, err := app.DB.GetFileStatus(correlationID)
 	if err != nil && err.Error() != "sql: no rows in result set" {
-		log.Errorf("failed to get status for file, corr-id: %s, reason: (%s)", correlationID, err.Error())
+		log.Errorf("failed to get status for file, correlation-id: %s, reason: (%s)", correlationID, err.Error())
 
 		return "nack"
 	}
@@ -234,7 +234,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	case "disabled":
 		fileID, err = app.DB.GetFileID(correlationID)
 		if err != nil {
-			log.Errorf("failed to get file-id for file, corr-id: %s, reason: %s", correlationID, err.Error())
+			log.Errorf("failed to get file-id for file, correlation-id: %s, reason: %s", correlationID, err.Error())
 
 			return "nack"
 		}
@@ -253,7 +253,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		if err != nil {
 			switch {
 			case strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:"):
-				log.Errorf("Failed to open file to ingest, file-id: %s, reason: (%s)", fileID, err.Error())
+				log.Errorf("Failed to open file to ingest, file-id: %s, inbox path: %s, reason: (%s)", fileID, message.FilePath, err.Error())
 				jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
 				m, _ := json.Marshal(message)
 				if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", string(jsonMsg), string(m)); err != nil {
@@ -322,22 +322,22 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		}
 	case "":
 		// Catch all for inboxes that doesn't update the DB
-		log.Warnf("ingesting unregistered file, corr-id: %s", correlationID)
+		log.Infof("ingesting unregistered file, correlation-id: %s", correlationID)
 		fileID, err = app.DB.RegisterFile(message.FilePath, message.User)
 		if err != nil {
-			log.Errorf("InsertFile failed, corr-id: %s, reason: (%s)", correlationID, err.Error())
+			log.Errorf("InsertFile failed, correlation-id: %s, reason: (%s)", correlationID, err.Error())
 
 			return "nack"
 		}
 	case "uploaded":
 		fileID, err = app.DB.GetFileID(correlationID)
 		if err != nil {
-			log.Errorf("failed to get ID for file, corr-id: %s, reason: %s", correlationID, err.Error())
+			log.Errorf("failed to get ID for file, correlation-id: %s, reason: %s", correlationID, err.Error())
 
 			return "nack"
 		}
 	default:
-		log.Warnf("unsupported file status: %s, corr-id: %s", status, correlationID)
+		log.Warnf("unsupported file status: %s, correlation-id: %s", status, correlationID)
 
 		return "reject"
 	}
