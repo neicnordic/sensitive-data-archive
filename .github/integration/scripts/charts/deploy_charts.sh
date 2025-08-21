@@ -14,7 +14,7 @@ if [ "$3" == "true" ]; then
     MQ_PORT=5671
     PROTOCOL=https
     SCHEME=HTTPS
-    GRPC_PORT=50443
+    GRPC_PORT=50444
 fi
 
 dir=".github/integration/scripts/charts"
@@ -73,11 +73,11 @@ if [ "$1" == "sda-svc" ]; then
         --set global.sync.api.password="$sync_api_pass" \
         --set global.sync.api.user="$sync_api_user" \
         --set global.sync.remote.host="$sync_host" \
-        --set api.readinessProbe.httpGet.scheme:="$SCHEME" \
-        --set auth.readinessProbe.httpGet.scheme:="$SCHEME" \
-        --set download.readinessProbe.httpGet.scheme:="$SCHEME" \
-        --set s3inbox.readinessProbe.httpGet.scheme:="$SCHEME" \
-        --set syncAPI.readinessProbe.httpGet.scheme:="$SCHEME" \
+        --set api.readinessProbe.httpGet.scheme="$SCHEME" \
+        --set auth.readinessProbe.httpGet.scheme="$SCHEME" \
+        --set download.readinessProbe.httpGet.scheme="$SCHEME" \
+        --set s3Inbox.readinessProbe.httpGet.scheme="$SCHEME" \
+        --set syncAPI.readinessProbe.httpGet.scheme="$SCHEME" \
         --set reencrypt.readinessProbe.grpc.port="$GRPC_PORT" \
         -f "$dir/values.yaml" \
         --wait
