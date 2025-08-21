@@ -33,10 +33,22 @@ jobs:
       with:
         languages: ${{ matrix.language }}
 
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: 21
+
     - name: Build sda-doa
       if: ${{ matrix.language == 'java' }}
       working-directory: ./sda-doa
       run: mvn clean install -DskipTests
+
+    - name: Set up JDK 19
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: 19
 
     - name: Build sda-sftp-inbox
       if: ${{ matrix.language == 'java' }}
