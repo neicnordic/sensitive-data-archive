@@ -444,7 +444,7 @@ func (s *TestSuite) SetupSuite() {
 	s.RBAC = []byte(`{"policy":[{"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
 	{"role":"submission","path":"/dataset/create","action":"POST"},
 	{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
-	{"role":"submission","path":"/file/ingest","action":"POST"},
+	{"role":"submission","path":"/file/ingest*","action":"POST"},
 	{"role":"submission","path":"/file/accession","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
@@ -1141,6 +1141,47 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 	b, _ := io.ReadAll(okResponse.Body)
 	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
 	assert.Contains(s.T(), string(b), "sql: no rows in result set")
+}
+
+func (s *TestSuite) TestMsgInfoFileID_Found() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
+
+	ingest, corrID, err := msgInfoFileID(c, fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, ingest.User)
+	assert.Equal(s.T(), filePath, ingest.FilePath)
+	assert.Equal(s.T(), fileID, corrID)
+}
+
+func (s *TestSuite) TestMsgInfoFileID_NotFound() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	_, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
+
+	ingest, corrID, err := msgInfoFileID(c, "random-id")
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), w.Body.String(), "file ID not found")
+	assert.Equal(s.T(), http.StatusNotFound, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
 }
 
 func (s *TestSuite) TestSetAccession() {
