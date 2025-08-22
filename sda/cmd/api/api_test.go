@@ -1143,6 +1143,90 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 	assert.Contains(s.T(), string(b), "sql: no rows in result set")
 }
 
+func (s *TestSuite) TestIngestMsgFilePath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":     user,
+		"filepath": filePath,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	ingest, corrID, err := ingestMsgFilePath(c)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, ingest.User)
+	assert.Equal(s.T(), filePath, ingest.FilePath)
+	assert.Equal(s.T(), fileID, corrID)
+}
+
+func (s *TestSuite) TestIngestMsgFilePath_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":     "no-dummy-user",
+		"filepath": filePath,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	ingest, corrID, err := ingestMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestIngestMsgFilePath_WrongPath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update satus of file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":     user,
+		"filepath": "random/path",
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	ingest, corrID, err := ingestMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
+}
+
 func (s *TestSuite) TestMsgInfoFileID_Found() {
 	user := "dummy"
 	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
