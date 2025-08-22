@@ -287,9 +287,22 @@ func getFiles(c *gin.Context) {
 // ingestFile function sends the ingest message
 // to the broker
 func ingestFile(c *gin.Context) {
-	ingest, corrID, err := msgInfoFilePath(c)
-	if err != nil {
-		return
+	var (
+		ingest schema.IngestionTrigger
+		corrID string
+		err    error
+	)
+	fileID := c.Query("fileid")
+	if fileID == "" {
+		ingest, corrID, err = msgInfoFilePath(c)
+		if err != nil {
+			return
+		}
+	} else {
+		ingest, corrID, err = msgInfoFileID(c, fileID)
+		if err != nil {
+			return
+		}
 	}
 
 	marshaledMsg, _ := json.Marshal(&ingest)
@@ -338,6 +351,33 @@ func msgInfoFilePath(c *gin.Context) (schema.IngestionTrigger, string, error) {
 	}
 	// Add type in message payload
 	ingest.Type = "ingest"
+
+	return ingest, corrID, nil
+}
+
+// msgInfoFileID creates the payload of the ingest message
+// by using the file UUID
+func msgInfoFileID(c *gin.Context, fileUUID string) (schema.IngestionTrigger, string, error) {
+	var ingest schema.IngestionTrigger
+	// Check if payload is provided as well
+	if c.Request.ContentLength > 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "Both file ID parameter and payload provided. Choose one")
+		return schema.IngestionTrigger{}, "", errors.New("add either parameter or payload, not both")
+	}
+	// Get the user and the inbox filepath
+	ingestInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
+		return schema.IngestionTrigger{}, "", err
+	}
+
+	// Information needed for the ingest message
+	ingest.Type = "ingest"
+	ingest.User = ingestInfo.User
+	ingest.FilePath = ingestInfo.InboxPath
+	// For BP the file UUID and the correlation ID are the same.
+	// TODO: If in GDI they are not the same then change the line below
+	corrID := fileUUID
 
 	return ingest, corrID, nil
 }
