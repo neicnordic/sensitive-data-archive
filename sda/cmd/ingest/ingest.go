@@ -213,7 +213,7 @@ func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrig
 
 	m, _ := json.Marshal(message)
 	if err := app.DB.UpdateFileEventLog(fileID, "disabled", correlationID, "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to set event log status for file, correlation-id: %s", correlationID)
+		log.Errorf("failed to update event log for file with id : %s", fileID)
 
 		return "nack"
 	}
