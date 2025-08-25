@@ -300,6 +300,12 @@ paths:
           schema:
             type: string
           required: true
+        - in: query
+          name: path_prefix
+          schema:
+            type: string
+          required: false
+          description: The inbox path prefix to filter entries on.
       responses:
         "200":
           content:
