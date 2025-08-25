@@ -1227,7 +1227,7 @@ func (s *TestSuite) TestIngestMsgFilePath_WrongPath() {
 	assert.Empty(s.T(), corrID)
 }
 
-func (s *TestSuite) TestMsgInfoFileID_Found() {
+func (s *TestSuite) TestMsgInfoFileID() {
 	user := "dummy"
 	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
 
@@ -1264,6 +1264,33 @@ func (s *TestSuite) TestMsgInfoFileID_NotFound() {
 	assert.Error(s.T(), err)
 	assert.Contains(s.T(), w.Body.String(), "file ID not found")
 	assert.Equal(s.T(), http.StatusNotFound, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestMsgInfoFileID_PayloadProvided() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":     user,
+		"filepath": filePath,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	ingest, corrID, err := msgInfoFileID(c, fileID)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), w.Body.String(), "Both file ID parameter and payload provided. Choose one")
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
 	assert.Empty(s.T(), ingest)
 	assert.Empty(s.T(), corrID)
 }
