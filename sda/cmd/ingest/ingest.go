@@ -22,6 +22,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 
@@ -249,7 +250,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		// What if the file in the inbox is different this time?
 		// Check uploaded checksum in the DB against the checksum of the file.
 		// Would be easy if the inbox message had the checksum or that the s3inbox added the checksum to the DB.
-		file, err := app.Inbox.NewFileReader(message.FilePath)
+		file, err := app.Inbox.NewFileReader(helper.UnanonymizeFilepath(message.FilePath, message.User))
 		if err != nil {
 			switch {
 			case strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:"):
@@ -342,7 +343,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		return "reject"
 	}
 
-	file, err := app.Inbox.NewFileReader(message.FilePath)
+	file, err := app.Inbox.NewFileReader(helper.UnanonymizeFilepath(message.FilePath, message.User))
 	if err != nil {
 		switch {
 		case (strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:")):
@@ -373,7 +374,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		}
 	}
 
-	fileSize, err := app.Inbox.GetFileSize(message.FilePath, false)
+	fileSize, err := app.Inbox.GetFileSize(helper.UnanonymizeFilepath(message.FilePath, message.User), false)
 	if err != nil {
 		log.Errorf("Failed to get file size of file to ingest, reason: (%s)", err.Error())
 		// Since reading the file worked, this should eventually succeed so it is ok to requeue.
