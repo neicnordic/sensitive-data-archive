@@ -126,7 +126,7 @@ func main() {
 
 			fileID, err := db.GetFileID(delivered.CorrelationId)
 			if err != nil {
-				log.Errorf("failed to get fileID for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
+				log.Errorf("failed to get file-id for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
 				}
@@ -160,7 +160,7 @@ func main() {
 
 			switch accessionIDExists {
 			case "duplicate":
-				log.Errorf("Accession ID already exists in the system. (accession-id: %s)\n", message.AccessionID)
+				log.Errorf("accession ID already exists in the system. (accession-id: %s)\n", message.AccessionID)
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
 					Error:           "There is a conflict regarding the file accessionID",
