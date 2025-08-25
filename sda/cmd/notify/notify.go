@@ -71,7 +71,7 @@ func main() {
 				log.Errorf("Failed to send email, error %v", err)
 
 				if e := d.Nack(false, false); e != nil {
-					log.Errorf("Failed to Nack message (corr-id: %s, errror: %v) ", d.CorrelationId, e)
+					log.Errorf("Failed to Nack message, error: %v) ", e)
 				}
 
 				continue
