@@ -458,9 +458,14 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 	testCases := 5
 	testUser := "GetFilesUser"
+	sub := "submission_a"
 
-	for i := 0; i < testCases; i++ {
-		fileID, err := db.RegisterFile(fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", testUser, i), testUser)
+	for i := range testCases {
+		if i == 2 {
+			sub = "submission_b"
+		}
+
+		fileID, err := db.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", testUser, sub, i), testUser)
 		assert.NoError(suite.T(), err, "failed to register file in database")
 		err = db.UpdateFileEventLog(fileID, "uploaded", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
@@ -469,11 +474,11 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		err = db.UpdateFileEventLog(fileID, "ready", fileID, testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
-	filelist, err := db.GetUserFiles("unknownuser", true)
+	filelist, err := db.GetUserFiles("unknownuser", "", true)
 	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
 
-	filelist, err = db.GetUserFiles(testUser, true)
+	filelist, err = db.GetUserFiles(testUser, "", true)
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
 
@@ -481,6 +486,10 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		assert.Equal(suite.T(), "ready", fileInfo.Status, "incorrect file status")
 		assert.Contains(suite.T(), fileInfo.AccessionID, "stableID-00", "incorrect file accession ID")
 	}
+
+	filteredFilelist, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true)
+	assert.NoError(suite.T(), err, "failed to get file list")
+	assert.Equal(suite.T(), 3, len(filteredFilelist), "file list is of incorrect length")
 }
 
 func (suite *DatabaseTests) TestGetCorrID() {
