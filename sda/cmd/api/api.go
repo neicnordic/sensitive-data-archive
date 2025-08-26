@@ -255,7 +255,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 			return
 		}
 
-		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
+		ok, err := e.Enforce(token.Subject(), c.Request.URL.Path, c.Request.Method)
 		if err != nil {
 			if Conf.API.AuditLogger != nil {
 				auditLog(log.Fields{
