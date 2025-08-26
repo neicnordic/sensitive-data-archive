@@ -244,7 +244,7 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 			return
 		}
 
-		ok, err := e.Enforce(token.Subject(), c.Request.URL.String(), c.Request.Method)
+		ok, err := e.Enforce(token.Subject(), c.Request.URL.Path, c.Request.Method)
 		if err != nil {
 			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
