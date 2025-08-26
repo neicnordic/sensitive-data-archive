@@ -708,14 +708,14 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 }
 
 // GetUserFiles retrieves all the files a user submitted
-func (dbs *SDAdb) GetUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
 	var err error
 
 	files := []*SubmissionFileInfo{}
 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		files, err = dbs.getUserFiles(userID, allData)
+		files, err = dbs.getUserFiles(userID, pathPrefix, allData)
 		if err == nil {
 			break
 		}
@@ -726,7 +726,7 @@ func (dbs *SDAdb) GetUserFiles(userID string, allData bool) ([]*SubmissionFileIn
 }
 
 // getUserFiles is the actual function performing work for GetUserFiles
-func (dbs *SDAdb) getUserFiles(userID string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	files := []*SubmissionFileInfo{}
@@ -734,11 +734,12 @@ func (dbs *SDAdb) getUserFiles(userID string, allData bool) ([]*SubmissionFileIn
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = `SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f
-LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id WHERE f.submission_user = $1
+LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id
+WHERE f.submission_user = $1 and f.submission_file_path LIKE $2
 AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);`
 
 	// nolint:rowserrcheck
-	rows, err := db.Query(query, userID)
+	rows, err := db.Query(query, userID, fmt.Sprintf("%s%%", pathPrefix))
 	if err != nil {
 		return nil, err
 	}
