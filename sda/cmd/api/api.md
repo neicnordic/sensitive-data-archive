@@ -19,6 +19,12 @@ Endpoints:
   [{"inboxPath":"requester_demo.org/data/file1.c4gh","fileStatus":"uploaded","createAt":"2023-11-13T10:12:43.144242Z"}] 
   ```
 
+    It is possible to limit the returned results by supplying a base path prefix in the query. In this case only files that have a path that starts with `submission-1` will be returned.
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET https://HOSTNAME/files?path_prefix=submission-1
+    ```
+
   If the `token` is invalid, 401 is returned.
 
 - `/datasets`
@@ -213,6 +219,12 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
     ```bash
     curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users/submitter@example.org/files
+    ```
+
+    It is possible to limit the returned results by supplying a base path prefix in the query. In this case only files that have a path that starts with `submission-1` will be returned.
+
+      ```bash
+    curl -H "Authorization: Bearer $token" -X GET https://HOSTNAME/users/submitter@example.org/files?path_prefix=submission-1
     ```
 
   - Error codes
