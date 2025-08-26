@@ -157,6 +157,24 @@ if [ "$resp" != "404" ]; then
 	exit 1
 fi
 
+# Test ingesting file by using the file id
+echo "Ingest file by using file ID"
+# Create a new file, encrypt it and upload it to inbox
+new_file="new_ingest_file.txt"
+echo "This is a new file for ingest from admin-api by using file UUID" > "$new_file"
+yes | /shared/crypt4gh encrypt -p /shared/c4gh.pub.pem -f /shared/"$new_file"
+s3cmd -c s3cfg put "$new_file" s3://test_dummy.org/"$new_file".c4gh
+sleep 3
+# Find the file id of the uploaded file
+new_fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/'$new_file'.c4gh") | .fileID')"
+# ingest the file
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/file/ingest?fileid=$new_fileid")"
+if [ "$resp" != "200" ]; then
+    echo "Error when requesting to ingesting file by the use of file id, expected 200 got: $resp"
+    exit 1
+fi
+echo "Ingestion finished successfully"
+
 # Test downloading the file from the inbox
 # Reupload a file under a different name, test to download it
 s3cmd -c s3cfg put "NA12878.bam.c4gh" s3://test_dummy.org/NC12878.bam.c4gh
