@@ -304,7 +304,12 @@ func getFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := Conf.API.DB.GetUserFiles(token.Subject(), false)
+	prefix := c.Query("path_prefix")
+	if prefix != "" {
+		prefix = fmt.Sprintf("%s/%s", strings.ReplaceAll(token.Subject(), "@", "_"), prefix)
+	}
+
+	files, err := Conf.API.DB.GetUserFiles(token.Subject(), prefix, false)
 	if err != nil {
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
@@ -726,7 +731,11 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimPrefix(username, "/")
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
-	files, err := Conf.API.DB.GetUserFiles(username, true)
+	prefix := c.Query("path_prefix")
+	if prefix != "" {
+		prefix = fmt.Sprintf("%s/%s", strings.ReplaceAll(username, "@", "_"), prefix)
+	}
+	files, err := Conf.API.DB.GetUserFiles(username, prefix, true)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
