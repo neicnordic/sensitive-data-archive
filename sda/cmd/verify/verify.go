@@ -289,7 +289,7 @@ func main() {
 				}
 
 				if file.ArchiveChecksum != message.EncryptedChecksums[0].Value {
-					log.Errorf("encrypted checksum don't match for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
+					log.Errorf("encrypted checksum mismatch for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
 					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 						if err := delivered.Nack(false, true); err != nil {

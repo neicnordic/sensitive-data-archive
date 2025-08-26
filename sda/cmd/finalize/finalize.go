@@ -160,7 +160,7 @@ func main() {
 
 			switch accessionIDExists {
 			case "duplicate":
-				log.Errorf("accession ID already exists in the system. (accession-id: %s)\n", message.AccessionID)
+				log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", fileID, message.AccessionID)
 				// Send the message to an error queue so it can be analyzed.
 				fileError := broker.InfoError{
 					Error:           "There is a conflict regarding the file accessionID",
