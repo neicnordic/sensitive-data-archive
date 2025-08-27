@@ -321,11 +321,11 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			return "ack"
 		}
 	case "":
-		// Catch all for inboxes that doesn't update the DB
-		log.Infof("ingesting unregistered file, correlation-id: %s", correlationID)
+		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
+		log.Infof("registering file, correlation-id: %s", correlationID)
 		fileID, err = app.DB.RegisterFile(message.FilePath, message.User)
 		if err != nil {
-			log.Errorf("InsertFile failed, correlation-id: %s, reason: (%s)", correlationID, err.Error())
+			log.Errorf("failed to register file, correlation-id: %s, reason: (%s)", correlationID, err.Error())
 
 			return "nack"
 		}
