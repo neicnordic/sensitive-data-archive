@@ -96,7 +96,7 @@ func main() {
 
 			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (dataset-mapping) failed, reason: (%s)", err.Error())
+				log.Errorf("validation of incoming message (dataset-mapping) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Message validation failed in sync service",
@@ -106,7 +106,7 @@ func main() {
 
 				body, _ := json.Marshal(infoErrorMessage)
 				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+					log.Errorf("failed to publish message, reason: (%v)", err)
 				}
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
@@ -129,7 +129,7 @@ func main() {
 
 			for _, aID := range message.AccessionIDs {
 				if err := syncFiles(aID); err != nil {
-					log.Errorf("failed to sync archived file %s, reason: (%s)", aID, err.Error())
+					log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
 					if err := delivered.Nack(false, false); err != nil {
 						log.Errorf("failed to nack following GetFileSize error message")
 					}
@@ -165,17 +165,17 @@ func syncFiles(stableID string) error {
 	log.Debugf("syncing file %s", stableID)
 	inboxPath, err := db.GetInboxPath(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get inbox path for file with stable ID: %s", stableID)
+		return fmt.Errorf("failed to get inbox path for file with stable ID: %s, reason: %v", stableID, err)
 	}
 
 	archivePath, err := db.GetArchivePath(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get archive path for file with stable ID: %s", stableID)
+		return fmt.Errorf("failed to get archive path for file with stable ID: %s, reason: %v", stableID, err)
 	}
 
 	fileSize, err := archive.GetFileSize(archivePath, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get filesize for file with archivepath: %s, reason: %v", archivePath, err)
 	}
 
 	file, err := archive.NewFileReader(archivePath)
