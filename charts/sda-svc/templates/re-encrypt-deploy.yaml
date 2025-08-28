@@ -82,7 +82,7 @@ spec:
         - name: c4gh
           secret:
             defaultMode: 0440
-            secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
+            secretName: {{ required "A secret for the c4gh keys is required" .Values.global.c4gh.secretName }}
       {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
