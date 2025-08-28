@@ -33,7 +33,7 @@ import (
 // server struct is used to implement reencrypt.ReEncryptServer.
 type server struct {
 	re.UnimplementedReencryptServer
-	c4ghPrivateKey *[32]byte
+	c4ghPrivateKeyList []*[32]byte
 }
 
 // hServer struct is used to implement the proxy grpc health.HealthServer.
@@ -90,14 +90,14 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	newReaderPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	newReaderPublicKeyList = append(newReaderPublicKeyList, newReaderPublicKey)
 
-	log.Debugf("crypt4ghkey: %v", *s.c4ghPrivateKey)
-
-	newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *s.c4ghPrivateKey, newReaderPublicKeyList, extraHeaderPackets...)
-	if err != nil {
-		return nil, status.Error(400, err.Error())
+	for _, key := range s.c4ghPrivateKeyList {
+		newheader, err := headers.ReEncryptHeader(in.GetOldheader(), *key, newReaderPublicKeyList, extraHeaderPackets...)
+		if err == nil {
+			return &re.ReencryptResponse{Header: newheader}, nil
+		}
 	}
 
-	return &re.ReencryptResponse{Header: newheader}, nil
+	return nil, status.Error(400, err.Error())
 }
 
 // Check implements the healthgrpc.HealthServer Check method for the proxy grpc Health server.
@@ -218,7 +218,7 @@ func main() {
 	}
 
 	s := grpc.NewServer(opts...)
-	re.RegisterReencryptServer(s, &server{c4ghPrivateKey: conf.ReEncrypt.Crypt4GHKey})
+	re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: conf.ReEncrypt.C4ghPrivateKeyList})
 	reflection.Register(s)
 
 	// Add health service for reencrypt server
