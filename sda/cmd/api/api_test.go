@@ -49,7 +49,7 @@ var BrokerAPI string
 
 type server struct {
 	reencrypt.UnimplementedReencryptServer
-	c4ghPrivateKey *[32]byte
+	c4ghPrivateKeyList []*[32]byte
 }
 
 func (s *server) ReencryptHeader(ctx context.Context, req *reencrypt.ReencryptRequest) (*reencrypt.ReencryptResponse, error) {
@@ -532,7 +532,7 @@ func (s *TestSuite) SetupSuite() {
 	go func() {
 		var opts []grpc.ServerOption
 		s.GrpcListener.gs = grpc.NewServer(opts...)
-		reencrypt.RegisterReencryptServer(s.GrpcListener.gs, &server{c4ghPrivateKey: Conf.ReEncrypt.Crypt4GHKey})
+		reencrypt.RegisterReencryptServer(s.GrpcListener.gs, &server{c4ghPrivateKeyList: Conf.ReEncrypt.C4ghPrivateKeyList})
 		if err := s.GrpcListener.gs.Serve(s.GrpcListener.Listener); err != nil {
 			s.T().Fail()
 		}
