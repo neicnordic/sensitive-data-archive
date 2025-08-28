@@ -468,11 +468,13 @@ func (ts *ConfigTestSuite) TestConfigReEncryptServer() {
 		ts.T().FailNow()
 	}
 
-	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
-	viper.Set("c4gh.passphrase", "test")
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: keyPath + "/c4gh.key", Passphrase: "test"},
+	})
 	config, err := NewConfig("reencrypt")
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 50051, config.ReEncrypt.Port)
+	assert.Equal(ts.T(), 1, len(config.ReEncrypt.C4ghPrivateKeyList))
 
 	viper.Set("grpc.CACert", certPath+"/ca.crt")
 	viper.Set("grpc.serverCert", certPath+"/tls.crt")
@@ -481,6 +483,32 @@ func (ts *ConfigTestSuite) TestConfigReEncryptServer() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), certPath+"/ca.crt", config.ReEncrypt.CACert)
 	assert.Equal(ts.T(), certPath+"/tls.crt", config.ReEncrypt.ServerCert)
+}
+
+func (ts *ConfigTestSuite) TestConfigReEncryptServer_multipleKeys() {
+	keyPath, _ := os.MkdirTemp("", "key")
+	defer os.RemoveAll(keyPath)
+	keyFile1 := keyPath + "/c4gh1.key"
+	keyFile2 := keyPath + "/c4gh2.key"
+
+	_, err := helper.CreatePrivateKeyFile(keyFile1, "test")
+	assert.NoError(ts.T(), err)
+	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
+	assert.NoError(ts.T(), err)
+
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{
+		{FilePath: keyFile1, Passphrase: "test"},
+		{FilePath: keyFile2, Passphrase: "test"},
+	})
+
+	config, err := NewConfig("reencrypt")
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 2, len(config.ReEncrypt.C4ghPrivateKeyList))
+}
+func (ts *ConfigTestSuite) TestConfigReEncryptServer_noKeys() {
+	viper.Set("c4gh.privateKeys", []C4GHprivateKeyConf{})
+	_, err := NewConfig("reencrypt")
+	assert.Error(ts.T(), err)
 }
 
 func (ts *ConfigTestSuite) TestConfigReEncryptClient() {

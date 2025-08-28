@@ -66,8 +66,8 @@ type Grpc struct {
 
 type ReEncConfig struct {
 	Grpc
-	Crypt4GHKey *[32]byte
-	Timeout     int
+	C4ghPrivateKeyList []*[32]byte
+	Timeout            int
 }
 
 type Sync struct {
@@ -386,8 +386,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 	case "reencrypt":
 		requiredConfVars = []string{
-			"c4gh.filepath",
-			"c4gh.passphrase",
+			"c4gh.privateKeys",
 		}
 	case "s3inbox":
 		requiredConfVars = []string{
@@ -1007,9 +1006,12 @@ func (c *Config) configReEncryptServer() (err error) {
 		c.ReEncrypt.Port = 50443
 	}
 
-	c.ReEncrypt.Crypt4GHKey, err = GetC4GHKey()
+	c.ReEncrypt.C4ghPrivateKeyList, err = GetC4GHprivateKeys()
 	if err != nil {
 		return err
+	}
+	if len(c.ReEncrypt.C4ghPrivateKeyList) == 0 {
+		return errors.New("no C4GH private keys configured")
 	}
 
 	return nil
