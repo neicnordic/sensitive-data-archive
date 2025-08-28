@@ -1221,7 +1221,7 @@ func (s *TestSuite) TestIngestMsgFilePath_WrongPath() {
 	assert.Empty(s.T(), corrID)
 }
 
-func (s *TestSuite) TestMsgInfoFileID() {
+func (s *TestSuite) TestIngestMsgFileID() {
 	user := "dummy"
 	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
 
@@ -1234,14 +1234,14 @@ func (s *TestSuite) TestMsgInfoFileID() {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
 
-	ingest, corrID, err := msgInfoFileID(c, fileID)
+	ingest, corrID, err := ingestMsgFileID(c, fileID)
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), user, ingest.User)
 	assert.Equal(s.T(), filePath, ingest.FilePath)
 	assert.Equal(s.T(), fileID, corrID)
 }
 
-func (s *TestSuite) TestMsgInfoFileID_NotFound() {
+func (s *TestSuite) TestIngestMsgFileID_NotFound() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 
@@ -1254,7 +1254,7 @@ func (s *TestSuite) TestMsgInfoFileID_NotFound() {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
 
-	ingest, corrID, err := msgInfoFileID(c, "random-id")
+	ingest, corrID, err := ingestMsgFileID(c, "random-id")
 	assert.Error(s.T(), err)
 	assert.Contains(s.T(), w.Body.String(), "file ID not found")
 	assert.Equal(s.T(), http.StatusNotFound, w.Code)
@@ -1262,7 +1262,7 @@ func (s *TestSuite) TestMsgInfoFileID_NotFound() {
 	assert.Empty(s.T(), corrID)
 }
 
-func (s *TestSuite) TestMsgInfoFileID_PayloadProvided() {
+func (s *TestSuite) TestIngestMsgFileID_PayloadProvided() {
 	user := "dummy"
 	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
 
@@ -1281,7 +1281,7 @@ func (s *TestSuite) TestMsgInfoFileID_PayloadProvided() {
 	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
 	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
 
-	ingest, corrID, err := msgInfoFileID(c, fileID)
+	ingest, corrID, err := ingestMsgFileID(c, fileID)
 	assert.Error(s.T(), err)
 	assert.Contains(s.T(), w.Body.String(), "Both file ID parameter and payload provided. Choose one")
 	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
