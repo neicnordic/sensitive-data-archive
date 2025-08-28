@@ -663,6 +663,47 @@ func accessionMsgFilePath(c *gin.Context) (schema.IngestionAccession, string, er
 	return accession, corrID, nil
 }
 
+// accessionMsgFileID constructs an accession message using a file UUID and accession ID provided as parameters.
+// It checks that no JSON payload is present in the request; if both are provided, it returns a 400 Bad Request.
+// The function retrieves the user, file path, and decrypted checksum from the database using the file UUID.
+// If the file UUID or checksum is not found, it responds with a 404 Not Found error.
+// Returns the accession payload, the correlation ID, and an error if any occurred.
+func accessionMsgFileID(c *gin.Context, fileUUID, acccessionID string) (schema.IngestionAccession, string, error) {
+	var accession schema.IngestionAccession
+	// Check if payload is provided as well
+	if c.Request.ContentLength > 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "Both parameters and json payload provided. Choose one")
+
+		return schema.IngestionAccession{}, "", errors.New("add either parameters or json payload, not both")
+	}
+	// Get the user and the inbox filepath
+	userPathInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
+
+		return schema.IngestionAccession{}, "", err
+	}
+	// Get the decrypted checksum
+	fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileUUID)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
+
+		return schema.IngestionAccession{}, "", err
+	}
+	// Information needed for the ingest message
+	accession.Type = "accession"
+	accession.User = userPathInfo.User
+	accession.FilePath = userPathInfo.InboxPath
+	accession.AccessionID = acccessionID
+	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
+	// For BP the file UUID and the correlation ID are the same.
+	// TODO: If in GDI they are not the same then change the line below
+	corrID := fileUUID
+
+	return accession, corrID, nil
+}
+
 func createDataset(c *gin.Context) {
 	var dataset dataset
 	if err := c.BindJSON(&dataset); err != nil {
