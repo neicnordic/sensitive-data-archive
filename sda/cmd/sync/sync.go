@@ -60,7 +60,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	publicKey, err = config.GetC4GHPublicKey()
+	publicKey, err = config.GetC4GHPublicKey("sync")
 	if err != nil {
 		log.Fatal(err)
 	}

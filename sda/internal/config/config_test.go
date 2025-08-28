@@ -337,7 +337,7 @@ func (ts *ConfigTestSuite) TestGetC4GHPublicKey() {
 	copy(kb[:], k)
 
 	viper.Set("c4gh.syncPubKeyPath", pubKeyPath+"/c4gh.pub")
-	pkBytes, err := GetC4GHPublicKey()
+	pkBytes, err := GetC4GHPublicKey("sync")
 	assert.NoError(ts.T(), err)
 	assert.NotNil(ts.T(), pkBytes)
 	assert.Equal(ts.T(), pkBytes, &kb, "GetC4GHPublicKey didn't return correct pubKey")
