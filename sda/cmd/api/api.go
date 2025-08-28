@@ -596,40 +596,8 @@ func downloadFile(c *gin.Context) {
 }
 
 func setAccession(c *gin.Context) {
-	var accession schema.IngestionAccession
-	if err := c.BindJSON(&accession); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
+	accession, corrID, err := accessionMsgFilePath(c)
 
-		return
-	}
-
-	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
-	if err != nil {
-		if corrID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		} else {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
-
-		return
-	}
-
-	fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
-	accession.Type = "accession"
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Debugln(err.Error())
@@ -647,6 +615,49 @@ func setAccession(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// accessionMsgFilePath parses the JSON payload from the request.
+// It validates the payload and retrieves all the information needed
+// to construct the accession payload message.
+// Returns the accession payload, the correlation ID, and an error if any occurred.
+func accessionMsgFilePath(c *gin.Context) (schema.IngestionAccession, string, error) {
+	var accession schema.IngestionAccession
+	if err := c.BindJSON(&accession); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+
+		return schema.IngestionAccession{}, "", err
+	}
+
+	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
+	if err != nil {
+		if corrID == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		} else {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
+
+		return schema.IngestionAccession{}, "", err
+	}
+
+	fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+	if err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return schema.IngestionAccession{}, "", err
+	}
+
+	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
+	accession.Type = "accession"
+
+	return accession, corrID, nil
 }
 
 func createDataset(c *gin.Context) {
