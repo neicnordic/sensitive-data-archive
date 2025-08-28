@@ -646,15 +646,18 @@ func accessionMsgFilePath(c *gin.Context) (schema.IngestionAccession, string, er
 		return schema.IngestionAccession{}, "", err
 	}
 
-	fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+	// For the BP case the correlation id is the same with the file id.
+	// TODO: If in GDi the IDs are different need to find the file id
+	fileUUID := corrID
+	fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileUUID)
 	if err != nil {
 		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
 
 		return schema.IngestionAccession{}, "", err
 	}
 
-	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
+	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
 	accession.Type = "accession"
 
 	return accession, corrID, nil
