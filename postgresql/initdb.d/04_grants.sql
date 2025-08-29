@@ -44,6 +44,7 @@ GRANT INSERT ON sda.file_event_log TO ingest;
 GRANT SELECT ON sda.file_event_log TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO ingest;
 GRANT SELECT ON sda.encryption_keys TO ingest;
+GRANT INSERT ON sda.encryption_keys TO ingest;
 
 -- legacy schema
 GRANT USAGE ON SCHEMA local_ega TO ingest;
