@@ -595,8 +595,30 @@ func downloadFile(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// setAccession handles requests to assign an accession ID to a file.
+// It accepts either a JSON payload with user and file path, or query parameters for fileid and accessionid.
+// If both payload and parameters are provided, a 400 Bad Request is returned.
+// The function validates the request, constructs the accession message, and sends it to the broker.
+// Returns 200 OK on success, or an appropriate error code on failure.
 func setAccession(c *gin.Context) {
-	accession, corrID, err := accessionMsgFilePath(c)
+	var (
+		accession schema.IngestionAccession
+		corrID    string
+		err       error
+	)
+	accessionID := c.Query("accessionid")
+	fileID := c.Query("fileid")
+	if fileID == "" || accessionID == "" {
+		accession, corrID, err = accessionMsgFilePath(c)
+		if err != nil {
+			return
+		}
+	} else {
+		accession, corrID, err = accessionMsgFileID(c, fileID, accessionID)
+		if err != nil {
+			return
+		}
+	}
 
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {

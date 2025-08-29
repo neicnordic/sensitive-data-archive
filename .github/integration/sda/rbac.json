@@ -27,7 +27,7 @@
        },
        {
           "role": "submission",
-          "path": "/file/accession",
+          "path": "/file/accession*",
           "action": "POST"
        },
        {
