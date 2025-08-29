@@ -389,6 +389,20 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"c4gh.privateKeys",
 		}
+	case "rotatekey":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"c4gh.rotatePubKeyPath",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+		}
 	case "s3inbox":
 		requiredConfVars = []string{
 			"broker.host",
@@ -650,6 +664,17 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "rotatekey":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		err := c.configDatabase()
+		if err != nil {
+			return nil, err
+		}
+
+		c.configSchemas()
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {
