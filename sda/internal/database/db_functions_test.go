@@ -830,6 +830,43 @@ func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
 	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
 }
 
+func (suite *DatabaseTests) TestGetKeyHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	// Register a new key and a new file
+	keyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc509`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.SetKeyHash(keyHex, fileID)
+
+	// Test happy path
+	keyHash, err := db.GetKeyHash(fileID)
+	assert.NoError(suite.T(), err, "Could not get key hash")
+	assert.Equal(suite.T(), keyHex, keyHash)
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetKeyHash_wrongFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	// Register a new key and a new file
+	keyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc509`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.SetKeyHash(keyHex, fileID)
+
+	// Test that using an unknown fileID produces an error
+	_, err = db.GetKeyHash("097e1dc9-6b42-42bf-966d-dece6fefda09")
+	assert.ErrorContains(suite.T(), err, "no rows in result set")
+
+}
+
 func (suite *DatabaseTests) TestListDatasets() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
