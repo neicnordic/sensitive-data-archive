@@ -54,6 +54,21 @@
                 "src-uri": "amqp:///sda"
             },
             "vhost": "sda"
+        },
+        {
+            "component": "shovel",
+            "name": "rotatekey",
+            "value": {
+                "ack-mode": "on-confirm",
+                "dest-queue": "rotatekey",
+                "dest-protocol": "amqp091",
+                "dest-uri": "amqp:///sda",
+                "src-delete-after": "never",
+                "src-protocol": "amqp091",
+                "src-queue": "rotatekey_stream",
+                "src-uri": "amqp:///sda"
+            },
+            "vhost": "sda"
         }
     ],
     "global_parameters": [],
@@ -148,6 +163,23 @@
             "durable": true,
             "auto_delete": false,
             "arguments": {}
+        },
+        {
+            "name": "rotatekey",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
+            "name": "rotatekey_stream",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-max-age": "1M",
+                "x-queue-type": "stream"
+            }
         },
         {
             "name": "catch_all.dead",
@@ -256,6 +288,14 @@
             "arguments": {},
             "destination": "verified",
             "routing_key": "verified"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "rotatekey_stream",
+            "routing_key": "rotatekey"
         },
         {
             "source": "sda.dead",
