@@ -63,6 +63,34 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
+func (dbs *SDAdb) GetFileIDbyAccessionID(accessionID string) (string, error) {
+	var (
+		err   error
+		count int
+		ID    string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		ID, err = dbs.getFileIDbyAccessionID(accessionID)
+		count++
+	}
+
+	return ID, err
+}
+func (dbs *SDAdb) getFileIDbyAccessionID(accessionID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT id FROM sda.files where stable_id = $1;"
+
+	var fileID string
+	err := db.QueryRow(getFileID, accessionID).Scan(&fileID)
+	if err != nil {
+		return "", err
+	}
+
+	return fileID, nil
+}
+
 // GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
 // and that is not yet archived
 func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string, error) {
