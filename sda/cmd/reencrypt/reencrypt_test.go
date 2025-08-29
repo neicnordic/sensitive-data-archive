@@ -33,7 +33,7 @@ type ReEncryptTests struct {
 	FileData         []byte
 	KeyPath          string
 	FileHeader       []byte
-	PrivateKey       *[32]byte
+	PrivateKeyList   []*[32]byte
 	UserPrivateKey   [32]byte
 	UserPublicKey    [32]byte
 	UserPubKeyString string
@@ -72,10 +72,11 @@ func (ts *ReEncryptTests) SetupTest() {
 	}
 	ts.UserPubKeyString = base64.StdEncoding.EncodeToString(buf.Bytes())
 
-	viper.Set("c4gh.filepath", ts.KeyPath+"/c4gh.key")
-	viper.Set("c4gh.passphrase", "test")
+	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
+		{FilePath: ts.KeyPath + "/c4gh.key", Passphrase: "test"},
+	})
 
-	ts.PrivateKey, err = config.GetC4GHKey()
+	ts.PrivateKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil {
 		ts.T().FailNow()
 	}
@@ -97,7 +98,7 @@ func (ts *ReEncryptTests) TestReencryptHeader() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: ts.PrivateKey})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
 		if err := s.Serve(lis); err != nil {
 			ts.T().Fail()
 		}
@@ -139,7 +140,7 @@ func (ts *ReEncryptTests) TestReencryptHeader_DataEditList() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: ts.PrivateKey})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
 		if err := s.Serve(lis); err != nil {
 			ts.T().Fail()
 		}
@@ -213,7 +214,7 @@ func (ts *ReEncryptTests) TestReencryptHeader_BadPubKey() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: ts.PrivateKey})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
 		_ = s.Serve(lis)
 	}()
 
@@ -243,7 +244,7 @@ func (ts *ReEncryptTests) TestReencryptHeader_NoHeader() {
 	go func() {
 		var opts []grpc.ServerOption
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: ts.PrivateKey})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
 		_ = s.Serve(lis)
 	}()
 
@@ -298,7 +299,7 @@ func (ts *ReEncryptTests) TestReencryptHeader_TLS() {
 		)
 		opts := []grpc.ServerOption{grpc.Creds(serverCreds)}
 		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKey: ts.PrivateKey})
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
 		if err := s.Serve(lis); err != nil {
 			ts.T().Fail()
 		}
