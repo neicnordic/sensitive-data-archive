@@ -126,6 +126,19 @@ GRANT UPDATE ON local_ega.files TO mapper;
 
 --------------------------------------------------------------------------------
 
+CREATE ROLE rotatekey;
+
+GRANT USAGE ON SCHEMA sda TO rotatekey;
+GRANT INSERT ON sda.files TO rotatekey;
+GRANT SELECT ON sda.files TO rotatekey;
+GRANT UPDATE ON sda.files TO rotatekey;
+GRANT SELECT ON sda.checksums TO rotatekey;
+GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO rotatekey;
+GRANT SELECT ON sda.file_event_log TO rotatekey;
+GRANT SELECT ON sda.encryption_keys TO rotatekey;
+
+--------------------------------------------------------------------------------
+
 CREATE ROLE sync;
 -- uses: db.GetArchived
 GRANT USAGE ON SCHEMA sda TO sync;
@@ -139,7 +152,6 @@ GRANT SELECT ON local_ega.files TO sync;
 GRANT UPDATE ON local_ega.main TO sync;
 
 --------------------------------------------------------------------------------
-
 
 CREATE ROLE download;
 
