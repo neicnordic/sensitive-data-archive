@@ -14,7 +14,7 @@ apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl post
 pip install --upgrade pip > /dev/null
 pip install aiohttp Authlib joserfc requests > /dev/null
 
-for n in api auth download finalize inbox ingest mapper sync verify; do
+for n in api auth download finalize inbox ingest mapper rotatekey sync verify; do
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
     psql -U postgres -h postgres -d sda -c "GRANT base TO $n;"
@@ -119,6 +119,11 @@ fi
 if [ ! -f "/shared/sync.sec.pem" ]; then
     echo "creating sync crypth4gh key"
     /shared/crypt4gh generate -n /shared/sync -p syncPass
+fi
+
+if [ ! -f "/shared/rotatekey.sec.pem" ]; then
+    echo "creating rotatekey crypth4gh key"
+    /shared/crypt4gh generate -n /shared/rotatekey -p rotatekeyPass
 fi
 
 if [ ! -f "/shared/keys/ssh" ]; then
