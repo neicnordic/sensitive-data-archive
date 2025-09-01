@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"net"
 	"net/http"
@@ -295,6 +296,35 @@ type TestSuite struct {
 	GoodC4ghFile string
 	BadC4ghFile  string
 	GrpcListener GrpcListener
+}
+
+func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, hash.Hash) {
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update status of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(s.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(s.T(), err)
+
+	fileInfo := database.FileInfo{
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	assert.NoError(s.T(), err, "failed to mark file as Archived")
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
+	assert.NoError(s.T(), err, "failed to mark file as Verified")
+
+	return fileID, decSha
 }
 
 func (s *TestSuite) TestShutdown() {
@@ -1411,6 +1441,86 @@ func (s *TestSuite) TestSetAccession_WrongFormat() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	fileID, decSha := helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, accession.User)
+	assert.Equal(s.T(), filePath, accession.FilePath)
+	assert.Equal(s.T(), accessionID, accession.AccessionID)
+	assert.Equal(s.T(), fmt.Sprintf("%x", decSha.Sum(nil)), accession.DecryptedChecksums[0].Value)
+	assert.Equal(s.T(), fileID, corrID)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         "no-dummy-user",
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath_WrongPath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     "random/folder/dumfile.c4gh",
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
 }
 
 func (s *TestSuite) TestCreateDataset() {
