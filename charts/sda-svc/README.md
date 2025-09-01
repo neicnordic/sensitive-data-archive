@@ -18,7 +18,7 @@ A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an 
 
 ### To 3.0.0
 
-This version adds Jobs that performes the following actions:
+This version adds jobs that perform the following actions:
 
 - Migrates the database schema from a V1 release.
 - Sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.
