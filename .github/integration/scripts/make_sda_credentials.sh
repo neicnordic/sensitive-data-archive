@@ -9,7 +9,7 @@ if [ -n "$PGSSLCERT" ]; then
 fi
 
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
-apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client >/dev/null
+apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client xxd >/dev/null
 
 pip install --upgrade pip > /dev/null
 pip install aiohttp Authlib joserfc requests > /dev/null
@@ -124,6 +124,17 @@ fi
 if [ ! -f "/shared/rotatekey.sec.pem" ]; then
     echo "creating rotatekey crypth4gh key"
     /shared/crypt4gh generate -n /shared/rotatekey -p rotatekeyPass
+fi
+
+# register the rotation key in the db
+resp=$(psql -U postgres -h postgres -d sda -At -c "SELECT description FROM sda.encryption_keys;")
+if ! echo "$resp" | grep -q 'this is the new key to rotate to'; then
+    rotateKeyHash=$(cat /shared/rotatekey.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256)
+    resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$rotateKeyHash', 'this is the new key to rotate to');")
+    if [ "$(echo "$resp" | tr -d '\n')" != "INSERT 0 1" ]; then
+        echo "insert keyhash failed"
+        exit 1
+    fi
 fi
 
 if [ ! -f "/shared/keys/ssh" ]; then
