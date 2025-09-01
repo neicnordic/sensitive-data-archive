@@ -128,14 +128,34 @@ func main() {
 			_ = json.Unmarshal(delivered.Body, &message)
 
 			for _, aID := range message.AccessionIDs {
-
 				fileID, err := db.GetFileIDbyAccessionID(aID)
 				if err != nil {
 					log.Errorf("failed to get file-id for file with accession-id: %s, reason: %v", aID, err)
 				}
 
-				// Check that the file is not already encrypted with the target key
+				// Get current keyhash for the file, send to error queue if this fails
 				oldKeyHash, err := db.GetKeyHash(fileID)
+				if err != nil {
+					log.Errorf("failed to get keyhash for file with accession-id: %s, reason: %v", aID, err)
+					// Send the message to an error queue so it can be analyzed.
+					infoErrorMessage := broker.InfoError{
+						Error:           "Failed to get keyhash in rotatekey service",
+						Reason:          err.Error(),
+						OriginalMessage: string(delivered.Body),
+					}
+
+					body, _ := json.Marshal(infoErrorMessage)
+					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+						log.Errorf("failed to publish message, reason: (%s)", err.Error())
+					}
+					if err := delivered.Ack(false); err != nil {
+						log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+					}
+
+					continue
+				}
+
+				// Check that the file is not already encrypted with the target key
 				if oldKeyHash == keyhash {
 					log.Errorf("the file with file-id: %s is already encrypted with the given rotation c4gh key", fileID)
 					if err := delivered.Nack(false, false); err != nil {
@@ -202,7 +222,6 @@ func main() {
 
 					continue
 				}
-
 			}
 
 			if err := delivered.Ack(false); err != nil {
