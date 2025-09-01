@@ -945,6 +945,7 @@ func (suite *DatabaseTests) TestGetKeyHash() {
 	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "failed to set key hash in database")
 
 	// Test happy path
 	keyHash, err := db.GetKeyHash(fileID)
@@ -965,6 +966,7 @@ func (suite *DatabaseTests) TestGetKeyHash_wrongFileID() {
 	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "failed to set key hash in database")
 
 	// Test that using an unknown fileID produces an error
 	_, err = db.GetKeyHash("097e1dc9-6b42-42bf-966d-dece6fefda09")
