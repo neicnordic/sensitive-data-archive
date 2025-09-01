@@ -1523,6 +1523,52 @@ func (s *TestSuite) TestAccessionMsgFilePath_WrongPath() {
 	assert.Empty(s.T(), corrID)
 }
 
+func (s *TestSuite) TestAccessionMsgFileID() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+
+	// Create and verify test file
+	fileID, decSha := helperCreateVerifiedTestFile(s, user, filePath)
+
+	// Set up Gin context with no payload
+	gin.SetMode(gin.ReleaseMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+fileID+"&accessionid="+accessionID, nil)
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFileID(c, fileID, accessionID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, accession.User)
+	assert.Equal(s.T(), filePath, accession.FilePath)
+	assert.Equal(s.T(), accessionID, accession.AccessionID)
+	assert.Equal(s.T(), "accession", accession.Type)
+	assert.Equal(s.T(), fileID, corrID)
+	assert.Equal(s.T(), fmt.Sprintf("%x", decSha.Sum(nil)), accession.DecryptedChecksums[0].Value)
+}
+
+func (s *TestSuite) TestAccessionMsgFileID_WrongFileID() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	// Register file and then use a random fileID
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+	randomFileID := "non-existent-file-id"
+
+	gin.SetMode(gin.ReleaseMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+randomFileID+"&accessionid="+accessionID, nil)
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFileID(c, randomFileID, accessionID)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusNotFound, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
+}
+
 func (s *TestSuite) TestCreateDataset() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
