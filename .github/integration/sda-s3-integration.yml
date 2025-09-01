@@ -253,6 +253,29 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  rotatekey:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-rotatekey]
+    container_name: rotatekey
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=rotatekey
+      - BROKER_USER=rotatekey
+      - BROKER_QUEUE=rotatekey
+      - BROKER_ROUTINGKEY=rotatekey
+      - DB_PASSWORD=rotatekey
+      - DB_USER=rotatekey
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
   cega-nss:
     container_name: cega-nss
     depends_on:
