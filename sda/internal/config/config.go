@@ -1224,7 +1224,6 @@ func GetC4GHprivateKeys() ([]*[32]byte, error) {
 
 // GetC4GHPublicKey reads the c4gh public key
 func GetC4GHPublicKey(app string) (*[32]byte, error) {
-
 	var keyPath string
 	switch app {
 	case "sync":
