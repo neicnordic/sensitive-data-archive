@@ -757,7 +757,7 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 
 	files := []database.SubmissionFileInfo{}
 	err = json.NewDecoder(okResponse.Body).Decode(&files)
-	assert.NoError(s.T(), err, "failed to list users from DB")
+	assert.NoError(s.T(), err, "failed to list files from DB")
 	assert.Equal(s.T(), 3, len(files))
 }
 
@@ -1971,7 +1971,7 @@ func (s *TestSuite) TestListUserFiles_filteredSelection() {
 
 	files := []database.SubmissionFileInfo{}
 	err = json.NewDecoder(okResponse.Body).Decode(&files)
-	assert.NoError(s.T(), err, "failed to list users from DB")
+	assert.NoError(s.T(), err, "failed to list user files from DB")
 	assert.Equal(s.T(), 3, len(files))
 	assert.Contains(s.T(), files[0].Status, "uploaded")
 }
