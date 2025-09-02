@@ -75,19 +75,30 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X POST "https://HOSTNAME/file/ingest?fileid=<FILE_UUID>"
 
 - `/file/accession`
-  - accepts `POST` requests with JSON data with the format: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+  - accepts `POST` requests with either:
+    - JSON data: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+    - OR query parameters: `/file/accession?fileid=<FILE_UUID>&accessionid=<ACCESSION_ID>`
   - assigns accession ID to the file.
 
+  - If both a JSON payload and query parameters are provided in the same request, a `400 Bad Request` is returned.
+
   - Error codes
-    - `200` Query execute ok.
-    - `400` Error due to bad payload i.e. wrong `user` + `filepath` combination.
+    - `200` Query executed successfully.
+    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and parameters provided, or invalid JSON).
     - `401` Token user is not in the list of admins.
+    - `404` File ID or decrypted checksum not found.
     - `500` Internal error due to DB or MQ failures.
 
-    Example:
+    Example (JSON payload):
 
     ```bash
     curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_id": "my-id-01", "filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/accession
+    ```
+
+    Example (query parameters):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X POST "https://HOSTNAME/file/accession?fileid=<FILE_UUID>&accessionid=<ACCESSION_ID>"
     ```
 
 - `/file/verify/:accession`
