@@ -5,8 +5,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: docker
@@ -14,36 +12,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
   - package-ecosystem: docker
     directory: "/sda-download"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
   - package-ecosystem: docker
     directory: "/rabbitmq"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
   - package-ecosystem: docker
     directory: "/sda"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
   - package-ecosystem: docker
     directory: "/sda-sftp-inbox"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
 
 # Each subfolder needs to be checked separately
   - package-ecosystem: gomod
@@ -53,8 +46,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
 
@@ -65,8 +57,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
 
@@ -78,8 +69,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
 
@@ -90,8 +80,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
 
@@ -100,8 +89,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
 
 ## release v1 branch
   - package-ecosystem: "github-actions"
@@ -110,8 +98,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 ### Docker
@@ -121,8 +108,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -132,8 +118,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -143,8 +128,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -154,8 +138,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -165,8 +148,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -176,8 +158,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     commit-message:
       prefix: "[release_v1]"
 
@@ -190,8 +171,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
     commit-message:
@@ -205,8 +185,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
     commit-message:
@@ -220,8 +199,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
     commit-message:
@@ -235,8 +213,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-    reviewers:
-      - "neicnordic/sensitive-data-development-collaboration"
+
     schedule:
       interval: weekly
     commit-message:
