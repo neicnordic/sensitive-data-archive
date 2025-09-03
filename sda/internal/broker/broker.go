@@ -8,8 +8,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // AMQPBroker is a Broker that reads messages from an AMQP broker
@@ -38,6 +41,15 @@ type MQConf struct {
 	ServerName    string
 	SchemasPath   string
 	PrefetchCount int
+}
+
+type Message struct {
+	ctx     context.Context
+	Message amqp.Delivery
+}
+
+func (m *Message) Context() context.Context {
+	return m.ctx
 }
 
 // InfoError struct for sending detailed error messages to analysis.
@@ -173,10 +185,10 @@ func (broker *AMQPBroker) ChannelWatcher() *amqp.Error {
 }
 
 // GetMessages reads messages from the queue
-func (broker *AMQPBroker) GetMessages(queue string) (<-chan amqp.Delivery, error) {
+func (broker *AMQPBroker) GetMessages(ctx context.Context, queue string) (<-chan Message, error) {
 	ch := broker.Channel
 
-	return ch.Consume(
+	deliveryChan, err := ch.Consume(
 		queue, // queue
 		"",    // consumer
 		false, // auto-ack
@@ -185,12 +197,61 @@ func (broker *AMQPBroker) GetMessages(queue string) (<-chan amqp.Delivery, error
 		false, // no-wait
 		nil,   // args
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	messageChan := make(chan Message)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("closing message channel")
+				return
+			case delivery := <-deliveryChan:
+
+				ctx := context.Background()
+
+				spanHeaders := make(propagation.MapCarrier)
+				// TODO extract to func
+				for k, v := range delivery.Headers {
+					switch val := v.(type) {
+					case string:
+						spanHeaders[k] = val
+					case int:
+						spanHeaders[k] = fmt.Sprintf("%d", val)
+						// TODO add support for other types
+					}
+				}
+
+				messageChan <- Message{
+					ctx:     otel.GetTextMapPropagator().Extract(ctx, spanHeaders),
+					Message: delivery,
+				}
+			}
+		}
+	}()
+
+	return messageChan, nil
 }
 
 // SendMessage sends a message to RabbitMQ
-func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, body []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (broker *AMQPBroker) SendMessage(ctx context.Context, corrID, exchange, routingKey string, body []byte) error {
+	ctx, span := observability.GetTracer().Start(ctx, "amqp_broker.SendMessage")
+	defer span.End()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+
+	// TODO extract to func
+	headers := make(amqp.Table)
+
+	spanHeader := make(propagation.MapCarrier)
+	otel.GetTextMapPropagator().Inject(ctx, spanHeader)
+
+	for k, v := range spanHeader {
+		headers[k] = v
+	}
 
 	err := broker.Channel.PublishWithContext(
 		ctx,
@@ -199,7 +260,7 @@ func (broker *AMQPBroker) SendMessage(corrID, exchange, routingKey string, body 
 		false, // mandatory
 		false, // immediate
 		amqp.Publishing{
-			Headers:         amqp.Table{},
+			Headers:         headers,
 			ContentEncoding: "UTF-8",
 			ContentType:     "application/json",
 			DeliveryMode:    amqp.Persistent, // 1=non-persistent, 2=persistent

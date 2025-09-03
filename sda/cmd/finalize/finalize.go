@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,26 +11,47 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
-var db *database.SDAdb
-var archive, backup storage.Backend
-var conf *config.Config
-var err error
-var message schema.IngestionAccession
+var (
+	archive, backup storage.Backend
+	mq              *broker.AMQPBroker
+	conf            *config.Config
+	db              *database.SDAdb
+	message         schema.IngestionAccession
+)
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "finalize")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
+
+	ctx, span := observability.GetTracer().Start(ctx, "startUp")
+
 	forever := make(chan bool)
 	conf, err = config.NewConfig("finalize")
 	if err != nil {
 		log.Fatal(err)
 	}
-	mq, err := broker.NewMQ(conf.Broker)
+	mq, err = broker.NewMQ(conf.Broker)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,11 +62,11 @@ func main() {
 
 	if conf.Backup.Type != "" && conf.Archive.Type != "" {
 		log.Debugln("initiating storage backends")
-		backup, err = storage.NewBackend(conf.Backup)
+		backup, err = storage.NewBackend(ctx, conf.Backup)
 		if err != nil {
 			log.Fatal(err)
 		}
-		archive, err = storage.NewBackend(conf.Archive)
+		archive, err = storage.NewBackend(ctx, conf.Archive)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -67,184 +89,43 @@ func main() {
 	}()
 
 	log.Info("Starting finalize service")
+	span.End()
+
 	go func() {
-		messages, err := mq.GetMessages(conf.Broker.Queue)
+		messages, err := mq.GetMessages(ctx, conf.Broker.Queue)
 		if err != nil {
 			log.Fatal(err)
 		}
-		for delivered := range messages {
-			log.Debugf("Received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
-			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", conf.Broker.SchemasPath), delivered.Body)
-			if err != nil {
-				log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", delivered.CorrelationId, err)
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: %v", err)
-				}
+		for msg := range messages {
+			ctx, span := observability.GetTracer().Start(msg.Context(), "handleMessage", trace.WithAttributes(attribute.String("correlation-id", msg.Message.CorrelationId)))
 
-				continue
+			if err := handleMessage(ctx, msg.Message); err != nil {
+				// TODO err handle
+				span.End()
+				log.Fatal(err)
 			}
 
-			// we unmarshal the message in the validation step so this is safe to do
-			_ = json.Unmarshal(delivered.Body, &message)
-			// If the file has been canceled by the uploader, don't spend time working on it.
-			status, err := db.GetFileStatus(delivered.CorrelationId)
-			if err != nil {
-				log.Errorf("failed to get file status, correlation-id: %s, reason: %v", delivered.CorrelationId, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
-			switch status {
-			case "disabled":
-				log.Infof("file with correlation-id: %s is disabled, aborting work", delivered.CorrelationId)
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: %v", err)
-				}
-
-				continue
-
-			case "verified":
-			case "enabled":
-			case "ready":
-				log.Infof("File with correlation-id: %s is already marked as ready.", delivered.CorrelationId)
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking message, reason: %v", err)
-				}
-
-				continue
-			default:
-				log.Warnf("file with correlation-id: %s is not verified yet, aborting work", delivered.CorrelationId)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("Failed acking canceled work, reason: %v", err)
-				}
-
-				continue
-			}
-
-			fileID, err := db.GetFileID(delivered.CorrelationId)
-			if err != nil {
-				log.Errorf("failed to get file-id for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
-			c := schema.IngestionCompletion{
-				User:               message.User,
-				FilePath:           message.FilePath,
-				AccessionID:        message.AccessionID,
-				DecryptedChecksums: message.DecryptedChecksums,
-			}
-			completeMsg, _ := json.Marshal(&c)
-			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), completeMsg)
-			if err != nil {
-				log.Errorf("Validation of outgoing message ingestion-completion failed, reason: (%v). Message body: %s\n", err, string(completeMsg))
-
-				continue
-			}
-
-			accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID, fileID)
-			if err != nil {
-				log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", fileID, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
-			switch accessionIDExists {
-			case "duplicate":
-				log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", fileID, message.AccessionID)
-				// Send the message to an error queue so it can be analyzed.
-				fileError := broker.InfoError{
-					Error:           "There is a conflict regarding the file accessionID",
-					Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
-					OriginalMessage: message,
-				}
-				body, _ := json.Marshal(fileError)
-
-				// Send the message to an error queue so it can be analyzed.
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
-					log.Errorf("failed to publish message, reason: %v", err)
-				}
-
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: %v", err)
-				}
-
-				continue
-			case "same":
-				log.Infof("file already has a stable ID, marking it as ready, file-id: %s", fileID)
-			default:
-				if conf.Backup.Type != "" && conf.Archive.Type != "" {
-					if err = backupFile(delivered); err != nil {
-						log.Errorf("failed to backup file, file-id: %s, reason: %v", fileID, err)
-						if err := delivered.Nack(false, true); err != nil {
-							log.Errorf("failed to Nack message, reason: %v", err)
-						}
-
-						continue
-					}
-				}
-
-				if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
-					log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", fileID, err)
-					if err := delivered.Nack(false, true); err != nil {
-						log.Errorf("failed to Nack message, reason: %v", err)
-					}
-
-					continue
-				}
-			}
-
-			// Mark file as "ready"
-			if err := db.UpdateFileEventLog(fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
-				log.Errorf("set status ready failed, file-id: %s, reason: %v", fileID, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
-			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
-				log.Errorf("failed to publish message, reason: %v", err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, reason: %v", err)
-			}
+			span.End()
 		}
 	}()
 
 	<-forever
 }
 
-func backupFile(delivered amqp.Delivery) error {
+func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
-	fileID, err := db.GetFileID(delivered.CorrelationId)
+	fileID, err := db.GetFileID(ctx, delivered.CorrelationId)
 	if err != nil {
 		return fmt.Errorf("failed to get ID for file, reason: %s", err.Error())
 	}
 
-	filePath, fileSize, err := db.GetArchived(fileID)
+	filePath, fileSize, err := db.GetArchived(ctx, fileID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archive.GetFileSize(filePath, false)
+	diskFileSize, err := archive.GetFileSize(ctx, filePath, false)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
@@ -253,13 +134,13 @@ func backupFile(delivered amqp.Delivery) error {
 		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, fileSize)
 	}
 
-	file, err := archive.NewFileReader(filePath)
+	file, err := archive.NewFileReader(ctx, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
 	defer file.Close()
 
-	dest, err := backup.NewFileWriter(filePath)
+	dest, err := backup.NewFileWriter(ctx, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
 	}
@@ -272,11 +153,169 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	// Mark file as "backed up"
-	if err := db.UpdateFileEventLog(fileID, "backed up", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
+	if err := db.UpdateFileEventLog(ctx, fileID, "backed up", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
 		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
 
 	log.Debug("Backup completed")
+
+	return nil
+}
+
+func handleMessage(ctx context.Context, delivered amqp.Delivery) error {
+
+	log.Debugf("Received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
+	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", conf.Broker.SchemasPath), delivered.Body)
+	if err != nil {
+		log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", delivered.CorrelationId, err)
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("Failed acking canceled work, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &message)
+	// If the file has been canceled by the uploader, don't spend time working on it.
+	status, err := db.GetFileStatus(ctx, delivered.CorrelationId)
+	if err != nil {
+		log.Errorf("failed to get file status, correlation-id: %s, reason: %v", delivered.CorrelationId, err)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	switch status {
+	case "disabled":
+		log.Infof("file with correlation-id: %s is disabled, aborting work", delivered.CorrelationId)
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("Failed acking canceled work, reason: %v", err)
+		}
+
+		return nil
+
+	case "verified":
+	case "enabled":
+	case "ready":
+		log.Infof("File with correlation-id: %s is already marked as ready.", delivered.CorrelationId)
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("Failed acking message, reason: %v", err)
+		}
+
+		return nil
+	default:
+		log.Warnf("file with correlation-id: %s is not verified yet, aborting work", delivered.CorrelationId)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("Failed acking canceled work, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	fileID, err := db.GetFileID(ctx, delivered.CorrelationId)
+	if err != nil {
+		log.Errorf("failed to get file-id for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	c := schema.IngestionCompletion{
+		User:               message.User,
+		FilePath:           message.FilePath,
+		AccessionID:        message.AccessionID,
+		DecryptedChecksums: message.DecryptedChecksums,
+	}
+	completeMsg, _ := json.Marshal(&c)
+	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-completion.json", conf.Broker.SchemasPath), completeMsg)
+	if err != nil {
+		log.Errorf("Validation of outgoing message ingestion-completion failed, reason: (%v). Message body: %s\n", err, string(completeMsg))
+
+		return nil
+	}
+
+	accessionIDExists, err := db.CheckAccessionIDExists(ctx, message.AccessionID, fileID)
+	if err != nil {
+		log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", fileID, err)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	switch accessionIDExists {
+	case "duplicate":
+		log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", fileID, message.AccessionID)
+		// Send the message to an error queue so it can be analyzed.
+		fileError := broker.InfoError{
+			Error:           "There is a conflict regarding the file accessionID",
+			Reason:          "The Accession ID already exists in the database, skipping marking it ready.",
+			OriginalMessage: message,
+		}
+		body, _ := json.Marshal(fileError)
+
+		// Send the message to an error queue so it can be analyzed.
+		if e := mq.SendMessage(ctx, delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+			log.Errorf("failed to publish message, reason: %v", err)
+		}
+
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: %v", err)
+		}
+
+		return nil
+	case "same":
+		log.Infof("file already has a stable ID, marking it as ready, file-id: %s", fileID)
+	default:
+		if conf.Backup.Type != "" && conf.Archive.Type != "" {
+			if err = backupFile(ctx, delivered); err != nil {
+				log.Errorf("failed to backup file, file-id: %s, reason: %v", fileID, err)
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: %v", err)
+				}
+
+				return nil
+			}
+		}
+
+		if err := db.SetAccessionID(ctx, message.AccessionID, fileID); err != nil {
+			log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", fileID, err)
+			if err := delivered.Nack(false, true); err != nil {
+				log.Errorf("failed to Nack message, reason: %v", err)
+			}
+
+			return nil
+		}
+	}
+
+	// Mark file as "ready"
+	if err := db.UpdateFileEventLog(ctx, fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
+		log.Errorf("set status ready failed, file-id: %s, reason: %v", fileID, err)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	if err := mq.SendMessage(ctx, delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
+		log.Errorf("failed to publish message, reason: %v", err)
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+
+		return nil
+	}
+
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to Ack message, reason: %v", err)
+	}
 
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
@@ -31,10 +32,10 @@ import (
 
 // Backend defines methods to be implemented by PosixBackend, S3Backend and sftpBackend
 type Backend interface {
-	GetFileSize(filePath string, expectDelay bool) (int64, error)
-	RemoveFile(filePath string) error
-	NewFileReader(filePath string) (io.ReadCloser, error)
-	NewFileWriter(filePath string) (io.WriteCloser, error)
+	GetFileSize(ctx context.Context, filePath string, expectDelay bool) (int64, error)
+	RemoveFile(ctx context.Context, filePath string) error
+	NewFileReader(ctx context.Context, filePath string) (io.ReadCloser, error)
+	NewFileWriter(ctx context.Context, filePath string) (io.WriteCloser, error)
 }
 
 // Conf is a wrapper for the storage config
@@ -56,10 +57,10 @@ type posixConf struct {
 }
 
 // NewBackend initiates a storage backend
-func NewBackend(conf Conf) (Backend, error) {
+func NewBackend(ctx context.Context, conf Conf) (Backend, error) {
 	switch conf.Type {
 	case "s3":
-		return newS3Backend(conf.S3)
+		return newS3Backend(ctx, conf.S3)
 	case "sftp":
 		return newSftpBackend(conf.SFTP)
 	default:
@@ -82,7 +83,7 @@ func newPosixBackend(conf posixConf) (*posixBackend, error) {
 }
 
 // NewFileReader returns an io.Reader instance
-func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
+func (pb *posixBackend) NewFileReader(_ context.Context, filePath string) (io.ReadCloser, error) {
 	if pb == nil {
 		return nil, errors.New("invalid posixBackend")
 	}
@@ -98,7 +99,7 @@ func (pb *posixBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 }
 
 // NewFileWriter returns an io.Writer instance
-func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
+func (pb *posixBackend) NewFileWriter(_ context.Context, filePath string) (io.WriteCloser, error) {
 	if pb == nil {
 		return nil, errors.New("invalid posixBackend")
 	}
@@ -114,7 +115,7 @@ func (pb *posixBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of the file
-func (pb *posixBackend) GetFileSize(filePath string, _ bool) (int64, error) {
+func (pb *posixBackend) GetFileSize(_ context.Context, filePath string, _ bool) (int64, error) {
 	if pb == nil {
 		return 0, errors.New("invalid posixBackend")
 	}
@@ -130,7 +131,7 @@ func (pb *posixBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 }
 
 // RemoveFile removes a file from a given path
-func (pb *posixBackend) RemoveFile(filePath string) error {
+func (pb *posixBackend) RemoveFile(_ context.Context, filePath string) error {
 	if pb == nil {
 		return errors.New("invalid posixBackend")
 	}
@@ -167,8 +168,8 @@ type S3Conf struct {
 	Readypath         string
 }
 
-func newS3Backend(conf S3Conf) (*s3Backend, error) {
-	s3Client, err := NewS3Client(conf)
+func newS3Backend(ctx context.Context, conf S3Conf) (*s3Backend, error) {
+	s3Client, err := NewS3Client(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -184,16 +185,16 @@ func newS3Backend(conf S3Conf) (*s3Backend, error) {
 		}),
 	}
 
-	err = CheckS3Bucket(conf.Bucket, s3Client)
+	err = CheckS3Bucket(ctx, conf.Bucket, s3Client)
 	if err != nil {
 		return sb, err
 	}
 
 	return sb, nil
 }
-func NewS3Client(conf S3Conf) (*s3.Client, error) {
+func NewS3Client(ctx context.Context, conf S3Conf) (*s3.Client, error) {
 	s3cfg, err := config.LoadDefaultConfig(
-		context.TODO(),
+		ctx,
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
 		config.WithHTTPClient(&http.Client{Transport: transportConfigS3(conf)}),
 	)
@@ -218,8 +219,11 @@ func NewS3Client(conf S3Conf) (*s3.Client, error) {
 
 	return s3Client, nil
 }
-func CheckS3Bucket(bucket string, s3Client *s3.Client) error {
-	_, err := s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: &bucket})
+func CheckS3Bucket(ctx context.Context, bucket string, s3Client *s3.Client) error {
+	ctx, span := observability.GetTracer().Start(ctx, "s3.CheckS3Bucket")
+	defer span.End()
+
+	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
@@ -239,8 +243,11 @@ func CheckS3Bucket(bucket string, s3Client *s3.Client) error {
 }
 
 // NewFileReader returns an io.Reader instance
-func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
-	r, err := sb.Client.GetObject(context.TODO(), &s3.GetObjectInput{
+func (sb *s3Backend) NewFileReader(ctx context.Context, filePath string) (io.ReadCloser, error) {
+	ctx, span := observability.GetTracer().Start(ctx, "s3.NewFileReader")
+	defer span.End()
+
+	r, err := sb.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &sb.Bucket,
 		Key:    &filePath,
 	})
@@ -256,7 +263,7 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 			return nil, err
 		}
 		time.Sleep(1 * time.Second)
-		r, err = sb.Client.GetObject(context.TODO(), &s3.GetObjectInput{
+		r, err = sb.Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: &sb.Bucket,
 			Key:    &filePath,
 		})
@@ -270,10 +277,15 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 }
 
 // NewFileWriter uploads the contents of an io.Reader to a S3 bucket
-func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
+func (sb *s3Backend) NewFileWriter(ctx context.Context, filePath string) (io.WriteCloser, error) {
+	ctx, span := observability.GetTracer().Start(ctx, "s3.NewFileWriter")
+	defer span.End()
+
 	reader, writer := io.Pipe()
 	go func() {
-		_, err := sb.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
+		ctx, span := observability.GetTracer().Start(ctx, "s3.UploadFile")
+		defer span.End()
+		_, err := sb.Uploader.Upload(ctx, &s3.PutObjectInput{
 			Body:            reader,
 			Bucket:          &sb.Bucket,
 			Key:             &filePath,
@@ -289,8 +301,11 @@ func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of a specific object
-func (sb *s3Backend) GetFileSize(filePath string, expectDelay bool) (int64, error) {
-	r, err := sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+func (sb *s3Backend) GetFileSize(ctx context.Context, filePath string, expectDelay bool) (int64, error) {
+	ctx, span := observability.GetTracer().Start(ctx, "s3.GetFileSize")
+	defer span.End()
+
+	r, err := sb.Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: &sb.Bucket,
 		Key:    &filePath,
 	})
@@ -310,7 +325,7 @@ func (sb *s3Backend) GetFileSize(filePath string, expectDelay bool) (int64, erro
 		}
 		time.Sleep(1 * time.Second)
 
-		r, err = sb.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		r, err = sb.Client.HeadObject(ctx, &s3.HeadObjectInput{
 			Bucket: &sb.Bucket,
 			Key:    &filePath,
 		})
@@ -324,8 +339,11 @@ func (sb *s3Backend) GetFileSize(filePath string, expectDelay bool) (int64, erro
 }
 
 // RemoveFile removes an object from a bucket
-func (sb *s3Backend) RemoveFile(filePath string) error {
-	_, err := sb.Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+func (sb *s3Backend) RemoveFile(ctx context.Context, filePath string) error {
+	ctx, span := observability.GetTracer().Start(ctx, "s3.RemoveFile")
+	defer span.End()
+
+	_, err := sb.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &sb.Bucket,
 		Key:    &filePath,
 	})
@@ -429,7 +447,7 @@ func newSftpBackend(conf SftpConf) (*sftpBackend, error) {
 }
 
 // NewFileWriter returns an io.Writer instance for the sftp remote
-func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
+func (sfb *sftpBackend) NewFileWriter(_ context.Context, filePath string) (io.WriteCloser, error) {
 	if sfb == nil {
 		return nil, errors.New("invalid sftpBackend")
 	}
@@ -449,7 +467,7 @@ func (sfb *sftpBackend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 }
 
 // GetFileSize returns the size of the file
-func (sfb *sftpBackend) GetFileSize(filePath string, _ bool) (int64, error) {
+func (sfb *sftpBackend) GetFileSize(_ context.Context, filePath string, _ bool) (int64, error) {
 	if sfb == nil {
 		return 0, errors.New("invalid sftpBackend")
 	}
@@ -463,7 +481,7 @@ func (sfb *sftpBackend) GetFileSize(filePath string, _ bool) (int64, error) {
 }
 
 // NewFileReader returns an io.Reader instance
-func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
+func (sfb *sftpBackend) NewFileReader(_ context.Context, filePath string) (io.ReadCloser, error) {
 	if sfb == nil {
 		return nil, errors.New("invalid sftpBackend")
 	}
@@ -477,7 +495,7 @@ func (sfb *sftpBackend) NewFileReader(filePath string) (io.ReadCloser, error) {
 }
 
 // RemoveFile removes a file or an empty directory.
-func (sfb *sftpBackend) RemoveFile(filePath string) error {
+func (sfb *sftpBackend) RemoveFile(_ context.Context, filePath string) error {
 	if sfb == nil {
 		return errors.New("invalid sftpBackend")
 	}

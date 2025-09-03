@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,21 +11,44 @@ import (
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/rabbitmq/amqp091-go"
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
-const err = "error"
 const ready = "ready"
 
+var (
+	mq   *broker.AMQPBroker
+	conf *config.Config
+)
+
 func main() {
-	forever := make(chan bool)
-	conf, err := config.NewConfig("notify")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "notify")
 	if err != nil {
 		log.Fatal(err)
 	}
-	mq, err := broker.NewMQ(conf.Broker)
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
+
+	ctx, span := observability.GetTracer().Start(ctx, "startUp")
+
+	forever := make(chan bool)
+	conf, err = config.NewConfig("notify")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mq, err = broker.NewMQ(conf.Broker)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,41 +69,24 @@ func main() {
 	}()
 
 	log.Infof("Starting %s notify service", conf.Broker.Queue)
+	span.End()
 
 	go func() {
-		messages, err := mq.GetMessages(conf.Broker.Queue)
+		messages, err := mq.GetMessages(ctx, conf.Broker.Queue)
 		if err != nil {
 			log.Fatalf("Failed to get message from mq (error: %v)", err)
 		}
 
-		for d := range messages {
-			log.Debugf("received a message: %s", d.Body)
+		for msg := range messages {
+			ctx, span := observability.GetTracer().Start(msg.Context(), "handleMessage", trace.WithAttributes(attribute.String("correlation-id", msg.Message.CorrelationId)))
 
-			if err := validator(conf.Broker.Queue, conf.Broker.SchemasPath, d); err != nil {
-				log.Errorf("Failed to handle message, reason: %v", err)
-
-				continue
-			}
-			user := getUser(conf.Broker.Queue, d.Body)
-			if user == "" {
-				log.Errorln("No user in message, skipping")
-
-				continue
+			if err := handleMessage(ctx, msg.Message); err != nil {
+				// TODO err handle
+				span.End()
+				log.Fatal(err)
 			}
 
-			if err := sendEmail(conf.Notify, "THIS SHOULD TAKE A TEMPLATE", user, setSubject(conf.Broker.Queue)); err != nil {
-				log.Errorf("Failed to send email, error %v", err)
-
-				if e := d.Nack(false, false); e != nil {
-					log.Errorf("Failed to Nack message, error: %v) ", e)
-				}
-
-				continue
-			}
-
-			if err := d.Ack(false); err != nil {
-				log.Errorf("Failed to ack message, error %v", err)
-			}
+			span.End()
 		}
 	}()
 
@@ -88,7 +95,7 @@ func main() {
 
 func getUser(queue string, orgMsg []byte) string {
 	switch queue {
-	case err:
+	case "error":
 		var notify broker.InfoError
 		_ = json.Unmarshal(orgMsg, &notify)
 		orgMsg, _ := base64.StdEncoding.DecodeString(notify.OriginalMessage.(string))
@@ -132,7 +139,7 @@ func sendEmail(conf config.SMTPConf, emailBody, recipient, subject string) error
 
 func setSubject(queue string) string {
 	switch queue {
-	case err:
+	case "error":
 		return "Error during ingestion"
 	case ready:
 		return "Ingestion completed"
@@ -141,9 +148,9 @@ func setSubject(queue string) string {
 	}
 }
 
-func validator(queue, schemaPath string, delivery amqp091.Delivery) error {
+func validator(queue, schemaPath string, delivery amqp.Delivery) error {
 	switch queue {
-	case err:
+	case "error":
 		if err := schema.ValidateJSON(fmt.Sprintf("%s/info-error.json", schemaPath), delivery.Body); err != nil {
 			return err
 		}
@@ -158,4 +165,36 @@ func validator(queue, schemaPath string, delivery amqp091.Delivery) error {
 	default:
 		return fmt.Errorf("unknown queue, %s", queue)
 	}
+}
+
+func handleMessage(ctx context.Context, delivered amqp.Delivery) error {
+	log.Debugf("received a message: %s", delivered.Body)
+
+	if err := validator(conf.Broker.Queue, conf.Broker.SchemasPath, delivered); err != nil {
+		log.Errorf("Failed to handle message, reason: %v", err)
+
+		return nil
+	}
+	user := getUser(conf.Broker.Queue, delivered.Body)
+	if user == "" {
+		log.Errorln("No user in message, skipping")
+
+		return nil
+	}
+
+	if err := sendEmail(conf.Notify, "THIS SHOULD TAKE A TEMPLATE", user, setSubject(conf.Broker.Queue)); err != nil {
+		log.Errorf("Failed to send email, error %v", err)
+
+		if e := delivered.Nack(false, false); e != nil {
+			log.Errorf("Failed to Nack message, error: %v) ", e)
+		}
+
+		return nil
+	}
+
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("Failed to ack message, error %v", err)
+	}
+
+	return nil
 }

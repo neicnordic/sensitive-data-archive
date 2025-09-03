@@ -22,6 +22,7 @@ import (
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
@@ -85,6 +86,9 @@ func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *bro
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.GetTracer().Start(r.Context(), "ServeHTTP")
+	defer span.End()
+
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
 		log.Debugln("Request not authenticated")
@@ -101,7 +105,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case Put, List, Other, AbortMultipart:
 		// Allowed
 		log.Debug("allowed known")
-		p.allowedResponse(w, r, token)
+		p.allowedResponse(ctx, w, r, token)
 	default:
 		log.Debugf("Unexpected request (%v) not allowed", r)
 		p.notAllowedResponse(w, r)
@@ -123,7 +127,7 @@ func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
 	reportError(http.StatusUnauthorized, "not authorized", w)
 }
 
-func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jwt.Token) {
+func (p *Proxy) allowedResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	log.Debug("prepend")
 	// Check whether token username and filepath match
 	str, err := url.ParseRequestURI(r.URL.Path)
@@ -162,7 +166,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	if p.detectRequestType(r) == Put && p.fileIDs[r.URL.Path] == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database", r.URL.Path)
-		p.fileIDs[r.URL.Path], err = p.database.RegisterFile(filepath, username)
+		p.fileIDs[r.URL.Path], err = p.database.RegisterFile(ctx, filepath, username)
 		log.Debugf("fileId: %v", p.fileIDs[r.URL.Path])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
@@ -172,7 +176,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// check if the file already exists, in that case send an overwrite message,
 		// so that the FEGA portal is informed that a new version of the file exists.
-		err = p.sendMessageOnOverwrite(r, rawFilepath, token)
+		err = p.sendMessageOnOverwrite(ctx, r, rawFilepath, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
@@ -181,7 +185,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	log.Debug("Forwarding to backend")
-	s3response, err := p.forwardToBackend(r)
+	s3response, err := p.forwardToBackend(ctx, r)
 	if err != nil {
 		p.internalServerError(w, r, fmt.Sprintf("forwarding error: %v", err))
 
@@ -205,7 +209,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			return
 		}
 
-		err = p.checkAndSendMessage(jsonMessage, r)
+		err = p.checkAndSendMessage(ctx, jsonMessage, r)
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
@@ -215,7 +219,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
 		if p.fileIDs[r.URL.Path] == "" {
-			p.fileIDs[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+			p.fileIDs[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(ctx, username, filepath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
@@ -225,7 +229,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[r.URL.Path])
 		}
 
-		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[r.URL.Path]); err != nil {
+		if err := p.storeObjectSizeInDB(ctx, rawFilepath, p.fileIDs[r.URL.Path]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
@@ -233,7 +237,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		}
 
 		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[r.URL.Path])
-		err = p.database.UpdateFileEventLog(p.fileIDs[r.URL.Path], "uploaded", p.fileIDs[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		err = p.database.UpdateFileEventLog(ctx, p.fileIDs[r.URL.Path], "uploaded", p.fileIDs[r.URL.Path], "inbox", "{}", string(jsonMessage))
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
@@ -274,7 +278,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 }
 
 // Renew the connection to MQ if necessary, then send message
-func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
+func (p *Proxy) checkAndSendMessage(ctx context.Context, jsonMessage []byte, r *http.Request) error {
 	var err error
 	if p.messenger == nil {
 		return errors.New("messenger is down")
@@ -295,7 +299,7 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 		}
 	}
 
-	if err := p.messenger.SendMessage(p.fileIDs[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+	if err := p.messenger.SendMessage(ctx, p.fileIDs[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
 
@@ -326,7 +330,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 	}
 }
 
-func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
+func (p *Proxy) forwardToBackend(ctx context.Context, r *http.Request) (*http.Response, error) {
+	_, span := observability.GetTracer().Start(ctx, "forwardToBackend")
+	defer span.End()
+
 	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
 
 	// Redirect request
@@ -493,7 +500,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 	checksum := Checksum{}
 	var err error
 
-	checksum.Value, event.Filesize, err = p.requestInfo(r.URL.Path)
+	checksum.Value, event.Filesize, err = p.requestInfo(r.Context(), r.URL.Path)
 	if err != nil {
 		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
@@ -512,9 +519,9 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token) (Eve
 
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
-func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
+func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
-	client, err := storage.NewS3Client(p.s3)
+	client, err := storage.NewS3Client(ctx, p.s3)
 	if err != nil {
 		return "", 0, err
 	}
@@ -537,9 +544,9 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 
 // checkFileExists makes a request to the S3 to check whether the file already
 // is uploaded. Returns a bool indicating whether the file was found.
-func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
+func (p *Proxy) checkFileExists(ctx context.Context, fullPath string) (bool, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
-	client, err := storage.NewS3Client(p.s3)
+	client, err := storage.NewS3Client(ctx, p.s3)
 	if err != nil {
 		return false, fmt.Errorf("could not connect to s3: %v", err)
 	}
@@ -558,8 +565,8 @@ func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, token jwt.Token) error {
-	exist, err := p.checkFileExists(r.URL.Path)
+func (p *Proxy) sendMessageOnOverwrite(ctx context.Context, r *http.Request, rawFilepath string, token jwt.Token) error {
+	exist, err := p.checkFileExists(ctx, r.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -579,7 +586,7 @@ func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, toke
 			return err
 		}
 
-		err = p.checkAndSendMessage(jsonMessage, r)
+		err = p.checkAndSendMessage(ctx, jsonMessage, r)
 		if err != nil {
 			return err
 		}
@@ -634,13 +641,13 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 	}
 }
 
-func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
-	client, err := storage.NewS3Client(p.s3)
+func (p *Proxy) storeObjectSizeInDB(ctx context.Context, path, fileID string) error {
+	client, err := storage.NewS3Client(ctx, p.s3)
 	if err != nil {
 		return err
 	}
 
-	o, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+	o, err := client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: &p.s3.Bucket,
 		Key:    &path,
 	})
@@ -653,6 +660,7 @@ func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
 		_ = p.database.Connect()
 	}
 
+	// TODO why sql command outside database package????
 	const setObjectSize = "UPDATE sda.files set submission_file_size = $1 where id = $2;"
 	_, err = p.database.DB.Exec(setObjectSize, *o.ContentLength, fileID)
 

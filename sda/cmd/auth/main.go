@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -265,7 +267,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
-	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
+	err = auth.Config.DB.UpdateUserInfo(ctx, idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
 	if err != nil {
 		log.Warn("Could not log user info.")
 	}
@@ -367,6 +369,9 @@ func addCSPheaders(ctx iris.Context) {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Initialise config
 	conf, err := config.NewConfig("auth")
 	if err != nil {
@@ -421,6 +426,17 @@ func main() {
 		panic(err)
 	}
 	defer authHandler.Config.DB.Close()
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "auth")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
 
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))

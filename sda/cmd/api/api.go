@@ -29,6 +29,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
@@ -52,6 +53,22 @@ var (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "api")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
+
+	ctx, span := observability.GetTracer().Start(ctx, "startUp")
+
 	Conf, err = config.NewConfig("api")
 	if err != nil {
 		log.Fatal(err)
@@ -77,6 +94,7 @@ func main() {
 		os.Exit(0)
 	}()
 
+	span.End()
 	srv := setup(Conf)
 	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
 		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
@@ -294,6 +312,9 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "getFiles")
+	defer span.End()
+
 	c.Writer.Header().Set("Content-Type", "application/json")
 	// Get user ID to extract all files
 	token, err := auth.Authenticate(c.Request)
@@ -304,7 +325,7 @@ func getFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := Conf.API.DB.GetUserFiles(token.Subject(), false)
+	files, err := Conf.API.DB.GetUserFiles(ctx, token.Subject(), false)
 	if err != nil {
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
@@ -317,6 +338,9 @@ func getFiles(c *gin.Context) {
 }
 
 func ingestFile(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "ingestFile")
+	defer span.End()
+
 	var ingest schema.IngestionTrigger
 	if err := c.BindJSON(&ingest); err != nil {
 		c.AbortWithStatusJSON(
@@ -338,7 +362,7 @@ func ingestFile(c *gin.Context) {
 		return
 	}
 
-	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
+	corrID, err := Conf.API.DB.GetCorrID(ctx, ingest.User, ingest.FilePath, "")
 	if err != nil {
 		if corrID == "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -349,7 +373,7 @@ func ingestFile(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(ctx, corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -362,7 +386,10 @@ func ingestFile(c *gin.Context) {
 // The deleteFile function deletes files from the inbox and marks them as
 // discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
-	inbox, err := storage.NewBackend(Conf.Inbox)
+	ctx, span := observability.GetTracer().Start(c, "deleteFile")
+	defer span.End()
+
+	inbox, err := storage.NewBackend(ctx, Conf.Inbox)
 	if err != nil {
 		log.Error(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -383,7 +410,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(ctx, submissionUser, fileID)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -393,7 +420,7 @@ func deleteFile(c *gin.Context) {
 
 	var retryTimes = 5
 	for count := 1; count <= retryTimes; count++ {
-		err = inbox.RemoveFile(filePath)
+		err = inbox.RemoveFile(ctx, filePath)
 		if err == nil {
 			break
 		}
@@ -406,7 +433,7 @@ func deleteFile(c *gin.Context) {
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	if err := Conf.API.DB.UpdateFileEventLog(fileID, "disabled", fileID, "api", "{}", "{}"); err != nil {
+	if err := Conf.API.DB.UpdateFileEventLog(ctx, fileID, "disabled", fileID, "api", "{}", "{}"); err != nil {
 		log.Errorf("set status deleted failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -454,6 +481,9 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 // provided in the request header from the inbox. It retrieves the file path
 // from the database using the file ID and user ID.
 func downloadFile(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "downloadFile")
+	defer span.End()
+
 	// Get the public key from the request header.
 	c4ghPubKey := c.GetHeader("C4GH-Public-Key")
 
@@ -465,7 +495,7 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	inbox, err := storage.NewBackend(Conf.Inbox)
+	inbox, err := storage.NewBackend(ctx, Conf.Inbox)
 	if err != nil {
 		log.Errorf("failed to initialize inbox backend, reason: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
@@ -475,7 +505,7 @@ func downloadFile(c *gin.Context) {
 
 	// Retrieve the actual file path for the user's file.
 	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(
+	filePath, err := Conf.API.DB.GetInboxFilePathFromID(ctx,
 		strings.TrimPrefix(c.Param("username"), "/"),
 		fileID,
 	)
@@ -487,7 +517,7 @@ func downloadFile(c *gin.Context) {
 	}
 
 	// Get inbox file handle
-	file, err := inbox.NewFileReader(filePath)
+	file, err := inbox.NewFileReader(ctx, filePath)
 	if err != nil {
 		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
@@ -529,6 +559,9 @@ func downloadFile(c *gin.Context) {
 }
 
 func setAccession(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "setAccession")
+	defer span.End()
+
 	var accession schema.IngestionAccession
 	if err := c.BindJSON(&accession); err != nil {
 		c.AbortWithStatusJSON(
@@ -542,7 +575,7 @@ func setAccession(c *gin.Context) {
 		return
 	}
 
-	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
+	corrID, err := Conf.API.DB.GetCorrID(ctx, accession.User, accession.FilePath, "")
 	if err != nil {
 		if corrID == "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -553,7 +586,7 @@ func setAccession(c *gin.Context) {
 		return
 	}
 
-	fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+	fileInfo, err := Conf.API.DB.GetFileInfo(ctx, corrID)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -571,7 +604,7 @@ func setAccession(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "accession", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(ctx, corrID, Conf.Broker.Exchange, "accession", marshaledMsg)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -583,6 +616,9 @@ func setAccession(c *gin.Context) {
 }
 
 func createDataset(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "createDataset")
+	defer span.End()
+
 	var dataset dataset
 	if err := c.BindJSON(&dataset); err != nil {
 		c.AbortWithStatusJSON(
@@ -603,7 +639,7 @@ func createDataset(c *gin.Context) {
 	}
 
 	for _, stableID := range dataset.AccessionIDs {
-		inboxPath, err := Conf.API.DB.GetInboxPath(stableID)
+		inboxPath, err := Conf.API.DB.GetInboxPath(ctx, stableID)
 		if err != nil {
 			switch {
 			case err.Error() == "sql: no rows in result set":
@@ -618,7 +654,7 @@ func createDataset(c *gin.Context) {
 				return
 			}
 		}
-		_, err = Conf.API.DB.GetCorrID(dataset.User, inboxPath, stableID)
+		_, err = Conf.API.DB.GetCorrID(ctx, dataset.User, inboxPath, stableID)
 		if err != nil {
 			switch {
 			case err.Error() == "sql: no rows in result set":
@@ -648,7 +684,7 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(ctx, "", Conf.Broker.Exchange, "mappings", marshaledMsg)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -660,8 +696,11 @@ func createDataset(c *gin.Context) {
 }
 
 func releaseDataset(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "releaseDataset")
+	defer span.End()
+
 	datasetID := strings.TrimPrefix(c.Param("dataset"), "/")
-	ok, err := Conf.API.DB.CheckIfDatasetExists(datasetID)
+	ok, err := Conf.API.DB.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -673,7 +712,7 @@ func releaseDataset(c *gin.Context) {
 		return
 	}
 
-	status, err := Conf.API.DB.GetDatasetStatus(datasetID)
+	status, err := Conf.API.DB.GetDatasetStatus(ctx, datasetID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -697,7 +736,7 @@ func releaseDataset(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(ctx, "", Conf.Broker.Exchange, "mappings", marshaledMsg)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -709,7 +748,10 @@ func releaseDataset(c *gin.Context) {
 }
 
 func listActiveUsers(c *gin.Context) {
-	users, err := Conf.API.DB.ListActiveUsers()
+	ctx, span := observability.GetTracer().Start(c, "listActiveUsers")
+	defer span.End()
+
+	users, err := Conf.API.DB.ListActiveUsers(ctx)
 	if err != nil {
 		log.Debugln("ListActiveUsers failed")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -722,11 +764,14 @@ func listActiveUsers(c *gin.Context) {
 // listUserFiles returns a list of files for a specific user
 // If the file has status disabled, the file will be skipped
 func listUserFiles(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "listUsersFiles")
+	defer span.End()
+
 	username := c.Param("username")
 	username = strings.TrimPrefix(username, "/")
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
-	files, err := Conf.API.DB.GetUserFiles(username, true)
+	files, err := Conf.API.DB.GetUserFiles(ctx, username, true)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -744,6 +789,9 @@ func listUserFiles(c *gin.Context) {
 // If the database insertion fails, it responds with a 500 Internal Server Error status.
 // On success, it responds with a 200 OK status.
 func addC4ghHash(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "addC4ghHash")
+	defer span.End()
+
 	var c4gh schema.C4ghPubKey
 	if err := c.BindJSON(&c4gh); err != nil {
 		c.AbortWithStatusJSON(
@@ -789,7 +837,7 @@ func addC4ghHash(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.DB.AddKeyHash(hex.EncodeToString(pubKey[:]), c4gh.Description)
+	err = Conf.API.DB.AddKeyHash(ctx, hex.EncodeToString(pubKey[:]), c4gh.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "key hash already exists") {
 			c.AbortWithStatusJSON(
@@ -818,7 +866,10 @@ func addC4ghHash(c *gin.Context) {
 }
 
 func listC4ghHashes(c *gin.Context) {
-	hashes, err := Conf.API.DB.ListKeyHashes()
+	ctx, span := observability.GetTracer().Start(c, "listC4ghHashes")
+	defer span.End()
+
+	hashes, err := Conf.API.DB.ListKeyHashes(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -839,8 +890,11 @@ func listC4ghHashes(c *gin.Context) {
 }
 
 func deprecateC4ghHash(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "deprecateC4ghHash")
+	defer span.End()
+
 	keyHash := strings.TrimPrefix(c.Param("keyHash"), "/")
-	err = Conf.API.DB.DeprecateKeyHash(keyHash)
+	err = Conf.API.DB.DeprecateKeyHash(ctx, keyHash)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -849,7 +903,10 @@ func deprecateC4ghHash(c *gin.Context) {
 }
 
 func listAllDatasets(c *gin.Context) {
-	datasets, err := Conf.API.DB.ListDatasets()
+	ctx, span := observability.GetTracer().Start(c, "listAllDatasets")
+	defer span.End()
+
+	datasets, err := Conf.API.DB.ListDatasets(ctx)
 	if err != nil {
 		log.Errorf("ListAllDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -860,8 +917,11 @@ func listAllDatasets(c *gin.Context) {
 }
 
 func listUserDatasets(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "listUserDatasets")
+	defer span.End()
+
 	username := strings.TrimPrefix(c.Param("username"), "/")
-	datasets, err := Conf.API.DB.ListUserDatasets(username)
+	datasets, err := Conf.API.DB.ListUserDatasets(ctx, username)
 	if err != nil {
 		log.Errorf("ListUserDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -872,13 +932,16 @@ func listUserDatasets(c *gin.Context) {
 }
 
 func listDatasets(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "listDatasets")
+	defer span.End()
+
 	token, err := auth.Authenticate(c.Request)
 	if err != nil {
 		c.JSON(401, err.Error())
 
 		return
 	}
-	datasets, err := Conf.API.DB.ListUserDatasets(token.Subject())
+	datasets, err := Conf.API.DB.ListUserDatasets(ctx, token.Subject())
 	if err != nil {
 		log.Errorf("ListDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -889,7 +952,10 @@ func listDatasets(c *gin.Context) {
 }
 
 func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
-	reVerify, err := Conf.API.DB.GetReVerificationData(accessionID)
+	ctx, span := observability.GetTracer().Start(c, "reVerify")
+	defer span.End()
+
+	reVerify, err := Conf.API.DB.GetReVerificationData(ctx, accessionID)
 	if err != nil {
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			c.AbortWithStatusJSON(http.StatusNotFound, "accession ID not found")
@@ -900,7 +966,7 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 
 		return c, err
 	}
-	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath, accessionID)
+	corrID, err := Conf.API.DB.GetCorrID(ctx, reVerify.User, reVerify.FilePath, accessionID)
 	if err != nil {
 		log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -916,7 +982,7 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 		return c, err
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "archived", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(ctx, corrID, Conf.Broker.Exchange, "archived", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -937,8 +1003,11 @@ func reVerifyFile(c *gin.Context) {
 }
 
 func reVerifyDataset(c *gin.Context) {
+	ctx, span := observability.GetTracer().Start(c, "reVerifyDataset")
+	defer span.End()
+
 	dataset := strings.TrimPrefix(c.Param("dataset"), "/")
-	accessions, err := Conf.API.DB.GetDatasetFiles(dataset)
+	accessions, err := Conf.API.DB.GetDatasetFiles(ctx, dataset)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

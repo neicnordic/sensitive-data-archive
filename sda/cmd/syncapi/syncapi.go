@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
@@ -17,6 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 
 	log "github.com/sirupsen/logrus"
@@ -38,6 +40,9 @@ type datasetFiles struct {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	Conf, err = config.NewConfig("sync-api")
 	if err != nil {
 		log.Fatal(err)
@@ -47,11 +52,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "syncapi")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		<-sigc
 		shutdown()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
 		os.Exit(0)
 	}()
 
@@ -142,7 +155,7 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := parseDatasetMessage(b); err != nil {
+	if err := parseDatasetMessage(r.Context(), b); err != nil {
 		log.Errorf("error on parsing dataset message: %v", err)
 		respondWithError(w, http.StatusInternalServerError, "error while processing message")
 
@@ -153,7 +166,10 @@ func dataset(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseDatasetMessage parses the JSON blob and sends the relevant messages
-func parseDatasetMessage(msg []byte) error {
+func parseDatasetMessage(ctx context.Context, msg []byte) error {
+	ctx, span := observability.GetTracer().Start(ctx, "parseDatasetMessage")
+	defer span.End()
+
 	log.Debugf("incoming blob %s", msg)
 	blob := syncDataset{}
 	_ = json.Unmarshal(msg, &blob)
@@ -170,7 +186,7 @@ func parseDatasetMessage(msg []byte) error {
 			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
 		corrID := uuid.New().String()
-		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
+		if err := Conf.API.MQ.SendMessage(ctx, corrID, Conf.Broker.Exchange, Conf.SyncAPI.IngestRouting, ingestMsg); err != nil {
 			return fmt.Errorf("failed to send ingest messge: Reason %v", err)
 		}
 
@@ -187,7 +203,7 @@ func parseDatasetMessage(msg []byte) error {
 			return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 		}
 
-		if err := Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
+		if err := Conf.API.MQ.SendMessage(ctx, corrID, Conf.Broker.Exchange, Conf.SyncAPI.AccessionRouting, finalizeMsg); err != nil {
 			return fmt.Errorf("failed to send mapping messge: Reason %v", err)
 		}
 	}
@@ -202,7 +218,7 @@ func parseDatasetMessage(msg []byte) error {
 		return fmt.Errorf("failed to marshal json messge: Reason %v", err)
 	}
 
-	if err := Conf.API.MQ.SendMessage(fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.MappingRouting, mappingMsg); err != nil {
+	if err := Conf.API.MQ.SendMessage(ctx, fmt.Sprintf("%v", time.Now().Unix()), Conf.Broker.Exchange, Conf.SyncAPI.MappingRouting, mappingMsg); err != nil {
 		return fmt.Errorf("failed to send mapping messge: Reason %v", err)
 	}
 

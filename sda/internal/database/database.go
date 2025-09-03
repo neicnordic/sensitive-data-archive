@@ -9,6 +9,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"go.nhat.io/otelsql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 )
 
 // DBConf stores information about how to connect to the database backend
@@ -123,14 +125,28 @@ func (dbs *SDAdb) Connect() error {
 	log.Infoln("Connecting to database")
 	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host, dbs.Config.Port, dbs.Config.Database, dbs.Config.User)
 
+	// Register the otelsql wrapper for the provided postgres driver.
+	driverName, err := otelsql.Register("postgres",
+		otelsql.TraceQueryWithArgs(),
+		otelsql.WithSystem(semconv.DBSystemPostgreSQL), // Optional.
+	)
+	if err != nil {
+		return err
+	}
+
 	for ConnectTimeout <= 0 || ConnectTimeout > time.Since(start) {
-		dbs.DB, err = sql.Open(dbs.Config.PgDataSource())
+		_, dsn := dbs.Config.PgDataSource()
+		dbs.DB, err = sql.Open(driverName, dsn)
 		if err == nil {
 			log.Infoln("Connected to database")
 			// Open may just validate its arguments without creating a
 			// connection to the database. To verify that the data source name
 			// is valid, call Ping.
 			err = dbs.DB.Ping()
+
+			if err := otelsql.RecordStats(dbs.DB); err != nil {
+				return err
+			}
 
 			return err
 		}

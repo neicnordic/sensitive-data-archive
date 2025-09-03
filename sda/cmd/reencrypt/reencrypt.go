@@ -17,6 +17,7 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -149,10 +150,24 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "reencrypt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

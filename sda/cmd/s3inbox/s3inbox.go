@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"os/signal"
@@ -8,11 +9,11 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
@@ -20,6 +21,22 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	otelShutdown, err := observability.SetupOTelSDK(ctx, "s3inbox")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		<-ctx.Done()
+		if err := otelShutdown(ctx); err != nil {
+			log.Errorf("failed to shutdown otel: %v", err)
+		}
+	}()
+
+	ctx, span := observability.GetTracer().Start(ctx, "startUp")
+
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -59,14 +76,14 @@ func main() {
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 
-	s3, err := storage.NewS3Client(conf.Inbox.S3)
+	s3, err := storage.NewS3Client(ctx, conf.Inbox.S3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
 
-	err = storage.CheckS3Bucket(conf.Inbox.S3.Bucket, s3)
+	err = storage.CheckS3Bucket(ctx, conf.Inbox.S3.Bucket, s3)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -113,6 +130,8 @@ func main() {
 		ReadHeaderTimeout: 30 * time.Second,
 		Handler:           router,
 	}
+
+	span.End()
 
 	if conf.Server.Cert != "" && conf.Server.Key != "" {
 		if err := server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key); err != nil {

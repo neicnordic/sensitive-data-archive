@@ -16,6 +16,47 @@ services:
       - ./scripts:/scripts
       - shared:/shared
 
+
+  jaeger:
+    container_name: jaeger
+    environment:
+      - SPAN_STORAGE_TYPE=memory
+      - METRICS_STORAGE_TYPE=prometheus
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_OTLP_HTTP_HOST_PORT=0.0.0.0:4318
+      - COLLECTOR_OTLP_GRPC_HOST_PORT=0.0.0.0:4317
+    image: jaegertracing/all-in-one:1.72.0
+    ports:
+      - 5778:5778
+      - 16686:16686
+      - 14317:4317
+      - 14318:4318
+      - 14250:14250
+      - 14268:14268
+      - 9411:9411
+    extra_hosts:
+      - "localhost:host-gateway"
+
+  otel:
+    container_name: otel
+    image: otel/opentelemetry-collector-contrib
+    depends_on:
+      jaeger:
+        condition: service_started
+    volumes:
+      - ./sda/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8810:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+      - 9090:9090 # prometheus metrics collected
+    extra_hosts:
+      - "localhost:host-gateway"
+
   postgres:
     build:
       context: ../../postgresql
@@ -96,12 +137,17 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel:
+        condition: service_started
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
       - DB_PASSWORD=inbox
       - DB_USER=inbox
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=s3inbox
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -132,7 +178,12 @@ services:
       - BROKER_ROUTINGKEY=archived
       - DB_PASSWORD=ingest
       - DB_USER=ingest
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=ingest
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -157,7 +208,12 @@ services:
       - BROKER_ROUTINGKEY=verified
       - DB_PASSWORD=verify
       - DB_USER=verify
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=verify
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -182,7 +238,12 @@ services:
       - BROKER_ROUTINGKEY=completed
       - DB_PASSWORD=finalize
       - DB_USER=finalize
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=finalize
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -206,7 +267,12 @@ services:
       - BROKER_QUEUE=mappings
       - DB_PASSWORD=mapper
       - DB_USER=mapper
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=mapper
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -228,6 +294,9 @@ services:
       - BROKER_USER=api
       - DB_PASSWORD=api
       - DB_USER=api
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=api
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -243,12 +312,18 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-reencrypt]
     container_name: reencrypt
+    environment:
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=reencrypt
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     depends_on:
       credentials:
         condition: service_completed_successfully
     ports:
       - "50051:50051"
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -339,6 +414,7 @@ services:
       - "8800:8080"
     volumes:
       - "./sda/aai-mock:/etc/lsaai-mock"
+
   aai-db:
     container_name: ls-aai-db
     environment:
@@ -355,6 +431,7 @@ services:
     image: mysql/mysql-server:latest
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+
   integration_test:
     container_name: tester
     command:
@@ -401,3 +478,4 @@ volumes:
   postgres_data:
   rabbitmq_data:
   shared:
+  grafana-storage:
