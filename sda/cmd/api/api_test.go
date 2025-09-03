@@ -707,6 +707,60 @@ func (s *TestSuite) TestAPIGetFiles() {
 	assert.NoError(s.T(), err)
 }
 
+func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
+	testUsers := []string{"dummy", "User-B", "User-C"}
+	for _, user := range testUsers {
+		sub := "submission_a"
+
+		for i := range 5 {
+			if i == 2 {
+				sub = "submission_b"
+			}
+
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			if err != nil {
+				s.FailNow("failed to register file in database")
+			}
+
+			err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				s.FailNow("failed to update satus of file in database")
+			}
+		}
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/files?path_prefix=submission_b", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/files", rbac(e), getFiles)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, okResponse.StatusCode)
+
+	files := []database.SubmissionFileInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&files)
+	assert.NoError(s.T(), err, "failed to list files from DB")
+	assert.Equal(s.T(), 3, len(files))
+}
+
 func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
@@ -1865,6 +1919,61 @@ func (s *TestSuite) TestListUserFiles() {
 	assert.NoError(s.T(), err, "failed to list users from DB")
 	assert.Equal(s.T(), 2, len(files))
 	assert.Contains(s.T(), files[0].AccessionID, "accession_user_example.org_0")
+}
+
+func (s *TestSuite) TestListUserFiles_filteredSelection() {
+	testUsers := []string{"user_example.org", "User-B", "User-C"}
+	for _, user := range testUsers {
+		sub := "submission_a"
+
+		for i := range 5 {
+			if i == 2 {
+				sub = "submission_b"
+			}
+
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			if err != nil {
+				s.FailNow("failed to register file in database")
+			}
+
+			err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+			if err != nil {
+				s.FailNow("failed to update satus of file in database")
+			}
+		}
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/users/user@example.org/files?path_prefix=submission_b", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/users/:username/files", rbac(e), listUserFiles)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, okResponse.StatusCode)
+
+	files := []database.SubmissionFileInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&files)
+	assert.NoError(s.T(), err, "failed to list user files from DB")
+	assert.Equal(s.T(), 3, len(files))
+	assert.Contains(s.T(), files[0].Status, "uploaded")
 }
 
 func (s *TestSuite) TestAddC4ghHash() {
