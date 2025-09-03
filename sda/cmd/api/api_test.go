@@ -717,7 +717,7 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -1931,7 +1931,7 @@ func (s *TestSuite) TestListUserFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
