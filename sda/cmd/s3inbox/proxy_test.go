@@ -474,12 +474,12 @@ func (s *ProxyTests) TestMessageFormatting() {
 	// start proxy that denies everything
 	proxy := NewProxy(s.S3Fakeconf, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
-	msg, err := proxy.CreateMessageFromRequest(r, claims, user)
+	msg, err := proxy.CreateMessageFromRequest(r, claims, "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 
 	assert.Equal(s.T(), int64(1234), msg.Filesize)
-	assert.Equal(s.T(), "user/new_file.txt", msg.Filepath)
+	assert.Equal(s.T(), "new_file.txt", msg.Filepath)
 	assert.Equal(s.T(), "user@host.domain", msg.Username)
 
 	c, _ := json.Marshal(msg.Checksum[0])
@@ -490,10 +490,11 @@ func (s *ProxyTests) TestMessageFormatting() {
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), msg.Username)
+	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 	assert.Equal(s.T(), "upload", msg.Operation)
+	assert.Equal(s.T(), "new_file.txt", msg.Filepath)
 }
 
 func (s *ProxyTests) TestDatabaseConnection() {
