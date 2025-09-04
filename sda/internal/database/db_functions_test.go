@@ -1248,6 +1248,7 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	assert.NoError(suite.T(), err)
 	_, err = db.getInboxFilePathFromID(user, fileID)
 	assert.Error(suite.T(), err)
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
@@ -1284,6 +1285,7 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "archived")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileID2)
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetUserAndPathFromUUID_Found() {
