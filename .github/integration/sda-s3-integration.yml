@@ -407,6 +407,8 @@ services:
         condition: service_started
       reencrypt:
         condition: service_started
+      rotatekey:
+        condition: service_started
     extra_hosts:
       - "localhost:host-gateway"
     environment:
