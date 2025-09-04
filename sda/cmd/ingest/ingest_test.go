@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -234,7 +235,7 @@ func (ts *TestSuite) SetupSuite() {
 		ts.FailNow("no private keys configured")
 	}
 
-	if err := ts.ingest.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
+	if err := ts.ingest.DB.AddKeyHash(context.TODO(), hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
 		ts.FailNow("failed to register the public key")
 	}
 }
@@ -293,11 +294,13 @@ func (ts *TestSuite) SetupTest() {
 
 	ts.filePath = filepath.Base(outFileName)
 
-	ts.ingest.Archive, err = storage.NewBackend(ts.ingest.Conf.Archive)
+	ctx := context.TODO()
+
+	ts.ingest.Archive, err = storage.NewBackend(ctx, ts.ingest.Conf.Archive)
 	if err != nil {
 		ts.FailNow("failed to setup archive backend")
 	}
-	ts.ingest.Inbox, err = storage.NewBackend(ts.ingest.Conf.Inbox)
+	ts.ingest.Inbox, err = storage.NewBackend(ctx, ts.ingest.Conf.Inbox)
 	if err != nil {
 		ts.FailNow("failed to setup inbox backend")
 	}
@@ -373,14 +376,16 @@ func (ts *TestSuite) TestTryDecrypt() {
 
 // messages of type `cancel`
 func (ts *TestSuite) TestCancelFile() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(file1, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -390,17 +395,19 @@ func (ts *TestSuite) TestCancelFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(file1, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -410,18 +417,20 @@ func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(uuid.New().String(), message))
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(ctx, uuid.New().String(), message))
 }
 
 // messages of type `ingest`
 func (ts *TestSuite) TestIngestFile() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -431,16 +440,18 @@ func (ts *TestSuite) TestIngestFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestIngestFile_secondTime() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -450,12 +461,14 @@ func (ts *TestSuite) TestIngestFile_secondTime() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	// file is already in `archived` state
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestIngestFile_unknownInboxType() {
+	ctx := context.TODO()
+
 	userName := "test-ingest-unknown"
 	message := schema.IngestionTrigger{
 		Type:     "ingest",
@@ -463,16 +476,18 @@ func (ts *TestSuite) TestIngestFile_unknownInboxType() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(uuid.New().String(), message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, uuid.New().String(), message))
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -482,22 +497,24 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -507,9 +524,9 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -551,7 +568,7 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
@@ -563,13 +580,15 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	assert.Equal(ts.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -579,7 +598,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
@@ -588,20 +607,22 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.DB.SetVerified(ctx, fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -611,7 +632,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
@@ -620,24 +641,26 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.DB.SetVerified(ctx, fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
+	ctx := context.TODO()
+
 	// prepare the DB entries
 	userName := "test-ingest"
-	fileID, err := ts.ingest.DB.RegisterFile(ts.filePath, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(ctx, ts.filePath, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 	corrID := uuid.New().String()
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "uploaded", corrID, userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -647,7 +670,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	var firstDbChecksum string
 	const q1 = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
@@ -662,11 +685,11 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.DB.SetVerified(ctx, fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.DB.UpdateFileEventLog(ctx, fileID, "disabled", corrID, "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -708,7 +731,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(ctx, corrID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
@@ -733,7 +756,7 @@ func (ts *TestSuite) TestIngestFile_missingFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(corrID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), corrID, message))
 }
 func (ts *TestSuite) TestDetectMisingC4GHKeys() {
 	viper.Set("c4gh.privateKeys", "")
@@ -743,6 +766,8 @@ func (ts *TestSuite) TestDetectMisingC4GHKeys() {
 }
 
 func (ts *TestSuite) TestRegisterC4ghKey_newDeployment() {
+	ctx := context.TODO()
+
 	_, err := ts.ingest.DB.DB.Exec("TRUNCATE sda.encryption_keys CASCADE;")
 	assert.NoError(ts.T(), err)
 
@@ -750,21 +775,23 @@ func (ts *TestSuite) TestRegisterC4ghKey_newDeployment() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(privateKeys))
 
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(ctx))
 
-	kh, err := ts.ingest.DB.ListKeyHashes()
+	kh, err := ts.ingest.DB.ListKeyHashes(ctx)
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(kh))
 }
 
 func (ts *TestSuite) TestRegisterC4ghKey_existingEntry() {
+	ctx := context.TODO()
+
 	privateKeys, err := config.GetC4GHprivateKeys()
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(privateKeys))
 
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(ctx))
 
-	kh, err := ts.ingest.DB.ListKeyHashes()
+	kh, err := ts.ingest.DB.ListKeyHashes(ctx)
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 1, len(kh))
 }

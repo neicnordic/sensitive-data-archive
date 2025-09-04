@@ -14,14 +14,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
 	otelTrace "go.opentelemetry.io/otel/trace"
+	otelTraceNoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 var tracerName string
 
 func GetTracer() otelTrace.Tracer {
-	// TODO no nil pointer if not setup
 	if tracerName == "" {
-		return nil
+		return otelTraceNoop.NewTracerProvider().Tracer("noop")
 	}
 	return otel.GetTracerProvider().Tracer(tracerName)
 }

@@ -227,7 +227,7 @@ func (ts *BrokerTestSuite) TestSendMessage() {
 	assert.NotNil(ts.T(), b, "NewMQ without ssl did not return a broker")
 	assert.False(ts.T(), b.Connection.IsClosed())
 
-	err = b.SendMessage("1", "", "ingest", []byte("test message"))
+	err = b.SendMessage(context.TODO(), "1", "", "ingest", []byte("test message"))
 	assert.NoError(ts.T(), err)
 
 	b.Channel.Close()
@@ -261,12 +261,12 @@ func (ts *BrokerTestSuite) TestGetMessages() {
 	)
 	assert.NoError(ts.T(), err)
 
-	d, err := b.GetMessages("ingest")
+	d, err := b.GetMessages(context.TODO(), "ingest")
 	assert.NoError(ts.T(), err)
 
 	for message := range d {
-		if string(message.Body) == "test message" {
-			err := message.Ack(false)
+		if string(message.Message.Body) == "test message" {
+			err := message.Message.Ack(false)
 			assert.NoError(ts.T(), err)
 
 			break

@@ -151,6 +151,8 @@ func (s *SyncTest) SetupTest() {
 }
 
 func (s *SyncTest) TestBuildSyncDatasetJSON() {
+	ctx := context.TODO()
+
 	s.SetupTest()
 	conf, err := config.NewConfig("sync")
 	assert.NoError(s.T(), err)
@@ -158,24 +160,24 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	db, err = database.NewSDAdb(conf.Database)
 	assert.NoError(s.T(), err)
 
-	fileID, err := db.RegisterFile("dummy.user/test/file1.c4gh", "dummy.user")
+	fileID, err := db.RegisterFile(ctx, "dummy.user/test/file1.c4gh", "dummy.user")
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.SetAccessionID("ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
+	err = db.SetAccessionID(ctx, "ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(s.T(), err)
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := database.FileInfo{ArchiveChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived(ctx, fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(fileInfo, fileID)
+	err = db.SetVerified(ctx, fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
 
 	accessions := []string{"ed6af454-d910-49e3-8cda-488a6f246e67"}
-	assert.NoError(s.T(), db.MapFilesToDataset("cd532362-e06e-4461-8490-b9ce64b8d9e7", accessions), "failed to map file to dataset")
+	assert.NoError(s.T(), db.MapFilesToDataset(ctx, "cd532362-e06e-4461-8490-b9ce64b8d9e7", accessions), "failed to map file to dataset")
 
 	m := []byte(`{"type":"mapping", "dataset_id": "cd532362-e06e-4461-8490-b9ce64b8d9e7", "accession_ids": ["ed6af454-d910-49e3-8cda-488a6f246e67"]}`)
-	jsonData, err := buildSyncDatasetJSON(m)
+	jsonData, err := buildSyncDatasetJSON(ctx, m)
 	assert.NoError(s.T(), err)
 	dataset := []byte(`{"dataset_id":"cd532362-e06e-4461-8490-b9ce64b8d9e7","dataset_files":[{"filepath":"dummy.user/test/file1.c4gh","file_id":"ed6af454-d910-49e3-8cda-488a6f246e67","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}],"user":"dummy.user"}`)
 	assert.Equal(s.T(), string(dataset), string(jsonData))
