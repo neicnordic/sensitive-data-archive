@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"net"
 	"net/http"
@@ -297,6 +298,35 @@ type TestSuite struct {
 	GrpcListener GrpcListener
 }
 
+func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, hash.Hash) {
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update status of file in database")
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	assert.NoError(s.T(), err)
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	assert.NoError(s.T(), err)
+
+	fileInfo := database.FileInfo{
+		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
+		Size:              1000,
+		Path:              filePath,
+		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
+		DecryptedSize:     948,
+	}
+	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	assert.NoError(s.T(), err, "failed to mark file as Archived")
+	err = Conf.API.DB.SetVerified(fileInfo, fileID)
+	assert.NoError(s.T(), err, "failed to mark file as Verified")
+
+	return fileID, decSha
+}
+
 func (s *TestSuite) TestShutdown() {
 	Conf = &config.Config{}
 	Conf.Broker = broker.MQConf{
@@ -444,8 +474,8 @@ func (s *TestSuite) SetupSuite() {
 	s.RBAC = []byte(`{"policy":[{"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
 	{"role":"submission","path":"/dataset/create","action":"POST"},
 	{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
-	{"role":"submission","path":"/file/ingest","action":"POST"},
-	{"role":"submission","path":"/file/accession","action":"POST"},
+	{"role":"submission","path":"/file/ingest*","action":"POST"},
+	{"role":"submission","path":"/file/accession*","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
 	{"role":"submission","path":"/users/:username/file/:fileid","action":"GET"},
@@ -1038,7 +1068,7 @@ func (s *TestSuite) TestRBAC_emptyPolicy() {
 	assert.Equal(s.T(), http.StatusUnauthorized, okResponse.StatusCode)
 	assert.Contains(s.T(), string(b), "not authorized")
 }
-func (s *TestSuite) TestIngestFile() {
+func (s *TestSuite) TestIngestFile_WithPayload() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 	m, err := model.NewModelFromString(jsonadapter.Model)
@@ -1097,169 +1127,199 @@ func (s *TestSuite) TestIngestFile() {
 	assert.Equal(s.T(), 1, data.MessagesReady)
 }
 
-func (s *TestSuite) TestIngestFile_NoUser() {
-	user := "dummy"
-	filePath := "/inbox/dummy/file10.c4gh"
-
-	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
-	assert.NoError(s.T(), err, "failed to register file in database")
-	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
-	assert.NoError(s.T(), err, "failed to update satus of file in database")
-
-	gin.SetMode(gin.ReleaseMode)
-	assert.NoError(s.T(), setupJwtAuth())
-
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
-
-	type ingest struct {
-		FilePath string `json:"filepath"`
-		User     string `json:"user"`
-	}
-	ingestMsg, _ := json.Marshal(ingest{User: "", FilePath: filePath})
-	// Mock request and response holders
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
-
-	_, router := gin.CreateTestContext(w)
-	router.POST("/file/ingest", ingestFile)
-
-	router.ServeHTTP(w, r)
-	okResponse := w.Result()
-	defer okResponse.Body.Close()
-	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
-}
-func (s *TestSuite) TestIngestFile_WrongUser() {
-	user := "dummy"
-	filePath := "/inbox/dummy/file10.c4gh"
-
-	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
-	assert.NoError(s.T(), err, "failed to register file in database")
-	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
-	assert.NoError(s.T(), err, "failed to update satus of file in database")
-
-	gin.SetMode(gin.ReleaseMode)
-	assert.NoError(s.T(), setupJwtAuth())
-
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
-
-	type ingest struct {
-		FilePath string `json:"filepath"`
-		User     string `json:"user"`
-	}
-	ingestMsg, _ := json.Marshal(ingest{User: "foo", FilePath: filePath})
-	// Mock request and response holders
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(ingestMsg))
-
-	_, router := gin.CreateTestContext(w)
-	router.POST("/file/ingest", ingestFile)
-
-	router.ServeHTTP(w, r)
-	okResponse := w.Result()
-	defer okResponse.Body.Close()
-	b, _ := io.ReadAll(okResponse.Body)
-	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
-	assert.Contains(s.T(), string(b), "sql: no rows in result set")
-}
-
-func (s *TestSuite) TestIngestFile_WrongFilePath() {
-	user := "dummy"
-	filePath := "/inbox/dummy/file10.c4gh"
-
-	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
-	assert.NoError(s.T(), err, "failed to register file in database")
-	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
-	assert.NoError(s.T(), err, "failed to update satus of file in database")
-
-	gin.SetMode(gin.ReleaseMode)
-	assert.NoError(s.T(), setupJwtAuth())
-
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
-
-	type ingest struct {
-		FilePath string `json:"filepath"`
-		User     string `json:"user"`
-	}
-	ingestMsg, _ := json.Marshal(ingest{User: "dummy", FilePath: "bad/path"})
-	// Mock request and response holders
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("POST", "/file/ingest", bytes.NewBuffer(ingestMsg))
-	r.Header.Add("Authorization", "Bearer "+s.Token)
-
-	_, router := gin.CreateTestContext(w)
-	router.POST("/file/ingest", ingestFile)
-
-	router.ServeHTTP(w, r)
-	okResponse := w.Result()
-	defer okResponse.Body.Close()
-	b, _ := io.ReadAll(okResponse.Body)
-	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
-	assert.Contains(s.T(), string(b), "sql: no rows in result set")
-}
-
-func (s *TestSuite) TestSetAccession() {
+func (s *TestSuite) TestIngestFile_WithFileID() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file11.c4gh"
-
 	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
-	assert.NoError(s.T(), err, "failed to register file in database")
+	assert.NoError(s.T(), err)
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
-	assert.NoError(s.T(), err, "failed to update satus of file in database")
-
-	encSha := sha256.New()
-	_, err = encSha.Write([]byte("Checksum"))
 	assert.NoError(s.T(), err)
-
-	decSha := sha256.New()
-	_, err = decSha.Write([]byte("DecryptedChecksum"))
-	assert.NoError(s.T(), err)
-
-	fileInfo := database.FileInfo{
-		UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
-		Size:              1000,
-		Path:              filePath,
-		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
-		DecryptedSize:     948,
-	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID)
-	assert.NoError(s.T(), err, "failed to mark file as Archived")
-
-	err = Conf.API.DB.SetVerified(fileInfo, fileID)
-	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(s.T(), setupJwtAuth())
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
 	m, err := model.NewModelFromString(jsonadapter.Model)
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC model")
-	}
+	assert.NoError(s.T(), err)
 	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC enforcer")
-	}
+	assert.NoError(s.T(), err)
 
-	type accession struct {
-		AccessionID string `json:"accession_id"`
-		FilePath    string `json:"filepath"`
-		User        string `json:"user"`
-	}
-	aID := "API:accession-id-01"
-	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: filePath, User: user})
-	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r := httptest.NewRequest("POST", "/file/ingest?fileid="+fileID, nil)
 	r.Header.Add("Authorization", "Bearer "+s.Token)
 
 	_, router := gin.CreateTestContext(w)
-	router.POST("/file/accession", rbac(e), setAccession)
-
+	router.POST("/file/ingest", rbac(e), ingestFile)
 	router.ServeHTTP(w, r)
+
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(s.T(), http.StatusOK, okResponse.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/ingest", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(s.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(s.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(s.T(), err, "failed to unmarshal response")
+	assert.Equal(s.T(), 1, data.MessagesReady)
+}
+
+func (s *TestSuite) TestIngestFile_BothFileIDAndPayloadProvided() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file12.c4gh"
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err)
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	assert.NoError(s.T(), err)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	assert.NoError(s.T(), err)
+
+	w := httptest.NewRecorder()
+	payload, _ := json.Marshal(map[string]string{
+		"user":     user,
+		"filepath": filePath,
+	})
+	r := httptest.NewRequest("POST", "/file/ingest?fileid="+fileID, bytes.NewBuffer(payload))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", rbac(e), ingestFile)
+	router.ServeHTTP(w, r)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(s.T(), string(body), "Both file ID parameter and payload provided")
+}
+
+func (s *TestSuite) TestIngestFile_NoFileIDnoPayload() {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/file/ingest", nil)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/ingest", ingestFile)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestIngestMsgFileID() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
+
+	ingest, corrID, err := ingestMsgFileID(c, fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, ingest.User)
+	assert.Equal(s.T(), filePath, ingest.FilePath)
+	assert.Equal(s.T(), fileID, corrID)
+}
+
+func (s *TestSuite) TestIngestMsgFileID_NotFound() {
+	user := "dummy"
+	filePath := "/inbox/dummy/file10.c4gh"
+
+	_, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/file/ingest", nil)
+
+	ingest, corrID, err := ingestMsgFileID(c, "random-id")
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), w.Body.String(), "file ID not found")
+	assert.Equal(s.T(), http.StatusNotFound, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestIngestMsgFileID_PayloadProvided() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+
+	fileID, err := Conf.API.DB.RegisterFile(filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":     user,
+		"filepath": filePath,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/ingest", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	ingest, corrID, err := ingestMsgFileID(c, fileID)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), w.Body.String(), "Both file ID parameter and payload provided. Choose one")
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), ingest)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestSetAccession_WithPayload() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	assert.NoError(s.T(), err)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	assert.NoError(s.T(), err)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", rbac(e), setAccession)
+	router.ServeHTTP(w, r)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
 	// verify that the message shows up in the queue
 	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
@@ -1279,40 +1339,80 @@ func (s *TestSuite) TestSetAccession() {
 	assert.Equal(s.T(), 1, data.MessagesReady)
 }
 
-func (s *TestSuite) TestSetAccession_WrongUser() {
+func (s *TestSuite) TestSetAccession_WithParams() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	fileID, _ := helperCreateVerifiedTestFile(s, user, filePath)
+
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(s.T(), setupJwtAuth())
-	Conf.Broker.SchemasPath = "../../schemas/isolated"
 	m, err := model.NewModelFromString(jsonadapter.Model)
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC model")
-	}
+	assert.NoError(s.T(), err)
 	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
-	if err != nil {
-		s.T().Logf("failure: %v", err)
-		s.FailNow("failed to setup RBAC enforcer")
-	}
+	assert.NoError(s.T(), err)
 
-	type accession struct {
-		AccessionID string `json:"accession_id"`
-		FilePath    string `json:"filepath"`
-		User        string `json:"user"`
-	}
-	aID := "API:accession-id-01"
-	accessionMsg, _ := json.Marshal(accession{AccessionID: aID, FilePath: "/inbox/dummy/file11.c4gh", User: "fooBar"})
-	// Mock request and response holders
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(accessionMsg))
+	r := httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+fileID+"&accessionid="+accessionID, nil)
 	r.Header.Add("Authorization", "Bearer "+s.Token)
 
 	_, router := gin.CreateTestContext(w)
 	router.POST("/file/accession", rbac(e), setAccession)
-
 	router.ServeHTTP(w, r)
-	okResponse := w.Result()
-	defer okResponse.Body.Close()
-	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(10 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req)
+	assert.NoError(s.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(s.T(), err, "failed to read response from broker")
+	err = json.Unmarshal(body, &data)
+	assert.NoError(s.T(), err, "failed to unmarshal response")
+	assert.Equal(s.T(), 1, data.MessagesReady)
+}
+
+func (s *TestSuite) TestSetAccession_BothPayloadAndParamsProvided() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	fileID, _ := helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	assert.NoError(s.T(), err)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	assert.NoError(s.T(), err)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/file/accession?fileid=%s&accessionid=%s", fileID, accessionID), bytes.NewBuffer(payload))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	r.Header.Set("Content-Type", "application/json")
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", rbac(e), setAccession)
+	router.ServeHTTP(w, r)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *TestSuite) TestSetAccession_WrongFormat() {
@@ -1349,6 +1449,132 @@ func (s *TestSuite) TestSetAccession_WrongFormat() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	fileID, decSha := helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, accession.User)
+	assert.Equal(s.T(), filePath, accession.FilePath)
+	assert.Equal(s.T(), accessionID, accession.AccessionID)
+	assert.Equal(s.T(), fmt.Sprintf("%x", decSha.Sum(nil)), accession.DecryptedChecksums[0].Value)
+	assert.Equal(s.T(), fileID, corrID)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath_WrongUser() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         "no-dummy-user",
+		"filepath":     filePath,
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestAccessionMsgFilePath_WrongPath() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	payload, _ := json.Marshal(map[string]string{
+		"user":         user,
+		"filepath":     "random/folder/dumfile.c4gh",
+		"accession_id": accessionID,
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession", bytes.NewBuffer(payload))
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFilePath(c)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
+}
+
+func (s *TestSuite) TestAccessionMsgFileID() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+
+	// Create and verify test file
+	fileID, decSha := helperCreateVerifiedTestFile(s, user, filePath)
+
+	// Set up Gin context with no payload
+	gin.SetMode(gin.ReleaseMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+fileID+"&accessionid="+accessionID, nil)
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFileID(c, fileID, accessionID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), user, accession.User)
+	assert.Equal(s.T(), filePath, accession.FilePath)
+	assert.Equal(s.T(), accessionID, accession.AccessionID)
+	assert.Equal(s.T(), "accession", accession.Type)
+	assert.Equal(s.T(), fileID, corrID)
+	assert.Equal(s.T(), fmt.Sprintf("%x", decSha.Sum(nil)), accession.DecryptedChecksums[0].Value)
+}
+
+func (s *TestSuite) TestAccessionMsgFileID_WrongFileID() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	accessionID := "accession-id-01"
+	// Register file and then use a random fileID
+	_, _ = helperCreateVerifiedTestFile(s, user, filePath)
+	randomFileID := "non-existent-file-id"
+
+	gin.SetMode(gin.ReleaseMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+randomFileID+"&accessionid="+accessionID, nil)
+	c.Request.Header.Add("Authorization", "Bearer "+s.Token)
+
+	accession, corrID, err := accessionMsgFileID(c, randomFileID, accessionID)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), http.StatusNotFound, w.Code)
+	assert.Empty(s.T(), accession)
+	assert.Empty(s.T(), corrID)
 }
 
 func (s *TestSuite) TestCreateDataset() {
