@@ -139,6 +139,9 @@ func main() {
 				fileID, err := db.GetFileIDbyAccessionID(aID)
 				if err != nil {
 					log.Errorf("failed to get file-id for file with accession-id: %s, reason: %v", aID, err)
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following failed to get fileID from accessionID error message")
+					}
 
 					continue
 				}
@@ -149,7 +152,7 @@ func main() {
 					log.Errorf("failed to get keyhash for file with accession-id: %s, reason: %v", aID, err)
 					// Send the message to an error queue so it can be analyzed.
 					infoErrorMessage := broker.InfoError{
-						Error:           "Failed to get keyhash in rotatekey service",
+						Error:           "Failed to get source key hash in rotatekey service",
 						Reason:          err.Error(),
 						OriginalMessage: string(delivered.Body),
 					}
@@ -209,6 +212,9 @@ func main() {
 				reVerify, err := db.GetReVerificationData(aID)
 				if err != nil {
 					log.Errorf("GetReVerificationData failed for file-id: %s, reason: %v", fileID, err)
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following GetReVerificationData error message")
+					}
 
 					continue
 				}
@@ -217,6 +223,9 @@ func main() {
 				err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), reVerifyMsg)
 				if err != nil {
 					log.Errorf("Validation of outgoing re-verify message failed, reason: %v", err)
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack after verify schema validation error message")
+					}
 
 					continue
 				}
@@ -224,12 +233,18 @@ func main() {
 				corrID, err := db.GetCorrID(reVerify.User, reVerify.FilePath, aID)
 				if err != nil {
 					log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack after GetCorrID error message")
+					}
 
 					continue
 				}
 
 				if err := mq.SendMessage(corrID, conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack after SendMessage error message")
+					}
 
 					continue
 				}
