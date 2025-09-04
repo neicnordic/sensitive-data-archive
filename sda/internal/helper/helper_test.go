@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -150,4 +151,31 @@ func (ts *HelperTest) TestCreatePrivateKeyFile() {
 
 	// Verify the public key is not empty
 	assert.NotEqual(ts.T(), [32]byte{}, publicKey, "Public key should not be empty")
+}
+
+func (ts *HelperTest) TestAnonymizeFilepath() {
+	filePath := "main_folder/sub_folder/file.name"
+	userName := "test.user@demo.org"
+	newPath := AnonymizeFilepath(filepath.Join(strings.Replace(userName, "@", "_", 1), filePath), userName)
+	assert.Equal(ts.T(), filePath, newPath)
+}
+
+func (ts *HelperTest) TestAnonymizeFilepath_noUser() {
+	filePath := "main_folder/sub_folder/file.name"
+	userName := "test.user@demo.org"
+	newPath := AnonymizeFilepath(filePath, userName)
+	assert.Equal(ts.T(), filePath, newPath)
+}
+
+func (ts *HelperTest) TestUnanonymizeFilepath() {
+	filePath := "main_folder/sub_folder/file.name"
+	userName := "test.user@demo.org"
+	newPath := UnanonymizeFilepath(filePath, userName)
+	assert.Equal(ts.T(), filepath.Join(strings.Replace(userName, "@", "_", 1), filePath), newPath)
+}
+func (ts *HelperTest) TestUnanonymizeFilepath_oldMessage() {
+	filePath := "test.user_demo.org/main_folder/sub_folder/file.name"
+	userName := "test.user@demo.org"
+	newPath := UnanonymizeFilepath(filePath, userName)
+	assert.Equal(ts.T(), filePath, newPath)
 }

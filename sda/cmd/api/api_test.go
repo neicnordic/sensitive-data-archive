@@ -717,7 +717,7 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -1931,7 +1931,7 @@ func (s *TestSuite) TestListUserFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", user, sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -2588,8 +2588,7 @@ func (s *TestSuite) TestDownloadFile() {
 	defer ts.Close()
 
 	// Register the file in the database
-	filePath := fmt.Sprintf("/%s/%s", s.User, filepath.Base(s.GoodC4ghFile))
-	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
+	fileID, err := Conf.API.DB.RegisterFile(filepath.Base(s.GoodC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -2708,8 +2707,7 @@ func (s *TestSuite) TestDownloadFile_badC4ghFile() {
 	defer ts.Close()
 
 	// Register a file in the database (but don't create the actual file)
-	filePath := fmt.Sprintf("/%s/%s", s.User, filepath.Base(s.BadC4ghFile))
-	fileID, err := Conf.API.DB.RegisterFile(filePath, s.User)
+	fileID, err := Conf.API.DB.RegisterFile(filepath.Base(s.BadC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")

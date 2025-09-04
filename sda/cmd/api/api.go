@@ -28,6 +28,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
@@ -304,12 +305,7 @@ func getFiles(c *gin.Context) {
 		return
 	}
 
-	prefix := c.Query("path_prefix")
-	if prefix != "" {
-		prefix = fmt.Sprintf("%s/%s", strings.ReplaceAll(token.Subject(), "@", "_"), prefix)
-	}
-
-	files, err := Conf.API.DB.GetUserFiles(token.Subject(), prefix, false)
+	files, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false)
 	if err != nil {
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
@@ -396,8 +392,8 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	var retryTimes = 5
-	for count := 1; count <= retryTimes; count++ {
+	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
+	for count := 1; count <= 5; count++ {
 		err = inbox.RemoveFile(filePath)
 		if err == nil {
 			break
@@ -491,8 +487,13 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	// Get inbox file handle
-	file, err := inbox.NewFileReader(filePath)
+	// Get inbox file handle #noqa
+	file, err := inbox.NewFileReader(
+		helper.UnanonymizeFilepath(
+			filePath,
+			strings.TrimPrefix(c.Param("username"), "/"),
+		),
+	)
 	if err != nil {
 		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
@@ -731,11 +732,8 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimPrefix(username, "/")
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
-	prefix := c.Query("path_prefix")
-	if prefix != "" {
-		prefix = fmt.Sprintf("%s/%s", strings.ReplaceAll(username, "@", "_"), prefix)
-	}
-	files, err := Conf.API.DB.GetUserFiles(username, prefix, true)
+
+	files, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

@@ -32,11 +32,15 @@ for file in NA12878.bam NA12878_20k_b37.bam NA12878.bai NA12878_20k_b37.bai; do
             '$ARGS.named|to_entries|map(with_entries(select(.key=="key").key="type"))'
     )
 
+    if [ "$file" = "NA12878.bam" ]; then
+        file="test_dummy.org/NA12878.bam"
+    fi
+
     ingest_payload=$(
         jq -r -c -n \
             --arg type ingest \
             --arg user test@dummy.org \
-            --arg filepath test_dummy.org/"$file.c4gh" \
+            --arg filepath "$file.c4gh" \
             --argjson encrypted_checksums "$encrypted_checksums" \
             '$ARGS.named|@base64'
     )

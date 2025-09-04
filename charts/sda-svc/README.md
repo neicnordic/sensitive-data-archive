@@ -18,8 +18,13 @@ A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an 
 
 ### To 3.0.0
 
-This version adds Jobs that migrates the database schema from a V1 release and sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.  
-When upgrading from a V1 release *both* `upgradeFromV1` and `setKeyHash` should be run.
+This version adds jobs that perform the following actions:
+
+- Migrates the database schema from a V1 release.
+- Sets the first registered crypt4gh key to all ingested files that do not have a c4gh key referenced.
+- Removes the submitters username from the submission file paths in the database.
+
+When upgrading from a V1 release *All these jobs* should be run.
 
 Unless the same queries are being executed manually by a database administrator a `Basic authentication Secret` containing the credentials to perform the upgrade needs to be created.
 
@@ -30,7 +35,7 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 Parameter | Description | Default
 --------- | ----------- | -------
 `image.repository` | Repository URI | `ghcr.io/neicnordic/sensitive-data-archive`
-`image.tag` | Tag version to deploy | ``
+`image.tag` | Tag version to deploy | `chart appVersion`
 `image.pullPolicy` | Image pull policy, `Always` or `IfNotPresent` | `Always`
 `global.secretsPath` | Path where the sensitive files can be found | `/.secrets`
 `global.c4ghPath` | This path will be a subpath to the secretsPath | `c4gh`
