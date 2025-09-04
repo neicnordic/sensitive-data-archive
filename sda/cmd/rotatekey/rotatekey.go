@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -52,26 +53,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Check that the rotation pub key hash exists in the database
-	keyhash := hex.EncodeToString(publicKey[:])
-	hashes, err := db.ListKeyHashes()
+	// Check that key is registered in the db at startup
+	keyhash, err := getKeyHash()
 	if err != nil {
-		log.Errorln(err.Error())
-	}
-	found := false
-	for n := range hashes {
-		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
-			log.Fatal("the crypt4gh rotate key hash has been deprecated")
-		}
-
-		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
-			found = true
-
-			break
-		}
-	}
-	if !found {
-		log.Fatal("the crypt4gh rotate key hash is not registered")
+		log.Fatalf("database lookup of the rotation key failed, reason: %v", err)
 	}
 
 	defer mq.Channel.Close()
@@ -124,6 +109,29 @@ func main() {
 				continue
 			}
 
+			// Fetch rotate key hash before starting work so that we make sure the hash state
+			// has not changed since the application startup.
+			keyhash, err = getKeyHash()
+			if err != nil {
+				log.Errorf("database lookup of the rotation key failed, reason: %v", err)
+				// Send the message to an error queue so it can be analyzed.
+				infoErrorMessage := broker.InfoError{
+					Error:           "Lookup of rotation key hash failed in rotatekey service",
+					Reason:          err.Error(),
+					OriginalMessage: string(delivered.Body),
+				}
+
+				body, _ := json.Marshal(infoErrorMessage)
+				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
+
+				continue
+			}
+
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 
@@ -131,6 +139,8 @@ func main() {
 				fileID, err := db.GetFileIDbyAccessionID(aID)
 				if err != nil {
 					log.Errorf("failed to get file-id for file with accession-id: %s, reason: %v", aID, err)
+
+					continue
 				}
 
 				// Get current keyhash for the file, send to error queue if this fails
@@ -217,6 +227,7 @@ func main() {
 
 					continue
 				}
+
 				if err := mq.SendMessage(corrID, conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 
@@ -259,4 +270,30 @@ func reencryptFileHeader(stableID string) ([]byte, error) {
 	}
 
 	return newHeader, nil
+}
+
+// Check that the key hash exists in the database
+func getKeyHash() (string, error) {
+	keyhash := hex.EncodeToString(publicKey[:])
+	hashes, err := db.ListKeyHashes()
+	if err != nil {
+		return "", err
+	}
+	found := false
+	for n := range hashes {
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
+			return "", errors.New("the c4gh key hash has been deprecated")
+		}
+
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
+			found = true
+
+			break
+		}
+	}
+	if !found {
+		return "", errors.New("the c4gh key hash is not registered")
+	}
+
+	return keyhash, nil
 }
