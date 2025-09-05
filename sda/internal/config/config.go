@@ -389,6 +389,20 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"c4gh.privateKeys",
 		}
+	case "rotatekey":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"c4gh.rotatePubKeyPath",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+		}
 	case "s3inbox":
 		requiredConfVars = []string{
 			"broker.host",
@@ -650,6 +664,17 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "rotatekey":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		err := c.configDatabase()
+		if err != nil {
+			return nil, err
+		}
+
+		c.configSchemas()
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {
@@ -713,6 +738,7 @@ func NewConfig(app string) (*Config, error) {
 	return c, nil
 }
 
+// configAPI provides configuration for the api web server
 func (c *Config) configAPI() error {
 	c.apiDefaults()
 	api := APIConf{}
@@ -1130,7 +1156,7 @@ func (c *Config) configSync() error {
 	return nil
 }
 
-// configSync provides configuration for the outgoing sync settings
+// configSyncAPI provides configuration for the outgoing sync settings
 func (c *Config) configSyncAPI() {
 	c.SyncAPI = SyncAPIConf{}
 	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
@@ -1197,8 +1223,17 @@ func GetC4GHprivateKeys() ([]*[32]byte, error) {
 }
 
 // GetC4GHPublicKey reads the c4gh public key
-func GetC4GHPublicKey() (*[32]byte, error) {
-	keyPath := viper.GetString("c4gh.syncPubKeyPath")
+func GetC4GHPublicKey(app string) (*[32]byte, error) {
+	var keyPath string
+	switch app {
+	case "sync":
+		keyPath = viper.GetString("c4gh.syncPubKeyPath")
+	case "rotatekey":
+		keyPath = viper.GetString("c4gh.rotatePubKeyPath")
+	default:
+		return nil, errors.New("pubKey not set")
+	}
+
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)
 	if err != nil {
