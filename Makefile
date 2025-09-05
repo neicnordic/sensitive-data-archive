@@ -112,7 +112,7 @@ integrationtest-sda-posix-down:
 
 integrationtest-sda-s3: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml run integration_test
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml down -v --remove-orphans
+
 integrationtest-sda-s3-run:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-s3-integration.yml run integration_test
 integrationtest-sda-s3-down:

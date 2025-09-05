@@ -3,13 +3,17 @@ package observability
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otelProm "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -68,12 +72,15 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	metricExporter, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpoint("localhost:4318"))
+	reg := prometheus.NewRegistry()
+	metricsExposer, err := otelProm.New(
+		otelProm.WithRegisterer(reg), // register exporter with this registry
+	)
 	if err != nil {
-		return nil, err
+		log.Fatalf("prometheus exporter: %v", err)
 	}
 
-	meterProvider := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(metricExporter)))
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metricsExposer.Reader))
 	if err != nil {
 		handleErr(err)
 		return
@@ -85,6 +92,16 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	if err != nil {
 		return nil, err
 	}
+
+	prometheusMux := http.NewServeMux()
+
+	prometheusMux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	go func() {
+		if err := http.ListenAndServe(":9090", prometheusMux); err != nil {
+			log.Error("failed to start prometheus metrics server")
+		}
+	}()
 
 	return
 }

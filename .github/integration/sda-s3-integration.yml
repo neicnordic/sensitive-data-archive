@@ -43,6 +43,10 @@ services:
     depends_on:
       jaeger:
         condition: service_started
+      grafana:
+        condition: service_started
+      prometheus:
+        condition: service_started
     volumes:
       - ./sda/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
@@ -53,9 +57,33 @@ services:
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
       - 55679:55679 # zpages extension
-      - 9090:9090 # prometheus metrics collected
     extra_hosts:
       - "localhost:host-gateway"
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    volumes:
+      - "./sda/prometheus.yml:/etc/prometheus/prometheus.yml"
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - 9090:9090
+
+  grafana:
+    image: grafana/grafana-enterprise
+    depends_on:
+      jaeger:
+        condition: service_started
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    extra_hosts:
+      - "localhost:host-gateway"
+
 
   postgres:
     build:
@@ -157,6 +185,7 @@ services:
     ports:
       - "18000:8000"
       - "18001:8001"
+      - "9092:9090"
 
   ingest:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -187,6 +216,8 @@ services:
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9093:9090"
 
   verify:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -217,6 +248,8 @@ services:
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9094:9090"
 
   finalize:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -247,6 +280,8 @@ services:
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9095:9090"
 
   mapper:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -276,6 +311,8 @@ services:
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9096:9090"
 
   api:
     command: [sda-api]
@@ -302,6 +339,7 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
+      - "9097:9090"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -321,12 +359,14 @@ services:
         condition: service_completed_successfully
     ports:
       - "50051:50051"
+      - "9098:9090"
     restart: always
     extra_hosts:
       - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+
 
   cega-nss:
     container_name: cega-nss
