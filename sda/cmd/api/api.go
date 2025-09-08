@@ -317,8 +317,7 @@ func getFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
-// ingestFile function sends the ingest message
-// to the broker
+// ingestFile function sends the ingest message to the broker
 func ingestFile(c *gin.Context) {
 	var (
 		ingest schema.IngestionTrigger
