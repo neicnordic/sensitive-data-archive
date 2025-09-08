@@ -3,13 +3,13 @@ module github.com/neicnordic/sensitive-data-archive
 go 1.24.1
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.38.3
-	github.com/aws/aws-sdk-go-v2/config v1.31.6
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.10
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.4
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.3
+	github.com/aws/aws-sdk-go-v2 v1.39.0
+	github.com/aws/aws-sdk-go-v2/config v1.31.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.11
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.5
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.0
 	github.com/aws/smithy-go v1.23.0
-	github.com/casbin/casbin/v2 v2.121.0
+	github.com/casbin/casbin/v2 v2.122.0
 	github.com/coreos/go-oidc/v3 v3.15.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
@@ -29,10 +29,10 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/viper v1.20.1
+	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.41.0
-	golang.org/x/oauth2 v0.30.0
+	golang.org/x/crypto v0.42.0
+	golang.org/x/oauth2 v0.31.0
 	google.golang.org/grpc v1.75.0
 	google.golang.org/protobuf v1.36.8
 )
@@ -50,18 +50,18 @@ require (
 	github.com/Shopify/goreferrer v0.0.0-20250513162709-b78e2829e40b // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.1 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.6 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.6 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.8.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.29.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.38.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.8.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.29.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.38.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.8.1 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
@@ -131,13 +131,13 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/sagikazarmark/locafero v0.9.0 // indirect
+	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	github.com/sourcegraph/conc v0.3.0 // indirect
-	github.com/spf13/afero v1.14.0 // indirect
-	github.com/spf13/cast v1.8.0 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
+	github.com/spf13/afero v1.15.0 // indirect
+	github.com/spf13/cast v1.10.0 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tdewolff/minify/v2 v2.23.6 // indirect
 	github.com/tdewolff/parse/v2 v2.8.1 // indirect
@@ -150,12 +150,12 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/yosssi/ace v0.0.5 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.17.0 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
-	golang.org/x/net v0.42.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
