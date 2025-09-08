@@ -1298,10 +1298,10 @@ func (suite *DatabaseTests) TestGetUserAndPathFromUUID_Found() {
 	fileID, err := db.RegisterFile(filePath, user)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	info, err := db.GetUserAndPathFromUUID(fileID)
+	pathInfo, userInfo, err := db.GetUserAndPathFromUUID(fileID)
 	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
-	assert.Equal(suite.T(), user, info.User)
-	assert.Equal(suite.T(), filePath, info.InboxPath)
+	assert.Equal(suite.T(), user, userInfo)
+	assert.Equal(suite.T(), filePath, pathInfo)
 	db.Close()
 }
 
@@ -1311,9 +1311,9 @@ func (suite *DatabaseTests) TestGetUserAndPathFromUUID_NotFound() {
 
 	// Use a non-existent UUID
 	invalidUUID := "abc-123"
-	info, err := db.GetUserAndPathFromUUID(invalidUUID)
+	pathInfo, userInfo, err := db.GetUserAndPathFromUUID(invalidUUID)
 	assert.Error(suite.T(), err, "expected error for non-existent UUID")
-	assert.Empty(suite.T(), info.User)
-	assert.Empty(suite.T(), info.InboxPath)
+	assert.Empty(suite.T(), userInfo)
+	assert.Empty(suite.T(), pathInfo)
 	db.Close()
 }

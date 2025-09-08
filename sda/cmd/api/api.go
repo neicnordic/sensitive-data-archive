@@ -402,7 +402,7 @@ func ingestMsgFileID(c *gin.Context, fileUUID string) (schema.IngestionTrigger, 
 		return schema.IngestionTrigger{}, "", errors.New("add either parameter or payload, not both")
 	}
 	// Get the user and the inbox filepath
-	ingestInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
+	pathInfo, userInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
 
@@ -411,8 +411,8 @@ func ingestMsgFileID(c *gin.Context, fileUUID string) (schema.IngestionTrigger, 
 
 	// Information needed for the ingest message
 	ingest.Type = "ingest"
-	ingest.User = ingestInfo.User
-	ingest.FilePath = ingestInfo.InboxPath
+	ingest.User = userInfo
+	ingest.FilePath = pathInfo
 	// For BP the file UUID and the correlation ID are the same.
 	// TODO: If in GDI they are not the same then change the line below
 	corrID := fileUUID
@@ -698,7 +698,7 @@ func accessionMsgFileID(c *gin.Context, fileUUID, acccessionID string) (schema.I
 		return schema.IngestionAccession{}, "", errors.New("add either parameters or json payload, not both")
 	}
 	// Get the user and the inbox filepath
-	userPathInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
+	pathInfo, userInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
 
@@ -714,8 +714,8 @@ func accessionMsgFileID(c *gin.Context, fileUUID, acccessionID string) (schema.I
 	}
 	// Information needed for the ingest message
 	accession.Type = "accession"
-	accession.User = userPathInfo.User
-	accession.FilePath = userPathInfo.InboxPath
+	accession.User = userInfo
+	accession.FilePath = pathInfo
 	accession.AccessionID = acccessionID
 	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
 	// For BP the file UUID and the correlation ID are the same.
