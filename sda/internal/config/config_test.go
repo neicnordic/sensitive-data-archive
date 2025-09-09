@@ -326,6 +326,35 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(ts.T(), config.Sync.Destination.Posix)
 	assert.Equal(ts.T(), "test", config.Sync.Destination.Posix.Location)
 }
+
+func (ts *ConfigTestSuite) TestRotateKeyConfig() {
+	ts.SetupTest()
+	// At this point we should fail because we lack configuration
+	config, err := NewConfig("rotatekey")
+	assert.Error(ts.T(), err)
+	assert.Nil(ts.T(), config)
+
+	viper.Set("c4gh.rotatePubKeyPath", "/keys/recipient")
+	config, err = NewConfig("rotatekey")
+	assert.NotNil(ts.T(), config)
+	assert.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), config.Broker)
+	assert.Equal(ts.T(), "testhost", config.Broker.Host)
+	assert.Equal(ts.T(), 123, config.Broker.Port)
+	assert.Equal(ts.T(), "testuser", config.Broker.User)
+	assert.Equal(ts.T(), "testpassword", config.Broker.Password)
+	assert.Equal(ts.T(), "routingtest", config.Broker.RoutingKey)
+	assert.NotNil(ts.T(), config.Database)
+	assert.Equal(ts.T(), "test", config.Database.Host)
+	assert.Equal(ts.T(), 123, config.Database.Port)
+	assert.Equal(ts.T(), "test", config.Database.User)
+	assert.Equal(ts.T(), "test", config.Database.Password)
+	assert.Equal(ts.T(), "test", config.Database.Database)
+	assert.NotNil(ts.T(), config.RotateKey)
+	assert.NotNil(ts.T(), config.RotateKey.Grpc)
+	assert.Equal(ts.T(), "reencrypt", config.RotateKey.Grpc.Host)
+}
+
 func (ts *ConfigTestSuite) TestGetC4GHPublicKey() {
 	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
 	pubKeyPath, _ := os.MkdirTemp("", "pubkey")
