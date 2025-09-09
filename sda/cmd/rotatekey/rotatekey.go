@@ -187,6 +187,15 @@ func main() {
 
 					continue
 				}
+				if newHeader == nil {
+					err = errors.New("reencrypt returned empty header")
+					log.Errorf("failed to rotate c4gh key for file %s, reason: %v", aID, err)
+					if err := delivered.Nack(false, false); err != nil {
+						log.Errorf("failed to nack following reencryptFiles error message")
+					}
+
+					continue
+				}
 
 				// Rotate header in database
 				if err := db.StoreHeader(newHeader, fileID); err != nil {
