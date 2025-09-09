@@ -38,7 +38,7 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.go-version }}
         id: go
@@ -73,7 +73,7 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.go-version }}
         id: go
@@ -108,7 +108,7 @@ jobs:
     steps:
 
       - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
         id: go
