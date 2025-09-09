@@ -50,6 +50,7 @@ type Config struct {
 	SyncAPI      SyncAPIConf
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
+	RotateKey    RotateKeyConf
 }
 
 type Grpc struct {
@@ -68,6 +69,10 @@ type ReEncConfig struct {
 	Grpc
 	C4ghPrivateKeyList []*[32]byte
 	Timeout            int
+}
+
+type RotateKeyConf struct {
+	Grpc Grpc
 }
 
 type Sync struct {
@@ -402,6 +407,7 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
+			"grpc.host",
 		}
 	case "s3inbox":
 		requiredConfVars = []string{
@@ -675,6 +681,11 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+
+		c.RotateKey.Grpc, err = configReEncryptClient()
+		if err != nil {
+			return nil, err
+		}
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {

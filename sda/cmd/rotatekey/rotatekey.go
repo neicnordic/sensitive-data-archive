@@ -6,26 +6,31 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
-	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/chacha20poly1305"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
-	err            error
-	publicKey      *[32]byte
-	archiveKeyList []*[32]byte
-	db             *database.SDAdb
-	conf           *config.Config
+	err       error
+	publicKey *[32]byte
+	db        *database.SDAdb
+	conf      *config.Config
 )
 
 func main() {
@@ -41,11 +46,6 @@ func main() {
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	archiveKeyList, err = config.GetC4GHprivateKeys()
-	if err != nil || len(archiveKeyList) == 0 {
-		log.Fatal("no C4GH private keys configured")
 	}
 
 	publicKey, err = config.GetC4GHPublicKey("rotatekey")
@@ -267,19 +267,14 @@ func reencryptFileHeader(stableID string) ([]byte, error) {
 		return nil, err
 	}
 
-	// determine decryption key
-	var key *[32]byte
-	for _, k := range archiveKeyList {
-		size, err := headers.EncryptedSegmentSize(header, *k)
-		if (err == nil) && (size != 0) {
-			key = k
-
-			break
-		}
+	// encode pubkey as pem and then as base64 string
+	tmp := &bytes.Buffer{}
+	if err = keys.WriteCrypt4GHX25519PublicKey(tmp, *publicKey); err != nil {
+		return nil, err
 	}
+	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
-	pubkeyList := [][chacha20poly1305.KeySize]byte{*publicKey}
-	newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
+	newHeader, err := reencryptHeader(header, pubKeyEncoded)
 	if err != nil {
 		return nil, err
 	}
@@ -311,4 +306,38 @@ func getKeyHash() (string, error) {
 	}
 
 	return keyhash, nil
+}
+
+// reencryptHeader re-encrypts the header of a file using the public key
+// provided in the request header and returns the new header. The function uses
+// gRPC to communicate with the re-encrypt service and handles TLS configuration
+// if needed. The function also handles the case where the CA certificate is
+// provided for secure communication.
+func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
+	var opts []grpc.DialOption
+	switch {
+	case conf.RotateKey.Grpc.ClientCreds != nil:
+		opts = append(opts, grpc.WithTransportCredentials(conf.RotateKey.Grpc.ClientCreds))
+	default:
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", conf.RotateKey.Grpc.Host, conf.RotateKey.Grpc.Port), opts...)
+	if err != nil {
+		log.Errorf("failed to connect to the reencrypt service, reason: %s", err)
+
+		return nil, err
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.RotateKey.Grpc.Timeout)*time.Second)
+	defer cancel()
+
+	c := reencrypt.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Header, nil
 }
