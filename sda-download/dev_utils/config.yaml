@@ -41,8 +41,11 @@ session:
   name: "sda_session_key"
 
 c4gh:
-  passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
   filepath: "./dev_utils/c4gh.sec.pem"
+  passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
+  privateKeys:
+  - filepath: "./dev_utils/c4gh.sec.pem"
+    passphrase: "oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm"
   transientPassphrase: ""
   transientKeyPath: ""
 
