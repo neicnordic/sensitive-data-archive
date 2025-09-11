@@ -63,6 +63,34 @@ func (dbs *SDAdb) getFileID(corrID string) (string, error) {
 	return fileID, nil
 }
 
+func (dbs *SDAdb) GetFileIDbyAccessionID(accessionID string) (string, error) {
+	var (
+		err   error
+		count int
+		ID    string
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		ID, err = dbs.getFileIDbyAccessionID(accessionID)
+		count++
+	}
+
+	return ID, err
+}
+func (dbs *SDAdb) getFileIDbyAccessionID(accessionID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT id FROM sda.files where stable_id = $1;"
+
+	var fileID string
+	err := db.QueryRow(getFileID, accessionID).Scan(&fileID)
+	if err != nil {
+		return "", err
+	}
+
+	return fileID, nil
+}
+
 // GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
 // and that is not yet archived
 func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string, error) {
@@ -937,6 +965,38 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 	return nil
 }
 
+// GetKeyHash wraps getKeyHash with exponential stand-off retries
+func (dbs *SDAdb) GetKeyHash(fileID string) (string, error) {
+	var (
+		keyHash string
+		err     error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		keyHash, err = dbs.getKeyHash(fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return keyHash, err
+}
+
+// getKeyHash gets the c4gh key hash corresponding to the fileID in the files table
+func (dbs *SDAdb) getKeyHash(fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "SELECT key_hash from sda.files WHERE id = $1;"
+	var keyHash string
+	err := db.QueryRow(query, fileID).Scan(&keyHash)
+	if err != nil {
+		return "", err
+	}
+
+	return keyHash, nil
+}
 func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
