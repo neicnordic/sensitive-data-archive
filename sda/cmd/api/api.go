@@ -317,25 +317,65 @@ func getFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
-// ingestFile function sends the ingest message to the broker
+/*
+ingestFile handles requests to initiate ingestion of a file.
+This endpoint supports two input modes:
+1. By file ID (via the "fileid" query parameter): Looks up the user and file path from the database.
+2. By JSON payload: Expects a JSON body with user and file path.
+The function constructs an ingest message, validates it
+and sends it to the broker with the appropriate correlation ID.
+*/
 func ingestFile(c *gin.Context) {
 	var (
 		ingest schema.IngestionTrigger
 		corrID string
-		err    error
 	)
-	fileID := c.Query("fileid")
-	if fileID == "" {
-		ingest, corrID, err = ingestMsgFilePath(c)
+	hasQuery := c.Query("fileid") != ""
+	hasBody := c.Request.ContentLength > 0
+	switch {
+	case hasQuery && hasBody:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "both file ID parameter and payload provided. Choose one")
+
+		return
+	case hasQuery:
+		// Get the user and the inbox filepath
+		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
 		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "file information not found")
+
 			return
 		}
-	} else {
-		ingest, corrID, err = ingestMsgFileID(c, fileID)
+		// Add file info in the message payload
+		ingest.User = fileDetails.User
+		ingest.FilePath = fileDetails.Path
+		corrID = fileDetails.CorrID
+	default:
+		// Bind ingest and payload
+		if err = c.BindJSON(&ingest); err != nil {
+			c.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{
+					"error":  "json decoding : " + err.Error(),
+					"status": http.StatusBadRequest,
+				},
+			)
+
+			return
+		}
+		// Find the correlation id of the file
+		corrID, err = Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
 		if err != nil {
+			if corrID == "" {
+				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+			} else {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+			}
+
 			return
 		}
 	}
+	// Add type in message payload
+	ingest.Type = "ingest"
 
 	marshaledMsg, _ := json.Marshal(&ingest)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
@@ -352,72 +392,6 @@ func ingestFile(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-}
-
-// ingestMsgFilePath parses the JSON payload from the request to construct an ingestion trigger message.
-// It validates the payload and retrieves the correlation ID for the file using the user and file path.
-// Returns the parsed ingestion trigger struct, the correlation ID, and an error if any occurred.
-func ingestMsgFilePath(c *gin.Context) (schema.IngestionTrigger, string, error) {
-	var ingest schema.IngestionTrigger
-	// Bind ingest and payload
-	if err := c.BindJSON(&ingest); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		return schema.IngestionTrigger{}, "", err
-	}
-	// Find the correlation id of the file
-	corrID, err := Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
-	if err != nil {
-		if corrID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		} else {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
-
-		return schema.IngestionTrigger{}, "", err
-	}
-	// Add type in message payload
-	ingest.Type = "ingest"
-
-	return ingest, corrID, nil
-}
-
-// ingestMsgFileID constructs an ingestion trigger message using a file UUID provided as a query parameter.
-// It checks that no JSON payload is present in the request; if both are provided, it returns a 400 Bad Request.
-// The function retrieves the user and file path from the database using the file UUID.
-// If the file UUID is not found, it responds with a 404 Not Found error.
-// Returns the constructed ingestion trigger struct, the correlation ID (file UUID), and an error if any occurred.
-func ingestMsgFileID(c *gin.Context, fileUUID string) (schema.IngestionTrigger, string, error) {
-	var ingest schema.IngestionTrigger
-	// Check if payload is provided as well
-	if c.Request.ContentLength > 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "Both file ID parameter and payload provided. Choose one")
-
-		return schema.IngestionTrigger{}, "", errors.New("add either parameter or payload, not both")
-	}
-	// Get the user and the inbox filepath
-	pathInfo, userInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
-
-		return schema.IngestionTrigger{}, "", err
-	}
-
-	// Information needed for the ingest message
-	ingest.Type = "ingest"
-	ingest.User = userInfo
-	ingest.FilePath = pathInfo
-	// For BP the file UUID and the correlation ID are the same.
-	// TODO: If in GDI they are not the same then change the line below
-	corrID := fileUUID
-
-	return ingest, corrID, nil
 }
 
 // The deleteFile function deletes files from the inbox and marks them as
@@ -594,30 +568,85 @@ func downloadFile(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// setAccession handles requests to assign an accession ID to a file.
-// It accepts either a JSON payload with user and file path, or query parameters for fileid and accessionid.
-// If both payload and parameters are provided, a 400 Bad Request is returned.
-// The function validates the request, constructs the accession message, and sends it to the broker.
-// Returns 200 OK on success, or an appropriate error code on failure.
+/*
+setAccession handles requests to assign an accession ID to a file.
+This endpoint supports two input modes:
+1. By query parameters ("fileid" and "accessionid"): Retrieves user, file path, and decrypted checksum from the database using the file ID.
+2. By JSON payload: Expects a JSON body with user and file path, then looks up the correlation ID and decrypted checksum.
+If both query parameters and a JSON payload are provided, the request is rejected with a 400 Bad Request.
+The function constructs an accession message, validates it and sends it to the message broker.
+*/
 func setAccession(c *gin.Context) {
 	var (
 		accession schema.IngestionAccession
 		corrID    string
-		err       error
 	)
-	accessionID := c.Query("accessionid")
-	fileID := c.Query("fileid")
-	if fileID == "" || accessionID == "" {
-		accession, corrID, err = accessionMsgFilePath(c)
+	hasQuery := c.Query("fileid") != "" || c.Query("accessionid") != ""
+	hasBody := c.Request.ContentLength > 0
+	switch {
+	case hasQuery && hasBody:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "both parameters and json payload provided. Choose one")
+
+		return
+	case hasQuery:
+		// Get the user and the inbox filepath
+		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
 		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "file details not found")
+
 			return
 		}
-	} else {
-		accession, corrID, err = accessionMsgFileID(c, fileID, accessionID)
+		// Get the decrypted checksum
+		fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(c.Query("fileid"))
 		if err != nil {
+			log.Debugln(err.Error())
+			c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
+
 			return
 		}
+		// Add info in message payload
+		accession.AccessionID = c.Query("accessionid")
+		accession.User = fileDetails.User
+		accession.FilePath = fileDetails.Path
+		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
+		// Corellation id
+		corrID = fileDetails.CorrID
+	default:
+		if err = c.BindJSON(&accession); err != nil {
+			c.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{
+					"error":  "json decoding : " + err.Error(),
+					"status": http.StatusBadRequest,
+				},
+			)
+
+			return
+		}
+		// Find the correlation id
+		corrID, err = Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
+		if err != nil {
+			if corrID == "" {
+				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+			} else {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+			}
+
+			return
+		}
+		// Get decrypted checksum
+		fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+		if err != nil {
+			log.Debugln(err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+			return
+		}
+		// Add decrypted checksum in message payload
+		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
 	}
+	// Add type in the message payload
+	accession.Type = "accession"
 
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
@@ -636,93 +665,6 @@ func setAccession(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-}
-
-// accessionMsgFilePath parses the JSON payload from the request.
-// It validates the payload and retrieves all the information needed
-// to construct the accession payload message.
-// Returns the accession payload, the correlation ID, and an error if any occurred.
-func accessionMsgFilePath(c *gin.Context) (schema.IngestionAccession, string, error) {
-	var accession schema.IngestionAccession
-	if err := c.BindJSON(&accession); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		return schema.IngestionAccession{}, "", err
-	}
-
-	corrID, err := Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
-	if err != nil {
-		if corrID == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-		} else {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
-
-		return schema.IngestionAccession{}, "", err
-	}
-
-	// For the BP case the correlation id is the same with the file id.
-	// TODO: If in GDi the IDs are different need to find the file id
-	fileUUID := corrID
-	fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileUUID)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
-
-		return schema.IngestionAccession{}, "", err
-	}
-
-	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
-	accession.Type = "accession"
-
-	return accession, corrID, nil
-}
-
-// accessionMsgFileID constructs an accession message using a file UUID and accession ID provided as parameters.
-// It checks that no JSON payload is present in the request; if both are provided, it returns a 400 Bad Request.
-// The function retrieves the user, file path, and decrypted checksum from the database using the file UUID.
-// If the file UUID or checksum is not found, it responds with a 404 Not Found error.
-// Returns the accession payload, the correlation ID, and an error if any occurred.
-func accessionMsgFileID(c *gin.Context, fileUUID, acccessionID string) (schema.IngestionAccession, string, error) {
-	var accession schema.IngestionAccession
-	// Check if payload is provided as well
-	if c.Request.ContentLength > 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "Both parameters and json payload provided. Choose one")
-
-		return schema.IngestionAccession{}, "", errors.New("add either parameters or json payload, not both")
-	}
-	// Get the user and the inbox filepath
-	pathInfo, userInfo, err := Conf.API.DB.GetUserAndPathFromUUID(fileUUID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, "file ID not found")
-
-		return schema.IngestionAccession{}, "", err
-	}
-	// Get the decrypted checksum
-	fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileUUID)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
-
-		return schema.IngestionAccession{}, "", err
-	}
-	// Information needed for the ingest message
-	accession.Type = "accession"
-	accession.User = userInfo
-	accession.FilePath = pathInfo
-	accession.AccessionID = acccessionID
-	accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
-	// For BP the file UUID and the correlation ID are the same.
-	// TODO: If in GDI they are not the same then change the line below
-	corrID := fileUUID
-
-	return accession, corrID, nil
 }
 
 func createDataset(c *gin.Context) {
