@@ -1174,3 +1174,43 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 
 	return accessions, nil
 }
+
+type FileDetails struct {
+	User    string
+	Path    string
+	Corr_id string
+}
+
+// GetUserAndPathFromUUID() retrieves user, path and correlation id by giving the file UUID
+func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
+	var (
+		info FileDetails
+		err error
+	)
+
+	for count := 0; count <= RetryTimes; count++ {
+		info, err = dbs.getFileDetailsFromUUID(fileUUID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return info, err
+}
+
+// getUserAndPathFromUUID() is the actual function performing work for GetUserAndPathFromUUID
+func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
+	var info FileDetails
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = `SELECT f.submission_user, f.submission_file_path, fel.correlation_id 
+		from sda.files f
+		join sda.file_event_log fel on f.id = fel.file_id
+		WHERE f.id = $1 and fel.event='uploaded';`
+	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&info.User, &info.Path, &info.Corr_id); err != nil {
+		return FileDetails{}, err
+	}
+
+	return info, nil
+}
