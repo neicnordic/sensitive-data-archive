@@ -1175,33 +1175,42 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	return accessions, nil
 }
 
-// GetUserAndPathFromUUID() retrieves user and path by giving the file UUID
-func (dbs *SDAdb) GetUserAndPathFromUUID(fileUUID string) (string, string, error) {
+type FileDetails struct {
+	User   string
+	Path   string
+	CorrID string
+}
+
+// GetUserAndPathFromUUID() retrieves user, path and correlation id by giving the file UUID
+func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 	var (
-		inboxPath, user string
-		err error
+		info FileDetails
+		err  error
 	)
 
 	for count := 0; count <= RetryTimes; count++ {
-		inboxPath, user, err = dbs.getUserAndPathFromUUID(fileUUID)
+		info, err = dbs.getFileDetailsFromUUID(fileUUID)
 		if err == nil {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	return inboxPath, user, err
+	return info, err
 }
 
 // getUserAndPathFromUUID() is the actual function performing work for GetUserAndPathFromUUID
-func (dbs *SDAdb) getUserAndPathFromUUID(fileUUID string) (string, string, error) {
+func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
+	var info FileDetails
 	dbs.checkAndReconnectIfNeeded()
 
-	const query = "SELECT submission_user, submission_file_path from sda.files WHERE id = $1;"
-	var inboxPath, user string
-	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&user, &inboxPath); err != nil {
-		return "", "", err
+	const query = `SELECT f.submission_user, f.submission_file_path, fel.correlation_id 
+		from sda.files f
+		join sda.file_event_log fel on f.id = fel.file_id
+		WHERE f.id = $1 and fel.event='uploaded';`
+	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&info.User, &info.Path, &info.CorrID); err != nil {
+		return FileDetails{}, err
 	}
 
-	return inboxPath, user, nil
+	return info, nil
 }
