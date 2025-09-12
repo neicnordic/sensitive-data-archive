@@ -193,11 +193,11 @@ paths:
           description: Successful operation.
         "400":
           description: |
-            Bad payload. Returned if both fileid/accessionid and payload are provided, or if payload is invalid.
+            Bad request. Returned if both fileid/accessionid and payload are provided, or if payload is invalid, or if fileid is invalid.
         "401":
           description: Authentication failure.
         "404":
-          description: File ID or decrypted checksum not found.
+          description: Decrypted checksum not found.
         "500":
           description: Internal application error.
   /file/ingest:
@@ -224,11 +224,9 @@ paths:
           description: Successful operation.
         "400":
           description: |
-            Bad payload. Returned if both fileid and payload are provided, or if payload is invalid.
+            Bad request. Returned if both fileid and payload are provided, or if payload is invalid, or if fileid is invalid.
         "401":
           description: Authentication failure.
-        "404":
-          description: File ID not found.
         "500":
           description: Internal application error.
   /file/{userName}/{fileID}:

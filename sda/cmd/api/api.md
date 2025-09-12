@@ -58,9 +58,8 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
   - Error codes
     - `200` Query executed successfully.
-    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and fileid provided, or invalid JSON).
+    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and fileid provided, invalid fileid, or invalid JSON).
     - `401` Token user is not in the list of admins.
-    - `404` File ID not found.
     - `500` Internal error due to DB or MQ failures.
 
     Example (JSON payload):
@@ -84,9 +83,9 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
   - Error codes
     - `200` Query executed successfully.
-    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and parameters provided, or invalid JSON).
+    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and parameters provided, invalid fileid, or invalid JSON).
     - `401` Token user is not in the list of admins.
-    - `404` File ID or decrypted checksum not found.
+    - `404` Decrypted checksum not found.
     - `500` Internal error due to DB or MQ failures.
 
     Example (JSON payload):
