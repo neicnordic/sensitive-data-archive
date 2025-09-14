@@ -222,9 +222,9 @@ echo "Ingest file by using file ID"
 s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/ingest/NB12878-ingest.bam.c4gh
 sleep 3
 # Find the file id of the uploaded file
-new_fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "test_dummy.org/ingest/NB12878-ingest.bam.c4gh") | .fileID')"
+new_fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "ingest/NB12878-ingest.bam.c4gh") | .fileID')"
 # ingest the file
-ingest_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/file/ingest?fileid=$new_fileid")"
+ingest_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/file/ingest?fileid=$new_fileid")"
 if [ "$ingest_resp" != "200" ]; then
     echo "Error when requesting to ingesting file by the use of file id, expected 200 got: $ingest_resp"
     exit 1
