@@ -21,6 +21,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -90,21 +91,8 @@ func main() {
 
 			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				log.Errorf("validation of incoming message (dataset-mapping) failed, reason: %v", err)
-				// Send the message to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed in rotatekey service",
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
+				msg := "validation of incoming message (dataset-mapping) failed"
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -113,21 +101,8 @@ func main() {
 			// has not changed since the application startup.
 			keyhash, err = getKeyHash()
 			if err != nil {
-				log.Errorf("database lookup of the rotation key failed, reason: %v", err)
-				// Send the message to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           "Lookup of rotation key hash failed in rotatekey service",
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
+				msg := "database lookup of the rotation key failed"
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -138,10 +113,9 @@ func main() {
 			// We expect only one aID per message so that we handle errors and nacks properly.
 			// A different json schema seems like a cleaner solution going forward.
 			if len(message.AccessionIDs) > 1 {
-				log.Errorf("failed to process message, reason: multiple accession_id's per message is not supported")
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
+				msg := "failed to process message"
+				err = errors.New("multiple accession_ids per message is not supported")
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -150,10 +124,8 @@ func main() {
 
 			fileID, err := db.GetFileIDbyAccessionID(aID)
 			if err != nil {
-				log.Errorf("failed to get file-id for file with accession-id: %s, reason: %v", aID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following failed to get fileID from accessionID error message")
-				}
+				msg := fmt.Sprintf("failed to get file-id for file with accession-id: %s", aID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -161,70 +133,47 @@ func main() {
 			// Get current keyhash for the file, send to error queue if this fails
 			oldKeyHash, err := db.GetKeyHash(fileID)
 			if err != nil {
-				log.Errorf("failed to get keyhash for file with accession-id: %s, reason: %v", aID, err)
-				// Send the message to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           "Failed to get source key hash in rotatekey service",
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
+				msg := fmt.Sprintf("failed to get keyhash for file with accession-id: %s", aID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			// Check that the file is not already encrypted with the target key
 			if oldKeyHash == keyhash {
-				log.Errorf("the file with file-id: %s is already encrypted with the given rotation c4gh key", fileID)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following already encrypted with key error message")
-				}
+				msg := fmt.Sprintf("failed to reencrypt file with file-id: %s", fileID)
+				err = errors.New("already encrypted with the given rotation c4gh key")
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			newHeader, err := reencryptFile(aID)
 			if err != nil {
-				log.Errorf("failed to rotate c4gh key for file %s, reason: %v", aID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following reencryptFiles error message")
-				}
+				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 			if newHeader == nil {
-				err = errors.New("reencrypt returned empty header")
-				log.Errorf("failed to rotate c4gh key for file %s, reason: %v", aID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following reencryptFiles error message")
-				}
+				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			// Rotate header in database
 			if err := db.StoreHeader(newHeader, fileID); err != nil {
-				log.Errorf("StoreHeader failed for file-id: %s, reason: %v", fileID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following storeheader error message")
-				}
+				msg := fmt.Sprintf("StoreHeader failed for file-id: %s", fileID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			// Rotate keyhash
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
-				log.Errorf("SetKeyHash failed for file-id: %s, reason: %v", fileID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following setKeyHash error message")
-				}
+				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -232,10 +181,8 @@ func main() {
 			// Send re-verify message
 			reVerify, err := db.GetReVerificationData(aID)
 			if err != nil {
-				log.Errorf("GetReVerificationData failed for file-id: %s, reason: %v", fileID, err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following GetReVerificationData error message")
-				}
+				msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -243,29 +190,23 @@ func main() {
 			reVerifyMsg, _ := json.Marshal(&reVerify)
 			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), reVerifyMsg)
 			if err != nil {
-				log.Errorf("Validation of outgoing re-verify message failed, reason: %v", err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack after verify schema validation error message")
-				}
+				msg := "Validation of outgoing re-verify message failed"
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			corrID, err := db.GetCorrID(reVerify.User, reVerify.FilePath, aID)
 			if err != nil {
-				log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack after GetCorrID error message")
-				}
+				msg := fmt.Sprintf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
 
 			if err := mq.SendMessage(corrID, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
-				log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack after SendMessage error message")
-				}
+				msg := "failed to publish message"
+				logAndNack(mq, delivered, msg, err)
 
 				continue
 			}
@@ -360,4 +301,22 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	}
 
 	return res.Header, nil
+}
+
+// Send the message to an error queue so it can be analyzed and then nack message.
+func logAndNack(mq *broker.AMQPBroker, delivered amqp091.Delivery, msg string, err error) {
+	log.Errorf("%s, reason: %v", msg, err)
+	infoErrorMessage := broker.InfoError{
+		Error:           msg,
+		Reason:          err.Error(),
+		OriginalMessage: string(delivered.Body),
+	}
+	body, _ := json.Marshal(infoErrorMessage)
+
+	if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
+		log.Errorf("failed to publish message, reason: (%s)", err.Error())
+	}
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+	}
 }
