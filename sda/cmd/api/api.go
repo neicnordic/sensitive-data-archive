@@ -629,9 +629,9 @@ func setAccession(c *gin.Context) {
 			return
 		}
 		// Find the correlation id
-		corrID, err = Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
+		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "uploaded")
 		if err != nil {
-			if corrID == "" {
+			if fileID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 			} else {
 				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -640,7 +640,7 @@ func setAccession(c *gin.Context) {
 			return
 		}
 		// Get decrypted checksum
-		fileInfo, err := Conf.API.DB.GetFileInfo(corrID)
+		fileInfo, err := Conf.API.DB.GetFileInfo(fileID)
 		if err != nil {
 			log.Debugln(err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -656,6 +656,17 @@ func setAccession(c *gin.Context) {
 	}
 	// Add type in the message payload
 	accession.Type = "accession"
+
+	corrID, err = Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
+	if err != nil {
+		if corrID == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+		} else {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+		}
+
+		return
+	}
 
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
