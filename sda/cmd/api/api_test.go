@@ -1551,6 +1551,33 @@ func (s *TestSuite) TestSetAccession_WithParams_WrongID() {
 	assert.Contains(s.T(), string(b), "file details not found")
 }
 
+func (s *TestSuite) TestSetAccession_WithParams_MissingAccession() {
+	user := "dummy"
+	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
+	fileID, _ := helperCreateVerifiedTestFile(s, user, filePath)
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	assert.NoError(s.T(), err)
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	assert.NoError(s.T(), err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/file/accession?fileid="+fileID, nil)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/accession", rbac(e), setAccession)
+	router.ServeHTTP(w, r)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(s.T(), string(b), "accessionid is not provided")
+}
+
 func (s *TestSuite) TestSetAccession_BothPayloadAndParamsProvided() {
 	user := "dummy"
 	filePath := "/inbox/dummy_folder/dummyfile.c4gh"
