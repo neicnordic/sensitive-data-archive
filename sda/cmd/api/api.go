@@ -582,10 +582,15 @@ func setAccession(c *gin.Context) {
 		corrID    string
 	)
 	hasQuery := c.Query("fileid") != "" || c.Query("accessionid") != ""
+	missingAccession := c.Query("fileid") != "" && c.Query("accessionid") == ""
 	hasBody := c.Request.ContentLength > 0
 	switch {
 	case hasQuery && hasBody:
 		c.AbortWithStatusJSON(http.StatusBadRequest, "both parameters and json payload provided. Choose one")
+
+		return
+	case missingAccession:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "accessionid is not provided")
 
 		return
 	case hasQuery:
