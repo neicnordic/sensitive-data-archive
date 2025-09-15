@@ -1296,12 +1296,16 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
 	filePath := "/dummy_user.org/Dummy_folder/dummyfile.c4gh"
 	user := "dummy@user.org"
 	fileID, err := db.RegisterFile(filePath, user)
-	assert.NoError(suite.T(), err, "failed to register file in database")
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
 
 	// Update event log to ensure correlation ID is set
 	correlationID := "b7e2c1a4-5f3b-4c8e-9d2a-7f6e1b2c3d4e"
 	err = db.UpdateFileEventLog(fileID, "uploaded", correlationID, user, "{}", "{}")
-	assert.NoError(suite.T(), err, "failed to update file event log")
+	if err != nil {
+		suite.FailNow("failed to update file event log")
+	}
 
 	infoFile, err := db.GetFileDetailsFromUUID(fileID)
 	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
