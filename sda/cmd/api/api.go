@@ -371,8 +371,8 @@ func ingestFile(c *gin.Context) {
 
 			return
 		}
-		default:
-			c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
+	default:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
 	}
 	// Add type in message payload
 	ingest.Type = "ingest"
@@ -649,6 +649,10 @@ func setAccession(c *gin.Context) {
 		}
 		// Add decrypted checksum in message payload
 		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileInfo.DecryptedChecksum}}
+	default:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
+
+		return
 	}
 	// Add type in the message payload
 	accession.Type = "accession"
