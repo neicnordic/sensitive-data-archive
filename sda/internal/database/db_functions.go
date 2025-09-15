@@ -1175,12 +1175,6 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	return accessions, nil
 }
 
-type FileDetails struct {
-	User   string
-	Path   string
-	CorrID string
-}
-
 // GetUserAndPathFromUUID() retrieves user, path and correlation id by giving the file UUID
 func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 	var (
