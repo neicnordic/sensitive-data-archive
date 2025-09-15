@@ -330,14 +330,12 @@ func ingestFile(c *gin.Context) {
 		ingest schema.IngestionTrigger
 		corrID string
 	)
-	hasQuery := c.Query("fileid") != ""
-	hasBody := c.Request.ContentLength > 0
 	switch {
-	case hasQuery && hasBody:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "both file ID parameter and payload provided. Choose one")
+	case c.Query("fileid") != "" && c.Request.ContentLength > 0:
+		c.AbortWithStatusJSON(http.StatusBadRequest, "both file ID parameter and payload provided.")
 
 		return
-	case hasQuery:
+	case c.Query("fileid") != "":
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
 		if err != nil {
@@ -349,7 +347,7 @@ func ingestFile(c *gin.Context) {
 		ingest.User = fileDetails.User
 		ingest.FilePath = fileDetails.Path
 		corrID = fileDetails.CorrID
-	default:
+	case c.Request.ContentLength > 0:
 		// Bind ingest and payload
 		if err = c.BindJSON(&ingest); err != nil {
 			c.AbortWithStatusJSON(
@@ -373,6 +371,8 @@ func ingestFile(c *gin.Context) {
 
 			return
 		}
+		default:
+			c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
 	}
 	// Add type in message payload
 	ingest.Type = "ingest"
@@ -593,7 +593,7 @@ func setAccession(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, "accessionid is not provided")
 
 		return
-	case hasQuery:
+	case c.Query("fileid") != "" && c.Query("accessionid") != "":
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
 		if err != nil {
@@ -616,7 +616,7 @@ func setAccession(c *gin.Context) {
 		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
 		// Corellation id
 		corrID = fileDetails.CorrID
-	default:
+	case c.Request.ContentLength > 0:
 		if err = c.BindJSON(&accession); err != nil {
 			c.AbortWithStatusJSON(
 				http.StatusBadRequest,
