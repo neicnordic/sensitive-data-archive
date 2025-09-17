@@ -975,6 +975,47 @@ func (suite *DatabaseTests) TestGetKeyHash_wrongFileID() {
 	db.Close()
 }
 
+func (suite *DatabaseTests) TestCheckKeyHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+	anotherKeyhash := "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99"
+	assert.NoError(suite.T(), db.AddKeyHash(anotherKeyhash, "this is a another key"), "failed to register key in database")
+
+	err = db.CheckKeyHash(anotherKeyhash)
+	assert.NoError(suite.T(), err, "failed to verify active key hash lookup")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestCheckKeyHash_keyDeprecated() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+	anotherKeyhash := "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99"
+	assert.NoError(suite.T(), db.AddKeyHash(anotherKeyhash, "this is a another key"), "failed to register key in database")
+	assert.NoError(suite.T(), db.DeprecateKeyHash(anotherKeyhash), "failure when deprecating keyhash")
+
+	err = db.CheckKeyHash(anotherKeyhash)
+	assert.ErrorContains(suite.T(), err, "the c4gh key hash has been deprecated")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestCheckKeyHash_keyNonExistent() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+
+	err = db.CheckKeyHash("somekeyhash")
+	assert.ErrorContains(suite.T(), err, "the c4gh key hash is not registered")
+
+	db.Close()
+}
+
 func (suite *DatabaseTests) TestListDatasets() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
