@@ -209,16 +209,7 @@ func main() {
 				continue
 			}
 
-			corrID, err := db.GetCorrID(reVerify.User, reVerify.FilePath, aID)
-			if err != nil {
-				msg := fmt.Sprintf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
-				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
-
-				continue
-			}
-
-			if err := mq.SendMessage(corrID, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
+			if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 				msg := "failed to publish message"
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
