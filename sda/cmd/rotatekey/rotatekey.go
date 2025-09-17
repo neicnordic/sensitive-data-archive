@@ -55,7 +55,8 @@ func main() {
 	}
 
 	// Check that key is registered in the db at startup
-	keyhash, err := getKeyHash()
+	keyhash := hex.EncodeToString(publicKey[:])
+	err = db.CheckKeyHash(keyhash)
 	if err != nil {
 		log.Fatalf("database lookup of the rotation key failed, reason: %v", err)
 	}
@@ -100,7 +101,8 @@ func main() {
 
 			// Fetch rotate key hash before starting work so that we make sure the hash state
 			// has not changed since the application startup.
-			keyhash, err = getKeyHash()
+			keyhash := hex.EncodeToString(publicKey[:])
+			err = db.CheckKeyHash(keyhash)
 			if err != nil {
 				msg := "database lookup of the rotation key failed"
 				log.Errorf("%s, reason: %v", msg, err)
@@ -254,32 +256,6 @@ func reencryptFile(stableID string) ([]byte, error) {
 	}
 
 	return newHeader, nil
-}
-
-// Check that the key hash exists in the database
-func getKeyHash() (string, error) {
-	keyhash := hex.EncodeToString(publicKey[:])
-	hashes, err := db.ListKeyHashes()
-	if err != nil {
-		return "", err
-	}
-	found := false
-	for n := range hashes {
-		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
-			return "", errors.New("the c4gh key hash has been deprecated")
-		}
-
-		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
-			found = true
-
-			break
-		}
-	}
-	if !found {
-		return "", errors.New("the c4gh key hash is not registered")
-	}
-
-	return keyhash, nil
 }
 
 // reencryptHeader re-encrypts the header of a file using the public key
