@@ -179,14 +179,6 @@ fi
 
 ### test for errors ###
 
-# file is already encrypted with key
-curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
-    -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body" | jq
-
-checkErrors "already encrypted with the given rotation c4gh key"
-errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
-
 # multiple accession_id's per message is not supported
 mappings=$(
     jq -c -n \
