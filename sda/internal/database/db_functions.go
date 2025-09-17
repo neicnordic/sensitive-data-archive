@@ -1070,6 +1070,26 @@ func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
 	return nil
 }
 
+// Check that a key hash exists in the database
+func (dbs *SDAdb) CheckKeyHash(keyhash string) error {
+	hashes, err := dbs.ListKeyHashes()
+	if err != nil {
+		return err
+	}
+
+	for n := range hashes {
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
+			return nil
+		}
+
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
+			return errors.New("the c4gh key hash has been deprecated")
+		}
+	}
+
+	return errors.New("the c4gh key hash is not registered")
+}
+
 // ListDatasets lists all datasets as well as the status
 func (dbs *SDAdb) ListDatasets() ([]*DatasetInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
