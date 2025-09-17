@@ -373,6 +373,8 @@ func ingestFile(c *gin.Context) {
 		}
 	default:
 		c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
+
+		return
 	}
 	// Add type in message payload
 	ingest.Type = "ingest"
