@@ -127,7 +127,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 
 # check DB for updated key hash in sda.files
 rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
-if "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where stable_id like 'ROTATE-KEY-0%';" | grep -c "$rotatekeyHash")" -neq 1;
+if [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where stable_id like 'ROTATE-KEY-0%';" | grep -c "$rotatekeyHash")" -ne 1 ];
 then
 	echo "failed to update the key hash of files"
 	exit 1
@@ -172,7 +172,7 @@ if ! cmp -s "testfile1_rotated" "testfile1" ; then
    exit 1
 fi
 # compare hashes as well
-if [ "$(sha256sum testfile1 | cut -d ' ' -f 1)" != "$(sha256sum testfile1 | cut -d ' ' -f 1)" ]; then
+if [ "$(sha256sum testfile1 | cut -d ' ' -f 1)" != "$(sha256sum testfile1_rotated | cut -d ' ' -f 1)" ]; then
 	echo "downloaded file has different sha256 hash from the original one"
 	exit 1
 fi
