@@ -92,7 +92,8 @@ func main() {
 			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
 				msg := "validation of incoming message (dataset-mapping) failed"
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -102,7 +103,8 @@ func main() {
 			keyhash, err = getKeyHash()
 			if err != nil {
 				msg := "database lookup of the rotation key failed"
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -113,9 +115,8 @@ func main() {
 			// We expect only one aID per message so that we handle errors and nacks properly.
 			// A different json schema seems like a cleaner solution going forward.
 			if len(message.AccessionIDs) > 1 {
-				msg := "failed to process message"
-				err = errors.New("multiple accession_ids per message is not supported")
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("failed to process message, reason: multiple accession_id's per message is not supported")
+				NackAndSendToErrorQueue(mq, delivered, "failed to process message", "multiple accession_id's per message is not supported")
 
 				continue
 			}
@@ -125,7 +126,8 @@ func main() {
 			fileID, err := db.GetFileIDbyAccessionID(aID)
 			if err != nil {
 				msg := fmt.Sprintf("failed to get file-id for file with accession-id: %s", aID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -134,7 +136,8 @@ func main() {
 			oldKeyHash, err := db.GetKeyHash(fileID)
 			if err != nil {
 				msg := fmt.Sprintf("failed to get keyhash for file with accession-id: %s", aID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -142,8 +145,8 @@ func main() {
 			// Check that the file is not already encrypted with the target key
 			if oldKeyHash == keyhash {
 				msg := fmt.Sprintf("failed to reencrypt file with file-id: %s", fileID)
-				err = errors.New("already encrypted with the given rotation c4gh key")
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSentToErrorQueue(mq, delivered, msg, "already encrypted with the given rotation c4gh key")
 
 				continue
 			}
@@ -151,13 +154,16 @@ func main() {
 			newHeader, err := reencryptFile(aID)
 			if err != nil {
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
 			if newHeader == nil {
+				err := errors.New("reencrypt returned empty header")
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -165,7 +171,8 @@ func main() {
 			// Rotate header in database
 			if err := db.StoreHeader(newHeader, fileID); err != nil {
 				msg := fmt.Sprintf("StoreHeader failed for file-id: %s", fileID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -173,7 +180,8 @@ func main() {
 			// Rotate keyhash
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
 				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -182,7 +190,8 @@ func main() {
 			reVerify, err := db.GetReVerificationData(aID)
 			if err != nil {
 				msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -191,7 +200,8 @@ func main() {
 			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), reVerifyMsg)
 			if err != nil {
 				msg := "Validation of outgoing re-verify message failed"
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -199,14 +209,16 @@ func main() {
 			corrID, err := db.GetCorrID(reVerify.User, reVerify.FilePath, aID)
 			if err != nil {
 				msg := fmt.Sprintf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
 
 			if err := mq.SendMessage(corrID, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 				msg := "failed to publish message"
-				logAndNack(mq, delivered, msg, err)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
 				continue
 			}
@@ -303,12 +315,11 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	return res.Header, nil
 }
 
-// Send the message to an error queue so it can be analyzed and then nack message.
-func logAndNack(mq *broker.AMQPBroker, delivered amqp091.Delivery, msg string, err error) {
-	log.Errorf("%s, reason: %v", msg, err)
+// Nack message without requeue. Send the message to an error queue so it can be analyzed.
+func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, msg, reason string) {
 	infoErrorMessage := broker.InfoError{
 		Error:           msg,
-		Reason:          err.Error(),
+		Reason:          reason,
 		OriginalMessage: string(delivered.Body),
 	}
 	body, _ := json.Marshal(infoErrorMessage)
