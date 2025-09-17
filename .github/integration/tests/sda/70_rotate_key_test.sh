@@ -88,9 +88,17 @@ checkStatus ready 0
 errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
 
 ## trigger key rotation
+corrID=$(
+        curl -s -X POST \
+            -H "content-type:application/json" \
+            -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox/get \
+            -d '{"count":1,"encoding":"auto","ackmode":"ack_requeue_false"}' | jq -r .[0].properties.correlation_id
+    )
+
 properties=$(
     jq -c -n \
         --argjson delivery_mode 2 \
+        --arg correlation_id "$corrID" \
         --arg content_encoding UTF-8 \
         --arg content_type application/json \
         '$ARGS.named'
