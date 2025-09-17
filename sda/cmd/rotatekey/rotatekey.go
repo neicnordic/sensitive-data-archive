@@ -144,9 +144,10 @@ func main() {
 
 			// Check that the file is not already encrypted with the target key
 			if oldKeyHash == keyhash {
-				msg := fmt.Sprintf("failed to reencrypt file with file-id: %s", fileID)
-				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSentToErrorQueue(mq, delivered, msg, "already encrypted with the given rotation c4gh key")
+				log.Infof("the file with file-id: %s is already encrypted with the given rotation c4gh key", fileID)
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to ack following already encrypted with key message")
+				}
 
 				continue
 			}
