@@ -59,40 +59,6 @@ func (suite *DatabaseTests) TestGetFileID() {
 	db.Close()
 }
 
-func (suite *DatabaseTests) TestGetFileIDbyAccessionID() {
-	db, err := NewSDAdb(suite.dbConf)
-	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
-
-	// register a file in the database
-	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
-	assert.NoError(suite.T(), err, "failed to register file in database")
-	stableID := "TEST:000-1234-4567"
-	err = db.SetAccessionID(stableID, fileID)
-	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-
-	retrievedFileID, err := db.GetFileIDbyAccessionID(stableID)
-	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.Equal(suite.T(), fileID, retrievedFileID)
-
-	db.Close()
-}
-
-func (suite *DatabaseTests) TestGetFileIDbyAccessionID_nonexistentID() {
-	db, err := NewSDAdb(suite.dbConf)
-	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
-
-	// register a file in the database
-	_, err = db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
-	assert.NoError(suite.T(), err, "failed to register file in database")
-
-	stableID := "TEST:000-1234-4567"
-	retrievedFileID, err := db.GetFileIDbyAccessionID(stableID)
-	assert.ErrorContains(suite.T(), err, "no rows in result set")
-	assert.Equal(suite.T(), "", retrievedFileID)
-
-	db.Close()
-}
-
 func (suite *DatabaseTests) TestUpdateFileEventLog() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
