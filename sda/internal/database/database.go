@@ -61,6 +61,12 @@ type DatasetInfo struct {
 	Timestamp string `json:"timeStamp"`
 }
 
+type FileDetails struct {
+	User   string
+	Path   string
+	CorrID string
+}
+
 // SchemaName is the name of the remote database schema to query
 var SchemaName = "sda"
 
