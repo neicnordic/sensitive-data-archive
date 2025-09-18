@@ -94,6 +94,7 @@ corrID=$(
             -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox/get \
             -d '{"count":1,"encoding":"auto","ackmode":"ack_requeue_false"}' | jq -r .[0].properties.correlation_id
     )
+fileID=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where stable_id='ROTATE-KEY-01';")
 
 properties=$(
     jq -c -n \
@@ -104,34 +105,27 @@ properties=$(
         '$ARGS.named'
 )
 
-mappings=$(
-    jq -c -n \
-        '$ARGS.positional' \
-        --args "ROTATE-KEY-01"
-)
-
-mapping_payload=$(
+rotatekey_payload=$(
     jq -r -c -n \
-        --arg type mapping \
-        --arg dataset_id KEY-ROTATION-TEST-0001 \
-        --argjson accession_ids "$mappings" \
+        --arg type "key_rotation" \
+        --arg file_id "$fileID" \
         '$ARGS.named|@base64'
 )
 
-mapping_body=$(
+rotatekey_body=$(
     jq -c -n \
         --arg vhost test \
         --arg name sda \
         --argjson properties "$properties" \
         --arg routing_key "rotatekey" \
         --arg payload_encoding base64 \
-        --arg payload "$mapping_payload" \
+        --arg payload "$rotatekey_payload" \
         '$ARGS.named'
 )
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body" | jq
+    -d "$rotatekey_body" | jq
 
 # check DB for updated key hash in sda.files
 rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
@@ -161,11 +155,14 @@ if [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ 
 fi
 
 ## download file with rotated key, concatenate header and archive body, decrypt and check
+
 # get rotated header
 psql -U postgres -h postgres -d sda -At -c "select header from sda.files where stable_id='ROTATE-KEY-01';" | xxd -r -p > testfile1_rotated.c4gh
+
 # get archive file
 archivePath=$(psql -U postgres -h postgres -d sda -At -c "select archive_file_path from sda.files where stable_id='ROTATE-KEY-01';")
 s3cmd --access_key=access --secret_key=secretKey --host=minio:9000 --no-ssl --host-bucket=minio:9000 get s3://archive/"$archivePath" --force
+
 # concatenate and decrypt
 cat testfile1_rotated.c4gh "$archivePath" > tmp_file && mv tmp_file testfile1_rotated.c4gh
 C4GH_PASSPHRASE=rotatekeyPass ./crypt4gh decrypt -f testfile1_rotated.c4gh -s rotatekey.sec.pem
@@ -187,40 +184,6 @@ fi
 
 ### test for errors ###
 
-# multiple accession_id's per message is not supported
-mappings=$(
-    jq -c -n \
-        '$ARGS.positional' \
-        --args "ROTATE-KEY-01" \
-        --args "ROTATE-KEY-02"
-)
-
-mapping_payload=$(
-    jq -r -c -n \
-        --arg type mapping \
-        --arg dataset_id KEY-ROTATION-TEST-0001 \
-        --argjson accession_ids "$mappings" \
-        '$ARGS.named|@base64'
-)
-
-mapping_body=$(
-    jq -c -n \
-        --arg vhost test \
-        --arg name sda \
-        --argjson properties "$properties" \
-        --arg routing_key "rotatekey" \
-        --arg payload_encoding base64 \
-        --arg payload "$mapping_payload" \
-        '$ARGS.named'
-)
-
-curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
-    -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body" | jq
-
-checkErrors "multiple accession_id's per message is not supported"
-errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
-
 # rotation key is deprecated
 rotateKeyHash=$(cat /shared/rotatekey.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256)
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/c4gh-keys/deprecate/$rotateKeyHash")"
@@ -231,9 +194,34 @@ fi
 
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$mapping_body" | jq
+    -d "$rotatekey_body" | jq
 
 checkErrors "rotation key is deprecated"
 errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
+
+# bad message
+
+rotatekey_payload=$(
+    jq -r -c -n \
+        --arg type "key_rotation" \
+        '$ARGS.named|@base64'
+)
+
+rotatekey_body=$(
+    jq -c -n \
+        --arg vhost test \
+        --arg name sda \
+        --argjson properties "$properties" \
+        --arg routing_key "rotatekey" \
+        --arg payload_encoding base64 \
+        --arg payload "$rotatekey_payload" \
+        '$ARGS.named'
+)
+
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$rotatekey_body" | jq
+
+checkErrors "validation of incoming message (rotate-key) failed"
 
 echo "Rotate key integration tests completed successfully"

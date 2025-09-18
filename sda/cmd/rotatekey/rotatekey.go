@@ -1,5 +1,5 @@
-// The rotatekey service accepts messages for files mapped to a dataset,
-// re-encrypts their header with a configured public key and stores it
+// The rotatekey service accepts messages to re-encrypt a file identified by its fileID.
+// The service re-encrypts the file header with a configured public key and stores it
 // in the database together with the key-hash of the rotation key.
 // I then sends a message to verify so the file is re-verified.
 
@@ -78,7 +78,7 @@ func main() {
 	}()
 
 	log.Info("Starting rotatekey service")
-	var message schema.DatasetMapping
+	var message schema.KeyRotation
 
 	go func() {
 		messages, err := mq.GetMessages(Conf.Broker.Queue)
@@ -90,9 +90,9 @@ func main() {
 				delivered.CorrelationId,
 				delivered.Body)
 
-			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), delivered.Body)
+			err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
-				msg := "validation of incoming message (dataset-mapping) failed"
+				msg := "validation of incoming message (rotate-key) failed"
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
@@ -114,30 +114,12 @@ func main() {
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 
-			// We expect only one aID per message so that we handle errors and nacks properly.
-			// A different json schema seems like a cleaner solution going forward.
-			if len(message.AccessionIDs) > 1 {
-				log.Errorf("failed to process message, reason: multiple accession_id's per message is not supported")
-				NackAndSendToErrorQueue(mq, delivered, "failed to process message", "multiple accession_id's per message is not supported")
-
-				continue
-			}
-
-			aID := message.AccessionIDs[0]
-
-			fileID, err := db.GetFileIDbyAccessionID(aID)
-			if err != nil {
-				msg := fmt.Sprintf("failed to get file-id for file with accession-id: %s", aID)
-				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
-
-				continue
-			}
+			fileID := message.FileID
 
 			// Get current keyhash for the file, send to error queue if this fails
 			oldKeyHash, err := db.GetKeyHash(fileID)
 			if err != nil {
-				msg := fmt.Sprintf("failed to get keyhash for file with accession-id: %s", aID)
+				msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
@@ -154,9 +136,9 @@ func main() {
 				continue
 			}
 
-			newHeader, err := reencryptFile(aID)
+			newHeader, err := reencryptFile(fileID)
 			if err != nil {
-				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
+				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
@@ -164,7 +146,7 @@ func main() {
 			}
 			if newHeader == nil {
 				err := errors.New("reencrypt returned empty header")
-				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", aID)
+				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
@@ -183,6 +165,15 @@ func main() {
 			// Rotate keyhash
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
 				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+
+				continue
+			}
+
+			aID, err := db.GetAccessionID(fileID)
+			if err != nil {
+				msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
 				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
 
@@ -226,10 +217,10 @@ func main() {
 	<-forever
 }
 
-func reencryptFile(stableID string) ([]byte, error) {
-	log.Debugf("rotating c4gh key for file with stable-id: %s", stableID)
+func reencryptFile(fileID string) ([]byte, error) {
+	log.Debugf("rotating c4gh key for file with file-id: %s", fileID)
 
-	header, err := db.GetHeaderForStableID(stableID)
+	header, err := db.GetHeader(fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -250,10 +241,10 @@ func reencryptFile(stableID string) ([]byte, error) {
 }
 
 // reencryptHeader re-encrypts the header of a file using the public key
-// provided in the request header and returns the new header. The function uses
-// gRPC to communicate with the re-encrypt service and handles TLS configuration
-// if needed. The function also handles the case where the CA certificate is
-// provided for secure communication.
+// provided and returns the new header. The function uses gRPC to
+// communicate with the re-encrypt service and handles TLS configuration
+// if needed. The function also handles the case where the CA certificate
+// is provided for secure communication.
 func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
