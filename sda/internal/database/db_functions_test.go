@@ -284,6 +284,61 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	db.Close()
 }
 
+func (suite *DatabaseTests) TestGetAccessionID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
+
+	err = db.SetArchived(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.SetVerified(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+	stableID := "TEST:000-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	res, err := db.GetAccessionID(fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting accessionID of file", err)
+	assert.Equal(suite.T(), stableID, res, "retrieved accessionID is wrong")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetAccessionID_wrongFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
+
+	err = db.SetArchived(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.SetVerified(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+	stableID := "TEST:000-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	// locally reduce RetryTimes to avoid 30s waiting limit of testsuite
+	RetryTimes = 2
+
+	// check for bad format
+	_, err = db.GetAccessionID("someFileID")
+	assert.ErrorContains(suite.T(), err, "invalid input syntax for type uuid")
+
+	// check for non-existent fileID
+	_, err = db.GetAccessionID(uuid.New().String())
+	assert.ErrorContains(suite.T(), err, "no rows in result set")
+
+	db.Close()
+}
+
 func (suite *DatabaseTests) TestGetFileInfo() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
