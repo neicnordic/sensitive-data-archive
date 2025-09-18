@@ -50,7 +50,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/ingest`
   - accepts `POST` requests with either:
-    - JSON data: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+    - A JSON payload: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
     - OR a `fileid` query parameter: `/file/ingest?fileid=<FILE_UUID>`
   - triggers the ingestion of the file.
 
@@ -75,7 +75,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/accession`
   - accepts `POST` requests with either:
-    - JSON data: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+    - A JSON playload: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
     - OR query parameters: `/file/accession?fileid=<FILE_UUID>&accessionid=<ACCESSION_ID>`
   - assigns accession ID to the file.
 
