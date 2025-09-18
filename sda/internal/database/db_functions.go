@@ -470,6 +470,37 @@ func (dbs *SDAdb) setAccessionID(accessionID, fileID string) error {
 	return nil
 }
 
+// GetAccessionID returns the stable id of a file identified by its file_id
+func (dbs *SDAdb) GetAccessionID(fileID string) (string, error) {
+	var (
+		aID string
+		err error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		aID, err = dbs.getAccessionID(fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return aID, err
+}
+func (dbs *SDAdb) getAccessionID(fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getAccessionID = "SELECT stable_id FROM sda.files WHERE id = $1;"
+	var aID string
+	err := db.QueryRow(getAccessionID, fileID).Scan(&aID)
+	if err != nil {
+		return "", err
+	}
+
+	return aID, nil
+}
+
 // MapFilesToDataset maps a set of files to a dataset in the database
 func (dbs *SDAdb) MapFilesToDataset(datasetID string, accessionIDs []string) error {
 	var err error
