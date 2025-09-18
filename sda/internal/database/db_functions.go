@@ -1175,7 +1175,7 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	return accessions, nil
 }
 
-// GetUserAndPathFromUUID() retrieves user, path and correlation id by giving the file UUID
+// GetFileDetailsFromUUID() retrieves user, path and correlation id by giving the file UUID
 func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 	var (
 		info FileDetails
@@ -1193,7 +1193,7 @@ func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 	return info, err
 }
 
-// getUserAndPathFromUUID() is the actual function performing work for GetUserAndPathFromUUID
+// getFileDetailsFromUUID() is the actual function performing work for GetUserAndPathFromUUID
 func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 	var info FileDetails
 	dbs.checkAndReconnectIfNeeded()

@@ -1315,7 +1315,7 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
 	db.Close()
 }
 
-func (suite *DatabaseTests) TestGetUserAndPathFromUUID_NotFound() {
+func (suite *DatabaseTests) TestGetFileDetailsFromUUID_NotFound() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
