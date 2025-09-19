@@ -115,6 +115,7 @@ spec:
           mountPath: {{ include "jwtPath" . }}
         {{- end }}
       {{- end }}
+      enableServiceLinks: false
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls

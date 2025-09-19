@@ -164,6 +164,7 @@ spec:
           mountPath: "/etc/ssl/certs/java"
         - name: tmp
           mountPath: /tmp/
+      enableServiceLinks: false
       volumes:
         - name: tmp
           emptyDir: {}

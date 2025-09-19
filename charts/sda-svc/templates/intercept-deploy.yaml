@@ -70,6 +70,7 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
       {{- end }}
+      enableServiceLinks: false
       volumes:
         - name: config
           projected:

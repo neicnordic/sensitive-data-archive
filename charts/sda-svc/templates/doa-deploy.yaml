@@ -281,6 +281,7 @@ spec:
         - name: archive
           mountPath: {{ .Values.global.archive.volumePath | quote }}
       {{- end }}
+      enableServiceLinks: false
       volumes:
         - name: tmp
           emptyDir: {}

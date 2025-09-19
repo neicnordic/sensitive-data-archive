@@ -74,6 +74,7 @@ spec:
         - name: archive
           mountPath: {{ .Values.global.archive.volumePath | quote }}
         {{- end }}
+      enableServiceLinks: false
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
