@@ -7,13 +7,11 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -23,8 +21,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -232,46 +228,13 @@ func reencryptFile(fileID string) ([]byte, error) {
 	}
 	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
-	newHeader, err := reencryptHeader(header, pubKeyEncoded)
+	newHeader, err := reencrypt.CallReencryptHeader(header, pubKeyEncoded, Conf.RotateKey.Grpc)
+
 	if err != nil {
 		return nil, err
 	}
 
 	return newHeader, nil
-}
-
-// reencryptHeader re-encrypts the header of a file using the public key
-// provided and returns the new header. The function uses gRPC to
-// communicate with the re-encrypt service and handles TLS configuration
-// if needed. The function also handles the case where the CA certificate
-// is provided for secure communication.
-func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
-	var opts []grpc.DialOption
-	switch {
-	case Conf.RotateKey.Grpc.ClientCreds != nil:
-		opts = append(opts, grpc.WithTransportCredentials(Conf.RotateKey.Grpc.ClientCreds))
-	default:
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-
-	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", Conf.RotateKey.Grpc.Host, Conf.RotateKey.Grpc.Port), opts...)
-	if err != nil {
-		log.Errorf("failed to connect to the reencrypt service, reason: %s", err)
-
-		return nil, err
-	}
-	defer conn.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(Conf.RotateKey.Grpc.Timeout)*time.Second)
-	defer cancel()
-
-	c := reencrypt.NewReencryptClient(conn)
-	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
-	if err != nil {
-		return nil, err
-	}
-
-	return res.Header, nil
 }
 
 // Nack message without requeue. Send the message to an error queue so it can be analyzed.
