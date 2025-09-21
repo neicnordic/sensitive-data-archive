@@ -33,6 +33,19 @@ checkErrors() {
 	done
 }
 
+checkConsumers() {
+    RETRY_TIMES=0
+    until [ "$(curl -su guest:guest http://localhost:15672/api/consumers | jq '.[].queue.name' | grep -c "$1")" -eq "$2" ]; do
+        echo "waiting for $1 consumer status"
+        RETRY_TIMES=$((RETRY_TIMES + 1))
+        if [ "$RETRY_TIMES" -eq 30 ]; then
+            echo "::error::Time out while waiting for $1 consumer status"
+            exit 1
+        fi
+        sleep 2
+    done
+}
+
 # cleanup queues and database
 URI=http://rabbitmq:15672
 if [ -n "$PGSSLCERT" ]; then
@@ -184,28 +197,15 @@ fi
 
 ### test for errors ###
 
-# rotation key is deprecated
+## test rotation key is deprecated during runtime
+echo "test rotation key is deprecated during runtime"
+
 rotateKeyHash=$(cat /shared/rotatekey.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256)
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/c4gh-keys/deprecate/$rotateKeyHash")"
 if [ "$resp" != "200" ]; then
 	echo "Error when trying to deprecate rotation public key hash, expected 200 got: $resp"
 	exit 1
 fi
-
-curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
-    -H 'Content-Type: application/json;charset=UTF-8' \
-    -d "$rotatekey_body" | jq
-
-checkErrors "rotation key is deprecated"
-errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
-
-# bad message
-
-rotatekey_payload=$(
-    jq -r -c -n \
-        --arg type "key_rotation" \
-        '$ARGS.named|@base64'
-)
 
 rotatekey_body=$(
     jq -c -n \
@@ -222,6 +222,45 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$rotatekey_body" | jq
 
+# check that app failed
+checkConsumers rotatekey 0
+
+## test app attempts to start with a configured rotation key that is deprecated
+echo "test app fails to start with a configured rotation key that is invalid"
+
+sleep 2
+# app will keep failing until we restore tha target key as active
+checkConsumers rotatekey 0
+deprecationDate=$(psql -U postgres -h postgres -d sda -At -c "select deprecated_at from sda.encryption_keys where deprecated_at is not null;")
+psql -U postgres -h postgres -d sda -At -c "UPDATE sda.encryption_keys SET deprecated_at = null WHERE deprecated_at = '$deprecationDate';"
+
+# check that app recovered when it found a valid target key
+checkConsumers rotatekey 1
+
+## test bad message
+test "test bad mq message"
+
+rotatekey_payload_bad=$(
+    jq -r -c -n \
+        --arg type "key_rotation" \
+        '$ARGS.named|@base64'
+)
+
+rotatekey_body=$(
+    jq -c -n \
+        --arg vhost test \
+        --arg name sda \
+        --argjson properties "$properties" \
+        --arg routing_key "rotatekey" \
+        --arg payload_encoding base64 \
+        --arg payload "$rotatekey_payload_bad" \
+        '$ARGS.named'
+)
+
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$rotatekey_body" | jq
+
 checkErrors "validation of incoming message (rotate-key) failed"
 
-echo "Rotate key integration tests completed successfully"
+printf "\033[32mRotate key integration tests completed successfully\033[0m\n"
