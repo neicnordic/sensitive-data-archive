@@ -99,12 +99,9 @@ func main() {
 			// has not changed since the application startup.
 			keyhash := hex.EncodeToString(publicKey[:])
 			err = db.CheckKeyHash(keyhash)
+			// exit app if target key was modified after app start-up, e.g. if key has been deprecated
 			if err != nil {
-				msg := "database lookup of the rotation key failed"
-				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
-
-				continue
+				log.Fatalf("check of target key failed, reason: %v", err)
 			}
 
 			// we unmarshal the message in the validation step so this is safe to do
