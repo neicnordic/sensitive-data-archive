@@ -23,16 +23,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	err       error
-	publicKey *[32]byte
-	db        *database.SDAdb
-	Conf      *config.Config
-)
-
 func main() {
 	forever := make(chan bool)
-	Conf, err = config.NewConfig("rotatekey")
+	Conf, err := config.NewConfig("rotatekey")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,15 +33,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err = database.NewSDAdb(Conf.Database)
+	db, err := database.NewSDAdb(Conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	publicKey, err = config.GetC4GHPublicKey("rotatekey")
+	publicKey, err := config.GetC4GHPublicKey("rotatekey")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// encode pubkey as pem and then as base64 string
+	tmp := &bytes.Buffer{}
+	if err := keys.WriteCrypt4GHX25519PublicKey(tmp, *publicKey); err != nil {
+		log.Fatal(err)
+	}
+	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
 	// Check that key is registered in the db at startup
 	keyhash := hex.EncodeToString(publicKey[:])
@@ -90,7 +90,7 @@ func main() {
 			if err != nil {
 				msg := "validation of incoming message (rotate-key) failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -114,7 +114,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -129,11 +129,23 @@ func main() {
 				continue
 			}
 
-			newHeader, err := reencryptFile(fileID)
+			// reencrypt header
+			log.Debugf("rotating c4gh key for file with file-id: %s", fileID)
+
+			header, err := db.GetHeader(fileID)
+			if err != nil {
+				msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
+				log.Errorf("%s, reason: %v", msg, err)
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+
+				continue
+			}
+
+			newHeader, err := reencrypt.CallReencryptHeader(header, pubKeyEncoded, Conf.RotateKey.Grpc)
 			if err != nil {
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -141,7 +153,7 @@ func main() {
 				err := errors.New("reencrypt returned empty header")
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -150,7 +162,7 @@ func main() {
 			if err := db.StoreHeader(newHeader, fileID); err != nil {
 				msg := fmt.Sprintf("StoreHeader failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -159,7 +171,7 @@ func main() {
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
 				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -168,7 +180,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -178,7 +190,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -188,7 +200,7 @@ func main() {
 			if err != nil {
 				msg := "Validation of outgoing re-verify message failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -196,7 +208,7 @@ func main() {
 			if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 				msg := "failed to publish message"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -210,32 +222,8 @@ func main() {
 	<-forever
 }
 
-func reencryptFile(fileID string) ([]byte, error) {
-	log.Debugf("rotating c4gh key for file with file-id: %s", fileID)
-
-	header, err := db.GetHeader(fileID)
-	if err != nil {
-		return nil, err
-	}
-
-	// encode pubkey as pem and then as base64 string
-	tmp := &bytes.Buffer{}
-	if err = keys.WriteCrypt4GHX25519PublicKey(tmp, *publicKey); err != nil {
-		return nil, err
-	}
-	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
-
-	newHeader, err := reencrypt.CallReencryptHeader(header, pubKeyEncoded, Conf.RotateKey.Grpc)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return newHeader, nil
-}
-
 // Nack message without requeue. Send the message to an error queue so it can be analyzed.
-func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, msg, reason string) {
+func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, mqExchange, msg, reason string) {
 	infoErrorMessage := broker.InfoError{
 		Error:           msg,
 		Reason:          reason,
@@ -243,7 +231,7 @@ func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, 
 	}
 	body, _ := json.Marshal(infoErrorMessage)
 
-	if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "error", body); err != nil {
+	if err := mq.SendMessage(delivered.CorrelationId, mqExchange, "error", body); err != nil {
 		log.Errorf("failed to publish message, reason: (%s)", err.Error())
 	}
 	if err := delivered.Ack(false); err != nil {
