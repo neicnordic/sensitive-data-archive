@@ -131,25 +131,24 @@ func (ts *S3TestSuite) TestListByPrefix() {
 	userID := "user1"
 
 	query := `
-		SELECT files.stable_id AS id,
-			datasets.stable_id AS dataset_id,
-			reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
-			files.submission_user AS user_id,
-			files.submission_file_path AS file_path,
-			files.archive_file_size AS file_size,
-			lef.archive_file_checksum AS encrypted_file_checksum,
-			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
-			files.decrypted_file_size,
-			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type
-		FROM sda.files
-		JOIN sda.file_dataset ON file_id = files.id
-		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
-		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
-		LEFT JOIN \(SELECT file_id, \(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event FROM sda.file_event_log GROUP BY file_id\) log ON files.id = log.file_id
-		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
-		WHERE datasets.stable_id = \$1;
-		`
+SELECT files.stable_id AS id,
+	datasets.stable_id AS dataset_id,
+	reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+	files.submission_user AS user_id,
+	files.submission_file_path AS file_path,
+	files.archive_file_size AS file_size,
+	sha_arch.checksum AS encrypted_file_checksum,
+	sha_arch.type AS encrypted_file_checksum_type,
+	files.decrypted_file_size,
+	sha_unenc.checksum AS decrypted_file_checksum,
+	sha_unenc.type AS decrypted_file_checksum_type
+FROM sda.files
+ 	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
+ 	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
+	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
+	LEFT JOIN sda.checksums sha_arch ON files.id = sha_arch.file_id AND sha_arch.source = 'ARCHIVED'
+WHERE datasets.stable_id = \$1;`
+
 	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
@@ -208,25 +207,24 @@ func (ts *S3TestSuite) TestListObjects() {
 	userID := "user1"
 
 	query := `
-		SELECT files.stable_id AS id,
-			datasets.stable_id AS dataset_id,
-			reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
-			files.submission_user AS user_id,
-			files.submission_file_path AS file_path,
-			files.archive_file_size AS file_size,
-			lef.archive_file_checksum AS encrypted_file_checksum,
-			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
-			files.decrypted_file_size,
-			sha.checksum AS decrypted_file_checksum,
-			sha.type AS decrypted_file_checksum_type
-		FROM sda.files
-		JOIN sda.file_dataset ON file_id = files.id
-		JOIN sda.datasets ON file_dataset.dataset_id = datasets.id
-		LEFT JOIN local_ega.files lef ON files.stable_id = lef.stable_id
-		LEFT JOIN \(SELECT file_id, \(ARRAY_AGG\(event ORDER BY started_at DESC\)\)\[1\] AS event FROM sda.file_event_log GROUP BY file_id\) log ON files.id = log.file_id
-		LEFT JOIN \(SELECT file_id, checksum, type FROM sda.checksums WHERE source = 'UNENCRYPTED'\) sha ON files.id = sha.file_id
-		WHERE datasets.stable_id = \$1;
-		`
+SELECT files.stable_id AS id,
+	datasets.stable_id AS dataset_id,
+	reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
+	files.submission_user AS user_id,
+	files.submission_file_path AS file_path,
+	files.archive_file_size AS file_size,
+	sha_arch.checksum AS encrypted_file_checksum,
+	sha_arch.type AS encrypted_file_checksum_type,
+	files.decrypted_file_size,
+	sha_unenc.checksum AS decrypted_file_checksum,
+	sha_unenc.type AS decrypted_file_checksum_type
+FROM sda.files
+ 	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
+ 	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
+	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
+	LEFT JOIN sda.checksums sha_arch ON files.id = sha_arch.file_id AND sha_arch.source = 'ARCHIVED'
+WHERE datasets.stable_id = \$1;`
+
 	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
 		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
