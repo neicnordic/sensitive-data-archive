@@ -38,6 +38,16 @@ type FileInfo struct {
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
 }
 
+// DatasetFile is returned by the metadata/datasets/*dataset/files endpoint
+type DatasetFile struct {
+	FileID                    string `json:"fileId"`
+	DisplayFileName           string `json:"displayFileName"`
+	FilePath                  string `json:"filePath"`
+	DecryptedFileSize         int64  `json:"decryptedFileSize"`
+	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
+	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
+}
+
 type DatasetInfo struct {
 	DatasetID string `json:"datasetId"`
 	CreatedAt string `json:"createdAt"`
@@ -130,11 +140,11 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 }
 
 // GetFiles retrieves the file details
-var GetFiles = func(datasetID string) ([]*FileInfo, error) {
+var GetFiles = func(datasetID string) ([]*DatasetFile, error) {
 	var (
-		r     []*FileInfo = nil
-		err   error       = nil
-		count             = 0
+		r     []*DatasetFile = nil
+		err   error          = nil
+		count                = 0
 	)
 
 	for count < dbRetryTimes {
@@ -151,7 +161,9 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	return r, err
 }
 
+// removeUserIDPrefix strips the user id prefix from a file path
 func removeUserIDPrefix(filePath, userID string) string {
+	strings.ReplaceAll(userID, "@", "_")
 	// Construct the full prefix we expect to find (userID + "/").
 	fullPrefix := userID + "/"
 	if strings.HasPrefix(filePath, fullPrefix) {
@@ -161,31 +173,18 @@ func removeUserIDPrefix(filePath, userID string) string {
 	return filePath
 }
 
-// processFileInfo removes any sensitive information from the file info
-func processFileInfo(fi *FileInfo, userID string) error {
-	// Remove userids from file paths
-	userID = strings.ReplaceAll(userID, "@", "_") // in filePath, @ is replaced with _
-	fi.FilePath = removeUserIDPrefix(fi.FilePath, userID)
-
-	return nil
-}
-
 // getFiles is the actual function performing work for GetFile
-func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
+func (dbs *SQLdb) getFiles(datasetID string) ([]*DatasetFile, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	files := []*FileInfo{}
+	files := []*DatasetFile{}
 	db := dbs.DB
 
 	const query = `
 SELECT files.stable_id AS id,
-	datasets.stable_id AS dataset_id,
 	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
 	files.submission_user AS user_id,
 	files.submission_file_path AS file_path,
-	files.archive_file_size AS file_size,
-	sha_arch.checksum AS encrypted_file_checksum,
-	sha_arch.type AS encrypted_file_checksum_type,
 	files.decrypted_file_size,
 	sha_unenc.checksum AS decrypted_file_checksum,
 	sha_unenc.type AS decrypted_file_checksum_type
@@ -193,7 +192,6 @@ FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
 	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
-	LEFT JOIN sda.checksums sha_arch ON files.id = sha_arch.file_id AND sha_arch.source = 'ARCHIVED'
 WHERE datasets.stable_id = $1;`
 
 	// nolint:rowserrcheck
@@ -210,10 +208,9 @@ WHERE datasets.stable_id = $1;`
 	// Iterate rows
 	for rows.Next() {
 		// Read rows into struct
-		fi := &FileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.DatasetID, &fi.DisplayFileName,
+		fi := &DatasetFile{}
+		err := rows.Scan(&fi.FileID, &fi.DisplayFileName,
 			&userID, &fi.FilePath,
-			&fi.EncryptedFileSize, &fi.EncryptedFileChecksum, &fi.EncryptedFileChecksumType,
 			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
 		if err != nil {
 			log.Error(err)
@@ -221,23 +218,8 @@ WHERE datasets.stable_id = $1;`
 			return nil, err
 		}
 
-		// NOTE FOR ENCRYPTED DOWNLOAD
-		// As of now, encrypted download is not supported. When implementing encrypted download, note that
-		// local_ega_ebi.file:file_size is the size of the file body in the archive without the header,
-		// so the user needs to know the size of the header when downloading in encrypted format.
-		// A way to get this could be:
-		// fd := GetFile()
-		// fi.EncryptedFileSize = fi.EncryptedFileSize + len(fd.Header)
-		// But if the header is re-encrypted or a completely new header is generated, the length
-		// needs to be conveyd to the user in some other way.
-
 		// Process file info so that we don't leak any unneccessary info.
-		err = processFileInfo(fi, userID)
-		if err != nil {
-			log.Error(err)
-
-			return nil, err
-		}
+		fi.FilePath = removeUserIDPrefix(fi.FilePath, userID)
 
 		// Add structs to array
 		files = append(files, fi)
@@ -394,12 +376,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	}
 
 	// Process file info so that we don't leak any unneccessary info.
-	err = processFileInfo(file, userID)
-	if err != nil {
-		log.Error(err)
-
-		return nil, err
-	}
+	file.FilePath = removeUserIDPrefix(file.FilePath, userID)
 
 	return file, nil
 }

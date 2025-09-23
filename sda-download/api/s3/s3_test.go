@@ -115,14 +115,10 @@ func (ts *S3TestSuite) TestListBuckets() {
 
 func (ts *S3TestSuite) TestListByPrefix() {
 	// Setup a mock database to handle queries
-	fileInfo := &database.FileInfo{
+	fileInfo := &database.DatasetFile{
 		FileID:                    "file1",
-		DatasetID:                 "dataset1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",
-		EncryptedFileSize:         60,
-		EncryptedFileChecksum:     "hash",
-		EncryptedFileChecksumType: "sha256",
 		DecryptedFileSize:         32,
 		DecryptedFileChecksum:     "hash",
 		DecryptedFileChecksumType: "sha256",
@@ -132,13 +128,9 @@ func (ts *S3TestSuite) TestListByPrefix() {
 
 	query := `
 SELECT files.stable_id AS id,
-	datasets.stable_id AS dataset_id,
 	reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
 	files.submission_user AS user_id,
 	files.submission_file_path AS file_path,
-	files.archive_file_size AS file_size,
-	sha_arch.checksum AS encrypted_file_checksum,
-	sha_arch.type AS encrypted_file_checksum_type,
 	files.decrypted_file_size,
 	sha_unenc.checksum AS decrypted_file_checksum,
 	sha_unenc.type AS decrypted_file_checksum_type
@@ -146,19 +138,16 @@ FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
 	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
-	LEFT JOIN sda.checksums sha_arch ON files.id = sha_arch.file_id AND sha_arch.source = 'ARCHIVED'
 WHERE datasets.stable_id = \$1;`
 
 	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
-		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-			"display_file_name", "user_id", "file_path", "file_size",
-			"decrypted_file_checksum", "decrypted_file_checksum_type",
+		WillReturnRows(sqlmock.NewRows([]string{"file_id",
+			"display_file_name", "user_id", "file_path",
 			"decrypted_file_size", "decrypted_file_checksum",
-			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID,
 			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
-			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
-			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
+			fileInfo.DecryptedFileSize, fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
 	// Send a request through the middleware to get files for the dataset and
 	// prefix
@@ -191,14 +180,10 @@ WHERE datasets.stable_id = \$1;`
 
 func (ts *S3TestSuite) TestListObjects() {
 	// Setup a mock database to handlequeries
-	fileInfo := &database.FileInfo{
+	fileInfo := &database.DatasetFile{
 		FileID:                    "file1",
-		DatasetID:                 "dataset1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",
-		EncryptedFileSize:         60,
-		EncryptedFileChecksum:     "hash",
-		EncryptedFileChecksumType: "sha256",
 		DecryptedFileSize:         32,
 		DecryptedFileChecksum:     "hash",
 		DecryptedFileChecksumType: "sha256",
@@ -208,13 +193,9 @@ func (ts *S3TestSuite) TestListObjects() {
 
 	query := `
 SELECT files.stable_id AS id,
-	datasets.stable_id AS dataset_id,
 	reverse\(split_part\(reverse\(files.submission_file_path::text\), '/'::text, 1\)\) AS display_file_name,
 	files.submission_user AS user_id,
 	files.submission_file_path AS file_path,
-	files.archive_file_size AS file_size,
-	sha_arch.checksum AS encrypted_file_checksum,
-	sha_arch.type AS encrypted_file_checksum_type,
 	files.decrypted_file_size,
 	sha_unenc.checksum AS decrypted_file_checksum,
 	sha_unenc.type AS decrypted_file_checksum_type
@@ -222,19 +203,16 @@ FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
 	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
-	LEFT JOIN sda.checksums sha_arch ON files.id = sha_arch.file_id AND sha_arch.source = 'ARCHIVED'
 WHERE datasets.stable_id = \$1;`
 
 	ts.Mock.ExpectQuery(query).
 		WithArgs("dataset1").
-		WillReturnRows(sqlmock.NewRows([]string{"file_id", "dataset_id",
-			"display_file_name", "user_id", "file_path", "file_size",
-			"encrypted_file_checksum", "encrypted_file_checksum_type",
+		WillReturnRows(sqlmock.NewRows([]string{"file_id",
+			"display_file_name", "user_id", "file_path",
 			"decrypted_file_size", "decrypted_file_checksum",
-			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID, fileInfo.DatasetID,
+			"decrypted_file_checksum_type"}).AddRow(fileInfo.FileID,
 			fileInfo.DisplayFileName, userID, fileInfo.FilePath,
-			fileInfo.EncryptedFileSize, fileInfo.EncryptedFileChecksum, fileInfo.EncryptedFileChecksumType, fileInfo.DecryptedFileSize,
-			fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
+			fileInfo.DecryptedFileSize, fileInfo.DecryptedFileChecksum, fileInfo.DecryptedFileChecksumType))
 
 	// Send a request through the middleware to get datasets
 

@@ -114,7 +114,7 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
+	database.GetFiles = func(_ string) ([]*database.DatasetFile, error) {
 		return nil, errors.New("something went wrong")
 	}
 
@@ -187,11 +187,11 @@ func TestGetFiles_Success(t *testing.T) {
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
-		fileInfo := database.FileInfo{
+	database.GetFiles = func(_ string) ([]*database.DatasetFile, error) {
+		fileInfo := database.DatasetFile{
 			FileID: "file1",
 		}
-		files := []*database.FileInfo{}
+		files := []*database.DatasetFile{}
 		files = append(files, &fileInfo)
 
 		return files, nil
@@ -226,7 +226,7 @@ func TestFiles_Fail(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
+	getFiles = func(_ string, _ *gin.Context) ([]*database.DatasetFile, int, error) {
 		return nil, 404, errors.New("dataset not found")
 	}
 
@@ -267,20 +267,16 @@ func TestFiles_Success(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
-		fileInfo := database.FileInfo{
+	getFiles = func(_ string, _ *gin.Context) ([]*database.DatasetFile, int, error) {
+		fileInfo := database.DatasetFile{
 			FileID:                    "file1",
-			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
-			EncryptedFileSize:         200,
-			EncryptedFileChecksum:     "hash",
-			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
 		}
-		files := []*database.FileInfo{}
+		files := []*database.DatasetFile{}
 		files = append(files, &fileInfo)
 
 		return files, 200, nil
@@ -303,11 +299,9 @@ func TestFiles_Success(t *testing.T) {
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 200
 	expectedBody := []byte(
-		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
-			`"dir/file1.txt","encryptedFileSize":200,` +
-			`"encryptedFileChecksum":"hash","encryptedFileChecksumType":"sha256",` +
-			`"decryptedFileSize":100,` +
-			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
+		`[{"fileId":"file1","displayFileName":"file1.txt","filePath":` +
+			`"dir/file1.txt",` +
+			`"decryptedFileSize":100,"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
