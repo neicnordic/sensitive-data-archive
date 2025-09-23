@@ -1,31 +1,31 @@
 # rotatekey Service
 
-Rotates the crypt4gh encryption key of a file that is mapped to a dataset and stored in the SDA.
+Rotates the crypt4gh encryption key of ingested file headers.
 
 ## Service Description
 
-The rotatekey service re-encrypts the header of a file with the configured target key, and updates the database with the new header and encryption key hash.
+The `rotatekey` service re-encrypts the header of a file with the configured target key, and updates the database with the new header and encryption key hash.
 
-When running, rotatekey reads messages from the `rotatekey_stream` RabbitMQ queue.
-For each message, these steps are taken (errors halts progress, the message is Nack'ed, an info-error message is sent and the service moves on to the next message):
+When running, rotatekey reads messages from the `rotatekey` RabbitMQ queue.
+For each message, these steps are taken:
 
-1. The message is validated as valid JSON that matches the "dataset-mapping" schema.
-2. A database look-up is performed for the configured target public key hash. If the look-up fails or the key has been deprecated, an error is raised.
-3. If the massage contains more than one accession IDs, an error is raised and the message is discarded as the service works on a one file per message basis.
-4. The file ID is fetched from the database.
-5. The key hash of the c4gh key with which the file is currently encrypted is fetched from the database and compared with the configured target key.
-6. If these key hashes differ, the reencrypt service is called to re-encrypt the file header with the target key.
-7. The file header entry in the database is updated with the new one.
-8. The key hash entry for the database is updated with the new one (target key).
-9. A re-verify message is compiled, validated and sent to the archived queue so that it is consumed by verify service.
-10. The message is Ack'ed.
+1. The message is validated as valid JSON that matches the "rotate-key" schema.
+2. A database look-up is performed for the configured target public key hash. If the look-up fails or the key has been deprecated, the service will exit.
+3. The key hash of the c4gh key with which the file is currently encrypted is fetched from the database and compared with the configured target key.
+4. If these key hashes differ, the reencrypt service is called to re-encrypt the file header with the target key.
+5. The file header entry in the database is updated with the new one.
+6. The key hash entry in the database is updated with the new one (target key).
+7. A re-verify message is compiled, validated and sent to the archived queue so that it is consumed by the `verify` service.
+8. The message is Ack'ed.
+
+In case of any errors during the above process, progress will be halted the message is Nack'ed, an info-error message is sent and the service moves on to the next message.
 
 ## Communication
 
-- Rotatekey reads messages from one rabbitmq stream (`rotatekey_stream`)
+- Rotatekey reads messages from one rabbitmq queue (`rotatekey`).
 - Rotatekey reads file information, headers and key hashes from the database and can not be started without a database connection.
-- Rotatekey makes grpc calls to reencrypt service for re-encrypting the header with the target public key.
-- Rotatekey sends messages to the `archived` queue for consumption by the verify service.
+- Rotatekey makes grpc calls to `reencrypt` service for re-encrypting the header with the target public key.
+- Rotatekey sends messages to the `archived` queue for consumption by the `verify` service.
 
 ## Configuration
 
@@ -85,7 +85,7 @@ These settings control how sync connects to the RabbitMQ message broker.
   Note that if `DB_SSLMODE` is set to anything but `disable`, then `DB_CACERT` needs to be set,
   and if set to `verify-full`, then `DB_CLIENTCERT`, and `DB_CLIENTKEY` must also be set.
 
-- `DB_CLIENTKEY`: key-file for the database client certificate
+- `DB_CLIENTKEY`: key file for the database client certificate
 - `DB_CLIENTCERT`: database client certificate file
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
 
