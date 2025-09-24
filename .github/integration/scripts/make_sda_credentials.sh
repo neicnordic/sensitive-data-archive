@@ -106,11 +106,6 @@ if [ ! -f "/shared/c4gh.sec.pem" ]; then
     /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
 fi
 
-if [ ! -f "/shared/c4gh1.sec.pem" ]; then
-    echo "creating crypth4gh key"
-    /shared/crypt4gh generate -n /shared/c4gh1 -p c4ghpass
-fi
-
 if [ ! -f "/shared/client.sec.pem" ]; then # client key for re-encryption
     echo "creating client crypth4gh key"
     /shared/crypt4gh generate -n /shared/client -p c4ghpass
