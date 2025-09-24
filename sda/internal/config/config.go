@@ -72,7 +72,8 @@ type ReEncConfig struct {
 }
 
 type RotateKeyConf struct {
-	Grpc Grpc
+	Grpc      Grpc
+	PublicKey *[32]byte
 }
 
 type Sync struct {
@@ -82,6 +83,7 @@ type Sync struct {
 	RemotePassword string
 	RemotePort     int
 	RemoteUser     string
+	PublicKey      *[32]byte
 }
 
 type SyncAPIConf struct {
@@ -686,6 +688,11 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		c.RotateKey.PublicKey, err = GetC4GHPublicKey(viper.GetString("c4gh.rotatePubKeyPath"))
+		if err != nil {
+			return nil, err
+		}
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {
@@ -708,7 +715,8 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		if err := c.configDatabase(); err != nil {
+		err := c.configDatabase()
+		if err != nil {
 			return nil, err
 		}
 
@@ -1164,6 +1172,12 @@ func (c *Config) configSync() error {
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
 	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
 
+	var err error
+	c.Sync.PublicKey, err = GetC4GHPublicKey(viper.GetString("c4gh.syncPubKeyPath"))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -1234,17 +1248,7 @@ func GetC4GHprivateKeys() ([]*[32]byte, error) {
 }
 
 // GetC4GHPublicKey reads the c4gh public key
-func GetC4GHPublicKey(app string) (*[32]byte, error) {
-	var keyPath string
-	switch app {
-	case "sync":
-		keyPath = viper.GetString("c4gh.syncPubKeyPath")
-	case "rotatekey":
-		keyPath = viper.GetString("c4gh.rotatePubKeyPath")
-	default:
-		return nil, errors.New("pubKey not set")
-	}
-
+func GetC4GHPublicKey(keyPath string) (*[32]byte, error) {
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)
 	if err != nil {
