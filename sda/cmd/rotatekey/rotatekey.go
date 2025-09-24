@@ -1,7 +1,7 @@
 // The rotatekey service accepts messages to re-encrypt a file identified by its fileID.
 // The service re-encrypts the file header with a configured public key and stores it
 // in the database together with the key-hash of the rotation key.
-// I then sends a message to verify so the file is re-verified.
+// It then sends a message to verify so that the file is re-verified.
 
 package main
 
@@ -25,33 +25,28 @@ import (
 
 func main() {
 	forever := make(chan bool)
-	Conf, err := config.NewConfig("rotatekey")
+	conf, err := config.NewConfig("rotatekey")
 	if err != nil {
 		log.Fatal(err)
 	}
-	mq, err := broker.NewMQ(Conf.Broker)
+	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
 		log.Fatal(err)
 	}
-	db, err := database.NewSDAdb(Conf.Database)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	publicKey, err := config.GetC4GHPublicKey("rotatekey")
+	db, err := database.NewSDAdb(conf.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// encode pubkey as pem and then as base64 string
 	tmp := &bytes.Buffer{}
-	if err := keys.WriteCrypt4GHX25519PublicKey(tmp, *publicKey); err != nil {
+	if err := keys.WriteCrypt4GHX25519PublicKey(tmp, *conf.RotateKey.PublicKey); err != nil {
 		log.Fatal(err)
 	}
 	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
 	// Check that key is registered in the db at startup
-	keyhash := hex.EncodeToString(publicKey[:])
+	keyhash := hex.EncodeToString(conf.RotateKey.PublicKey[:])
 	err = db.CheckKeyHash(keyhash)
 	if err != nil {
 		log.Fatalf("database lookup of the rotation key failed, reason: %v", err)
@@ -77,7 +72,7 @@ func main() {
 	var message schema.KeyRotation
 
 	go func() {
-		messages, err := mq.GetMessages(Conf.Broker.Queue)
+		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -86,18 +81,18 @@ func main() {
 				delivered.CorrelationId,
 				delivered.Body)
 
-			err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), delivered.Body)
+			err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
 				msg := "validation of incoming message (rotate-key) failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
 
 			// Fetch rotate key hash before starting work so that we make sure the hash state
 			// has not changed since the application startup.
-			keyhash := hex.EncodeToString(publicKey[:])
+			keyhash := hex.EncodeToString(conf.RotateKey.PublicKey[:])
 			err = db.CheckKeyHash(keyhash)
 			// exit app if target key was modified after app start-up, e.g. if key has been deprecated
 			if err != nil {
@@ -114,7 +109,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -136,16 +131,16 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
 
-			newHeader, err := reencrypt.CallReencryptHeader(header, pubKeyEncoded, Conf.RotateKey.Grpc)
+			newHeader, err := reencrypt.CallReencryptHeader(header, pubKeyEncoded, conf.RotateKey.Grpc)
 			if err != nil {
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -153,7 +148,7 @@ func main() {
 				err := errors.New("reencrypt returned empty header")
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -162,7 +157,7 @@ func main() {
 			if err := db.StoreHeader(newHeader, fileID); err != nil {
 				msg := fmt.Sprintf("StoreHeader failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -171,7 +166,7 @@ func main() {
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
 				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -180,7 +175,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -190,25 +185,25 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
 
 			reVerifyMsg, _ := json.Marshal(&reVerify)
-			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), reVerifyMsg)
+			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), reVerifyMsg)
 			if err != nil {
 				msg := "Validation of outgoing re-verify message failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
 
-			if err := mq.SendMessage(delivered.CorrelationId, Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
+			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 				msg := "failed to publish message"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, Conf.Broker.Exchange, msg, err.Error())
+				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
