@@ -80,8 +80,8 @@ c4gh:
   privateKeys:
     - filePath: "/tmp/shared/c4gh.sec.pem"
       passphrase: "c4ghpass"
-    - filePath: "/tmp/shared/c4gh1.sec.pem"
-      passphrase: "c4ghpass"
+    - filePath: "/tmp/shared/rotatekey.sec.pem"
+      passphrase: "rotatekeyPass"
 
 oidc:
   configuration:
