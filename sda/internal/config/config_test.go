@@ -20,6 +20,7 @@ import (
 
 type ConfigTestSuite struct {
 	suite.Suite
+	pubKeyPath string
 }
 
 var certPath, rootDir string
@@ -67,6 +68,11 @@ func (ts *ConfigTestSuite) SetupTest() {
 	viper.Set("inbox.type", "s3")
 	viper.Set("server.jwtpubkeypath", "testpath")
 	viper.Set("log.level", "debug")
+
+	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
+	ts.pubKeyPath, _ = os.MkdirTemp("", "pubkey")
+	err = os.WriteFile(ts.pubKeyPath+"/c4gh.pub", []byte(pubKey), 0600)
+	assert.NoError(ts.T(), err)
 }
 
 func (ts *ConfigTestSuite) TearDownTest() {
@@ -303,7 +309,7 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	viper.Set("sync.remote.password", "test")
 	viper.Set("c4gh.filepath", "/keys/key")
 	viper.Set("c4gh.passphrase", "pass")
-	viper.Set("c4gh.syncPubKeyPath", "/keys/recipient")
+	viper.Set("c4gh.syncPubKeyPath", ts.pubKeyPath+"/c4gh.pub")
 	config, err = NewConfig("sync")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
@@ -325,6 +331,8 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(ts.T(), config.Sync)
 	assert.NotNil(ts.T(), config.Sync.Destination.Posix)
 	assert.Equal(ts.T(), "test", config.Sync.Destination.Posix.Location)
+
+	defer os.RemoveAll(ts.pubKeyPath)
 }
 
 func (ts *ConfigTestSuite) TestRotateKeyConfig() {
@@ -334,7 +342,7 @@ func (ts *ConfigTestSuite) TestRotateKeyConfig() {
 	assert.Error(ts.T(), err)
 	assert.Nil(ts.T(), config)
 
-	viper.Set("c4gh.rotatePubKeyPath", "/keys/recipient")
+	viper.Set("c4gh.rotatePubKeyPath", ts.pubKeyPath+"/c4gh.pub")
 	config, err = NewConfig("rotatekey")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
@@ -353,25 +361,22 @@ func (ts *ConfigTestSuite) TestRotateKeyConfig() {
 	assert.NotNil(ts.T(), config.RotateKey)
 	assert.NotNil(ts.T(), config.RotateKey.Grpc)
 	assert.Equal(ts.T(), "reencrypt", config.RotateKey.Grpc.Host)
+
+	defer os.RemoveAll(ts.pubKeyPath)
 }
 
 func (ts *ConfigTestSuite) TestGetC4GHPublicKey() {
-	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
-	pubKeyPath, _ := os.MkdirTemp("", "pubkey")
-	err := os.WriteFile(pubKeyPath+"/c4gh.pub", []byte(pubKey), 0600)
-	assert.NoError(ts.T(), err)
-
 	var kb [32]byte
 	k, _ := base64.StdEncoding.DecodeString("uQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=")
 	copy(kb[:], k)
 
-	viper.Set("c4gh.syncPubKeyPath", pubKeyPath+"/c4gh.pub")
-	pkBytes, err := GetC4GHPublicKey("sync")
+	viper.Set("c4gh.syncPubKeyPath", ts.pubKeyPath+"/c4gh.pub")
+	pkBytes, err := GetC4GHPublicKey(ts.pubKeyPath + "/c4gh.pub")
 	assert.NoError(ts.T(), err)
 	assert.NotNil(ts.T(), pkBytes)
 	assert.Equal(ts.T(), pkBytes, &kb, "GetC4GHPublicKey didn't return correct pubKey")
 
-	defer os.RemoveAll(pubKeyPath)
+	defer os.RemoveAll(ts.pubKeyPath)
 }
 func (ts *ConfigTestSuite) TestGetC4GHKey() {
 	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
