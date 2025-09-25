@@ -25,7 +25,6 @@ type SQLdb struct {
 }
 
 // FileInfo  is returned by the metadata/datasets/*dataset/files endpoint
-// And is used to gather the FileID in the s3 endpoint implementation
 type FileInfo struct {
 	FileID                    string `json:"fileId"`
 	DisplayFileName           string `json:"displayFileName"`
@@ -289,17 +288,17 @@ func (dbs *SQLdb) getDatasetInfo(datasetID string) (*DatasetInfo, error) {
 	return dataset, nil
 }
 
-// GetDatasetFileInfo returns information on a file given a dataset ID and an
+// GetDatasetFileStableId returns the stable id of a file given a dataset ID and an
 // upload file path
-var GetDatasetFileInfo = func(datasetID, filePath string) (*FileInfo, error) {
+var GetDatasetFileStableId = func(datasetID, filePath string) (string, error) {
 	var (
-		d     *FileInfo
-		err   error
-		count int
+		fileStableId string
+		err          error
+		count        int
 	)
 
 	for count < dbRetryTimes {
-		d, err = DB.getDatasetFileInfo(datasetID, filePath)
+		fileStableId, err = DB.getDatasetFileStableId(datasetID, filePath)
 		if err != nil {
 			count++
 
@@ -309,49 +308,36 @@ var GetDatasetFileInfo = func(datasetID, filePath string) (*FileInfo, error) {
 		break
 	}
 
-	return d, err
+	return fileStableId, err
 }
 
 // getDatasetFileInfo is the actual function performing work for GetFile
-func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, error) {
+func (dbs *SQLdb) getDatasetFileStableId(datasetID, filePath string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	file := &FileInfo{}
 	db := dbs.DB
 
 	const query = `
-SELECT files.stable_id AS id,
-	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
-	files.submission_user AS user_id,
-	files.submission_file_path AS file_path,
-	files.decrypted_file_size,
-	sha_unenc.checksum AS decrypted_file_checksum,
-	sha_unenc.type AS decrypted_file_checksum_type
+SELECT files.stable_id
 FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
-	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
 	WHERE datasets.stable_id = $1 AND files.submission_file_path ~ ('^[^/]*/?' || $2);`
 	// regexp matching in the submission file path in order to disregard the
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
 
-	var userID string
+	var fileStableID string
 	// nolint:rowserrcheck
-	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DisplayFileName, &userID, &file.FilePath,
-		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
+	err := db.QueryRow(query, datasetID, filePath).Scan(&fileStableID)
 
 	if err != nil {
 		log.Error(err)
 
-		return nil, err
+		return "", err
 	}
 
-	// Process file info so that we don't leak any unneccessary info.
-	file.FilePath = removeUserIDPrefix(file.FilePath, userID)
-
-	return file, nil
+	return fileStableID, nil
 }
 
 // CheckFilePermission checks if user has permissions to access the dataset the file is a part of
