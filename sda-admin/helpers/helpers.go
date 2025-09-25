@@ -12,6 +12,14 @@ import (
 // necessary for mocking in unit tests
 var GetResponseBody = GetBody
 
+type IngestFileInfo struct {
+	User  string
+	Path  string
+	Id    string
+	Url   string
+	Token string
+}
+
 // GetBody sends a GET request to the given URL and returns the body of the response
 func GetBody(url, token string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
@@ -50,8 +58,15 @@ var PostRequest = PostReq
 
 // PostReq sends a POST request to the server with a JSON body and returns the response body or an error.
 func PostReq(url, token string, jsonBody []byte) ([]byte, error) {
-	// Create a new POST request with the provided JSON body
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	var req *http.Request
+	var err error
+	if jsonBody != nil {
+		// Create a new POST request with the provided JSON body
+		req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	} else {
+		// Create a new POST request with query
+		req, err = http.NewRequest("POST", url, nil)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
 	}
