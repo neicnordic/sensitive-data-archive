@@ -24,23 +24,9 @@ type SQLdb struct {
 	ConnInfo string
 }
 
-// FileInfo is used to gather the FileID in the s3 endpoint implementation
-// Should be removed once query for getDatasetFileInfo is optimised
+// FileInfo  is returned by the metadata/datasets/*dataset/files endpoint
+// And is used to gather the FileID in the s3 endpoint implementation
 type FileInfo struct {
-	FileID                    string `json:"fileId"`
-	DatasetID                 string `json:"datasetId"`
-	DisplayFileName           string `json:"displayFileName"`
-	FilePath                  string `json:"filePath"`
-	EncryptedFileSize         int64  `json:"encryptedFileSize"`
-	EncryptedFileChecksum     string `json:"encryptedFileChecksum"`
-	EncryptedFileChecksumType string `json:"encryptedFileChecksumType"`
-	DecryptedFileSize         int64  `json:"decryptedFileSize"`
-	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
-	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-}
-
-// DatasetFile is returned by the metadata/datasets/*dataset/files endpoint
-type DatasetFile struct {
 	FileID                    string `json:"fileId"`
 	DisplayFileName           string `json:"displayFileName"`
 	FilePath                  string `json:"filePath"`
@@ -141,11 +127,11 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 }
 
 // GetFiles retrieves the file details
-var GetFiles = func(datasetID string) ([]*DatasetFile, error) {
+var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 	var (
-		r     []*DatasetFile = nil
-		err   error          = nil
-		count                = 0
+		r     []*FileInfo = nil
+		err   error       = nil
+		count             = 0
 	)
 
 	for count < dbRetryTimes {
@@ -175,10 +161,10 @@ func removeUserIDPrefix(filePath, userID string) string {
 }
 
 // getFiles is the actual function performing work for GetFile
-func (dbs *SQLdb) getFiles(datasetID string) ([]*DatasetFile, error) {
+func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	files := []*DatasetFile{}
+	files := []*FileInfo{}
 	db := dbs.DB
 
 	const query = `
@@ -209,7 +195,7 @@ WHERE datasets.stable_id = $1;`
 	// Iterate rows
 	for rows.Next() {
 		// Read rows into struct
-		fi := &DatasetFile{}
+		fi := &FileInfo{}
 		err := rows.Scan(&fi.FileID, &fi.DisplayFileName,
 			&userID, &fi.FilePath,
 			&fi.DecryptedFileSize, &fi.DecryptedFileChecksum, &fi.DecryptedFileChecksumType)
@@ -334,31 +320,18 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	db := dbs.DB
 
 	const query = `
-		SELECT f.stable_id AS file_id,
-			d.stable_id AS dataset_id,
-			reverse(split_part(reverse(f.submission_file_path::text), '/'::text, 1)) AS display_file_name,
-			f.submission_user AS user_id,
-			f.submission_file_path AS file_path,
-			f.archive_file_size AS file_size,
-			lef.archive_file_checksum AS encrypted_file_checksum,
-			lef.archive_file_checksum_type AS encrypted_file_checksum_type,
-			f.decrypted_file_size,
-			dc.checksum AS decrypted_file_checksum,
-			dc.type AS decrypted_file_checksum_type
-		FROM sda.files f
-		JOIN sda.file_dataset fd ON fd.file_id = f.id
-		JOIN sda.datasets d ON fd.dataset_id = d.id
-		LEFT JOIN local_ega.files lef ON f.stable_id = lef.stable_id
-		LEFT JOIN (SELECT file_id,
-					(ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event
-				FROM sda.file_event_log
-				GROUP BY file_id) e
-		ON f.id = e.file_id
-		LEFT JOIN (SELECT file_id, checksum, type
-			FROM sda.checksums
-		WHERE source = 'UNENCRYPTED') dc
-		ON f.id = dc.file_id
-		WHERE d.stable_id = $1 AND f.submission_file_path ~ ('^[^/]*/?' || $2);`
+SELECT files.stable_id AS id,
+	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+	files.submission_user AS user_id,
+	files.submission_file_path AS file_path,
+	files.decrypted_file_size,
+	sha_unenc.checksum AS decrypted_file_checksum,
+	sha_unenc.type AS decrypted_file_checksum_type
+FROM sda.files
+ 	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
+ 	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
+	LEFT JOIN sda.checksums sha_unenc ON files.id = sha_unenc.file_id AND sha_unenc.source = 'UNENCRYPTED'
+	WHERE datasets.stable_id = $1 AND files.submission_file_path ~ ('^[^/]*/?' || $2);`
 	// regexp matching in the submission file path in order to disregard the
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
@@ -366,8 +339,7 @@ func (dbs *SQLdb) getDatasetFileInfo(datasetID, filePath string) (*FileInfo, err
 	var userID string
 	// nolint:rowserrcheck
 	err := db.QueryRow(query, datasetID, filePath).Scan(&file.FileID,
-		&file.DatasetID, &file.DisplayFileName, &userID, &file.FilePath,
-		&file.EncryptedFileSize, &file.EncryptedFileChecksum, &file.EncryptedFileChecksumType,
+		&file.DisplayFileName, &userID, &file.FilePath,
 		&file.DecryptedFileSize, &file.DecryptedFileChecksum, &file.DecryptedFileChecksumType)
 
 	if err != nil {

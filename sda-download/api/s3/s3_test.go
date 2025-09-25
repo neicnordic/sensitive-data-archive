@@ -115,7 +115,7 @@ func (ts *S3TestSuite) TestListBuckets() {
 
 func (ts *S3TestSuite) TestListByPrefix() {
 	// Setup a mock database to handle queries
-	fileInfo := &database.DatasetFile{
+	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",
@@ -180,7 +180,7 @@ WHERE datasets.stable_id = \$1;`
 
 func (ts *S3TestSuite) TestListObjects() {
 	// Setup a mock database to handlequeries
-	fileInfo := &database.DatasetFile{
+	fileInfo := &database.FileInfo{
 		FileID:                    "file1",
 		DisplayFileName:           "file.txt",
 		FilePath:                  "dir/file.txt",

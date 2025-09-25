@@ -114,7 +114,7 @@ func TestGetFiles_Fail_Database(t *testing.T) {
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(_ string) ([]*database.DatasetFile, error) {
+	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
 		return nil, errors.New("something went wrong")
 	}
 
@@ -187,11 +187,11 @@ func TestGetFiles_Success(t *testing.T) {
 			Datasets: []string{"dataset1", "dataset2"},
 		}
 	}
-	database.GetFiles = func(_ string) ([]*database.DatasetFile, error) {
-		fileInfo := database.DatasetFile{
+	database.GetFiles = func(_ string) ([]*database.FileInfo, error) {
+		fileInfo := database.FileInfo{
 			FileID: "file1",
 		}
-		files := []*database.DatasetFile{}
+		files := []*database.FileInfo{}
 		files = append(files, &fileInfo)
 
 		return files, nil
@@ -226,7 +226,7 @@ func TestFiles_Fail(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(_ string, _ *gin.Context) ([]*database.DatasetFile, int, error) {
+	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
 		return nil, 404, errors.New("dataset not found")
 	}
 
@@ -267,8 +267,8 @@ func TestFiles_Success(t *testing.T) {
 	originalGetFiles := getFiles
 
 	// Substitute mock functions
-	getFiles = func(_ string, _ *gin.Context) ([]*database.DatasetFile, int, error) {
-		fileInfo := database.DatasetFile{
+	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
+		fileInfo := database.FileInfo{
 			FileID:                    "file1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
@@ -276,7 +276,7 @@ func TestFiles_Success(t *testing.T) {
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
 		}
-		files := []*database.DatasetFile{}
+		files := []*database.FileInfo{}
 		files = append(files, &fileInfo)
 
 		return files, 200, nil
