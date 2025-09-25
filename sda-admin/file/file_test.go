@@ -42,7 +42,7 @@ func TestList(t *testing.T) {
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestIngest_Success(t *testing.T) {
+func TestIngestPath_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -63,7 +63,7 @@ func TestIngest_Success(t *testing.T) {
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestIngest_PostRequestFailure(t *testing.T) {
+func TestIngestPath_PostRequestFailure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -71,13 +71,52 @@ func TestIngest_PostRequestFailure(t *testing.T) {
 
 	var ingestInfo helpers.IngestFileInfo
 	expectedURL := "http://example.com/file/ingest"
-	ingestInfo.Url =  "http://example.com"
+	ingestInfo.Url = "http://example.com"
 	ingestInfo.Token = "test-token"
 	ingestInfo.User = "test-user"
 	ingestInfo.Path = "/path/to/file"
 	jsonBody := []byte(`{"filepath":"/path/to/file","user":"test-user"}`)
 
 	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
+
+	err := Ingest(ingestInfo)
+	assert.Error(t, err)
+	assert.EqualError(t, err, "failed to send request")
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestIngestID_Success(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalFunc := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
+
+	var ingestInfo helpers.IngestFileInfo
+	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
+	ingestInfo.Url = "http://example.com"
+	ingestInfo.Token = "test-token"
+	ingestInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+
+	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, []byte(nil)).Return([]byte(`{}`), nil)
+
+	err := Ingest(ingestInfo)
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestIngestID_PostRequestFailure(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalFunc := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
+
+	var ingestInfo helpers.IngestFileInfo
+	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
+	ingestInfo.Url = "http://example.com"
+	ingestInfo.Token = "test-token"
+	ingestInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+
+	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, []byte(nil)).Return([]byte(nil), errors.New("failed to send request"))
 
 	err := Ingest(ingestInfo)
 	assert.Error(t, err)
