@@ -48,15 +48,17 @@ func TestIngest_Success(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
+	var ingestInfo helpers.IngestFileInfo
 	expectedURL := "http://example.com/file/ingest"
-	token := "test-token"
-	username := "test-user"
-	filepath := "/path/to/file"
+	ingestInfo.Url = "http://example.com"
+	ingestInfo.Token = "test-token"
+	ingestInfo.User = "test-user"
+	ingestInfo.Path = "/path/to/file"
 	jsonBody := []byte(`{"filepath":"/path/to/file","user":"test-user"}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
+	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := Ingest("http://example.com", token, username, filepath)
+	err := Ingest(ingestInfo)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -67,15 +69,17 @@ func TestIngest_PostRequestFailure(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
+	var ingestInfo helpers.IngestFileInfo
 	expectedURL := "http://example.com/file/ingest"
-	token := "test-token"
-	username := "test-user"
-	filepath := "/path/to/file"
+	ingestInfo.Url =  "http://example.com"
+	ingestInfo.Token = "test-token"
+	ingestInfo.User = "test-user"
+	ingestInfo.Path = "/path/to/file"
 	jsonBody := []byte(`{"filepath":"/path/to/file","user":"test-user"}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
+	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := Ingest("http://example.com", token, username, filepath)
+	err := Ingest(ingestInfo)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
