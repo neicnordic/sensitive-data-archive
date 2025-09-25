@@ -24,7 +24,8 @@ type SQLdb struct {
 	ConnInfo string
 }
 
-// FileInfo is returned by the metadata endpoint
+// FileInfo is used to gather the FileID in the s3 endpoint implementation
+// Should be removed once query for getDatasetFileInfo is optimised
 type FileInfo struct {
 	FileID                    string `json:"fileId"`
 	DatasetID                 string `json:"datasetId"`
