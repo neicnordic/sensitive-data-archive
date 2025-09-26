@@ -168,3 +168,44 @@ func TestSetAccessionPath_PostRequestFailure(t *testing.T) {
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
 }
+
+func TestSetAccessionID_Success(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalFunc := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
+
+	var accessionInfo helpers.FileInfo
+	expectedURL := "http://example.com/file/accession?accessionid=accession-123&fileid=dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.Url = "http://example.com"
+	accessionInfo.Token = "test-token"
+	accessionInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.Accession = "accession-123"
+
+	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, []byte(nil)).Return([]byte(`{}`), nil)
+
+	err := SetAccession(accessionInfo)
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestSetAccessionID_PostRequestFailure(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalFunc := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
+
+	var accessionInfo helpers.FileInfo
+	expectedURL := "http://example.com/file/accession?accessionid=accession-123&fileid=dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.Url = "http://example.com"
+	accessionInfo.Token = "test-token"
+	accessionInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.Accession = "accession-123"
+
+	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, []byte(nil)).Return([]byte(nil), errors.New("failed to send request"))
+
+	err := SetAccession(accessionInfo)
+	assert.Error(t, err)
+	assert.EqualError(t, err, "failed to send request")
+	mockHelpers.AssertExpectations(t)
+}
