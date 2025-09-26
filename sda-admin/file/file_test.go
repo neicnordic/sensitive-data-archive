@@ -124,42 +124,46 @@ func TestIngestID_PostRequestFailure(t *testing.T) {
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestSetAccession_Success(t *testing.T) {
+func TestSetAccessionPath_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
+	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession"
-	token := "test-token"
-	username := "test-user"
-	filepath := "/path/to/file"
-	accessionID := "accession-123"
+	accessionInfo.Url = "http://example.com"
+	accessionInfo.Token = "test-token"
+	accessionInfo.User = "test-user"
+	accessionInfo.Path = "/path/to/file"
+	accessionInfo.Accession = "accession-123"
 	jsonBody := []byte(`{"accession_id":"accession-123","filepath":"/path/to/file","user":"test-user"}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(`{}`), nil)
+	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, jsonBody).Return([]byte(`{}`), nil)
 
-	err := SetAccession("http://example.com", token, username, filepath, accessionID)
+	err := SetAccession(accessionInfo)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestSetAccession_PostRequestFailure(t *testing.T) {
+func TestSetAccessionPath_PostRequestFailure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
+	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession"
-	token := "test-token"
-	username := "test-user"
-	filepath := "/path/to/file"
-	accessionID := "accession-123"
+	accessionInfo.Url = "http://example.com"
+	accessionInfo.Token = "test-token"
+	accessionInfo.User = "test-user"
+	accessionInfo.Path = "/path/to/file"
+	accessionInfo.Accession = "accession-123"
 	jsonBody := []byte(`{"accession_id":"accession-123","filepath":"/path/to/file","user":"test-user"}`)
 
-	mockHelpers.On("PostRequest", expectedURL, token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
+	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, jsonBody).Return([]byte(nil), errors.New("failed to send request"))
 
-	err := SetAccession("http://example.com", token, username, filepath, accessionID)
+	err := SetAccession(accessionInfo)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
