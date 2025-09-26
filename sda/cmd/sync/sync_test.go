@@ -28,6 +28,7 @@ var dbPort int
 
 type SyncTest struct {
 	suite.Suite
+	keyPath string
 }
 
 func TestSyncTestSuite(t *testing.T) {
@@ -135,23 +136,23 @@ func (s *SyncTest) SetupTest() {
 	viper.Set("sync.remote.password", "pass")
 
 	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
-	keyPath, _ := os.MkdirTemp("", "key")
-	err := os.WriteFile(keyPath+"/c4gh.key", []byte(key), 0600)
+	s.keyPath, _ = os.MkdirTemp("", "key")
+	err := os.WriteFile(s.keyPath+"/c4gh.key", []byte(key), 0600)
 	assert.NoError(s.T(), err)
 
-	viper.Set("c4gh.filepath", keyPath+"/c4gh.key")
+	viper.Set("c4gh.filepath", s.keyPath+"/c4gh.key")
 	viper.Set("c4gh.passphrase", "test")
 
 	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
-	err = os.WriteFile(keyPath+"/c4gh.pub", []byte(pubKey), 0600)
+	err = os.WriteFile(s.keyPath+"/c4gh.pub", []byte(pubKey), 0600)
 	assert.NoError(s.T(), err)
-	viper.Set("c4gh.syncPubKeyPath", keyPath+"/c4gh.pub")
-
-	defer os.RemoveAll(keyPath)
+	viper.Set("c4gh.syncPubKeyPath", s.keyPath+"/c4gh.pub")
 }
 
 func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	s.SetupTest()
+	defer os.RemoveAll(s.keyPath)
+
 	conf, err := config.NewConfig("sync")
 	assert.NoError(s.T(), err)
 
