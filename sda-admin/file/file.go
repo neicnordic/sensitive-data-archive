@@ -78,26 +78,40 @@ func Ingest(ingestInfo helpers.FileInfo) error {
 	return nil
 }
 
-// SetAccession assigns an accession ID to a specified file for a given user
-func SetAccession(apiURI, token, username, filepath, accessionID string) error {
-	parsedURL, err := url.Parse(apiURI)
+// SetAccession assigns an accession ID to a file via the SDA API.
+// Depending on the provided fields in accessionInfo:
+// - If accessionInfo.Id is empty, it sends a POST request to /file/accession with a JSON body containing accession_id, filepath, and user.
+// - If accessionInfo.Id is set, it sends a POST request to /file/accession with fileid and accessionid as query parameters.
+func SetAccession(accessionInfo helpers.FileInfo) error {
+	var jsonBody []byte
+	parsedURL, err := url.Parse(accessionInfo.Url)
 	if err != nil {
 		return err
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "file/accession")
 
-	requestBody := RequestBodyFileAccession{
-		AccessionID: accessionID,
-		Filepath:    filepath,
-		User:        username,
+	if accessionInfo.Id == "" {
+		if err := helpers.CheckValidChars(accessionInfo.Path); err != nil {
+			return err
+		}
+		requestBody := RequestBodyFileAccession{
+			AccessionID: accessionInfo.Accession,
+			Filepath:    accessionInfo.Path,
+			User:        accessionInfo.User,
+		}
+		jsonBody, err = json.Marshal(requestBody)
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSON, reason: %v", err)
+		}
+	} else {
+		query := parsedURL.Query()
+		query.Set("fileid", accessionInfo.Id)
+		query.Set("accessionid", accessionInfo.Accession)
+		parsedURL.RawQuery = query.Encode()
+		jsonBody = nil
 	}
 
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON, reason: %v", err)
-	}
-
-	_, err = helpers.PostRequest(parsedURL.String(), token, jsonBody)
+	_, err = helpers.PostRequest(parsedURL.String(), accessionInfo.Token, jsonBody)
 	if err != nil {
 		return err
 	}
