@@ -76,12 +76,15 @@ var fileListUsage = `Usage: sda-admin file list -user USERNAME
 Options:
   -user USERNAME 	Specify the username associated with the files.`
 
-var fileIngestUsage = `Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
-  Trigger the ingestion of a given file for a specific user.
+var fileIngestUsage = `Usage with file path and user: sda-admin file ingest -filepath FILEPATH -user USERNAME
+Usage with file ID: sda-admin file ingest -fileid FILEUUID
+
+  Trigger the ingestion either by providing filepath and user or file ID.
 
 Options:
   -filepath FILEPATH   Specify the path of the file to ingest.
-  -user USERNAME       Specify the username associated with the file.`
+  -user USERNAME       Specify the username associated with the file.
+  -fileid FILEUUID     Specify the file ID (UUID) of the file to ingest.`
 
 var fileAccessionUsage = `Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
   Assign accession ID to a file and associate it with a user.
@@ -336,23 +339,27 @@ func handleFileCommand() error {
 
 func handleFileIngestCommand() error {
 	fileIngestCmd := flag.NewFlagSet("ingest", flag.ExitOnError)
-	var filepath, username string
-	fileIngestCmd.StringVar(&filepath, "filepath", "", "Filepath to ingest")
-	fileIngestCmd.StringVar(&username, "user", "", "Username to associate with the file")
+	var ingestInfo helpers.IngestFileInfo
+	ingestInfo.Url = apiURI
+	ingestInfo.Token = token
+	fileIngestCmd.StringVar(&ingestInfo.Path, "filepath", "", "Filepath to ingest")
+	fileIngestCmd.StringVar(&ingestInfo.User, "user", "", "Username to associate with the file")
+	fileIngestCmd.StringVar(&ingestInfo.Id, "fileid", "", "File ID (UUID) to ingest")
 
 	if err := fileIngestCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
 	}
 
-	if filepath == "" || username == "" {
-		return fmt.Errorf("error: both -filepath and -user are required.\n%s", fileIngestUsage)
+	switch {
+	case ingestInfo.Path == "" && ingestInfo.User == "" && ingestInfo.Id == "":
+		return fmt.Errorf("error: either -filepath and -user pair or -fileid are required.\n%s", fileIngestUsage)
+	case ingestInfo.Id != "" && (ingestInfo.Path != "" || ingestInfo.User != ""):
+		return fmt.Errorf("error: choose if -filepath and -user pair or -fileid will be used.\n%s", fileIngestUsage)
+	case ingestInfo.Id == "" && (ingestInfo.Path == "" || ingestInfo.User == ""):
+		return fmt.Errorf("error: both -filepath and -user must be provided together.\n%s", fileIngestUsage)
 	}
 
-	if err := helpers.CheckValidChars(filepath); err != nil {
-		return err
-	}
-
-	err := file.Ingest(apiURI, token, username, filepath)
+	err := file.Ingest(ingestInfo)
 	if err != nil {
 		return fmt.Errorf("error: failed to ingest file, reason: %v", err)
 	}
