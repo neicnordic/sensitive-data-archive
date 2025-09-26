@@ -89,6 +89,7 @@ spec:
       command: [ "/bin/bash" ]
       args:
         - "/release-test-app/release-test.sh"
+  enableServiceLinks: false
   volumes:
     {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
       - name: certs

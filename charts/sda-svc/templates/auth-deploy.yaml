@@ -99,6 +99,7 @@ spec:
         - name: c4gh
           mountPath: {{ template "c4ghPath" . }}
       {{- end }}
+      enableServiceLinks: false
       volumes:
       {{- if not .Values.global.vaultSecrets }}
         {{- if and (.Values.global.auth.resignJwt) (not .Values.global.vaultSecrets) }}
