@@ -270,12 +270,8 @@ func TestFiles_Success(t *testing.T) {
 	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
 		fileInfo := database.FileInfo{
 			FileID:                    "file1",
-			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
-			EncryptedFileSize:         200,
-			EncryptedFileChecksum:     "hash",
-			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
@@ -303,11 +299,9 @@ func TestFiles_Success(t *testing.T) {
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 200
 	expectedBody := []byte(
-		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
-			`"dir/file1.txt","encryptedFileSize":200,` +
-			`"encryptedFileChecksum":"hash","encryptedFileChecksumType":"sha256",` +
-			`"decryptedFileSize":100,` +
-			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
+		`[{"fileId":"file1","displayFileName":"file1.txt","filePath":` +
+			`"dir/file1.txt",` +
+			`"decryptedFileSize":100,"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
