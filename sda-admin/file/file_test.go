@@ -48,7 +48,7 @@ func TestIngestPath_Success(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
-	var ingestInfo helpers.IngestFileInfo
+	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest"
 	ingestInfo.Url = "http://example.com"
 	ingestInfo.Token = "test-token"
@@ -69,7 +69,7 @@ func TestIngestPath_PostRequestFailure(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
-	var ingestInfo helpers.IngestFileInfo
+	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest"
 	ingestInfo.Url = "http://example.com"
 	ingestInfo.Token = "test-token"
@@ -91,7 +91,7 @@ func TestIngestID_Success(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
-	var ingestInfo helpers.IngestFileInfo
+	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
 	ingestInfo.Url = "http://example.com"
 	ingestInfo.Token = "test-token"
@@ -110,7 +110,7 @@ func TestIngestID_PostRequestFailure(t *testing.T) {
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalFunc }() // Restore original after test
 
-	var ingestInfo helpers.IngestFileInfo
+	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
 	ingestInfo.Url = "http://example.com"
 	ingestInfo.Token = "test-token"

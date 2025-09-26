@@ -12,12 +12,13 @@ import (
 // necessary for mocking in unit tests
 var GetResponseBody = GetBody
 
-type IngestFileInfo struct {
-	User  string
-	Path  string
-	Id    string
-	Url   string
-	Token string
+type FileInfo struct {
+	User      string
+	Path      string
+	Id        string
+	Url       string
+	Token     string
+	Accession string
 }
 
 // GetBody sends a GET request to the given URL and returns the body of the response

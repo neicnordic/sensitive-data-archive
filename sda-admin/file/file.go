@@ -43,7 +43,7 @@ func List(apiURI, token, username string) error {
 // Depending on the provided fields in ingestInfo:
 // - If ingestInfo.Id is empty, it sends a POST request to /file/ingest with a JSON body containing the file path and user.
 // - If ingestInfo.Id is set, it sends a POST request to /file/ingest with the fileid as a query parameter and no JSON body.
-func Ingest(ingestInfo helpers.IngestFileInfo) error {
+func Ingest(ingestInfo helpers.FileInfo) error {
 	var jsonBody []byte
 	parsedURL, err := url.Parse(ingestInfo.Url)
 	if err != nil {
