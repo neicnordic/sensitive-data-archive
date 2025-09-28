@@ -81,8 +81,7 @@ func main() {
 	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
 	// Check that key is registered in the db at startup
-	keyhash := hex.EncodeToString(conf.RotateKey.PublicKey[:])
-	err = db.CheckKeyHash(keyhash)
+	err = db.CheckKeyHash(hex.EncodeToString(conf.RotateKey.PublicKey[:]))
 	if err != nil {
 		panic(fmt.Errorf("database lookup of the rotation key failed, reason: %v", err))
 	}
@@ -129,7 +128,7 @@ func main() {
 			if err != nil {
 				msg := "validation of incoming message (rotate-key) failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -137,9 +136,8 @@ func main() {
 			// Fetch rotate key hash before starting work so that we make sure the hash state
 			// has not changed since the application startup.
 			keyhash := hex.EncodeToString(conf.RotateKey.PublicKey[:])
-			err = db.CheckKeyHash(keyhash)
 			// exit app if target key was modified after app start-up, e.g. if key has been deprecated
-			if err != nil {
+			if err = db.CheckKeyHash(keyhash); err != nil {
 				panic(fmt.Errorf("check of target key failed, reason: %v", err))
 			}
 
@@ -153,7 +151,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -175,7 +173,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -184,7 +182,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -192,7 +190,7 @@ func main() {
 				err := errors.New("reencrypt returned empty header")
 				msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -210,7 +208,7 @@ func main() {
 			if err := db.SetKeyHash(keyhash, fileID); err != nil {
 				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -219,7 +217,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -229,7 +227,7 @@ func main() {
 			if err != nil {
 				msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -239,7 +237,7 @@ func main() {
 			if err != nil {
 				msg := "Validation of outgoing re-verify message failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -247,7 +245,7 @@ func main() {
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 				msg := "failed to publish message"
 				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
+				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
 				continue
 			}
@@ -261,8 +259,8 @@ func main() {
 	<-forever
 }
 
-// Nack message without requeue. Send the message to an error queue so it can be analyzed.
-func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, mqExchange, msg, reason string) {
+// Nack message and send the payload to an error queue so it can be analyzed.
+func nackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, mqExchange, msg, reason string) {
 	infoErrorMessage := broker.InfoError{
 		Error:           msg,
 		Reason:          reason,
@@ -273,7 +271,7 @@ func NackAndSendToErrorQueue(mq *broker.AMQPBroker, delivered amqp091.Delivery, 
 	if err := mq.SendMessage(delivered.CorrelationId, mqExchange, "error", body); err != nil {
 		log.Errorf("failed to publish message, reason: (%s)", err.Error())
 	}
-	if err := delivered.Ack(false); err != nil {
+	if err := delivered.Nack(false, false); err != nil {
 		log.Errorf("failed to Ack message, reason: (%s)", err.Error())
 	}
 }
