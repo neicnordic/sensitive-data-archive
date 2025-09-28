@@ -12,6 +12,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -24,24 +27,56 @@ import (
 )
 
 func main() {
+	var (
+		mq *broker.AMQPBroker
+		db *database.SDAdb
+	)
+	sigc := make(chan os.Signal, 5)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	// Create a function to handle panic and exit gracefully
+	defer func() {
+		if err := recover(); err != nil {
+			if mq != nil {
+				defer mq.Channel.Close()
+				defer mq.Connection.Close()
+			}
+			if db != nil {
+				defer db.Close()
+			}
+			log.Fatal(err)
+		}
+	}()
+
 	forever := make(chan bool)
+
 	conf, err := config.NewConfig("rotatekey")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	mq, err := broker.NewMQ(conf.Broker)
+	mq, err = broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	db, err := database.NewSDAdb(conf.Database)
+	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
+
+	go func() {
+		<-sigc // blocks here until it receives from sigc
+		fmt.Println("Interrupt signal received. Shutting down.")
+		defer mq.Channel.Close()
+		defer mq.Connection.Close()
+		defer db.Close()
+
+		os.Exit(0) // exit program
+	}()
 
 	// encode pubkey as pem and then as base64 string
 	tmp := &bytes.Buffer{}
 	if err := keys.WriteCrypt4GHX25519PublicKey(tmp, *conf.RotateKey.PublicKey); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	pubKeyEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
 
@@ -49,12 +84,8 @@ func main() {
 	keyhash := hex.EncodeToString(conf.RotateKey.PublicKey[:])
 	err = db.CheckKeyHash(keyhash)
 	if err != nil {
-		log.Fatalf("database lookup of the rotation key failed, reason: %v", err)
+		panic(fmt.Errorf("database lookup of the rotation key failed, reason: %v", err))
 	}
-
-	defer mq.Channel.Close()
-	defer mq.Connection.Close()
-	defer db.Close()
 
 	go func() {
 		connError := mq.ConnectionWatcher()
@@ -72,9 +103,22 @@ func main() {
 	var message schema.KeyRotation
 
 	go func() {
+		// Create a function to handle panic and exit gracefully
+		defer func() {
+			if err := recover(); err != nil {
+				if mq != nil {
+					defer mq.Channel.Close()
+					defer mq.Connection.Close()
+				}
+				if db != nil {
+					defer db.Close()
+				}
+				log.Fatal(err)
+			}
+		}()
 		messages, err := mq.GetMessages(conf.Broker.Queue)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		for delivered := range messages {
 			log.Debugf("Received a message (corr-id: %s, message: %s)",
@@ -96,7 +140,7 @@ func main() {
 			err = db.CheckKeyHash(keyhash)
 			// exit app if target key was modified after app start-up, e.g. if key has been deprecated
 			if err != nil {
-				log.Fatalf("check of target key failed, reason: %v", err)
+				panic(fmt.Errorf("check of target key failed, reason: %v", err))
 			}
 
 			// we unmarshal the message in the validation step so this is safe to do
