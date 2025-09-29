@@ -84,7 +84,7 @@
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>8.5.17</version>
+            <version>8.6.0</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>
@@ -121,7 +121,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>clearinghouse</artifactId>
-            <version>3.0.8</version>
+            <version>3.0.9</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
