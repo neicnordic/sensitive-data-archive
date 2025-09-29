@@ -226,7 +226,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 checkConsumers rotatekey 0
 
 ## test app attempts to start with a configured rotation key that is deprecated
-echo "test app fails to start with a configured rotation key that is invalid"
+echo "test that app fails to start with a configured rotation key that is invalid"
 
 sleep 2
 # app will keep failing until we restore tha target key as active
@@ -238,11 +238,12 @@ psql -U postgres -h postgres -d sda -At -c "UPDATE sda.encryption_keys SET depre
 checkConsumers rotatekey 1
 
 ## test bad message
-test "test bad mq message"
+echo "test bad mq message"
 
 rotatekey_payload_bad=$(
     jq -r -c -n \
         --arg type "key_rotation" \
+        --arg file_id "0f38b6z-9868-446f-91ab-6a83832a3f0a" \
         '$ARGS.named|@base64'
 )
 
