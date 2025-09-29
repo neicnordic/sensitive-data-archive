@@ -8,7 +8,7 @@ COPY src/ /src/
 
 RUN mvn clean install -DskipTests --no-transfer-progress
 
-FROM eclipse-temurin:21-alpine
+FROM eclipse-temurin:25-alpine
 
 RUN apk add --no-cache --upgrade ca-certificates java-cacerts libssl3 libcrypto3 \
     && ln -sf /etc/ssl/certs/java/cacerts $JAVA_HOME/lib/security/cacerts
