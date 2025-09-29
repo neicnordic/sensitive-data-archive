@@ -18,7 +18,7 @@ jobs:
       packages: write
     steps:
       - name: Delete 'PR' containers older than one month
-        uses: snok/container-retention-policy@v3.0.0
+        uses: snok/container-retention-policy@v3.0.1
         with:
           account: ${{ github.repository_owner }}
           image-names: sensitive-data-archive
