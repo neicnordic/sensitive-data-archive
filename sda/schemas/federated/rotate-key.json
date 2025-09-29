@@ -21,6 +21,7 @@
             "type": "string",
             "title": "The unique file identifier",
             "description": "The unique file identifier",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
             "examples": [
                 "420420cc43-e060-4583-a891-9f8170ee66c8"
             ]
