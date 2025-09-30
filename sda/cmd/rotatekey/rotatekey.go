@@ -195,18 +195,9 @@ func main() {
 				continue
 			}
 
-			// Rotate header in database
-			if err := db.StoreHeader(newHeader, fileID); err != nil {
-				msg := fmt.Sprintf("StoreHeader failed for file-id: %s", fileID)
-				log.Errorf("%s, reason: %v", msg, err)
-				NackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
-
-				continue
-			}
-
-			// Rotate keyhash
-			if err := db.SetKeyHash(keyhash, fileID); err != nil {
-				msg := fmt.Sprintf("SetKeyHash failed for file-id: %s", fileID)
+			// Rotate header and keyhash in database
+			if err := db.RotateHeaderKey(newHeader, keyhash, fileID); err != nil {
+				msg := fmt.Sprintf("RotateHeaderKey failed for file-id: %s", fileID)
 				log.Errorf("%s, reason: %v", msg, err)
 				nackAndSendToErrorQueue(mq, delivered, conf.Broker.Exchange, msg, err.Error())
 
