@@ -2,6 +2,7 @@ package database
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"time"
@@ -98,6 +99,54 @@ func (suite *DatabaseTests) TestStoreHeader() {
 
 	// store header for non existing entry
 	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, "00000000-0000-0000-0000-000000000000")
+	assert.EqualError(suite.T(), err, "something went wrong with the query zero rows were changed")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestRotateHeaderKey() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+
+	// Register a new key and a new file
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.addKeyHash("someKeyHash", "this is a test key")
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, fileID)
+	assert.NoError(suite.T(), err, "failed to store file header")
+
+	// test happy path
+	newKeyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc507`
+	err = db.addKeyHash(newKeyHex, "new key")
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	newHHeader := []byte{1, 2, 3}
+
+	err = db.RotateHeaderKey(newHHeader, newKeyHex, fileID)
+	assert.NoError(suite.T(), err)
+
+	// Verify that the key+header were updated
+	var dbHeaderString, dbKeyHash string
+	err = db.DB.QueryRow("SELECT header, key_hash FROM sda.files WHERE id=$1", fileID).Scan(&dbHeaderString, &dbKeyHash)
+	assert.NoError(suite.T(), err)
+	dbHeader, err := hex.DecodeString(dbHeaderString)
+	assert.NoError(suite.T(), err, "hex decoding of rotated header failed")
+	assert.Equal(suite.T(), newHHeader, dbHeader)
+	assert.Equal(suite.T(), newKeyHex, dbKeyHash)
+
+	// case of non registered keyhash
+	err = db.RotateHeaderKey([]byte{2, 4, 6, 8}, "unknownKeyHash", fileID)
+	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
+	// check that no column was updated
+	err = db.DB.QueryRow("SELECT header, key_hash FROM sda.files WHERE id=$1", fileID).Scan(&dbHeaderString, &dbKeyHash)
+	assert.NoError(suite.T(), err)
+	dbHeader, err = hex.DecodeString(dbHeaderString)
+	assert.NoError(suite.T(), err, "hex decoding of rotated header failed")
+	assert.Equal(suite.T(), newHHeader, dbHeader)
+	assert.Equal(suite.T(), newKeyHex, dbKeyHash)
+
+	// case of non existing entry
+	err = db.RotateHeaderKey([]byte{15, 45, 20, 40, 48}, "keyHex", "00000000-0000-0000-0000-000000000000")
 	assert.EqualError(suite.T(), err, "something went wrong with the query zero rows were changed")
 
 	db.Close()

@@ -200,6 +200,39 @@ func (dbs *SDAdb) storeHeader(header []byte, id string) error {
 	return nil
 }
 
+// RotateHeader stores the file header in the database
+func (dbs *SDAdb) RotateHeaderKey(header []byte, keyHash, fileID string) error {
+	var (
+		err   error
+		count int
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		err = dbs.rotateHeaderKey(header, keyHash, fileID)
+		count++
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) rotateHeaderKey(header []byte, keyHash, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "UPDATE sda.files SET header = $1, key_hash = $2 WHERE id = $3;"
+
+	result, err := db.Exec(query, hex.EncodeToString(header), keyHash, fileID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+	log.Debugf("Successfully set header and key hash for file %s", fileID)
+
+	return nil
+}
+
 // SetArchived marks the file as 'ARCHIVED'
 func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
 	var err error
