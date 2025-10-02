@@ -260,16 +260,8 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		return "nackRequeue", msg, err
 	}
 
-	aID, err := app.DB.GetAccessionID(fileID)
-	if err != nil {
-		msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
-		log.Errorf("%s, reason: %v", msg, err)
-
-		return "ackSendToError", msg, err
-	}
-
 	// Send re-verify message
-	reVerify, err := app.DB.GetReVerificationData(aID)
+	reVerify, err := app.DB.GetReVerificationDataFromFileID(fileID)
 	if err != nil {
 		msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
