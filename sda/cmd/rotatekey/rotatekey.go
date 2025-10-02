@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/neicnordic/crypt4gh/keys"
@@ -204,7 +205,12 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "ackSendToError", msg, err
+		switch {
+		case strings.Contains(err.Error(), "sql: no rows in result set"):
+			return "ackSendToError", msg, err
+		default:
+			return "nackRequeue", msg, err
+		}
 	}
 
 	// Check that the file is not already encrypted with the target key
@@ -223,7 +229,12 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "ackSendToError", msg, err
+		switch {
+		case strings.Contains(err.Error(), "sql: no rows in result set"):
+			return "ackSendToError", msg, err
+		default:
+			return "nackRequeue", msg, err
+		}
 	}
 
 	newHeader, err := reencrypt.CallReencryptHeader(header, app.PubKeyEncoded, app.Conf.RotateKey.Grpc)
@@ -246,7 +257,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("RotateHeaderKey failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "ackSendToError", msg, err
+		return "nackRequeue", msg, err
 	}
 
 	aID, err := app.DB.GetAccessionID(fileID)
@@ -279,7 +290,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := "failed to publish message"
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "ackSendToError", msg, err
+		return "nackRequeue", msg, err
 	}
 
 	return "ack", "", nil
