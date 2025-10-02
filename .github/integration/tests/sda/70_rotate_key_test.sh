@@ -7,19 +7,6 @@ fi
 
 cd shared || true
 
-checkStatus () {
-	RETRY_TIMES=0
-	until [ "$(curl -s -k -H "Authorization: Bearer $token" -X GET http://api:8080/users/test@dummy.org/files | jq | grep -c "$1")" -eq "$2" ]; do
-	    echo "waiting for files to become $1"
-	    RETRY_TIMES=$((RETRY_TIMES + 1))
-	    if [ "$RETRY_TIMES" -eq 30 ]; then
-	        echo "::error::Time out while waiting for files to become $1"
-	        exit 1
-	    fi
-	    sleep 2
-	done
-}
-
 checkErrors() {
 	RETRY_TIMES=0
 	until [ $(("$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')"-"$errorStreamSize")) -eq 1 ]; do
@@ -88,15 +75,18 @@ if [ "$response" -ne 1 ]; then
 	exit 1
 fi
 
-## ingest and map files to dataset
+## ingest file
 curl -s -k -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"filepath": "dataset_rotatekey/testfile1.c4gh", "user": "test@dummy.org"}' http://api:8080/file/ingest
-checkStatus verified 1
-
-curl -s -k -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_id": "ROTATE-KEY-01", "filepath": "dataset_rotatekey/testfile1.c4gh", "user": "test@dummy.org"}' http://api:8080/file/accession
-checkStatus ready 1
-
-curl -s -k -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"accession_ids": ["ROTATE-KEY-01"], "dataset_id": "KEY-ROTATION-TEST-0001", "user": "test@dummy.org"}' http://api:8080/dataset/create
-checkStatus ready 0
+RETRY_TIMES=0
+until [ "$(curl -s -k -H "Authorization: Bearer $token" -X GET http://api:8080/users/test@dummy.org/files | jq | grep -c "verified")" -eq 1 ]; do
+    echo "waiting for files to become verified"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for files to become verified"
+        exit 1
+    fi
+    sleep 2
+done
 
 errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
 
@@ -107,7 +97,7 @@ corrID=$(
             -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox/get \
             -d '{"count":1,"encoding":"auto","ackmode":"ack_requeue_false"}' | jq -r .[0].properties.correlation_id
     )
-fileID=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where stable_id='ROTATE-KEY-01';")
+fileID=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_rotatekey/testfile1.c4gh';")
 
 properties=$(
     jq -c -n \
@@ -142,7 +132,7 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 
 # check DB for updated key hash in sda.files
 rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
-if [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where stable_id like 'ROTATE-KEY-0%';" | grep -c "$rotatekeyHash")" -ne 1 ];
+if [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where id='$fileID';" | grep -c "$rotatekeyHash")" -ne 1 ];
 then
 	echo "failed to update the key hash of files"
 	exit 1
@@ -162,6 +152,7 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/archived/ |
 done
 
 # check that no other erros occured
+sleep 5
 if [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')" -ne "$errorStreamSize" ]; then
 	echo "something went wrong with the key rotation"
 	exit 1
@@ -170,10 +161,10 @@ fi
 ## download file with rotated key, concatenate header and archive body, decrypt and check
 
 # get rotated header
-psql -U postgres -h postgres -d sda -At -c "select header from sda.files where stable_id='ROTATE-KEY-01';" | xxd -r -p > testfile1_rotated.c4gh
+psql -U postgres -h postgres -d sda -At -c "select header from sda.files where id='$fileID';" | xxd -r -p > testfile1_rotated.c4gh
 
 # get archive file
-archivePath=$(psql -U postgres -h postgres -d sda -At -c "select archive_file_path from sda.files where stable_id='ROTATE-KEY-01';")
+archivePath=$(psql -U postgres -h postgres -d sda -At -c "select archive_file_path from sda.files where id='$fileID';")
 s3cmd --access_key=access --secret_key=secretKey --host=minio:9000 --no-ssl --host-bucket=minio:9000 get s3://archive/"$archivePath" --force
 
 # concatenate and decrypt
@@ -293,7 +284,5 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -d "$rotatekey_body" | jq
 
 checkErrors "failed to get keyhash for file"
-
-errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
 
 printf "\033[32mRotate key integration tests completed successfully\033[0m\n"
