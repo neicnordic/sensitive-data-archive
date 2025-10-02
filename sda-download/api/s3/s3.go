@@ -185,13 +185,13 @@ func ListObjects(c *gin.Context) {
 	})
 }
 
-func getFileStableId(c *gin.Context) (fileStableId string, err error) {
+func getFileStableID(c *gin.Context) (fileStableID string, err error) {
 	// Get file info for the given file path (or abort)
 	filename := c.Param("filename")
 	if !strings.HasSuffix(c.Param("filename"), ".c4gh") {
 		filename = c.Param("filename") + ".c4gh"
 	}
-	fileStableId, err = database.GetDatasetFileStableId(c.Param("dataset"), filename)
+	fileStableID, err = database.GetDatasetFileStableID(c.Param("dataset"), filename)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			c.AbortWithStatus(http.StatusNotFound)
@@ -202,7 +202,7 @@ func getFileStableId(c *gin.Context) (fileStableId string, err error) {
 		return
 	}
 
-	return fileStableId, nil
+	return fileStableID, nil
 }
 
 // GetObject respondes to an S3 GetObject request. This request returns S3
@@ -213,7 +213,7 @@ func getFileStableId(c *gin.Context) (fileStableId string, err error) {
 func GetObject(c *gin.Context) {
 	log.Debugf("S3 GetObject request, context: %v", c.Params)
 
-	fileStableId, err := getFileStableId(c)
+	fileStableID, err := getFileStableID(c)
 	if err != nil {
 		return
 	}
@@ -222,7 +222,7 @@ func GetObject(c *gin.Context) {
 	c.Set("S3", true)
 
 	// set the fileID so that download knows what file to download
-	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileStableId})
+	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileStableID})
 
 	// Download the file
 	sda.Download(c)
@@ -236,7 +236,7 @@ func GetObject(c *gin.Context) {
 func GetEcnryptedObject(c *gin.Context) {
 	log.Debugf("S3 GetEncryptedObject request, context: %v", c.Params)
 
-	fileStableId, err := getFileStableId(c)
+	fileStableID, err := getFileStableID(c)
 	if err != nil {
 		return
 	}
@@ -245,7 +245,7 @@ func GetEcnryptedObject(c *gin.Context) {
 	c.Set("S3", true)
 
 	// set the fileID so that download knows what file to download
-	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileStableId})
+	c.Params = append(c.Params, gin.Param{Key: "fileid", Value: fileStableID})
 
 	// set the encrypted parameter so that download gets the encrypted file instead
 	c.Params = append(c.Params, gin.Param{Key: "type", Value: "encrypted"})

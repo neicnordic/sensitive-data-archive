@@ -288,17 +288,17 @@ func (dbs *SQLdb) getDatasetInfo(datasetID string) (*DatasetInfo, error) {
 	return dataset, nil
 }
 
-// GetDatasetFileStableId returns the stable id of a file given a dataset ID and an
+// GetDatasetFileStableID returns the stable id of a file given a dataset ID and an
 // upload file path
-var GetDatasetFileStableId = func(datasetID, filePath string) (string, error) {
+var GetDatasetFileStableID = func(datasetID, filePath string) (string, error) {
 	var (
-		fileStableId string
+		fileStableID string
 		err          error
 		count        int
 	)
 
 	for count < dbRetryTimes {
-		fileStableId, err = DB.getDatasetFileStableId(datasetID, filePath)
+		fileStableID, err = DB.getDatasetFileStableID(datasetID, filePath)
 		if err != nil {
 			count++
 
@@ -308,11 +308,11 @@ var GetDatasetFileStableId = func(datasetID, filePath string) (string, error) {
 		break
 	}
 
-	return fileStableId, err
+	return fileStableID, err
 }
 
 // getDatasetFileInfo is the actual function performing work for GetFile
-func (dbs *SQLdb) getDatasetFileStableId(datasetID, filePath string) (string, error) {
+func (dbs *SQLdb) getDatasetFileStableID(datasetID, filePath string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
