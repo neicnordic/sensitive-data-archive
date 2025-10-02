@@ -264,4 +264,36 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
 
 checkErrors "validation of incoming message (rotate-key) failed"
 
+# update errorStream
+errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
+
+## test non-existent fileID
+echo "test non-existent fileID"
+
+rotatekey_payload_bad=$(
+    jq -r -c -n \
+        --arg type "key_rotation" \
+        --arg file_id "d3fc4148-6918-479c-914d-ad669041c816" \
+        '$ARGS.named|@base64'
+)
+
+rotatekey_body=$(
+    jq -c -n \
+        --arg vhost test \
+        --arg name sda \
+        --argjson properties "$properties" \
+        --arg routing_key "rotatekey" \
+        --arg payload_encoding base64 \
+        --arg payload "$rotatekey_payload_bad" \
+        '$ARGS.named'
+)
+
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$rotatekey_body" | jq
+
+checkErrors "failed to get keyhash for file"
+
+errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
+
 printf "\033[32mRotate key integration tests completed successfully\033[0m\n"

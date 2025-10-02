@@ -1010,7 +1010,7 @@ func (dbs *SDAdb) GetKeyHash(fileID string) (string, error) {
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
 		keyHash, err = dbs.getKeyHash(fileID)
-		if err == nil {
+		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
