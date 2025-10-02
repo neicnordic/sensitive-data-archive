@@ -22,7 +22,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -134,7 +133,19 @@ func main() {
 			if err != nil {
 				msg := "validation of incoming message (rotate-key) failed"
 				log.Errorf("%s, reason: %v", msg, err)
-				app.nackAndSendToErrorQueue(delivered, msg, err.Error())
+				// Ack message and send the payload to an error queue so it can be analyzed.
+				infoErrorMessage := broker.InfoError{
+					Error:           msg,
+					Reason:          err.Error(),
+					OriginalMessage: string(delivered.Body),
+				}
+				body, _ := json.Marshal(infoErrorMessage)
+				if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
 
 				continue
 			}
@@ -157,8 +168,23 @@ func main() {
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("failed to ack message, reason: %v", err)
 				}
-			case "nack":
-				app.nackAndSendToErrorQueue(delivered, msg, err.Error())
+			case "ackSendToError":
+				infoErrorMessage := broker.InfoError{
+					Error:           msg,
+					Reason:          err.Error(),
+					OriginalMessage: string(delivered.Body),
+				}
+				body, _ := json.Marshal(infoErrorMessage)
+				if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+				}
+			case "nackRequeue":
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: %v", err)
+				}
 			default:
 				// will catch `reject`s, failures that should not be requeued.
 				if err := delivered.Reject(false); err != nil {
@@ -178,7 +204,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	// Check that the file is not already encrypted with the target key
@@ -197,7 +223,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	newHeader, err := reencrypt.CallReencryptHeader(header, app.PubKeyEncoded, app.Conf.RotateKey.Grpc)
@@ -205,14 +231,14 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 	if newHeader == nil {
 		err := errors.New("reencrypt returned empty header")
 		msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	// Rotate header and keyhash in database
@@ -220,7 +246,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("RotateHeaderKey failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	aID, err := app.DB.GetAccessionID(fileID)
@@ -228,7 +254,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("GetAccessionID failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	// Send re-verify message
@@ -237,7 +263,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	reVerifyMsg, _ := json.Marshal(&reVerify)
@@ -246,32 +272,15 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := "Validation of outgoing re-verify message failed"
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 		msg := "failed to publish message"
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nack", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	return "ack", "", nil
-}
-
-// Nack message and send the payload to an error queue so it can be analyzed.
-func (app *RotateKey) nackAndSendToErrorQueue(delivered amqp091.Delivery, msg, reason string) {
-	infoErrorMessage := broker.InfoError{
-		Error:           msg,
-		Reason:          reason,
-		OriginalMessage: string(delivered.Body),
-	}
-	body, _ := json.Marshal(infoErrorMessage)
-
-	if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
-		log.Errorf("failed to publish message, reason: (%s)", err.Error())
-	}
-	if err := delivered.Nack(false, false); err != nil {
-		log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-	}
 }
