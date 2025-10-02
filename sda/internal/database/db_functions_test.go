@@ -1360,6 +1360,42 @@ func (suite *DatabaseTests) TestGetReVerificationData() {
 	db.Close()
 }
 
+func (suite *DatabaseTests) TestGetReVerificationDataFromFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	fileID, err := db.RegisterFile("/testuser/TestGetReVerificationData.c4gh", "testuser")
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
+	if err = db.SetArchived(fileInfo, fileID); err != nil {
+		suite.FailNow("failed to archive file")
+	}
+	if err = db.SetVerified(fileInfo, fileID); err != nil {
+		suite.FailNow("failed to mark file as verified")
+	}
+
+	data, err := db.GetReVerificationDataFromFileID(fileID)
+	assert.NoError(suite.T(), err, "failed to get verification data from fileID")
+	assert.Equal(suite.T(), "/archive/TestGetReVerificationData.c4gh", data.ArchivePath)
+
+	db.Close()
+}
+
 func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)

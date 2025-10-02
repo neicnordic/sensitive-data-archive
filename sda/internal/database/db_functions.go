@@ -1252,6 +1252,30 @@ func (dbs *SDAdb) GetReVerificationData(accessionID string) (schema.IngestionVer
 	return reVerify, nil
 }
 
+func (dbs *SDAdb) GetReVerificationDataFromFileID(fileID string) (schema.IngestionVerification, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	reVerify := schema.IngestionVerification{ReVerify: true, FileID: fileID}
+
+	const query = "SELECT archive_file_path,submission_file_path,submission_user FROM sda.files where id = $1;"
+	err := db.QueryRow(query, fileID).Scan(&reVerify.ArchivePath, &reVerify.FilePath, &reVerify.User)
+	if err != nil {
+		return schema.IngestionVerification{}, err
+	}
+
+	var checksum schema.Checksums
+	const archiveChecksum = "SELECT type,checksum from sda.checksums WHERE file_id = $1 AND source = 'ARCHIVED';"
+	if err := db.QueryRow(archiveChecksum, reVerify.FileID).Scan(&checksum.Type, &checksum.Value); err != nil {
+		log.Errorln(err.Error())
+
+		return schema.IngestionVerification{}, err
+	}
+	checksum.Type = strings.ToLower(checksum.Type)
+	reVerify.EncryptedChecksums = append(reVerify.EncryptedChecksums, checksum)
+
+	return reVerify, nil
+}
+
 func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
