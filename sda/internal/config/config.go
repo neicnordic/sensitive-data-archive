@@ -50,6 +50,7 @@ type Config struct {
 	SyncAPI      SyncAPIConf
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
+	RotateKey    RotateKeyConf
 }
 
 type Grpc struct {
@@ -70,6 +71,11 @@ type ReEncConfig struct {
 	Timeout            int
 }
 
+type RotateKeyConf struct {
+	Grpc      Grpc
+	PublicKey *[32]byte
+}
+
 type Sync struct {
 	CenterPrefix   string
 	Destination    storage.Conf
@@ -77,6 +83,7 @@ type Sync struct {
 	RemotePassword string
 	RemotePort     int
 	RemoteUser     string
+	PublicKey      *[32]byte
 }
 
 type SyncAPIConf struct {
@@ -389,6 +396,21 @@ func NewConfig(app string) (*Config, error) {
 		requiredConfVars = []string{
 			"c4gh.privateKeys",
 		}
+	case "rotatekey":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"c4gh.rotatePubKeyPath",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+			"grpc.host",
+		}
 	case "s3inbox":
 		requiredConfVars = []string{
 			"broker.host",
@@ -650,6 +672,27 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	case "rotatekey":
+		if err := c.configBroker(); err != nil {
+			return nil, err
+		}
+
+		err := c.configDatabase()
+		if err != nil {
+			return nil, err
+		}
+
+		c.configSchemas()
+
+		c.RotateKey.Grpc, err = configReEncryptClient()
+		if err != nil {
+			return nil, err
+		}
+
+		c.RotateKey.PublicKey, err = GetC4GHPublicKey(viper.GetString("c4gh.rotatePubKeyPath"))
+		if err != nil {
+			return nil, err
+		}
 	case "s3inbox":
 		err := c.configBroker()
 		if err != nil {
@@ -672,7 +715,8 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		if err := c.configDatabase(); err != nil {
+		err := c.configDatabase()
+		if err != nil {
 			return nil, err
 		}
 
@@ -713,6 +757,7 @@ func NewConfig(app string) (*Config, error) {
 	return c, nil
 }
 
+// configAPI provides configuration for the api web server
 func (c *Config) configAPI() error {
 	c.apiDefaults()
 	api := APIConf{}
@@ -1127,10 +1172,16 @@ func (c *Config) configSync() error {
 	c.Sync.RemoteUser = viper.GetString("sync.remote.user")
 	c.Sync.CenterPrefix = viper.GetString("sync.centerPrefix")
 
+	var err error
+	c.Sync.PublicKey, err = GetC4GHPublicKey(viper.GetString("c4gh.syncPubKeyPath"))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// configSync provides configuration for the outgoing sync settings
+// configSyncAPI provides configuration for the outgoing sync settings
 func (c *Config) configSyncAPI() {
 	c.SyncAPI = SyncAPIConf{}
 	c.SyncAPI.APIPassword = viper.GetString("sync.api.password")
@@ -1197,8 +1248,7 @@ func GetC4GHprivateKeys() ([]*[32]byte, error) {
 }
 
 // GetC4GHPublicKey reads the c4gh public key
-func GetC4GHPublicKey() (*[32]byte, error) {
-	keyPath := viper.GetString("c4gh.syncPubKeyPath")
+func GetC4GHPublicKey(keyPath string) (*[32]byte, error) {
 	// Make sure the key path and passphrase is valid
 	keyFile, err := os.Open(keyPath)
 	if err != nil {
