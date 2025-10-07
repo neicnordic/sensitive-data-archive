@@ -1,0 +1,109 @@
+BootStrap: docker
+From: alpine:3.22
+
+%post
+   apk add --no-cache jq bash
+
+%environment
+   export LC_ALL=C
+
+%runscript
+   #!/bin/bash
+   if [ "$1" != "describe" ]; then
+
+    allPass=true
+    output='{
+      "files": ['
+
+    anyFiles=false
+
+    for k in $(jq '.files | keys | .[]' /mnt/input/input.json); do
+      anyFiles=true
+      value=$(jq -r ".files[$k]" /mnt/input/input.json);
+      path=$(jq -r '.path' <<< "$value");
+
+      if [ -f $path ]; then
+      wordCount=$(wc -w < $path)
+
+      if (($wordCount >= 100 && $wordCount <= 200)); then
+        output+="
+        {
+          \"path\": \"$path\",
+          \"result\": \"passed\",
+        },"
+      else
+
+        allPass=false
+
+        output+="
+        {
+          \"path\": \"$path\",
+          \"result\": \"failed\",
+          \"messages\": [
+            {
+              \"level\": \"error\",
+              \"time\": \"$(date +"%Y-%m-%dT%H:%M:%S%z")\",
+              \"message\": \"file has $wordCount words, which is not between 100 and 200\"
+            }
+          ]
+        },"
+      fi
+      else
+
+        allPass=false
+
+        output+="
+        {
+          \"path\": \"$path\",
+          \"result\": \"failed\",
+          \"messages\": [
+            {
+              \"level\": \"error\",
+              \"time\": \"$(date +"%Y-%m-%dT%H:%M:%S%z")\",
+              \"message\": \"file does not exists\"
+            }
+          ]
+        },"
+      fi
+    done
+
+    if [ $anyFiles = true ]; then
+    output=${output::-1}
+
+   if [ $allPass = true ]; then
+    output+="
+    ],
+    \"result\": \"passed\"
+   }"
+   else
+    output+="
+      ],
+      \"result\": \"failed\"
+    }"
+   fi
+   else
+      output+="
+      ],
+      \"result\": \"false\",
+       \"messages\": [
+         {
+           \"level\": \"error\",
+           \"time\": \"$(date +"%Y-%m-%dT%H:%M:%S%z")\",
+           \"message\": \"No files submitted to be validated\"
+         }
+       ]
+     }"
+   fi
+
+    echo $output > /mnt/output/result.json
+
+   else
+     echo '{
+   "validatorId": "validator-word-count-100-200",
+   "name": "File word count validator",
+   "description": "Checks that the word count of a file is between 100 and 200 words",
+   "version": "1.0.0",
+   "mode": "file",
+   "pathSpecification": ["*"]
+   }'
+   fi
