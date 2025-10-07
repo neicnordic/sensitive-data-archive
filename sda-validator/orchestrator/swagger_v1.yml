@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: SDA validator orchestrator API
+  version: "1.0"
+  description: This is the API for the validator orchestrator.
+paths:
+  /validate:
+    post:
+      description: Request a set of files to be validated with a set of validators
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRequest"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateResponse"
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /validators:
+    get:
+      description: Get the available validators
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                description: "The validators to be executed"
+                type: array
+                items:
+                  type: string
+                example: [ "xml-validator", "file-structure-validator" ]
+        "500":
+          description: Internal application error.
+
+components:
+  schemas:
+    ValidateRequest:
+      type: object
+      properties:
+        file_paths:
+          description: "The file paths to be validated"
+          type: array
+          items:
+            type: string
+          example: ["dataset_001/metadata.xml", "dataset_001/datafile.bam", "dataset_001/datafile.bam.bai"]
+        validators:
+          description: "The validators to be executed"
+          type: array
+          items:
+            type: string
+          example: ["xml-validator", "file-structure-validator"]
+        user_id:
+          type: string
+    ValidateResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          validator:
+            description: "Name of the validator this result reefers to"
+            type: string
+          result:
+            description: "Completed / Failed, denotes if the validation was executed successfully or not"
+            type: string
+          files:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  description: "Id of the file"
+                  type: string
+                path:
+                  description: "Path of the file"
+                  type: string
+                result:
+                  description: "Success / Failure, denotes if the validation was successful or failed"
+                  type: string
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      level:
+                        type: string
+                        description: "Level of message"
+                      time:
+                        type: string
+                        description: "Timestamp of message"
+                      message:
+                        type: string
+                        description: "Message"
+          messages:
+            type: array
+            items:
+              type: object
+              properties:
+                level:
+                  type: string
+                  description: "Level of message"
+                time:
+                  type: string
+                  description: "Timestamp of message"
+                message:
+                  type: string
+                  description: "Message"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
