@@ -7,21 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/openapi/go-gin-server/go"
 	log "github.com/sirupsen/logrus"
-
-	"net/http"
-	"os/exec"
-
-	"github.com/gin-gonic/gin"
 )
 
 type validatorAPIImpl struct {

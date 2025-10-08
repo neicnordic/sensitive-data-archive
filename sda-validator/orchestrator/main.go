@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/config"
-	_ "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/config"
 	internalConfig "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
 	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/openapi/go-gin-server/go"
 	log "github.com/sirupsen/logrus"
