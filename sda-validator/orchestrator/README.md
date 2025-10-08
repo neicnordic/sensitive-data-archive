@@ -8,14 +8,15 @@ See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the Validator
 
 ## Configuration
 
-| Flag              | Env Variable    | Default value | Type                   | Description                                                    |
-|-------------------|-----------------|---------------|------------------------|----------------------------------------------------------------|
-| --api-port        | API_PORT        |               | Int                    | Pt to host the ValidationAPI server at                         |
-| --sda-api-address | SDA_API_URL     |               | String                 | Url to the sda-api service                                     |
-| --sda-api-token   | SDA_API_TOKEN   |               | String                 | Token to authenticate when calling the sda-api service         |
-| --validator-paths | VALIDATOR_PATHS | []            | Comma seperated string | The paths to the available validators, in comma separated list |
-| --config-file     | CONFIG_FILE     |               | string                 | Set the direct path to the config file                         |
-| --config-path     | CONFIG_PATH     | .             | string                 | Set the path viper will look for the config file at            |
+| Flag                  | Env Variable        | Default value | Type                   | Description                                                            |
+|-----------------------|---------------------|---------------|------------------------|------------------------------------------------------------------------|
+| --api-port            | API_PORT            |               | Int                    | Pt to host the ValidationAPI server at                                 |
+| --sda-api-address     | SDA_API_URL         |               | String                 | Url to the sda-api service                                             |
+| --sda-api-token       | SDA_API_TOKEN       |               | String                 | Token to authenticate when calling the sda-api service                 |
+| --validator-paths     | VALIDATOR_PATHS     | []            | Comma seperated string | The paths to the available validators, in comma separated list         |
+| --config-file         | CONFIG_FILE         |               | string                 | Set the direct path to the config file                                 |
+| --config-path         | CONFIG_PATH         | .             | string                 | Set the path viper will look for the config file at                    |
+| --validation-work-dir | VALIDATION_WORK_DIR | /validators   | string                 | Directory where application will manage data to be used for validation |
 
 ## Open API generation
 

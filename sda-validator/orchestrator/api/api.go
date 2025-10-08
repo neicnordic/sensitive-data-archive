@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,19 +17,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
+	commandExecutor "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/command_executor.go"
 	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/openapi/go-gin-server/go"
 	log "github.com/sirupsen/logrus"
 )
 
 type validatorAPIImpl struct {
-	validatorPaths []string
-	sdaApiUrl      string
-	sdaApiToken    string
+	validatorPaths    []string
+	sdaApiUrl         string
+	sdaApiToken       string
+	commandExecutor   commandExecutor.CommandExecutor
+	validationWorkDir string
 }
 
 func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (validatorAPI.ValidatorAPI, error) {
 
-	impl := &validatorAPIImpl{}
+	impl := &validatorAPIImpl{
+		commandExecutor: commandExecutor.OsCommandExecutor{},
+	}
 
 	for _, option := range options {
 		option(impl)
@@ -41,6 +45,9 @@ func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (validatorAPI.Valid
 	}
 	if impl.sdaApiToken == "" {
 		return nil, errors.New("sdaApiToken is required")
+	}
+	if impl.validationWorkDir == "" {
+		return nil, errors.New("validationWorkDir is required")
 	}
 
 	return impl, nil
@@ -59,8 +66,7 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 
 	rsp := api.prepareValidateResponse(request.Validators, validatorsToBeExecuted)
 
-	jobId := uuid.NewString()
-	jobDir := fmt.Sprintf("/validators/jobs/%s", jobId)
+	jobDir := filepath.Join(api.validationWorkDir, "jobs", uuid.NewString())
 
 	if err := os.MkdirAll(jobDir, 0755); err != nil {
 		log.Errorf("failed to create job dir, user: %s, error: %v", request.UserId, err)
@@ -113,7 +119,7 @@ func validatorOutputToValidateResponse(validator string, output *validationOutpu
 	}
 
 	for i, fileResult := range output.Files {
-		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data/")
+		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data")
 		fileDetails := validatorAPI.ValidateResponseInnerFilesInner{
 			Path:     filePath,
 			Result:   fileResult.Result,
@@ -182,14 +188,14 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 	// Here we monut the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
 	// we also mount validatorJobDir/files/ as /mnt/input/data such that the validator can access the files without the need for us to duplicate them per validator
 	// TODO ensure a validator can not modify the files to be validated
-	_, err = exec.Command(
+	_, err = api.commandExecutor.Execute(
 		"apptainer",
 		"run",
 		"--bind",
 		fmt.Sprintf("%s:/mnt", validatorJobDir),
 		"--bind",
 		fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
-		validatorPath).Output()
+		validatorPath)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to execute run command"), err)
 	}
@@ -213,7 +219,7 @@ func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []st
 	needFilesMounted := false
 
 	for _, path := range api.validatorPaths {
-		out, err := exec.Command(path, "describe").Output()
+		out, err := api.commandExecutor.Execute(path, "describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue
@@ -446,7 +452,7 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 
 	for _, path := range api.validatorPaths {
 
-		out, err := exec.Command(path, "describe").Output()
+		out, err := api.commandExecutor.Execute(path, "describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue
