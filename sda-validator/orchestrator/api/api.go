@@ -57,65 +57,9 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 		return
 	}
 
-	validatorsToBeExecuted := make(map[string]*describeResult)
+	validatorsToBeExecuted, needFilesMounted := api.findValidatorsToBeExecuted(request.Validators)
 
-	rsp := make([]validatorAPI.ValidateResponseInner, 0, len(api.validatorPaths))
-
-	// If all validators requested to be used are of mode 'file-structure' we do not need to download, decrypt, and mount files
-	needFilesMounted := false
-
-	for _, path := range api.validatorPaths {
-		out, err := exec.Command(path, "describe").Output()
-		if err != nil {
-			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
-			continue
-		}
-
-		dr := new(describeResult)
-		if err := json.Unmarshal(out, dr); err != nil {
-			log.Errorf("failed to unmarshal response from describe command towards path: %s, error: %v", path, err)
-			continue
-		}
-
-		for _, validatorName := range request.Validators {
-			if dr.ValidatorId == validatorName {
-				validatorsToBeExecuted[path] = dr
-				if dr.Mode != "file-structure" {
-					needFilesMounted = true
-				}
-				break
-			}
-		}
-
-	}
-
-	for _, validatorName := range request.Validators {
-		validatorFound := false
-
-		for _, validatorToBeExecuted := range validatorsToBeExecuted {
-			if validatorName == validatorToBeExecuted.ValidatorId {
-				validatorFound = true
-				break
-			}
-		}
-
-		if validatorFound {
-			continue
-		}
-
-		rsp = append(rsp, validatorAPI.ValidateResponseInner{
-			Validator: validatorName,
-			Result:    "failed",
-			Files:     nil,
-			Messages: []validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
-				{
-					Level:   "error",
-					Time:    time.Now().String(),
-					Message: "validator is not supported",
-				},
-			},
-		})
-	}
+	rsp := api.prepareValidateResponse(request.Validators, validatorsToBeExecuted)
 
 	jobId := uuid.NewString()
 	jobDir := fmt.Sprintf("/validators/jobs/%s", jobId)
@@ -143,81 +87,10 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 	// Prep directories, inputs, etc and run each validator, and then collect the result
 	for validatorPath, validatorDescription := range validatorsToBeExecuted {
 
-		validatorJobDir := filepath.Join(jobDir, validatorDescription.ValidatorId)
+		output, err := api.executeValidator(validatorPath, jobDir, validatorDescription, userFiles)
 
-		if err := os.MkdirAll(validatorJobDir, 0755); err != nil {
-			log.Errorf("failed to prepare directory for job: %s", validatorJobDir)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		if err := os.MkdirAll(filepath.Join(validatorJobDir, "/input"), 0755); err != nil {
-			log.Errorf("failed to prepare output directory for job: %s", validatorJobDir)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		if err := os.MkdirAll(filepath.Join(validatorJobDir, "/output"), 0755); err != nil {
-			log.Errorf("failed to prepare output directory for job: %s", validatorJobDir)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		input := &validationInput{
-			Files:  nil,
-			Paths:  nil,
-			Config: nil,
-		}
-
-		for _, userFile := range userFiles {
-			filePathForJob := filepath.Join("/mnt/input/data", userFile.inboxPath)
-			switch validatorDescription.Mode {
-			case "file", "file-pair":
-				input.Files = append(input.Files, &fileInput{Path: filePathForJob})
-			case "file-structure":
-				input.Paths = append(input.Paths, filePathForJob)
-			}
-		}
-
-		inputData, err := json.Marshal(input)
 		if err != nil {
-			log.Errorf("failed to marshal input struct to json for validator: %s, error: %v", validatorDescription.ValidatorId, err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		if err := os.WriteFile(filepath.Join(validatorJobDir, "/input/input.json"), inputData, 0644); err != nil {
-			log.Errorf("failed to write input.json for validator: %s, error: %v", validatorDescription.ValidatorId, err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		// Here we monut the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
-		// we also mount validatorJobDir/files/ as /mnt/input/data such that the validator can access the files without the need for us to duplicate them per validator
-		// TODO ensure a validator can not modify the files to be validated
-		_, err = exec.Command(
-			"apptainer",
-			"run",
-			"--bind",
-			fmt.Sprintf("%s:/mnt", validatorJobDir),
-			"--bind",
-			fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
-			validatorPath).Output()
-		if err != nil {
-			log.Errorf("failed to execute run command towards path: %s, error: %v", validatorPath, err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		result, err := os.ReadFile(filepath.Join(validatorJobDir, "/output/result.json"))
-		if err != nil {
-			log.Errorf("failed to read result file for validator: %s, error: %v", validatorDescription.ValidatorId, err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		output := new(validationOutput)
-		if err := json.Unmarshal(result, output); err != nil {
-			log.Errorf("failed to unmarshal result file for validator: %s, error: %v, raw: %s", validatorDescription.ValidatorId, err, result)
+			log.Errorf("failed to execute validator %s, error: %v", validatorPath, err)
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -226,52 +99,188 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 	}
 
 	for validator, result := range results {
-		r := validatorAPI.ValidateResponseInner{
-			Validator: validator,
-			Result:    result.Result,
-			Files:     make([]validatorAPI.ValidateResponseInnerFilesInner, len(result.Files)),
-			Messages:  make([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner, len(result.Messages)),
-		}
-
-		for i, fileResult := range result.Files {
-			filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data")
-			fileDetails := validatorAPI.ValidateResponseInnerFilesInner{
-				Path:     filePath,
-				Result:   fileResult.Result,
-				Messages: make([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner, len(fileResult.Messages)),
-			}
-
-			for j, fileMessage := range fileResult.Messages {
-				fileDetails.Messages[j] = validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
-					Level:   fileMessage.Level,
-					Time:    fileMessage.Time,
-					Message: fileMessage.Message,
-				}
-			}
-
-			r.Files[i] = fileDetails
-		}
-		for i, message := range result.Messages {
-			r.Messages[i] = validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
-				Level:   message.Level,
-				Time:    message.Time,
-				Message: message.Message,
-			}
-		}
-
-		rsp = append(rsp, r)
+		r := validatorOutputsToValidateResponse(validator, result)
+		rsp = append(rsp, *r)
 	}
 
 	c.JSON(200, rsp)
+}
+
+func validatorOutputsToValidateResponse(validator string, output *validationOutput) *validatorAPI.ValidateResponseInner {
+	r := &validatorAPI.ValidateResponseInner{
+		Validator: validator,
+		Result:    output.Result,
+		Files:     make([]validatorAPI.ValidateResponseInnerFilesInner, len(output.Files)),
+		Messages:  make([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner, len(output.Messages)),
+	}
+
+	for i, fileResult := range output.Files {
+		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data")
+		fileDetails := validatorAPI.ValidateResponseInnerFilesInner{
+			Path:     filePath,
+			Result:   fileResult.Result,
+			Messages: make([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner, len(fileResult.Messages)),
+		}
+
+		for j, fileMessage := range fileResult.Messages {
+			fileDetails.Messages[j] = validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
+				Level:   fileMessage.Level,
+				Time:    fileMessage.Time,
+				Message: fileMessage.Message,
+			}
+		}
+
+		r.Files[i] = fileDetails
+	}
+	for i, message := range output.Messages {
+		r.Messages[i] = validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
+			Level:   message.Level,
+			Time:    message.Time,
+			Message: message.Message,
+		}
+	}
+	return r
+}
+
+func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, validatorDescription *describeResult, userFiles []*userFileDetails) (*validationOutput, error) {
+	validatorJobDir := filepath.Join(jobDir, validatorDescription.ValidatorId)
+
+	if err := os.MkdirAll(validatorJobDir, 0755); err != nil {
+		return nil, errors.Join(errors.New("failed to prepare directory for job"), err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(validatorJobDir, "/input"), 0755); err != nil {
+		return nil, errors.Join(errors.New("failed to prepare input directory for job"), err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(validatorJobDir, "/output"), 0755); err != nil {
+		return nil, errors.Join(errors.New("failed to prepare output directory for job"), err)
+	}
+
+	input := &validationInput{
+		Files:  nil,
+		Paths:  nil,
+		Config: nil,
+	}
+
+	for _, userFile := range userFiles {
+		filePathForJob := filepath.Join("/mnt/input/data", userFile.inboxPath)
+		switch validatorDescription.Mode {
+		case "file", "file-pair":
+			input.Files = append(input.Files, &fileInput{Path: filePathForJob})
+		case "file-structure":
+			input.Paths = append(input.Paths, filePathForJob)
+		}
+	}
+
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		return nil, errors.Join(errors.New("failed to marshal input struct to json for validator"), err)
+	}
+	if err := os.WriteFile(filepath.Join(validatorJobDir, "/input/input.json"), inputData, 0644); err != nil {
+		return nil, errors.Join(errors.New("failed to write input.json for validator"), err)
+	}
+
+	// Here we monut the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
+	// we also mount validatorJobDir/files/ as /mnt/input/data such that the validator can access the files without the need for us to duplicate them per validator
+	// TODO ensure a validator can not modify the files to be validated
+	_, err = exec.Command(
+		"apptainer",
+		"run",
+		"--bind",
+		fmt.Sprintf("%s:/mnt", validatorJobDir),
+		"--bind",
+		fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
+		validatorPath).Output()
+	if err != nil {
+		return nil, errors.Join(errors.New("failed to execute run command"), err)
+	}
+
+	result, err := os.ReadFile(filepath.Join(validatorJobDir, "/output/result.json"))
+	if err != nil {
+		return nil, errors.Join(errors.New("failed to read result file"), err)
+	}
+
+	output := new(validationOutput)
+	if err := json.Unmarshal(result, output); err != nil {
+		return nil, errors.Join(errors.New("failed to unmarshal result"), err)
+	}
+	return output, nil
+}
+
+func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []string) (map[string]*describeResult, bool) {
+
+	validatorsToBeExecuted := make(map[string]*describeResult)
+	// If all validators requested to be used are of mode 'file-structure' we do not need to download, decrypt, and mount files
+	needFilesMounted := false
+
+	for _, path := range api.validatorPaths {
+		out, err := exec.Command(path, "describe").Output()
+		if err != nil {
+			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
+			continue
+		}
+
+		dr := new(describeResult)
+		if err := json.Unmarshal(out, dr); err != nil {
+			log.Errorf("failed to unmarshal response from describe command towards path: %s, error: %v", path, err)
+			continue
+		}
+
+		for _, validatorName := range requestedValidators {
+			if dr.ValidatorId == validatorName {
+				validatorsToBeExecuted[path] = dr
+				if dr.Mode != "file-structure" {
+					needFilesMounted = true
+				}
+				break
+			}
+		}
+	}
+
+	return validatorsToBeExecuted, needFilesMounted
+}
+
+func (api *validatorAPIImpl) prepareValidateResponse(requestedValidators []string, validatorsToBeExecuted map[string]*describeResult) []validatorAPI.ValidateResponseInner {
+	rsp := make([]validatorAPI.ValidateResponseInner, 0, len(requestedValidators))
+
+	for _, validatorName := range requestedValidators {
+		validatorFound := false
+
+		for _, validatorToBeExecuted := range validatorsToBeExecuted {
+			if validatorName == validatorToBeExecuted.ValidatorId {
+				validatorFound = true
+				break
+			}
+		}
+
+		if validatorFound {
+			continue
+		}
+
+		rsp = append(rsp, validatorAPI.ValidateResponseInner{
+			Validator: validatorName,
+			Result:    "failed",
+			Files:     nil,
+			Messages: []validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{
+				{
+					Level:   "error",
+					Time:    time.Now().String(),
+					Message: "validator is not supported",
+				},
+			},
+		})
+	}
+	return rsp
 }
 
 // getUserFiles, list all th users inbox files, find the id of the files requested to be validated, and then downloads the files
 // to the jobDir such that they can be made available to the validators
 func (api *validatorAPIImpl) getUserFiles(jobDir, userId string, filePaths []string, mountFiles bool) ([]*userFileDetails, error) {
 
-	jobFileDir := filepath.Join(jobDir, "/files/")
+	jobFilesDir := filepath.Join(jobDir, "/files/")
 
-	if err := os.MkdirAll(jobFileDir, 0755); err != nil {
+	if err := os.MkdirAll(jobFilesDir, 0755); err != nil {
 		log.Errorf("failed to prepare files directory for job: %s", jobDir)
 		return nil, err
 	}
@@ -338,78 +347,93 @@ func (api *validatorAPIImpl) getUserFiles(jobDir, userId string, filePaths []str
 		return fileDetails, nil
 	}
 
+	if err := api.downloadFiles(userId, jobFilesDir, fileDetails); err != nil {
+		return nil, err
+	}
+
+	return fileDetails, nil
+
+}
+func (api *validatorAPIImpl) downloadFiles(userId, jobFilesDir string, fileDetails []*userFileDetails) error {
 	publicKeyData, privateKeyData, err := keys.GenerateKeyPair()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	buf := new(bytes.Buffer)
 	if err := keys.WriteCrypt4GHX25519PublicKey(buf, publicKeyData); err != nil {
-		return nil, err
+		return err
 	}
 	pubKeyBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 
 	// Download and mount files to local
 	for _, fileDetail := range fileDetails {
-
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", api.sdaApiUrl, userId, fileDetail.fileID), nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create the request, reason: %v", err)
+		if err := api.downloadFile(userId, jobFilesDir, fileDetail, pubKeyBase64, privateKeyData); err != nil {
+			return err
 		}
+	}
 
-		// TODO how to handle auth in better way
-		req.Header.Add("Authorization", "Bearer "+api.sdaApiToken)
-		req.Header.Add("Content-Type", "application/json")
-		req.Header.Set("C4GH-Public-Key", pubKeyBase64)
+	return nil
+}
 
-		// Send the request
-		res, err = client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get response, reason: %v", err)
-		}
-		// Check the status code
-		if res.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("server returned status %d: for: %s", res.StatusCode, req.URL.String())
-		}
+func (api *validatorAPIImpl) downloadFile(userId, jobFilesDir string, fileDetail *userFileDetails, pubKeyBase64 string, privateKeyData [32]byte) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", api.sdaApiUrl, userId, fileDetail.fileID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create the request, reason: %v", err)
+	}
 
-		fileLocalPath := filepath.Join(jobFileDir, fileDetail.inboxPath)
+	// TODO how to handle auth in better way
+	req.Header.Add("Authorization", "Bearer "+api.sdaApiToken)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Set("C4GH-Public-Key", pubKeyBase64)
 
-		dir, _ := filepath.Split(fileLocalPath)
+	// Send the request
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get response, reason: %v", err)
+	}
+	// Check the status code
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned status %d: for: %s", res.StatusCode, req.URL.String())
+	}
 
-		// Ensure any sub directories file is in is created
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Errorf("failed to create sub directory for file: %s, error: %v", dir, err)
-			return nil, err
-		}
+	fileLocalPath := filepath.Join(jobFilesDir, fileDetail.inboxPath)
 
-		file, err := os.Create(fileLocalPath)
-		if err != nil {
-			log.Errorf("failed to create file for file: %s, error: %v", fileLocalPath, err)
-			return nil, err
-		}
+	dir, _ := filepath.Split(fileLocalPath)
 
-		// Decrypt file
+	// Ensure any sub directories file is in is created
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Errorf("failed to create sub directory for file: %s, error: %v", dir, err)
+		return err
+	}
 
-		crypt4GHReader, err := streaming.NewCrypt4GHReader(res.Body, privateKeyData, nil)
-		if err != nil {
-			_ = res.Body.Close()
-			_ = file.Close()
-			return nil, fmt.Errorf("could not create cryp4gh reader: %v", err)
-		}
+	file, err := os.Create(fileLocalPath)
+	if err != nil {
+		log.Errorf("failed to create file for file: %s, error: %v", fileLocalPath, err)
+		return err
+	}
 
-		_, err = io.Copy(file, crypt4GHReader)
-		if err != nil {
-			_ = res.Body.Close()
-			_ = crypt4GHReader.Close()
-			_ = file.Close()
-			return nil, fmt.Errorf("could not decrypt file %s: %s", fileDetail.inboxPath, err)
-		}
+	// Decrypt file
+
+	crypt4GHReader, err := streaming.NewCrypt4GHReader(res.Body, privateKeyData, nil)
+	if err != nil {
+		_ = res.Body.Close()
+		_ = file.Close()
+		return fmt.Errorf("could not create cryp4gh reader: %v", err)
+	}
+
+	_, err = io.Copy(file, crypt4GHReader)
+	if err != nil {
 		_ = res.Body.Close()
 		_ = crypt4GHReader.Close()
 		_ = file.Close()
-
+		return fmt.Errorf("could not decrypt file %s: %s", fileDetail.inboxPath, err)
 	}
+	_ = res.Body.Close()
+	_ = crypt4GHReader.Close()
+	_ = file.Close()
 
-	return fileDetails, nil
+	return nil
 }
 
 type userFileDetails struct {
