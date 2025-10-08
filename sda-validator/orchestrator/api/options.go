@@ -17,3 +17,9 @@ func SdaApiToken(v string) func(*validatorAPIImpl) {
 		impl.sdaApiToken = v
 	}
 }
+
+func ValidationWorkDir(v string) func(*validatorAPIImpl) {
+	return func(impl *validatorAPIImpl) {
+		impl.validationWorkDir = v
+	}
+}
