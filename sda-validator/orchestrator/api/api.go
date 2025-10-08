@@ -97,14 +97,14 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 	}
 
 	for validator, result := range results {
-		r := validatorOutputsToValidateResponse(validator, result)
+		r := validatorOutputToValidateResponse(validator, result)
 		rsp = append(rsp, *r)
 	}
 
 	c.JSON(200, rsp)
 }
 
-func validatorOutputsToValidateResponse(validator string, output *validationOutput) *validatorAPI.ValidateResponseInner {
+func validatorOutputToValidateResponse(validator string, output *validationOutput) *validatorAPI.ValidateResponseInner {
 	r := &validatorAPI.ValidateResponseInner{
 		Validator: validator,
 		Result:    output.Result,
@@ -113,7 +113,7 @@ func validatorOutputsToValidateResponse(validator string, output *validationOutp
 	}
 
 	for i, fileResult := range output.Files {
-		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data")
+		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data/")
 		fileDetails := validatorAPI.ValidateResponseInnerFilesInner{
 			Path:     filePath,
 			Result:   fileResult.Result,
@@ -476,14 +476,14 @@ type fileInput struct {
 type config struct {
 }
 type validationOutput struct {
-	Result   string          `json:"result"`
-	Files    []*fileOutput   `json:"files"`
-	Messages []outPutMessage `json:"messages"`
+	Result   string           `json:"result"`
+	Files    []*fileOutput    `json:"files"`
+	Messages []*outPutMessage `json:"messages"`
 }
 type fileOutput struct {
-	Path     string          `json:"path"`
-	Result   string          `json:"result"`
-	Messages []outPutMessage `json:"messages"`
+	Path     string           `json:"path"`
+	Result   string           `json:"result"`
+	Messages []*outPutMessage `json:"messages"`
 }
 type outPutMessage struct {
 	Level   string `json:"level"`
