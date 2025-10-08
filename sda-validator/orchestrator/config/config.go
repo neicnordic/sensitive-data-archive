@@ -7,10 +7,11 @@ import (
 )
 
 var (
-	apiPort        int
-	validatorPaths []string
-	sdaApiUrl      string
-	sdaApiToken    string
+	apiPort           int
+	validatorPaths    []string
+	sdaApiUrl         string
+	sdaApiToken       string
+	validationWorkDir string
 )
 
 func init() {
@@ -51,6 +52,15 @@ func init() {
 			AssignFunc: func(flagName string) {
 				sdaApiToken = viper.GetString(flagName)
 			},
+		}, &config.Flag{
+			Name: "validation-work-dir",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "/validators", "Directory where application will manage data to be used for validation")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				validationWorkDir = viper.GetString(flagName)
+			},
 		},
 	)
 }
@@ -68,4 +78,8 @@ func ApiPort() int {
 }
 func ValidatorPaths() []string {
 	return validatorPaths
+}
+
+func ValidationWorkDir() string {
+	return validationWorkDir
 }

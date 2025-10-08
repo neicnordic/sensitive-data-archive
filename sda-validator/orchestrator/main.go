@@ -24,6 +24,7 @@ func main() {
 		api.ValidatorPaths(config.ValidatorPaths()),
 		api.SdaApiUrl(config.SdaApiUrl()),
 		api.SdaApiToken(config.SdaApiToken()),
+		api.ValidationWorkDir(config.ValidationWorkDir()),
 	)
 	if err != nil {
 		log.Fatalf("failed to create new validator API impl, err: %v", err)
