@@ -8,12 +8,14 @@ See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the Validator
 
 ## Configuration
 
-| Flag              | Env Variable    | Config File     | Type                   | Description                                                    |
-|-------------------|-----------------|-----------------|------------------------|----------------------------------------------------------------|
-| --api-port        | API_PORT        | api.port        | Int                    | Pt to host the ValidationAPI server at                         |
-| --sda-api-address | SDA_API_URL     | sda.api.url     | String                 | Url to the sda-api service                                     |
-| --sda-api-token   | SDA_API_TOKEN   | sda.api.token   | String                 | Token to authenticate when calling the sda-api service         |
-| --validator-paths | VALIDATOR_PATHS | validator.paths | Comma seperated string | The paths to the available validators, in comma separated list |
+| Flag              | Env Variable    | Default value | Type                   | Description                                                    |
+|-------------------|-----------------|---------------|------------------------|----------------------------------------------------------------|
+| --api-port        | API_PORT        |               | Int                    | Pt to host the ValidationAPI server at                         |
+| --sda-api-address | SDA_API_URL     |               | String                 | Url to the sda-api service                                     |
+| --sda-api-token   | SDA_API_TOKEN   |               | String                 | Token to authenticate when calling the sda-api service         |
+| --validator-paths | VALIDATOR_PATHS | []            | Comma seperated string | The paths to the available validators, in comma separated list |
+| --config-file     | CONFIG_FILE     |               | string                 | Set the direct path to the config file                         |
+| --config-path     | CONFIG_PATH     | .             | string                 | Set the path viper will look for the config file at            |
 
 ## Open API generation
 
