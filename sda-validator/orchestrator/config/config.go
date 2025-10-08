@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	ApiPort        int
-	ValidatorPaths []string
-	SdaApiUrl      string
-	SdaApiToken    string
+	apiPort        int
+	validatorPaths []string
+	sdaApiUrl      string
+	sdaApiToken    string
 )
 
 func init() {
@@ -22,7 +22,7 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				ApiPort = viper.GetInt(flagName)
+				apiPort = viper.GetInt(flagName)
 			},
 		}, &config.Flag{
 			Name: "validator-paths",
@@ -31,7 +31,7 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				ValidatorPaths = viper.GetStringSlice(flagName)
+				validatorPaths = viper.GetStringSlice(flagName)
 			},
 		}, &config.Flag{
 			Name: "sda-api-url",
@@ -40,7 +40,7 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				SdaApiUrl = viper.GetString(flagName)
+				sdaApiUrl = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "sda-api-token",
@@ -49,8 +49,23 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				SdaApiToken = viper.GetString(flagName)
+				sdaApiToken = viper.GetString(flagName)
 			},
 		},
 	)
+}
+
+func SdaApiToken() string {
+	return sdaApiToken
+}
+
+func SdaApiUrl() string {
+	return sdaApiUrl
+}
+
+func ApiPort() int {
+	return apiPort
+}
+func ValidatorPaths() []string {
+	return validatorPaths
 }
