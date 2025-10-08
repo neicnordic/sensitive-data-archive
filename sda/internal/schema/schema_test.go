@@ -469,3 +469,21 @@ func TestValidateJSONBigpictureMetadtaSync(t *testing.T) {
 	msg, _ = json.Marshal(badMsg)
 	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/bigpicture/metadata-sync.json", schemaPath), msg))
 }
+
+func TestValidateJSONKeyRotation(t *testing.T) {
+	okMsg := KeyRotation{
+		Type:   "key_rotation",
+		FileID: "cd532362-e06e-4460-8490-b9ce64b8d9e7",
+	}
+
+	msg, _ := json.Marshal(okMsg)
+	assert.Nil(t, ValidateJSON(fmt.Sprintf("%s/isolated/rotate-key.json", schemaPath), msg))
+
+	badMsg := KeyRotation{
+		Type:   "foo",
+		FileID: "cd532362-e06e-4460-8490-b9ce64b8d9e7",
+	}
+
+	msg, _ = json.Marshal(badMsg)
+	assert.Error(t, ValidateJSON(fmt.Sprintf("%s/isolated/rotate-key.json", schemaPath), msg))
+}

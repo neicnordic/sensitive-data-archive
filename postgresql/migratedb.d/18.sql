@@ -1,10 +1,11 @@
+
 DO
 $$
 DECLARE
 -- The version we know how to do migration from, at the end of a successful migration
 -- we will no longer be at this version.
-  sourcever INTEGER := 13;
-  changes VARCHAR := 'Add userinfo and create AUTH user';
+  sourcever INTEGER := 17;
+  changes VARCHAR := 'Create rotatekey role and grant it priviledges to sda tables';
 BEGIN
   IF (select max(version) from sda.dbschema_version) = sourcever then
     RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;
@@ -29,21 +30,20 @@ BEGIN
     END;
     $created$ LANGUAGE plpgsql;
 
-    CREATE TABLE IF NOT EXISTS sda.userinfo (
-        id          TEXT PRIMARY KEY,
-        name        TEXT,
-        email       TEXT,
-        groups      TEXT[]
-    );
+    PERFORM create_role_if_not_exists('rotatekey');
 
-    PERFORM create_role_if_not_exists('auth');
-    GRANT USAGE ON SCHEMA sda TO auth;
-    GRANT SELECT, INSERT, UPDATE ON sda.userinfo TO auth;
-
-    GRANT base TO auth;
+    GRANT USAGE ON SCHEMA sda TO rotatekey;
+    GRANT INSERT ON sda.files TO rotatekey;
+    GRANT SELECT ON sda.files TO rotatekey;
+    GRANT UPDATE ON sda.files TO rotatekey;
+    GRANT SELECT ON sda.checksums TO rotatekey;
+    GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO rotatekey;
+    GRANT SELECT ON sda.file_event_log TO rotatekey;
+    GRANT SELECT ON sda.encryption_keys TO rotatekey;
 
     -- Drop temporary user creation function
     DROP FUNCTION create_role_if_not_exists;
+
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;
