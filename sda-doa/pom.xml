@@ -110,7 +110,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>crypt4gh</artifactId>
-            <version>3.0.33</version>
+            <version>3.0.34</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -121,7 +121,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>clearinghouse</artifactId>
-            <version>3.0.9</version>
+            <version>3.0.10</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
