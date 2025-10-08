@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"strings"
+	"text/tabwriter"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -27,31 +29,40 @@ func RegisterFlags(flags ...*Flag) {
 
 var command = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
-		// Empty func such that cobra will evaluate required flags, etc
+		// Empty func such that cobra will evaluate flags, etc
 	},
 }
 
 func init() {
 
 	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
 
 	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.SetConfigType("yaml")
 
-	if viper.IsSet("configPath") {
-		configPath := viper.GetString("configPath")
-		splitPath := strings.Split(strings.TrimLeft(configPath, "/"), "/")
-		viper.AddConfigPath(path.Join(splitPath...))
-	}
+	command.Flags().String("config-path", ".", "Set the path viper will look for the config file at")
+	command.Flags().String("config-file", "", "Set the direct path to the config file")
 
-	if viper.IsSet("configFile") {
-		viper.SetConfigFile(viper.GetString("configFile"))
-	}
+	command.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 
-	_ = viper.ReadInConfig()
+		fmt.Println("Flags:")
+		writer := tabwriter.NewWriter(os.Stdout, 1, 1, 8, ' ', 0)
+		_, _ = fmt.Fprintln(writer, "  Name:\tEnv variable:\tType:\tUsage:\tDefault Value:\t")
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			if flag.Name == "help" {
+				return
+			}
+
+			flagType, usage := pflag.UnquoteUsage(flag)
+			envVar := strings.ToUpper(strings.Replace(strings.Replace(flag.Name, "-", "_", -1), ".", "_", -1))
+			_, _ = fmt.Fprintln(writer, fmt.Sprintf("  --%s\t%s\t%s\t%s\t%v\t", flag.Name, envVar, flagType, usage, flag.DefValue))
+		})
+
+		_ = writer.Flush()
+
+		os.Exit(0)
+	})
 }
 
 func Load() error {
@@ -67,6 +78,18 @@ func Load() error {
 	if err := command.Execute(); err != nil {
 		log.Fatalf("%v", err)
 	}
+
+	if viper.IsSet("config-path") {
+		configPath := viper.GetString("config-path")
+		splitPath := strings.Split(strings.TrimLeft(configPath, "/"), "/")
+		viper.AddConfigPath(path.Join(splitPath...))
+	}
+
+	if viper.IsSet("config-file") {
+		viper.SetConfigFile(viper.GetString("config-file"))
+	}
+
+	_ = viper.ReadInConfig()
 
 	var missingFlags error
 	for _, flag := range registeredFlags {
