@@ -22,9 +22,9 @@ func main() {
 	}
 
 	validatorAPIImpl, err := api.NewValidatorAPIImpl(
-		api.ValidatorPaths(config.ValidatorPaths),
-		api.SdaApiUrl(config.SdaApiUrl),
-		api.SdaApiToken(config.SdaApiToken),
+		api.ValidatorPaths(config.ValidatorPaths()),
+		api.SdaApiUrl(config.SdaApiUrl()),
+		api.SdaApiToken(config.SdaApiToken()),
 	)
 	if err != nil {
 		log.Fatalf("failed to create new validator API impl, err: %v", err)
@@ -35,7 +35,7 @@ func main() {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", config.ApiPort),
+		Addr:              fmt.Sprintf(":%d", config.ApiPort()),
 		Handler:           ginRouter,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
