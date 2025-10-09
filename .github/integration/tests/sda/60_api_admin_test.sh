@@ -245,7 +245,7 @@ echo "Ingestion by using file ID finished successfully"
 # Test giving accession id to a file by using file id
 echo "Giving accession id by using file id"
 # The file which ingested above will be used
-accession_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST "http://api:8080/file/accession?fileid=$new_fileid&accessionid=SDA-123-asd")"
+accession_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/file/accession?fileid=$new_fileid&accessionid=SDA-123-asd")"
 if [ "$accession_resp" != "200" ]; then
     echo "Error when requesting to finalize file by the use of file id, expected 200 got: $accession_resp"
     exit 1
