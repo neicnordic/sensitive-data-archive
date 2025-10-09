@@ -31,7 +31,6 @@ type validatorAPIImpl struct {
 }
 
 func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (validatorAPI.ValidatorAPI, error) {
-
 	impl := &validatorAPIImpl{
 		commandExecutor: commandExecutor.OsCommandExecutor{},
 	}
@@ -81,10 +80,16 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 
 	results := make(map[string]*validationOutput)
 
-	userFiles, err := api.getUserFiles(jobDir, request.UserId, request.FilePaths, needFilesMounted)
+	userFiles, missingUserFiles, err := api.prepareUserFiles(jobDir, request.UserId, request.FilePaths, needFilesMounted)
 	if err != nil {
-		log.Errorf("failed to get user files, user: %s, error: %v", request.UserId, err)
+		log.Errorf("failed to prepare user files, error: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	if len(missingUserFiles) > 0 {
+		log.Infof("request had files: %v which was not found under user: %s", missingUserFiles, request.UserId)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("files: %v was not found to belong to user: %s", missingUserFiles, request.UserId)})
 		return
 	}
 
@@ -119,7 +124,7 @@ func validatorOutputToValidateResponse(validator string, output *validationOutpu
 	}
 
 	for i, fileResult := range output.Files {
-		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data")
+		filePath, _ := strings.CutPrefix(fileResult.Path, "/mnt/input/data/")
 		fileDetails := validatorAPI.ValidateResponseInnerFilesInner{
 			Path:     filePath,
 			Result:   fileResult.Result,
@@ -213,7 +218,6 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 }
 
 func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []string) (map[string]*describeResult, bool) {
-
 	validatorsToBeExecuted := make(map[string]*describeResult)
 	// If all validators requested to be used are of mode 'file-structure' we do not need to download, decrypt, and mount files
 	needFilesMounted := false
@@ -278,17 +282,7 @@ func (api *validatorAPIImpl) prepareValidateResponse(requestedValidators []strin
 	return rsp
 }
 
-// getUserFiles, list all th users inbox files, find the id of the files requested to be validated, and then downloads the files
-// to the jobDir such that they can be made available to the validators
-func (api *validatorAPIImpl) getUserFiles(jobDir, userId string, filePaths []string, mountFiles bool) ([]*userFileDetails, error) {
-
-	jobFilesDir := filepath.Join(jobDir, "/files/")
-
-	if err := os.MkdirAll(jobFilesDir, 0755); err != nil {
-		log.Errorf("failed to prepare files directory for job: %s", jobDir)
-		return nil, err
-	}
-
+func (api *validatorAPIImpl) getUserFiles(userId string) ([]byte, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaApiUrl, userId), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
@@ -317,6 +311,25 @@ func (api *validatorAPIImpl) getUserFiles(jobDir, userId string, filePaths []str
 		return nil, fmt.Errorf("failed to read response body, reason: %v", err)
 	}
 
+	return resBody, nil
+}
+
+// getUserFiles, list all th users inbox files, find the id of the files requested to be validated, and then downloads the files
+// to the jobDir such that they can be made available to the validators
+func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths []string, mountFiles bool) ([]*userFileDetails, []string, error) {
+	jobFilesDir := filepath.Join(jobDir, "/files/")
+
+	if err := os.MkdirAll(jobFilesDir, 0755); err != nil {
+		log.Errorf("failed to prepare files directory for job: %s", jobDir)
+		return nil, nil, err
+	}
+
+	userFilesRaw, err := api.getUserFiles(userId)
+	if err != nil {
+		log.Errorf("failed to get user files, reason: %v", err)
+		return nil, nil, err
+	}
+
 	// Only get fields which are of interest
 	type userFilesResponse struct {
 		FileID    string `json:"fileID"`
@@ -324,38 +337,48 @@ func (api *validatorAPIImpl) getUserFiles(jobDir, userId string, filePaths []str
 	}
 	var userFiles []*userFilesResponse
 
-	if err := json.Unmarshal(resBody, &userFiles); err != nil {
-		return nil, fmt.Errorf("failed to uncmarshal response body, reason: %v", err)
+	if err := json.Unmarshal(userFilesRaw, &userFiles); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
 	}
 
 	var fileDetails []*userFileDetails
+	var missingUserFiles []string
 
-	for _, userFile := range userFiles {
-		userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
-		for _, filePath := range filePaths {
+	for _, filePath := range filePaths {
+		fileFound := false
+		for _, userFile := range userFiles {
+			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
 			if filePath == userFile.InboxPath {
 				fileDetails = append(fileDetails, &userFileDetails{
 					fileID:    userFile.FileID,
 					inboxPath: userFile.InboxPath,
 				})
+				fileFound = true
 				break
 			}
 		}
+		if !fileFound {
+			missingUserFiles = append(missingUserFiles, filePath)
+		}
+	}
+
+	if len(missingUserFiles) > 0 {
+		return nil, missingUserFiles, nil
 	}
 
 	if len(fileDetails) == 0 {
-		return fileDetails, nil
+		return fileDetails, nil, nil
 	}
 
 	if !mountFiles {
-		return fileDetails, nil
+		return fileDetails, nil, nil
 	}
 
 	if err := api.downloadFiles(userId, jobFilesDir, fileDetails); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return fileDetails, nil
+	return fileDetails, nil, nil
 
 }
 func (api *validatorAPIImpl) downloadFiles(userId, jobFilesDir string, fileDetails []*userFileDetails) error {
@@ -418,7 +441,6 @@ func (api *validatorAPIImpl) downloadFile(userId, jobFilesDir string, fileDetail
 	}
 
 	// Decrypt file
-
 	crypt4GHReader, err := streaming.NewCrypt4GHReader(res.Body, privateKeyData, nil)
 	if err != nil {
 		_ = res.Body.Close()
@@ -440,18 +462,11 @@ func (api *validatorAPIImpl) downloadFile(userId, jobFilesDir string, fileDetail
 	return nil
 }
 
-type userFileDetails struct {
-	fileID    string
-	inboxPath string
-}
-
 // ValidatorsGet handles the GET /validators
 func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
-
 	rsp := make([]string, 0)
 
 	for _, path := range api.validatorPaths {
-
 		out, err := api.commandExecutor.Execute(path, "describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
@@ -465,10 +480,14 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 		}
 
 		rsp = append(rsp, dr.ValidatorId)
-
 	}
 
 	c.JSON(200, rsp)
+}
+
+type userFileDetails struct {
+	fileID    string
+	inboxPath string
 }
 
 type validationInput struct {
