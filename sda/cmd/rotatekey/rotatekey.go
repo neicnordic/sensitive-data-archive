@@ -274,7 +274,7 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 		msg := "failed to publish message"
 		log.Errorf("%s, reason: %v", msg, err)
 
-		return "nackRequeue", msg, err
+		return "ackSendToError", msg, err
 	}
 
 	return "ack", "", nil
