@@ -484,3 +484,40 @@ func (ts *ReEncryptTests) TestCallReencryptHeader_BadInput() {
 	assert.ErrorContains(ts.T(), err, "illegal base64 data")
 	assert.Nil(ts.T(), res)
 }
+
+func (ts *ReEncryptTests) TestReencryptHeader_NoMatchingKey() {
+	lis, err := net.Listen("tcp", "localhost:50065")
+	if err != nil {
+		ts.T().FailNow()
+	}
+
+	var keyList []*[32]byte
+	_, testKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		ts.T().FailNow()
+	}
+	keyList = append(keyList, (&testKey))
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: keyList})
+		_ = s.Serve(lis)
+	}()
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:50065", opts...)
+	if err != nil {
+		ts.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	assert.Contains(ts.T(), err.Error(), "reencryption failed, no matching key available")
+	assert.Nil(ts.T(), res)
+}
