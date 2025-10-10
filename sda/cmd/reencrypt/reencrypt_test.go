@@ -481,6 +481,6 @@ func (ts *ReEncryptTests) TestCallReencryptHeader_BadInput() {
 	}
 
 	res, err := re.CallReencryptHeader(ts.FileHeader, "somekey", grpcConf)
-	assert.Error(ts.T(), err)
+	assert.ErrorContains(ts.T(), err, "illegal base64 data")
 	assert.Nil(ts.T(), res)
 }
