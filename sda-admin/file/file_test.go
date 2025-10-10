@@ -50,7 +50,7 @@ func TestIngestPath_Success(t *testing.T) {
 
 	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest"
-	ingestInfo.Url = "http://example.com"
+	ingestInfo.URL = "http://example.com"
 	ingestInfo.Token = "test-token"
 	ingestInfo.User = "test-user"
 	ingestInfo.Path = "/path/to/file"
@@ -71,7 +71,7 @@ func TestIngestPath_PostRequestFailure(t *testing.T) {
 
 	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest"
-	ingestInfo.Url = "http://example.com"
+	ingestInfo.URL = "http://example.com"
 	ingestInfo.Token = "test-token"
 	ingestInfo.User = "test-user"
 	ingestInfo.Path = "/path/to/file"
@@ -93,9 +93,9 @@ func TestIngestID_Success(t *testing.T) {
 
 	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
-	ingestInfo.Url = "http://example.com"
+	ingestInfo.URL = "http://example.com"
 	ingestInfo.Token = "test-token"
-	ingestInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	ingestInfo.ID = "dd813b8a-ea90-4556-b640-32039733a31f"
 
 	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, []byte(nil)).Return([]byte(`{}`), nil)
 
@@ -112,9 +112,9 @@ func TestIngestID_PostRequestFailure(t *testing.T) {
 
 	var ingestInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/ingest?fileid=dd813b8a-ea90-4556-b640-32039733a31f"
-	ingestInfo.Url = "http://example.com"
+	ingestInfo.URL = "http://example.com"
 	ingestInfo.Token = "test-token"
-	ingestInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	ingestInfo.ID = "dd813b8a-ea90-4556-b640-32039733a31f"
 
 	mockHelpers.On("PostRequest", expectedURL, ingestInfo.Token, []byte(nil)).Return([]byte(nil), errors.New("failed to send request"))
 
@@ -132,7 +132,7 @@ func TestSetAccessionPath_Success(t *testing.T) {
 
 	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession"
-	accessionInfo.Url = "http://example.com"
+	accessionInfo.URL = "http://example.com"
 	accessionInfo.Token = "test-token"
 	accessionInfo.User = "test-user"
 	accessionInfo.Path = "/path/to/file"
@@ -154,7 +154,7 @@ func TestSetAccessionPath_PostRequestFailure(t *testing.T) {
 
 	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession"
-	accessionInfo.Url = "http://example.com"
+	accessionInfo.URL = "http://example.com"
 	accessionInfo.Token = "test-token"
 	accessionInfo.User = "test-user"
 	accessionInfo.Path = "/path/to/file"
@@ -177,9 +177,9 @@ func TestSetAccessionID_Success(t *testing.T) {
 
 	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession?accessionid=accession-123&fileid=dd813b8a-ea90-4556-b640-32039733a31f"
-	accessionInfo.Url = "http://example.com"
+	accessionInfo.URL = "http://example.com"
 	accessionInfo.Token = "test-token"
-	accessionInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.ID = "dd813b8a-ea90-4556-b640-32039733a31f"
 	accessionInfo.Accession = "accession-123"
 
 	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, []byte(nil)).Return([]byte(`{}`), nil)
@@ -197,9 +197,9 @@ func TestSetAccessionID_PostRequestFailure(t *testing.T) {
 
 	var accessionInfo helpers.FileInfo
 	expectedURL := "http://example.com/file/accession?accessionid=accession-123&fileid=dd813b8a-ea90-4556-b640-32039733a31f"
-	accessionInfo.Url = "http://example.com"
+	accessionInfo.URL = "http://example.com"
 	accessionInfo.Token = "test-token"
-	accessionInfo.Id = "dd813b8a-ea90-4556-b640-32039733a31f"
+	accessionInfo.ID = "dd813b8a-ea90-4556-b640-32039733a31f"
 	accessionInfo.Accession = "accession-123"
 
 	mockHelpers.On("PostRequest", expectedURL, accessionInfo.Token, []byte(nil)).Return([]byte(nil), errors.New("failed to send request"))

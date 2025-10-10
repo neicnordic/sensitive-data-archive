@@ -15,8 +15,8 @@ var GetResponseBody = GetBody
 type FileInfo struct {
 	User      string
 	Path      string
-	Id        string
-	Url       string
+	ID        string
+	URL       string
 	Token     string
 	Accession string
 }

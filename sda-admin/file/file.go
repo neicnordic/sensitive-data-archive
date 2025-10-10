@@ -45,13 +45,13 @@ func List(apiURI, token, username string) error {
 // - If ingestInfo.Id is set, it sends a POST request to /file/ingest with the fileid as a query parameter and no JSON body.
 func Ingest(ingestInfo helpers.FileInfo) error {
 	var jsonBody []byte
-	parsedURL, err := url.Parse(ingestInfo.Url)
+	parsedURL, err := url.Parse(ingestInfo.URL)
 	if err != nil {
 		return err
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "file/ingest")
 
-	if ingestInfo.Id == "" {
+	if ingestInfo.ID == "" {
 		if err := helpers.CheckValidChars(ingestInfo.Path); err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ func Ingest(ingestInfo helpers.FileInfo) error {
 		}
 	} else {
 		query := parsedURL.Query()
-		query.Set("fileid", ingestInfo.Id)
+		query.Set("fileid", ingestInfo.ID)
 		parsedURL.RawQuery = query.Encode()
 		jsonBody = nil
 	}
@@ -84,13 +84,13 @@ func Ingest(ingestInfo helpers.FileInfo) error {
 // - If accessionInfo.Id is set, it sends a POST request to /file/accession with fileid and accessionid as query parameters.
 func SetAccession(accessionInfo helpers.FileInfo) error {
 	var jsonBody []byte
-	parsedURL, err := url.Parse(accessionInfo.Url)
+	parsedURL, err := url.Parse(accessionInfo.URL)
 	if err != nil {
 		return err
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "file/accession")
 
-	if accessionInfo.Id == "" {
+	if accessionInfo.ID == "" {
 		if err := helpers.CheckValidChars(accessionInfo.Path); err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func SetAccession(accessionInfo helpers.FileInfo) error {
 		}
 	} else {
 		query := parsedURL.Query()
-		query.Set("fileid", accessionInfo.Id)
+		query.Set("fileid", accessionInfo.ID)
 		query.Set("accessionid", accessionInfo.Accession)
 		parsedURL.RawQuery = query.Encode()
 		jsonBody = nil
