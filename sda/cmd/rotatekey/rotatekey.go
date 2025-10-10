@@ -161,7 +161,7 @@ func main() {
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 
-			ackNack, msg, err := app.rotateHeader(delivered.CorrelationId, message.FileID)
+			ackNack, msg, err := app.reEncryptHeader(delivered.CorrelationId, message.FileID)
 
 			switch ackNack {
 			case "ack":
@@ -197,7 +197,7 @@ func main() {
 	<-forever
 }
 
-func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg string, err error) {
+func (app *RotateKey) reEncryptHeader(correlationID, fileID string) (ackNack, msg string, err error) {
 	// Get current keyhash for the file, send to error queue if this fails
 	oldKeyHash, err := app.DB.GetKeyHash(fileID)
 	if err != nil {
