@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -239,13 +238,6 @@ func (app *RotateKey) rotateHeader(correlationID, fileID string) (ackNack, msg s
 
 	newHeader, err := reencrypt.CallReencryptHeader(header, app.PubKeyEncoded, app.Conf.RotateKey.Grpc)
 	if err != nil {
-		msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
-		log.Errorf("%s, reason: %v", msg, err)
-
-		return "ackSendToError", msg, err
-	}
-	if newHeader == nil {
-		err := errors.New("reencrypt returned empty header")
 		msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
