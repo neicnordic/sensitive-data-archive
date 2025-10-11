@@ -631,7 +631,7 @@ func setAccession(c *gin.Context) {
 			return
 		}
 		// Find the correlation id
-		fileID, err := Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "uploaded")
+		fileID, err := Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "verified")
 		if err != nil {
 			if fileID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
