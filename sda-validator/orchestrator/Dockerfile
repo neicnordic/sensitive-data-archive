@@ -36,10 +36,6 @@ COPY --from=apptainer_builder /bin/apptainer /bin/apptainer
 COPY --from=apptainer_builder /etc/apptainer/ /etc/apptainer/
 COPY --from=apptainer_builder /var/lib/apptainer /var/lib/apptainer
 
-# executables needed by apptainer to build the sandbox
-COPY --from=apptainer_builder /bin/bash /bin/bash
-COPY --from=apptainer_builder /bin/sh /bin/sh
-
 # Copy libraries needed by apptainer and any executables that apptainer needs
 COPY --from=apptainer_builder /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
 COPY --from=apptainer_builder /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
