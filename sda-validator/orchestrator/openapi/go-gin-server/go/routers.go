@@ -62,8 +62,8 @@ func DefaultHandleFunc(c *gin.Context) {
 
 type ApiHandleFunctions struct {
 
-	// Routes for the ValidatorAPI part of the API
-	ValidatorAPI ValidatorAPI
+	// Routes for the ValidatorOrchestratorAPI part of the API
+	ValidatorOrchestratorAPI ValidatorOrchestratorAPI
 }
 
 func getRoutes(handleFunctions ApiHandleFunctions) []Route {
@@ -72,13 +72,13 @@ func getRoutes(handleFunctions ApiHandleFunctions) []Route {
 			"ValidatePost",
 			http.MethodPost,
 			"/validate",
-			handleFunctions.ValidatorAPI.ValidatePost,
+			handleFunctions.ValidatorOrchestratorAPI.ValidatePost,
 		},
 		{
 			"ValidatorsGet",
 			http.MethodGet,
 			"/validators",
-			handleFunctions.ValidatorAPI.ValidatorsGet,
+			handleFunctions.ValidatorOrchestratorAPI.ValidatorsGet,
 		},
 	}
 }

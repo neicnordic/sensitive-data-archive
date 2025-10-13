@@ -4,7 +4,7 @@ The sda-validator-orchestrator is responsible for integrating with 3rd party app
 API which allows the callers to see the available validators, and to invocate validation of a set of file paths
 belonging to a user.
 
-See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the ValidatorAPI.
+See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the ValidatorOrchestratorAPI.
 
 ## Configuration
 
@@ -24,7 +24,7 @@ To generate a go-gin-server template and helper structs, run the following comma
 additional files which are not needed and are removed as part of the following command
 
 ``` bash 
-$ openapi-generator-cli generate -g go-gin-server -i swagger_v1.yml -o openapi/go-gin-server --openapi-normalizer SET_TAGS_FOR_ALL_OPERATIONS=validator --additional-properties=interfaceOnly=true
+$ openapi-generator-cli generate -g go-gin-server -i swagger_v1.yml -o openapi/go-gin-server --openapi-normalizer SET_TAGS_FOR_ALL_OPERATIONS=validator_orchestrator --additional-properties=interfaceOnly=true
 # Remove unneeded files
 $ rm -r openapi/go-gin-server/.openapi-generator
 $ rm -r openapi/go-gin-server/api

@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ValidatorAPI interface {
+type ValidatorOrchestratorAPI interface {
 
 
     // ValidatePost Post /validate
