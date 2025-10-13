@@ -474,7 +474,7 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 			"apptainer",
 			"exec",
 			path,
-			"./.run/",
+			"./.run",
 			"describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
