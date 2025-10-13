@@ -47,9 +47,9 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 		return nil, errors.New("no args for mock command executor")
 	}
 
-	if args[0] == "describe" {
+	if args[len(args)-1] == "describe" {
 		return json.Marshal(&describeResult{
-			ValidatorId:       strings.TrimSuffix(name, "-path"),
+			ValidatorId:       strings.TrimSuffix(filepath.Base(args[1]), "-path"),
 			Name:              "mock validator",
 			Description:       "Mock validator description",
 			Version:           "v0.0.0",
@@ -60,7 +60,7 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 
 	// Currently we expect 6 args when running a validator
 	// as seen at api.executeValidator(...)
-	if len(args) != 6 {
+	if len(args) != 7 {
 		return nil, errors.New("unexpected amount of args when running validator")
 	}
 
@@ -119,7 +119,7 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 	if err != nil {
 		return nil, fmt.Errorf("mock validator could not marshal output, error: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(jobDir, "output", "result.json"), outputRaw, 755); err != nil {
+	if err := os.WriteFile(filepath.Join(jobDir, "output", "result.json"), outputRaw, 777); err != nil {
 		return nil, fmt.Errorf("mock validator could not write output file, error: %v", err)
 	}
 
@@ -477,8 +477,8 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 	c, _ := gin.CreateTestContext(w)
 
 	request := &validatorAPI.ValidateRequest{
-		FilePaths:  []string{"mock-validator-1", "mock-validator-2"},
-		Validators: []string{"testFile1", "testFile3", "test_dir/testFile5"},
+		Validators: []string{"mock-validator-1", "mock-validator-2"},
+		FilePaths:  []string{"testFile1", "testFile3", "test_dir/testFile5"},
 		UserId:     "test_user",
 	}
 
@@ -487,8 +487,15 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 		ts.FailNow("failed to marshal request to validate request", err)
 	}
 
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestRaw))
-	apiImpl.ValidatorsGet(c)
+	c.Request, err = http.NewRequest("POST", fmt.Sprintf("%s/validate", httpTestServer.URL), io.NopCloser(bytes.NewBuffer(requestRaw)))
+	if err != nil {
+		ts.FailNow("failed to create http request", err)
+	}
+	apiImpl.ValidatePost(c)
+
+	if w.Code != 200 {
+		ts.FailNow("unexpected response code")
+	}
 
 	var response []validatorAPI.ValidateResponseInner
 
@@ -500,15 +507,13 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 		ts.FailNow("unexpected response length")
 	}
 
-	for i := 1; i <= len(response); i++ {
-		ts.Equal(response[i].Validator, fmt.Sprintf("mock-validator-%d", i))
+	for i := 0; i < len(response); i++ {
+		ts.Equal(response[i].Validator, fmt.Sprintf("mock-validator-%d", i+1))
 
-		ts.Equal(response[i].Result, "passed")
+		ts.Equal("passed", response[i].Result)
 		ts.Len(response[i].Messages, 0)
 		if len(response[i].Files) != 3 {
 			ts.Fail("unexpected amount of files in validator result length")
 		}
 	}
-	ts.Equal(response[0].Validator, "mock-validator-1")
-
 }
