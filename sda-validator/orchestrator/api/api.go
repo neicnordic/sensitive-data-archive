@@ -195,12 +195,11 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 	// TODO ensure a validator can not modify the files to be validated
 	_, err = api.commandExecutor.Execute(
 		"apptainer",
-		"run",
-		"--bind",
-		fmt.Sprintf("%s:/mnt", validatorJobDir),
-		"--bind",
-		fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
-		validatorPath)
+		"exec",
+		"--bind", fmt.Sprintf("%s:/mnt", validatorJobDir),
+		"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
+		validatorPath,
+		"./.run")
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to execute run command"), err)
 	}
@@ -223,7 +222,12 @@ func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []st
 	needFilesMounted := false
 
 	for _, path := range api.validatorPaths {
-		out, err := api.commandExecutor.Execute(path, "describe")
+		out, err := api.commandExecutor.Execute(
+			"apptainer",
+			"exec",
+			path,
+			"./.run",
+			"describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue
@@ -462,12 +466,16 @@ func (api *validatorAPIImpl) downloadFile(userId, jobFilesDir string, fileDetail
 	return nil
 }
 
-// ValidatorsGet handles the GET /validators
 func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 	rsp := make([]string, 0)
 
 	for _, path := range api.validatorPaths {
-		out, err := api.commandExecutor.Execute(path, "describe")
+		out, err := api.commandExecutor.Execute(
+			"apptainer",
+			"exec",
+			path,
+			"./.run/",
+			"describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue

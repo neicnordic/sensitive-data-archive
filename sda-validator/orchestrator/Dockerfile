@@ -1,32 +1,12 @@
-FROM golang:1.25-alpine AS apptainer_builder
+FROM debian:trixie-slim AS apptainer_builder
 
-RUN apk add --no-cache \
-        # Required for apptainer to find min go version
-        bash \
-        binutils-gold \
-        cryptsetup \
-        gawk \
-        gcc \
-        git \
-        libc-dev \
-        linux-headers \
-        libressl-dev \
-        libuuid \
-        libseccomp-dev \
-        make \
-        util-linux-dev
+RUN apt update \
+      && apt install -y wget \
+      && cd /tmp \
+      && wget https://github.com/apptainer/apptainer/releases/download/v1.4.3/apptainer_1.4.3-trixie+_amd64.deb \
+      && apt install -y ./apptainer_1.4.3-trixie+_amd64.deb libsubid5 squashfs-tools
 
-ARG APPTAINER_COMMITISH="v1.4.3"
-ARG MCONFIG_OPTIONS="--with-suid"
-WORKDIR $GOPATH/src/github.com/apptainer
-RUN git clone https://github.com/apptainer/apptainer.git \
-    && cd apptainer \
-    && git checkout "$APPTAINER_COMMITISH" \
-    && ./mconfig $MCONFIG_OPTIONS -p /usr/local/apptainer \
-    && cd builddir \
-    && make \
-    && make install
-
+COPY ./apptainer.conf /etc/apptainer/apptainer.conf
 
 FROM golang:1.25-alpine AS app_builder
 
@@ -36,7 +16,8 @@ COPY . .
 
 RUN go build -buildvcs=false -o ./sda-validator-orchestrator
 
-FROM golang:1.25-alpine
+
+FROM gcr.io/distroless/static-debian12
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
@@ -47,17 +28,28 @@ LABEL org.label-schema.build-date=$BUILD_DATE
 LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-archive"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
-COPY --from=app_builder /go/sda-validator-orchestrator /usr/bin/
 
-COPY --from=apptainer_builder /usr/local/apptainer /usr/local/apptainer
+COPY --from=app_builder /go/sda-validator-orchestrator /usr/bin/
 COPY --from=app_builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-ENV PATH="/usr/local/apptainer/bin:$PATH" \
-    APPTAINER_TMPDIR="/tmp-apptainer"
-RUN apk add --no-cache ca-certificates libseccomp squashfs-tools tzdata \
-    && mkdir -p $APPTAINER_TMPDIR \
-    && cp /usr/share/zoneinfo/UTC /etc/localtime \
-    && apk del tzdata \
-    && rm -rf /tmp/* /var/cache/apk/*
+COPY --from=apptainer_builder /bin/apptainer /bin/apptainer
+COPY --from=apptainer_builder /etc/apptainer/ /etc/apptainer/
+COPY --from=apptainer_builder /var/lib/apptainer /var/lib/apptainer
 
+# executables needed by apptainer to build the sandbox
+COPY --from=apptainer_builder /bin/bash /bin/bash
+COPY --from=apptainer_builder /bin/sh /bin/sh
+
+# Copy libraries needed by apptainer and any executables that apptainer needs
+COPY --from=apptainer_builder /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+COPY --from=apptainer_builder /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
+COPY --from=apptainer_builder /usr/libexec/apptainer/bin/starter /libexec/apptainer/bin/starter
+
+COPY --from=apptainer_builder /bin/unsquashfs /bin/unsquashfs
+COPY --from=apptainer_builder /etc/localtime /etc/localtime
+
+
+ENV PATH="/usr/local/apptainer/:$PATH"
+
+USER 65534
 CMD ["sda-validator-orchestrator"]
