@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create new validator API impl, err: %v", err)
 	}
-	ginRouter := validatorAPI.NewRouter(validatorAPI.ApiHandleFunctions{ValidatorAPI: validatorAPIImpl})
+	ginRouter := validatorAPI.NewRouter(validatorAPI.ApiHandleFunctions{ValidatorOrchestratorAPI: validatorAPIImpl})
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
