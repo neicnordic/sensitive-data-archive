@@ -15,6 +15,7 @@ import (
 )
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 
 	if err := internalConfig.Load(); err != nil {
 		log.Fatal(err)
@@ -30,7 +31,6 @@ func main() {
 		log.Fatalf("failed to create new validator API impl, err: %v", err)
 	}
 	ginRouter := validatorAPI.NewRouter(validatorAPI.ApiHandleFunctions{ValidatorAPI: validatorAPIImpl})
-	gin.SetMode(gin.ReleaseMode)
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
