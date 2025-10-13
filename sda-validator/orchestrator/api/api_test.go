@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/openapi/go-gin-server/go"
@@ -253,16 +254,16 @@ func (ts *ValidatorAPITestSuite) TestPrepareUserFiles() {
 
 			file := bytes.Buffer{}
 			file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
-			io.Copy(encryptedFileWriter, &file)
+			_, _ = io.Copy(encryptedFileWriter, &file)
 
-			encryptedFileWriter.Close()
+			_ = encryptedFileWriter.Close()
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(encryptedFile.String()))
 		default:
 			// Set the response status code
 			w.WriteHeader(http.StatusInternalServerError)
 			// Set the response body
-			fmt.Fprint(w, "unexpected path called")
+			_, _ = fmt.Fprint(w, "unexpected path called")
 		}
 	}))
 	defer httpTestServer.Close()
@@ -300,7 +301,7 @@ func (ts *ValidatorAPITestSuite) TestPrepareUserFiles_MissingFiles() {
 			// Set the response status code
 			w.WriteHeader(http.StatusInternalServerError)
 			// Set the response body
-			fmt.Fprint(w, "unexpected path called")
+			_, _ = fmt.Fprint(w, "unexpected path called")
 		}
 	}))
 	defer httpTestServer.Close()
@@ -372,4 +373,142 @@ func (ts *ValidatorAPITestSuite) TestValidatorOutputToValidateResponse() {
 	ts.Equal("info", validateResponseInner.Messages[0].Level)
 	ts.Equal(now.String(), validateResponseInner.Messages[0].Time)
 	ts.Equal("2/3 files passed validation", validateResponseInner.Messages[0].Message)
+}
+
+func (ts *ValidatorAPITestSuite) TestValidatorsGet() {
+	apiImpl := validatorAPIImpl{
+		validatorPaths:  []string{"mock-validator-1-path", "mock-validator-2-path", "mock-validator-3-path"},
+		commandExecutor: &mockCommandExecutor{passValidation: false},
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	apiImpl.ValidatorsGet(c)
+
+	var response []string
+
+	if err := json.Unmarshal([]byte(w.Body.String()), &response); err != nil {
+		ts.FailNow("failed to unmarshal response to describe result")
+	}
+
+	if len(response) != 3 {
+		ts.FailNow("unexpected response length")
+	}
+	ts.Equal(response[0], "mock-validator-1")
+	ts.Equal(response[1], "mock-validator-2")
+	ts.Equal(response[2], "mock-validator-3")
+}
+
+func (ts *ValidatorAPITestSuite) TestValidatePost() {
+	httpTestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+		switch {
+		case req.RequestURI == "/users/test_user/files":
+			// Set the response status code
+			w.WriteHeader(http.StatusOK)
+			// Set the response body
+			_, _ = w.Write([]byte(`[
+{
+	"FileID": "test-file-id-1",
+	"InboxPath": "testFile1"
+},{
+	"FileID": "test-file-id-2",
+	"InboxPath": "testFile2"
+},{
+	"FileID": "test-file-id-3",
+	"InboxPath": "testFile3"
+},{
+	"FileID": "test-file-id-4",
+	"InboxPath": "test_dir/testFile4"
+},{
+	"FileID": "test-file-id-5",
+	"InboxPath": "test_dir/testFile5"
+}
+]`))
+		case strings.Contains(req.RequestURI, "/users/test_user/file/"):
+			publicKey, err := base64.StdEncoding.DecodeString(req.Header.Get("C4GH-Public-Key"))
+			if err != nil || len(publicKey) == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = fmt.Fprint(w, "bad public key")
+				return
+			}
+
+			reader := bytes.NewReader(publicKey)
+			newReaderPublicKey, err := keys.ReadPublicKey(reader)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = fmt.Fprint(w, "could not read public key")
+				return
+			}
+
+			encryptedFile := bytes.Buffer{}
+			encryptedFileWriter, err := streaming.NewCrypt4GHWriter(&encryptedFile, [32]byte{}, [][32]byte{newReaderPublicKey}, nil)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = fmt.Fprint(w, "could not read create crypt4gh writer")
+				return
+			}
+
+			file := bytes.Buffer{}
+			file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
+			_, _ = io.Copy(encryptedFileWriter, &file)
+
+			_ = encryptedFileWriter.Close()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(encryptedFile.String()))
+		default:
+			// Set the response status code
+			w.WriteHeader(http.StatusInternalServerError)
+			// Set the response body
+			_, _ = fmt.Fprint(w, "unexpected path called")
+		}
+	}))
+	defer httpTestServer.Close()
+
+	apiImpl := validatorAPIImpl{
+		validatorPaths:    []string{"mock-validator-1-path", "mock-validator-2-path", "mock-validator-3-path"},
+		commandExecutor:   &mockCommandExecutor{passValidation: true},
+		validationWorkDir: ts.tempDir,
+		sdaApiUrl:         httpTestServer.URL,
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	request := &validatorAPI.ValidateRequest{
+		FilePaths:  []string{"mock-validator-1", "mock-validator-2"},
+		Validators: []string{"testFile1", "testFile3", "test_dir/testFile5"},
+		UserId:     "test_user",
+	}
+
+	requestRaw, err := json.Marshal(request)
+	if err != nil {
+		ts.FailNow("failed to marshal request to validate request", err)
+	}
+
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestRaw))
+	apiImpl.ValidatorsGet(c)
+
+	var response []validatorAPI.ValidateResponseInner
+
+	if err := json.Unmarshal([]byte(w.Body.String()), &response); err != nil {
+		ts.FailNow("failed to unmarshal response to validate result", err)
+	}
+
+	if len(response) != 2 {
+		ts.FailNow("unexpected response length")
+	}
+
+	for i := 1; i <= len(response); i++ {
+		ts.Equal(response[i].Validator, fmt.Sprintf("mock-validator-%d", i))
+
+		ts.Equal(response[i].Result, "passed")
+		ts.Len(response[i].Messages, 0)
+		if len(response[i].Files) != 3 {
+			ts.Fail("unexpected amount of files in validator result length")
+		}
+	}
+	ts.Equal(response[0].Validator, "mock-validator-1")
+
 }
