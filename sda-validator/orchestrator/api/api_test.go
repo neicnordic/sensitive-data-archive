@@ -60,7 +60,7 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 
 	// Currently we expect 6 args when running a validator
 	// as seen at api.executeValidator(...)
-	if len(args) != 7 {
+	if len(args) != 6 {
 		return nil, errors.New("unexpected amount of args when running validator")
 	}
 

@@ -30,7 +30,7 @@ type validatorAPIImpl struct {
 	validationWorkDir string
 }
 
-func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (validatorAPI.ValidatorAPI, error) {
+func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (validatorAPI.ValidatorOrchestratorAPI, error) {
 	impl := &validatorAPIImpl{
 		commandExecutor: commandExecutor.OsCommandExecutor{},
 	}
@@ -195,11 +195,10 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 	// TODO ensure a validator can not modify the files to be validated
 	_, err = api.commandExecutor.Execute(
 		"apptainer",
-		"exec",
+		"run",
 		"--bind", fmt.Sprintf("%s:/mnt", validatorJobDir),
 		"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
-		validatorPath,
-		"./.run")
+		validatorPath)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to execute run command"), err)
 	}
@@ -224,9 +223,8 @@ func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []st
 	for _, path := range api.validatorPaths {
 		out, err := api.commandExecutor.Execute(
 			"apptainer",
-			"exec",
+			"run",
 			path,
-			"./.run",
 			"describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
@@ -472,9 +470,8 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 	for _, path := range api.validatorPaths {
 		out, err := api.commandExecutor.Execute(
 			"apptainer",
-			"exec",
+			"run",
 			path,
-			"./.run",
 			"describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
