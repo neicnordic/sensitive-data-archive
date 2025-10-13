@@ -337,7 +337,7 @@ func ingestFile(c *gin.Context) {
 		return
 	case c.Query("fileid") != "":
 		// Get the user and the inbox filepath
-		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
+		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "uploaded")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "file information not found")
 
@@ -597,7 +597,7 @@ func setAccession(c *gin.Context) {
 		return
 	case c.Query("fileid") != "" && c.Query("accessionid") != "":
 		// Get the user and the inbox filepath
-		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"))
+		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "verified")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "file details not found")
 

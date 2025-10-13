@@ -1176,14 +1176,14 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 }
 
 // GetFileDetailsFromUUID() retrieves user, path and correlation id by giving the file UUID
-func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
+func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID, event string) (FileDetails, error) {
 	var (
 		info FileDetails
 		err  error
 	)
 
 	for count := 0; count <= RetryTimes; count++ {
-		info, err = dbs.getFileDetailsFromUUID(fileUUID)
+		info, err = dbs.getFileDetailsFromUUID(fileUUID, event)
 		if err == nil {
 			break
 		}
@@ -1194,15 +1194,15 @@ func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
 }
 
 // getFileDetailsFromUUID() is the actual function performing work for GetUserAndPathFromUUID
-func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID string) (FileDetails, error) {
+func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID, event string) (FileDetails, error) {
 	var info FileDetails
 	dbs.checkAndReconnectIfNeeded()
 
 	const query = `SELECT f.submission_user, f.submission_file_path, fel.correlation_id 
 		from sda.files f
 		join sda.file_event_log fel on f.id = fel.file_id
-		WHERE f.id = $1 and fel.event='uploaded';`
-	if err := dbs.DB.QueryRow(query, fileUUID).Scan(&info.User, &info.Path, &info.CorrID); err != nil {
+		WHERE f.id = $1 and fel.event=$2;`
+	if err := dbs.DB.QueryRow(query, fileUUID, event).Scan(&info.User, &info.Path, &info.CorrID); err != nil {
 		return FileDetails{}, err
 	}
 

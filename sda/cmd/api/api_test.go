@@ -323,6 +323,8 @@ func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, 
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
+	err = Conf.API.DB.UpdateFileEventLog(fileID, "verified", fileID, user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update status of file in database")
 
 	return fileID, decSha
 }

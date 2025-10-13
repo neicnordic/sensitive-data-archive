@@ -1307,7 +1307,7 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
 		suite.FailNow("failed to update file event log")
 	}
 
-	infoFile, err := db.GetFileDetailsFromUUID(fileID)
+	infoFile, err := db.GetFileDetailsFromUUID(fileID, "uploaded")
 	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
 	assert.Equal(suite.T(), user, infoFile.User)
 	assert.Equal(suite.T(), filePath, infoFile.Path)
@@ -1321,7 +1321,7 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUID_NotFound() {
 
 	// Use a non-existent UUID
 	invalidUUID := "abc-123"
-	infoFile, err := db.GetFileDetailsFromUUID(invalidUUID)
+	infoFile, err := db.GetFileDetailsFromUUID(invalidUUID, "uploaded")
 	assert.Error(suite.T(), err, "expected error for non-existent UUID")
 	assert.Empty(suite.T(), infoFile.User)
 	assert.Empty(suite.T(), infoFile.Path)
