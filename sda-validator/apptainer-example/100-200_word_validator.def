@@ -9,7 +9,7 @@ From: alpine:3.22
 
 %runscript
    #!/bin/bash
-   if [ "$1" != "describe" ]; then
+   if [ "$1" != "--describe" ]; then
 
     allPass=true
     output='{
