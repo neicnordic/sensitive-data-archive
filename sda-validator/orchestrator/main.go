@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +21,9 @@ import (
 
 func main() {
 	gin.SetMode(gin.ReleaseMode)
+
+	sigc := make(chan os.Signal, 5)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	if err := internalConfig.Load(); err != nil {
 		log.Fatal(err)
@@ -44,7 +52,19 @@ func main() {
 		WriteTimeout:      -1,
 	}
 
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("Error starting server, due to: %v", err)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(http.ErrServerClosed, err) {
+			log.Fatalf("Error starting server, due to: %v", err)
+		}
+	}()
+
+	log.Infof("server listening at: %s", srv.Addr)
+	<-sigc
+
+	log.Info("gracefully shutting down server")
+	serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer serverShutdownCancel()
+	if err := srv.Shutdown(serverShutdownCtx); err != nil {
+		log.Fatal("failed to gracefully shutdown the server")
 	}
 }
