@@ -196,6 +196,7 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 	_, err = api.commandExecutor.Execute(
 		"apptainer",
 		"run",
+		"--userns",
 		"--bind", fmt.Sprintf("%s:/mnt", validatorJobDir),
 		"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
 		validatorPath)
@@ -224,8 +225,9 @@ func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []st
 		out, err := api.commandExecutor.Execute(
 			"apptainer",
 			"run",
+			"--userns",
 			path,
-			"describe")
+			"--describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue
@@ -471,8 +473,9 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 		out, err := api.commandExecutor.Execute(
 			"apptainer",
 			"run",
+			"--userns",
 			path,
-			"describe")
+			"--describe")
 		if err != nil {
 			log.Errorf("failed to execute describe command towards path: %s, error: %v", path, err)
 			continue
