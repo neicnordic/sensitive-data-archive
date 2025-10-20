@@ -607,7 +607,7 @@ func setAccession(c *gin.Context) {
 		fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(c.Query("fileid"))
 		if err != nil {
 			log.Debugln(err.Error())
-			c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, "required data missing")
 
 			return
 		}
