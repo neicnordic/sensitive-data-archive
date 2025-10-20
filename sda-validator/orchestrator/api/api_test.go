@@ -49,7 +49,7 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 
 	if args[len(args)-1] == "--describe" {
 		return json.Marshal(&describeResult{
-			ValidatorId:       strings.TrimSuffix(filepath.Base(args[1]), "-path"),
+			ValidatorId:       strings.TrimSuffix(filepath.Base(args[len(args)-2]), "-path"),
 			Name:              "mock validator",
 			Description:       "Mock validator description",
 			Version:           "v0.0.0",
@@ -60,12 +60,12 @@ func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, err
 
 	// Currently we expect 6 args when running a validator
 	// as seen at api.executeValidator(...)
-	if len(args) != 7 {
+	if len(args) != 10 {
 		return nil, errors.New("unexpected amount of args when running validator")
 	}
 
 	// extracting path being mounted as /mnt and writing directly in that directory
-	jobDir := strings.Split(args[3], ":")[0]
+	jobDir := strings.Split(args[6], ":")[0]
 
 	inputRaw, err := os.ReadFile(filepath.Join(jobDir, "input", "input.json"))
 	if err != nil {
