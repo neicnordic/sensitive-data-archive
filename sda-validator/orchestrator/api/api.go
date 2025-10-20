@@ -152,7 +152,7 @@ func validatorOutputToValidateResponse(validator string, output *validationOutpu
 	return r
 }
 
-func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, validatorDescription *describeResult, userFiles []*userFileDetails) (*validationOutput, error) {
+func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, validatorDescription *describeResult, userFiles map[string]*userFileDetails) (*validationOutput, error) {
 	validatorJobDir := filepath.Join(jobDir, validatorDescription.ValidatorId)
 
 	if err := os.MkdirAll(validatorJobDir, 0755); err != nil {
@@ -325,7 +325,7 @@ func (api *validatorAPIImpl) getUserFiles(userId string) ([]byte, error) {
 
 // getUserFiles, list all th users inbox files, find the id of the files requested to be validated, and then downloads the files
 // to the jobDir such that they can be made available to the validators
-func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths []string, mountFiles bool) ([]*userFileDetails, []string, error) {
+func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths []string, mountFiles bool) (map[string]*userFileDetails, []string, error) {
 	jobFilesDir := filepath.Join(jobDir, "/files/")
 
 	if err := os.MkdirAll(jobFilesDir, 0755); err != nil {
@@ -350,7 +350,7 @@ func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths [
 		return nil, nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
 	}
 
-	var fileDetails []*userFileDetails
+	fileDetails := make(map[string]*userFileDetails, len(filePaths))
 	var missingUserFiles []string
 
 	for _, filePath := range filePaths {
@@ -358,10 +358,10 @@ func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths [
 		for _, userFile := range userFiles {
 			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
 			if filePath == userFile.InboxPath {
-				fileDetails = append(fileDetails, &userFileDetails{
+				fileDetails[filePath] = &userFileDetails{
 					fileID:    userFile.FileID,
 					inboxPath: userFile.InboxPath,
-				})
+				}
 				fileFound = true
 				break
 			}
@@ -390,7 +390,7 @@ func (api *validatorAPIImpl) prepareUserFiles(jobDir, userId string, filePaths [
 	return fileDetails, nil, nil
 
 }
-func (api *validatorAPIImpl) downloadFiles(userId, jobFilesDir string, fileDetails []*userFileDetails) error {
+func (api *validatorAPIImpl) downloadFiles(userId, jobFilesDir string, fileDetails map[string]*userFileDetails) error {
 	publicKeyData, privateKeyData, err := keys.GenerateKeyPair()
 	if err != nil {
 		return err
