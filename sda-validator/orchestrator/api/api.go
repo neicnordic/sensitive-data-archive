@@ -79,13 +79,14 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 	}()
 
 	results := make(map[string]*validationOutput)
-
+	log.Infof("preparing files")
 	userFiles, missingUserFiles, err := api.prepareUserFiles(jobDir, request.UserId, request.FilePaths, needFilesMounted)
 	if err != nil {
 		log.Errorf("failed to prepare user files, error: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	log.Infof("prepare files done")
 
 	if len(missingUserFiles) > 0 {
 		log.Infof("request had files: %v which was not found under user: %s", missingUserFiles, request.UserId)
@@ -197,6 +198,8 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 		"apptainer",
 		"run",
 		"--userns",
+		"--net",
+		"--network", "none",
 		"--bind", fmt.Sprintf("%s:/mnt", validatorJobDir),
 		"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobDir, "/files/")),
 		validatorPath)
@@ -226,6 +229,8 @@ func (api *validatorAPIImpl) findValidatorsToBeExecuted(requestedValidators []st
 			"apptainer",
 			"run",
 			"--userns",
+			"--net",
+			"--network", "none",
 			path,
 			"--describe")
 		if err != nil {
@@ -474,6 +479,8 @@ func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {
 			"apptainer",
 			"run",
 			"--userns",
+			"--net",
+			"--network", "none",
 			path,
 			"--describe")
 		if err != nil {
