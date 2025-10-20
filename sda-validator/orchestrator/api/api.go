@@ -191,9 +191,8 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 		return nil, errors.Join(errors.New("failed to write input.json for validator"), err)
 	}
 
-	// Here we monut the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
+	// Here we mount the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
 	// we also mount validatorJobDir/files/ as /mnt/input/data such that the validator can access the files without the need for us to duplicate them per validator
-	// TODO ensure a validator can not modify the files to be validated
 	_, err = api.commandExecutor.Execute(
 		"apptainer",
 		"run",
@@ -216,6 +215,7 @@ func (api *validatorAPIImpl) executeValidator(validatorPath, jobDir string, vali
 	if err := json.Unmarshal(result, output); err != nil {
 		return nil, errors.Join(errors.New("failed to unmarshal result"), err)
 	}
+
 	return output, nil
 }
 
@@ -443,7 +443,7 @@ func (api *validatorAPIImpl) downloadFile(userId, jobFilesDir string, fileDetail
 		return err
 	}
 
-	file, err := os.Create(fileLocalPath)
+	file, err := os.OpenFile(fileLocalPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0444)
 	if err != nil {
 		log.Errorf("failed to create file for file: %s, error: %v", fileLocalPath, err)
 		return err
