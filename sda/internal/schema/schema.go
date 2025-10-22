@@ -67,6 +67,8 @@ func getStructName(path string) any {
 		return new(SyncDataset)
 	case "metadata-sync":
 		return new(SyncMetadata)
+	case "rotate-key":
+		return new(KeyRotation)
 	default:
 		return ""
 	}
@@ -184,4 +186,9 @@ type Metadata struct {
 type C4ghPubKey struct {
 	PubKey      string `json:"pubkey"`
 	Description string `json:"description"`
+}
+
+type KeyRotation struct {
+	Type   string `json:"type"`
+	FileID string `json:"file_id"`
 }
