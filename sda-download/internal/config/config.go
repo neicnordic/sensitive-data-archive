@@ -60,6 +60,11 @@ type AppConfig struct {
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+
+	// Expected version string for the sda-cli client (e.g., "v1.2.3")
+	// If the client version header does not match this, the request is blocked.
+	// Optional. Default value is "v0.0.0"
+	ExpectedCliVersion string
 }
 
 // Stores the Crypt4GH private key used internally
@@ -242,6 +247,7 @@ func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
 	viper.SetDefault("app.middleware", "default")
+	viper.SetDefault("app.expectedcliversion", "v0.0.0")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
 	viper.SetDefault("session.httponly", true)
@@ -370,6 +376,7 @@ func (c *Map) appConfig() error {
 	c.App.ServerCert = viper.GetString("app.servercert")
 	c.App.ServerKey = viper.GetString("app.serverkey")
 	c.App.Middleware = viper.GetString("app.middleware")
+	c.App.ExpectedCliVersion = viper.GetString("app.expectedcliversion")
 
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")

@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
@@ -82,6 +85,94 @@ func TokenMiddleware() gin.HandlerFunc {
 
 		// Forward request to the next endpoint handler
 		c.Next()
+	}
+}
+
+// ClientVersionMiddleware checks for the required "sda-cli-version" header.
+// It aborts the request with 412 (Precondition Failed) if the header is missing or
+// if the version does not meet the minimum required version.
+func ClientVersionMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		clientVersionStr := c.GetHeader("sda-cli-version")
+		expectedVersionStr := config.Config.App.ExpectedCliVersion
+
+		// 1. Check if the header is present
+		if clientVersionStr == "" {
+			errorMessage := fmt.Sprintf(
+				"Error: Missing required header '%s'. Please ensure you are using the latest sda-cli client.",
+				"sda-cli-version",
+			)
+			log.Warnf("request blocked (412): Missing required header '%s'", "sda-cli-version")
+			c.String(http.StatusPreconditionFailed, errorMessage)
+			c.AbortWithStatus(http.StatusPreconditionFailed)
+
+			return
+		}
+
+		// Safely strip the common 'v' prefix before SemVer parsing.
+		processedClientVersionStr := clientVersionStr
+		if after, ok :=strings.CutPrefix(processedClientVersionStr, "v"); ok  {
+			processedClientVersionStr = after
+		}
+
+		// Parse the expected minimum version from config
+		requiredVersion, err := semver.NewVersion(expectedVersionStr)
+		if err != nil {
+			log.Errorf("configuration error: cannot parse expected minimum version '%s' as SemVer: %v. Blocking request.", expectedVersionStr, err)
+			c.String(http.StatusInternalServerError, "Internal Server Error: Invalid minimum client version configured.")
+			c.AbortWithStatus(http.StatusInternalServerError)
+
+			return
+		}
+
+		// Parse the client's provided version (using the processed string)
+		clientVersion, err := semver.NewVersion(processedClientVersionStr)
+		if err != nil {
+			log.Warnf("request blocked (412): processed client version header '%s' is not a valid semantic version: %v", processedClientVersionStr, err)
+			errorMessage := fmt.Sprintf(
+				"Error: Your sda-cli client version ('%s') is invalid. Required minimum version is '%s'.",
+				clientVersionStr,
+				expectedVersionStr,
+			)
+			c.String(http.StatusPreconditionFailed, errorMessage)
+			c.AbortWithStatus(http.StatusPreconditionFailed)
+
+			return
+		}
+
+		// 2. Check if the client version is sufficient (clientVersion >= requiredVersion)
+		if clientVersion.LessThan(requiredVersion) {
+			errorMessage := fmt.Sprintf(
+				"Error: Your sda-cli client version ('%s') is insufficient. Please update to at least version '%s' to proceed.",
+				clientVersionStr,
+				expectedVersionStr,
+			)
+			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, expectedVersionStr)
+			c.String(http.StatusPreconditionFailed, errorMessage)
+			c.AbortWithStatus(http.StatusPreconditionFailed)
+
+			return
+		}
+
+		// Version is correct, proceed to the next handler/middleware
+		log.Debugf("client version check passed: %s", clientVersionStr)
+	}
+}
+
+// ChainDefaultMiddleware chains the ClientVersionMiddleware and TokenMiddleware.
+// It is intended to be the default composite middleware set for the application.
+func ChainDefaultMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 1. Run the Client Version Check. This will abort if version is invalid/missing (HTTP 412)
+		ClientVersionMiddleware()(c)
+
+		// Check if the request was aborted by the version middleware
+		if c.IsAborted() {
+			return
+		}
+
+		// 2. Run the Token Middleware (only if version check passed)
+		TokenMiddleware()(c)
 	}
 }
 
