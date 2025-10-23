@@ -410,3 +410,103 @@ func TestClientVersionMiddleware(t *testing.T) {
 		})
 	}
 }
+
+func TestChainDefaultMiddleware_Success(t *testing.T) {
+	// Setup global mocks required for TokenMiddleware Success (No Cache)
+	originalGetToken := auth.GetToken
+	originalGetVisas := auth.GetVisas
+	originalGetPermissions := auth.GetPermissions
+	originalNewSessionKey := session.NewSessionKey
+	originalSessionName := config.Config.Session.Name
+
+	auth.GetToken = func(_ http.Header) (string, int, error) { return token, 200, nil }
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) { return &auth.Visas{}, nil }
+	auth.GetPermissions = func(_ auth.Visas) []string { return []string{"dataset1"} }
+	session.NewSessionKey = func() string { return "key" }
+	config.Config.Session.Name = "sda_session_key" // Set session name for cookie assertion
+
+	defer func() {
+		auth.GetToken = originalGetToken
+		auth.GetVisas = originalGetVisas
+		auth.GetPermissions = originalGetPermissions
+		session.NewSessionKey = originalNewSessionKey
+		config.Config.Session.Name = originalSessionName
+	}()
+
+	// Setup config for ClientVersionMiddleware Success
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	config.Config.App.ExpectedCliVersion = "v0.2.0"
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	// Setup Request/Response
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("sda-cli-version", "v0.3.0") // Newer version, should pass
+	_, router := gin.CreateTestContext(w)
+
+	// Send request through the chain middleware
+	router.GET("/", ChainDefaultMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
+
+	// Assertions
+	expectedStatusCode := http.StatusOK // Both middlewares passed
+	if w.Code != expectedStatusCode {
+		t.Errorf("TestChainDefaultMiddleware_Success failed, got status %d expected %d", w.Code, expectedStatusCode)
+	}
+	// Check that a session cookie was set by TokenMiddleware (confirming it ran)
+	cookies := w.Result().Cookies()
+	cookieFound := false
+	for _, c := range cookies {
+		if c.Name == "sda_session_key" {
+			cookieFound = true
+			break
+		}
+	}
+
+	if !cookieFound {
+		t.Error("TestChainDefaultMiddleware_Success failed, expected a session cookie, but none was found.")
+	}
+}
+
+func TestChainDefaultMiddleware_Fail_VersionAbortsChain(t *testing.T) {
+	// We use a flag to assert that TokenMiddleware was NOT executed.
+	originalGetToken := auth.GetToken
+	wasTokenCalled := false
+	auth.GetToken = func(_ http.Header) (string, int, error) {
+		wasTokenCalled = true
+
+		return token, 200, nil
+	}
+	defer func() {
+		auth.GetToken = originalGetToken
+	}()
+
+	// Setup config for ClientVersionMiddleware Failure (Insufficient version)
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	config.Config.App.ExpectedCliVersion = "v0.2.0"
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	// Setup Request/Response
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("sda-cli-version", "0.1.0") // Insufficient version, should abort (412)
+	_, router := gin.CreateTestContext(w)
+
+	// Send request through the chain middleware
+	router.GET("/", ChainDefaultMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
+
+	// Assertions
+	expectedStatusCode := http.StatusPreconditionFailed // 412
+	if w.Code != expectedStatusCode {
+		t.Errorf("TestChainDefaultMiddleware_Fail_VersionAbortsChain failed, got status %d expected %d", w.Code, expectedStatusCode)
+	}
+
+	if wasTokenCalled {
+		t.Error("TestChainDefaultMiddleware_Fail_VersionAbortsChain failed, TokenMiddleware was executed when it should have been aborted.")
+	}
+}
