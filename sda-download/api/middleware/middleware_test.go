@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -301,5 +302,111 @@ func TestGetDatasets(t *testing.T) {
 	storedDatasets := GetCacheFromContext(c)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
+	}
+}
+
+func TestClientVersionMiddleware(t *testing.T) {
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	const headerName = "sda-cli-version"
+
+	tests := []struct {
+		name                  string
+		clientVersionHeader   string
+		configExpectedVersion string
+		expectedStatus        int
+		expectedBodyContains  string
+	}{
+		{
+			name:                 "Fail_MissingHeader",
+			clientVersionHeader:  "",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "Missing required header",
+		},
+		{
+			name:                 "Fail_InvalidClientSemVer",
+			clientVersionHeader:  "v-invalid-1",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "is invalid",
+		},
+		{
+			name:                 "Fail_InsufficientVersion",
+			clientVersionHeader:  "v0.1.9",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "is insufficient. Please update to at least version 'v0.2.0'",
+		},
+		{
+			// This tests the logic for handling a bad configuration value
+			name:                 "Fail_InvalidConfigVersion",
+			clientVersionHeader:  "v0.2.0",
+			configExpectedVersion: "not-semver",
+			expectedStatus:       http.StatusInternalServerError, // 500
+			expectedBodyContains: "Internal Server Error: Invalid minimum client version configured.",
+		},
+		{
+			name:                 "Success_EqualVersion",
+			clientVersionHeader:  "v0.2.0",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:       http.StatusOK, // 200
+			expectedBodyContains: "",
+		},
+		{
+			name:                 "Success_NewerVersion",
+			clientVersionHeader:  "v0.3.0",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:       http.StatusOK, // 200
+			expectedBodyContains: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/", nil)
+			_, router := gin.CreateTestContext(w)
+
+			// Set the configuration mock and the request header
+			config.Config.App.ExpectedCliVersion = tt.configExpectedVersion
+			if tt.clientVersionHeader != "" {
+				r.Header.Set(headerName, tt.clientVersionHeader)
+			}
+
+			// Define a dummy handler to check if the middleware allowed passage
+			var passed bool
+			dummyHandler := func(c *gin.Context) {
+				passed = true
+				c.Status(http.StatusOK) // Explicitly set OK status if allowed to pass
+			}
+
+			// Send request through the middleware
+			router.GET("/", ClientVersionMiddleware(), dummyHandler)
+			router.ServeHTTP(w, r)
+
+			// Assertion 1: Check Status Code
+			if w.Code != tt.expectedStatus {
+				t.Errorf("status code mismatch.\nGot: %d\nWant: %d", w.Code, tt.expectedStatus)
+			}
+
+			// Assertion 2: Check Body Content for Failures
+			body := w.Body.String()
+			if tt.expectedStatus != http.StatusOK && !strings.Contains(body, tt.expectedBodyContains) {
+				t.Errorf("response body mismatch.\nGot Body: %s\nWant Body to contain: %s", body, tt.expectedBodyContains)
+			}
+
+			// Assertion 3: Check if the request was allowed to pass (only for success cases)
+			if tt.expectedStatus == http.StatusOK && !passed {
+				t.Error("success case failed: Middleware unexpectedly blocked the request.")
+			}
+			if tt.expectedStatus != http.StatusOK && passed {
+				t.Error("failure case failed: Middleware unexpectedly allowed the request to pass.")
+			}
+		})
 	}
 }
