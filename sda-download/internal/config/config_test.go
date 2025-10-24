@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/spf13/viper"
@@ -83,16 +84,27 @@ func (ts *TestSuite) TestAppConfig() {
 	viper.Set("db.sslmode", "disable")
 
 	viper.Set("app.middleware", "noexist")
+	viper.Set("app.expectedcliversion", "v0.2.0")
+
 
 	c := &Map{}
 	err = c.appConfig()
 	assert.Error(ts.T(), err, "Error expected")
 	viper.Reset()
 
+	// Test fail on invalid expected client version
+	viper.Set("app.expectedcliversion", "not-a-semver")
+	c = &Map{}
+	err = c.appConfig()
+	assert.Error(ts.T(), err, "Error expected for invalid semver string")
+	assert.Contains(ts.T(), err.Error(), "'not-a-semver' is not a valid semantic version")
+	viper.Reset()
+
 	viper.Set("app.host", "test")
 	viper.Set("app.port", 1234)
 	viper.Set("app.servercert", "test")
 	viper.Set("app.serverkey", "test")
+	viper.Set("app.expectedcliversion", "v0.2.0")
 	viper.Set("log.logLevel", "debug")
 	viper.Set("db.sslmode", "disable")
 	viper.Set("c4gh.transientKeyPath", privateKeyFile.Name())
@@ -107,6 +119,11 @@ func (ts *TestSuite) TestAppConfig() {
 	assert.Equal(ts.T(), "test", c.App.ServerKey)
 	assert.NotEmpty(ts.T(), c.C4GH.PrivateKey)
 	assert.NotEmpty(ts.T(), c.C4GH.PublicKeyB64)
+
+	// Assert ExpectedCliVersion
+	expectedVersion, _ := semver.NewVersion("v0.2.0")
+	assert.NotNil(ts.T(), c.App.ExpectedCliVersion, "ExpectedCliVersion should be parsed and not nil")
+	assert.True(ts.T(), expectedVersion.Equal(c.App.ExpectedCliVersion), "Parsed version does not match expected version")
 
 	// Check the private key that was loaded by checking the derived public key
 	publicKey, err := base64.StdEncoding.DecodeString(c.C4GH.PublicKeyB64)
