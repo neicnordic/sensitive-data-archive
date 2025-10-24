@@ -29,6 +29,51 @@ fi
 
 echo "Head method health endpoint is ok"
 
+# ------------------
+# Test Client Version Header
+# These tests verify that the version middleware runs before authentication.
+# We assume the app is configured to require a minimum version (v0.2.0).
+
+# Fail - missing header (expected 412 Precondition Failed)
+check_missing_header=$(curl -o /dev/null -s -w "%{http_code}\n" -X GET --cacert certs/ca.pem "https://localhost:8443/metadata/datasets")
+
+if [ "$check_missing_header" != "412" ]; then
+    echo "Client Version Test FAIL: missing header should return 412"
+    echo "got: ${check_missing_header}"
+    exit 1
+fi
+echo "Client Version Test OK: Missing header correctly returns 412"
+
+# Fail - insufficient version (e.g., v0.1.0, Expected 412)
+check_insufficient_version=$(curl -o /dev/null -s -w "%{http_code}\n" -X GET --cacert certs/ca.pem -H "SDA-Client-Version: v0.1.0" "https://localhost:8443/metadata/datasets")
+
+if [ "$check_insufficient_version" != "412" ]; then
+    echo "Client Version Test FAIL: insufficient version (v0.1.0) should return 412"
+    echo "got: ${check_insufficient_version}"
+    exit 1
+fi
+echo "Client Version Test OK: Insufficient version (v0.1.0) correctly returns 412"
+
+
+# Success - sufficient version (e.g., v0.2.0, Expected 401 from token middleware)
+check_sufficient_version=$(curl -o /dev/null -s -w "%{http_code}\n" -X GET --cacert certs/ca.pem -H "SDA-Client-Version: v0.2.0" "https://localhost:8443/metadata/datasets")
+
+if [ "$check_sufficient_version" != "401" ]; then
+    echo "Client Version Test FAIL: sufficient version (v0.2.0) passed version check but failed token check (Expected 401)"
+    echo "got: ${check_sufficient_version}"
+    exit 1
+fi
+echo "Client Version Test OK: sufficient version (v0.2.0) correctly proceeds to token check (returns 401)"
+
+# Test 4: Success - newer version (e.g., v1.0.0, Expected 401 from token middleware)
+check_newer_version=$(curl -o /dev/null -s -w "%{http_code}\n" -X GET --cacert certs/ca.pem -H "SDA-Client-Version: v1.0.0" "https://localhost:8443/metadata/datasets")
+
+if [ "$check_newer_version" != "401" ]; then
+    echo "Client Version Test FAIL: Newer version (v1.0.0) passed version check but failed token check (Expected 401)"
+    echo "got: ${check_newer_version}"
+    exit 1
+fi
+echo "Client Version Test OK: Newer version (v1.0.0) correctly proceeds to token check (returns 401)"
 
 # ------------------
 # Test empty token
