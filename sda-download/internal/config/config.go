@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sda-download/internal/storage"
@@ -60,6 +61,12 @@ type AppConfig struct {
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+
+	// Expected version string for the sda-cli client (e.g., "v1.2.3")
+	// If the client version header does not match this, the request is blocked.
+	// Optional. Default value is "v0.0.0"
+	ExpectedCliVersion    *semver.Version
+	ExpectedCliVersionStr string // This is the original string from the config file
 }
 
 // Stores the Crypt4GH private key used internally
@@ -242,6 +249,7 @@ func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
 	viper.SetDefault("app.middleware", "default")
+	viper.SetDefault("app.expectedcliversion", "v0.0.0")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
 	viper.SetDefault("session.httponly", true)
@@ -371,13 +379,20 @@ func (c *Map) appConfig() error {
 	c.App.ServerKey = viper.GetString("app.serverkey")
 	c.App.Middleware = viper.GetString("app.middleware")
 
+	// Validate and parse the configured minimum client version into a SemVer object
+	c.App.ExpectedCliVersionStr = viper.GetString("app.expectedcliversion")
+	parsedVersion, err := semver.NewVersion(c.App.ExpectedCliVersionStr)
+	if err != nil {
+		return fmt.Errorf("app.expectedcliversion value='%s' is not a valid semantic version: %v", c.App.ExpectedCliVersionStr, err)
+	}
+	c.App.ExpectedCliVersion = parsedVersion
+
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")
 	} else if c.App.ServerCert != "" && c.App.ServerKey != "" {
 		c.App.Port = 443
 	}
 
-	var err error
 	if viper.GetString("c4gh.transientKeyPath") != "" {
 		if !viper.IsSet("c4gh.transientPassphrase") {
 			return errors.New("c4gh.transientPassphrase is not set")
@@ -500,7 +515,7 @@ func GetC4GHKeys() ([32]byte, string, error) {
 	if err != nil {
 		return [32]byte{}, "", fmt.Errorf("error when reading private key: %v", err)
 	}
-	keyFile.Close()
+	_ = keyFile.Close()
 
 	public := keys.DerivePublicKey(private)
 	pem := bytes.Buffer{}

@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
@@ -301,5 +303,216 @@ func TestGetDatasets(t *testing.T) {
 	storedDatasets := GetCacheFromContext(c)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
+	}
+}
+
+func TestClientVersionMiddleware(t *testing.T) {
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	tests := []struct {
+		name                  string
+		clientVersionHeader   string
+		configExpectedVersion string
+		expectedStatus        int
+		expectedBodyContains  string
+	}{
+		{
+			name:                  "Fail_MissingHeader",
+			clientVersionHeader:   "",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "Missing required header",
+		},
+		{
+			name:                  "Fail_InvalidClientSemVer",
+			clientVersionHeader:   "v-invalid-1",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "is invalid",
+		},
+		{
+			name:                  "Fail_InsufficientVersion",
+			clientVersionHeader:   "v0.1.9",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "is insufficient. Please update to at least version 'v0.2.0'",
+		},
+		{
+			name:                  "Success_EqualVersion",
+			clientVersionHeader:   "v0.2.0",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:        http.StatusOK, // 200
+			expectedBodyContains:  "",
+		},
+		{
+			name:                  "Success_NewerVersion",
+			clientVersionHeader:   "v0.3.0",
+			configExpectedVersion: "v0.2.0",
+			expectedStatus:        http.StatusOK, // 200
+			expectedBodyContains:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/", nil)
+			_, router := gin.CreateTestContext(w)
+
+			config.Config.App.ExpectedCliVersionStr = tt.configExpectedVersion
+			// Set the configuration mock by parsing the string into the required SemVer object
+			parsedVersion, err := semver.NewVersion(tt.configExpectedVersion)
+			if err != nil {
+				t.Fatalf("Test setup error: Failed to parse expected version '%s': %v", tt.configExpectedVersion, err)
+			}
+			config.Config.App.ExpectedCliVersion = parsedVersion
+
+			if tt.clientVersionHeader != "" {
+				r.Header.Set("SDA-Client-Version", tt.clientVersionHeader)
+			}
+
+			// Define a dummy handler to check if the middleware allowed passage
+			var passed bool
+			dummyHandler := func(c *gin.Context) {
+				passed = true
+				c.Status(http.StatusOK) // Explicitly set OK status if allowed to pass
+			}
+
+			// Send request through the middleware
+			router.GET("/", ClientVersionMiddleware(), dummyHandler)
+			router.ServeHTTP(w, r)
+
+			// Assertion 1: Check Status Code
+			if w.Code != tt.expectedStatus {
+				t.Errorf("status code mismatch.\nGot: %d\nWant: %d", w.Code, tt.expectedStatus)
+			}
+
+			// Assertion 2: Check Body Content for Failures
+			body := w.Body.String()
+			if tt.expectedStatus != http.StatusOK && !strings.Contains(body, tt.expectedBodyContains) {
+				t.Errorf("response body mismatch.\nGot Body: %s\nWant Body to contain: %s", body, tt.expectedBodyContains)
+			}
+
+			// Assertion 3: Check if the request was allowed to pass (only for success cases)
+			if tt.expectedStatus == http.StatusOK && !passed {
+				t.Error("success case failed: Middleware unexpectedly blocked the request.")
+			}
+			if tt.expectedStatus != http.StatusOK && passed {
+				t.Error("failure case failed: Middleware unexpectedly allowed the request to pass.")
+			}
+		})
+	}
+}
+
+func TestChainDefaultMiddleware_Success(t *testing.T) {
+	// Setup global mocks required for TokenMiddleware Success (No Cache)
+	originalGetToken := auth.GetToken
+	originalGetVisas := auth.GetVisas
+	originalGetPermissions := auth.GetPermissions
+	originalNewSessionKey := session.NewSessionKey
+	originalSessionName := config.Config.Session.Name
+
+	auth.GetToken = func(_ http.Header) (string, int, error) { return token, 200, nil }
+	auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) { return &auth.Visas{}, nil }
+	auth.GetPermissions = func(_ auth.Visas) []string { return []string{"dataset1"} }
+	session.NewSessionKey = func() string { return "key" }
+	config.Config.Session.Name = "sda_session_key" // Set session name for cookie assertion
+
+	defer func() {
+		auth.GetToken = originalGetToken
+		auth.GetVisas = originalGetVisas
+		auth.GetPermissions = originalGetPermissions
+		session.NewSessionKey = originalNewSessionKey
+		config.Config.Session.Name = originalSessionName
+	}()
+
+	// Setup config for ClientVersionMiddleware Success
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	expectedCliVersion, err := semver.NewVersion("0.2.0")
+	if err != nil {
+		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
+	}
+	config.Config.App.ExpectedCliVersion = expectedCliVersion
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	// Setup Request/Response
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("SDA-Client-Version", "v0.3.0") // Newer version, should pass
+	_, router := gin.CreateTestContext(w)
+
+	// Send request through the chain middleware
+	router.GET("/", ChainDefaultMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
+
+	// Assertions
+	expectedStatusCode := http.StatusOK // Both middlewares passed
+	if w.Code != expectedStatusCode {
+		t.Errorf("TestChainDefaultMiddleware_Success failed, got status %d expected %d", w.Code, expectedStatusCode)
+	}
+	// Check that a session cookie was set by TokenMiddleware (confirming it ran)
+	cookies := w.Result().Cookies()
+	cookieFound := false
+	for _, c := range cookies {
+		if c.Name == "sda_session_key" {
+			cookieFound = true
+
+			break
+		}
+	}
+
+	if !cookieFound {
+		t.Error("TestChainDefaultMiddleware_Success failed, expected a session cookie, but none was found.")
+	}
+}
+
+func TestChainDefaultMiddleware_Fail_VersionAbortsChain(t *testing.T) {
+	// We use a flag to assert that TokenMiddleware was NOT executed.
+	originalGetToken := auth.GetToken
+	wasTokenCalled := false
+	auth.GetToken = func(_ http.Header) (string, int, error) {
+		wasTokenCalled = true
+
+		return token, 200, nil
+	}
+	defer func() {
+		auth.GetToken = originalGetToken
+	}()
+
+	// Setup config for ClientVersionMiddleware Failure (Insufficient version)
+	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	expectedCliVersion, err := semver.NewVersion("0.2.0")
+	if err != nil {
+		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
+	}
+	config.Config.App.ExpectedCliVersion = expectedCliVersion
+	defer func() {
+		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+	}()
+
+	// Setup Request/Response
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("SDA-Client-Version", "0.1.0") // Insufficient version, should abort (412)
+	_, router := gin.CreateTestContext(w)
+
+	// Send request through the chain middleware
+	router.GET("/", ChainDefaultMiddleware(), testEndpoint)
+	router.ServeHTTP(w, r)
+
+	// Assertions
+	expectedStatusCode := http.StatusPreconditionFailed // 412
+	if w.Code != expectedStatusCode {
+		t.Errorf("TestChainDefaultMiddleware_Fail_VersionAbortsChain failed, got status %d expected %d", w.Code, expectedStatusCode)
+	}
+
+	if wasTokenCalled {
+		t.Error("TestChainDefaultMiddleware_Fail_VersionAbortsChain failed, TokenMiddleware was executed when it should have been aborted.")
 	}
 }
