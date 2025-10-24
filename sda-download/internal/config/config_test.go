@@ -86,7 +86,6 @@ func (ts *TestSuite) TestAppConfig() {
 	viper.Set("app.middleware", "noexist")
 	viper.Set("app.expectedcliversion", "v0.2.0")
 
-
 	c := &Map{}
 	err = c.appConfig()
 	assert.Error(ts.T(), err, "Error expected")

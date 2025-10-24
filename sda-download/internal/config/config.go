@@ -65,7 +65,7 @@ type AppConfig struct {
 	// Expected version string for the sda-cli client (e.g., "v1.2.3")
 	// If the client version header does not match this, the request is blocked.
 	// Optional. Default value is "v0.0.0"
-	ExpectedCliVersion *semver.Version
+	ExpectedCliVersion    *semver.Version
 	ExpectedCliVersionStr string // This is the original string from the config file
 }
 
