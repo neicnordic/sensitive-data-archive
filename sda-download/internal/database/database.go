@@ -149,9 +149,9 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 
 // removeUserIDPrefix strips the user id prefix from a file path
 func removeUserIDPrefix(filePath, userID string) string {
-	strings.ReplaceAll(userID, "@", "_")
+	sanitizedUserID := strings.ReplaceAll(userID, "@", "_")
 	// Construct the full prefix we expect to find (userID + "/").
-	fullPrefix := userID + "/"
+	fullPrefix := sanitizedUserID + "/"
 	if strings.HasPrefix(filePath, fullPrefix) {
 		return strings.TrimPrefix(filePath, fullPrefix)
 	}
