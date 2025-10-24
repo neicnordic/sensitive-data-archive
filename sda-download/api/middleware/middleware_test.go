@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
@@ -311,8 +312,6 @@ func TestClientVersionMiddleware(t *testing.T) {
 		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
 	}()
 
-	const headerName = "sda-cli-version"
-
 	tests := []struct {
 		name                  string
 		clientVersionHeader   string
@@ -342,14 +341,6 @@ func TestClientVersionMiddleware(t *testing.T) {
 			expectedBodyContains: "is insufficient. Please update to at least version 'v0.2.0'",
 		},
 		{
-			// This tests the logic for handling a bad configuration value
-			name:                 "Fail_InvalidConfigVersion",
-			clientVersionHeader:  "v0.2.0",
-			configExpectedVersion: "not-semver",
-			expectedStatus:       http.StatusInternalServerError, // 500
-			expectedBodyContains: "Internal Server Error: Invalid minimum client version configured.",
-		},
-		{
 			name:                 "Success_EqualVersion",
 			clientVersionHeader:  "v0.2.0",
 			configExpectedVersion: "v0.2.0",
@@ -372,10 +363,16 @@ func TestClientVersionMiddleware(t *testing.T) {
 			r := httptest.NewRequest("GET", "/", nil)
 			_, router := gin.CreateTestContext(w)
 
-			// Set the configuration mock and the request header
-			config.Config.App.ExpectedCliVersion = tt.configExpectedVersion
+			config.Config.App.ExpectedCliVersionStr = tt.configExpectedVersion
+			// Set the configuration mock by parsing the string into the required SemVer object
+			parsedVersion, err := semver.NewVersion(tt.configExpectedVersion)
+			if err != nil {
+				t.Fatalf("Test setup error: Failed to parse expected version '%s': %v", tt.configExpectedVersion, err)
+			}
+			config.Config.App.ExpectedCliVersion = parsedVersion
+
 			if tt.clientVersionHeader != "" {
-				r.Header.Set(headerName, tt.clientVersionHeader)
+				r.Header.Set("SDA-Client-Version", tt.clientVersionHeader)
 			}
 
 			// Define a dummy handler to check if the middleware allowed passage
@@ -435,7 +432,11 @@ func TestChainDefaultMiddleware_Success(t *testing.T) {
 
 	// Setup config for ClientVersionMiddleware Success
 	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
-	config.Config.App.ExpectedCliVersion = "v0.2.0"
+	expectedCliVersion, err := semver.NewVersion("0.2.0") 
+	if err != nil {
+		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
+	}
+	config.Config.App.ExpectedCliVersion = expectedCliVersion 
 	defer func() {
 		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
 	}()
@@ -443,7 +444,7 @@ func TestChainDefaultMiddleware_Success(t *testing.T) {
 	// Setup Request/Response
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("sda-cli-version", "v0.3.0") // Newer version, should pass
+	r.Header.Set("SDA-Client-Version", "v0.3.0") // Newer version, should pass
 	_, router := gin.CreateTestContext(w)
 
 	// Send request through the chain middleware
@@ -485,7 +486,11 @@ func TestChainDefaultMiddleware_Fail_VersionAbortsChain(t *testing.T) {
 
 	// Setup config for ClientVersionMiddleware Failure (Insufficient version)
 	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
-	config.Config.App.ExpectedCliVersion = "v0.2.0"
+	expectedCliVersion, err := semver.NewVersion("0.2.0")
+	if err != nil {
+		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
+	}
+	config.Config.App.ExpectedCliVersion = expectedCliVersion
 	defer func() {
 		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
 	}()
@@ -493,7 +498,7 @@ func TestChainDefaultMiddleware_Fail_VersionAbortsChain(t *testing.T) {
 	// Setup Request/Response
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("sda-cli-version", "0.1.0") // Insufficient version, should abort (412)
+	r.Header.Set("SDA-Client-Version", "0.1.0") // Insufficient version, should abort (412)
 	_, router := gin.CreateTestContext(w)
 
 	// Send request through the chain middleware
