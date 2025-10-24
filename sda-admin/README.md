@@ -28,20 +28,33 @@ Use the following command to return all files belonging to the specified user `t
 sda-admin file list -user test-user@example.org
 ```
 
+
 ## Ingest a file
 
-Use the following command to trigger the ingesting of a given file `/path/to/file.c4gh` that belongs to the user `test-user@example.org`
+You can ingest a file either by specifying its path and user, or by using its file ID:
 
+**By file path and user:**
 ```sh
 sda-admin file ingest -filepath /path/to/file.c4gh -user test-user@example.org
 ```
 
+**By file ID:**
+```sh
+sda-admin file ingest -fileid <FILEUUID>
+```
+
 ## Assign an accession ID to a file
 
-Use the following command to assign an accession ID `my-accession-id-1` to a given file `/path/to/file.c4gh` that belongs to the user `test-user@example.org`
+You can assign an accession ID to a file either by specifying its path and user, or by using its file ID:
 
+**By file path and user:**
 ```sh
 sda-admin file set-accession -filepath /path/to/file.c4gh -user test-user@example.org -accession-id my-accession-id-1
+```
+
+**By file ID:**
+```sh
+sda-admin file set-accession -fileid <FILEUUID> -accession-id my-accession-id-1
 ```
 
 ## Create a dataset from a list of accession IDs and a dataset ID
