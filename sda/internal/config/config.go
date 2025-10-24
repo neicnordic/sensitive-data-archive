@@ -4,10 +4,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/c2h5oh/datasize"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -1130,6 +1133,73 @@ func parsePosixEndpoints(prefix string) ([]string, error) {
 	}
 
 	return endpoints, nil
+}
+
+func parseS3Endpoints(prefix string) (map[string]storage.S3Endpoint, error) {
+	s3endpoints := make(map[string]storage.S3Endpoint)
+
+	list := []storage.S3Endpoint{}
+	if err := viper.UnmarshalKey(
+		prefix+".s3endpoints",
+		&list,
+		func(config *mapstructure.DecoderConfig) {
+			config.WeaklyTypedInput = true
+			config.ZeroFields = true
+		},
+	); err != nil {
+		return s3endpoints, err
+	}
+
+	for _, e := range list {
+		switch {
+		case e.URL == "":
+			return s3endpoints, errors.New("missing required parameter s3endpoint URL")
+		case e.AccessKey == "":
+			return s3endpoints, errors.New("missing required parameter s3endpoint access key")
+		case e.SecretKey == "":
+			return s3endpoints, errors.New("missing required parameter s3endpoint secret key")
+		case e.BucketPrefix == "":
+			return s3endpoints, errors.New("missing required parameter s3 bucket prefix")
+		default:
+			u, err := url.ParseRequestURI(e.URL)
+			if err != nil {
+				return s3endpoints, err
+			}
+			switch {
+			case !strings.HasPrefix(u.Scheme, "http"):
+				return s3endpoints, errors.New("malformed url, scheme is missing")
+			default:
+			}
+
+			if e.MaxQuota != "" {
+				s, err := datasize.ParseString(e.MaxQuota)
+				if err != nil {
+					return s3endpoints, err
+				}
+
+				if s.Bytes() > 0 {
+					e.MaxQuota = s.String()
+				}
+			}
+
+			if e.Chunksize != "" {
+				s, err := datasize.ParseString(e.Chunksize)
+				if err != nil {
+					return s3endpoints, err
+				}
+
+				if s > 5*datasize.MB {
+					e.Chunksize = s.String()
+				} else {
+					e.Chunksize = ""
+				}
+			}
+
+			s3endpoints[e.URL] = e
+		}
+	}
+
+	return s3endpoints, nil
 }
 
 // configSFTP populates and returns a sftpConf with sftp backend configuration
