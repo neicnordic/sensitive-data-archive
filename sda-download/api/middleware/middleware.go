@@ -3,7 +3,6 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
@@ -88,51 +87,35 @@ func TokenMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ClientVersionMiddleware checks for the required "sda-cli-version" header.
+// ClientVersionMiddleware checks for the required "SDA-Client-Version" header.
 // It aborts the request with 412 (Precondition Failed) if the header is missing or
 // if the version does not meet the minimum required version.
 func ClientVersionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		clientVersionStr := c.GetHeader("sda-cli-version")
-		expectedVersionStr := config.Config.App.ExpectedCliVersion
+		const headerName = "SDA-Client-Version"
+		clientVersionStr := c.GetHeader(headerName)
 
 		// 1. Check if the header is present
 		if clientVersionStr == "" {
 			errorMessage := fmt.Sprintf(
 				"Error: Missing required header '%s'. Please ensure you are using the latest sda-cli client.",
-				"sda-cli-version",
+				headerName,
 			)
-			log.Warnf("request blocked (412): Missing required header '%s'", "sda-cli-version")
+			log.Warnf("request blocked (412): Missing required header '%s'", headerName)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.AbortWithStatus(http.StatusPreconditionFailed)
 
 			return
 		}
 
-		// Safely strip the common 'v' prefix before SemVer parsing.
-		processedClientVersionStr := clientVersionStr
-		if after, ok :=strings.CutPrefix(processedClientVersionStr, "v"); ok  {
-			processedClientVersionStr = after
-		}
-
-		// Parse the expected minimum version from config
-		requiredVersion, err := semver.NewVersion(expectedVersionStr)
-		if err != nil {
-			log.Errorf("configuration error: cannot parse expected minimum version '%s' as SemVer: %v. Blocking request.", expectedVersionStr, err)
-			c.String(http.StatusInternalServerError, "Internal Server Error: Invalid minimum client version configured.")
-			c.AbortWithStatus(http.StatusInternalServerError)
-
-			return
-		}
-
 		// Parse the client's provided version (using the processed string)
-		clientVersion, err := semver.NewVersion(processedClientVersionStr)
+		clientVersion, err := semver.NewVersion(clientVersionStr)
 		if err != nil {
-			log.Warnf("request blocked (412): processed client version header '%s' is not a valid semantic version: %v", processedClientVersionStr, err)
+			log.Warnf("request blocked (412): processed client version header '%s' is not a valid semantic version: %v", clientVersionStr, err)
 			errorMessage := fmt.Sprintf(
-				"Error: Your sda-cli client version ('%s') is invalid. Required minimum version is '%s'.",
+				"Error: Your sda-cli client version '%s' is invalid. Required minimum version is '%s'.",
 				clientVersionStr,
-				expectedVersionStr,
+				config.Config.App.ExpectedCliVersionStr,
 			)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.AbortWithStatus(http.StatusPreconditionFailed)
@@ -141,13 +124,13 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 		}
 
 		// 2. Check if the client version is sufficient (clientVersion >= requiredVersion)
-		if clientVersion.LessThan(requiredVersion) {
+		if clientVersion.LessThan(config.Config.App.ExpectedCliVersion) {
 			errorMessage := fmt.Sprintf(
-				"Error: Your sda-cli client version ('%s') is insufficient. Please update to at least version '%s' to proceed.",
+				"Error: Your sda-cli client version '%s' is insufficient. Please update to at least version '%s' to proceed.",
 				clientVersionStr,
-				expectedVersionStr,
+				config.Config.App.ExpectedCliVersionStr,
 			)
-			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, expectedVersionStr)
+			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.ExpectedCliVersionStr)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.AbortWithStatus(http.StatusPreconditionFailed)
 
