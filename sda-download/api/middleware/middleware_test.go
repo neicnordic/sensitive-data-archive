@@ -320,39 +320,39 @@ func TestClientVersionMiddleware(t *testing.T) {
 		expectedBodyContains  string
 	}{
 		{
-			name:                 "Fail_MissingHeader",
-			clientVersionHeader:  "",
+			name:                  "Fail_MissingHeader",
+			clientVersionHeader:   "",
 			configExpectedVersion: "v0.2.0",
-			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "Missing required header",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "Missing required header",
 		},
 		{
-			name:                 "Fail_InvalidClientSemVer",
-			clientVersionHeader:  "v-invalid-1",
+			name:                  "Fail_InvalidClientSemVer",
+			clientVersionHeader:   "v-invalid-1",
 			configExpectedVersion: "v0.2.0",
-			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "is invalid",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "is invalid",
 		},
 		{
-			name:                 "Fail_InsufficientVersion",
-			clientVersionHeader:  "v0.1.9",
+			name:                  "Fail_InsufficientVersion",
+			clientVersionHeader:   "v0.1.9",
 			configExpectedVersion: "v0.2.0",
-			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "is insufficient. Please update to at least version 'v0.2.0'",
+			expectedStatus:        http.StatusPreconditionFailed, // 412
+			expectedBodyContains:  "is insufficient. Please update to at least version 'v0.2.0'",
 		},
 		{
-			name:                 "Success_EqualVersion",
-			clientVersionHeader:  "v0.2.0",
+			name:                  "Success_EqualVersion",
+			clientVersionHeader:   "v0.2.0",
 			configExpectedVersion: "v0.2.0",
-			expectedStatus:       http.StatusOK, // 200
-			expectedBodyContains: "",
+			expectedStatus:        http.StatusOK, // 200
+			expectedBodyContains:  "",
 		},
 		{
-			name:                 "Success_NewerVersion",
-			clientVersionHeader:  "v0.3.0",
+			name:                  "Success_NewerVersion",
+			clientVersionHeader:   "v0.3.0",
 			configExpectedVersion: "v0.2.0",
-			expectedStatus:       http.StatusOK, // 200
-			expectedBodyContains: "",
+			expectedStatus:        http.StatusOK, // 200
+			expectedBodyContains:  "",
 		},
 	}
 
@@ -432,11 +432,11 @@ func TestChainDefaultMiddleware_Success(t *testing.T) {
 
 	// Setup config for ClientVersionMiddleware Success
 	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
-	expectedCliVersion, err := semver.NewVersion("0.2.0") 
+	expectedCliVersion, err := semver.NewVersion("0.2.0")
 	if err != nil {
 		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
 	}
-	config.Config.App.ExpectedCliVersion = expectedCliVersion 
+	config.Config.App.ExpectedCliVersion = expectedCliVersion
 	defer func() {
 		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
 	}()
@@ -462,6 +462,7 @@ func TestChainDefaultMiddleware_Success(t *testing.T) {
 	for _, c := range cookies {
 		if c.Name == "sda_session_key" {
 			cookieFound = true
+
 			break
 		}
 	}
