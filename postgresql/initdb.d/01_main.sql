@@ -35,7 +35,8 @@ VALUES (0, now(), 'Created with version'),
        (18, now(), 'Create rotatekey role and grant it privileges to sda tables'),
        (19, now(), 'Create new indexes on files and file_event_log tables'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
-       (21, now(), 'Drop functions set_verified, and set_archived');
+       (21, now(), 'Drop functions set_verified, and set_archived'),
+       (22, now(), 'Expand files table with storage locations');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -62,12 +63,15 @@ CREATE TABLE files (
     stable_id            TEXT UNIQUE,
 
     submission_user      TEXT,
+    submission_location  TEXT,
     submission_file_path TEXT DEFAULT '' NOT NULL,
 
     submission_file_size BIGINT,
+    archive_location     TEXT,
     archive_file_path    TEXT DEFAULT '' NOT NULL,
     archive_file_size    BIGINT,
     decrypted_file_size  BIGINT,
+    backup_location      TEXT,
     backup_path          TEXT,
 
     header               TEXT,
