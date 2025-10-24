@@ -1,3 +1,6 @@
+app:
+  expectedcliversion: "v0.2.0"
+
 log:
   level: "debug"
   format: "json"
