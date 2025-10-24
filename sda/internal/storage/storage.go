@@ -166,6 +166,19 @@ type S3Conf struct {
 	NonExistRetryTime time.Duration
 	Readypath         string
 }
+type S3Endpoint struct {
+	AccessKey    string `mapstructure:"access_key"`
+	BucketPrefix string `mapstructure:"bucket_prefix"`
+	CACert       string `mapstructure:"ca_cert"`
+	Chunksize    string `mapstructure:"chunksize"`
+	MaxBuckets   int    `mapstructure:"max_buckets"`
+	MaxObjects   int    `mapstructure:"max_objects"`
+	MaxQuota     string `mapstructure:"max_quota"`
+	Readypath    string `mapstructure:"ready_path"`
+	Region       string `mapstructure:"region"`
+	SecretKey    string `mapstructure:"secret_key"`
+	URL          string `mapstructure:"url"`
+}
 
 func newS3Backend(conf S3Conf) (*s3Backend, error) {
 	s3Client, err := NewS3Client(conf)
