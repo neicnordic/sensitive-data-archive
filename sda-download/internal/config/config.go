@@ -515,7 +515,7 @@ func GetC4GHKeys() ([32]byte, string, error) {
 	if err != nil {
 		return [32]byte{}, "", fmt.Errorf("error when reading private key: %v", err)
 	}
-	keyFile.Close()
+	_ = keyFile.Close()
 
 	public := keys.DerivePublicKey(private)
 	pem := bytes.Buffer{}
