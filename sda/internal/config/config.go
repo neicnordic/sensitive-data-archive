@@ -1121,6 +1121,17 @@ func configS3Storage(prefix string) storage.S3Conf {
 	return s3
 }
 
+func parsePosixEndpoints(prefix string) ([]string, error) {
+	endpoints := viper.GetStringSlice(prefix + ".posixEndpoints")
+	for _, e := range endpoints {
+		if !strings.HasPrefix(e, "/") {
+			return nil, errors.New("posix paths must be absolute")
+		}
+	}
+
+	return endpoints, nil
+}
+
 // configSFTP populates and returns a sftpConf with sftp backend configuration
 func configSFTP(prefix string) storage.SftpConf {
 	sftpConf := storage.SftpConf{}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -619,4 +621,97 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
 	_, err = NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+}
+
+func (ts *ConfigTestSuite) TestParsePosixEndpoints() {
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigType("yaml")
+	for _, step := range []struct {
+		name            string
+		conf            []byte
+		envConf         string
+		expectedError   string
+		expectedEntries int
+	}{
+		{
+			name: "conf_OK",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - /mnt/second
+`),
+			envConf:         "",
+			expectedError:   "",
+			expectedEntries: 2,
+		},
+		{
+			name:            "empty_OK",
+			conf:            nil,
+			envConf:         "",
+			expectedError:   "",
+			expectedEntries: 0,
+		},
+		{
+			name:            "env_one_OK",
+			conf:            nil,
+			envConf:         "/mnt/archive",
+			expectedError:   "",
+			expectedEntries: 1,
+		},
+		{
+			name:            "env_two_OK",
+			conf:            nil,
+			envConf:         "/mnt/archive1 /mnt/archive2",
+			expectedError:   "",
+			expectedEntries: 2,
+		},
+		{
+			name: "env_override_OK",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - /mnt/second
+  - /mnt/third
+`),
+			envConf:         "/data/archive",
+			expectedError:   "",
+			expectedEntries: 1,
+		},
+		{
+			name:            "bad_path",
+			conf:            nil,
+			envConf:         "data/temp",
+			expectedError:   "posix paths must be absolute",
+			expectedEntries: 0,
+		},
+		{
+			name: "bad_yaml",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - .
+  - /mnt/second
+`),
+			envConf:         "",
+			expectedError:   "posix paths must be absolute",
+			expectedEntries: 0,
+		},
+	} {
+		ts.T().Run(step.name, func(t *testing.T) {
+			assert.NoError(t, viper.ReadConfig(bytes.NewBuffer(step.conf)))
+			os.Setenv("ARCHIVE_POSIXENDPOINTS", step.envConf)
+			endpoints, err := parsePosixEndpoints("archive")
+			if step.expectedError != "" {
+				assert.Equal(t, err.Error(), step.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, step.expectedEntries, len(endpoints))
+		})
+	}
 }
