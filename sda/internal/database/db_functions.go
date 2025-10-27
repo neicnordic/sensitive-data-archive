@@ -270,11 +270,11 @@ func (dbs *SDAdb) rotateHeaderKey(header []byte, keyHash, fileID string) error {
 }
 
 // SetArchived marks the file as 'ARCHIVED'
-func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
+func (dbs *SDAdb) SetArchived(location string, file FileInfo, fileID string) error {
 	var err error
 
 	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.setArchived(file, fileID)
+		err = dbs.setArchived(location, file, fileID)
 		if err == nil {
 			break
 		}
@@ -283,12 +283,12 @@ func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
 
 	return err
 }
-func (dbs *SDAdb) setArchived(file FileInfo, fileID string) error {
+func (dbs *SDAdb) setArchived(location string, file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const setArchived = "UPDATE sda.files SET archive_file_path = $1, archive_file_size = $2 WHERE id = $3;"
-	if _, err := db.Exec(setArchived, file.Path, file.Size, fileID); err != nil {
+	const setArchived = "UPDATE sda.files SET archive_location = $1, archive_file_path = $2, archive_file_size = $3 WHERE id = $4;"
+	if _, err := db.Exec(setArchived, location, file.Path, file.Size, fileID); err != nil {
 		return fmt.Errorf("setArchived error: %s", err.Error())
 	}
 
