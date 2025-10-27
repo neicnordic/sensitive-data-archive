@@ -22,14 +22,14 @@ import (
 // If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
 // If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
 // and a different fileId is provided, the fileId in the database will NOT be updated.
-func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (string, error) {
+func (dbs *SDAdb) RegisterFile(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	if dbs.Version < 4 {
 		return "", errors.New("database schema v4 required for RegisterFile()")
 	}
 
-	query := "SELECT sda.register_file($1, $2, $3);"
+	query := "SELECT sda.register_file($1, $2, $3, $4);"
 
 	var createdFileID string
 
@@ -39,7 +39,7 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 		fileIDArg.String = *fileID
 	}
 
-	err := dbs.DB.QueryRow(query, fileIDArg, uploadPath, uploadUser).Scan(&createdFileID)
+	err := dbs.DB.QueryRow(query, fileIDArg, inboxLocation, uploadPath, uploadUser).Scan(&createdFileID)
 
 	return createdFileID, err
 }
