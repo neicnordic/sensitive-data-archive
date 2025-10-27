@@ -115,7 +115,7 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 			errorMessage := fmt.Sprintf(
 				"Error: Your sda-cli client version '%s' is invalid. Required minimum version is '%s'.",
 				clientVersionStr,
-				config.Config.App.ExpectedCliVersionStr,
+				config.Config.App.MinimalCliVersionStr,
 			)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.AbortWithStatus(http.StatusPreconditionFailed)
@@ -124,13 +124,13 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 		}
 
 		// 2. Check if the client version is sufficient (clientVersion >= requiredVersion)
-		if clientVersion.LessThan(config.Config.App.ExpectedCliVersion) {
+		if clientVersion.LessThan(config.Config.App.MinimalCliVersion) {
 			errorMessage := fmt.Sprintf(
 				"Error: Your sda-cli client version '%s' is insufficient. Please update to at least version '%s' to proceed.",
 				clientVersionStr,
-				config.Config.App.ExpectedCliVersionStr,
+				config.Config.App.MinimalCliVersionStr,
 			)
-			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.ExpectedCliVersionStr)
+			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.MinimalCliVersionStr)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.AbortWithStatus(http.StatusPreconditionFailed)
 

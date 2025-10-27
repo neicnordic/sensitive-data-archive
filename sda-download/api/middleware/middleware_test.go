@@ -307,9 +307,9 @@ func TestGetDatasets(t *testing.T) {
 }
 
 func TestClientVersionMiddleware(t *testing.T) {
-	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
+	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
 	defer func() {
-		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
 	}()
 
 	tests := []struct {
@@ -363,13 +363,13 @@ func TestClientVersionMiddleware(t *testing.T) {
 			r := httptest.NewRequest("GET", "/", nil)
 			_, router := gin.CreateTestContext(w)
 
-			config.Config.App.ExpectedCliVersionStr = tt.configExpectedVersion
+			config.Config.App.MinimalCliVersionStr = tt.configExpectedVersion
 			// Set the configuration mock by parsing the string into the required SemVer object
 			parsedVersion, err := semver.NewVersion(tt.configExpectedVersion)
 			if err != nil {
 				t.Fatalf("Test setup error: Failed to parse expected version '%s': %v", tt.configExpectedVersion, err)
 			}
-			config.Config.App.ExpectedCliVersion = parsedVersion
+			config.Config.App.MinimalCliVersion = parsedVersion
 
 			if tt.clientVersionHeader != "" {
 				r.Header.Set("SDA-Client-Version", tt.clientVersionHeader)
@@ -431,14 +431,14 @@ func TestChainDefaultMiddleware_Success(t *testing.T) {
 	}()
 
 	// Setup config for ClientVersionMiddleware Success
-	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
-	expectedCliVersion, err := semver.NewVersion("0.2.0")
+	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
+	parsedVersion, err := semver.NewVersion("0.2.0")
 	if err != nil {
 		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
 	}
-	config.Config.App.ExpectedCliVersion = expectedCliVersion
+	config.Config.App.MinimalCliVersion = parsedVersion
 	defer func() {
-		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
 	}()
 
 	// Setup Request/Response
@@ -486,14 +486,14 @@ func TestChainDefaultMiddleware_Fail_VersionAbortsChain(t *testing.T) {
 	}()
 
 	// Setup config for ClientVersionMiddleware Failure (Insufficient version)
-	originalExpectedCliVersion := config.Config.App.ExpectedCliVersion
-	expectedCliVersion, err := semver.NewVersion("0.2.0")
+	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
+	minimalCliVersion, err := semver.NewVersion("0.2.0")
 	if err != nil {
 		t.Fatalf("Test setup error: Failed to parse expected version '0.2.0': %v", err)
 	}
-	config.Config.App.ExpectedCliVersion = expectedCliVersion
+	config.Config.App.MinimalCliVersion = minimalCliVersion
 	defer func() {
-		config.Config.App.ExpectedCliVersion = originalExpectedCliVersion
+		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
 	}()
 
 	// Setup Request/Response
