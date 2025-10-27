@@ -81,9 +81,6 @@ func TokenMiddleware() gin.HandlerFunc {
 		// Store dataset list to request context, for use in the endpoint handlers
 		log.Debugf("storing %v to request context", cache)
 		c.Set(requestContextKey, cache)
-
-		// Forward request to the next endpoint handler
-		c.Next()
 	}
 }
 
@@ -142,20 +139,26 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ChainDefaultMiddleware chains the ClientVersionMiddleware and TokenMiddleware.
+// ChainDefaultMiddleware chains the TokenMiddleware and ClientVersionMiddleware,
+// prioritizing authentication before checking client version requirements.
 // It is intended to be the default composite middleware set for the application.
 func ChainDefaultMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Run the Client Version Check. This will abort if version is invalid/missing (HTTP 412)
-		ClientVersionMiddleware()(c)
+		// Run the Token Middleware. This will abort if authentication fails (HTTP 401)
+		TokenMiddleware()(c)
 
-		// Check if the request was aborted by the version middleware
 		if c.IsAborted() {
 			return
 		}
 
-		// 2. Run the Token Middleware (only if version check passed)
-		TokenMiddleware()(c)
+		// Run the Client Version Check (only if token check passed). This will abort if version is invalid/missing (HTTP 412)
+		ClientVersionMiddleware()(c)
+
+		if c.IsAborted() {
+			return
+		}
+
+		c.Next()
 	}
 }
 
