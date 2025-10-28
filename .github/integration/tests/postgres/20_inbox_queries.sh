@@ -26,6 +26,12 @@ for host in migrate postgres; do
         echo "Mark file as uploaded failed"
         exit 1
     fi
+
+    otherID=$(psql -U inbox -h "$host" -d sda -At -c "SELECT sda.register_file('/inbox', 'other-file.c4gh', 'test-user', '5f948ba8-888d-4a63-b532-fae2f62af3bf');")
+    if [ -z "$otherID" ]; then
+        echo "register_file failed"
+        exit 1
+    fi
 done
 
 echo "20_inbox_queries completed successfully"
