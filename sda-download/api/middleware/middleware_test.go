@@ -507,7 +507,7 @@ func TestChainDefaultMiddleware(t *testing.T) {
 			}
 
 			_, router := gin.CreateTestContext(w)
-			router.GET("/", ChainDefaultMiddleware(), testEndpoint)
+			router.GET("/", append(ChainDefaultMiddleware(), testEndpoint)...)
 			router.ServeHTTP(w, r)
 
 			// Assert Status Code
