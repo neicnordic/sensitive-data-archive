@@ -150,6 +150,13 @@
             "arguments": {}
         },
         {
+            "name": "rotatekey",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
             "name": "catch_all.dead",
             "vhost": "sda",
             "durable": true,
@@ -256,6 +263,14 @@
             "arguments": {},
             "destination": "verified",
             "routing_key": "verified"
+        },
+        {
+            "source": "sda",
+            "vhost": "sda",
+            "destination_type": "queue",
+            "arguments": {},
+            "destination": "rotatekey",
+            "routing_key": "rotatekey"
         },
         {
             "source": "sda.dead",
