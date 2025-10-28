@@ -1593,7 +1593,7 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "archived")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileID2)
-  
+
 	db.Close()
 }
 
