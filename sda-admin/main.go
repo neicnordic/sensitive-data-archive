@@ -34,6 +34,8 @@ Commands:
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
                                 Release a dataset for downloading.
+  dataset rotatekey -dataset-id DATASET_ID
+                                Rotate encryption keys for all files in a dataset.
   
 Global Options:
   -uri URI         Set the URI for the API server (optional if API_HOST is set).
@@ -99,6 +101,10 @@ Release a dataset:
   Usage: sda-admin dataset release -dataset-id DATASET_ID
     Release a dataset for downloading based on its dataset ID.
 
+Rotate keys for a dataset:
+  Usage: sda-admin dataset rotatekey -dataset-id DATASET_ID
+    Rotate encryption keys for all files in a dataset.
+
 Options:
   -dataset-id DATASET_ID   Specify the unique identifier for the dataset.
   [ACCESSION_ID ...]       (For dataset create) Specify one or more accession IDs to include in the dataset.
@@ -114,6 +120,12 @@ Options:
 
 var datasetReleaseUsage = `Usage: sda-admin dataset release -dataset-id DATASET_ID
   Release a dataset for downloading based on its dataset ID.
+
+Options:
+  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
+
+var datasetRotateKeyUsage = `Usage: sda-admin dataset rotatekey -dataset-id DATASET_ID
+  Rotate encryption keys for all files in a dataset.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
@@ -265,6 +277,8 @@ func handleHelpDataset() error {
 		fmt.Println(datasetCreateUsage)
 	case flag.Arg(2) == "release":
 		fmt.Println(datasetReleaseUsage)
+	case flag.Arg(2) == "rotatekey":
+		fmt.Println(datasetRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
@@ -389,7 +403,7 @@ func handleFileAccessionCommand() error {
 
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
-		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release).\n%s", datasetUsage)
+		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release, rotatekey).\n%s", datasetUsage)
 	}
 
 	switch flag.Arg(1) {
@@ -399,6 +413,10 @@ func handleDatasetCommand() error {
 		}
 	case "release":
 		if err := handleDatasetReleaseCommand(); err != nil {
+			return err
+		}
+	case "rotatekey":
+		if err := handleDatasetRotateKeyCommand(); err != nil {
 			return err
 		}
 	default:
@@ -452,6 +470,27 @@ func handleDatasetReleaseCommand() error {
 	err := dataset.Release(apiURI, token, datasetID)
 	if err != nil {
 		return fmt.Errorf("error: failed to release dataset, reason: %v", err)
+	}
+
+	return nil
+}
+
+func handleDatasetRotateKeyCommand() error {
+	datasetRotateKeyCmd := flag.NewFlagSet("rotatekey", flag.ExitOnError)
+	var datasetID string
+	datasetRotateKeyCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to rotate keys for")
+
+	if err := datasetRotateKeyCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	if datasetID == "" {
+		return fmt.Errorf("error: -dataset-id is required.\n%s", datasetRotateKeyUsage)
+	}
+
+	err := dataset.RotateKey(apiURI, token, datasetID)
+	if err != nil {
+		return fmt.Errorf("error: failed to rotate keys for dataset, reason: %v", err)
 	}
 
 	return nil
