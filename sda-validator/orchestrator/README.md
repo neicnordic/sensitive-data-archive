@@ -24,13 +24,15 @@ To generate a go-gin-server template and helper structs, run the following comma
 additional files which are not needed and are removed as part of the following command
 
 ``` bash 
-$ openapi-generator-cli generate -g go-gin-server -i swagger_v1.yml -o openapi/go-gin-server --openapi-normalizer SET_TAGS_FOR_ALL_OPERATIONS=validator_orchestrator --additional-properties=interfaceOnly=true
-# Remove unneeded files
-$ rm -r openapi/go-gin-server/.openapi-generator
-$ rm -r openapi/go-gin-server/api
-$ rm -r openapi/go-gin-server/Dockerfile
-$ rm -r openapi/go-gin-server/go.*
-$ rm -r openapi/go-gin-server/main.go
-$ rm -r openapi/go-gin-server/.openapi-generator-ignore
-$ rm -r openapi/go-gin-server/go/README.md
+rm -rf api/openapi_interface/*
+openapi-generator-cli generate -g go-gin-server -i swagger_v1.yml -o api/openapi_interface --openapi-normalizer SET_TAGS_FOR_ALL_OPERATIONS=validator_orchestrator --additional-properties=interfaceOnly=true
+rm -rf api/openapi_interface/.openapi-generator
+rm -rf api/openapi_interface/api
+rm -rf api/openapi_interface/Dockerfile
+rm -rf api/openapi_interface/go.*
+rm -rf api/openapi_interface/main.go
+rm -rf api/openapi_interface/.openapi-generator-ignore
+rm -rf api/openapi_interface/go/README.md
+mv api/openapi_interface/go/* api/openapi_interface/
+rm -rf api/openapi_interface/go/
 ```

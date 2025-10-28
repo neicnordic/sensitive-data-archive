@@ -18,11 +18,78 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ValidateResponse"
+                type: object
+                properties:
+                  validation_id:
+                    description: "The validation id"
+                    type: string
         "400":
           description: Bad payload
         "401":
           description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /admin/validate:
+    post:
+      description: Request a set of files to be validated with a set of validators for a specific user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminValidateRequest"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation_id:
+                    description: "The validation id"
+                    type: string
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /result:
+    get:
+      description: "Get the result of a validation"
+      parameters:
+        - in: path
+          name: validation_id
+          schema:
+            type: string
+            description: "The validation id to fetch result for"
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "500":
+          description: Internal application error.
+  /admin/result:
+    get:
+      description: "Get the result of a validation from any user"
+      parameters:
+        - in: path
+          name: validation_id
+          schema:
+            type: string
+            description: "The validation id to fetch result for"
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
         "500":
           description: Internal application error.
   /validators:
@@ -34,7 +101,7 @@ paths:
           content:
             application/json:
               schema:
-                description: "The validators to be executed"
+                description: "The available validators to be executed"
                 type: array
                 items:
                   type: string
@@ -59,33 +126,55 @@ components:
           items:
             type: string
           example: ["xml-validator", "file-structure-validator"]
+    AdminValidateRequest:
+      type: object
+      properties:
+        file_paths:
+          description: "The file paths to be validated"
+          type: array
+          items:
+            type: string
+          example: ["dataset_001/metadata.xml", "dataset_001/datafile.bam", "dataset_001/datafile.bam.bai"]
+        validators:
+          description: "The validators to be executed"
+          type: array
+          items:
+            type: string
+          example: ["xml-validator", "file-structure-validator"]
         user_id:
           type: string
-    ValidateResponse:
+    ResultResponse:
       type: array
       items:
         type: object
         properties:
-          validator:
-            description: "Name of the validator this result reefers to"
+          validator_id:
+            description: "The id of the validator"
             type: string
           result:
-            description: "Completed / Failed, denotes if the validation was executed successfully or not"
+            description: "Denotes the overall result of the validator validation"
             type: string
+            enum: ["Pending", "Success", "Failed", "Error"]
+          started_at:
+            type: string
+            description: "The time the validator validation was started RFC3339 format"
+            format: date-time
+          finished_at:
+            type: string
+            description: "The time the validator validation was finished RFC3339 format"
+            format: date-time
           files:
             type: array
             items:
               type: object
               properties:
-                id:
-                  description: "Id of the file"
-                  type: string
                 path:
                   description: "Path of the file"
                   type: string
                 result:
-                  description: "Success / Failure, denotes if the validation was successful or failed"
+                  description: "Denotes the result of validation of the file"
                   type: string
+                  enum: ["Pending", "Success", "Failed", "Error"]
                 messages:
                   type: array
                   items:
