@@ -100,7 +100,7 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 			)
 			log.Warnf("request blocked (412): Missing required header '%s'", headerName)
 			c.String(http.StatusPreconditionFailed, errorMessage)
-			c.AbortWithStatus(http.StatusPreconditionFailed)
+			c.Abort()
 
 			return
 		}
@@ -115,7 +115,7 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 				config.Config.App.MinimalCliVersionStr,
 			)
 			c.String(http.StatusPreconditionFailed, errorMessage)
-			c.AbortWithStatus(http.StatusPreconditionFailed)
+			c.Abort()
 
 			return
 		}
@@ -129,7 +129,7 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 			)
 			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.MinimalCliVersionStr)
 			c.String(http.StatusPreconditionFailed, errorMessage)
-			c.AbortWithStatus(http.StatusPreconditionFailed)
+			c.Abort()
 
 			return
 		}
