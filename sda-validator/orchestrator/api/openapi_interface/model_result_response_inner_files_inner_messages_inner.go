@@ -9,7 +9,7 @@
 
 package openapi
 
-type ValidateResponseInnerFilesInnerMessagesInner struct {
+type ResultResponseInnerFilesInnerMessagesInner struct {
 
 	// Level of message
 	Level string `json:"level,omitempty"`

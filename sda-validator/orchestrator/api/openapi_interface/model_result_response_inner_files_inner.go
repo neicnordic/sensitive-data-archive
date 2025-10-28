@@ -9,16 +9,13 @@
 
 package openapi
 
-type ValidateResponseInnerFilesInner struct {
-
-	// Id of the file
-	Id string `json:"id,omitempty"`
+type ResultResponseInnerFilesInner struct {
 
 	// Path of the file
 	Path string `json:"path,omitempty"`
 
-	// Success / Failure, denotes if the validation was successful or failed
+	// Denotes the result of validation of the file
 	Result string `json:"result,omitempty"`
 
-	Messages []ValidateResponseInnerFilesInnerMessagesInner `json:"messages,omitempty"`
+	Messages []ResultResponseInnerFilesInnerMessagesInner `json:"messages,omitempty"`
 }

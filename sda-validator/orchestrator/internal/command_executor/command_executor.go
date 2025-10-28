@@ -1,4 +1,4 @@
-package command_executor_go
+package command_executor
 
 import "os/exec"
 

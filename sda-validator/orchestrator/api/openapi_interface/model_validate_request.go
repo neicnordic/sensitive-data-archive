@@ -16,6 +16,4 @@ type ValidateRequest struct {
 
 	// The validators to be executed
 	Validators []string `json:"validators,omitempty"`
-
-	UserId string `json:"user_id,omitempty"`
 }
