@@ -2,518 +2,466 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/neicnordic/crypt4gh/keys"
-	"github.com/neicnordic/crypt4gh/streaming"
+	"github.com/google/uuid"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/validators"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
 
 type ValidatorAPITestSuite struct {
 	suite.Suite
 
-	tempDir string
+	tempDir        string
+	ginEngine      *gin.Engine
+	httpTestServer *httptest.Server
+
+	mockDatabase *mockDatabase
+	mockBroker   *mockBroker
 }
 
+type mockDatabase struct {
+	mock.Mock
+}
+
+func (m *mockDatabase) Commit() error {
+	_ = m.Called()
+	return nil
+}
+
+func (m *mockDatabase) Rollback() error {
+	_ = m.Called()
+	return nil
+}
+
+func (m *mockDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
+	_ = m.Called()
+	return m, nil
+}
+
+func (m *mockDatabase) Close() error {
+	_ = m.Called()
+	return nil
+}
+
+func (m *mockDatabase) ReadValidationResult(_ context.Context, validationID string, userID *string) (*model.ValidationResult, error) {
+	args := m.Called(validationID, userID)
+	return args.Get(0).(*model.ValidationResult), args.Error(1)
+}
+
+func (m *mockDatabase) ReadValidationInformation(_ context.Context, _ string) (*model.ValidationInformation, error) {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.ReadValidationInformation call not expected in unit tests")
+}
+
+func (m *mockDatabase) InsertFileValidationJob(_ context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
+	args := m.Called(validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt.Format(time.RFC3339))
+	return args.Error(0)
+}
+
+func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, _, _, _, _ string, _ []*model.Message, _ time.Time, _ string, _ []*model.Message) error {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.UpdateFileValidationJob call not expected in unit tests")
+}
+
+func (m *mockDatabase) AllValidationJobsDone(_ context.Context, _ string) (bool, error) {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.AllValidationJobsDone call not expected in unit tests")
+}
+
+type mockBroker struct {
+	mock.Mock
+}
+
+func (m *mockBroker) PublishMessage(_ context.Context, destination string, body []byte) error {
+	args := m.Called(destination, body)
+	return args.Error(0)
+}
+
+func (m *mockBroker) Subscribe(_ context.Context, queue, consumerID string, handleFunc func(context.Context, amqp.Delivery) error) error {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.subscribe call not expected in unit tests")
+}
+
+func (m *mockBroker) Close() error {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.close call not expected in unit tests")
+}
+
+func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
+	// Function not needed for unit test, but to implement interface
+	panic("broker.ConnectionWatcher call not expected in unit tests")
+}
+
+func mockAuthenticator(c *gin.Context) {
+	token := jwt.New()
+	if err := token.Set("sub", "test_user"); err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Set("token", token)
+}
+
+func (ts *ValidatorAPITestSuite) SetupSuite() {
+	ts.mockDatabase = &mockDatabase{}
+	ts.mockBroker = &mockBroker{}
+
+	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+		switch req.RequestURI {
+		case "/users/test_user/files", "/users/different_user/files":
+			// Set the response status code
+			w.WriteHeader(http.StatusOK)
+			// Set the response body
+			_, _ = w.Write([]byte(`[
+{
+	"FileID": "test-file-id-1",
+	"InboxPath": "testFile1",
+	"submissionFileSize": 1024
+},{
+	"FileID": "test-file-id-2",
+	"InboxPath": "testFile2",
+	"submissionFileSize": 1024
+},{
+	"FileID": "test-file-id-3",
+	"InboxPath": "testFile3",
+	"submissionFileSize": 1024
+},{
+	"FileID": "test-file-id-4",
+	"InboxPath": "test_dir/testFile4",
+	"submissionFileSize": 1024
+},{
+	"FileID": "test-file-id-5",
+	"InboxPath": "test_dir/testFile5",
+    "submissionFileSize": 1024
+}
+]`))
+		default:
+			// Set the response status code
+			w.WriteHeader(http.StatusInternalServerError)
+			// Set the response body
+			_, _ = fmt.Fprint(w, "unexpected path called")
+		}
+	}))
+
+	database.RegisterDatabase(ts.mockDatabase)
+
+	ts.ginEngine = gin.Default()
+	ts.ginEngine.Use(mockAuthenticator)
+
+	ts.ginEngine = openapi.NewRouterWithGinEngine(ts.ginEngine,
+		openapi.ApiHandleFunctions{
+			ValidatorOrchestratorAPI: &validatorAPIImpl{
+				sdaApiUrl:                     ts.httpTestServer.URL,
+				sdaApiToken:                   "mock-sdaApiToken",
+				validationFileSizeLimit:       1024 * 4,
+				validationJobPreparationQueue: "job-preparation-queue",
+				broker:                        ts.mockBroker,
+			}})
+
+	validators.Validators = map[string]*validators.ValidatorDescription{
+		"mock-validator": {
+			ValidatorId:       "mock-validator",
+			Name:              "mock validator",
+			Description:       "Validator for mocking",
+			Version:           "v0.0.0",
+			Mode:              "file",
+			PathSpecification: nil,
+			ValidatorPath:     "/mock-validator.sif",
+		},
+	}
+}
 func (ts *ValidatorAPITestSuite) SetupTest() {
 	ts.tempDir = ts.T().TempDir()
+	*ts.mockDatabase = mockDatabase{}
+	*ts.mockBroker = mockBroker{}
 }
+
 func (ts *ValidatorAPITestSuite) TearDownTest() {
+}
+
+func (ts *ValidatorAPITestSuite) TearDownSuite() {
+
+	ts.httpTestServer.Close()
 }
 
 func TestValidatorAPITestSuite(t *testing.T) {
 	suite.Run(t, new(ValidatorAPITestSuite))
 }
 
-type mockCommandExecutor struct {
-	passValidation bool
-}
-
-func (mce mockCommandExecutor) Execute(name string, args ...string) ([]byte, error) {
-	if len(args) == 0 {
-		return nil, errors.New("no args for mock command executor")
-	}
-
-	if args[len(args)-1] == "--describe" {
-		return json.Marshal(&describeResult{
-			ValidatorId:       strings.TrimSuffix(filepath.Base(args[len(args)-2]), "-path"),
-			Name:              "mock validator",
-			Description:       "Mock validator description",
-			Version:           "v0.0.0",
-			Mode:              "file",
-			PathSpecification: []string{"*"},
-		})
-	}
-
-	// Currently we expect 6 args when running a validator
-	// as seen at api.executeValidator(...)
-	if len(args) != 10 {
-		return nil, errors.New("unexpected amount of args when running validator")
-	}
-
-	// extracting path being mounted as /mnt and writing directly in that directory
-	jobDir := strings.Split(args[6], ":")[0]
-
-	inputRaw, err := os.ReadFile(filepath.Join(jobDir, "input", "input.json"))
-	if err != nil {
-		return nil, fmt.Errorf("mock validator could not read input file, error: %v", err)
-	}
-
-	input := new(validationInput)
-	if err := json.Unmarshal(inputRaw, input); err != nil {
-		return nil, fmt.Errorf("mock validator could not unmarshal input, error: %v", err)
-	}
-
-	output := &validationOutput{
-		Result:   "passed",
-		Files:    nil,
-		Messages: nil,
-	}
-
-	if !mce.passValidation {
-		output.Result = "failed"
-		output.Messages = []*outPutMessage{
-			{
-				Level:   "error",
-				Time:    time.Now().String(),
-				Message: "mock validator failing validation",
-			},
-		}
-	}
-
-	for _, file := range input.Files {
-		fo := &fileOutput{
-			Path:     file.Path,
-			Result:   "passed",
-			Messages: nil,
-		}
-
-		if !mce.passValidation {
-			fo.Result = "failed"
-			fo.Messages = []*outPutMessage{
-				{
-					Level:   "error",
-					Time:    time.Now().String(),
-					Message: "mock validator failing validation",
-				},
-			}
-		}
-
-		output.Files = append(output.Files, fo)
-	}
-
-	outputRaw, err := json.Marshal(output)
-	if err != nil {
-		return nil, fmt.Errorf("mock validator could not marshal output, error: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(jobDir, "output", "result.json"), outputRaw, 777); err != nil {
-		return nil, fmt.Errorf("mock validator could not write output file, error: %v", err)
-	}
-
-	return nil, nil
-}
-
-func (ts *ValidatorAPITestSuite) TestNewValidatorAPIImpl_MissingSdaApiUrl() {
-	_, err := NewValidatorAPIImpl(
-		SdaApiToken("token"),
-		ValidationWorkDir("workDir"),
-	)
-
-	ts.EqualError(err, "sdaApiUrl is required")
-}
-
-func (ts *ValidatorAPITestSuite) TestNewValidatorAPIImpl_MissingSdaApiToken() {
-	_, err := NewValidatorAPIImpl(
-		SdaApiUrl("url"),
-		ValidationWorkDir("workDir"),
-	)
-
-	ts.EqualError(err, "sdaApiToken is required")
-}
-func (ts *ValidatorAPITestSuite) TestNewValidatorAPIImpl_MissingValidationWorkDir() {
-	_, err := NewValidatorAPIImpl(
-		SdaApiUrl("url"),
-		SdaApiToken("token"),
-	)
-
-	ts.EqualError(err, "validationWorkDir is required")
-}
-
-func (ts *ValidatorAPITestSuite) TestPrepareValidateResponse() {
-	apiImpl := validatorAPIImpl{}
-
-	preparedValidationResponse := apiImpl.prepareValidateResponse([]string{"mock-validator-1", "mock-validator-2", "mock-validator-3"}, map[string]*describeResult{
-		"mock-validator-1-path": {
-			ValidatorId: "mock-validator-1",
-		},
-		"mock-validator-2-path": {
-			ValidatorId: "mock-validator-2",
-		},
-		"mock-validator-3-path": {
-			ValidatorId: "mock-validator-3",
-		},
+func (ts *ValidatorAPITestSuite) TestValidatePost_MissingValidator() {
+	w := httptest.NewRecorder()
+	body, err := json.Marshal(&openapi.ValidateRequest{
+		FilePaths:  []string{"123", "abc"},
+		Validators: []string{"abc-validator"},
 	})
+	if err != nil {
+		ts.FailNow(err.Error(), "failed to prepare validate request")
+	}
+	req, _ := http.NewRequest("POST", "/validate", bytes.NewReader(body))
+	ts.ginEngine.ServeHTTP(w, req)
 
-	ts.Len(preparedValidationResponse, 0)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	assert.Equal(ts.T(), `{"error":"[abc-validator] are not supported validators"}`, w.Body.String())
 }
-func (ts *ValidatorAPITestSuite) TestPrepareValidateResponse_MissingValidator() {
-	apiImpl := validatorAPIImpl{}
 
-	preparedValidationResponse := apiImpl.prepareValidateResponse([]string{"mock-validator-1", "mock-validator-2", "mock-validator-3"}, map[string]*describeResult{
-		"mock-validator-1-path": {
-			ValidatorId: "mock-validator-1",
-		},
-		"mock-validator-2-path": {
-			ValidatorId: "mock-validator-2",
-		},
+func (ts *ValidatorAPITestSuite) TestValidatePost_FilesNotFound() {
+	w := httptest.NewRecorder()
+	body, err := json.Marshal(&openapi.ValidateRequest{
+		FilePaths:  []string{"testFile1", "testFile2", "test_dir/testFile8", "testFile10"},
+		Validators: []string{"mock-validator"},
 	})
-
-	ts.Len(preparedValidationResponse, 1)
-
-}
-func (ts *ValidatorAPITestSuite) TestFindValidatorsToBeExecuted() {
-	apiImpl := validatorAPIImpl{
-		validatorPaths:  []string{"mock-validator-1-path", "mock-validator-2-path", "mock-validator-3-path"},
-		commandExecutor: &mockCommandExecutor{passValidation: false},
+	if err != nil {
+		ts.FailNow(err.Error(), "failed to prepare validate request")
 	}
+	req, _ := http.NewRequest("POST", "/validate", bytes.NewReader(body))
+	ts.ginEngine.ServeHTTP(w, req)
 
-	validatorsToBeExecuted, needFilesMounted := apiImpl.findValidatorsToBeExecuted([]string{"mock-validator-1", "mock-validator-2", "mock-validator-3"})
-
-	if len(validatorsToBeExecuted) != 3 {
-		ts.FailNow("did not find the expected number of validators to be executed")
-	}
-	ts.Equal(validatorsToBeExecuted["mock-validator-1-path"].ValidatorId, "mock-validator-1")
-	ts.Equal(validatorsToBeExecuted["mock-validator-2-path"].ValidatorId, "mock-validator-2")
-	ts.Equal(validatorsToBeExecuted["mock-validator-3-path"].ValidatorId, "mock-validator-3")
-	ts.Equal(needFilesMounted, true)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	assert.Equal(ts.T(), `{"error":"files: [test_dir/testFile8 testFile10] not found"}`, w.Body.String())
 }
 
-func (ts *ValidatorAPITestSuite) TestPrepareUserFiles() {
-
-	httpTestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-
-		switch {
-		case req.RequestURI == "/users/test_user/files":
-			// Set the response status code
-			w.WriteHeader(http.StatusOK)
-			// Set the response body
-			_, _ = w.Write([]byte(`[
-{
-	"FileID": "test-file-id-1",
-	"InboxPath": "testFile1"
-},{
-	"FileID": "test-file-id-2",
-	"InboxPath": "testFile2"
-},{
-	"FileID": "test-file-id-3",
-	"InboxPath": "testFile3"
-},{
-	"FileID": "test-file-id-4",
-	"InboxPath": "test_dir/testFile4"
-},{
-	"FileID": "test-file-id-5",
-	"InboxPath": "test_dir/testFile5"
-}
-]`))
-		case strings.Contains(req.RequestURI, "/users/test_user/file/"):
-			publicKey, err := base64.StdEncoding.DecodeString(req.Header.Get("C4GH-Public-Key"))
-			if err != nil || len(publicKey) == 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "bad public key")
-				return
-			}
-
-			reader := bytes.NewReader(publicKey)
-			newReaderPublicKey, err := keys.ReadPublicKey(reader)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "could not read public key")
-				return
-			}
-
-			encryptedFile := bytes.Buffer{}
-			encryptedFileWriter, err := streaming.NewCrypt4GHWriter(&encryptedFile, [32]byte{}, [][32]byte{newReaderPublicKey}, nil)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "could not read create crypt4gh writer")
-				return
-			}
-
-			file := bytes.Buffer{}
-			file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
-			_, _ = io.Copy(encryptedFileWriter, &file)
-
-			_ = encryptedFileWriter.Close()
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(encryptedFile.String()))
-		default:
-			// Set the response status code
-			w.WriteHeader(http.StatusInternalServerError)
-			// Set the response body
-			_, _ = fmt.Fprint(w, "unexpected path called")
-		}
-	}))
-	defer httpTestServer.Close()
-
-	apiImpl := validatorAPIImpl{
-		sdaApiUrl: httpTestServer.URL,
+func (ts *ValidatorAPITestSuite) TestValidatePost_ExceedValidationFileSizeLimit() {
+	w := httptest.NewRecorder()
+	body, err := json.Marshal(&openapi.ValidateRequest{
+		FilePaths:  []string{"testFile1", "testFile2", "testFile3", "test_dir/testFile4", "test_dir/testFile5"},
+		Validators: []string{"mock-validator"},
+	})
+	if err != nil {
+		ts.FailNow(err.Error(), "failed to prepare validate request")
 	}
+	req, _ := http.NewRequest("POST", "/validate", bytes.NewReader(body))
+	ts.ginEngine.ServeHTTP(w, req)
 
-	userFiles, missingUserfiles, err := apiImpl.prepareUserFiles(ts.tempDir, "test_user", []string{"testFile1", "testFile3", "test_dir/testFile5"}, true)
-
-	ts.NoError(err)
-
-	ts.Len(missingUserfiles, 0)
-	ts.Len(userFiles, 3)
-
-	for _, file := range userFiles {
-		fileContent, err := os.ReadFile(filepath.Join(ts.tempDir, "files", file.inboxPath))
-		ts.NoError(err)
-		if err != nil {
-			continue
-		}
-		ts.Equal(fmt.Sprintf("this is file: %s", file.fileID), string(fileContent))
-	}
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	assert.Equal(ts.T(), `{"error":"requested files exceed the file size limit"}`, w.Body.String())
 }
 
-func (ts *ValidatorAPITestSuite) TestPrepareUserFiles_MissingFiles() {
-	httpTestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch {
-		case req.RequestURI == "/users/test_user/files":
-			// Set the response status code
-			w.WriteHeader(http.StatusOK)
-			// Set the response body
-			_, _ = w.Write([]byte(`[]`))
-		default:
-			// Set the response status code
-			w.WriteHeader(http.StatusInternalServerError)
-			// Set the response body
-			_, _ = fmt.Fprint(w, "unexpected path called")
-		}
-	}))
-	defer httpTestServer.Close()
+func (ts *ValidatorAPITestSuite) TestValidatePost() {
+	ts.mockDatabase.On("Rollback").Return(nil)
+	ts.mockDatabase.On("BeginTransaction").Return(nil)
+	ts.mockDatabase.On("Commit").Return(nil)
+	ts.mockDatabase.On("InsertFileValidationJob", mock.Anything, "mock-validator", mock.Anything, mock.Anything, int64(1024), "test_user", "test_user", mock.Anything).Return(nil)
+	ts.mockBroker.On("PublishMessage", mock.Anything, mock.Anything).Return(nil)
 
-	apiImpl := validatorAPIImpl{
-		sdaApiUrl: httpTestServer.URL,
+	w := httptest.NewRecorder()
+	body, err := json.Marshal(&openapi.ValidateRequest{
+		FilePaths:  []string{"testFile1", "testFile2", "test_dir/testFile5"},
+		Validators: []string{"mock-validator"},
+	})
+	if err != nil {
+		ts.FailNow(err.Error(), "failed to prepare validate request")
+	}
+	req, _ := http.NewRequest("POST", "/validate", bytes.NewReader(body))
+	ts.ginEngine.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	validateResult := new(openapi.ValidatePost200Response)
+	if err := json.Unmarshal(w.Body.Bytes(), validateResult); err != nil {
+		ts.FailNow(err.Error(), "failed to parse response body to ValidatePost200Response")
+	}
+	if _, err := uuid.Parse(validateResult.ValidationId); err != nil {
+		ts.FailNow(err.Error(), "failed to parse validation id as uuid in response")
 	}
 
-	userFiles, missingUserFiles, err := apiImpl.prepareUserFiles(ts.tempDir, "test_user", []string{"testFile1", "testFile3", "test_dir/testFile5"}, true)
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "InsertFileValidationJob", 3)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-1", "testFile1", int64(1024), "test_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-2", "testFile2", int64(1024), "test_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-5", "test_dir/testFile5", int64(1024), "test_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Commit", 1)
+	ts.mockDatabase.AssertNotCalled(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
 
-	ts.NoError(err)
-
-	ts.Len(missingUserFiles, 3)
-	ts.Len(userFiles, 0)
-
+	ts.mockBroker.AssertCalled(ts.T(), "PublishMessage", "job-preparation-queue", mock.Anything)
 }
 
-func (ts *ValidatorAPITestSuite) TestValidatorOutputToValidateResponse() {
-	now := time.Now()
+func (ts *ValidatorAPITestSuite) TestAdminValidatePost() {
+	ts.mockDatabase.On("Rollback").Return(nil)
+	ts.mockDatabase.On("BeginTransaction").Return(nil)
+	ts.mockDatabase.On("Commit").Return(nil)
+	ts.mockDatabase.On("InsertFileValidationJob", mock.Anything, "mock-validator", mock.Anything, mock.Anything, int64(1024), "different_user", "test_user", mock.Anything).Return(nil)
+	ts.mockBroker.On("PublishMessage", mock.Anything, mock.Anything).Return(nil)
 
-	validateResponseInner := validatorOutputToValidateResponse("mock-validator", &validationOutput{
-		Result: "passed",
-		Files: []*fileOutput{
+	w := httptest.NewRecorder()
+	body, err := json.Marshal(&openapi.AdminValidateRequest{
+		FilePaths:  []string{"testFile2", "test_dir/testFile4", "test_dir/testFile5"},
+		Validators: []string{"mock-validator"},
+		UserId:     "different_user",
+	})
+	if err != nil {
+		ts.FailNow(err.Error(), "failed to prepare validate request")
+	}
+	req, _ := http.NewRequest("POST", "/admin/validate", bytes.NewReader(body))
+	ts.ginEngine.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	validateResult := new(openapi.ValidatePost200Response)
+	if err := json.Unmarshal(w.Body.Bytes(), validateResult); err != nil {
+		ts.FailNow(err.Error(), "failed to parse response body to ValidatePost200Response")
+	}
+	if _, err := uuid.Parse(validateResult.ValidationId); err != nil {
+		ts.FailNow(err.Error(), "failed to parse validation id as uuid in response")
+	}
+
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "InsertFileValidationJob", 3)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-4", "test_dir/testFile4", int64(1024), "different_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-2", "testFile2", int64(1024), "different_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-5", "test_dir/testFile5", int64(1024), "different_user", "test_user", mock.Anything)
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Commit", 1)
+	ts.mockDatabase.AssertNotCalled(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
+
+	ts.mockBroker.AssertCalled(ts.T(), "PublishMessage", "job-preparation-queue", mock.Anything)
+}
+
+func (ts *ValidatorAPITestSuite) TestAdminResultGet() {
+	startedAt, _ := time.Parse(time.RFC3339, time.Now().Add(-2*time.Second).Format(time.RFC3339))
+	finishedAt, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	testValidationResult := &model.ValidationResult{
+		ValidationID: uuid.NewString(),
+		ValidatorResults: []*model.ValidatorResult{
 			{
-				Path:     "/mnt/input/data/test_file_1",
-				Result:   "passed",
-				Messages: nil,
-			}, {
-				Path:     "/mnt/input/data/test_file_2",
-				Result:   "passed",
-				Messages: nil,
-			}, {
-				Path:   "/mnt/input/data/test_dir/test_file_3",
-				Result: "failed",
-				Messages: []*outPutMessage{
+				ValidatorID: "mock-validator",
+				Result:      "passed",
+				StartedAt:   startedAt,
+				FinishedAt:  finishedAt,
+				Messages:    nil,
+				Files: []*model.FileResult{
 					{
-						Level:   "info",
-						Time:    now.String(),
-						Message: "file failed validation",
+						FilePath: "testFile1",
+						Result:   "passed",
+						Messages: nil,
+					}, {
+						FilePath: "testFile2",
+						Result:   "passed",
+						Messages: nil,
+					}, {
+						FilePath: "test_dir/testFile5",
+						Result:   "passed",
+						Messages: nil,
 					},
 				},
 			},
 		},
-		Messages: []*outPutMessage{
+	}
+
+	ts.mockDatabase.On("ReadValidationResult", testValidationResult.ValidationID, (*string)(nil)).Return(testValidationResult, nil)
+
+	w := httptest.NewRecorder()
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/admin/result?validation_id=%s", testValidationResult.ValidationID), nil)
+	ts.ginEngine.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var resultResponse []openapi.ResultResponseInner
+	if err := json.Unmarshal(w.Body.Bytes(), &resultResponse); err != nil {
+		ts.FailNow(err.Error(), "failed to parse response body to []openapi.ResultResponseInner")
+	}
+
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "ReadValidationResult", 1)
+	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationResult", testValidationResult.ValidationID, (*string)(nil))
+
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults), len(resultResponse))
+
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Result, resultResponse[0].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].ValidatorID, resultResponse[0].ValidatorId)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].StartedAt, resultResponse[0].StartedAt)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].FinishedAt, resultResponse[0].FinishedAt)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Messages), len(resultResponse[0].Messages))
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files), len(resultResponse[0].Files))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[0].Result, resultResponse[0].Files[0].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[0].FilePath, resultResponse[0].Files[0].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[0].Messages), len(resultResponse[0].Files[0].Messages))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[1].Result, resultResponse[0].Files[1].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[1].FilePath, resultResponse[0].Files[1].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[1].Messages), len(resultResponse[0].Files[1].Messages))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[2].Result, resultResponse[0].Files[2].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[2].FilePath, resultResponse[0].Files[2].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[2].Messages), len(resultResponse[0].Files[2].Messages))
+
+}
+
+func (ts *ValidatorAPITestSuite) TestResultGet() {
+
+	startedAt, _ := time.Parse(time.RFC3339, time.Now().Add(-2*time.Second).Format(time.RFC3339))
+	finishedAt, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	testValidationResult := &model.ValidationResult{
+		ValidationID: uuid.NewString(),
+		ValidatorResults: []*model.ValidatorResult{
 			{
-				Level:   "info",
-				Time:    now.String(),
-				Message: "2/3 files passed validation",
+				ValidatorID: "mock-validator",
+				Result:      "passed",
+				StartedAt:   startedAt,
+				FinishedAt:  finishedAt,
+				Messages:    nil,
+				Files: []*model.FileResult{
+					{
+						FilePath: "testFile1",
+						Result:   "passed",
+						Messages: nil,
+					}, {
+						FilePath: "testFile2",
+						Result:   "passed",
+						Messages: nil,
+					}, {
+						FilePath: "test_dir/testFile5",
+						Result:   "passed",
+						Messages: nil,
+					},
+				},
 			},
 		},
-	})
-
-	ts.Equal("mock-validator", validateResponseInner.Validator)
-
-	ts.Equal("test_file_1", validateResponseInner.Files[0].Path)
-	ts.Equal("passed", validateResponseInner.Files[0].Result)
-	ts.Equal([]openapi.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[0].Messages)
-
-	ts.Equal("test_file_2", validateResponseInner.Files[1].Path)
-	ts.Equal("passed", validateResponseInner.Files[1].Result)
-	ts.Equal([]openapi.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[1].Messages)
-
-	ts.Equal("test_dir/test_file_3", validateResponseInner.Files[2].Path)
-	ts.Equal("failed", validateResponseInner.Files[2].Result)
-	ts.Equal("info", validateResponseInner.Files[2].Messages[0].Level)
-	ts.Equal(now.String(), validateResponseInner.Files[2].Messages[0].Time)
-	ts.Equal("file failed validation", validateResponseInner.Files[2].Messages[0].Message)
-
-	ts.Equal("info", validateResponseInner.Messages[0].Level)
-	ts.Equal(now.String(), validateResponseInner.Messages[0].Time)
-	ts.Equal("2/3 files passed validation", validateResponseInner.Messages[0].Message)
-}
-
-func (ts *ValidatorAPITestSuite) TestValidatorsGet() {
-	apiImpl := validatorAPIImpl{
-		validatorPaths:  []string{"mock-validator-1-path", "mock-validator-2-path", "mock-validator-3-path"},
-		commandExecutor: &mockCommandExecutor{passValidation: false},
 	}
+
+	testUser := "test_user"
+	ts.mockDatabase.On("ReadValidationResult", testValidationResult.ValidationID, &testUser).Return(testValidationResult, nil)
 
 	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
 
-	apiImpl.ValidatorsGet(c)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/result?validation_id=%s", testValidationResult.ValidationID), nil)
+	ts.ginEngine.ServeHTTP(w, req)
 
-	var response []string
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	if err := json.Unmarshal([]byte(w.Body.String()), &response); err != nil {
-		ts.FailNow("failed to unmarshal response to describe result")
+	var resultResponse []openapi.ResultResponseInner
+	if err := json.Unmarshal(w.Body.Bytes(), &resultResponse); err != nil {
+		ts.FailNow(err.Error(), "failed to parse response body to []openapi.ResultResponseInner")
 	}
 
-	if len(response) != 3 {
-		ts.FailNow("unexpected response length")
-	}
-	ts.Equal(response[0], "mock-validator-1")
-	ts.Equal(response[1], "mock-validator-2")
-	ts.Equal(response[2], "mock-validator-3")
-}
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "ReadValidationResult", 1)
+	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationResult", testValidationResult.ValidationID, &testUser)
 
-func (ts *ValidatorAPITestSuite) TestValidatePost() {
-	httpTestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults), len(resultResponse))
 
-		switch {
-		case req.RequestURI == "/users/test_user/files":
-			// Set the response status code
-			w.WriteHeader(http.StatusOK)
-			// Set the response body
-			_, _ = w.Write([]byte(`[
-{
-	"FileID": "test-file-id-1",
-	"InboxPath": "testFile1"
-},{
-	"FileID": "test-file-id-2",
-	"InboxPath": "testFile2"
-},{
-	"FileID": "test-file-id-3",
-	"InboxPath": "testFile3"
-},{
-	"FileID": "test-file-id-4",
-	"InboxPath": "test_dir/testFile4"
-},{
-	"FileID": "test-file-id-5",
-	"InboxPath": "test_dir/testFile5"
-}
-]`))
-		case strings.Contains(req.RequestURI, "/users/test_user/file/"):
-			publicKey, err := base64.StdEncoding.DecodeString(req.Header.Get("C4GH-Public-Key"))
-			if err != nil || len(publicKey) == 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "bad public key")
-				return
-			}
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Result, resultResponse[0].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].ValidatorID, resultResponse[0].ValidatorId)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].StartedAt, resultResponse[0].StartedAt)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].FinishedAt, resultResponse[0].FinishedAt)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Messages), len(resultResponse[0].Messages))
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files), len(resultResponse[0].Files))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[0].Result, resultResponse[0].Files[0].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[0].FilePath, resultResponse[0].Files[0].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[0].Messages), len(resultResponse[0].Files[0].Messages))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[1].Result, resultResponse[0].Files[1].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[1].FilePath, resultResponse[0].Files[1].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[1].Messages), len(resultResponse[0].Files[1].Messages))
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[2].Result, resultResponse[0].Files[2].Result)
+	assert.Equal(ts.T(), testValidationResult.ValidatorResults[0].Files[2].FilePath, resultResponse[0].Files[2].Path)
+	assert.Equal(ts.T(), len(testValidationResult.ValidatorResults[0].Files[2].Messages), len(resultResponse[0].Files[2].Messages))
 
-			reader := bytes.NewReader(publicKey)
-			newReaderPublicKey, err := keys.ReadPublicKey(reader)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "could not read public key")
-				return
-			}
-
-			encryptedFile := bytes.Buffer{}
-			encryptedFileWriter, err := streaming.NewCrypt4GHWriter(&encryptedFile, [32]byte{}, [][32]byte{newReaderPublicKey}, nil)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = fmt.Fprint(w, "could not read create crypt4gh writer")
-				return
-			}
-
-			file := bytes.Buffer{}
-			file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
-			_, _ = io.Copy(encryptedFileWriter, &file)
-
-			_ = encryptedFileWriter.Close()
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(encryptedFile.String()))
-		default:
-			// Set the response status code
-			w.WriteHeader(http.StatusInternalServerError)
-			// Set the response body
-			_, _ = fmt.Fprint(w, "unexpected path called")
-		}
-	}))
-	defer httpTestServer.Close()
-
-	apiImpl := validatorAPIImpl{
-		validatorPaths:    []string{"mock-validator-1-path", "mock-validator-2-path", "mock-validator-3-path"},
-		commandExecutor:   &mockCommandExecutor{passValidation: true},
-		validationWorkDir: ts.tempDir,
-		sdaApiUrl:         httpTestServer.URL,
-	}
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-
-	request := &openapi.ValidateRequest{
-		Validators: []string{"mock-validator-1", "mock-validator-2"},
-		FilePaths:  []string{"testFile1", "testFile3", "test_dir/testFile5"},
-		UserId:     "test_user",
-	}
-
-	requestRaw, err := json.Marshal(request)
-	if err != nil {
-		ts.FailNow("failed to marshal request to validate request", err)
-	}
-
-	c.Request, err = http.NewRequest("POST", fmt.Sprintf("%s/validate", httpTestServer.URL), io.NopCloser(bytes.NewBuffer(requestRaw)))
-	if err != nil {
-		ts.FailNow("failed to create http request", err)
-	}
-	apiImpl.ValidatePost(c)
-
-	if w.Code != 200 {
-		ts.FailNow("unexpected response code")
-	}
-
-	var response []openapi.ValidateResponseInner
-
-	if err := json.Unmarshal([]byte(w.Body.String()), &response); err != nil {
-		ts.FailNow("failed to unmarshal response to validate result", err)
-	}
-
-	if len(response) != 2 {
-		ts.FailNow("unexpected response length")
-	}
-
-	for i := 0; i < len(response); i++ {
-		ts.Equal(response[i].Validator, fmt.Sprintf("mock-validator-%d", i+1))
-
-		ts.Equal("passed", response[i].Result)
-		ts.Len(response[i].Messages, 0)
-		if len(response[i].Files) != 3 {
-			ts.Fail("unexpected amount of files in validator result length")
-		}
-	}
 }
