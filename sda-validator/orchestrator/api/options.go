@@ -1,10 +1,6 @@
 package api
 
-func ValidatorPaths(v []string) func(*validatorAPIImpl) {
-	return func(impl *validatorAPIImpl) {
-		impl.validatorPaths = v
-	}
-}
+import "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
 
 func SdaApiUrl(v string) func(*validatorAPIImpl) {
 	return func(impl *validatorAPIImpl) {
@@ -18,8 +14,20 @@ func SdaApiToken(v string) func(*validatorAPIImpl) {
 	}
 }
 
-func ValidationWorkDir(v string) func(*validatorAPIImpl) {
+func ValidationJobPreparationQueue(v string) func(*validatorAPIImpl) {
 	return func(impl *validatorAPIImpl) {
-		impl.validationWorkDir = v
+		impl.validationJobPreparationQueue = v
+	}
+}
+
+func Broker(v broker.AMQPBrokerI) func(*validatorAPIImpl) {
+	return func(impl *validatorAPIImpl) {
+		impl.broker = v
+	}
+}
+
+func ValidationFileSizeLimit(v int64) func(*validatorAPIImpl) {
+	return func(impl *validatorAPIImpl) {
+		impl.validationFileSizeLimit = v
 	}
 }
