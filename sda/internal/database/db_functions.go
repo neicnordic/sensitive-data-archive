@@ -1288,12 +1288,18 @@ func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 	return unencryptedChecksum, nil
 }
 
-func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
+// DatasetFileIDs holds both the internal file ID and stable accession ID
+type DatasetFileIDs struct {
+	FileID      string `json:"fileID"`
+	AccessionID string `json:"accessionID"`
+}
+
+func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]DatasetFileIDs, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	var accessions []string
-	rows, err := db.Query("SELECT stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
+	var files []DatasetFileIDs
+	rows, err := db.Query("SELECT id, stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
 	if err != nil {
 		return nil, err
 	}
@@ -1303,14 +1309,14 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var accession string
-		err := rows.Scan(&accession)
+		var file DatasetFileIDs
+		err := rows.Scan(&file.FileID, &file.AccessionID)
 		if err != nil {
 			return nil, err
 		}
 
-		accessions = append(accessions, accession)
+		files = append(files, file)
 	}
 
-	return accessions, nil
+	return files, nil
 }
