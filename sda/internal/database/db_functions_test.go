@@ -1527,9 +1527,16 @@ func (suite *DatabaseTests) TestGetDsatasetFiles() {
 		suite.FailNow("failed to map files to dataset")
 	}
 
-	accessions, err := db.GetDatasetFiles(dID)
-	assert.NoError(suite.T(), err, "failed to get accessions for a dataset")
-	assert.Equal(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, accessions)
+	files, err := db.GetDatasetFiles(dID)
+	assert.NoError(suite.T(), err, "failed to get files for a dataset")
+	assert.Equal(suite.T(), 3, len(files))
+
+	// Extract accession IDs for comparison
+	var accessions []string
+	for _, file := range files {
+		accessions = append(accessions, file.AccessionID)
+	}
+	assert.ElementsMatch(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, accessions)
 
 	db.Close()
 }
