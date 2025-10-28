@@ -1,6 +1,9 @@
 package config
 
 import (
+	"log"
+
+	go_units "github.com/docker/go-units"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -12,11 +15,31 @@ var (
 	sdaApiUrl         string
 	sdaApiToken       string
 	validationWorkDir string
+
+	validationFileSizeLimit   int64
+	jobWorkerCount            int
+	jobQueue                  string
+	jobPreparationWorkerCount int
+	jobPreparationQueue       string
 )
 
 func init() {
 	config.RegisterFlags(
 		&config.Flag{
+			Name: "validation-file-size-limit",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "100GB", "The human readable size limit of files in a single validation, this should equal the size of the size of the validation-work-dir. Supported abbreviations: B, kB, MB, GB, TB, PB, EB, ZB, YB")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				var err error
+				validationFileSizeLimit, err = go_units.FromHumanSize(viper.GetString(flagName))
+				if err != nil {
+					log.Fatalf("failed to parse: %s due to: %v", err)
+				}
+
+			},
+		}, &config.Flag{
 			Name: "api-port",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.Int(flagName, 0, "Port to host the ValidationAPI server at")
@@ -61,6 +84,42 @@ func init() {
 			AssignFunc: func(flagName string) {
 				validationWorkDir = viper.GetString(flagName)
 			},
+		}, &config.Flag{
+			Name: "job-worker-count",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 2, "Amount of job workers to run")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				jobWorkerCount = viper.GetInt(flagName)
+			},
+		}, &config.Flag{
+			Name: "job-preparation-worker-count",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 1, "Amount of job preparation workers to run")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				jobPreparationWorkerCount = viper.GetInt(flagName)
+			},
+		}, &config.Flag{
+			Name: "job-queue",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "The queue for validation job workers")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				jobQueue = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "job-preparation-queue",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "The queue for job preparation workers")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				jobPreparationQueue = viper.GetString(flagName)
+			},
 		},
 	)
 }
@@ -82,4 +141,20 @@ func ValidatorPaths() []string {
 
 func ValidationWorkDir() string {
 	return validationWorkDir
+}
+
+func JobPreparationWorkerCount() int {
+	return jobPreparationWorkerCount
+}
+func JobPreparationQueue() string {
+	return jobPreparationQueue
+}
+func JobWorkerCount() int {
+	return jobWorkerCount
+}
+func JobQueue() string {
+	return jobQueue
+}
+func ValidationFileSizeLimit() int64 {
+	return validationFileSizeLimit
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
-	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/openapi/go-gin-server/go"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -358,11 +358,11 @@ func (ts *ValidatorAPITestSuite) TestValidatorOutputToValidateResponse() {
 
 	ts.Equal("test_file_1", validateResponseInner.Files[0].Path)
 	ts.Equal("passed", validateResponseInner.Files[0].Result)
-	ts.Equal([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[0].Messages)
+	ts.Equal([]openapi.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[0].Messages)
 
 	ts.Equal("test_file_2", validateResponseInner.Files[1].Path)
 	ts.Equal("passed", validateResponseInner.Files[1].Result)
-	ts.Equal([]validatorAPI.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[1].Messages)
+	ts.Equal([]openapi.ValidateResponseInnerFilesInnerMessagesInner{}, validateResponseInner.Files[1].Messages)
 
 	ts.Equal("test_dir/test_file_3", validateResponseInner.Files[2].Path)
 	ts.Equal("failed", validateResponseInner.Files[2].Result)
@@ -476,7 +476,7 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	request := &validatorAPI.ValidateRequest{
+	request := &openapi.ValidateRequest{
 		Validators: []string{"mock-validator-1", "mock-validator-2"},
 		FilePaths:  []string{"testFile1", "testFile3", "test_dir/testFile5"},
 		UserId:     "test_user",
@@ -497,7 +497,7 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 		ts.FailNow("unexpected response code")
 	}
 
-	var response []validatorAPI.ValidateResponseInner
+	var response []openapi.ValidateResponseInner
 
 	if err := json.Unmarshal([]byte(w.Body.String()), &response); err != nil {
 		ts.FailNow("failed to unmarshal response to validate result", err)

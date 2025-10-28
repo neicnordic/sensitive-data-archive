@@ -69,6 +69,24 @@ type ApiHandleFunctions struct {
 func getRoutes(handleFunctions ApiHandleFunctions) []Route {
 	return []Route{ 
 		{
+			"AdminResultGet",
+			http.MethodGet,
+			"/admin/result",
+			handleFunctions.ValidatorOrchestratorAPI.AdminResultGet,
+		},
+		{
+			"AdminValidatePost",
+			http.MethodPost,
+			"/admin/validate",
+			handleFunctions.ValidatorOrchestratorAPI.AdminValidatePost,
+		},
+		{
+			"ResultGet",
+			http.MethodGet,
+			"/result",
+			handleFunctions.ValidatorOrchestratorAPI.ResultGet,
+		},
+		{
 			"ValidatePost",
 			http.MethodPost,
 			"/validate",

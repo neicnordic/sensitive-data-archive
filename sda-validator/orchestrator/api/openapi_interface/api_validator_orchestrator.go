@@ -16,6 +16,15 @@ import (
 type ValidatorOrchestratorAPI interface {
 
 
+    // AdminResultGet Get /admin/result
+     AdminResultGet(c *gin.Context)
+
+    // AdminValidatePost Post /admin/validate
+     AdminValidatePost(c *gin.Context)
+
+    // ResultGet Get /result
+     ResultGet(c *gin.Context)
+
     // ValidatePost Post /validate
      ValidatePost(c *gin.Context)
 
