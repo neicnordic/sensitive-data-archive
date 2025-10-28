@@ -109,5 +109,17 @@ func Load() error {
 	for _, flag := range registeredFlags {
 		flag.AssignFunc(flag.Name)
 	}
+
+	if viper.IsSet("log.level") {
+		stringLevel := viper.GetString("log.level")
+		logLevel, err := log.ParseLevel(stringLevel)
+		if err != nil {
+			log.Debugf("Log level '%s' not supported, setting to 'trace'", stringLevel)
+			logLevel = log.TraceLevel
+		}
+		log.SetLevel(logLevel)
+		log.Infof("Setting log level to '%s'", stringLevel)
+	}
+
 	return nil
 }
