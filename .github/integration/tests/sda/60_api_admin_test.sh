@@ -147,6 +147,35 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "select id from sda.file_e
    sleep 2
 done
 
+# Finalize file
+echo "Giving accession id by using json payload"
+accession_payload=$(
+jq -c -n \
+	--arg filepath "NE12878.bam.c4gh" \
+	--arg user "test@dummy.org" \
+    --arg accession_id "my-id-01" \
+	'$ARGS.named'
+)
+
+resp_accession_payload="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$accession_payload" "http://api:8080/file/accession")"
+if [ "$resp_accession_payload" != "200" ]; then
+    echo "Error when requesting to ingesting file, expected 200 got: $resp_accession_payload"
+    exit 1
+fi
+
+# Check that the file has been finalized
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$fileid' order by started_at desc limit 1;")" = "ready" ]; do
+   echo "waiting for finalize to complete"
+   RETRY_TIMES=$((RETRY_TIMES + 1))
+   if [ "$RETRY_TIMES" -eq 10 ]; then
+      echo "::error::Time out while waiting for finalizing to complete"
+      exit 1
+   fi
+   sleep 2
+done
+echo "Finalize by using json payload finished successfully"
+
 # Try to delete file not in inbox
 fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "NE12878.bam.c4gh") | .fileID')"
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
@@ -215,5 +244,52 @@ if [ "$resp" != "404" ]; then
     echo "Trying to download a non existing file, expected 404 got: $resp"
     exit 1
 fi
+
+# Test ingesting file by using the file id
+echo "Ingest file by using file ID"
+# Reupload a file under a different name
+s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/ingest/NB12878-ingest.bam.c4gh
+sleep 3
+# Find the file id of the uploaded file
+new_fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "ingest/NB12878-ingest.bam.c4gh") | .fileID')"
+# ingest the file
+ingest_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/file/ingest?fileid=$new_fileid")"
+if [ "$ingest_resp" != "200" ]; then
+    echo "Error when requesting to ingesting file by the use of file id, expected 200 got: $ingest_resp"
+    exit 1
+fi
+# Check that the file is ingested and verified
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$new_fileid' order by started_at desc limit 1;")" = "verified" ]; do
+   echo "waiting for verified to complete"
+   RETRY_TIMES=$((RETRY_TIMES + 1))
+   if [ "$RETRY_TIMES" -eq 10 ]; then
+      echo "::error::Time out while waiting for verified to complete"
+      exit 1
+   fi
+   sleep 2
+done
+echo "Ingestion by using file ID finished successfully"
+
+# Test giving accession id to a file by using file id
+echo "Giving accession id by using file id"
+# The file which ingested above will be used
+accession_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/file/accession?fileid=$new_fileid&accessionid=SDA-123-asd")"
+if [ "$accession_resp" != "200" ]; then
+    echo "Error when requesting to finalize file by the use of file id, expected 200 got: $accession_resp"
+    exit 1
+fi
+# Check that the file has been finalized
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$new_fileid' order by started_at desc limit 1;")" = "ready" ]; do
+   echo "waiting for finalize to complete"
+   RETRY_TIMES=$((RETRY_TIMES + 1))
+   if [ "$RETRY_TIMES" -eq 10 ]; then
+      echo "::error::Time out while waiting for finalizing to complete"
+      exit 1
+   fi
+   sleep 2
+done
+echo "Finalize by using file ID finished successfully"
 
 echo "API admin tests completed successfully"

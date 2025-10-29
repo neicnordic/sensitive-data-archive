@@ -1556,7 +1556,6 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	assert.NoError(suite.T(), err)
 	_, err = db.getInboxFilePathFromID(user, fileID)
 	assert.Error(suite.T(), err)
-
 	db.Close()
 }
 
@@ -1594,6 +1593,48 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "archived")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileID2)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Register a file to get a valid UUID
+	filePath := "/dummy_user.org/Dummy_folder/dummyfile.c4gh"
+	user := "dummy@user.org"
+	fileID, err := db.RegisterFile(filePath, user)
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	// Update event log to ensure correlation ID is set
+	correlationID := "b7e2c1a4-5f3b-4c8e-9d2a-7f6e1b2c3d4e"
+	err = db.UpdateFileEventLog(fileID, "uploaded", correlationID, user, "{}", "{}")
+	if err != nil {
+		suite.FailNow("failed to update file event log")
+	}
+
+	infoFile, err := db.GetFileDetailsFromUUID(fileID, "uploaded")
+	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
+	assert.Equal(suite.T(), user, infoFile.User)
+	assert.Equal(suite.T(), filePath, infoFile.Path)
+	assert.Equal(suite.T(), correlationID, infoFile.CorrID)
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetFileDetailsFromUUID_NotFound() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Use a non-existent UUID
+	invalidUUID := "abc-123"
+	infoFile, err := db.GetFileDetailsFromUUID(invalidUUID, "uploaded")
+	assert.Error(suite.T(), err, "expected error for non-existent UUID")
+	assert.Empty(suite.T(), infoFile.User)
+	assert.Empty(suite.T(), infoFile.Path)
+	assert.Empty(suite.T(), infoFile.CorrID)
 
 	db.Close()
 }
