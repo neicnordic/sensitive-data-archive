@@ -35,9 +35,8 @@ func init() {
 				var err error
 				validationFileSizeLimit, err = go_units.FromHumanSize(viper.GetString(flagName))
 				if err != nil {
-					log.Fatalf("failed to parse: %s due to: %v", err)
+					log.Fatalf("failed to parse: %s due to: %v", viper.GetString(flagName), err)
 				}
-
 			},
 		}, &config.Flag{
 			Name: "api-port",
