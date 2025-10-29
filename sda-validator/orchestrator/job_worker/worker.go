@@ -29,10 +29,12 @@ type worker struct {
 
 var workers []*worker
 var conf *config
-var shutdownChan = make(chan struct{}, 1)
+var shutdownChan chan struct{}
 
 // Init initializes the workers with the given options
 func Init(opt ...func(*config)) error {
+	workers = []*worker{}
+	shutdownChan = make(chan struct{}, 1)
 
 	conf = &config{}
 
@@ -115,7 +117,7 @@ func (w *worker) close() {
 func ShutdownWorkers() {
 	wg := sync.WaitGroup{}
 	for _, w := range workers {
-		if w.running {
+		if !w.running {
 			continue
 		}
 		wg.Add(1)
@@ -252,7 +254,12 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		return err
 	}
 
-	allJobsDone, err := database.AllValidationJobsDone(ctx, jobMessage.ValidationID)
+	return checkAndCleanVolume(ctx, jobMessage.ValidationID, jobMessage.ValidationDirectory)
+}
+
+func checkAndCleanVolume(ctx context.Context, validationID, validationDirectory string) error {
+
+	allJobsDone, err := database.AllValidationJobsDone(ctx, validationID)
 	if err != nil {
 		log.Errorf("failed to check if all validation jobs done due to: %v", err)
 		return err
@@ -262,14 +269,14 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		return nil
 	}
 
-	if err := os.RemoveAll(jobMessage.ValidationDirectory); err != nil {
+	if err := os.RemoveAll(validationDirectory); err != nil {
 		log.Errorf("failed to remove validation directory when all jobs done, due to %v", err)
 	}
 
 	return nil
 }
 
-func updateFileValidationJobsOnError(ctx context.Context, job *model.JobMessage, validatorMessage []*model.Message) error {
+func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobMessage, validatorMessage []*model.Message) error {
 
 	tx, err := database.BeginTransaction(ctx)
 	if err != nil {
@@ -285,12 +292,15 @@ func updateFileValidationJobsOnError(ctx context.Context, job *model.JobMessage,
 
 	now := time.Now()
 
-	for _, fileInfo := range job.Files {
-		if err := tx.UpdateFileValidationJob(ctx, job.ValidationID, job.ValidatorID, fileInfo.FileID, "error", nil, now, "error", validatorMessage); err != nil {
+	for _, fileInfo := range jobMessage.Files {
+		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", nil, now, "error", validatorMessage); err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
 			return err
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return checkAndCleanVolume(ctx, jobMessage.ValidationID, jobMessage.ValidationDirectory)
 }
