@@ -33,10 +33,12 @@ type worker struct {
 
 var workers []*worker
 var conf *config
-var shutdownChan = make(chan struct{}, 1)
+var shutdownChan chan struct{}
 
 // Init initializes the workers with the given options
 func Init(opt ...func(*config)) error {
+	workers = []*worker{}
+	shutdownChan = make(chan struct{}, 1)
 
 	conf = &config{}
 

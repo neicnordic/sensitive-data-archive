@@ -166,7 +166,6 @@ func (broker *amqpBroker) Subscribe(ctx context.Context, queue, consumerID strin
 			if err := broker.channel.Cancel(consumerID, true); err != nil {
 				log.Errorf("failed to cancel channel for consumerID: %s, reason: %v", consumerID, err)
 			}
-			return nil
 		}
 	}
 }
