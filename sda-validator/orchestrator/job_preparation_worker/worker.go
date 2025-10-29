@@ -89,7 +89,7 @@ func StartWorkers() error {
 		return errors.New("workers have not been initialized")
 	}
 
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 
 	wg := &sync.WaitGroup{}
 	for _, w := range workers {
