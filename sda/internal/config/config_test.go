@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -619,4 +621,221 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
 	_, err = NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+}
+
+func (ts *ConfigTestSuite) TestParsePosixEndpoints() {
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigType("yaml")
+	for _, step := range []struct {
+		name            string
+		conf            []byte
+		envConf         string
+		expectedError   string
+		expectedEntries int
+	}{
+		{
+			name: "conf_OK",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - /mnt/second
+`),
+			envConf:         "",
+			expectedError:   "",
+			expectedEntries: 2,
+		},
+		{
+			name:            "empty_OK",
+			conf:            nil,
+			envConf:         "",
+			expectedError:   "",
+			expectedEntries: 0,
+		},
+		{
+			name:            "env_one_OK",
+			conf:            nil,
+			envConf:         "/mnt/archive",
+			expectedError:   "",
+			expectedEntries: 1,
+		},
+		{
+			name:            "env_two_OK",
+			conf:            nil,
+			envConf:         "/mnt/archive1 /mnt/archive2",
+			expectedError:   "",
+			expectedEntries: 2,
+		},
+		{
+			name: "env_override_OK",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - /mnt/second
+  - /mnt/third
+`),
+			envConf:         "/data/archive",
+			expectedError:   "",
+			expectedEntries: 1,
+		},
+		{
+			name:            "bad_path",
+			conf:            nil,
+			envConf:         "data/temp",
+			expectedError:   "posix paths must be absolute",
+			expectedEntries: 0,
+		},
+		{
+			name: "bad_yaml",
+			conf: []byte(`
+archive:
+  posixendpoints:
+  - /mnt/first
+  - .
+  - /mnt/second
+`),
+			envConf:         "",
+			expectedError:   "posix paths must be absolute",
+			expectedEntries: 0,
+		},
+	} {
+		ts.T().Run(step.name, func(t *testing.T) {
+			assert.NoError(t, viper.ReadConfig(bytes.NewBuffer(step.conf)))
+			os.Setenv("ARCHIVE_POSIXENDPOINTS", step.envConf)
+			endpoints, err := parsePosixEndpoints("archive")
+			if step.expectedError != "" {
+				assert.Equal(t, err.Error(), step.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, step.expectedEntries, len(endpoints))
+		})
+	}
+}
+
+func (ts *ConfigTestSuite) TestParseS3Endpoints() {
+	viper.SetConfigType("yaml")
+
+	for _, step := range []struct {
+		name            string
+		conf            []byte
+		expectedError   string
+		expectedEntries int
+	}{
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "http://localhost:8080"
+    ca_cert: "/mnt/certs/ca.crt"
+    chunksize: "50"
+    region: "us-east-1"
+    access_key: "access"
+    secret_key: "secret"
+    max_buckets: 10
+    max_objects: 1000
+    max_quota: "10GB"
+    bucket_prefix: "archvie"
+    ready_path: "/health/ready"
+`),
+			expectedEntries: 1,
+			expectedError:   "",
+			name:            "all_OK",
+		},
+		{
+			conf: []byte(`
+archive:
+  posixEndpoints:
+`),
+			expectedEntries: 0,
+			expectedError:   "",
+			name:            "no_s3config_OK",
+		},
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "http://localhost:8080"
+    access_key: "access"
+    secret_key: "secret"
+    bucket_prefix: "archvie"
+`),
+			expectedEntries: 1,
+			expectedError:   "",
+			name:            "minimal_OK",
+		},
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "http://example.org"
+    access_key: "access"
+    secret_key: "secret"
+    bucket_prefix: "archvie"
+  - url: "http://example.com"
+    access_key: "access"
+    secret_key: "secret"
+    bucket_prefix: "archvie"
+`),
+			expectedEntries: 2,
+			expectedError:   "",
+			name:            "multiple_OK",
+		},
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "http://localhost:8080"
+    access_key: ""
+    secret_key: "secret"
+    bucket_prefix: "archvie"
+`),
+			expectedEntries: 0,
+			expectedError:   "missing required parameter s3endpoint access key",
+			name:            "missing_credentials",
+		},
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "http://localhost:8080"
+    bucket_prefix: "archvie"
+    access_key: "access"
+    secret_key: "secret"
+    max_quota: 2.0GB
+`),
+			expectedEntries: 0,
+			expectedError:   "strconv.UnmarshalText: parsing \"2.0GB\": invalid syntax",
+			name:            "bad_yaml",
+		},
+		{
+			conf: []byte(`
+archive:
+  s3endpoints:
+  - url: "localhost:8080"
+    bucket_prefix: "archvie"
+    access_key: "access"
+    secret_key: "secret"
+`),
+			expectedEntries: 0,
+			expectedError:   "malformed url, scheme is missing",
+			name:            "bad_hostname",
+		},
+	} {
+		ts.T().Run(step.name, func(t *testing.T) {
+			assert.NoError(t, viper.ReadConfig(bytes.NewBuffer(step.conf)))
+			endpoints, e := parseS3Endpoints("archive")
+			if strings.HasSuffix(step.name, "_OK") {
+				assert.NoError(t, e)
+				assert.Equal(t, step.expectedEntries, len(endpoints))
+				// assert.Equal(ts.T(), "", endpoints)
+			} else {
+				assert.EqualError(t, e, step.expectedError)
+				assert.Equal(t, step.expectedEntries, len(endpoints))
+			}
+		})
+	}
 }
