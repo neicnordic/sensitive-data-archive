@@ -74,7 +74,7 @@ func writeName() (name string, err error) {
 
 func doCleanup() {
 	for _, name := range cleanupFiles {
-		os.Remove(name)
+		_ = os.Remove(name)
 	}
 
 	cleanupFiles = cleanupFilesBack[0:0]
@@ -138,7 +138,7 @@ func TestPosixBackend(t *testing.T) {
 
 	assert.Nil(t, err, "Failure when writing to posix writer")
 	assert.Equal(t, len(writeData), written, "Did not write all writeData")
-	writer.Close()
+	_ = writer.Close()
 
 	log.SetOutput(&buf)
 	writer, err = backend.NewFileWriter(posixNotCreatable)
@@ -309,7 +309,7 @@ func TestS3Backend(t *testing.T) {
 
 	assert.Nil(t, err, "Failure when writing to s3 writer")
 	assert.Equal(t, len(writeData), written, "Did not write all writeData")
-	writer.Close()
+	_ = writer.Close()
 
 	reader, err := s3back.NewFileReader(s3Creatable)
 	assert.Nil(t, err, "s3 NewFileReader failed when it should work")

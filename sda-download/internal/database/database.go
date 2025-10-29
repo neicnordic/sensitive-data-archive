@@ -114,7 +114,7 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 
 	for dbs.DB.Ping() != nil {
 		log.Errorln("Database unreachable, reconnecting")
-		dbs.DB.Close()
+		_ = dbs.DB.Close()
 
 		if time.Since(start) > dbReconnectTimeout {
 			logFatalf("Could not reconnect to failed database in reasonable time, giving up")
@@ -149,9 +149,9 @@ var GetFiles = func(datasetID string) ([]*FileInfo, error) {
 
 // removeUserIDPrefix strips the user id prefix from a file path
 func removeUserIDPrefix(filePath, userID string) string {
-	strings.ReplaceAll(userID, "@", "_")
+	sanitizedUserID := strings.ReplaceAll(userID, "@", "_")
 	// Construct the full prefix we expect to find (userID + "/").
-	fullPrefix := userID + "/"
+	fullPrefix := sanitizedUserID + "/"
 	if strings.HasPrefix(filePath, fullPrefix) {
 		return strings.TrimPrefix(filePath, fullPrefix)
 	}
@@ -461,5 +461,5 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 // Close terminates the connection to the database
 func (dbs *SQLdb) Close() {
 	db := dbs.DB
-	db.Close()
+	_ = db.Close()
 }

@@ -19,7 +19,7 @@ file="dummy_data"
 expected_size=1048605
 
 # Download unencrypted full file (from download service at port 9443), check file size
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" "https://localhost:9443/s3/$dataset/$file" --output full1.bam
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file" --output full1.bam
 
 file_size=$(stat -c %s full1.bam)  # Get the size of the file
 if [ "$file_size" -ne "$expected_size" ]; then
@@ -30,7 +30,7 @@ fi
 # Test reencrypt the file header with the client public key 
 clientkey=$(base64 -w0 client.pub.pem)
 reencryptedFile=reencrypted.bam.c4gh
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3/$dataset/$file" --output $reencryptedFile
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file" --output $reencryptedFile
 
 expected_encrypted_size=1049205
 file_size=$(stat -c %s $reencryptedFile)
@@ -55,7 +55,7 @@ fi
 
 # download reencrypted partial file, check file size
 partReencryptedFile=part1.bam.c4gh
-curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile
+curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file?startCoordinate=0&endCoordinate=1000" --output $partReencryptedFile
 file_size=$(stat -c %s $partReencryptedFile)  # Get the size of the file
 part_expected_size=65688
 

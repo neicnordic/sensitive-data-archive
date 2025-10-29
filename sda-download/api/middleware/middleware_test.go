@@ -3,17 +3,21 @@ package middleware
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
 	"github.com/neicnordic/sda-download/pkg/auth"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
 const token string = "token"
@@ -301,5 +305,229 @@ func TestGetDatasets(t *testing.T) {
 	storedDatasets := GetCacheFromContext(c)
 	if !reflect.DeepEqual(datasets, storedDatasets) {
 		t.Errorf("TestStoreDatasets failed, got %s, expected %s", storedDatasets, datasets)
+	}
+}
+
+func TestClientVersionMiddleware(t *testing.T) {
+	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
+	defer func() {
+		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
+	}()
+
+	tests := []struct {
+		name                 string
+		clientVersionHeader  string
+		configMinimalVersion string
+		expectedStatus       int
+		expectedBodyContains string
+	}{
+		{
+			name:                 "Fail_MissingHeader",
+			clientVersionHeader:  "",
+			configMinimalVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "Missing required header",
+		},
+		{
+			name:                 "Fail_InvalidClientSemVer",
+			clientVersionHeader:  "v-invalid-1",
+			configMinimalVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "is invalid",
+		},
+		{
+			name:                 "Fail_InsufficientVersion",
+			clientVersionHeader:  "v0.1.9",
+			configMinimalVersion: "v0.2.0",
+			expectedStatus:       http.StatusPreconditionFailed, // 412
+			expectedBodyContains: "is insufficient. Please update to at least version 'v0.2.0'",
+		},
+		{
+			name:                 "Success_EqualVersion",
+			clientVersionHeader:  "v0.2.0",
+			configMinimalVersion: "v0.2.0",
+			expectedStatus:       http.StatusOK, // 200
+			expectedBodyContains: "",
+		},
+		{
+			name:                 "Success_NewerVersion",
+			clientVersionHeader:  "v0.3.0",
+			configMinimalVersion: "v0.2.0",
+			expectedStatus:       http.StatusOK, // 200
+			expectedBodyContains: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/", nil)
+			_, router := gin.CreateTestContext(w)
+
+			config.Config.App.MinimalCliVersionStr = tt.configMinimalVersion
+			// Set the configuration mock by parsing the string into the required SemVer object
+			parsedVersion, err := semver.NewVersion(tt.configMinimalVersion)
+			if err != nil {
+				t.Fatalf("Test setup error: Failed to parse minimal version '%s': %v", tt.configMinimalVersion, err)
+			}
+			config.Config.App.MinimalCliVersion = parsedVersion
+
+			if tt.clientVersionHeader != "" {
+				r.Header.Set("SDA-Client-Version", tt.clientVersionHeader)
+			}
+
+			// Define a dummy handler to check if the middleware allowed passage
+			var passed bool
+			dummyHandler := func(c *gin.Context) {
+				passed = true
+				c.Status(http.StatusOK) // Explicitly set OK status if allowed to pass
+			}
+
+			// Send request through the middleware
+			router.GET("/", ClientVersionMiddleware(), dummyHandler)
+			router.ServeHTTP(w, r)
+
+			// Assertion 1: Check Status Code
+			if w.Code != tt.expectedStatus {
+				t.Errorf("status code mismatch.\nGot: %d\nWant: %d", w.Code, tt.expectedStatus)
+			}
+
+			// Assertion 2: Check Body Content for Failures
+			body := w.Body.String()
+			if tt.expectedStatus != http.StatusOK && !strings.Contains(body, tt.expectedBodyContains) {
+				t.Errorf("response body mismatch.\nGot Body: %s\nWant Body to contain: %s", body, tt.expectedBodyContains)
+			}
+
+			// Assertion 3: Check if the request was allowed to pass (only for success cases)
+			if tt.expectedStatus == http.StatusOK && !passed {
+				t.Error("success case failed: Middleware unexpectedly blocked the request.")
+			}
+			if tt.expectedStatus != http.StatusOK && passed {
+				t.Error("failure case failed: Middleware unexpectedly allowed the request to pass.")
+			}
+		})
+	}
+}
+
+// TestChainDefaultMiddleware tests the ordered execution of TokenMiddleware -> ClientVersionMiddleware
+func TestChainDefaultMiddleware(t *testing.T) {
+	// Store original configuration and functions for restoration
+	originalGetToken := auth.GetToken
+	originalGetVisas := auth.GetVisas
+	originalGetPermissions := auth.GetPermissions
+	originalNewSessionKey := session.NewSessionKey
+	originalSessionName := config.Config.Session.Name
+	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
+
+	// Shared defer to restore mocks and config after all tests run
+	defer func() {
+		auth.GetToken = originalGetToken
+		auth.GetVisas = originalGetVisas
+		auth.GetPermissions = originalGetPermissions
+		session.NewSessionKey = originalNewSessionKey
+		config.Config.Session.Name = originalSessionName
+		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
+	}()
+
+	// Define test cases for the middleware chain
+	tests := []struct {
+		name             string
+		clientVersion    string
+		minimalVersion   string
+		mockTokenSuccess bool
+		expectedStatus   int
+		expectCookie     bool
+	}{
+		{
+			name:             "Success_TokenAndVersionPass",
+			clientVersion:    "v0.3.0",
+			minimalVersion:   "v0.2.0",
+			mockTokenSuccess: true,
+			expectedStatus:   http.StatusOK,
+			expectCookie:     true,
+		},
+		{
+			name:             "Fail_VersionInsufficient_AfterTokenPass",
+			clientVersion:    "v0.1.0", // Fails version check
+			minimalVersion:   "v0.2.0",
+			mockTokenSuccess: true,
+			expectedStatus:   http.StatusPreconditionFailed, // 412
+			expectCookie:     true,                          // TokenMiddleware ran and set cookie
+		},
+		{
+			name:             "Fail_AuthBlockedFirst_VersionIrrelevant",
+			clientVersion:    "v0.1.0", // Would fail version check, but should fail token first
+			minimalVersion:   "v0.2.0",
+			mockTokenSuccess: false,
+			expectedStatus:   http.StatusUnauthorized, // 401
+			expectCookie:     false,
+		},
+		{
+			name:             "Fail_AuthBlockedFirst_VersionSufficient",
+			clientVersion:    "v1.0.0", // Would pass version check, but should fail token first
+			minimalVersion:   "v0.2.0",
+			mockTokenSuccess: false,
+			expectedStatus:   http.StatusUnauthorized, // 401
+			expectCookie:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// --- Setup Mocks and Config for this test case ---
+			token := "mock-token"
+
+			if tt.mockTokenSuccess {
+				auth.GetToken = func(_ http.Header) (string, int, error) { return token, http.StatusOK, nil }
+				auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) { return &auth.Visas{}, nil }
+				auth.GetPermissions = func(_ auth.Visas) []string { return []string{"dataset1"} }
+				session.NewSessionKey = func() string { return "key" }
+				config.Config.Session.Name = "sda_session_key"
+			} else {
+				auth.GetToken = func(_ http.Header) (string, int, error) {
+					return "", http.StatusUnauthorized, errors.New("missing token")
+				}
+				auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
+					return &auth.Visas{}, errors.New("auth failed")
+				}
+			}
+
+			// Set up ClientVersionMiddleware config
+			parsedVersion, err := semver.NewVersion(tt.minimalVersion)
+			assert.NoErrorf(t, err, "Test setup error: Failed to parse minimal version '%s'", tt.minimalVersion)
+			config.Config.App.MinimalCliVersion = parsedVersion
+
+			// --- Execution ---
+
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/", nil)
+			if tt.clientVersion != "" {
+				r.Header.Set("SDA-Client-Version", tt.clientVersion)
+			}
+
+			_, router := gin.CreateTestContext(w)
+			router.GET("/", append(ChainDefaultMiddleware(), testEndpoint)...)
+			router.ServeHTTP(w, r)
+
+			// Assert Status Code
+			assert.Equal(t, tt.expectedStatus, w.Code, fmt.Sprintf("Expected status %d, got %d", tt.expectedStatus, w.Code))
+
+			// Assert Cookie Presence
+			cookieFound := false
+			for _, c := range w.Result().Cookies() {
+				if c.Name == config.Config.Session.Name {
+					cookieFound = true
+
+					break
+				}
+			}
+
+			if tt.expectCookie {
+				assert.True(t, cookieFound, "Expected a session cookie to be set, but none was found.")
+			} else {
+				assert.False(t, cookieFound, "Expected no session cookie to be set, but one was found.")
+			}
+		})
 	}
 }
