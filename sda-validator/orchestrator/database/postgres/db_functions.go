@@ -99,7 +99,7 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse started at: %v", err)
 		}
-
+		validatorResult.Files = append(validatorResult.Files, fileResult)
 		validatorResults[validatorResult.ValidatorID] = validatorResult
 	}
 
@@ -133,6 +133,7 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 
 	validationInformation := new(model.ValidationInformation)
 	validatorsIDs := make(map[string]struct{})
+	files := make(map[string]*model.FileInformation)
 
 	for rows.Next() {
 		fileInformation := new(model.FileInformation)
@@ -149,7 +150,7 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 		}
 
 		validatorsIDs[validatorsID] = struct{}{}
-		validationInformation.Files = append(validationInformation.Files, fileInformation)
+		files[fileInformation.FileID] = fileInformation
 	}
 
 	if err := rows.Err(); err != nil {
@@ -163,6 +164,9 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 
 	for validatorID := range validatorsIDs {
 		validationInformation.ValidatorIDs = append(validationInformation.ValidatorIDs, validatorID)
+	}
+	for _, file := range files {
+		validationInformation.Files = append(validationInformation.Files, file)
 	}
 
 	return validationInformation, nil
