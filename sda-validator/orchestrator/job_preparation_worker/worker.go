@@ -155,6 +155,11 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		return err
 	}
 
+	if validationInformation == nil {
+		log.Warnf("received job preparation message with validation id: %s, which had no file validation jobs in database", jobPreparationMessage.ValidationID)
+		return nil
+	}
+
 	validationDir := filepath.Join(conf.validationWorkDir, jobPreparationMessage.ValidationID)
 	validationFilesDir := filepath.Join(validationDir, "files")
 	if err = os.MkdirAll(validationFilesDir, 0755); err != nil {
