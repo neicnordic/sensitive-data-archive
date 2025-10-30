@@ -6,19 +6,35 @@ import (
 	"github.com/spf13/viper"
 )
 
-var rbacPolicyFilePath string
+type rbacConfig struct {
+	rbacPolicyFilePath string
+}
+
+var conf = &rbacConfig{}
 
 func init() {
 	config.RegisterFlags(
 		&config.Flag{
-			Name: "rbac.policy-file-path",
+			Name: "rbacCasbin.policy-file-path",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "/rbac/rbac.json", "Path to file containing rbac policy")
+				flagSet.String(flagName, "/rbacCasbin/rbacCasbin.json", "Path to file containing rbacCasbin policy")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				rbacPolicyFilePath = viper.GetString(flagName)
+				conf.rbacPolicyFilePath = viper.GetString(flagName)
 			},
 		},
 	)
+}
+
+func RbacPolicyFilePath(v string) func(*rbacConfig) {
+	return func(c *rbacConfig) {
+		c.rbacPolicyFilePath = v
+	}
+}
+
+func (c *rbacConfig) clone() *rbacConfig {
+	return &rbacConfig{
+		rbacPolicyFilePath: c.rbacPolicyFilePath,
+	}
 }
