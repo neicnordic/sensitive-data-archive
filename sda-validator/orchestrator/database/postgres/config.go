@@ -182,7 +182,7 @@ func Schema(v string) func(c *dbConfig) {
 	}
 }
 
-func (c *dbConfig) copy() *dbConfig {
+func (c *dbConfig) clone() *dbConfig {
 	return &dbConfig{
 		host:         c.host,
 		port:         c.port,

@@ -23,34 +23,44 @@ type Authenticator interface {
 
 type validateFromToken struct {
 	Keyset jwk.Set
+	config *authenticatorConfig
 }
 
-func NewAuthenticator() (Authenticator, error) {
-	authenticator := &validateFromToken{jwk.NewSet()}
-	switch {
-	case jwtPubKeyPath != "":
-		log.Info("new authenticator from jwt public key path")
-		if err := authenticator.readJwtPubKeyPath(jwtPubKeyPath); err != nil {
-			return nil, err
-		}
-	case jwtPubKeyUrl != "":
-		log.Info("new authenticator from jwt public key url")
-		if err := authenticator.fetchJwtPubKeyURL(jwtPubKeyUrl); err != nil {
+func NewAuthenticator(options ...func(config *authenticatorConfig)) (Authenticator, error) {
+	authenticator := &validateFromToken{
+		Keyset: jwk.NewSet(),
+		config: conf.clone(),
+	}
+
+	for _, option := range options {
+		option(authenticator.config)
+	}
+
+	if authenticator.config.jwtPubKeyPath != "" {
+		log.Info("authenticator add jwt public from key path")
+		if err := authenticator.readJwtPubKeyPath(); err != nil {
 			return nil, err
 		}
 	}
+	if authenticator.config.jwtPubKeyUrl != "" {
+		log.Info("authenticator add jwt public key from url")
+		if err := authenticator.fetchJwtPubKeyURL(); err != nil {
+			return nil, err
+		}
+	}
+
 	return authenticator, nil
 }
 
-func (u *validateFromToken) readJwtPubKeyPath(jwtPubKeyPath string) error {
-	err := filepath.Walk(jwtPubKeyPath,
+func (u *validateFromToken) readJwtPubKeyPath() error {
+	err := filepath.Walk(u.config.jwtPubKeyPath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 			if info.Mode().IsRegular() {
-				log.Debug("Reading file: ", filepath.Join(filepath.Clean(jwtPubKeyPath), info.Name()))
-				keyData, err := os.ReadFile(filepath.Join(filepath.Clean(jwtPubKeyPath), info.Name()))
+				log.Debug("Reading file: ", filepath.Join(filepath.Clean(u.config.jwtPubKeyPath), info.Name()))
+				keyData, err := os.ReadFile(filepath.Join(filepath.Clean(u.config.jwtPubKeyPath), info.Name()))
 				if err != nil {
 					return fmt.Errorf("key file error: %v", err)
 				}
@@ -78,8 +88,8 @@ func (u *validateFromToken) readJwtPubKeyPath(jwtPubKeyPath string) error {
 	return nil
 }
 
-func (u *validateFromToken) fetchJwtPubKeyURL(jwtPubKeyUrl string) error {
-	jwkURL, err := url.ParseRequestURI(jwtPubKeyUrl)
+func (u *validateFromToken) fetchJwtPubKeyURL() error {
+	jwkURL, err := url.ParseRequestURI(u.config.jwtPubKeyUrl)
 	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
 		if err != nil {
 			return err
@@ -87,14 +97,14 @@ func (u *validateFromToken) fetchJwtPubKeyURL(jwtPubKeyUrl string) error {
 
 		return fmt.Errorf("jwtPubKeyUrl is not a proper URL (%s)", jwkURL)
 	}
-	log.Info("jwkURL: ", jwtPubKeyUrl)
+	log.Info("jwkURL: ", u.config.jwtPubKeyUrl)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	u.Keyset, err = jwk.Fetch(ctx, jwtPubKeyUrl)
+	u.Keyset, err = jwk.Fetch(ctx, u.config.jwtPubKeyUrl)
 	if err != nil {
-		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtPubKeyUrl)
+		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, u.config.jwtPubKeyUrl)
 	}
 
 	for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
@@ -111,7 +121,6 @@ func (u *validateFromToken) fetchJwtPubKeyURL(jwtPubKeyUrl string) error {
 // Authenticate verifies that the token included in the http.Request is valid
 func (u *validateFromToken) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		log.Info("validating auth")
 		if u == nil {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
