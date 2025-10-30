@@ -126,22 +126,12 @@ func (u *validateFromToken) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		var tokenString string
-		switch {
-		case c.GetHeader("X-Amz-Security-Token") != "":
-			tokenString = c.GetHeader("X-Amz-Security-Token")
-		case c.GetHeader("Authorization") != "":
-			authStr := c.GetHeader("Authorization")
-			var err error
-			tokenString, err = readTokenFromHeader(authStr)
-			if err != nil {
-				c.AbortWithStatus(http.StatusUnauthorized)
-				return
-			}
-		default:
+		tokenString, err := readTokenFromHeader(c.GetHeader("Authorization"))
+		if err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
+
 		if tokenString == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
