@@ -64,6 +64,11 @@ func TestPostReq(t *testing.T) {
 	body, err = PostReq(serverError.URL, "mock_token", []byte(`{"name":"test"}`))
 	assert.Error(t, err)
 	assert.Nil(t, body)
+
+	// Test nil jsonBody case
+	body, err = PostReq(server.URL, "mock_token", nil)
+	assert.NoError(t, err)
+	assert.JSONEq(t, mockResponse, string(body))
 }
 
 func TestInvalidCharacters(t *testing.T) {
