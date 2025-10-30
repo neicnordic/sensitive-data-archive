@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"strings"
 
 	go_units "github.com/docker/go-units"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
@@ -50,11 +51,11 @@ func init() {
 		}, &config.Flag{
 			Name: "validator-paths",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.StringSlice(flagName, []string{}, "The paths to the available validators, in comma separated list")
+				flagSet.String(flagName, "", "The paths to the available validators, in comma separated list")
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				validatorPaths = viper.GetStringSlice(flagName)
+				validatorPaths = strings.Split(viper.GetString(flagName), ",")
 			},
 		}, &config.Flag{
 			Name: "sda-api-url",
