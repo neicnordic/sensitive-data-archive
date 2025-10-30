@@ -6,9 +6,14 @@ import (
 	"github.com/spf13/viper"
 )
 
-var jwtPubKeyPath, jwtPubKeyUrl string
+type authenticatorConfig struct {
+	jwtPubKeyPath, jwtPubKeyUrl string
+}
+
+var conf = &authenticatorConfig{}
 
 func init() {
+
 	config.RegisterFlags(
 		&config.Flag{
 			Name: "jwt.pub-key-url",
@@ -17,7 +22,7 @@ func init() {
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				jwtPubKeyUrl = viper.GetString(flagName)
+				conf.jwtPubKeyUrl = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -27,8 +32,26 @@ func init() {
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				jwtPubKeyPath = viper.GetString(flagName)
+				conf.jwtPubKeyPath = viper.GetString(flagName)
 			},
 		},
 	)
+}
+
+func JwtPubKeyPath(v string) func(*authenticatorConfig) {
+	return func(c *authenticatorConfig) {
+		c.jwtPubKeyPath = v
+	}
+}
+func JwtPubKeyUrl(v string) func(*authenticatorConfig) {
+	return func(c *authenticatorConfig) {
+		c.jwtPubKeyUrl = v
+	}
+}
+
+func (c *authenticatorConfig) clone() *authenticatorConfig {
+	return &authenticatorConfig{
+		jwtPubKeyPath: c.jwtPubKeyPath,
+		jwtPubKeyUrl:  c.jwtPubKeyUrl,
+	}
 }

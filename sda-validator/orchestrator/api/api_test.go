@@ -110,9 +110,6 @@ func (ts *ValidatorAPITestSuite) SetupTest() {
 	*ts.mockBroker = mockBroker{}
 }
 
-func (ts *ValidatorAPITestSuite) TearDownTest() {
-}
-
 func (ts *ValidatorAPITestSuite) TearDownSuite() {
 	ts.httpTestServer.Close()
 }

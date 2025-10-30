@@ -22,7 +22,7 @@ var preparedStatements map[string]*sql.Stmt
 
 func Init(options ...func(config *dbConfig)) error {
 
-	dbConf := globalConf.copy()
+	dbConf := globalConf.clone()
 
 	for _, o := range options {
 		o(dbConf)

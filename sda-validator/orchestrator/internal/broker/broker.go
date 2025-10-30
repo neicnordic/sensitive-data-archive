@@ -24,7 +24,7 @@ type amqpBroker struct {
 // NewAMQPBroker creates a new Broker that can communicate with a backend amqp server.
 func NewAMQPBroker(options ...func(*amqpConfig)) (AMQPBrokerI, error) {
 
-	brokerConf := globalConf.copy()
+	brokerConf := globalConf.clone()
 
 	for _, o := range options {
 		o(brokerConf)
