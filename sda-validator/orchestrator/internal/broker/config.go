@@ -240,7 +240,7 @@ func PrefetchCount(v int) func(c *amqpConfig) {
 	}
 }
 
-func (c *amqpConfig) copy() *amqpConfig {
+func (c *amqpConfig) clone() *amqpConfig {
 	return &amqpConfig{
 		host:          c.host,
 		port:          c.port,
