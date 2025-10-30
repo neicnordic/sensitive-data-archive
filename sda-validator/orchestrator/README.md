@@ -6,8 +6,115 @@ belonging to a user, and to read the result for a specific validation request.
 
 See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the ValidatorOrchestratorAPI.
 
-## Configuration
 
+## High level
+
+The following sections aims to describe to sda-validator-orchestrator on a high level
+
+### Diagram
+![high_level_diagram.jpg](docs/high_level_diagram.jpg)
+
+### "Components"
+
+The sda-validator-orchestrator mainly consists of three "components", the HTTP server, job preparation workers, and job workers.
+
+#### HTTP server
+
+The HTTP server implements the [ValidatorOrchestratorAPI](swagger_v1.yml) and allows for users and admins to request the currently available validators,
+request a set of files to be validated with a set of validators, and to fetch the results of a validation request.
+
+The HTTP server will authenticate requests, expecting a Bearer token in the "Authorization" header, if not provided, not valid, or not signed by any key configured by either the [--jwt.pub-key-path or --jwt.pub-key-url configurations](#configuration) 401 (unauthorized) will be returned.
+The HTTP server also enforces RBAC (role based access control) towards the available APIs on the [ValidatorOrchestratorAPI](swagger_v1.yml), the RBAC policy is expected to be provided by the [rbac.policy-file-path configuration].
+example policy
+```json
+{
+  "policy": [
+    {
+      "role": "admin",
+      "path": "/admin/validate",
+      "action": "POST"
+    }, {
+      "role": "admin",
+      "path": "/admin/result",
+      "action": "GET"
+    }, {
+      "role": "submission",
+      "path": "/validators",
+      "action": "GET"
+    }, {
+      "role": "submission",
+      "path": "/validate",
+      "action": "POST"
+    }, {
+      "role": "submission",
+      "path": "/result",
+      "action": "GET"
+    }
+  ],
+  "roles": [
+    {
+      "role": "admin",
+      "rolebinding": "submission"
+    },
+    {
+      "role": "testu@lifescience-ri.eu",
+      "rolebinding": "admin"
+    }, {
+      "role": "EXAMPLE_TOKEN_SUBJECT",
+      "rolebinding": "admin"
+    }, {
+      "role": "EXAMPLE_TOKEN_SUBJECT_2",
+      "rolebinding": "submission"
+    }
+  ]
+}
+```
+
+The port the HTTP server is hosted on can be configured with the [--api-port configuration](#configuration).
+
+The HTTP server communicates with the [sda-api](../../sda/cmd/api/api.md) using the `/users/${USER}/files` API to ensure requested files exists, that they belong to the user, and to get additional information about the files such as their "sda id" and the file size.
+The sda-api is expected to be hosted on the URL provided by the [--sda-api-url configuration](#configuration)
+The sda-api requires authentication, the sda-validator-orchestrator will authenticate calls towards the sda-api with the token configured by the [--sda-api-token configuration](#configuration).
+
+The HTTP server implementation will publish job preparations messages to the rabbitmq queue configured by the [--job-preparation-queue configuration](#configuration).
+
+#### Job Preparation Worker
+Current main responsibility is to download the files that are to be validated into a created directory for this validation request in the configured validation work directory[see validation-work-dir configuration](#configuration).
+
+Files are downloaded from the [sda-api](../../sda/cmd/api/api.md) using the `/users/${USER}/file/${FILE_ID}` API which is expected to be hosted on the URL provided by the [--sda-api-url configuration](#configuration) 
+The sda-api requires authentication, the sda-validator-orchestrator will authenticate calls towards the sda-api with the token configured by the [--sda-api-token configuration](#configuration). 
+
+Before downloading the files the job preparation workers will ensure that sufficient space is available in the volume, and if it can not reserve space for all files, it will abort and reconsume the message until other validations has finished such that sufficient space can be reserved for the requested files. 
+
+Once files has been downloaded it will send a validation job for the files for each validator requested.
+
+Amount of job preparation workers in a sda-validator-orchestrator can be configured by the [--job-preparation-worker-count configuration](#configuration).
+Job preparation workers will consume from the rabbitmq queue specified by the [--job-preparation-queue configuration](#configuration).
+Job preparation workers will publish job messages to the rabbitmq queue specified by the [--job-queue configuration](#configuration).
+
+#### Job worker
+The main responsibly of a job worker is to invocate the 3rd Party Validators(Apptainer) with the required inputs and to read the result and store it in the [file_validation_job table](#postgres) postgres database.
+
+After each job is completed it checks if all jobs in a validation are finished and cleans up the files from the file system for the validation.
+
+Amount of job workers in a sda-validator-orchestrator can be configured by the [--job-worker-count configuration](#configuration)
+Job workers will consume from the rabbitmq queue specified by the [--job-queue configuration](#configuration)
+
+### Postgres
+The sda-validator-orchestrator requires a Postgres database connection, this connection is setup with the [--database.* configurations](#configuration).
+And [file_validation_job table](database/postgres/initdb.d/02_create_table_file_validation_job.sql)) is expected to exists in the database && schema provided in the configuration.
+
+### Rabbitmq Broker
+The sda-validator-orchestrator requires a rabbitmq connection, this connection is setup with the [--broker.* configurations](#configuration).. 
+
+Each job preparation and job worker will start consuming messages from the configured queues based on [--job-preparation-queue configuration](#configuration) and [--job-queue configuration](#configuration).
+It will publish messages to the exchange configured by the [--broker.exchange configuration] with routing keys based on the [--job-preparation-queue configuration](#configuration) and [--job-queue configuration](#configuration).
+
+### File system
+The sda-validator-orchestrator
+
+
+## Configuration
 
 | Name:                          | Env variable:                | Type:   | Usage:                                                                                                                                                                                       | Default Value:             |         
 |--------------------------------|------------------------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|                               
