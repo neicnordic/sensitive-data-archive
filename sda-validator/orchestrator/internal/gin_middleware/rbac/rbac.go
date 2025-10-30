@@ -15,27 +15,37 @@ type Rbac interface {
 	Enforce() gin.HandlerFunc
 }
 
-type rbac struct {
-	e *casbin.Enforcer
+type rbacCasbin struct {
+	casbinEnforcer *casbin.Enforcer
+	config         *rbacConfig
 }
 
-func NewRbac() (Rbac, error) {
+func NewRbac(options ...func(*rbacConfig)) (Rbac, error) {
 
-	rbacPolicy, err := os.ReadFile(rbacPolicyFilePath)
+	rbac := &rbacCasbin{
+		casbinEnforcer: nil,
+		config:         conf.clone(),
+	}
+
+	for _, option := range options {
+		option(rbac.config)
+	}
+
+	rbacPolicy, err := os.ReadFile(rbac.config.rbacPolicyFilePath)
 	if err != nil {
 		return nil, err
 	}
 
 	m, _ := model.NewModelFromString(RbacModel)
-	casbinEnforcer, err := casbin.NewEnforcer(m, NewAdapter(rbacPolicy))
+	rbac.casbinEnforcer, err = casbin.NewEnforcer(m, NewAdapter(rbacPolicy))
 	if err != nil {
 		return nil, err
 	}
 
-	return &rbac{e: casbinEnforcer}, nil
+	return rbac, nil
 }
 
-func (rbac *rbac) Enforce() gin.HandlerFunc {
+func (rbac *rbacCasbin) Enforce() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, ok := c.Get("token")
 		if !ok {
@@ -49,9 +59,9 @@ func (rbac *rbac) Enforce() gin.HandlerFunc {
 			return
 		}
 
-		ok, err := rbac.e.Enforce(token.(jwt.Token).Subject(), c.Request.URL.Path, c.Request.Method)
+		ok, err := rbac.casbinEnforcer.Enforce(token.(jwt.Token).Subject(), c.Request.URL.Path, c.Request.Method)
 		if err != nil {
-			log.Debugf("rbac enforcement failed, reason: %s", err.Error())
+			log.Infof("rbac enforcement failed, reason: %s", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 
 			return
