@@ -1,4 +1,4 @@
-package job_preparation_worker
+package jobpreparationworker
 
 import (
 	"bytes"
@@ -53,11 +53,11 @@ func Init(opt ...func(*config)) error {
 	if conf.destinationQueue == "" {
 		return errors.New("destinationQueue is required")
 	}
-	if conf.sdaApiUrl == "" {
-		return errors.New("sdaApiUrl is required")
+	if conf.sdaAPIURL == "" {
+		return errors.New("sdaAPIURL is required")
 	}
-	if conf.sdaApiToken == "" {
-		return errors.New("sdaApiToken is required")
+	if conf.sdaAPIToken == "" {
+		return errors.New("sdaAPIToken is required")
 	}
 	if conf.broker == nil {
 		return errors.New("broker is required")
@@ -91,11 +91,8 @@ func StartWorkers() error {
 
 	errChan := make(chan error, 1)
 
-	wg := &sync.WaitGroup{}
 	for _, w := range workers {
-		wg.Add(1)
 		go func(w *worker) {
-			wg.Done()
 			w.running = true
 			// passing ctx such that we can gracefully shut down the subscribe
 			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
@@ -107,13 +104,12 @@ func StartWorkers() error {
 		}(w)
 	}
 
-	wg.Wait()
-
 	select {
 	case err := <-errChan:
 		return err
 	case <-shutdownChan:
 		close(shutdownChan)
+
 		return nil
 	}
 }
@@ -132,11 +128,9 @@ func ShutdownWorkers() {
 		if !w.running {
 			continue
 		}
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			w.close()
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 	shutdownChan <- struct{}{}
@@ -146,24 +140,28 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	jobPreparationMessage := new(model.JobPreparationMessage)
 	if err := json.Unmarshal(message.Body, jobPreparationMessage); err != nil {
 		log.Errorf("could not unmarshal message to job preparation message due to: %v", err)
+
 		return nil // returning nil so message is not nacked and reconsumed
 	}
 
 	validationInformation, err := database.ReadValidationInformation(ctx, jobPreparationMessage.ValidationID)
 	if err != nil {
 		log.Warnf("could not read validation information due to: %v", err)
+
 		return err
 	}
 
 	if validationInformation == nil {
 		log.Warnf("received job preparation message with validation id: %s, which had no file validation jobs in database", jobPreparationMessage.ValidationID)
+
 		return nil
 	}
 
 	validationDir := filepath.Join(conf.validationWorkDir, jobPreparationMessage.ValidationID)
 	validationFilesDir := filepath.Join(validationDir, "files")
-	if err = os.MkdirAll(validationFilesDir, 0755); err != nil {
+	if err = os.MkdirAll(validationFilesDir, 0750); err != nil {
 		log.Errorf("failed to create validation work directory: %s, error: %v", validationFilesDir, err)
+
 		return err
 	}
 	// Remove validation directory if any error is encountered
@@ -180,6 +178,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	for _, validatorID := range validationInformation.ValidatorIDs {
 		if validatorDescription, ok := validators.Validators[validatorID]; ok && validatorDescription.RequiresFileContent() {
 			requiresFileContent = true
+
 			break
 		}
 	}
@@ -187,6 +186,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	if requiresFileContent {
 		if err := downloadFiles(ctx, validationFilesDir, validationInformation); err != nil {
 			log.Errorf("failed to download files, error: %v", err)
+
 			return err
 		}
 	}
@@ -195,7 +195,6 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 }
 
 func downloadFiles(ctx context.Context, validationFilesDir string, validationInformation *model.ValidationInformation) error {
-
 	files := make(map[string]*os.File)
 	// Ensure all files are closed
 	defer func(filesToClose map[string]*os.File) {
@@ -206,24 +205,26 @@ func downloadFiles(ctx context.Context, validationFilesDir string, validationInf
 
 	// Reserve disk space for all files to be downloaded
 	for _, fileInformation := range validationInformation.Files {
-
 		fileLocalPath := filepath.Join(validationFilesDir, fileInformation.FilePath)
 		dir, _ := filepath.Split(fileLocalPath)
 
 		// Ensure any sub directories file is in is created
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			log.Errorf("failed to create sub directory for file: %s, error: %v", dir, err)
+
 			return err
 		}
 
 		file, err := os.OpenFile(fileLocalPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0444)
 		if err != nil {
 			log.Errorf("failed to open file: %s, error: %v", fileLocalPath, err)
+
 			return err
 		}
 
 		if err := file.Truncate(fileInformation.SubmissionFileSize); err != nil {
 			log.Errorf("failed to truncate file: %s, error: %v", fileLocalPath, err)
+
 			return err
 		}
 		files[fileInformation.FileID] = file
@@ -240,8 +241,8 @@ func downloadFiles(ctx context.Context, validationFilesDir string, validationInf
 	pubKeyBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 
 	// Download and mount files to local
-	for fileId, file := range files {
-		if err := downloadFile(ctx, validationInformation.SubmissionUserID, fileId, file, pubKeyBase64, privateKeyData); err != nil {
+	for fileID, file := range files {
+		if err := downloadFile(ctx, validationInformation.SubmissionUserID, fileID, file, pubKeyBase64, privateKeyData); err != nil {
 			return err
 		}
 	}
@@ -250,13 +251,13 @@ func downloadFiles(ctx context.Context, validationFilesDir string, validationInf
 }
 
 func downloadFile(_ context.Context, userID, fileID string, file *os.File, pubKeyBase64 string, privateKeyData [32]byte) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", conf.sdaApiUrl, userID, fileID), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", conf.sdaAPIURL, userID, fileID), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create the request, reason: %v", err)
 	}
 
 	// TODO how to handle auth in better way, TBD #989
-	req.Header.Add("Authorization", "Bearer "+conf.sdaApiToken)
+	req.Header.Add("Authorization", "Bearer "+conf.sdaAPIToken)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Set("C4GH-Public-Key", pubKeyBase64)
 
@@ -305,9 +306,7 @@ func (w *worker) sendValidatorJobs(ctx context.Context, validationDir string, va
 			ValidationDirectory: validationDir,
 			Files:               make([]*model.FileInformation, len(validationInformation.Files)),
 		}
-		for i, fileInfo := range validationInformation.Files {
-			jobMessage.Files[i] = fileInfo
-		}
+		copy(jobMessage.Files, validationInformation.Files)
 
 		body, err := json.Marshal(jobMessage)
 		if err != nil {
@@ -318,5 +317,6 @@ func (w *worker) sendValidatorJobs(ctx context.Context, validationDir string, va
 			return fmt.Errorf("failed to publish message due to: %s", err)
 		}
 	}
+
 	return nil
 }

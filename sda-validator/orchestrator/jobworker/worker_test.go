@@ -1,4 +1,4 @@
-package job_worker
+package jobworker
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func (ts *JobWorkerTestSuite) SetupSuite() {
 	database.RegisterDatabase(ts.mockDatabase)
 	validators.Validators = map[string]*validators.ValidatorDescription{
 		"mock-validator": {
-			ValidatorId:       "mock-validator",
+			ValidatorID:       "mock-validator",
 			Name:              "mock validator",
 			Description:       "Validator for mocking",
 			Version:           "v0.0.0",
@@ -71,7 +71,6 @@ type mockCommandExecutor struct {
 
 func (m *mockCommandExecutor) Execute(name string, args ...string) ([]byte, error) {
 	mockArgs := m.Called(name, args)
-
 	mockArgs.Get(0).(func())()
 
 	return nil, mockArgs.Error(1)
@@ -83,16 +82,19 @@ type mockDatabase struct {
 
 func (m *mockDatabase) Commit() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) Rollback() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
 	_ = m.Called()
+
 	return m, nil
 }
 
@@ -118,11 +120,13 @@ func (m *mockDatabase) InsertFileValidationJob(_ context.Context, _, _, _, _ str
 
 func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error {
 	args := m.Called(validationID, validatorID, fileID, fileResult, fileMessages, finishedAt, validatorResult, validatorMessages)
+
 	return args.Error(0)
 }
 
 func (m *mockDatabase) AllValidationJobsDone(_ context.Context, validationID string) (bool, error) {
 	args := m.Called(validationID)
+
 	return args.Bool(0), args.Error(1)
 }
 
@@ -181,6 +185,7 @@ func (ts *JobWorkerTestSuite) TestInitWorkers() {
 	))
 	ts.Len(workers, 2)
 }
+
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
 	ts.EqualError(Init(
 		Broker(ts.mockBroker),
@@ -188,14 +193,15 @@ func (ts *JobWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
 		WorkerCount(2),
 	), "sourceQueue is required")
 }
-func (ts *JobWorkerTestSuite) TestInitWorkers_NoBroker() {
 
+func (ts *JobWorkerTestSuite) TestInitWorkers_NoBroker() {
 	ts.EqualError(Init(
 		SourceQueue("job-queue"),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
 	), "broker is required")
 }
+
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoCommandExecutor() {
 	ts.EqualError(Init(
 		SourceQueue("job-queue"),
@@ -208,6 +214,7 @@ func (ts *JobWorkerTestSuite) TestStartWorkers_NoInit() {
 	conf = nil
 	ts.EqualError(StartWorkers(), "workers have not been initialized")
 }
+
 func (ts *JobWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	if err := Init(
 		SourceQueue("job-queue"),
@@ -221,8 +228,8 @@ func (ts *JobWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(errors.New("subscribe error"))
 
 	ts.EqualError(StartWorkers(), "job worker encountered error\nsubscribe error")
-
 }
+
 func (ts *JobWorkerTestSuite) TestStartAndShutdownWorkers() {
 	if err := Init(
 		SourceQueue("job-queue"),
@@ -296,7 +303,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 	validationID := uuid.NewString()
 	validationDir := filepath.Join(ts.tempDir, validationID)
 
-	if err := os.MkdirAll(filepath.Join(validationDir, "files"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(validationDir, "files"), 0750); err != nil {
 		ts.FailNow("failed to create validation dir", err)
 	}
 	jobMessage := &model.JobMessage{
@@ -323,10 +330,10 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 	for _, file := range jobMessage.Files {
 		filePath := filepath.Join(validationDir, "files", file.FilePath)
 		fileDir := filepath.Dir(filePath)
-		if err := os.MkdirAll(fileDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(fileDir, 0750); err != nil {
 			ts.FailNow("failed to create validation file dir", err)
 		}
-		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0444); err != nil {
+		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0400); err != nil {
 			ts.FailNow("failed to create validation file", err)
 		}
 	}
@@ -360,7 +367,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 		},
 		Messages: nil,
 	}
-	resultJson, err := json.Marshal(expectedResult)
+	resultJSON, err := json.Marshal(expectedResult)
 	if err != nil {
 		ts.FailNow("failed to marshal expected result", err)
 	}
@@ -374,7 +381,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 			"--bind", fmt.Sprintf("%s:/mnt", filepath.Join(validationDir, "mock-validator")),
 			"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobMessage.ValidationDirectory, "files")),
 			"/mock-validator.sif"}).Return(func() {
-		if err := os.WriteFile(filepath.Join(validationDir, "mock-validator", "output", "result.json"), resultJson, 0444); err != nil {
+		if err := os.WriteFile(filepath.Join(validationDir, "mock-validator", "output", "result.json"), resultJSON, 0400); err != nil {
 			ts.Fail("failed to create result file")
 		}
 	}, nil)
@@ -445,7 +452,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 	validationID := uuid.NewString()
 	validationDir := filepath.Join(ts.tempDir, validationID)
 
-	if err := os.MkdirAll(filepath.Join(validationDir, "files"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(validationDir, "files"), 0750); err != nil {
 		ts.FailNow("failed to create validation dir", err)
 	}
 	jobMessage := &model.JobMessage{
@@ -464,10 +471,10 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 	for _, file := range jobMessage.Files {
 		filePath := filepath.Join(validationDir, "files", file.FilePath)
 		fileDir := filepath.Dir(filePath)
-		if err := os.MkdirAll(fileDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(fileDir, 0750); err != nil {
 			ts.FailNow("failed to create validation file dir", err)
 		}
-		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0444); err != nil {
+		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0400); err != nil {
 			ts.FailNow("failed to create validation file", err)
 		}
 	}
@@ -552,7 +559,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 	validationID := uuid.NewString()
 	validationDir := filepath.Join(ts.tempDir, validationID)
 
-	if err := os.MkdirAll(filepath.Join(validationDir, "files"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(validationDir, "files"), 0750); err != nil {
 		ts.FailNow("failed to create validation dir", err)
 	}
 	jobMessage := &model.JobMessage{
@@ -579,10 +586,10 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 	for _, file := range jobMessage.Files {
 		filePath := filepath.Join(validationDir, "files", file.FilePath)
 		fileDir := filepath.Dir(filePath)
-		if err := os.MkdirAll(fileDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(fileDir, 0750); err != nil {
 			ts.FailNow("failed to create validation file dir", err)
 		}
-		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0444); err != nil {
+		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0400); err != nil {
 			ts.FailNow("failed to create validation file", err)
 		}
 	}
@@ -669,7 +676,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 	validationID := uuid.NewString()
 	validationDir := filepath.Join(ts.tempDir, validationID)
 
-	if err := os.MkdirAll(filepath.Join(validationDir, "files"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(validationDir, "files"), 0750); err != nil {
 		ts.FailNow("failed to create validation dir", err)
 	}
 	jobMessage := &model.JobMessage{
@@ -696,10 +703,10 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 	for _, file := range jobMessage.Files {
 		filePath := filepath.Join(validationDir, "files", file.FilePath)
 		fileDir := filepath.Dir(filePath)
-		if err := os.MkdirAll(fileDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(fileDir, 0750); err != nil {
 			ts.FailNow("failed to create validation file dir", err)
 		}
-		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0444); err != nil {
+		if err := os.WriteFile(filePath, []byte(fmt.Sprintf("This is file: %s", file.FileID)), 0400); err != nil {
 			ts.FailNow("failed to create validation file", err)
 		}
 	}
@@ -725,7 +732,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 		},
 		Messages: nil,
 	}
-	resultJson, err := json.Marshal(expectedResult)
+	resultJSON, err := json.Marshal(expectedResult)
 	if err != nil {
 		ts.FailNow("failed to marshal expected result", err)
 	}
@@ -739,7 +746,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 			"--bind", fmt.Sprintf("%s:/mnt", filepath.Join(validationDir, "mock-validator")),
 			"--bind", fmt.Sprintf("%s:/mnt/input/data", filepath.Join(jobMessage.ValidationDirectory, "files")),
 			"/mock-validator.sif"}).Return(func() {
-		if err := os.WriteFile(filepath.Join(validationDir, "mock-validator", "output", "result.json"), resultJson, 0444); err != nil {
+		if err := os.WriteFile(filepath.Join(validationDir, "mock-validator", "output", "result.json"), resultJSON, 0400); err != nil {
 			ts.Fail("failed to create result file")
 		}
 	}, nil)

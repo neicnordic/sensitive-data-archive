@@ -51,23 +51,25 @@ func (ts *AuthenticatorTestSuite) SetupTest() {
 	}
 
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-
 		keySet := jwk.NewSet()
 
 		publicKey, err := jwk.ParseKey(publicKeyRaw, jwk.WithPEM(true))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+
 			return
 		}
 
 		if err := keySet.AddKey(publicKey); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+
 			return
 		}
 
 		raw, err := json.Marshal(keySet)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+
 			return
 		}
 
@@ -96,11 +98,11 @@ func generateToken(privateKeyRaw []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign token: %v", err)
 	}
+
 	return tokenRaw, nil
 }
 
 func generateEs256PemKey() ([]byte, []byte, error) {
-
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate key: %v", err)
@@ -143,6 +145,7 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyFile() {
 	ts.ginEngine.GET("/", func(c *gin.Context) {
 		if _, ok := c.Get("token"); !ok {
 			c.AbortWithStatus(http.StatusBadRequest)
+
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
@@ -159,9 +162,8 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyFile() {
 }
 
 func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyUrl() {
-
 	newAuthenticator, err := NewAuthenticator(
-		JwtPubKeyUrl(ts.httpTestServer.URL),
+		JwtPubKeyURL(ts.httpTestServer.URL),
 	)
 
 	if err != nil {
@@ -173,6 +175,7 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyUrl() {
 	ts.ginEngine.GET("/", func(c *gin.Context) {
 		if _, ok := c.Get("token"); !ok {
 			c.AbortWithStatus(http.StatusBadRequest)
+
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
@@ -189,9 +192,8 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyUrl() {
 }
 
 func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyUrl_TokenSignedWithDifferentKey() {
-
 	newAuthenticator, err := NewAuthenticator(
-		JwtPubKeyUrl(ts.httpTestServer.URL),
+		JwtPubKeyURL(ts.httpTestServer.URL),
 	)
 
 	if err != nil {
@@ -203,6 +205,7 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyUrl_TokenSigned
 	ts.ginEngine.GET("/", func(c *gin.Context) {
 		if _, ok := c.Get("token"); !ok {
 			c.AbortWithStatus(http.StatusBadRequest)
+
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
@@ -240,6 +243,7 @@ func (ts *AuthenticatorTestSuite) TestAuthenticator_FromJwtPubKeyPath_TokenSigne
 	ts.ginEngine.GET("/", func(c *gin.Context) {
 		if _, ok := c.Get("token"); !ok {
 			c.AbortWithStatus(http.StatusBadRequest)
+
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)

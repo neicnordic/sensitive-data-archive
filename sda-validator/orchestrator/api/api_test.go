@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
+	openapi "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/validators"
@@ -38,7 +38,6 @@ func (ts *ValidatorAPITestSuite) SetupSuite() {
 	ts.mockBroker = &mockBroker{}
 
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-
 		switch req.RequestURI {
 		case "/users/test_user/files", "/users/different_user/files":
 			// Set the response status code
@@ -83,8 +82,8 @@ func (ts *ValidatorAPITestSuite) SetupSuite() {
 	ts.ginEngine = openapi.NewRouterWithGinEngine(ts.ginEngine,
 		openapi.ApiHandleFunctions{
 			ValidatorOrchestratorAPI: &validatorAPIImpl{
-				sdaApiUrl:                     ts.httpTestServer.URL,
-				sdaApiToken:                   "mock-sdaApiToken",
+				sdaAPIURL:                     ts.httpTestServer.URL,
+				sdaAPIToken:                   "mock-sdaAPIToken",
 				validationFileSizeLimit:       1024 * 4,
 				validationJobPreparationQueue: "job-preparation-queue",
 				broker:                        ts.mockBroker,
@@ -92,7 +91,7 @@ func (ts *ValidatorAPITestSuite) SetupSuite() {
 
 	validators.Validators = map[string]*validators.ValidatorDescription{
 		"mock-validator": {
-			ValidatorId:       "mock-validator",
+			ValidatorID:       "mock-validator",
 			Name:              "mock validator",
 			Description:       "Validator for mocking",
 			Version:           "v0.0.0",
@@ -124,26 +123,31 @@ type mockDatabase struct {
 
 func (m *mockDatabase) Commit() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) Rollback() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
 	_ = m.Called()
+
 	return m, nil
 }
 
 func (m *mockDatabase) Close() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) ReadValidationResult(_ context.Context, validationID string, userID *string) (*model.ValidationResult, error) {
 	args := m.Called(validationID, userID)
+
 	return args.Get(0).(*model.ValidationResult), args.Error(1)
 }
 
@@ -154,6 +158,7 @@ func (m *mockDatabase) ReadValidationInformation(_ context.Context, _ string) (*
 
 func (m *mockDatabase) InsertFileValidationJob(_ context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
 	args := m.Called(validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt.Format(time.RFC3339))
+
 	return args.Error(0)
 }
 
@@ -173,6 +178,7 @@ type mockBroker struct {
 
 func (m *mockBroker) PublishMessage(_ context.Context, destination string, body []byte) error {
 	args := m.Called(destination, body)
+
 	return args.Error(0)
 }
 
@@ -195,6 +201,7 @@ func mockAuthenticator(c *gin.Context) {
 	token := jwt.New()
 	if err := token.Set("sub", "test_user"); err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
+
 		return
 	}
 	c.Set("token", token)
@@ -202,8 +209,8 @@ func mockAuthenticator(c *gin.Context) {
 
 func (ts *ValidatorAPITestSuite) TestNewValidatorAPIImpl() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiUrl("mock-url"),
-		SdaApiToken("mock-token"),
+		SdaAPIURL("mock-url"),
+		SdaAPIToken("mock-token"),
 		ValidationFileSizeLimit(1),
 		ValidationJobPreparationQueue("mock-queue"),
 		Broker(ts.mockBroker),
@@ -213,28 +220,28 @@ func (ts *ValidatorAPITestSuite) TestNewValidatorAPIImpl() {
 }
 func (ts *ValidatorAPITestSuite) TestInitWorkers_NoSdaApiUrl() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiToken("mock-token"),
+		SdaAPIToken("mock-token"),
 		ValidationFileSizeLimit(1),
 		ValidationJobPreparationQueue("mock-queue"),
 		Broker(ts.mockBroker),
 	)
-	ts.EqualError(err, "sdaApiUrl is required")
+	ts.EqualError(err, "sdaAPIURL is required")
 	ts.Nil(impl)
 }
 func (ts *ValidatorAPITestSuite) TestInitWorkers_NoSdaApiToken() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiUrl("mock-url"),
+		SdaAPIURL("mock-url"),
 		ValidationFileSizeLimit(1),
 		ValidationJobPreparationQueue("mock-queue"),
 		Broker(ts.mockBroker),
 	)
-	ts.EqualError(err, "sdaApiToken is required")
+	ts.EqualError(err, "sdaAPIToken is required")
 	ts.Nil(impl)
 }
 func (ts *ValidatorAPITestSuite) TestInitWorkers_NoValidationFileSizeLimit() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiUrl("mock-url"),
-		SdaApiToken("mock-token"),
+		SdaAPIURL("mock-url"),
+		SdaAPIToken("mock-token"),
 		ValidationJobPreparationQueue("mock-queue"),
 		Broker(ts.mockBroker),
 	)
@@ -243,8 +250,8 @@ func (ts *ValidatorAPITestSuite) TestInitWorkers_NoValidationFileSizeLimit() {
 }
 func (ts *ValidatorAPITestSuite) TestInitWorkers_NoValidationJobPreparationQueue() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiUrl("mock-url"),
-		SdaApiToken("mock-token"),
+		SdaAPIURL("mock-url"),
+		SdaAPIToken("mock-token"),
 		ValidationFileSizeLimit(1),
 		Broker(ts.mockBroker),
 	)
@@ -253,8 +260,8 @@ func (ts *ValidatorAPITestSuite) TestInitWorkers_NoValidationJobPreparationQueue
 }
 func (ts *ValidatorAPITestSuite) TestInitWorkers_NoBroker() {
 	impl, err := NewValidatorAPIImpl(
-		SdaApiUrl("mock-url"),
-		SdaApiToken("mock-token"),
+		SdaAPIURL("mock-url"),
+		SdaAPIToken("mock-token"),
 		ValidationFileSizeLimit(1),
 		ValidationJobPreparationQueue("mock-queue"),
 	)
@@ -312,8 +319,8 @@ func (ts *ValidatorAPITestSuite) TestValidatePost_ExceedValidationFileSizeLimit(
 func (ts *ValidatorAPITestSuite) TestAdminValidatePost_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
-			sdaApiUrl:                     ts.httpTestServer.URL,
-			sdaApiToken:                   "mock-sdaApiToken",
+			sdaAPIURL:                     ts.httpTestServer.URL,
+			sdaAPIToken:                   "mock-sdaAPIToken",
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,
@@ -333,8 +340,8 @@ func (ts *ValidatorAPITestSuite) TestAdminValidatePost_NoTokenInContext() {
 func (ts *ValidatorAPITestSuite) TestValidatePost_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
-			sdaApiUrl:                     ts.httpTestServer.URL,
-			sdaApiToken:                   "mock-sdaApiToken",
+			sdaAPIURL:                     ts.httpTestServer.URL,
+			sdaAPIToken:                   "mock-sdaAPIToken",
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,
@@ -498,8 +505,8 @@ func (ts *ValidatorAPITestSuite) TestAdminResultGet() {
 func (ts *ValidatorAPITestSuite) TestResultGet_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
-			sdaApiUrl:                     ts.httpTestServer.URL,
-			sdaApiToken:                   "mock-sdaApiToken",
+			sdaAPIURL:                     ts.httpTestServer.URL,
+			sdaAPIToken:                   "mock-sdaAPIToken",
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,
@@ -517,7 +524,6 @@ func (ts *ValidatorAPITestSuite) TestResultGet_NoTokenInContext() {
 }
 
 func (ts *ValidatorAPITestSuite) TestResultGet() {
-
 	startedAt, _ := time.Parse(time.RFC3339, time.Now().Add(-2*time.Second).Format(time.RFC3339))
 	finishedAt, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 	testValidationResult := &model.ValidationResult{
@@ -595,7 +601,6 @@ func (ts *ValidatorAPITestSuite) TestResultGet() {
 	ts.Equal(testValidationResult.ValidatorResults[0].Files[2].Result, resultResponse[0].Files[2].Result)
 	ts.Equal(testValidationResult.ValidatorResults[0].Files[2].FilePath, resultResponse[0].Files[2].Path)
 	ts.Equal(len(testValidationResult.ValidatorResults[0].Files[2].Messages), len(resultResponse[0].Files[2].Messages))
-
 }
 
 func (ts *ValidatorAPITestSuite) TestValidatorsGet() {

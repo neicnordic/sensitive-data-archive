@@ -4,7 +4,7 @@ import (
 	"log"
 	"strings"
 
-	go_units "github.com/docker/go-units"
+	gounits "github.com/docker/go-units"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -13,8 +13,8 @@ import (
 var (
 	apiPort           int
 	validatorPaths    []string
-	sdaApiUrl         string
-	sdaApiToken       string
+	sdaAPIURL         string
+	sdaAPIToken       string
 	validationWorkDir string
 
 	validationFileSizeLimit   int64
@@ -34,7 +34,7 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				var err error
-				validationFileSizeLimit, err = go_units.FromHumanSize(viper.GetString(flagName))
+				validationFileSizeLimit, err = gounits.FromHumanSize(viper.GetString(flagName))
 				if err != nil {
 					log.Fatalf("failed to parse: %s due to: %v", viper.GetString(flagName), err)
 				}
@@ -64,7 +64,7 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				sdaApiUrl = viper.GetString(flagName)
+				sdaAPIURL = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "sda-api-token",
@@ -73,7 +73,7 @@ func init() {
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				sdaApiToken = viper.GetString(flagName)
+				sdaAPIToken = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "validation-work-dir",
@@ -124,15 +124,15 @@ func init() {
 	)
 }
 
-func SdaApiToken() string {
-	return sdaApiToken
+func SdaAPIToken() string {
+	return sdaAPIToken
 }
 
-func SdaApiUrl() string {
-	return sdaApiUrl
+func SdaAPIURL() string {
+	return sdaAPIURL
 }
 
-func ApiPort() int {
+func APIPort() int {
 	return apiPort
 }
 func ValidatorPaths() []string {

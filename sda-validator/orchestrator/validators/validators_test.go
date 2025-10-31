@@ -33,13 +33,13 @@ func (m *mockCommandExecutor) Execute(name string, args ...string) ([]byte, erro
 	if val, ok := mockArgs.Get(0).([]byte); ok {
 		return val, mockArgs.Error(1)
 	}
+
 	return nil, mockArgs.Error(1)
 }
 
 func (ts *ValidatorsTestSuite) TestInit() {
-
 	validatorDescription1 := &ValidatorDescription{
-		ValidatorId:       "mock-validator-1",
+		ValidatorID:       "mock-validator-1",
 		Name:              "mock validator 1",
 		Description:       "Mock validator 1",
 		Version:           "v0.0.1",
@@ -48,7 +48,7 @@ func (ts *ValidatorsTestSuite) TestInit() {
 		ValidatorPath:     "*",
 	}
 	validatorDescription2 := &ValidatorDescription{
-		ValidatorId:       "mock-validator-2",
+		ValidatorID:       "mock-validator-2",
 		Name:              "mock validator 2",
 		Description:       "Mock validator 2",
 		Version:           "v0.0.2",
@@ -101,7 +101,6 @@ func (ts *ValidatorsTestSuite) TestInit() {
 }
 
 func (ts *ValidatorsTestSuite) TestInit_Error() {
-
 	ts.mockCommandExecutor.On("Execute",
 		"apptainer",
 		[]string{"run",

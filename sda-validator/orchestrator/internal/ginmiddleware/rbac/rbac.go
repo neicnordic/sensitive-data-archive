@@ -21,7 +21,6 @@ type rbacCasbin struct {
 }
 
 func NewRbac(options ...func(*rbacConfig)) (Rbac, error) {
-
 	rbac := &rbacCasbin{
 		casbinEnforcer: nil,
 		config:         conf.clone(),
@@ -50,12 +49,14 @@ func (rbac *rbacCasbin) Enforce() gin.HandlerFunc {
 		token, ok := c.Get("token")
 		if !ok {
 			c.AbortWithStatus(http.StatusUnauthorized)
+
 			return
 		}
 
 		if _, ok := token.(jwt.Token); !ok {
 			log.Warnf("token from gin context is not a jwt.Token")
 			c.AbortWithStatus(http.StatusInternalServerError)
+
 			return
 		}
 
@@ -68,6 +69,7 @@ func (rbac *rbacCasbin) Enforce() gin.HandlerFunc {
 		}
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
+
 			return
 		}
 
