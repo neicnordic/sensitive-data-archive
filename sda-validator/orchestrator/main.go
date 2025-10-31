@@ -13,17 +13,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api"
-	validatorAPI "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
+	validatorapi "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/config"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/command_executor"
-	internalConfig "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/gin_middleware/authenticator"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/gin_middleware/rbac"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/job_preparation_worker"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/job_worker"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/commandexecutor"
+	internalconfig "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/ginmiddleware/authenticator"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/ginmiddleware/rbac"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/jobpreparationworker"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/jobworker"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/validators"
 	log "github.com/sirupsen/logrus"
 )
@@ -34,7 +34,7 @@ func main() {
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	if err := internalConfig.Load(); err != nil {
+	if err := internalconfig.Load(); err != nil {
 		log.Fatalf("failed to load config due to: %v", err)
 	}
 
@@ -51,30 +51,30 @@ func main() {
 		log.Fatalf("failed to initialise postgres database due to: %v", err)
 	}
 
-	if err := job_preparation_worker.Init(
-		job_preparation_worker.WorkerCount(config.JobPreparationWorkerCount()),
-		job_preparation_worker.Broker(amqpBroker),
-		job_preparation_worker.SourceQueue(config.JobPreparationQueue()),
-		job_preparation_worker.SdaApiToken(config.SdaApiToken()),
-		job_preparation_worker.SdaApiUrl(config.SdaApiUrl()),
-		job_preparation_worker.DestinationQueue(config.JobQueue()),
-		job_preparation_worker.ValidationWorkDirectory(config.ValidationWorkDir()),
+	if err := jobpreparationworker.Init(
+		jobpreparationworker.WorkerCount(config.JobPreparationWorkerCount()),
+		jobpreparationworker.Broker(amqpBroker),
+		jobpreparationworker.SourceQueue(config.JobPreparationQueue()),
+		jobpreparationworker.SdaAPIToken(config.SdaAPIToken()),
+		jobpreparationworker.SdaAPIURL(config.SdaAPIURL()),
+		jobpreparationworker.DestinationQueue(config.JobQueue()),
+		jobpreparationworker.ValidationWorkDirectory(config.ValidationWorkDir()),
 	); err != nil {
 		log.Fatalf("failed to initialize job preparation workers due to: %v", err)
 	}
 
-	if err := job_worker.Init(
-		job_worker.WorkerCount(config.JobWorkerCount()),
-		job_worker.Broker(amqpBroker),
-		job_worker.SourceQueue(config.JobQueue()),
-		job_worker.CommandExecutor(&command_executor.OsCommandExecutor{}),
+	if err := jobworker.Init(
+		jobworker.WorkerCount(config.JobWorkerCount()),
+		jobworker.Broker(amqpBroker),
+		jobworker.SourceQueue(config.JobQueue()),
+		jobworker.CommandExecutor(&commandexecutor.OsCommandExecutor{}),
 	); err != nil {
 		log.Fatalf("failed to initialize job preparation workers due to: %v", err)
 	}
 
 	validatorAPIImpl, err := api.NewValidatorAPIImpl(
-		api.SdaApiUrl(config.SdaApiUrl()),
-		api.SdaApiToken(config.SdaApiToken()),
+		api.SdaAPIURL(config.SdaAPIURL()),
+		api.SdaAPIToken(config.SdaAPIToken()),
 		api.Broker(amqpBroker),
 		api.ValidationJobPreparationQueue(config.JobPreparationQueue()),
 		api.ValidationFileSizeLimit(config.ValidationFileSizeLimit()),
@@ -95,12 +95,12 @@ func main() {
 	}
 	ginRouter.Use(authMiddleware.Authenticate(), rbacMiddleware.Enforce())
 
-	validatorAPI.NewRouterWithGinEngine(ginRouter, validatorAPI.ApiHandleFunctions{ValidatorOrchestratorAPI: validatorAPIImpl})
+	validatorapi.NewRouterWithGinEngine(ginRouter, validatorapi.ApiHandleFunctions{ValidatorOrchestratorAPI: validatorAPIImpl})
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", config.ApiPort()),
+		Addr:              fmt.Sprintf(":%d", config.APIPort()),
 		Handler:           ginRouter,
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
@@ -110,14 +110,14 @@ func main() {
 	}
 
 	go func() {
-		if err := job_worker.StartWorkers(); err != nil {
+		if err := jobworker.StartWorkers(); err != nil {
 			log.Errorf("job workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}
 	}()
 
 	go func() {
-		if err := job_preparation_worker.StartWorkers(); err != nil {
+		if err := jobpreparationworker.StartWorkers(); err != nil {
 			log.Errorf("job preparation workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}
@@ -125,7 +125,7 @@ func main() {
 
 	go func() {
 		log.Infof("server listening at: %s", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(http.ErrServerClosed, err) {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Errorf("Error starting server, due to: %v", err)
 			sigc <- syscall.SIGTERM
 		}
@@ -144,16 +144,16 @@ func main() {
 
 	log.Infof("shutting down HTTP server")
 	serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer serverShutdownCancel()
 	if err := srv.Shutdown(serverShutdownCtx); err != nil {
 		log.Errorf("failed to gracefully shutdown the server due to: %v", err)
 	}
+	serverShutdownCancel()
 
 	log.Infof("shutting down job preparation workers")
-	job_preparation_worker.ShutdownWorkers()
+	jobpreparationworker.ShutdownWorkers()
 
 	log.Infof("shutting down job workers")
-	job_worker.ShutdownWorkers()
+	jobworker.ShutdownWorkers()
 
 	log.Infof("shutting broker connection")
 	if err := amqpBroker.Close(); err != nil {

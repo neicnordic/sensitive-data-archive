@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // Import pg driver
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
 	log "github.com/sirupsen/logrus"
@@ -21,7 +21,6 @@ type pgDb struct {
 var preparedStatements map[string]*sql.Stmt
 
 func Init(options ...func(config *dbConfig)) error {
-
 	dbConf := globalConf.clone()
 
 	for _, o := range options {
@@ -46,12 +45,14 @@ func Init(options ...func(config *dbConfig)) error {
 		preparedStmt, err := pg.db.Prepare(query)
 		if err != nil {
 			log.Errorf("failed to prepare query: %s, due to: %v", queryName, err)
+
 			return errors.Join(fmt.Errorf("failed to prepare query: %s", queryName), err)
 		}
 		preparedStatements[queryName] = preparedStmt
 	}
 
 	database.RegisterDatabase(pg)
+
 	return nil
 }
 
@@ -60,11 +61,11 @@ func (db *pgDb) Close() error {
 	if db.db == nil {
 		return nil
 	}
+
 	return db.db.Close()
 }
 
 func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, error) {
-
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

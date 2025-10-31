@@ -23,6 +23,7 @@ func (tx *pgTx) Rollback() error {
 	if errors.Is(err, sql.ErrTxDone) {
 		return nil
 	}
+
 	return err
 }
 

@@ -1,15 +1,15 @@
-package job_worker
+package jobworker
 
 import (
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
-	commandExecutor "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/command_executor"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/commandexecutor"
 )
 
 type config struct {
 	workerCount     int
 	sourceQueue     string
 	broker          broker.AMQPBrokerI
-	commandExecutor commandExecutor.CommandExecutor
+	commandExecutor commandexecutor.CommandExecutor
 }
 
 func WorkerCount(v int) func(*config) {
@@ -30,7 +30,7 @@ func Broker(v broker.AMQPBrokerI) func(*config) {
 	}
 }
 
-func CommandExecutor(v commandExecutor.CommandExecutor) func(*config) {
+func CommandExecutor(v commandexecutor.CommandExecutor) func(*config) {
 	return func(opts *config) {
 		opts.commandExecutor = v
 	}

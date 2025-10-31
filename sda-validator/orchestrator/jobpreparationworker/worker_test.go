@@ -1,4 +1,4 @@
-package job_preparation_worker
+package jobpreparationworker
 
 import (
 	"bytes"
@@ -42,13 +42,13 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 	ts.mockBroker = &mockBroker{}
 
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-
 		switch {
 		case strings.Contains(req.RequestURI, "/users/test_user/file/"):
 			publicKey, err := base64.StdEncoding.DecodeString(req.Header.Get("C4GH-Public-Key"))
 			if err != nil || len(publicKey) == 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = fmt.Fprint(w, "bad public key")
+
 				return
 			}
 
@@ -57,6 +57,7 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = fmt.Fprint(w, "could not read public key")
+
 				return
 			}
 
@@ -65,16 +66,17 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = fmt.Fprint(w, "could not read create crypt4gh writer")
+
 				return
 			}
 
 			file := bytes.Buffer{}
-			file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
+			_, _ = file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
 			_, _ = io.Copy(encryptedFileWriter, &file)
 
 			_ = encryptedFileWriter.Close()
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(encryptedFile.String()))
+			_, _ = w.Write(encryptedFile.Bytes())
 		default:
 			// Set the response status code
 			w.WriteHeader(http.StatusInternalServerError)
@@ -87,7 +89,7 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 
 	validators.Validators = map[string]*validators.ValidatorDescription{
 		"mock-validator": {
-			ValidatorId:       "mock-validator",
+			ValidatorID:       "mock-validator",
 			Name:              "mock validator",
 			Description:       "Validator for mocking",
 			Version:           "v0.0.0",
@@ -121,21 +123,25 @@ type mockDatabase struct {
 
 func (m *mockDatabase) Commit() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) Rollback() error {
 	_ = m.Called()
+
 	return nil
 }
 
 func (m *mockDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
 	_ = m.Called()
+
 	return m, nil
 }
 
 func (m *mockDatabase) Close() error {
 	_ = m.Called()
+
 	return nil
 }
 
@@ -146,6 +152,7 @@ func (m *mockDatabase) ReadValidationResult(_ context.Context, validationID stri
 
 func (m *mockDatabase) ReadValidationInformation(_ context.Context, validationID string) (*model.ValidationInformation, error) {
 	args := m.Called(validationID)
+
 	return args.Get(0).(*model.ValidationInformation), args.Error(1)
 }
 
@@ -171,6 +178,7 @@ type mockBroker struct {
 
 func (m *mockBroker) PublishMessage(_ context.Context, destination string, body []byte) error {
 	args := m.Called(destination, body)
+
 	return args.Error(0)
 }
 
@@ -214,31 +222,31 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers() {
 	ts.NoError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
 	))
 	ts.Len(workers, 2)
 }
+
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoValidationWorkDirectory() {
 	ts.EqualError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		WorkerCount(2),
 	), "validationWorkDir is required")
 }
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoBroker() {
-
 	ts.EqualError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
 	), "broker is required")
@@ -247,30 +255,29 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSdaApiToken() {
 	ts.EqualError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
+		SdaAPIURL(ts.httpTestServer.URL),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "sdaApiToken is required")
+	), "sdaAPIToken is required")
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSdaApiUrl() {
-
 	ts.EqualError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiToken("mock-token"),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "sdaApiUrl is required")
+	), "sdaAPIURL is required")
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoDestinationQueue() {
 	ts.EqualError(Init(
 		SourceQueue("job-preparation-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
@@ -280,8 +287,8 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoDestinationQueue() {
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
 	ts.EqualError(Init(
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
@@ -292,12 +299,13 @@ func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_NoInit() {
 	conf = nil
 	ts.EqualError(StartWorkers(), "workers have not been initialized")
 }
+
 func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	if err := Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
@@ -308,14 +316,14 @@ func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(errors.New("subscribe error"))
 
 	ts.EqualError(StartWorkers(), "job preparation worker encountered error\nsubscribe error")
-
 }
+
 func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
 	if err := Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
@@ -361,8 +369,8 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 	err := Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
-		SdaApiUrl(ts.httpTestServer.URL),
-		SdaApiToken("mock-token"),
+		SdaAPIURL(ts.httpTestServer.URL),
+		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),

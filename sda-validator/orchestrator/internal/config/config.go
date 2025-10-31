@@ -34,7 +34,6 @@ var command = &cobra.Command{
 }
 
 func init() {
-
 	viper.SetConfigName("config")
 
 	viper.AutomaticEnv()
@@ -45,7 +44,6 @@ func init() {
 	command.Flags().String("config-file", "", "Set the direct path to the config file")
 
 	command.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-
 		fmt.Println("Flags:")
 		writer := tabwriter.NewWriter(os.Stdout, 1, 1, 8, ' ', 0)
 		_, _ = fmt.Fprintln(writer, "  Name:\tEnv variable:\tType:\tUsage:\tDefault Value:\t")
@@ -55,8 +53,8 @@ func init() {
 			}
 
 			flagType, usage := pflag.UnquoteUsage(flag)
-			envVar := strings.ToUpper(strings.Replace(strings.Replace(flag.Name, "-", "_", -1), ".", "_", -1))
-			_, _ = fmt.Fprintln(writer, fmt.Sprintf("  --%s\t%s\t%s\t%s\t%v\t", flag.Name, envVar, flagType, usage, flag.DefValue))
+			envVar := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(flag.Name, "-", "_"), ".", "_"))
+			_, _ = fmt.Fprintf(writer, "  --%s\t%s\t%s\t%s\t%v\t", flag.Name, envVar, flagType, usage, flag.DefValue)
 		})
 
 		_ = writer.Flush()
@@ -66,7 +64,6 @@ func init() {
 }
 
 func Load() error {
-
 	for _, flag := range registeredFlags {
 		flag.RegisterFunc(command.Flags(), flag.Name)
 	}
@@ -76,7 +73,7 @@ func Load() error {
 	}
 
 	if err := command.Execute(); err != nil {
-		log.Fatalf("%v", err)
+		return err
 	}
 
 	if viper.IsSet("config-path") {
@@ -99,9 +96,9 @@ func Load() error {
 
 		if !viper.IsSet(flag.Name) {
 			missingFlags = errors.Join(missingFlags, fmt.Errorf("missing required flag: %s", flag.Name))
+
 			continue
 		}
-
 	}
 	if missingFlags != nil {
 		return missingFlags

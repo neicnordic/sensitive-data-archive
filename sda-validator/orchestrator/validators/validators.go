@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/command_executor"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/commandexecutor"
 )
 
 var Validators map[string]*ValidatorDescription
 
 type ValidatorDescription struct {
-	ValidatorId       string   `json:"validatorId"`
+	ValidatorID       string   `json:"validatorID"`
 	Name              string   `json:"name"`
 	Description       string   `json:"description"`
 	Version           string   `json:"version"`
@@ -20,15 +20,14 @@ type ValidatorDescription struct {
 	ValidatorPath string // The path this validator is available at
 }
 
-var commandExecutor command_executor.CommandExecutor
+var commandExecutor commandexecutor.CommandExecutor
 
 func init() {
-	commandExecutor = command_executor.OsCommandExecutor{}
+	commandExecutor = commandexecutor.OsCommandExecutor{}
 	Validators = make(map[string]*ValidatorDescription)
 }
 
 func Init(validatorsPaths []string) error {
-
 	for _, path := range validatorsPaths {
 		out, err := commandExecutor.Execute(
 			"apptainer",
@@ -48,7 +47,7 @@ func Init(validatorsPaths []string) error {
 		}
 		vd.ValidatorPath = path
 
-		Validators[vd.ValidatorId] = vd
+		Validators[vd.ValidatorID] = vd
 	}
 
 	return nil

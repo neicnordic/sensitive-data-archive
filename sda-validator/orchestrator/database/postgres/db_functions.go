@@ -84,6 +84,7 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 
 		if readValidatorResult, ok := validatorResults[validatorResult.ValidatorID]; ok {
 			readValidatorResult.Files = append(readValidatorResult.Files, fileResult)
+
 			continue
 		}
 
@@ -176,6 +177,7 @@ func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, val
 	if _, err := stmt.ExecContext(ctx, validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt.Format(time.RFC3339)); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -192,6 +194,7 @@ func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, val
 	if _, err := stmt.ExecContext(ctx, finishedAt.Format(time.RFC3339), fileResult, vm, fm, validatorResult, fileID, validatorID, validationID); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -203,6 +206,7 @@ func (db *pgDb) allValidationJobsDone(ctx context.Context, stmt *sql.Stmt, valid
 		if errors.Is(row.Err(), sql.ErrNoRows) {
 			return true, nil
 		}
+
 		return false, err
 	}
 

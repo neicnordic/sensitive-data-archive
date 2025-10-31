@@ -2,15 +2,15 @@ package api
 
 import "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
 
-func SdaApiUrl(v string) func(*validatorAPIImpl) {
+func SdaAPIURL(v string) func(*validatorAPIImpl) {
 	return func(impl *validatorAPIImpl) {
-		impl.sdaApiUrl = v
+		impl.sdaAPIURL = v
 	}
 }
 
-func SdaApiToken(v string) func(*validatorAPIImpl) {
+func SdaAPIToken(v string) func(*validatorAPIImpl) {
 	return func(impl *validatorAPIImpl) {
-		impl.sdaApiToken = v
+		impl.sdaAPIToken = v
 	}
 }
 

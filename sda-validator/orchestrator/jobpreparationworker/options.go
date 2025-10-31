@@ -1,4 +1,4 @@
-package job_preparation_worker
+package jobpreparationworker
 
 import "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
 
@@ -6,8 +6,8 @@ type config struct {
 	workerCount       int
 	sourceQueue       string
 	destinationQueue  string
-	sdaApiUrl         string
-	sdaApiToken       string // TODO TBD #989
+	sdaAPIURL         string
+	sdaAPIToken       string // TODO TBD #989
 	broker            broker.AMQPBrokerI
 	validationWorkDir string
 }
@@ -41,14 +41,14 @@ func ValidationWorkDirectory(v string) func(*config) {
 	}
 }
 
-func SdaApiToken(v string) func(*config) {
+func SdaAPIToken(v string) func(*config) {
 	return func(opts *config) {
-		opts.sdaApiToken = v
+		opts.sdaAPIToken = v
 	}
 }
 
-func SdaApiUrl(v string) func(*config) {
+func SdaAPIURL(v string) func(*config) {
 	return func(opts *config) {
-		opts.sdaApiUrl = v
+		opts.sdaAPIURL = v
 	}
 }

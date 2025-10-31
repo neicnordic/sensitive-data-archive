@@ -1,4 +1,4 @@
-package command_executor
+package commandexecutor
 
 import "os/exec"
 

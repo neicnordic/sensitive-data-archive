@@ -1,4 +1,4 @@
-package job_worker
+package jobworker
 
 import (
 	"context"
@@ -78,11 +78,8 @@ func StartWorkers() error {
 
 	errChan := make(chan error, 1)
 
-	wg := &sync.WaitGroup{}
 	for _, w := range workers {
-		wg.Add(1)
 		go func(w *worker) {
-			wg.Done()
 			w.running = true
 			// passing ctx such that we can gracefully shut down the subscribe
 			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
@@ -94,14 +91,12 @@ func StartWorkers() error {
 		}(w)
 	}
 
-	// Wait until all workers have been started before allowing shutdown
-	wg.Wait()
-
 	select {
 	case err := <-errChan:
 		return err
 	case <-shutdownChan:
 		close(shutdownChan)
+
 		return nil
 	}
 }
@@ -116,15 +111,14 @@ func (w *worker) close() {
 // ShutdownWorkers shutdowns and waits for all workers to have closed
 func ShutdownWorkers() {
 	wg := sync.WaitGroup{}
+
 	for _, w := range workers {
 		if !w.running {
 			continue
 		}
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			w.close()
-			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -135,6 +129,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	jobMessage := new(model.JobMessage)
 	if err := json.Unmarshal(message.Body, jobMessage); err != nil {
 		log.Errorf("could not unmarshal message to job message due to: %v", err)
+
 		return nil // returning nil so message is not nacked and reconsumed
 	}
 
@@ -149,13 +144,15 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		}
 	}()
 
-	if err := os.MkdirAll(filepath.Join(jobDirectory, "output"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(jobDirectory, "output"), 0750); err != nil {
 		log.Errorf("failed to create job output directory at: %s, error: %v", jobDirectory, err)
+
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Join(jobDirectory, "input"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(jobDirectory, "input"), 0750); err != nil {
 		log.Errorf("failed to create job input directory at: %s, error: %v", jobDirectory, err)
+
 		return err
 	}
 
@@ -177,16 +174,20 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 			input.Files = append(input.Files, &model.FileInput{Path: filePathForJob})
 		case "file-structure":
 			input.Paths = append(input.Paths, filePathForJob)
+		default:
+			return updateFileValidationJobsOnError(ctx, jobMessage, []*model.Message{{Level: "error", Message: fmt.Sprintf("validator has unknown mode: %s", validatorDescription.Mode), Time: time.Now().Format(time.RFC3339)}})
 		}
 	}
 
 	inputData, err := json.Marshal(input)
 	if err != nil {
 		log.Errorf("failed to marshal input data due to: %v", err)
+
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(jobDirectory, "input", "input.json"), inputData, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobDirectory, "input", "input.json"), inputData, 0600); err != nil {
 		log.Errorf("failed to write input.json for validator due to: %v", err)
+
 		return err
 	}
 
@@ -204,53 +205,65 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 
 	if err != nil {
 		log.Errorf("failed to execute run command due to: %s", err)
+
 		return updateFileValidationJobsOnError(ctx, jobMessage, []*model.Message{{Level: "error", Message: fmt.Sprintf("failed to execute run command due to: %s", err), Time: time.Now().Format(time.RFC3339)}})
 	}
 
 	result, err := os.ReadFile(filepath.Join(jobDirectory, "/output/result.json"))
 	if err != nil {
 		log.Errorf("failed to read result file: %v", err)
+
 		return updateFileValidationJobsOnError(ctx, jobMessage, []*model.Message{{Level: "error", Message: fmt.Sprintf("failed to read result file: %v", err), Time: time.Now().Format(time.RFC3339)}})
 	}
 
-	output := new(model.ValidatorOutput)
-	if err := json.Unmarshal(result, output); err != nil {
+	validatorOutput := new(model.ValidatorOutput)
+	if err := json.Unmarshal(result, validatorOutput); err != nil {
 		log.Errorf("failed to unmarshal result file: %v", err)
+
 		return updateFileValidationJobsOnError(ctx, jobMessage, []*model.Message{{Level: "error", Message: fmt.Sprintf("failed to unmarshal result file: %v", err), Time: time.Now().Format(time.RFC3339)}})
 	}
 
+	return updateFileValidationJobs(ctx, jobMessage, validatorOutput)
+}
+func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage, validatorOutput *model.ValidatorOutput) error {
 	tx, err := database.BeginTransaction(ctx)
 	if err != nil {
 		log.Errorf("failed to begin transaction: %v", err)
+
 		return err
 	}
 
 	now := time.Now()
 	for _, fileInfo := range jobMessage.Files {
 		var fileResult *model.FileResult
-		for _, fr := range output.Files {
+		for _, fr := range validatorOutput.Files {
 			filePath, _ := strings.CutPrefix(fr.FilePath, "/mnt/input/data/")
 			if filePath == fileInfo.FilePath {
 				fileResult = fr
+
 				break
 			}
 		}
 		if fileResult == nil {
-			if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", []*model.Message{{Level: "error", Message: "file result not found in validator output", Time: time.Now().Format(time.RFC3339)}}, now, output.Result, output.Messages); err != nil {
-				log.Errorf("failed to update file validation job due to: %v", err)
+			if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", []*model.Message{{Level: "error", Message: "file result not found in validator output", Time: time.Now().Format(time.RFC3339)}}, now, validatorOutput.Result, validatorOutput.Messages); err != nil {
+				log.Errorf("failed to update file validation job on file missing from result file due to: %v", err)
+
 				return err
 			}
+
 			continue
 		}
 
-		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, fileResult.Result, fileResult.Messages, now, output.Result, output.Messages); err != nil {
+		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, fileResult.Result, fileResult.Messages, now, validatorOutput.Result, validatorOutput.Messages); err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
+
 			return err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		log.Errorf("failed to commit transaction due to: %v", err)
+
 		return err
 	}
 
@@ -258,10 +271,10 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 }
 
 func checkAndCleanVolume(ctx context.Context, validationID, validationDirectory string) error {
-
 	allJobsDone, err := database.AllValidationJobsDone(ctx, validationID)
 	if err != nil {
 		log.Errorf("failed to check if all validation jobs done due to: %v", err)
+
 		return err
 	}
 
@@ -277,10 +290,10 @@ func checkAndCleanVolume(ctx context.Context, validationID, validationDirectory 
 }
 
 func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobMessage, validatorMessage []*model.Message) error {
-
 	tx, err := database.BeginTransaction(ctx)
 	if err != nil {
 		log.Errorf("failed to begin transaction: %v", err)
+
 		return err
 	}
 	// Deferring rollback as if tx has been commited rollback wont be actioned
@@ -295,6 +308,7 @@ func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobM
 	for _, fileInfo := range jobMessage.Files {
 		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", nil, now, "error", validatorMessage); err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
+
 			return err
 		}
 	}
@@ -302,5 +316,6 @@ func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobM
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
 	return checkAndCleanVolume(ctx, jobMessage.ValidationID, jobMessage.ValidationDirectory)
 }
