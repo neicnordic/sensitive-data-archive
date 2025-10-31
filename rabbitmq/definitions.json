@@ -162,6 +162,19 @@
             "durable": true,
             "auto_delete": false,
             "arguments": {}
+        }, {
+          "name": "validation-job-queue",
+          "vhost": "sda",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "validation-job-preparation-queue",
+          "vhost": "sda",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
         }
     ],
     "exchanges": [
@@ -279,6 +292,22 @@
             "arguments": {},
             "destination": "catch_all.dead",
             "routing_key": "#"
+        },
+        {
+          "source": "sda",
+          "vhost": "sda",
+          "destination_type": "queue",
+          "arguments": {},
+          "destination": "validation-job-queue",
+          "routing_key": "validation-job-queue"
+        },
+        {
+          "source": "sda",
+          "vhost": "sda",
+          "destination_type": "queue",
+          "arguments": {},
+          "destination": "validation-job-preparation-queue",
+          "routing_key": "validation-job-preparation-queue"
         }
     ]
 }
