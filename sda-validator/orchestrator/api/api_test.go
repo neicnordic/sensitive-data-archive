@@ -156,13 +156,13 @@ func (m *mockDatabase) ReadValidationInformation(_ context.Context, _ string) (*
 	panic("database.ReadValidationInformation call not expected in unit tests")
 }
 
-func (m *mockDatabase) InsertFileValidationJob(_ context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
-	args := m.Called(validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt.Format(time.RFC3339))
+func (m *mockDatabase) InsertFileValidationJob(_ context.Context, params *model.InsertFileValidationJobParameters) error {
+	args := m.Called(params.ValidationID, params.ValidatorID, params.FileID, params.FilePath, params.FileSubmissionSize, params.SubmissionUser, params.TriggeredBy, params.StartedAt.Format(time.RFC3339))
 
 	return args.Error(0)
 }
 
-func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, _, _, _, _ string, _ []*model.Message, _ time.Time, _ string, _ []*model.Message) error {
+func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, _ *model.UpdateFileValidationJobParameters) error {
 	// Function not needed for unit test, but to implement interface
 	panic("database.UpdateFileValidationJob call not expected in unit tests")
 }

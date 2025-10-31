@@ -173,25 +173,25 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 	return validationInformation, nil
 }
 
-func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
-	if _, err := stmt.ExecContext(ctx, validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt.Format(time.RFC3339)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error {
-	fm, err := json.Marshal(fileMessages)
+func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, params *model.UpdateFileValidationJobParameters) error {
+	fileMessagesJSON, err := json.Marshal(params.FileMessages)
 	if err != nil {
 		return fmt.Errorf("failed to marshal file messages: %v", err)
 	}
-	vm, err := json.Marshal(validatorMessages)
+	validatorMessagesJSON, err := json.Marshal(params.ValidatorMessages)
 	if err != nil {
 		return fmt.Errorf("failed to marshal validator messages: %v", err)
 	}
 
-	if _, err := stmt.ExecContext(ctx, finishedAt.Format(time.RFC3339), fileResult, vm, fm, validatorResult, fileID, validatorID, validationID); err != nil {
+	if _, err := stmt.ExecContext(ctx,
+		params.FinishedAt.Format(time.RFC3339),
+		params.FileResult,
+		validatorMessagesJSON,
+		fileMessagesJSON,
+		params.ValidatorResult,
+		params.FileID,
+		params.ValidatorID,
+		params.ValidationID); err != nil {
 		return err
 	}
 
@@ -211,4 +211,20 @@ func (db *pgDb) allValidationJobsDone(ctx context.Context, stmt *sql.Stmt, valid
 	}
 
 	return false, nil
+}
+
+func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, params *model.InsertFileValidationJobParameters) error {
+	if _, err := stmt.ExecContext(ctx,
+		params.ValidationID,
+		params.ValidatorID,
+		params.FileID,
+		params.FilePath,
+		params.FileSubmissionSize,
+		params.SubmissionUser,
+		params.TriggeredBy,
+		params.StartedAt.Format(time.RFC3339)); err != nil {
+		return err
+	}
+
+	return nil
 }

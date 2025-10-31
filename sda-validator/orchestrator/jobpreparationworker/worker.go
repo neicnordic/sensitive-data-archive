@@ -33,12 +33,11 @@ type worker struct {
 
 var workers []*worker
 var conf *config
-var shutdownChan chan struct{}
+var workerMonitorChan chan error
 
 // Init initializes the workers with the given options
 func Init(opt ...func(*config)) error {
 	workers = []*worker{}
-	shutdownChan = make(chan struct{}, 1)
 
 	conf = &config{}
 
@@ -67,6 +66,8 @@ func Init(opt ...func(*config)) error {
 		return errors.New("validationWorkDir is required")
 	}
 
+	workerMonitorChan = make(chan error, conf.workerCount)
+
 	for i := 0; i < conf.workerCount; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		w := &worker{
@@ -74,44 +75,35 @@ func Init(opt ...func(*config)) error {
 			ctx:     ctx,
 			cancel:  cancel,
 			stopCh:  make(chan struct{}, 1),
-			running: false,
+			running: true,
 		}
 
 		workers = append(workers, w)
-	}
 
-	return nil
-}
-
-// StartWorkers starts all initialized workers and waits for the workers to either encounter an error or for shutdown to be triggered
-func StartWorkers() error {
-	if conf == nil {
-		return errors.New("workers have not been initialized")
-	}
-
-	errChan := make(chan error, 1)
-
-	for _, w := range workers {
 		go func(w *worker) {
-			w.running = true
 			// passing ctx such that we can gracefully shut down the subscribe
 			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
-				errChan <- errors.Join(errors.New("job preparation worker encountered error"), err)
+				log.Errorf("job worker encountered error: %v", err)
+				workerMonitorChan <- err
 			}
-
 			w.stopCh <- struct{}{}
 			w.running = false
 		}(w)
 	}
 
-	select {
-	case err := <-errChan:
-		return err
-	case <-shutdownChan:
-		close(shutdownChan)
+	return nil
+}
 
-		return nil
+// MonitorWorkers monitors if any worker encounters an subscribe error
+func MonitorWorkers() chan error {
+	if conf == nil {
+		noConfErr := make(chan error, 1)
+		noConfErr <- errors.New("workers have not been initialized")
+
+		return noConfErr
 	}
+
+	return workerMonitorChan
 }
 
 // close a worker and wait until it has closed
@@ -133,7 +125,7 @@ func ShutdownWorkers() {
 		})
 	}
 	wg.Wait()
-	shutdownChan <- struct{}{}
+	close(workerMonitorChan)
 }
 
 func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err error) {

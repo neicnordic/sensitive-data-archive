@@ -38,8 +38,6 @@ type JobPreparationWorkerTestSuite struct {
 }
 
 func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
-	ts.mockDatabase = &mockDatabase{}
-	ts.mockBroker = &mockBroker{}
 
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
@@ -85,8 +83,6 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 		}
 	}))
 
-	database.RegisterDatabase(ts.mockDatabase)
-
 	validators.Validators = map[string]*validators.ValidatorDescription{
 		"mock-validator": {
 			ValidatorID:       "mock-validator",
@@ -102,11 +98,9 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 func (ts *JobPreparationWorkerTestSuite) SetupTest() {
 	ts.tempDir = ts.T().TempDir()
 	// Reset any Asserts and On() on mocks from previous tests
-	*ts.mockDatabase = mockDatabase{}
-	*ts.mockBroker = mockBroker{}
-}
-
-func (ts *JobPreparationWorkerTestSuite) TearDownTest() {
+	ts.mockDatabase = &mockDatabase{}
+	ts.mockBroker = &mockBroker{}
+	database.RegisterDatabase(ts.mockDatabase)
 }
 
 func (ts *JobPreparationWorkerTestSuite) TearDownSuite() {
@@ -156,12 +150,12 @@ func (m *mockDatabase) ReadValidationInformation(_ context.Context, validationID
 	return args.Get(0).(*model.ValidationInformation), args.Error(1)
 }
 
-func (m *mockDatabase) InsertFileValidationJob(_ context.Context, _, _, _, _ string, _ int64, _, _ string, _ time.Time) error {
+func (m *mockDatabase) InsertFileValidationJob(_ context.Context, _ *model.InsertFileValidationJobParameters) error {
 	// Function not needed for unit test, but to implement interface
 	panic("database.InsertFileValidationJob call not expected in unit tests")
 }
 
-func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, _, _, _, _ string, _ []*model.Message, _ time.Time, _ string, _ []*model.Message) error {
+func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, _ *model.UpdateFileValidationJobParameters) error {
 	// Function not needed for unit test, but to implement interface
 	panic("database.UpdateFileValidationJob call not expected in unit tests")
 }
@@ -191,7 +185,7 @@ func (m *mockBroker) Subscribe(ctx context.Context, queue, consumerID string, ha
 
 	messageChan, ok := m.messageChans[consumerID]
 	if !ok {
-		return errors.New("unexpected consumer id")
+		return nil
 	}
 	for {
 		select {
@@ -219,6 +213,7 @@ func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers() {
+	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
 	ts.NoError(Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
@@ -229,6 +224,7 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers() {
 		WorkerCount(2),
 	))
 	ts.Len(workers, 2)
+	ShutdownWorkers()
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoValidationWorkDirectory() {
@@ -297,10 +293,17 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
 
 func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_NoInit() {
 	conf = nil
-	ts.EqualError(StartWorkers(), "workers have not been initialized")
+	select {
+	case <-time.After(2 * time.Second):
+		ts.FailNow("timeout error, expected MonitorWorker to return error")
+	case err := <-MonitorWorkers():
+		ts.EqualError(err, "workers have not been initialized")
+	}
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
+	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(errors.New("subscribe error"))
+
 	if err := Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
@@ -313,12 +316,22 @@ func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
 		ts.FailNow(err.Error())
 	}
 
-	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(errors.New("subscribe error"))
-
-	ts.EqualError(StartWorkers(), "job preparation worker encountered error\nsubscribe error")
+	select {
+	case <-time.After(2 * time.Second):
+		ts.FailNow("timeout error, expected MonitorWorker to return error")
+	case err := <-MonitorWorkers():
+		ts.EqualError(err, "subscribe error")
+	}
+	ShutdownWorkers()
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
+	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
+		"job-preparation-worker-0": make(chan amqp.Delivery),
+		"job-preparation-worker-1": make(chan amqp.Delivery),
+	}
+	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
+
 	if err := Init(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
@@ -331,20 +344,6 @@ func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 2)
-
-	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
-		"job-preparation-worker-0": make(chan amqp.Delivery),
-		"job-preparation-worker-1": make(chan amqp.Delivery),
-	}
-	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
@@ -365,6 +364,7 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 		"job-preparation-worker-0": worker1MessageChan,
 		"job-preparation-worker-1": worker2MessageChan,
 	}
+	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
 
 	err := Init(
 		SourceQueue("job-preparation-queue"),
@@ -380,17 +380,7 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 	}
 	ts.Len(workers, 2)
 
-	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
 	ts.mockBroker.On("PublishMessage", "job-queue", mock.Anything).Return(nil)
-
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)

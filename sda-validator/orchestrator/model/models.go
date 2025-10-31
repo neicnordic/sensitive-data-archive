@@ -70,3 +70,15 @@ type UserFilesResponse struct {
 	InboxPath          string `json:"inboxPath"`
 	SubmissionFileSize int64  `json:"submissionFileSize"`
 }
+
+type InsertFileValidationJobParameters struct {
+	ValidationID, ValidatorID, FileID, FilePath, SubmissionUser, TriggeredBy string
+	FileSubmissionSize                                                       int64
+	StartedAt                                                                time.Time
+}
+type UpdateFileValidationJobParameters struct {
+	ValidationID, ValidatorID, FileID, FileResult, ValidatorResult string
+	FileMessages                                                   []*Message
+	FinishedAt                                                     time.Time
+	ValidatorMessages                                              []*Message
+}

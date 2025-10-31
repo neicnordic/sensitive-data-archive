@@ -30,11 +30,6 @@ type JobWorkerTestSuite struct {
 }
 
 func (ts *JobWorkerTestSuite) SetupSuite() {
-	ts.mockDatabase = &mockDatabase{}
-	ts.mockBroker = &mockBroker{}
-	ts.mockCommandExecutor = &mockCommandExecutor{}
-
-	database.RegisterDatabase(ts.mockDatabase)
 	validators.Validators = map[string]*validators.ValidatorDescription{
 		"mock-validator": {
 			ValidatorID:       "mock-validator",
@@ -50,9 +45,10 @@ func (ts *JobWorkerTestSuite) SetupSuite() {
 func (ts *JobWorkerTestSuite) SetupTest() {
 	ts.tempDir = ts.T().TempDir()
 	// Reset any Asserts and On() on mocks from previous tests
-	*ts.mockDatabase = mockDatabase{}
-	*ts.mockBroker = mockBroker{}
-	*ts.mockCommandExecutor = mockCommandExecutor{}
+	ts.mockDatabase = &mockDatabase{}
+	ts.mockBroker = &mockBroker{}
+	ts.mockCommandExecutor = &mockCommandExecutor{}
+	database.RegisterDatabase(ts.mockDatabase)
 }
 
 func (ts *JobWorkerTestSuite) TearDownTest() {
@@ -113,13 +109,13 @@ func (m *mockDatabase) ReadValidationInformation(_ context.Context, _ string) (*
 	panic("database.ReadValidationInformation call not expected in unit tests")
 }
 
-func (m *mockDatabase) InsertFileValidationJob(_ context.Context, _, _, _, _ string, _ int64, _, _ string, _ time.Time) error {
+func (m *mockDatabase) InsertFileValidationJob(_ context.Context, _ *model.InsertFileValidationJobParameters) error {
 	// Function not needed for unit test, but to implement interface
 	panic("database.InsertFileValidationJob call not expected in unit tests")
 }
 
-func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error {
-	args := m.Called(validationID, validatorID, fileID, fileResult, fileMessages, finishedAt, validatorResult, validatorMessages)
+func (m *mockDatabase) UpdateFileValidationJob(_ context.Context, params *model.UpdateFileValidationJobParameters) error {
+	args := m.Called(params.ValidationID, params.ValidatorID, params.FileID, params.FileResult, params.FileMessages, params.FinishedAt, params.ValidatorResult, params.ValidatorMessages)
 
 	return args.Error(0)
 }
@@ -149,7 +145,7 @@ func (m *mockBroker) Subscribe(ctx context.Context, queue, consumerID string, ha
 
 	messageChan, ok := m.messageChans[consumerID]
 	if !ok {
-		return errors.New("unexpected consumer id")
+		return nil
 	}
 	for {
 		select {
@@ -177,6 +173,7 @@ func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers() {
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 	ts.NoError(Init(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
@@ -184,6 +181,7 @@ func (ts *JobWorkerTestSuite) TestInitWorkers() {
 		WorkerCount(2),
 	))
 	ts.Len(workers, 2)
+	ShutdownWorkers()
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
@@ -212,10 +210,17 @@ func (ts *JobWorkerTestSuite) TestInitWorkers_NoCommandExecutor() {
 
 func (ts *JobWorkerTestSuite) TestStartWorkers_NoInit() {
 	conf = nil
-	ts.EqualError(StartWorkers(), "workers have not been initialized")
+	select {
+	case <-time.After(2 * time.Second):
+		ts.FailNow("timeout error, expected MonitorWorker to return error")
+	case err := <-MonitorWorkers():
+		ts.EqualError(err, "workers have not been initialized")
+	}
 }
 
 func (ts *JobWorkerTestSuite) TestStartWorkers_SubscribeError() {
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(errors.New("subscribe error"))
+
 	if err := Init(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
@@ -225,12 +230,22 @@ func (ts *JobWorkerTestSuite) TestStartWorkers_SubscribeError() {
 		ts.FailNow(err.Error())
 	}
 
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(errors.New("subscribe error"))
-
-	ts.EqualError(StartWorkers(), "job worker encountered error\nsubscribe error")
+	select {
+	case <-time.After(2 * time.Second):
+		ts.FailNow("timeout error, expected MonitorWorker to return error")
+	case err := <-MonitorWorkers():
+		ts.EqualError(err, "subscribe error")
+	}
+	ShutdownWorkers()
 }
 
 func (ts *JobWorkerTestSuite) TestStartAndShutdownWorkers() {
+	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
+		"job-worker-0": make(chan amqp.Delivery),
+		"job-worker-1": make(chan amqp.Delivery),
+	}
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
+
 	if err := Init(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
@@ -240,20 +255,6 @@ func (ts *JobWorkerTestSuite) TestStartAndShutdownWorkers() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 2)
-
-	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
-		"job-worker-0": make(chan amqp.Delivery),
-		"job-worker-1": make(chan amqp.Delivery),
-	}
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
@@ -272,6 +273,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
 		"job-worker-0": worker1MessageChan,
 	}
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
 	err := Init(
 		SourceQueue("job-queue"),
@@ -283,17 +285,6 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 1)
-
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
@@ -421,6 +412,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
 		"job-worker-0": worker1MessageChan,
 	}
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
 	err := Init(
 		SourceQueue("job-queue"),
@@ -432,17 +424,6 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 1)
-
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
@@ -528,6 +509,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
 		"job-worker-0": worker1MessageChan,
 	}
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
 	err := Init(
 		SourceQueue("job-queue"),
@@ -539,17 +521,6 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 1)
-
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
@@ -645,6 +616,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
 		"job-worker-0": worker1MessageChan,
 	}
+	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
 	err := Init(
 		SourceQueue("job-queue"),
@@ -656,17 +628,6 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 		ts.FailNow(err.Error())
 	}
 	ts.Len(workers, 1)
-
-	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-
-	go func() {
-		if err := StartWorkers(); err != nil {
-			ts.FailNow(err.Error())
-		}
-	}()
-
-	// Some sleep to ensure workers have time to be started
-	time.Sleep(1 * time.Second)
 
 	for i, worker := range workers {
 		ts.Equal(true, worker.running)
