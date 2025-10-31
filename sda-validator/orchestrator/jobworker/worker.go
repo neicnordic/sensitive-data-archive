@@ -24,17 +24,17 @@ type worker struct {
 	cancel context.CancelFunc
 
 	stopCh  chan struct{}
+	error   error
 	running bool
 }
 
 var workers []*worker
 var conf *config
-var shutdownChan chan struct{}
+var workerMonitorChan chan error
 
 // Init initializes the workers with the given options
 func Init(opt ...func(*config)) error {
 	workers = []*worker{}
-	shutdownChan = make(chan struct{}, 1)
 
 	conf = &config{}
 
@@ -54,6 +54,8 @@ func Init(opt ...func(*config)) error {
 		return errors.New("commandExecutor is required")
 	}
 
+	workerMonitorChan = make(chan error, conf.workerCount)
+
 	for i := 0; i < conf.workerCount; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		w := &worker{
@@ -61,44 +63,35 @@ func Init(opt ...func(*config)) error {
 			ctx:     ctx,
 			cancel:  cancel,
 			stopCh:  make(chan struct{}, 1),
-			running: false,
+			running: true,
 		}
 
 		workers = append(workers, w)
-	}
 
-	return nil
-}
-
-// StartWorkers starts all initialized workers and waits for the workers to either encounter an error or for shutdown to be triggered
-func StartWorkers() error {
-	if conf == nil {
-		return errors.New("workers have not been initialized")
-	}
-
-	errChan := make(chan error, 1)
-
-	for _, w := range workers {
 		go func(w *worker) {
-			w.running = true
 			// passing ctx such that we can gracefully shut down the subscribe
 			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
-				errChan <- errors.Join(errors.New("job worker encountered error"), err)
+				log.Errorf("job worker encountered error: %v", err)
+				workerMonitorChan <- err
 			}
-
 			w.stopCh <- struct{}{}
 			w.running = false
 		}(w)
 	}
 
-	select {
-	case err := <-errChan:
-		return err
-	case <-shutdownChan:
-		close(shutdownChan)
+	return nil
+}
 
-		return nil
+// MonitorWorkers monitors if any worker encounters an subscribe error
+func MonitorWorkers() chan error {
+	if conf == nil {
+		noConfErr := make(chan error, 1)
+		noConfErr <- errors.New("workers have not been initialized")
+
+		return noConfErr
 	}
+
+	return workerMonitorChan
 }
 
 // close a worker and wait until it has closed
@@ -122,7 +115,7 @@ func ShutdownWorkers() {
 	}
 
 	wg.Wait()
-	shutdownChan <- struct{}{}
+	close(workerMonitorChan)
 }
 
 func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err error) {
@@ -245,7 +238,16 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 			}
 		}
 		if fileResult == nil {
-			if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", []*model.Message{{Level: "error", Message: "file result not found in validator output", Time: time.Now().Format(time.RFC3339)}}, now, validatorOutput.Result, validatorOutput.Messages); err != nil {
+			if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+				ValidationID:      jobMessage.ValidationID,
+				ValidatorID:       jobMessage.ValidatorID,
+				FileID:            fileInfo.FileID,
+				FileResult:        "error",
+				ValidatorResult:   validatorOutput.Result,
+				FileMessages:      []*model.Message{{Level: "error", Message: "file result not found in validator output", Time: time.Now().Format(time.RFC3339)}},
+				FinishedAt:        now,
+				ValidatorMessages: validatorOutput.Messages,
+			}); err != nil {
 				log.Errorf("failed to update file validation job on file missing from result file due to: %v", err)
 
 				return err
@@ -254,7 +256,16 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 			continue
 		}
 
-		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, fileResult.Result, fileResult.Messages, now, validatorOutput.Result, validatorOutput.Messages); err != nil {
+		if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+			ValidationID:      jobMessage.ValidationID,
+			ValidatorID:       jobMessage.ValidatorID,
+			FileID:            fileInfo.FileID,
+			FileResult:        fileResult.Result,
+			ValidatorResult:   validatorOutput.Result,
+			FileMessages:      fileResult.Messages,
+			FinishedAt:        now,
+			ValidatorMessages: validatorOutput.Messages,
+		}); err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
 
 			return err
@@ -289,7 +300,7 @@ func checkAndCleanVolume(ctx context.Context, validationID, validationDirectory 
 	return nil
 }
 
-func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobMessage, validatorMessage []*model.Message) error {
+func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobMessage, validatorMessages []*model.Message) error {
 	tx, err := database.BeginTransaction(ctx)
 	if err != nil {
 		log.Errorf("failed to begin transaction: %v", err)
@@ -306,7 +317,16 @@ func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobM
 	now := time.Now()
 
 	for _, fileInfo := range jobMessage.Files {
-		if err := tx.UpdateFileValidationJob(ctx, jobMessage.ValidationID, jobMessage.ValidatorID, fileInfo.FileID, "error", nil, now, "error", validatorMessage); err != nil {
+		if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+			ValidationID:      jobMessage.ValidationID,
+			ValidatorID:       jobMessage.ValidatorID,
+			FileID:            fileInfo.FileID,
+			FileResult:        "error",
+			ValidatorResult:   "error",
+			FileMessages:      nil,
+			FinishedAt:        now,
+			ValidatorMessages: validatorMessages,
+		}); err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
 
 			return err

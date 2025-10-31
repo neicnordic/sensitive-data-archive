@@ -110,14 +110,14 @@ func main() {
 	}
 
 	go func() {
-		if err := jobworker.StartWorkers(); err != nil {
+		if err := <-jobworker.MonitorWorkers(); err != nil {
 			log.Errorf("job workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}
 	}()
 
 	go func() {
-		if err := jobpreparationworker.StartWorkers(); err != nil {
+		if err := <-jobpreparationworker.MonitorWorkers(); err != nil {
 			log.Errorf("job preparation workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}

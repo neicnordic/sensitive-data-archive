@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
 )
@@ -35,12 +34,12 @@ func (tx *pgTx) ReadValidationInformation(ctx context.Context, validationID stri
 	return tx.readValidationInformation(ctx, tx.tx.Stmt(preparedStatements[readValidationInformationQuery]), validationID)
 }
 
-func (tx *pgTx) InsertFileValidationJob(ctx context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
-	return tx.insertFileValidationJob(ctx, tx.tx.Stmt(preparedStatements[insertFileValidationJobQuery]), validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt)
+func (tx *pgTx) InsertFileValidationJob(ctx context.Context, insertFileValidationJobParameters *model.InsertFileValidationJobParameters) error {
+	return tx.insertFileValidationJob(ctx, tx.tx.Stmt(preparedStatements[insertFileValidationJobQuery]), insertFileValidationJobParameters)
 }
 
-func (tx *pgTx) UpdateFileValidationJob(ctx context.Context, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error {
-	return tx.updateFileValidationJob(ctx, tx.tx.Stmt(preparedStatements[updateFileValidationJobQuery]), validationID, validatorID, fileID, fileResult, fileMessages, finishedAt, validatorResult, validatorMessages)
+func (tx *pgTx) UpdateFileValidationJob(ctx context.Context, updateFileValidationJobParameters *model.UpdateFileValidationJobParameters) error {
+	return tx.updateFileValidationJob(ctx, tx.tx.Stmt(preparedStatements[updateFileValidationJobQuery]), updateFileValidationJobParameters)
 }
 
 func (tx *pgTx) AllValidationJobsDone(ctx context.Context, validationID string) (bool, error) {
