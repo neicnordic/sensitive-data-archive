@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
 )
@@ -30,9 +29,9 @@ type functions interface {
 	// ReadValidationInformation returns the pending validator jobs for a validation
 	ReadValidationInformation(ctx context.Context, validationID string) (*model.ValidationInformation, error)
 
-	InsertFileValidationJob(ctx context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error
+	InsertFileValidationJob(ctx context.Context, insertFileValidationJobParameters *model.InsertFileValidationJobParameters) error
 	// UpdateFileValidationJob updates a file validation jobs with
-	UpdateFileValidationJob(ctx context.Context, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error
+	UpdateFileValidationJob(ctx context.Context, fileValidationJobUpdateParameters *model.UpdateFileValidationJobParameters) error
 	// AllValidationJobsDone checks if all validator jobs for a validation have finished
 	AllValidationJobsDone(ctx context.Context, validationID string) (bool, error)
 }
