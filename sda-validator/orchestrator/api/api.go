@@ -185,7 +185,7 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 		return
 	}
 
-	fileInformation, sumUserFiles, missingFiles, err := api.getUserFiles(userID, requestedFilePaths)
+	userFiles, err := api.getUserFiles(userID, requestedFilePaths)
 	if err != nil {
 		log.Errorf("failed to get user files due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -193,13 +193,13 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 		return
 	}
 
-	if len(missingFiles) > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("files: %v not found", missingFiles)})
+	if len(userFiles.missingFiles) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("files: %v not found", userFiles.missingFiles)})
 
 		return
 	}
 
-	if requiresFileContent && sumUserFiles > api.validationFileSizeLimit {
+	if requiresFileContent && userFiles.sumFilesSize > api.validationFileSizeLimit {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "requested files exceed the file size limit"})
 
 		return
@@ -222,8 +222,17 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 
 	now := time.Now()
 	for _, validatorID := range requestedValidators {
-		for _, file := range fileInformation {
-			if err := tx.InsertFileValidationJob(c, validationID, validatorID, file.FileID, file.FilePath, file.SubmissionFileSize, userID, triggeredBy, now); err != nil {
+		for _, file := range userFiles.fileInformation {
+			if err := tx.InsertFileValidationJob(c, &model.InsertFileValidationJobParameters{
+				ValidationID:       validationID,
+				ValidatorID:        validatorID,
+				FileID:             file.FileID,
+				FilePath:           file.FilePath,
+				SubmissionUser:     userID,
+				TriggeredBy:        triggeredBy,
+				FileSubmissionSize: file.SubmissionFileSize,
+				StartedAt:          now,
+			}); err != nil {
 				log.Errorf("failed to insert file validation job due to: %v", err)
 				c.AbortWithStatus(http.StatusInternalServerError)
 
@@ -258,10 +267,16 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	c.JSON(200, &openapi.ValidatePost200Response{ValidationId: validationID})
 }
 
-func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (map[string]*model.FileInformation, int64, []string, error) {
+type getUserFilesResponse struct {
+	fileInformation map[string]*model.FileInformation
+	sumFilesSize    int64
+	missingFiles    []string
+}
+
+func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (*getUserFilesResponse, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaAPIURL, userID), nil)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("failed to create the request, reason: %v", err)
+		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
 	}
 
 	// TODO how to handle auth in better way, TBD #989
@@ -272,57 +287,53 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("failed to get response, reason: %v", err)
+		return nil, fmt.Errorf("failed to get response, reason: %v", err)
 	}
 	defer res.Body.Close()
 
 	// Check the status code
 	if res.StatusCode != http.StatusOK {
-		return nil, 0, nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
+		return nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
 	}
 
 	// Read the response body
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("failed to read response body, reason: %v", err)
+		return nil, fmt.Errorf("failed to read response body, reason: %v", err)
 	}
 
 	var userFiles []*model.UserFilesResponse
 
 	if err := json.Unmarshal(resBody, &userFiles); err != nil {
-		return nil, 0, nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
 	}
 
-	fileInformation := make(map[string]*model.FileInformation)
-	var missingUserFiles []string
-	var sumUserFiles int64
+	rsp := &getUserFilesResponse{
+		fileInformation: make(map[string]*model.FileInformation),
+	}
 
 	for _, filePath := range requestedFilePaths {
 		fileFound := false
 		for _, userFile := range userFiles {
 			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
 			if filePath == userFile.InboxPath {
-				fileInformation[filePath] = &model.FileInformation{
+				rsp.fileInformation[filePath] = &model.FileInformation{
 					FileID:             userFile.FileID,
 					FilePath:           userFile.InboxPath,
 					SubmissionFileSize: userFile.SubmissionFileSize,
 				}
 				fileFound = true
-				sumUserFiles += userFile.SubmissionFileSize
+				rsp.sumFilesSize += userFile.SubmissionFileSize
 
 				break
 			}
 		}
 		if !fileFound {
-			missingUserFiles = append(missingUserFiles, filePath)
+			rsp.missingFiles = append(rsp.missingFiles, filePath)
 		}
 	}
 
-	if len(missingUserFiles) > 0 {
-		return nil, 0, missingUserFiles, nil
-	}
-
-	return fileInformation, sumUserFiles, nil, nil
+	return rsp, nil
 }
 
 func (api *validatorAPIImpl) ValidatorsGet(c *gin.Context) {

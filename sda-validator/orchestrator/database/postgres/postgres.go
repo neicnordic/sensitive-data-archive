@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	_ "github.com/lib/pq" // Import pg driver
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
@@ -82,12 +81,12 @@ func (db *pgDb) ReadValidationInformation(ctx context.Context, validationID stri
 	return db.readValidationInformation(ctx, preparedStatements[readValidationInformationQuery], validationID)
 }
 
-func (db *pgDb) InsertFileValidationJob(ctx context.Context, validationID, validatorID, fileID, filePath string, fileSubmissionSize int64, submissionUser, triggeredBy string, startedAt time.Time) error {
-	return db.insertFileValidationJob(ctx, preparedStatements[insertFileValidationJobQuery], validationID, validatorID, fileID, filePath, fileSubmissionSize, submissionUser, triggeredBy, startedAt)
+func (db *pgDb) InsertFileValidationJob(ctx context.Context, insertFileValidationJobParameters *model.InsertFileValidationJobParameters) error {
+	return db.insertFileValidationJob(ctx, preparedStatements[insertFileValidationJobQuery], insertFileValidationJobParameters)
 }
 
-func (db *pgDb) UpdateFileValidationJob(ctx context.Context, validationID, validatorID, fileID, fileResult string, fileMessages []*model.Message, finishedAt time.Time, validatorResult string, validatorMessages []*model.Message) error {
-	return db.updateFileValidationJob(ctx, preparedStatements[updateFileValidationJobQuery], validationID, validatorID, fileID, fileResult, fileMessages, finishedAt, validatorResult, validatorMessages)
+func (db *pgDb) UpdateFileValidationJob(ctx context.Context, updateFileValidationJobParameters *model.UpdateFileValidationJobParameters) error {
+	return db.updateFileValidationJob(ctx, preparedStatements[updateFileValidationJobQuery], updateFileValidationJobParameters)
 }
 
 func (db *pgDb) AllValidationJobsDone(ctx context.Context, validationID string) (bool, error) {
