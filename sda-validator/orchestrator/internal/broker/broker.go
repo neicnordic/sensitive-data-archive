@@ -23,7 +23,6 @@ type amqpBroker struct {
 
 // NewAMQPBroker creates a new Broker that can communicate with a backend amqp server.
 func NewAMQPBroker(options ...func(*amqpConfig)) (AMQPBrokerI, error) {
-
 	brokerConf := globalConf.clone()
 
 	for _, o := range options {
@@ -56,7 +55,7 @@ func NewAMQPBroker(options ...func(*amqpConfig)) (AMQPBrokerI, error) {
 	}
 
 	if e := channel.Confirm(false); e != nil {
-		fmt.Printf("channel could not be put into confirm mode: %s", e)
+		_, _ = fmt.Printf("channel could not be put into confirm mode: %s", e)
 
 		return nil, fmt.Errorf("channel could not be put into confirm mode: %s", e)
 	}
@@ -131,7 +130,6 @@ func setupTLSConfig(conf *amqpConfig) (*tls.Config, error) {
 }
 
 func (broker *amqpBroker) Subscribe(ctx context.Context, queue, consumerID string, handleFunc func(context.Context, amqp.Delivery) error) error {
-
 	messageChan, err := broker.channel.ConsumeWithContext(ctx,
 		queue,      // queue
 		consumerID, // consumerID
@@ -150,12 +148,14 @@ func (broker *amqpBroker) Subscribe(ctx context.Context, queue, consumerID strin
 		case message, ok := <-messageChan:
 			if !ok {
 				log.Debugf("consumerID: %s, channel closed", consumerID)
+
 				return nil
 			}
 			if err := handleFunc(context.Background(), message); err != nil {
 				if err := message.Nack(false, true); err != nil {
 					log.Errorf("consumerID: %s, failed to nack message, reason: %v", consumerID, err)
 				}
+
 				continue
 			}
 			if err := message.Ack(false); err != nil {
@@ -198,7 +198,7 @@ func (broker *amqpBroker) PublishMessage(ctx context.Context, destination string
 	if !confirmed.Ack {
 		return fmt.Errorf("failed delivery of delivery tag: %d", confirmed.DeliveryTag)
 	}
-	log.Debugf("confirmed delivery with delivery tag: %d", confirmed.DeliveryTag)
+	log.Debugf("published message to %s, with delivery tag: %d", destination, confirmed.DeliveryTag)
 
 	return nil
 }
@@ -207,10 +207,8 @@ func (broker *amqpBroker) Close() error {
 	if err := broker.channel.Close(); err != nil {
 		return err
 	}
-	if err := broker.connection.Close(); err != nil {
-		return err
-	}
-	return nil
+
+	return broker.connection.Close()
 }
 
 // ConnectionWatcher listens to events from the server
