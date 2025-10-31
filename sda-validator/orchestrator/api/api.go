@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
+	openapi "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/api/openapi_interface"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
@@ -21,8 +21,8 @@ import (
 )
 
 type validatorAPIImpl struct {
-	sdaApiUrl                     string
-	sdaApiToken                   string
+	sdaAPIURL                     string
+	sdaAPIToken                   string
 	validationFileSizeLimit       int64
 	validationJobPreparationQueue string
 	broker                        broker.AMQPBrokerI
@@ -35,11 +35,11 @@ func NewValidatorAPIImpl(options ...func(*validatorAPIImpl)) (openapi.ValidatorO
 		option(impl)
 	}
 
-	if impl.sdaApiUrl == "" {
-		return nil, errors.New("sdaApiUrl is required")
+	if impl.sdaAPIURL == "" {
+		return nil, errors.New("sdaAPIURL is required")
 	}
-	if impl.sdaApiToken == "" {
-		return nil, errors.New("sdaApiToken is required")
+	if impl.sdaAPIToken == "" {
+		return nil, errors.New("sdaAPIToken is required")
 	}
 	if impl.validationFileSizeLimit == 0 {
 		return nil, errors.New("validationFileSizeLimit is required")
@@ -62,17 +62,18 @@ func (api *validatorAPIImpl) ResultGet(c *gin.Context) {
 	token, ok := c.Get("token")
 	if !ok {
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
-	userId := token.(jwt.Token).Subject()
+	userID := token.(jwt.Token).Subject()
 
-	api.result(c, c.Query("validation_id"), &userId)
+	api.result(c, c.Query("validation_id"), &userID)
 }
 
 func (api *validatorAPIImpl) result(c *gin.Context, validationID string, userID *string) {
-
 	if validationID == "" {
 		c.AbortWithStatus(http.StatusBadRequest)
+
 		return
 	}
 
@@ -81,6 +82,7 @@ func (api *validatorAPIImpl) result(c *gin.Context, validationID string, userID 
 	if err != nil {
 		log.Errorf("failed to read validation result: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 
@@ -130,17 +132,19 @@ func (api *validatorAPIImpl) AdminValidatePost(c *gin.Context) {
 	token, ok := c.Get("token")
 	if !ok {
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
-	userId := token.(jwt.Token).Subject()
+	userID := token.(jwt.Token).Subject()
 	request := new(openapi.AdminValidateRequest)
 	if err := c.ShouldBindJSON(request); err != nil {
 		log.Errorf("failed to bind request to json error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
 		return
 	}
 
-	api.validate(c, request.UserId, userId, request.FilePaths, request.Validators)
+	api.validate(c, request.UserId, userID, request.FilePaths, request.Validators)
 }
 
 // ValidatePost handles the POST /validate
@@ -148,32 +152,36 @@ func (api *validatorAPIImpl) ValidatePost(c *gin.Context) {
 	token, ok := c.Get("token")
 	if !ok {
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
-	userId := token.(jwt.Token).Subject()
+	userID := token.(jwt.Token).Subject()
 	request := new(openapi.ValidateRequest)
 	if err := c.ShouldBindJSON(request); err != nil {
 		log.Errorf("failed to bind request to json error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
 		return
 	}
 
-	api.validate(c, userId, userId, request.FilePaths, request.Validators)
+	api.validate(c, userID, userID, request.FilePaths, request.Validators)
 }
-func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string, requestedFilePaths, requestedValidators []string) {
 
+func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string, requestedFilePaths, requestedValidators []string) {
 	var unsupportedValidators []string
 	var requiresFileContent bool
 	for _, requestedValidator := range requestedValidators {
 		validatorDescription, ok := validators.Validators[requestedValidator]
 		if !ok {
 			unsupportedValidators = append(unsupportedValidators, requestedValidator)
+
 			continue
 		}
 		requiresFileContent = validatorDescription.RequiresFileContent() || requiresFileContent
 	}
 	if len(unsupportedValidators) > 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%v are not supported validators", unsupportedValidators)})
+
 		return
 	}
 
@@ -181,16 +189,19 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	if err != nil {
 		log.Errorf("failed to get user files due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 
 	if len(missingFiles) > 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("files: %v not found", missingFiles)})
+
 		return
 	}
 
 	if requiresFileContent && sumUserFiles > api.validationFileSizeLimit {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "requested files exceed the file size limit"})
+
 		return
 	}
 
@@ -200,6 +211,7 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	if err != nil {
 		log.Errorf("failed to begin transaction due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 	defer func() {
@@ -209,11 +221,12 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	}()
 
 	now := time.Now()
-	for _, validatorId := range requestedValidators {
+	for _, validatorID := range requestedValidators {
 		for _, file := range fileInformation {
-			if err := tx.InsertFileValidationJob(c, validationID, validatorId, file.FileID, file.FilePath, file.SubmissionFileSize, userID, triggeredBy, now); err != nil {
+			if err := tx.InsertFileValidationJob(c, validationID, validatorID, file.FileID, file.FilePath, file.SubmissionFileSize, userID, triggeredBy, now); err != nil {
 				log.Errorf("failed to insert file validation job due to: %v", err)
 				c.AbortWithStatus(http.StatusInternalServerError)
+
 				return
 			}
 		}
@@ -222,6 +235,7 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	if err := tx.Commit(); err != nil {
 		log.Errorf("failed to commit the transaction due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 
@@ -230,26 +244,28 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	if err != nil {
 		log.Errorf("failed to marshal job perparation message due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 
 	if err := api.broker.PublishMessage(c, api.validationJobPreparationQueue, msg); err != nil {
 		log.Errorf("failed to publish job perparation message due to: %v", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
+
 		return
 	}
 
 	c.JSON(200, &openapi.ValidatePost200Response{ValidationId: validationID})
 }
 
-func (api *validatorAPIImpl) getUserFiles(userId string, requesteFilePaths []string) (map[string]*model.FileInformation, int64, []string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaApiUrl, userId), nil)
+func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (map[string]*model.FileInformation, int64, []string, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaAPIURL, userID), nil)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("failed to create the request, reason: %v", err)
 	}
 
 	// TODO how to handle auth in better way, TBD #989
-	req.Header.Add("Authorization", "Bearer "+api.sdaApiToken)
+	req.Header.Add("Authorization", "Bearer "+api.sdaAPIToken)
 	req.Header.Add("Content-Type", "application/json")
 
 	// Send the request
@@ -281,7 +297,7 @@ func (api *validatorAPIImpl) getUserFiles(userId string, requesteFilePaths []str
 	var missingUserFiles []string
 	var sumUserFiles int64
 
-	for _, filePath := range requesteFilePaths {
+	for _, filePath := range requestedFilePaths {
 		fileFound := false
 		for _, userFile := range userFiles {
 			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
@@ -293,6 +309,7 @@ func (api *validatorAPIImpl) getUserFiles(userId string, requesteFilePaths []str
 				}
 				fileFound = true
 				sumUserFiles += userFile.SubmissionFileSize
+
 				break
 			}
 		}
