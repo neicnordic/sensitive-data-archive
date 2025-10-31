@@ -30,6 +30,7 @@ func (a *mockAuthenticator) authenticate(c *gin.Context) {
 	token := jwt.New()
 	if err := token.Set("sub", a.user); err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
+
 		return
 	}
 	c.Set("token", token)
@@ -38,7 +39,7 @@ func (a *mockAuthenticator) authenticate(c *gin.Context) {
 func (ts *RbacTestSuite) SetupSuite() {
 	ts.tempDir = ts.T().TempDir()
 
-	os.WriteFile(filepath.Join(ts.tempDir, "rbac.policy"), []byte(`
+	if err := os.WriteFile(filepath.Join(ts.tempDir, "rbac.policy"), []byte(`
 {
   "policy": [
 	{
@@ -64,9 +65,11 @@ func (ts *RbacTestSuite) SetupSuite() {
 	  "rolebinding": "submitter"
 	}
   ]
-}`), 0644)
-
+}`), 0600); err != nil {
+		ts.FailNow("failed to write rbac policy file due to %v", err)
+	}
 }
+
 func setupGinEngine(mockAuthMiddleware, rbacMiddleware func(c *gin.Context)) *gin.Engine {
 	ginEngine := gin.New()
 	ginEngine.Use(mockAuthMiddleware, rbacMiddleware)
@@ -77,6 +80,7 @@ func setupGinEngine(mockAuthMiddleware, rbacMiddleware func(c *gin.Context)) *gi
 	ginEngine.GET("/submitter/test", func(c *gin.Context) {
 		c.AbortWithStatus(http.StatusOK)
 	})
+
 	return ginEngine
 }
 
@@ -150,7 +154,6 @@ func (ts *RbacTestSuite) TestRbac_UnknownUser_SubmitterEndpoint() {
 }
 
 func (ts *RbacTestSuite) TestRbac_NoTokenInContext() {
-
 	rbac, err := NewRbac(
 		RbacPolicyFilePath(filepath.Join(ts.tempDir, "rbac.policy")),
 	)

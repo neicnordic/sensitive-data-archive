@@ -42,7 +42,7 @@ func NewAuthenticator(options ...func(config *authenticatorConfig)) (Authenticat
 			return nil, err
 		}
 	}
-	if authenticator.config.jwtPubKeyUrl != "" {
+	if authenticator.config.jwtPubKeyURL != "" {
 		log.Info("authenticator add jwt public key from url")
 		if err := authenticator.fetchJwtPubKeyURL(); err != nil {
 			return nil, err
@@ -89,22 +89,22 @@ func (u *validateFromToken) readJwtPubKeyPath() error {
 }
 
 func (u *validateFromToken) fetchJwtPubKeyURL() error {
-	jwkURL, err := url.ParseRequestURI(u.config.jwtPubKeyUrl)
+	jwkURL, err := url.ParseRequestURI(u.config.jwtPubKeyURL)
 	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
 		if err != nil {
 			return err
 		}
 
-		return fmt.Errorf("jwtPubKeyUrl is not a proper URL (%s)", jwkURL)
+		return fmt.Errorf("jwtPubKeyURL is not a proper URL (%s)", jwkURL)
 	}
-	log.Info("jwkURL: ", u.config.jwtPubKeyUrl)
+	log.Info("jwkURL: ", u.config.jwtPubKeyURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	u.Keyset, err = jwk.Fetch(ctx, u.config.jwtPubKeyUrl)
+	u.Keyset, err = jwk.Fetch(ctx, u.config.jwtPubKeyURL)
 	if err != nil {
-		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, u.config.jwtPubKeyUrl)
+		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, u.config.jwtPubKeyURL)
 	}
 
 	for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
@@ -123,17 +123,20 @@ func (u *validateFromToken) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if u == nil {
 			c.AbortWithStatus(http.StatusInternalServerError)
+
 			return
 		}
 
 		tokenString, err := readTokenFromHeader(c.GetHeader("Authorization"))
 		if err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
+
 			return
 		}
 
 		if tokenString == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
+
 			return
 		}
 
@@ -141,6 +144,7 @@ func (u *validateFromToken) Authenticate() gin.HandlerFunc {
 		if err != nil {
 			log.Warnf("failed to parse token: %v", err)
 			c.AbortWithStatus(http.StatusUnauthorized)
+
 			return
 		}
 
@@ -148,6 +152,7 @@ func (u *validateFromToken) Authenticate() gin.HandlerFunc {
 		if err != nil || iss.Hostname() == "" {
 			log.Warnf("failed to get issuer from token (%v)", iss)
 			c.AbortWithStatus(http.StatusUnauthorized)
+
 			return
 		}
 
