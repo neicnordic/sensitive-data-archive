@@ -51,7 +51,7 @@ func main() {
 		log.Fatalf("failed to initialise postgres database due to: %v", err)
 	}
 
-	if err := jobpreparationworker.Init(
+	jobpreparationworkers, err := jobpreparationworker.NewWorkers(
 		jobpreparationworker.WorkerCount(config.JobPreparationWorkerCount()),
 		jobpreparationworker.Broker(amqpBroker),
 		jobpreparationworker.SourceQueue(config.JobPreparationQueue()),
@@ -59,16 +59,18 @@ func main() {
 		jobpreparationworker.SdaAPIURL(config.SdaAPIURL()),
 		jobpreparationworker.DestinationQueue(config.JobQueue()),
 		jobpreparationworker.ValidationWorkDirectory(config.ValidationWorkDir()),
-	); err != nil {
+	)
+	if err != nil {
 		log.Fatalf("failed to initialize job preparation workers due to: %v", err)
 	}
 
-	if err := jobworker.Init(
+	jobworkers, err := jobworker.NewWorkers(
 		jobworker.WorkerCount(config.JobWorkerCount()),
 		jobworker.Broker(amqpBroker),
 		jobworker.SourceQueue(config.JobQueue()),
 		jobworker.CommandExecutor(&commandexecutor.OsCommandExecutor{}),
-	); err != nil {
+	)
+	if err != nil {
 		log.Fatalf("failed to initialize job preparation workers due to: %v", err)
 	}
 
@@ -110,14 +112,14 @@ func main() {
 	}
 
 	go func() {
-		if err := <-jobworker.MonitorWorkers(); err != nil {
+		if err := <-jobworkers.Monitor(); err != nil {
 			log.Errorf("job workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}
 	}()
 
 	go func() {
-		if err := <-jobpreparationworker.MonitorWorkers(); err != nil {
+		if err := <-jobpreparationworkers.Monitor(); err != nil {
 			log.Errorf("job preparation workers failed: %v", err)
 			sigc <- syscall.SIGTERM
 		}
@@ -150,10 +152,10 @@ func main() {
 	serverShutdownCancel()
 
 	log.Infof("shutting down job preparation workers")
-	jobpreparationworker.ShutdownWorkers()
+	jobpreparationworkers.Shutdown()
 
 	log.Infof("shutting down job workers")
-	jobworker.ShutdownWorkers()
+	jobworkers.Shutdown()
 
 	log.Infof("shutting broker connection")
 	if err := amqpBroker.Close(); err != nil {
