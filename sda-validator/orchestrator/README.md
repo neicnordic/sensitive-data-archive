@@ -175,3 +175,36 @@ rm -rf api/openapi_interface/go/README.md
 mv api/openapi_interface/go/* api/openapi_interface/
 rm -rf api/openapi_interface/go/
 ```
+
+## Build and deploy
+The [Dockerfile](Dockerfile) will produce an image containing the sda-validator-orchestrator and only its dependant binaries by utilising the [distroless image](gcr.io/distroless/static-debian12.
+
+The main dependant binary is [Apptainer](#apptainer) which is described in its section.
+
+To deploy the image see the [.kube folder](.kube) for an example of the kubernetes resources which populates the [sda-validator-orchestrator configuration](#configuration), and mounts an ephemeral volume as the validation work directory, in a production environment its is recommended that this volume is persistent such that the sda-validator-orchestrator is more resilient for restarts, etc, and for scaling.
+
+### Apptainer
+[Apptainer](https://apptainer.org/) is downloaded into the final image from a precompiled debian 13 binary, which then utilises the [apptainer.conf](apptainer.conf) to override the following default configration:
+- allow setuid = yes (default: no) 
+  - Reason: Only allow apptainer to run in unprivileged user namespaces.
+- config resolv_conf = no (default: yes)
+  - Reason: Apptainer should not have access to internet, so no reason to config resolv.conf.
+- mount proc = no (default: yes)
+  - Reason: No additional mounting besides files to be validated.
+- mount sys = no (default: yes)
+  - Reason: No additional mounting besides files to be validated.
+- mount dev = no (default: yes)
+  - Reason: No additional mounting besides files to be validated.
+- mount home = no (default: yes)
+  - Reason: No additional mounting besides files to be validated. 
+- mount tmp = no (default: yes)
+  - Reason: No additional mounting besides files to be validated. 
+- enable fusemount = no (default: yes)
+  - Reason: Fuse mounting is not needed 
+- mount slave = no (default: yes)
+  - Reason: No additional mounting besides files to be validated.
+- Remove bind paths: 
+  - bind path = /etc/localtime
+    - Reason: No additional mounting besides files to be validated.
+  - bind path = /etc/hosts
+    - Reason: Apptainer should not have access to internet, so no reason to mount /etc/hosts
