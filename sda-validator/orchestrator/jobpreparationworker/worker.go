@@ -27,83 +27,88 @@ type worker struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	conf *config
+
 	stopCh  chan struct{}
 	running bool
 }
 
-var workers []*worker
-var conf *config
-var workerMonitorChan chan error
+type Workers struct {
+	workers           []*worker
+	conf              *config
+	workerMonitorChan chan error
+}
 
-// Init initializes the workers with the given options
-func Init(opt ...func(*config)) error {
-	workers = []*worker{}
-
-	conf = &config{}
+// NewWorkers initializes the workers with the given options
+func NewWorkers(opt ...func(*config)) (*Workers, error) {
+	newWorkers := &Workers{
+		conf: &config{},
+	}
 
 	for _, o := range opt {
-		o(conf)
+		o(newWorkers.conf)
 	}
 
-	if conf.sourceQueue == "" {
-		return errors.New("sourceQueue is required")
+	if newWorkers.conf.sourceQueue == "" {
+		return nil, errors.New("sourceQueue is required")
 	}
 
-	if conf.destinationQueue == "" {
-		return errors.New("destinationQueue is required")
+	if newWorkers.conf.destinationQueue == "" {
+		return nil, errors.New("destinationQueue is required")
 	}
-	if conf.sdaAPIURL == "" {
-		return errors.New("sdaAPIURL is required")
+	if newWorkers.conf.sdaAPIURL == "" {
+		return nil, errors.New("sdaAPIURL is required")
 	}
-	if conf.sdaAPIToken == "" {
-		return errors.New("sdaAPIToken is required")
+	if newWorkers.conf.sdaAPIToken == "" {
+		return nil, errors.New("sdaAPIToken is required")
 	}
-	if conf.broker == nil {
-		return errors.New("broker is required")
-	}
-
-	if conf.validationWorkDir == "" {
-		return errors.New("validationWorkDir is required")
+	if newWorkers.conf.broker == nil {
+		return nil, errors.New("broker is required")
 	}
 
-	workerMonitorChan = make(chan error, conf.workerCount)
+	if newWorkers.conf.validationWorkDir == "" {
+		return nil, errors.New("validationWorkDir is required")
+	}
 
-	for i := 0; i < conf.workerCount; i++ {
+	newWorkers.workerMonitorChan = make(chan error, newWorkers.conf.workerCount)
+
+	for i := 0; i < newWorkers.conf.workerCount; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		w := &worker{
 			id:      fmt.Sprintf("job-preparation-worker-%d", i),
 			ctx:     ctx,
 			cancel:  cancel,
 			stopCh:  make(chan struct{}, 1),
+			conf:    newWorkers.conf,
 			running: true,
 		}
 
-		workers = append(workers, w)
+		newWorkers.workers = append(newWorkers.workers, w)
 
 		go func(w *worker) {
 			// passing ctx such that we can gracefully shut down the subscribe
-			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
+			if err := newWorkers.conf.broker.Subscribe(w.ctx, newWorkers.conf.sourceQueue, w.id, w.handleFunc); err != nil {
 				log.Errorf("job worker encountered error: %v", err)
-				workerMonitorChan <- err
+				newWorkers.workerMonitorChan <- err
 			}
-			w.stopCh <- struct{}{}
 			w.running = false
+			w.stopCh <- struct{}{}
 		}(w)
 	}
 
-	return nil
+	return newWorkers, nil
 }
 
 // MonitorWorkers monitors if any worker encounters an subscribe error
-func MonitorWorkers() chan error {
-	if conf == nil {
+func (w *Workers) Monitor() chan error {
+	if w.conf == nil {
 		noConfErr := make(chan error, 1)
 		noConfErr <- errors.New("workers have not been initialized")
 
 		return noConfErr
 	}
 
-	return workerMonitorChan
+	return w.workerMonitorChan
 }
 
 // close a worker and wait until it has closed
@@ -114,9 +119,9 @@ func (w *worker) close() {
 }
 
 // ShutdownWorkers shutdowns and waits for all workers to have closed
-func ShutdownWorkers() {
+func (w *Workers) Shutdown() {
 	wg := sync.WaitGroup{}
-	for _, w := range workers {
+	for _, w := range w.workers {
 		if !w.running {
 			continue
 		}
@@ -125,7 +130,7 @@ func ShutdownWorkers() {
 		})
 	}
 	wg.Wait()
-	close(workerMonitorChan)
+	close(w.workerMonitorChan)
 }
 
 func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err error) {
@@ -149,7 +154,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		return nil
 	}
 
-	validationDir := filepath.Join(conf.validationWorkDir, jobPreparationMessage.ValidationID)
+	validationDir := filepath.Join(w.conf.validationWorkDir, jobPreparationMessage.ValidationID)
 	validationFilesDir := filepath.Join(validationDir, "files")
 	if err = os.MkdirAll(validationFilesDir, 0750); err != nil {
 		log.Errorf("failed to create validation work directory: %s, error: %v", validationFilesDir, err)
@@ -161,7 +166,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		if err == nil {
 			return
 		}
-		if err := os.RemoveAll(filepath.Join(conf.validationWorkDir, jobPreparationMessage.ValidationID)); err != nil {
+		if err := os.RemoveAll(filepath.Join(w.conf.validationWorkDir, jobPreparationMessage.ValidationID)); err != nil {
 			log.Errorf("failed to remove validation directory after worker encountered an error due to: %v", err)
 		}
 	}()
@@ -176,7 +181,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	}
 
 	if requiresFileContent {
-		if err := downloadFiles(ctx, validationFilesDir, validationInformation); err != nil {
+		if err := w.downloadFiles(ctx, validationFilesDir, validationInformation); err != nil {
 			log.Errorf("failed to download files, error: %v", err)
 
 			return err
@@ -186,7 +191,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	return w.sendValidatorJobs(ctx, validationDir, validationInformation)
 }
 
-func downloadFiles(ctx context.Context, validationFilesDir string, validationInformation *model.ValidationInformation) error {
+func (w *worker) downloadFiles(ctx context.Context, validationFilesDir string, validationInformation *model.ValidationInformation) error {
 	files := make(map[string]*os.File)
 	// Ensure all files are closed
 	defer func(filesToClose map[string]*os.File) {
@@ -234,7 +239,7 @@ func downloadFiles(ctx context.Context, validationFilesDir string, validationInf
 
 	// Download and mount files to local
 	for fileID, file := range files {
-		if err := downloadFile(ctx, validationInformation.SubmissionUserID, fileID, file, pubKeyBase64, privateKeyData); err != nil {
+		if err := w.downloadFile(ctx, validationInformation.SubmissionUserID, fileID, file, pubKeyBase64, privateKeyData); err != nil {
 			return err
 		}
 	}
@@ -242,14 +247,14 @@ func downloadFiles(ctx context.Context, validationFilesDir string, validationInf
 	return nil
 }
 
-func downloadFile(_ context.Context, userID, fileID string, file *os.File, pubKeyBase64 string, privateKeyData [32]byte) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", conf.sdaAPIURL, userID, fileID), nil)
+func (w *worker) downloadFile(_ context.Context, userID, fileID string, file *os.File, pubKeyBase64 string, privateKeyData [32]byte) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", w.conf.sdaAPIURL, userID, fileID), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create the request, reason: %v", err)
 	}
 
 	// TODO how to handle auth in better way, TBD #989
-	req.Header.Add("Authorization", "Bearer "+conf.sdaAPIToken)
+	req.Header.Add("Authorization", "Bearer "+w.conf.sdaAPIToken)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Set("C4GH-Public-Key", pubKeyBase64)
 
@@ -305,7 +310,7 @@ func (w *worker) sendValidatorJobs(ctx context.Context, validationDir string, va
 			return fmt.Errorf("failed to marshal job message due to: %s", err)
 		}
 
-		if err := conf.broker.PublishMessage(ctx, conf.destinationQueue, body); err != nil {
+		if err := w.conf.broker.PublishMessage(ctx, w.conf.destinationQueue, body); err != nil {
 			return fmt.Errorf("failed to publish message due to: %s", err)
 		}
 	}

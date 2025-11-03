@@ -174,46 +174,54 @@ func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
 
 func (ts *JobWorkerTestSuite) TestInitWorkers() {
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
-	ts.NoError(Init(
+
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
-	))
-	ts.Len(workers, 2)
-	ShutdownWorkers()
+	)
+	ts.NoError(err)
+	ts.Len(workers.workers, 2)
+	workers.Shutdown()
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
-	), "sourceQueue is required")
+	)
+	ts.EqualError(err, "sourceQueue is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoBroker() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
-	), "broker is required")
+	)
+	ts.EqualError(err, "broker is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers_NoCommandExecutor() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		WorkerCount(2),
-	), "commandExecutor is required")
+	)
+	ts.EqualError(err, "commandExecutor is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobWorkerTestSuite) TestStartWorkers_NoInit() {
-	conf = nil
+	workers := &Workers{}
 	select {
 	case <-time.After(2 * time.Second):
 		ts.FailNow("timeout error, expected MonitorWorker to return error")
-	case err := <-MonitorWorkers():
+	case err := <-workers.Monitor():
 		ts.EqualError(err, "workers have not been initialized")
 	}
 }
@@ -221,22 +229,23 @@ func (ts *JobWorkerTestSuite) TestStartWorkers_NoInit() {
 func (ts *JobWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(errors.New("subscribe error"))
 
-	if err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
-	); err != nil {
+	)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
 	select {
 	case <-time.After(2 * time.Second):
 		ts.FailNow("timeout error, expected MonitorWorker to return error")
-	case err := <-MonitorWorkers():
+	case err := <-workers.Monitor():
 		ts.EqualError(err, "subscribe error")
 	}
-	ShutdownWorkers()
+	workers.Shutdown()
 }
 
 func (ts *JobWorkerTestSuite) TestStartAndShutdownWorkers() {
@@ -246,24 +255,25 @@ func (ts *JobWorkerTestSuite) TestStartAndShutdownWorkers() {
 	}
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
-	if err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
 		WorkerCount(2),
-	); err != nil {
+	)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 2)
+	ts.Len(workers.workers, 2)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-worker-%d", i), worker.id)
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 }
@@ -275,7 +285,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 	}
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
-	err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
@@ -284,9 +294,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 1)
+	ts.Len(workers.workers, 1)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-worker-%d", i), worker.id)
 	}
@@ -385,9 +395,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume() {
 		Body: message,
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 
@@ -414,7 +424,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 	}
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
-	err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
@@ -423,9 +433,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 1)
+	ts.Len(workers.workers, 1)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-worker-%d", i), worker.id)
 	}
@@ -484,9 +494,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_ErrorOnApptainerRun() {
 		Body: message,
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 
@@ -511,7 +521,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 	}
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
-	err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
@@ -520,9 +530,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 1)
+	ts.Len(workers.workers, 1)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-worker-%d", i), worker.id)
 	}
@@ -589,9 +599,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_NoResultFileFromApptainer() {
 		Body: message,
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 
@@ -618,7 +628,7 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 	}
 	ts.mockBroker.On("Subscribe", "job-queue", mock.Anything).Return(nil)
 
-	err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-queue"),
 		Broker(ts.mockBroker),
 		CommandExecutor(ts.mockCommandExecutor),
@@ -627,9 +637,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 1)
+	ts.Len(workers.workers, 1)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-worker-%d", i), worker.id)
 	}
@@ -720,9 +730,9 @@ func (ts *JobWorkerTestSuite) TestWorkersConsume_MissingFileInResultFile() {
 		Body: message,
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 

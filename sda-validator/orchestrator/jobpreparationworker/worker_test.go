@@ -38,7 +38,6 @@ type JobPreparationWorkerTestSuite struct {
 }
 
 func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
-
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
 		case strings.Contains(req.RequestURI, "/users/test_user/file/"):
@@ -214,7 +213,7 @@ func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers() {
 	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
-	ts.NoError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
@@ -222,81 +221,94 @@ func (ts *JobPreparationWorkerTestSuite) TestInitWorkers() {
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	))
-	ts.Len(workers, 2)
-	ShutdownWorkers()
+	)
+	ts.NoError(err)
+	ts.Len(workers.workers, 2)
+	workers.Shutdown()
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoValidationWorkDirectory() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
 		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		WorkerCount(2),
-	), "validationWorkDir is required")
+	)
+	ts.EqualError(err, "validationWorkDir is required")
+	ts.Nil(workers)
 }
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoBroker() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
 		SdaAPIToken("mock-token"),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "broker is required")
+	)
+	ts.EqualError(err, "broker is required")
+	ts.Nil(workers)
 }
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSdaApiToken() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "sdaAPIToken is required")
+	)
+	ts.EqualError(err, "sdaAPIToken is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSdaApiUrl() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "sdaAPIURL is required")
+	)
+	ts.EqualError(err, "sdaAPIURL is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoDestinationQueue() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
 		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "destinationQueue is required")
+	)
+	ts.EqualError(err, "destinationQueue is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestInitWorkers_NoSourceQueue() {
-	ts.EqualError(Init(
+	workers, err := NewWorkers(
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
 		SdaAPIToken("mock-token"),
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	), "sourceQueue is required")
+	)
+	ts.EqualError(err, "sourceQueue is required")
+	ts.Nil(workers)
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_NoInit() {
-	conf = nil
+	workers := &Workers{}
 	select {
 	case <-time.After(2 * time.Second):
 		ts.FailNow("timeout error, expected MonitorWorker to return error")
-	case err := <-MonitorWorkers():
+	case err := <-workers.Monitor():
 		ts.EqualError(err, "workers have not been initialized")
 	}
 }
@@ -304,7 +316,7 @@ func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_NoInit() {
 func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
 	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(errors.New("subscribe error"))
 
-	if err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
@@ -312,17 +324,18 @@ func (ts *JobPreparationWorkerTestSuite) TestStartWorkers_SubscribeError() {
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	); err != nil {
+	)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
 	select {
 	case <-time.After(2 * time.Second):
 		ts.FailNow("timeout error, expected MonitorWorker to return error")
-	case err := <-MonitorWorkers():
+	case err := <-workers.Monitor():
 		ts.EqualError(err, "subscribe error")
 	}
-	ShutdownWorkers()
+	workers.Shutdown()
 }
 
 func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
@@ -332,7 +345,7 @@ func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
 	}
 	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
 
-	if err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
@@ -340,19 +353,20 @@ func (ts *JobPreparationWorkerTestSuite) TestStartAndShutdownWorkers() {
 		Broker(ts.mockBroker),
 		ValidationWorkDirectory(ts.tempDir),
 		WorkerCount(2),
-	); err != nil {
+	)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 2)
+	ts.Len(workers.workers, 2)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-preparation-worker-%d", i), worker.id)
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 }
@@ -366,7 +380,7 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 	}
 	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
 
-	err := Init(
+	workers, err := NewWorkers(
 		SourceQueue("job-preparation-queue"),
 		DestinationQueue("job-queue"),
 		SdaAPIURL(ts.httpTestServer.URL),
@@ -378,11 +392,11 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-	ts.Len(workers, 2)
+	ts.Len(workers.workers, 2)
 
 	ts.mockBroker.On("PublishMessage", "job-queue", mock.Anything).Return(nil)
 
-	for i, worker := range workers {
+	for i, worker := range workers.workers {
 		ts.Equal(true, worker.running)
 		ts.Equal(fmt.Sprintf("job-preparation-worker-%d", i), worker.id)
 	}
@@ -447,9 +461,9 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 		Body: message2,
 	}
 
-	ShutdownWorkers()
+	workers.Shutdown()
 
-	for _, worker := range workers {
+	for _, worker := range workers.workers {
 		ts.Equal(false, worker.running)
 	}
 
