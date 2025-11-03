@@ -21,7 +21,10 @@ import (
 var SelectedMiddleware = func() []gin.HandlerFunc {
 	switch strings.ToLower(config.Config.App.Middleware) {
 	case "default":
-		return middleware.ChainDefaultMiddleware()
+		return []gin.HandlerFunc{
+			middleware.TokenMiddleware(),
+			middleware.ClientVersionMiddleware(),
+		}
 	case "token":
 		return []gin.HandlerFunc{middleware.TokenMiddleware()}
 	default:
@@ -71,14 +74,12 @@ func Setup() *http.Server {
 	}
 
 	router.HandleMethodNotAllowed = true
-	mw := SelectedMiddleware()
-
 	// protected endpoints
-	router.GET("/metadata/datasets", append(mw, sda.Datasets)...)
-	router.GET("/metadata/datasets/*dataset", append(mw, sda.Files)...)
-	router.GET("/files/:fileid", append(mw, sda.Download)...)
-	router.GET("/s3/*path", append(mw, s3.Download)...)
-	router.HEAD("/s3/*path", append(mw, s3.Download)...)
+	router.GET("/metadata/datasets", append(SelectedMiddleware(), sda.Datasets)...)
+	router.GET("/metadata/datasets/*dataset", append(SelectedMiddleware(), sda.Files)...)
+	router.GET("/files/:fileid", append(SelectedMiddleware(), sda.Download)...)
+	router.GET("/s3/*path", append(SelectedMiddleware(), s3.Download)...)
+	router.HEAD("/s3/*path", append(SelectedMiddleware(), s3.Download)...)
 
 	// public endpoints
 	router.GET("/health", healthResponse)

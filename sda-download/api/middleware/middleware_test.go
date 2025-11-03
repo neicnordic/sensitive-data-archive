@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,6 @@ import (
 	"github.com/neicnordic/sda-download/internal/session"
 	"github.com/neicnordic/sda-download/pkg/auth"
 	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 )
 
 const token string = "token"
@@ -326,21 +324,21 @@ func TestClientVersionMiddleware(t *testing.T) {
 			clientVersionHeader:  "",
 			configMinimalVersion: "v0.2.0",
 			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "Missing required header",
+			expectedBodyContains: "Missing client version header in request",
 		},
 		{
 			name:                 "Fail_InvalidClientSemVer",
 			clientVersionHeader:  "v-invalid-1",
 			configMinimalVersion: "v0.2.0",
 			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "is invalid",
+			expectedBodyContains: "is not a valid semantic version",
 		},
 		{
 			name:                 "Fail_InsufficientVersion",
 			clientVersionHeader:  "v0.1.9",
 			configMinimalVersion: "v0.2.0",
 			expectedStatus:       http.StatusPreconditionFailed, // 412
-			expectedBodyContains: "is insufficient. Please update to at least version 'v0.2.0'",
+			expectedBodyContains: "is outdated, please update to at least version 'v0.2.0'",
 		},
 		{
 			name:                 "Success_EqualVersion",
@@ -405,128 +403,6 @@ func TestClientVersionMiddleware(t *testing.T) {
 			}
 			if tt.expectedStatus != http.StatusOK && passed {
 				t.Error("failure case failed: Middleware unexpectedly allowed the request to pass.")
-			}
-		})
-	}
-}
-
-// TestChainDefaultMiddleware tests the ordered execution of TokenMiddleware -> ClientVersionMiddleware
-func TestChainDefaultMiddleware(t *testing.T) {
-	// Store original configuration and functions for restoration
-	originalGetToken := auth.GetToken
-	originalGetVisas := auth.GetVisas
-	originalGetPermissions := auth.GetPermissions
-	originalNewSessionKey := session.NewSessionKey
-	originalSessionName := config.Config.Session.Name
-	originalMinimalCliVersion := config.Config.App.MinimalCliVersion
-
-	// Shared defer to restore mocks and config after all tests run
-	defer func() {
-		auth.GetToken = originalGetToken
-		auth.GetVisas = originalGetVisas
-		auth.GetPermissions = originalGetPermissions
-		session.NewSessionKey = originalNewSessionKey
-		config.Config.Session.Name = originalSessionName
-		config.Config.App.MinimalCliVersion = originalMinimalCliVersion
-	}()
-
-	// Define test cases for the middleware chain
-	tests := []struct {
-		name             string
-		clientVersion    string
-		minimalVersion   string
-		mockTokenSuccess bool
-		expectedStatus   int
-		expectCookie     bool
-	}{
-		{
-			name:             "Success_TokenAndVersionPass",
-			clientVersion:    "v0.3.0",
-			minimalVersion:   "v0.2.0",
-			mockTokenSuccess: true,
-			expectedStatus:   http.StatusOK,
-			expectCookie:     true,
-		},
-		{
-			name:             "Fail_VersionInsufficient_AfterTokenPass",
-			clientVersion:    "v0.1.0", // Fails version check
-			minimalVersion:   "v0.2.0",
-			mockTokenSuccess: true,
-			expectedStatus:   http.StatusPreconditionFailed, // 412
-			expectCookie:     true,                          // TokenMiddleware ran and set cookie
-		},
-		{
-			name:             "Fail_AuthBlockedFirst_VersionIrrelevant",
-			clientVersion:    "v0.1.0", // Would fail version check, but should fail token first
-			minimalVersion:   "v0.2.0",
-			mockTokenSuccess: false,
-			expectedStatus:   http.StatusUnauthorized, // 401
-			expectCookie:     false,
-		},
-		{
-			name:             "Fail_AuthBlockedFirst_VersionSufficient",
-			clientVersion:    "v1.0.0", // Would pass version check, but should fail token first
-			minimalVersion:   "v0.2.0",
-			mockTokenSuccess: false,
-			expectedStatus:   http.StatusUnauthorized, // 401
-			expectCookie:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// --- Setup Mocks and Config for this test case ---
-			token := "mock-token"
-
-			if tt.mockTokenSuccess {
-				auth.GetToken = func(_ http.Header) (string, int, error) { return token, http.StatusOK, nil }
-				auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) { return &auth.Visas{}, nil }
-				auth.GetPermissions = func(_ auth.Visas) []string { return []string{"dataset1"} }
-				session.NewSessionKey = func() string { return "key" }
-				config.Config.Session.Name = "sda_session_key"
-			} else {
-				auth.GetToken = func(_ http.Header) (string, int, error) {
-					return "", http.StatusUnauthorized, errors.New("missing token")
-				}
-				auth.GetVisas = func(_ auth.OIDCDetails, _ string) (*auth.Visas, error) {
-					return &auth.Visas{}, errors.New("auth failed")
-				}
-			}
-
-			// Set up ClientVersionMiddleware config
-			parsedVersion, err := semver.NewVersion(tt.minimalVersion)
-			assert.NoErrorf(t, err, "Test setup error: Failed to parse minimal version '%s'", tt.minimalVersion)
-			config.Config.App.MinimalCliVersion = parsedVersion
-
-			// --- Execution ---
-
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", "/", nil)
-			if tt.clientVersion != "" {
-				r.Header.Set("SDA-Client-Version", tt.clientVersion)
-			}
-
-			_, router := gin.CreateTestContext(w)
-			router.GET("/", append(ChainDefaultMiddleware(), testEndpoint)...)
-			router.ServeHTTP(w, r)
-
-			// Assert Status Code
-			assert.Equal(t, tt.expectedStatus, w.Code, fmt.Sprintf("Expected status %d, got %d", tt.expectedStatus, w.Code))
-
-			// Assert Cookie Presence
-			cookieFound := false
-			for _, c := range w.Result().Cookies() {
-				if c.Name == config.Config.Session.Name {
-					cookieFound = true
-
-					break
-				}
-			}
-
-			if tt.expectCookie {
-				assert.True(t, cookieFound, "Expected a session cookie to be set, but none was found.")
-			} else {
-				assert.False(t, cookieFound, "Expected no session cookie to be set, but one was found.")
 			}
 		})
 	}

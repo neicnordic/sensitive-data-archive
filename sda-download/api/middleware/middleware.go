@@ -92,17 +92,12 @@ func TokenMiddleware() gin.HandlerFunc {
 // if the version does not meet the minimum required version.
 func ClientVersionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		const headerName = "SDA-Client-Version"
-		clientVersionStr := c.GetHeader(headerName)
+		clientVersionStr := c.GetHeader("SDA-Client-Version")
 
-		// 1. Check if the header is present
+		// Check if the header is present
 		if clientVersionStr == "" {
-			errorMessage := fmt.Sprintf(
-				"Error: Missing required header '%s'. Please ensure you are using the latest sda-cli client.",
-				headerName,
-			)
-			log.Warnf("request blocked (412): Missing required header '%s'", headerName)
-			c.String(http.StatusPreconditionFailed, errorMessage)
+			log.Warnf("request blocked (412): Missing client version header in request")
+			c.String(http.StatusPreconditionFailed, "Missing client version header in request")
 			c.Abort()
 
 			return
@@ -111,26 +106,17 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 		// Parse the client's provided version (using the processed string)
 		clientVersion, err := semver.NewVersion(clientVersionStr)
 		if err != nil {
-			log.Warnf("request blocked (412): processed client version header '%s' is not a valid semantic version: %v", clientVersionStr, err)
-			errorMessage := fmt.Sprintf(
-				"Error: Your sda-cli client version '%s' is invalid. Required minimum version is '%s'.",
-				clientVersionStr,
-				config.Config.App.MinimalCliVersionStr,
-			)
-			c.String(http.StatusPreconditionFailed, errorMessage)
+			log.Warnf("client version header '%s' is not a valid semantic version: %v", clientVersionStr, err)
+			c.String(http.StatusPreconditionFailed, "client version header is not a valid semantic version")
 			c.Abort()
 
 			return
 		}
 
-		// 2. Check if the client version is sufficient (clientVersion >= requiredVersion)
+		// Check if the client version is sufficient (clientVersion >= minimalVersion)
 		if clientVersion.LessThan(config.Config.App.MinimalCliVersion) {
-			errorMessage := fmt.Sprintf(
-				"Error: Your sda-cli client version '%s' is insufficient. Please update to at least version '%s' to proceed.",
-				clientVersionStr,
-				config.Config.App.MinimalCliVersionStr,
-			)
-			log.Warnf("request blocked (412): Insufficient client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.MinimalCliVersionStr)
+			errorMessage := fmt.Sprintf("Error: Your sda-cli client version is outdated, please update to at least version '%s'.", config.Config.App.MinimalCliVersionStr)
+			log.Warnf("request blocked (412): outdated client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.MinimalCliVersionStr)
 			c.String(http.StatusPreconditionFailed, errorMessage)
 			c.Abort()
 
@@ -142,15 +128,6 @@ func ClientVersionMiddleware() gin.HandlerFunc {
 
 		// Forward request to the next endpoint handler
 		c.Next()
-	}
-}
-
-// ChainDefaultMiddleware returns the default set of middlewares
-// to be applied in order: authentication, then client version check.
-func ChainDefaultMiddleware() []gin.HandlerFunc {
-	return []gin.HandlerFunc{
-		TokenMiddleware(),
-		ClientVersionMiddleware(),
 	}
 }
 
