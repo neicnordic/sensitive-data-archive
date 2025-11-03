@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/commandexecutor"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/validators"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -23,75 +24,80 @@ type worker struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	commandExecutor commandexecutor.CommandExecutor
+
 	stopCh  chan struct{}
 	error   error
 	running bool
 }
 
-var workers []*worker
-var conf *config
-var workerMonitorChan chan error
+type Workers struct {
+	workers           []*worker
+	conf              *config
+	workerMonitorChan chan error
+}
 
-// Init initializes the workers with the given options
-func Init(opt ...func(*config)) error {
-	workers = []*worker{}
-
-	conf = &config{}
+// NewWorkers initializes the workers with the given options
+func NewWorkers(opt ...func(*config)) (*Workers, error) {
+	newWorkers := &Workers{
+		conf: &config{},
+	}
 
 	for _, o := range opt {
-		o(conf)
+		o(newWorkers.conf)
 	}
 
-	if conf.sourceQueue == "" {
-		return errors.New("sourceQueue is required")
+	if newWorkers.conf.sourceQueue == "" {
+		return nil, errors.New("sourceQueue is required")
 	}
 
-	if conf.broker == nil {
-		return errors.New("broker is required")
+	if newWorkers.conf.broker == nil {
+		return nil, errors.New("broker is required")
 	}
 
-	if conf.commandExecutor == nil {
-		return errors.New("commandExecutor is required")
+	if newWorkers.conf.commandExecutor == nil {
+		return nil, errors.New("commandExecutor is required")
 	}
 
-	workerMonitorChan = make(chan error, conf.workerCount)
+	newWorkers.workerMonitorChan = make(chan error, newWorkers.conf.workerCount)
 
-	for i := 0; i < conf.workerCount; i++ {
+	for i := 0; i < newWorkers.conf.workerCount; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		w := &worker{
-			id:      fmt.Sprintf("job-worker-%d", i),
-			ctx:     ctx,
-			cancel:  cancel,
-			stopCh:  make(chan struct{}, 1),
-			running: true,
+			id:              fmt.Sprintf("job-worker-%d", i),
+			ctx:             ctx,
+			cancel:          cancel,
+			stopCh:          make(chan struct{}, 1),
+			running:         true,
+			commandExecutor: newWorkers.conf.commandExecutor,
 		}
 
-		workers = append(workers, w)
+		newWorkers.workers = append(newWorkers.workers, w)
 
 		go func(w *worker) {
 			// passing ctx such that we can gracefully shut down the subscribe
-			if err := conf.broker.Subscribe(w.ctx, conf.sourceQueue, w.id, w.handleFunc); err != nil {
+			if err := newWorkers.conf.broker.Subscribe(w.ctx, newWorkers.conf.sourceQueue, w.id, w.handleFunc); err != nil {
 				log.Errorf("job worker encountered error: %v", err)
-				workerMonitorChan <- err
+				newWorkers.workerMonitorChan <- err
 			}
-			w.stopCh <- struct{}{}
 			w.running = false
+			w.stopCh <- struct{}{}
 		}(w)
 	}
 
-	return nil
+	return newWorkers, nil
 }
 
-// MonitorWorkers monitors if any worker encounters an subscribe error
-func MonitorWorkers() chan error {
-	if conf == nil {
+// Monitor monitors if any worker encounters an subscribe error
+func (w *Workers) Monitor() chan error {
+	if w.conf == nil {
 		noConfErr := make(chan error, 1)
 		noConfErr <- errors.New("workers have not been initialized")
 
 		return noConfErr
 	}
 
-	return workerMonitorChan
+	return w.workerMonitorChan
 }
 
 // close a worker and wait until it has closed
@@ -101,11 +107,11 @@ func (w *worker) close() {
 	close(w.stopCh)
 }
 
-// ShutdownWorkers shutdowns and waits for all workers to have closed
-func ShutdownWorkers() {
+// Shutdown shutdowns and waits for all workers to have closed
+func (w *Workers) Shutdown() {
 	wg := sync.WaitGroup{}
 
-	for _, w := range workers {
+	for _, w := range w.workers {
 		if !w.running {
 			continue
 		}
@@ -115,7 +121,7 @@ func ShutdownWorkers() {
 	}
 
 	wg.Wait()
-	close(workerMonitorChan)
+	close(w.workerMonitorChan)
 }
 
 func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err error) {
@@ -186,7 +192,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 
 	// Here we mount the validatorJobDir as /mnt with the input, and output directories such that validator can access input/input.json and write a output/result.json
 	// we also mount validatorJobDir/files/ as /mnt/input/data such that the validator can access the files without the need for us to duplicate them per validator
-	_, err = conf.commandExecutor.Execute(
+	_, err = w.commandExecutor.Execute(
 		"apptainer",
 		"run",
 		"--userns",
