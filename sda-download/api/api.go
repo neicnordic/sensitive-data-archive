@@ -17,18 +17,16 @@ import (
 )
 
 // SelectedMiddleware returns the middleware chain based on configuration.
-// For example, config.Config.App.Middleware could be "default", "token", etc.
+// For example, config.Config.App.Middleware could be "default", "token-clientversion", etc.
 var SelectedMiddleware = func() []gin.HandlerFunc {
 	switch strings.ToLower(config.Config.App.Middleware) {
-	case "default":
+	case "token-clientversion":
 		return []gin.HandlerFunc{
 			middleware.TokenMiddleware(),
 			middleware.ClientVersionMiddleware(),
 		}
-	case "token":
-		return []gin.HandlerFunc{middleware.TokenMiddleware()}
 	default:
-		return nil
+		return []gin.HandlerFunc{middleware.TokenMiddleware()}
 	}
 }
 

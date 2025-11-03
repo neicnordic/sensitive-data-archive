@@ -25,7 +25,7 @@ const S3 = "s3"
 
 // availableMiddlewares list the options for middlewares
 // empty string "" is an alias for default, for when the config key is not set, or it's empty
-var availableMiddlewares = []string{"", "default", "token"}
+var availableMiddlewares = []string{"", "default", "token-clientversion"}
 
 // Config is a global configuration value store
 var Config Map

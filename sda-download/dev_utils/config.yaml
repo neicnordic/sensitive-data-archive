@@ -3,7 +3,7 @@ app:
   servercert: "./dev_utils/certs/download.pem"
   serverkey: "./dev_utils/certs/download-key.pem"
   port: "8443"
-  middleware: "default"
+  middleware: "token-clientversion"
   minimalcliversion: "v0.2.0"
 
 log:
