@@ -52,12 +52,12 @@ AND finished_at IS NULL`,
 
 func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, validationID string, userID *string) (*model.ValidationResult, error) {
 	rows, err := stmt.QueryContext(ctx, validationID, userID)
-	defer func() {
-		_ = rows.Close()
-	}()
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	validatorResults := make(map[string]*model.ValidatorResult)
 
