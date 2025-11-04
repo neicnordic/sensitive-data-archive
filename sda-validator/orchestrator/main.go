@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 )
 
 func main() {
+	log.SetFormatter(&log.JSONFormatter{})
 	gin.SetMode(gin.ReleaseMode)
 
 	sigc := make(chan os.Signal, 5)
@@ -85,7 +87,7 @@ func main() {
 		log.Fatalf("failed to create new validator API impl, due to: %v", err)
 	}
 
-	ginRouter := gin.Default()
+	ginRouter := gin.New()
 
 	authMiddleware, err := authenticator.NewAuthenticator()
 	if err != nil {
@@ -95,7 +97,33 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create rbac middleware, due to: %v", err)
 	}
-	ginRouter.Use(authMiddleware.Authenticate(), rbacMiddleware.Enforce())
+
+	ginMiddlewares := []gin.HandlerFunc{gin.Recovery(), authMiddleware.Authenticate(), rbacMiddleware.Enforce()}
+
+	if log.IsLevelEnabled(log.InfoLevel) {
+		ginLogger := gin.LoggerWithConfig(
+			gin.LoggerConfig{
+				Formatter: func(params gin.LogFormatterParams) string {
+					s, _ := json.Marshal(map[string]any{
+						"level":       "info",
+						"method":      params.Method,
+						"path":        params.Path,
+						"remote_addr": params.ClientIP,
+						"status_code": params.StatusCode,
+						"time":        params.TimeStamp.Format(time.RFC3339),
+					})
+
+					return string(s) + "\n"
+				},
+
+				Output:    gin.DefaultWriter,
+				SkipPaths: []string{"/ready"},
+			},
+		)
+		ginMiddlewares = append([]gin.HandlerFunc{ginLogger}, ginMiddlewares...)
+	}
+
+	ginRouter.Use(ginMiddlewares...)
 
 	validatorapi.NewRouterWithGinEngine(ginRouter, validatorapi.ApiHandleFunctions{ValidatorOrchestratorAPI: validatorAPIImpl})
 

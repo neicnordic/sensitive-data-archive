@@ -42,6 +42,7 @@ func init() {
 
 	command.Flags().String("config-path", ".", "Set the path viper will look for the config file at")
 	command.Flags().String("config-file", "", "Set the direct path to the config file")
+	command.Flags().String("log.level", "INFO", "Set the log level, supported levels: PANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE")
 
 	command.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		fmt.Println("Flags:")
@@ -54,7 +55,7 @@ func init() {
 
 			flagType, usage := pflag.UnquoteUsage(flag)
 			envVar := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(flag.Name, "-", "_"), ".", "_"))
-			_, _ = fmt.Fprintf(writer, "  --%s\t%s\t%s\t%s\t%v\t", flag.Name, envVar, flagType, usage, flag.DefValue)
+			_, _ = fmt.Fprintf(writer, "  --%s\t%s\t%s\t%s\t%v\t\n", flag.Name, envVar, flagType, usage, flag.DefValue)
 		})
 
 		_ = writer.Flush()
@@ -107,16 +108,14 @@ func Load() error {
 		flag.AssignFunc(flag.Name)
 	}
 
-	if viper.IsSet("log.level") {
-		stringLevel := viper.GetString("log.level")
-		logLevel, err := log.ParseLevel(stringLevel)
-		if err != nil {
-			log.Debugf("Log level '%s' not supported, setting to 'trace'", stringLevel)
-			logLevel = log.TraceLevel
-		}
-		log.SetLevel(logLevel)
-		log.Infof("Setting log level to '%s'", stringLevel)
+	stringLevel := viper.GetString("log.level")
+	logLevel, err := log.ParseLevel(stringLevel)
+	if err != nil {
+		log.Debugf("Log level '%s' not supported, setting to 'trace'", stringLevel)
+		logLevel = log.TraceLevel
 	}
+	log.SetLevel(logLevel)
+	log.Infof("Setting log level to '%s'", stringLevel)
 
 	return nil
 }
