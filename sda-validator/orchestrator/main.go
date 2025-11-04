@@ -185,12 +185,12 @@ func main() {
 	log.Infof("shutting down job workers")
 	jobworkers.Shutdown()
 
-	log.Infof("shutting broker connection")
+	log.Infof("shutting down broker connection")
 	if err := amqpBroker.Close(); err != nil {
 		log.Errorf("failed to gracefully shutdown broker connection")
 	}
 
-	log.Infof("shutting database connection")
+	log.Infof("shutting down database connection")
 	if err := database.Close(); err != nil {
 		log.Errorf("failed to gracefully database connection")
 	}
