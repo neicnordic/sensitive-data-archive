@@ -86,6 +86,11 @@ func (api *validatorAPIImpl) result(c *gin.Context, validationID string, userID 
 		return
 	}
 
+	if validationResult == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No validation with id: %s found for the given user", validationID)})
+		return
+	}
+
 	var rsp []*openapi.ResultResponseInner
 
 	for _, validatorResult := range validationResult.ValidatorResults {
