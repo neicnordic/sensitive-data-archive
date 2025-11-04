@@ -204,10 +204,6 @@ func (broker *amqpBroker) PublishMessage(ctx context.Context, destination string
 }
 
 func (broker *amqpBroker) Close() error {
-	if err := broker.channel.Close(); err != nil {
-		return err
-	}
-
 	return broker.connection.Close()
 }
 
