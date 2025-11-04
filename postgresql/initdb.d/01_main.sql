@@ -30,7 +30,10 @@ VALUES (0, now(), 'Created with version'),
        (13, now(), 'Create API user'),
        (14, now(), 'Create Auth user'),
        (15, now(), 'Give API user insert priviledge in logs table'),
-       (16, now(), 'Give ingest user select priviledge in encryption_keys table');
+       (16, now(), 'Give ingest user select priviledge in encryption_keys table'),
+       (17, now(), 'Add submission user to constraint'),
+       (18, now(), 'Create rotatekey role and grant it priviledges to sda tables'),
+       (19, now(), 'Expand files table with storage locations');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -57,11 +60,14 @@ CREATE TABLE files (
     stable_id            TEXT UNIQUE,
 
     submission_user      TEXT,
+    submission_location  TEXT,
     submission_file_path TEXT DEFAULT '' NOT NULL,
     submission_file_size BIGINT,
+    archive_location     TEXT,
     archive_file_path    TEXT DEFAULT '' NOT NULL,
     archive_file_size    BIGINT,
     decrypted_file_size  BIGINT,
+    backup_location      TEXT,
     backup_path          TEXT,
 
     header               TEXT,
