@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/session"
@@ -79,6 +81,50 @@ func TokenMiddleware() gin.HandlerFunc {
 		// Store dataset list to request context, for use in the endpoint handlers
 		log.Debugf("storing %v to request context", cache)
 		c.Set(requestContextKey, cache)
+
+		// Forward request to the next endpoint handler
+		c.Next()
+	}
+}
+
+// ClientVersionMiddleware checks for the required "SDA-Client-Version" header.
+// It aborts the request with 412 (Precondition Failed) if the header is missing or
+// if the version does not meet the minimum required version.
+func ClientVersionMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		clientVersionStr := c.GetHeader("SDA-Client-Version")
+
+		// Check if the header is present
+		if clientVersionStr == "" {
+			log.Debugln("request blocked (412): Missing client version header in request")
+			c.String(http.StatusPreconditionFailed, "Missing client version header in request")
+			c.Abort()
+
+			return
+		}
+
+		// Parse the client's provided version (using the processed string)
+		clientVersion, err := semver.NewVersion(clientVersionStr)
+		if err != nil {
+			log.Debugf("client version header '%s' is not a valid semantic version: %v", clientVersionStr, err)
+			c.String(http.StatusPreconditionFailed, "client version header is not a valid semantic version")
+			c.Abort()
+
+			return
+		}
+
+		// Check if the client version is sufficient (clientVersion >= minimalVersion)
+		if clientVersion.LessThan(config.Config.App.MinimalCliVersion) {
+			errorMessage := fmt.Sprintf("Error: Your sda-cli client version is outdated, please update to at least version '%s'.", config.Config.App.MinimalCliVersionStr)
+			log.Debugf("request blocked (412): outdated client version '%s'. Required minimum '%s'", clientVersionStr, config.Config.App.MinimalCliVersionStr)
+			c.String(http.StatusPreconditionFailed, errorMessage)
+			c.Abort()
+
+			return
+		}
+
+		// Version is correct, proceed to the next handler/middleware
+		log.Debugf("client version check passed: %s", clientVersionStr)
 
 		// Forward request to the next endpoint handler
 		c.Next()
