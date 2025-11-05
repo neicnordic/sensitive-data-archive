@@ -162,7 +162,7 @@ func main() {
 	}()
 
 	go func() {
-		if err := <-amqpBroker.ConnectionWatcher(); err != nil {
+		if err := <-amqpBroker.Monitor(); err != nil {
 			log.Errorf("broker connection error: %v", err)
 			sigc <- syscall.SIGTERM
 		}
