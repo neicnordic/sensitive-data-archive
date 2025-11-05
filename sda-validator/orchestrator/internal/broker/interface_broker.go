@@ -13,6 +13,6 @@ type AMQPBrokerI interface {
 	Subscribe(ctx context.Context, queue, consumerID string, handleFunc func(context.Context, amqp.Delivery) error) error
 	// Close the broker connection
 	Close() error
-	// ConnectionWatcher returns a chan watching the broker connection events
-	ConnectionWatcher() chan *amqp.Error
+	// Monitor returns a chan watching the broker connection and channel close events
+	Monitor() chan *amqp.Error
 }

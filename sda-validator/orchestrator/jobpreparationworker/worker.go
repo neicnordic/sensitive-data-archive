@@ -118,7 +118,7 @@ func (w *worker) close() {
 	close(w.stopCh)
 }
 
-// ShutdownWorkers shutdowns and waits for all workers to have closed
+// Shutdown shutdowns and waits for all workers to have closed
 func (w *Workers) Shutdown() {
 	wg := sync.WaitGroup{}
 	for _, w := range w.workers {
