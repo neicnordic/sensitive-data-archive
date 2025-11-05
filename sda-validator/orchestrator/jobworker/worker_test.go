@@ -167,9 +167,9 @@ func (m *mockBroker) Close() error {
 	panic("broker.close call not expected in unit tests")
 }
 
-func (m *mockBroker) ConnectionWatcher() chan *amqp.Error {
+func (m *mockBroker) Monitor() chan *amqp.Error {
 	// Function not needed for unit test, but to implement interface
-	panic("broker.ConnectionWatcher call not expected in unit tests")
+	panic("broker.Monitor call not expected in unit tests")
 }
 
 func (ts *JobWorkerTestSuite) TestInitWorkers() {
