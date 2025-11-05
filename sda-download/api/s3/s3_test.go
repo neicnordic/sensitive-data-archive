@@ -279,7 +279,7 @@ func (ts *S3TestSuite) TestParseParams() {
 		router.ServeHTTP(w, httptest.NewRequest("GET", params.Path, nil))
 
 		response := w.Result()
-		response.Body.Close()
+		_ = response.Body.Close()
 
 		assert.Equal(ts.T(), http.StatusAccepted, response.StatusCode, "Request failed")
 	}

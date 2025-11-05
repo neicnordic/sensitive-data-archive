@@ -4,6 +4,7 @@ go 1.24.1
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/dgraph-io/ristretto v1.0.0
 	github.com/gin-gonic/gin v1.11.0
