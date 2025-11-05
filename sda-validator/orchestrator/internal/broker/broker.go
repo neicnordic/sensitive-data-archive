@@ -207,7 +207,18 @@ func (broker *amqpBroker) Close() error {
 	return broker.connection.Close()
 }
 
-// ConnectionWatcher listens to events from the server
-func (broker *amqpBroker) ConnectionWatcher() chan *amqp.Error {
-	return broker.connection.NotifyClose(make(chan *amqp.Error))
+// Monitor listens to close events on the broker connection and channel
+func (broker *amqpBroker) Monitor() chan *amqp.Error {
+	errChan := make(chan *amqp.Error)
+
+	go func() {
+		select {
+		case err := <-broker.connection.NotifyClose(make(chan *amqp.Error, 1)):
+			errChan <- err
+		case err := <-broker.channel.NotifyClose(make(chan *amqp.Error, 1)):
+			errChan <- err
+		}
+	}()
+
+	return errChan
 }
