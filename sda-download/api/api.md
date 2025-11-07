@@ -59,25 +59,19 @@ For example, given a dataset name `https://doi.org/abc/123`, one can do `GET /me
 [
     {
         "fileId": "urn:file:1",
-        "datasetId": "dataset_1",
         "displayFileName": "file_1.txt.c4gh",
-        "fileName": "hash",
-        "fileSize": 60,
+        "filePath": "directory/file_1.txt.c4gh",
         "decryptedFileSize": 32,
         "decryptedFileChecksum": "hash",
         "decryptedFileChecksumType": "SHA256",
-        "fileStatus": "READY"
     },
     {
         "fileId": "urn:file:2",
-        "datasetId": "dataset_1",
         "displayFileName": "file_2.txt.c4gh",
-        "fileName": "hash",
-        "fileSize": 60,
+        "filePath": "directory/file_2.txt.c4gh",       
         "decryptedFileSize": 32,
         "decryptedFileChecksum": "hash",
         "decryptedFileChecksumType": "SHA256",
-        "fileStatus": "READY"
     },
 ]
 ```

@@ -270,12 +270,8 @@ func TestFiles_Success(t *testing.T) {
 	getFiles = func(_ string, _ *gin.Context) ([]*database.FileInfo, int, error) {
 		fileInfo := database.FileInfo{
 			FileID:                    "file1",
-			DatasetID:                 "dataset1",
 			DisplayFileName:           "file1.txt",
 			FilePath:                  "dir/file1.txt",
-			EncryptedFileSize:         200,
-			EncryptedFileChecksum:     "hash",
-			EncryptedFileChecksumType: "sha256",
 			DecryptedFileSize:         100,
 			DecryptedFileChecksum:     "hash",
 			DecryptedFileChecksumType: "sha256",
@@ -303,11 +299,9 @@ func TestFiles_Success(t *testing.T) {
 	body, _ := io.ReadAll(response.Body)
 	expectedStatusCode := 200
 	expectedBody := []byte(
-		`[{"fileId":"file1","datasetId":"dataset1","displayFileName":"file1.txt","filePath":` +
-			`"dir/file1.txt","encryptedFileSize":200,` +
-			`"encryptedFileChecksum":"hash","encryptedFileChecksumType":"sha256",` +
-			`"decryptedFileSize":100,` +
-			`"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
+		`[{"fileId":"file1","displayFileName":"file1.txt","filePath":` +
+			`"dir/file1.txt",` +
+			`"decryptedFileSize":100,"decryptedFileChecksum":"hash","decryptedFileChecksumType":"sha256"}]`)
 
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
@@ -752,7 +746,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	privPEM := "-----BEGIN PRIVATE KEY-----\n" + base64.StdEncoding.EncodeToString(privdata) + "\n-----END PRIVATE KEY-----\n"
 	_, err = keyfile.Write([]byte(privPEM))
 	assert.NoError(t, err, "Could not write private key")
-	keyfile.Close()
+	_ = keyfile.Close()
 
 	certfile, err := os.CreateTemp("", "cert")
 	assert.NoError(t, err, "Could not create temp file for cert")
@@ -760,7 +754,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	pubPEM := "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(server.Certificate().Raw) + "\n-----END CERTIFICATE-----\n"
 	_, err = certfile.Write([]byte(pubPEM))
 	assert.NoError(t, err, "Could not write public key")
-	certfile.Close()
+	_ = certfile.Close()
 
 	// Configure Reencrypt to use fake server
 	config.Config.Reencrypt.Host = serverdetails[0]
@@ -814,7 +808,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 
 	_, err = io.Copy(datafile, &bufferWriter)
 	assert.NoError(t, err, "Could not write temporary file")
-	datafile.Close()
+	_ = datafile.Close()
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {

@@ -164,34 +164,67 @@ paths:
           description: Internal application error
   /file/accession:
     post:
-      description: Assigns accession ID to a given file.
+      description: |
+        Assigns accession ID to a given file.
+        You can provide either a JSON payload with `user`, `filepath`, and `accession_id`,
+        or query parameters `fileid` and `accessionid`.
+        If both payload and parameters are provided, a 400 Bad Request is returned.
+      parameters:
+        - in: query
+          name: fileid
+          schema:
+            type: string
+          required: false
+          description: UUID of the file to accession. If provided, payload must be empty.
+        - in: query
+          name: accessionid
+          schema:
+            type: string
+          required: false
+          description: Accession ID to assign to the file. If provided, payload must be empty.
       requestBody:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/FileAccession"
+        required: false
       responses:
         "200":
           description: Successful operation.
         "400":
-          description: Bad payload
+          description: |
+            Bad request. Returned if both fileid/accessionid and payload are provided, or if payload is invalid, or if fileid is invalid.
         "401":
           description: Authentication failure.
+        "404":
+          description: Decrypted checksum not found.
         "500":
           description: Internal application error.
   /file/ingest:
     post:
-      description: Trigger ingestion of a given file.
+      description: |
+        Trigger ingestion of a given file.
+        You can provide either a JSON payload with `user` and `filepath`, or a `fileid` query parameter.
+        If both are provided, a 400 Bad Request is returned.
+      parameters:
+        - in: query
+          name: fileid
+          schema:
+            type: string
+          required: false
+          description: UUID of the file to ingest. If provided, payload must be empty.
       requestBody:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/FileIngest"
+        required: false
       responses:
         "200":
           description: Successful operation.
         "400":
-          description: Bad payload
+          description: |
+            Bad request. Returned if both fileid and payload are provided, or if payload is invalid, or if fileid is invalid.
         "401":
           description: Authentication failure.
         "500":

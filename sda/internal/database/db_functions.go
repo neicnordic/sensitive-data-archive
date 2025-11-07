@@ -200,6 +200,39 @@ func (dbs *SDAdb) storeHeader(header []byte, id string) error {
 	return nil
 }
 
+// RotateHeader stores the file header in the database
+func (dbs *SDAdb) RotateHeaderKey(header []byte, keyHash, fileID string) error {
+	var (
+		err   error
+		count int
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		err = dbs.rotateHeaderKey(header, keyHash, fileID)
+		count++
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) rotateHeaderKey(header []byte, keyHash, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "UPDATE sda.files SET header = $1, key_hash = $2 WHERE id = $3;"
+
+	result, err := db.Exec(query, hex.EncodeToString(header), keyHash, fileID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("something went wrong with the query zero rows were changed")
+	}
+	log.Debugf("Successfully set header and key hash for file %s", fileID)
+
+	return nil
+}
+
 // SetArchived marks the file as 'ARCHIVED'
 func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
 	var err error
@@ -440,6 +473,37 @@ func (dbs *SDAdb) setAccessionID(accessionID, fileID string) error {
 	}
 
 	return nil
+}
+
+// GetAccessionID returns the stable id of a file identified by its file_id
+func (dbs *SDAdb) GetAccessionID(fileID string) (string, error) {
+	var (
+		aID string
+		err error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		aID, err = dbs.getAccessionID(fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return aID, err
+}
+func (dbs *SDAdb) getAccessionID(fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getAccessionID = "SELECT stable_id FROM sda.files WHERE id = $1;"
+	var aID string
+	err := db.QueryRow(getAccessionID, fileID).Scan(&aID)
+	if err != nil {
+		return "", err
+	}
+
+	return aID, nil
 }
 
 // MapFilesToDataset maps a set of files to a dataset in the database
@@ -937,6 +1001,38 @@ func (dbs *SDAdb) addKeyHash(keyHash, keyDescription string) error {
 	return nil
 }
 
+// GetKeyHash wraps getKeyHash with exponential stand-off retries
+func (dbs *SDAdb) GetKeyHash(fileID string) (string, error) {
+	var (
+		keyHash string
+		err     error
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		keyHash, err = dbs.getKeyHash(fileID)
+		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return keyHash, err
+}
+
+// getKeyHash gets the c4gh key hash corresponding to the fileID in the files table
+func (dbs *SDAdb) getKeyHash(fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = "SELECT key_hash from sda.files WHERE id = $1;"
+	var keyHash string
+	err := db.QueryRow(query, fileID).Scan(&keyHash)
+	if err != nil {
+		return "", err
+	}
+
+	return keyHash, nil
+}
 func (dbs *SDAdb) SetKeyHash(keyHash, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
@@ -1008,6 +1104,26 @@ func (dbs *SDAdb) DeprecateKeyHash(keyHash string) error {
 	}
 
 	return nil
+}
+
+// Check that a key hash exists in the database
+func (dbs *SDAdb) CheckKeyHash(keyhash string) error {
+	hashes, err := dbs.ListKeyHashes()
+	if err != nil {
+		return err
+	}
+
+	for n := range hashes {
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
+			return nil
+		}
+
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
+			return errors.New("the c4gh key hash has been deprecated")
+		}
+	}
+
+	return errors.New("the c4gh key hash is not registered")
 }
 
 // ListDatasets lists all datasets as well as the status
@@ -1136,6 +1252,30 @@ func (dbs *SDAdb) GetReVerificationData(accessionID string) (schema.IngestionVer
 	return reVerify, nil
 }
 
+func (dbs *SDAdb) GetReVerificationDataFromFileID(fileID string) (schema.IngestionVerification, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	reVerify := schema.IngestionVerification{ReVerify: true, FileID: fileID}
+
+	const query = "SELECT archive_file_path,submission_file_path,submission_user FROM sda.files where id = $1;"
+	err := db.QueryRow(query, fileID).Scan(&reVerify.ArchivePath, &reVerify.FilePath, &reVerify.User)
+	if err != nil {
+		return schema.IngestionVerification{}, err
+	}
+
+	var checksum schema.Checksums
+	const archiveChecksum = "SELECT type,checksum from sda.checksums WHERE file_id = $1 AND source = 'ARCHIVED';"
+	if err := db.QueryRow(archiveChecksum, reVerify.FileID).Scan(&checksum.Type, &checksum.Value); err != nil {
+		log.Errorln(err.Error())
+
+		return schema.IngestionVerification{}, err
+	}
+	checksum.Type = strings.ToLower(checksum.Type)
+	reVerify.EncryptedChecksums = append(reVerify.EncryptedChecksums, checksum)
+
+	return reVerify, nil
+}
+
 func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
@@ -1173,4 +1313,38 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	}
 
 	return accessions, nil
+}
+
+// GetFileDetailsFromUUID() retrieves user, path and correlation id by giving the file UUID
+func (dbs *SDAdb) GetFileDetailsFromUUID(fileUUID, event string) (FileDetails, error) {
+	var (
+		info FileDetails
+		err  error
+	)
+
+	for count := 0; count <= RetryTimes; count++ {
+		info, err = dbs.getFileDetailsFromUUID(fileUUID, event)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return info, err
+}
+
+// getFileDetailsFromUUID() is the actual function performing work for GetUserAndPathFromUUID
+func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID, event string) (FileDetails, error) {
+	var info FileDetails
+	dbs.checkAndReconnectIfNeeded()
+
+	const query = `SELECT f.submission_user, f.submission_file_path, fel.correlation_id 
+		from sda.files f
+		join sda.file_event_log fel on f.id = fel.file_id
+		WHERE f.id = $1 and fel.event=$2;`
+	if err := dbs.DB.QueryRow(query, fileUUID, event).Scan(&info.User, &info.Path, &info.CorrID); err != nil {
+		return FileDetails{}, err
+	}
+
+	return info, nil
 }

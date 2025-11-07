@@ -39,7 +39,7 @@ jobs:
           output: '${{ matrix.image-name }}-results.sarif'
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: '${{ matrix.image-name }}-results.sarif'
           category: ${{ matrix.image-name }}
@@ -65,7 +65,7 @@ jobs:
           output: 'sda-results.sarif'
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'sda-results.sarif'
           category: sda

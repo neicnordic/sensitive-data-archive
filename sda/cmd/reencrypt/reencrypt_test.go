@@ -342,3 +342,182 @@ func (ts *ReEncryptTests) TestReencryptHeader_TLS() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "content", string(data))
 }
+
+func (ts *ReEncryptTests) TestCallReencryptHeader() {
+	lis, err := net.Listen("tcp", "localhost:50061")
+	if err != nil {
+		ts.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
+		if err := s.Serve(lis); err != nil {
+			ts.T().Fail()
+		}
+	}()
+
+	grpcConf := config.Grpc{
+		Host:    "localhost",
+		Port:    50061,
+		Timeout: 30,
+	}
+	res, err := re.CallReencryptHeader(ts.FileHeader, ts.UserPubKeyString, grpcConf)
+	assert.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), "crypt4gh", string(res[:8]))
+
+	hr := bytes.NewReader(res)
+	fileStream := io.MultiReader(hr, bytes.NewReader(ts.FileData))
+
+	c4gh, err := streaming.NewCrypt4GHReader(fileStream, ts.UserPrivateKey, nil)
+	assert.NoError(ts.T(), err)
+
+	data, err := io.ReadAll(c4gh)
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "content", string(data))
+}
+
+func (ts *ReEncryptTests) TestCallReencryptHeaderTLS() {
+	certPath := ts.T().TempDir()
+	helper.MakeCerts(certPath)
+	rootCAs := x509.NewCertPool()
+	cacertFile, err := os.ReadFile(certPath + "/ca.crt")
+	if err != nil {
+		ts.T().FailNow()
+	}
+	ok := rootCAs.AppendCertsFromPEM(cacertFile)
+	if !ok {
+		ts.T().FailNow()
+	}
+	certs, err := tls.LoadX509KeyPair(certPath+"/tls.crt", certPath+"/tls.key")
+	if err != nil {
+		ts.T().Log(err.Error())
+		ts.T().FailNow()
+	}
+
+	lis, err := net.Listen("tcp", "localhost:50062")
+	if err != nil {
+		ts.T().FailNow()
+	}
+
+	go func() {
+		serverCreds := credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				MinVersion:   tls.VersionTLS13,
+				ClientCAs:    rootCAs,
+			},
+		)
+		opts := []grpc.ServerOption{grpc.Creds(serverCreds)}
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
+		if err := s.Serve(lis); err != nil {
+			ts.T().Fail()
+		}
+	}()
+
+	clientCreds := credentials.NewTLS(
+		&tls.Config{
+			Certificates: []tls.Certificate{certs},
+			MinVersion:   tls.VersionTLS13,
+			RootCAs:      rootCAs,
+		},
+	)
+
+	grpcConf := config.Grpc{
+		ClientCreds: clientCreds,
+		Host:        "localhost",
+		Port:        50062,
+		Timeout:     30,
+	}
+	res, err := re.CallReencryptHeader(ts.FileHeader, ts.UserPubKeyString, grpcConf)
+	assert.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), "crypt4gh", string(res[:8]))
+
+	hr := bytes.NewReader(res)
+	fileStream := io.MultiReader(hr, bytes.NewReader(ts.FileData))
+
+	c4gh, err := streaming.NewCrypt4GHReader(fileStream, ts.UserPrivateKey, nil)
+	assert.NoError(ts.T(), err)
+
+	data, err := io.ReadAll(c4gh)
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "content", string(data))
+}
+
+func (ts *ReEncryptTests) TestCallReencryptHeader_ConnectionError() {
+	grpcConf := config.Grpc{
+		Host:    "locahost",
+		Port:    50063,
+		Timeout: 30,
+	}
+	_, err := re.CallReencryptHeader(ts.FileHeader, ts.UserPubKeyString, grpcConf)
+	assert.Error(ts.T(), err, "expected a connection error")
+}
+
+func (ts *ReEncryptTests) TestCallReencryptHeader_BadInput() {
+	lis, err := net.Listen("tcp", "localhost:50064")
+	if err != nil {
+		ts.T().FailNow()
+	}
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
+		if err := s.Serve(lis); err != nil {
+			ts.T().Fail()
+		}
+	}()
+
+	grpcConf := config.Grpc{
+		Host:    "localhost",
+		Port:    50064,
+		Timeout: 30,
+	}
+
+	res, err := re.CallReencryptHeader(ts.FileHeader, "somekey", grpcConf)
+	assert.ErrorContains(ts.T(), err, "illegal base64 data")
+	assert.Nil(ts.T(), res)
+}
+
+func (ts *ReEncryptTests) TestReencryptHeader_NoMatchingKey() {
+	lis, err := net.Listen("tcp", "localhost:50065")
+	if err != nil {
+		ts.T().FailNow()
+	}
+
+	var keyList []*[32]byte
+	_, testKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		ts.T().FailNow()
+	}
+	keyList = append(keyList, (&testKey))
+
+	go func() {
+		var opts []grpc.ServerOption
+		s := grpc.NewServer(opts...)
+		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: keyList})
+		_ = s.Serve(lis)
+	}()
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:50065", opts...)
+	if err != nil {
+		ts.T().FailNow()
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	assert.Contains(ts.T(), err.Error(), "reencryption failed, no matching key available")
+	assert.Nil(ts.T(), res)
+}

@@ -71,6 +71,7 @@ spec:
         - name: inbox
           mountPath: {{ .Values.global.inbox.path | quote }}
       {{- end }}
+      enableServiceLinks: false
       volumes:
       {{- if not .Values.global.vaultSecrets }}
         - name: config

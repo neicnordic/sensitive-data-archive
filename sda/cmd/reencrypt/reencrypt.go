@@ -97,7 +97,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 		}
 	}
 
-	return nil, status.Error(400, err.Error())
+	return nil, status.Error(400, "header reencryption failed, no matching key available")
 }
 
 // Check implements the healthgrpc.HealthServer Check method for the proxy grpc Health server.

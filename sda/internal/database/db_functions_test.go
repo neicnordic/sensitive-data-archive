@@ -2,6 +2,7 @@ package database
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"time"
@@ -37,6 +38,8 @@ func (suite *DatabaseTests) TestRegisterFile() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='registered')", fileID).Scan(&exists)
 	assert.NoError(suite.T(), err, "Failed to check if registered file event exists")
 	assert.True(suite.T(), exists, "RegisterFile() did not insert a row into sda.file_event_log with id: "+fileID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetFileID() {
@@ -53,6 +56,8 @@ func (suite *DatabaseTests) TestGetFileID() {
 	fID, err := db.GetFileID(corrID)
 	assert.NoError(suite.T(), err, "GetFileId failed")
 	assert.Equal(suite.T(), fileID, fID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestUpdateFileEventLog() {
@@ -77,6 +82,8 @@ func (suite *DatabaseTests) TestUpdateFileEventLog() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='uploaded')", fileID).Scan(&exists)
 	assert.NoError(suite.T(), err, "Failed to check if uploaded file event exists")
 	assert.True(suite.T(), exists, "UpdateFileEventLog() did not insert a row into sda.file_event_log with id: "+fileID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestStoreHeader() {
@@ -93,6 +100,56 @@ func (suite *DatabaseTests) TestStoreHeader() {
 	// store header for non existing entry
 	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, "00000000-0000-0000-0000-000000000000")
 	assert.EqualError(suite.T(), err, "something went wrong with the query zero rows were changed")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestRotateHeaderKey() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+
+	// Register a new key and a new file
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.addKeyHash("someKeyHash", "this is a test key")
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, fileID)
+	assert.NoError(suite.T(), err, "failed to store file header")
+
+	// test happy path
+	newKeyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc507`
+	err = db.addKeyHash(newKeyHex, "new key")
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	newHHeader := []byte{1, 2, 3}
+
+	err = db.RotateHeaderKey(newHHeader, newKeyHex, fileID)
+	assert.NoError(suite.T(), err)
+
+	// Verify that the key+header were updated
+	var dbHeaderString, dbKeyHash string
+	err = db.DB.QueryRow("SELECT header, key_hash FROM sda.files WHERE id=$1", fileID).Scan(&dbHeaderString, &dbKeyHash)
+	assert.NoError(suite.T(), err)
+	dbHeader, err := hex.DecodeString(dbHeaderString)
+	assert.NoError(suite.T(), err, "hex decoding of rotated header failed")
+	assert.Equal(suite.T(), newHHeader, dbHeader)
+	assert.Equal(suite.T(), newKeyHex, dbKeyHash)
+
+	// case of non registered keyhash
+	err = db.RotateHeaderKey([]byte{2, 4, 6, 8}, "unknownKeyHash", fileID)
+	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
+	// check that no column was updated
+	err = db.DB.QueryRow("SELECT header, key_hash FROM sda.files WHERE id=$1", fileID).Scan(&dbHeaderString, &dbKeyHash)
+	assert.NoError(suite.T(), err)
+	dbHeader, err = hex.DecodeString(dbHeaderString)
+	assert.NoError(suite.T(), err, "hex decoding of rotated header failed")
+	assert.Equal(suite.T(), newHHeader, dbHeader)
+	assert.Equal(suite.T(), newKeyHex, dbKeyHash)
+
+	// case of non existing entry
+	err = db.RotateHeaderKey([]byte{15, 45, 20, 40, 48}, "keyHex", "00000000-0000-0000-0000-000000000000")
+	assert.EqualError(suite.T(), err, "something went wrong with the query zero rows were changed")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestSetArchived() {
@@ -112,6 +169,8 @@ func (suite *DatabaseTests) TestSetArchived() {
 
 	err = db.SetArchived(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetFileStatus() {
@@ -129,6 +188,8 @@ func (suite *DatabaseTests) TestGetFileStatus() {
 	status, err := db.GetFileStatus(corrID)
 	assert.NoError(suite.T(), err, "failed to get file status")
 	assert.Equal(suite.T(), "downloaded", status)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetHeader() {
@@ -145,6 +206,8 @@ func (suite *DatabaseTests) TestGetHeader() {
 	header, err := db.GetHeader(fileID)
 	assert.NoError(suite.T(), err, "failed to get file header")
 	assert.Equal(suite.T(), []byte{15, 45, 20, 40, 48}, header)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestSetVerified() {
@@ -161,6 +224,8 @@ func (suite *DatabaseTests) TestSetVerified() {
 
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetArchived() {
@@ -182,6 +247,8 @@ func (suite *DatabaseTests) TestGetArchived() {
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 	assert.Equal(suite.T(), 1000, fileSize)
 	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestSetAccessionID() {
@@ -200,6 +267,8 @@ func (suite *DatabaseTests) TestSetAccessionID() {
 	stableID := "TEST:000-1234-4567"
 	err = db.SetAccessionID(stableID, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestCheckAccessionIDExists() {
@@ -226,6 +295,63 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	duplicate, err := db.CheckAccessionIDExists(stableID, uuid.New().String())
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 	assert.Equal(suite.T(), "duplicate", duplicate)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetAccessionID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
+
+	err = db.SetArchived(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.SetVerified(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+	stableID := "TEST:000-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	res, err := db.GetAccessionID(fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting accessionID of file", err)
+	assert.Equal(suite.T(), stableID, res, "retrieved accessionID is wrong")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetAccessionID_wrongFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	// register a file in the database
+	fileID, err := db.RegisterFile("/testuser/TestSetAccessionID.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
+
+	err = db.SetArchived(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
+	err = db.SetVerified(fileInfo, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
+	stableID := "TEST:000-1234-4567"
+	err = db.SetAccessionID(stableID, fileID)
+	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
+
+	// locally reduce RetryTimes to avoid 30s waiting limit of testsuite
+	RetryTimes = 2
+
+	// check for bad format
+	_, err = db.GetAccessionID("someFileID")
+	assert.ErrorContains(suite.T(), err, "invalid input syntax for type uuid")
+
+	// check for non-existent fileID
+	_, err = db.GetAccessionID(uuid.New().String())
+	assert.ErrorContains(suite.T(), err, "no rows in result set")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetFileInfo() {
@@ -257,6 +383,8 @@ func (suite *DatabaseTests) TestGetFileInfo() {
 	assert.Equal(suite.T(), "/tmp/TestGetFileInfo.c4gh", info.Path)
 	assert.Equal(suite.T(), "11c94bc7fb13afeb2b3fb16c1dbe9206dc09560f1b31420f2d46210ca4ded0a8", info.ArchiveChecksum)
 	assert.Equal(suite.T(), "a671218c2418aa51adf97e33c5c91a720289ba3c9fd0d36f6f4bf9610730749f", info.DecryptedChecksum)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestMapFilesToDataset() {
@@ -294,6 +422,8 @@ func (suite *DatabaseTests) TestMapFilesToDataset() {
 		suite.FailNow("failed to get dataset members from database")
 	}
 	assert.Equal(suite.T(), 5, dsMembers)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetInboxPath() {
@@ -316,6 +446,8 @@ func (suite *DatabaseTests) TestGetInboxPath() {
 		assert.NoError(suite.T(), err, "getInboxPath failed")
 		assert.Contains(suite.T(), path, "/testuser/TestGetInboxPath")
 	}
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestUpdateDatasetEvent() {
@@ -349,6 +481,8 @@ func (suite *DatabaseTests) TestUpdateDatasetEvent() {
 
 	err = db.UpdateDatasetEvent(dID, "deprecated", "{\"type\": \"deprecate\"}")
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetHeaderForStableID() {
@@ -369,6 +503,8 @@ func (suite *DatabaseTests) TestGetHeaderForStableID() {
 	header, err := db.GetHeaderForStableID("TEST:010-1234-4567")
 	assert.NoError(suite.T(), err, "failed to get header for stable ID: %v", err)
 	assert.Equal(suite.T(), header, []byte("HEADER"), "did not get expected header")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetSyncData() {
@@ -397,6 +533,8 @@ func (suite *DatabaseTests) TestGetSyncData() {
 	assert.Equal(suite.T(), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", fileData.Checksum, "did not get expected file checksum")
 	assert.Equal(suite.T(), "/testuser/TestGetGetSyncData.c4gh", fileData.FilePath, "did not get expected file path")
 	assert.Equal(suite.T(), "testuser", fileData.User, "did not get expected user")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestCheckIfDatasetExists() {
@@ -430,6 +568,8 @@ func (suite *DatabaseTests) TestCheckIfDatasetExists() {
 	ok, err = db.checkIfDatasetExists("missing dataset")
 	assert.NoError(suite.T(), err, "check if dataset exists failed")
 	assert.Equal(suite.T(), ok, false)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetArchivePath() {
@@ -451,6 +591,8 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	path, err := db.getArchivePath("acession-0001")
 	assert.NoError(suite.T(), err, "getArchivePath failed")
 	assert.Equal(suite.T(), path, corrID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetUserFiles() {
@@ -490,6 +632,8 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	filteredFilelist, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true)
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), 3, len(filteredFilelist), "file list is of incorrect length")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetCorrID() {
@@ -507,6 +651,8 @@ func (suite *DatabaseTests) TestGetCorrID() {
 	corrID, err := db.GetCorrID(user, filePath, "")
 	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), fileID, corrID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
@@ -546,6 +692,8 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 	corrID, err := db.GetCorrID(user, filePath, "")
 	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), fileID2, corrID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetCorrID_wrongFilePath() {
@@ -563,6 +711,8 @@ func (suite *DatabaseTests) TestGetCorrID_wrongFilePath() {
 	corrID, err := db.GetCorrID(user, "/testuser/file20.c4gh", "")
 	assert.EqualError(suite.T(), err, "sql: no rows in result set")
 	assert.Equal(suite.T(), "", corrID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetCorrID_fileWithAccessionID() {
@@ -584,6 +734,8 @@ func (suite *DatabaseTests) TestGetCorrID_fileWithAccessionID() {
 	corrID, err := db.GetCorrID(user, filePath, "stableID")
 	assert.NoError(suite.T(), err, "failed to get correlation ID of file in database")
 	assert.Equal(suite.T(), fileID, corrID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestListActiveUsers() {
@@ -628,6 +780,8 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 				suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
 			}
 		}
+
+		db.Close()
 	}
 
 	err = db.MapFilesToDataset("test-dataset-01", []string{"accession_User-A_00", "accession_User-A_01", "accession_User-A_02"})
@@ -643,6 +797,8 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 	userList, err := db.ListActiveUsers()
 	assert.NoError(suite.T(), err, "failed to list users from DB")
 	assert.Equal(suite.T(), 3, len(userList))
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetDatasetStatus() {
@@ -715,6 +871,8 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 	status, err = db.GetDatasetStatus(dID)
 	assert.NoError(suite.T(), err, "got (%v) when no error weas expected")
 	assert.Equal(suite.T(), "deprecated", status)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestAddKeyHash() {
@@ -732,6 +890,8 @@ func (suite *DatabaseTests) TestAddKeyHash() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.encryption_keys WHERE key_hash=$1 AND description=$2)", keyHex, keyDescription).Scan(&exists)
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.True(suite.T(), exists, "key hash was not added to the database")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestListKeyHashes() {
@@ -752,6 +912,8 @@ func (suite *DatabaseTests) TestListKeyHashes() {
 	hashList[0].CreatedAt = ct.Format(time.DateOnly)
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.Equal(suite.T(), expectedResponse, hashList[0], "key hash was not added to the database")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestListKeyHashes_emptyTable() {
@@ -761,6 +923,8 @@ func (suite *DatabaseTests) TestListKeyHashes_emptyTable() {
 	hashList, err := db.ListKeyHashes()
 	assert.NoError(suite.T(), err, "failed to verify key hash existence")
 	assert.Equal(suite.T(), []C4ghKeyHash{}, hashList, "fuu")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestDeprecateKeyHashes() {
@@ -769,6 +933,8 @@ func (suite *DatabaseTests) TestDeprecateKeyHashes() {
 	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc32", "this is a test key"), "failed to register key in database")
 
 	assert.NoError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc32"), "failure when deprecating keyhash")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestDeprecateKeyHashes_wrongHash() {
@@ -777,6 +943,8 @@ func (suite *DatabaseTests) TestDeprecateKeyHashes_wrongHash() {
 	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc11", "this is a another key"), "failed to register key in database")
 
 	assert.EqualError(suite.T(), db.DeprecateKeyHash("wr0n6h4sh"), "key hash not found or already deprecated", "failure when deprecating non existing keyhash")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
@@ -788,6 +956,8 @@ func (suite *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
 
 	// we should not be able to change the deprecation date
 	assert.EqualError(suite.T(), db.DeprecateKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "key hash not found or already deprecated", "failure when deprecating keyhash")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestSetKeyHash() {
@@ -811,6 +981,8 @@ func (suite *DatabaseTests) TestSetKeyHash() {
 	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.files WHERE key_hash=$1 AND id=$2)", keyHex, fileID).Scan(&exists)
 	assert.NoError(suite.T(), err, "failed to verify key hash set for file")
 	assert.True(suite.T(), exists, "key hash was not set for file in the database")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
@@ -828,6 +1000,90 @@ func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
 	newKeyHex := "6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc502"
 	err = db.SetKeyHash(newKeyHex, fileID)
 	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetKeyHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	// Register a new key and a new file
+	keyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc509`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "failed to set key hash in database")
+
+	// Test happy path
+	keyHash, err := db.GetKeyHash(fileID)
+	assert.NoError(suite.T(), err, "Could not get key hash")
+	assert.Equal(suite.T(), keyHex, keyHash)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetKeyHash_wrongFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	// Register a new key and a new file
+	keyHex := `6af1407abc74656b8913a7d323c4bfd30bf7c8ca359f74ae35357acef29dc509`
+	keyDescription := "this is a test key"
+	err = db.addKeyHash(keyHex, keyDescription)
+	assert.NoError(suite.T(), err, "failed to register key in database")
+	fileID, err := db.RegisterFile("/testuser/file1.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+	err = db.SetKeyHash(keyHex, fileID)
+	assert.NoError(suite.T(), err, "failed to set key hash in database")
+
+	// Test that using an unknown fileID produces an error
+	_, err = db.GetKeyHash("097e1dc9-6b42-42bf-966d-dece6fefda09")
+	assert.ErrorContains(suite.T(), err, "no rows in result set")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestCheckKeyHash() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+	anotherKeyhash := "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99"
+	assert.NoError(suite.T(), db.AddKeyHash(anotherKeyhash, "this is a another key"), "failed to register key in database")
+
+	err = db.CheckKeyHash(anotherKeyhash)
+	assert.NoError(suite.T(), err, "failed to verify active key hash lookup")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestCheckKeyHash_keyDeprecated() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+	anotherKeyhash := "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99"
+	assert.NoError(suite.T(), db.AddKeyHash(anotherKeyhash, "this is a another key"), "failed to register key in database")
+	assert.NoError(suite.T(), db.DeprecateKeyHash(anotherKeyhash), "failure when deprecating keyhash")
+
+	err = db.CheckKeyHash(anotherKeyhash)
+	assert.ErrorContains(suite.T(), err, "the c4gh key hash has been deprecated")
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestCheckKeyHash_keyNonExistent() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	assert.NoError(suite.T(), db.AddKeyHash("cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+
+	err = db.CheckKeyHash("somekeyhash")
+	assert.ErrorContains(suite.T(), err, "the c4gh key hash is not registered")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestListDatasets() {
@@ -912,6 +1168,8 @@ func (suite *DatabaseTests) TestListDatasets() {
 	assert.NoError(suite.T(), err, "got (%v) when listing datasets", err)
 	assert.Equal(suite.T(), "test-get-dataset-01", datasets[0].DatasetID)
 	assert.Equal(suite.T(), "registered", datasets[1].Status)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestListUserDatasets() {
@@ -1004,6 +1262,8 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 	assert.NoError(suite.T(), err, "got (%v) when listing datasets for a user", err)
 	assert.Equal(suite.T(), 2, len(datasets))
 	assert.Equal(suite.T(), "test-user-dataset-01", datasets[0].DatasetID)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestUpdateUserInfo() {
@@ -1024,6 +1284,8 @@ func (suite *DatabaseTests) TestUpdateUserInfo() {
 	err = db.DB.QueryRow("SELECT name FROM sda.userinfo WHERE id=$1", userID).Scan(&name2)
 	assert.NoError(suite.T(), err, "could not select user info: %v", err)
 	assert.Equal(suite.T(), name, name2, "user info table did not update correctly")
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestUpdateUserInfo_newInfo() {
@@ -1054,6 +1316,8 @@ func (suite *DatabaseTests) TestUpdateUserInfo_newInfo() {
 	err = db.DB.QueryRow("SELECT groups FROM sda.userinfo WHERE id=$1", userID).Scan(pq.Array(&dbgroups))
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), groups, dbgroups)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetReVerificationData() {
@@ -1092,6 +1356,44 @@ func (suite *DatabaseTests) TestGetReVerificationData() {
 	data, err := db.GetReVerificationData(accession)
 	assert.NoError(suite.T(), err, "failed to get verification data")
 	assert.Equal(suite.T(), "/archive/TestGetReVerificationData.c4gh", data.ArchivePath)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetReVerificationDataFromFileID() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+
+	fileID, err := db.RegisterFile("/testuser/TestGetReVerificationData.c4gh", "testuser")
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	encSha := sha256.New()
+	_, err = encSha.Write([]byte("Checksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	decSha := sha256.New()
+	_, err = decSha.Write([]byte("DecryptedChecksum"))
+	if err != nil {
+		suite.FailNow("failed to generate checksum")
+	}
+
+	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
+	if err = db.SetArchived(fileInfo, fileID); err != nil {
+		suite.FailNow("failed to archive file")
+	}
+	if err = db.SetVerified(fileInfo, fileID); err != nil {
+		suite.FailNow("failed to mark file as verified")
+	}
+
+	data, err := db.GetReVerificationDataFromFileID(fileID)
+	assert.NoError(suite.T(), err, "failed to get verification data from fileID")
+	assert.Equal(suite.T(), "/archive/TestGetReVerificationData.c4gh", data.ArchivePath)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
@@ -1131,6 +1433,8 @@ func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
 	data, err := db.GetReVerificationData("accession")
 	assert.EqualError(suite.T(), err, "sql: no rows in result set")
 	assert.Equal(suite.T(), schema.IngestionVerification{}, data)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetDecryptedChecksum() {
@@ -1166,6 +1470,8 @@ func (suite *DatabaseTests) TestGetDecryptedChecksum() {
 	checksum, err := db.GetDecryptedChecksum(fileID)
 	assert.NoError(suite.T(), err, "failed to get verification data")
 	assert.Equal(suite.T(), fmt.Sprintf("%x", decSha.Sum(nil)), checksum)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetDsatasetFiles() {
@@ -1224,6 +1530,8 @@ func (suite *DatabaseTests) TestGetDsatasetFiles() {
 	accessions, err := db.GetDatasetFiles(dID)
 	assert.NoError(suite.T(), err, "failed to get accessions for a dataset")
 	assert.Equal(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, accessions)
+
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
@@ -1248,6 +1556,7 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	assert.NoError(suite.T(), err)
 	_, err = db.getInboxFilePathFromID(user, fileID)
 	assert.Error(suite.T(), err)
+	db.Close()
 }
 
 func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
@@ -1284,4 +1593,48 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 	fileID2, err = db.getFileIDByUserPathAndStatus(user, filePath, "archived")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileID2)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Register a file to get a valid UUID
+	filePath := "/dummy_user.org/Dummy_folder/dummyfile.c4gh"
+	user := "dummy@user.org"
+	fileID, err := db.RegisterFile(filePath, user)
+	if err != nil {
+		suite.FailNow("failed to register file in database")
+	}
+
+	// Update event log to ensure correlation ID is set
+	correlationID := "b7e2c1a4-5f3b-4c8e-9d2a-7f6e1b2c3d4e"
+	err = db.UpdateFileEventLog(fileID, "uploaded", correlationID, user, "{}", "{}")
+	if err != nil {
+		suite.FailNow("failed to update file event log")
+	}
+
+	infoFile, err := db.GetFileDetailsFromUUID(fileID, "uploaded")
+	assert.NoError(suite.T(), err, "failed to get user and path from UUID")
+	assert.Equal(suite.T(), user, infoFile.User)
+	assert.Equal(suite.T(), filePath, infoFile.Path)
+	assert.Equal(suite.T(), correlationID, infoFile.CorrID)
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetFileDetailsFromUUID_NotFound() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	// Use a non-existent UUID
+	invalidUUID := "abc-123"
+	infoFile, err := db.GetFileDetailsFromUUID(invalidUUID, "uploaded")
+	assert.Error(suite.T(), err, "expected error for non-existent UUID")
+	assert.Empty(suite.T(), infoFile.User)
+	assert.Empty(suite.T(), infoFile.Path)
+	assert.Empty(suite.T(), infoFile.CorrID)
+
+	db.Close()
 }
