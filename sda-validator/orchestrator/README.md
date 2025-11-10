@@ -134,8 +134,8 @@ Job workers will consume from the rabbitmq queue specified by the [--job-queue c
 
 The sda-validator-orchestrator requires a Postgres database connection, this connection is setup with
 the [--database.* configurations](#configuration).
-And [file_validation_job table](database/postgres/initdb.d/02_create_table_file_validation_job.sql)) is expected to
-exists in the database && schema provided in the configuration.
+And [file_validation_job table](database/postgres/initdb.d/01_create_table_file_validation_job.sql) is expected to
+exist in the database && schema provided in the configuration.
 
 ### Rabbitmq Broker
 
