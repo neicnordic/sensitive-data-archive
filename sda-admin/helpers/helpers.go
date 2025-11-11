@@ -59,15 +59,7 @@ var PostRequest = PostReq
 
 // PostReq sends a POST request to the server with a JSON body and returns the response body or an error.
 func PostReq(url, token string, jsonBody []byte) ([]byte, error) {
-	var req *http.Request
-	var err error
-	if jsonBody != nil {
-		// Create a new POST request with the provided JSON body
-		req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
-	} else {
-		// Create a new POST request with query
-		req, err = http.NewRequest("POST", url, nil)
-	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
 	}
