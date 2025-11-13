@@ -141,7 +141,7 @@ func (api *validatorAPIImpl) AdminValidatePost(c *gin.Context) {
 
 		return
 	}
-	userID := token.(jwt.Token).Subject()
+	adminID := token.(jwt.Token).Subject()
 	request := new(openapi.AdminValidateRequest)
 	if err := c.ShouldBindJSON(request); err != nil {
 		log.Errorf("failed to bind request to json error: %v", err)
@@ -150,7 +150,13 @@ func (api *validatorAPIImpl) AdminValidatePost(c *gin.Context) {
 		return
 	}
 
-	api.validate(c, request.UserId, userID, request.FilePaths, request.Validators)
+	if request.UserId == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+
+		return
+	}
+
+	api.validate(c, request.UserId, adminID, request.FilePaths, request.Validators)
 }
 
 // ValidatePost handles the POST /validate

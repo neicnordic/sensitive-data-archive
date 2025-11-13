@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS file_validation_job
     triggered_by         TEXT,
     file_result          TEXT                              DEFAULT 'pending',
     started_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
-    finished_at          TIMESTAMP,
+    finished_at          TIMESTAMP WITH TIME ZONE,
     file_messages        JSON,
     validator_messages   JSON,
     validator_result     TEXT                              DEFAULT 'pending',
