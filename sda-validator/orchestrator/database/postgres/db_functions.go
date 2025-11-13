@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	readValidationResultsQuery     = "readValidationResults"
-	readValidationInformationQuery = "readValidationInformation"
-	insertFileValidationJobQuery   = "insertFileValidationJob"
-	updateFileValidationJobQuery   = "updateFileValidationJob"
-	allValidationJobsDoneQuery     = "allValidationJobsDone"
+	readValidationResultsQuery              = "readValidationResults"
+	readValidationInformationQuery          = "readValidationInformation"
+	insertFileValidationJobQuery            = "insertFileValidationJob"
+	updateFileValidationJobQuery            = "updateFileValidationJob"
+	allValidationJobsDoneQuery              = "allValidationJobsDone"
+	updateAllValidationJobFilesOnErrorQuery = "updateAllValidationJobFilesOnError"
 )
 
 var queries = map[string]string{
@@ -48,6 +49,11 @@ SELECT false
 FROM file_validation_job
 WHERE validation_id = $1
 AND finished_at IS NULL`,
+
+	updateAllValidationJobFilesOnErrorQuery: `
+UPDATE file_validation_job SET
+finished_at = $1, file_result = "error", validator_messages = $2, validator_result = "error"                               
+WHERE validation_id = $3`,
 }
 
 func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, validationID string, userID *string) (*model.ValidationResult, error) {
@@ -223,6 +229,22 @@ func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 		params.SubmissionUser,
 		params.TriggeredBy,
 		params.StartedAt.Format(time.RFC3339)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sql.Stmt, validationId string, validatorMessage *model.Message) error {
+	validatorMessagesJSON, err := json.Marshal([]*model.Message{validatorMessage})
+	if err != nil {
+		return fmt.Errorf("failed to marshal validator message: %v", err)
+	}
+
+	if _, err := stmt.ExecContext(ctx,
+		time.Now().Format(time.RFC3339),
+		validatorMessagesJSON,
+		validationId); err != nil {
 		return err
 	}
 

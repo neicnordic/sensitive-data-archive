@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
@@ -99,7 +100,7 @@ func NewWorkers(opt ...func(*config)) (*Workers, error) {
 	return newWorkers, nil
 }
 
-// MonitorWorkers monitors if any worker encounters an subscribe error
+// Monitor monitors if any worker encounters an subscribe error
 func (w *Workers) Monitor() chan error {
 	if w.conf == nil {
 		noConfErr := make(chan error, 1)
@@ -159,7 +160,11 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 	if err = os.MkdirAll(validationFilesDir, 0750); err != nil {
 		log.Errorf("failed to create validation work directory: %s, error: %v", validationFilesDir, err)
 
-		return err
+		return database.UpdateAllValidationJobFilesOnError(ctx, jobPreparationMessage.ValidationID, &model.Message{
+			Level:   "error",
+			Time:    time.Now().Format(time.RFC3339),
+			Message: "Internal error",
+		})
 	}
 	// Remove validation directory if any error is encountered
 	defer func() {
@@ -184,7 +189,14 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 		if err := w.downloadFiles(ctx, validationFilesDir, validationInformation); err != nil {
 			log.Errorf("failed to download files, error: %v", err)
 
-			return err
+			if err := os.RemoveAll(filepath.Join(w.conf.validationWorkDir, jobPreparationMessage.ValidationID)); err != nil {
+				log.Errorf("failed to remove validation directory after worker encountered an error due to: %v", err)
+			}
+			return database.UpdateAllValidationJobFilesOnError(ctx, jobPreparationMessage.ValidationID, &model.Message{
+				Level:   "error",
+				Time:    time.Now().Format(time.RFC3339),
+				Message: "Internal error",
+			})
 		}
 	}
 

@@ -172,6 +172,10 @@ func (m *mockDatabase) AllValidationJobsDone(_ context.Context, _ string) (bool,
 	panic("database.AllValidationJobsDone call not expected in unit tests")
 }
 
+func (m *mockDatabase) UpdateAllValidationJobFilesOnError(_ context.Context, _ string, _ *model.Message) error {
+	panic("database.UpdateAllValidationJobFilesOnError call not expected in unit tests")
+}
+
 type mockBroker struct {
 	mock.Mock
 }

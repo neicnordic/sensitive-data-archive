@@ -15,9 +15,9 @@ var conf = &rbacConfig{}
 func init() {
 	config.RegisterFlags(
 		&config.Flag{
-			Name: "rbacCasbin.policy-file-path",
+			Name: "rbac.policy-file-path",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "/rbac/policy.json", "Path to file containing rbacCasbin policy")
+				flagSet.String(flagName, "/rbac/policy.json", "Path to file containing rbac policy")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {

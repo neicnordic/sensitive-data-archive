@@ -3,6 +3,7 @@ package validators
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/commandexecutor"
 )
@@ -29,6 +30,10 @@ func init() {
 
 func Init(validatorsPaths []string) error {
 	for _, path := range validatorsPaths {
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("failed to stat file: %s, error: %v", path, err)
+		}
+
 		out, err := commandExecutor.Execute(
 			"apptainer",
 			"run",
