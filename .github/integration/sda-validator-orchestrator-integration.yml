@@ -1,0 +1,361 @@
+services:
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        sh /scripts/make_sda_credentials.sh;
+
+        curl -s -u guest:guest -X PUT -k "http://rabbitmq:15672/api/users/validator_orchestrator" -H "content-type:application/json" -d '{"password": "validator_orchestrator", "tags":"none"}';
+        curl -s -u guest:guest -X PUT -k "http://rabbitmq:15672/api/permissions/sda/validator_orchestrator" -H "content-type:application/json" -d '{"configure":"","write":"sda","read":".*"}';
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.11-slim-bookworm
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
+
+
+  database_init:
+    container_name: database_init
+    image: postgres:15.4-alpine
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        pg_isready 
+        psql -c "CREATE DATABASE sda_validator_orchestrator"  || true;
+        psql -d sda_validator_orchestrator -c "CREATE SCHEMA sda_validator_orchestrator;" || true;
+        export PGOPTIONS="--search_path=sda_validator_orchestrator";
+        find /init/ -name *.sql -exec psql -d sda_validator_orchestrator -f {} \;
+        psql -d sda_validator_orchestrator -c "CREATE USER validator_orchestrator WITH PASSWORD 'validator_orchestrator'";
+        psql -d sda_validator_orchestrator -c "GRANT USAGE ON SCHEMA sda_validator_orchestrator TO validator_orchestrator;";
+        psql -d sda_validator_orchestrator -c "GRANT ALL ON ALL TABLES IN SCHEMA sda_validator_orchestrator TO validator_orchestrator;";
+        psql -d sda_validator_orchestrator -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sda_validator_orchestrator TO validator_orchestrator;";
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=rootpasswd
+    volumes:
+      - ./../../sda-validator/orchestrator/database/postgres/initdb.d/:/init
+      - shared:/shared
+
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    container_name: rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    restart: always
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio
+    command: server /data  --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  validator-orchestrator_init:
+    container_name: validator-orchestrator_init
+    image: golang:1.25-alpine
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        wget -O /validators/100-200_word_validator.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/100-200_word_validator.sif;
+        wget -O /validators/always_success.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/always_success.sif;
+        mkdir /validators/config
+        cp /config.yaml /validators/config/config.yaml;
+        echo "sda-api-token: "$(cat /shared/token) >> /validators/config/config.yaml;
+        echo '{
+            "policy": [
+              {
+                "role": "admin",
+                "path": "/admin/*",
+                "action": "(GET)|(POST)"
+              }, {
+                "role": "submission",
+                "path": "/validators",
+                "action": "GET"
+              }, {
+                "role": "submission",
+                "path": "/validate",
+                "action": "POST"
+              }, {
+                "role": "submission",
+                "path": "/result",
+                "action": "GET"
+              }
+            ],
+            "roles": [
+              {
+                "role": "admin",
+                "rolebinding": "submission"
+              },
+              {
+                "role": "admin_user@integration.test",
+                "rolebinding": "admin"
+              }, {
+                "role": "submission_user@integration.test",
+                "rolebinding": "submission"
+              }
+            ]
+          }' > /validators/config/rbac.policy
+
+    volumes:
+      - validators:/validators
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  validator-orchestrator:
+    build:
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
+      context: ../../sda
+      target: debug
+    security_opt: # Unconfine seccomp and apparmor to allow apptainer to create usernamespaces within the container
+      - seccomp=unconfined
+      - apparmor=unconfined
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-validator-orchestrator
+    container_name: validator-orchestrator
+    user: root
+    depends_on:
+      api:
+        condition: service_started
+      database_init:
+        condition: service_completed_successfully
+      validator-orchestrator_init:
+        condition: service_completed_successfully
+    environment:
+      - LOG_LEVEL=DEBUG
+      - API_PORT=8080
+      - VALIDATOR_PATHS=/validators/100-200_word_validator.sif,/validators/always_success.sif
+      - SDA_API_URL=http://api:8080
+      - BROKER_PASSWORD=validator_orchestrator
+      - BROKER_USER=validator_orchestrator
+      - JOB_QUEUE=validation-job-queue
+      - JOB_PREPARATION_QUEUE=validation-job-preparation-queue
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=validator_orchestrator
+      - DATABASE_PASSWORD=validator_orchestrator
+      - CONFIG_FILE=/validators/config/config.yaml
+      - JWT_PUB_KEY_URL=http://localhost:8800/oidc/jwk
+      - RBAC_POLICY_FILE_PATH=/validators/config/rbac.policy
+    extra_hosts:
+      - "localhost:host-gateway"
+    restart: always
+    volumes:
+      - validators:/validators
+      - ./sda/rbac.json:/rbac/policy.json
+    ports:
+      - "8082:8080"
+      
+  s3inbox:
+    build:
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
+      context: ../../sda
+      target: debug
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [ sda-s3inbox ]
+    container_name: s3inbox
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      mock-aai:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=inbox
+      - BROKER_USER=inbox
+      - BROKER_ROUTINGKEY=inbox
+      - DB_PASSWORD=inbox
+      - DB_USER=inbox
+    extra_hosts:
+      - "localhost:host-gateway"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+    ports:
+      - "18000:8000"
+      - "18001:8001"
+
+  api:
+    command: [ sda-api ]
+    container_name: api
+    depends_on:
+      reencrypt:
+        condition: service_started
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      mock-aai:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=api
+      - BROKER_USER=api
+      - DB_PASSWORD=api
+      - DB_USER=api
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    ports:
+      - "8090:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - ./sda/rbac.json:/rbac.json
+      - shared:/shared
+  
+  
+  
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-reencrypt]
+    container_name: reencrypt
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+        
+  mock-aai:
+    container_name: ls-aai-mock
+    depends_on:
+      aai-db:
+        condition: service_healthy
+    environment:
+      - DOCKERHOST=localhost
+    healthcheck:
+      test:
+        [ "CMD", "/bin/true" ]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.3-broker2.1.13-tomcat9.0-jdk21
+    ports:
+      - "8800:8080"
+    volumes:
+      - "./sda/aai-mock:/etc/lsaai-mock"
+
+
+  aai-db:
+    container_name: ls-aai-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "aaiPass"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "aai"
+      MYSQL_USER: "aai"
+      MYSQL_PASSWORD: "aaiPass"
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: mysql/mysql-server:latest
+    volumes:
+      - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+
+  integration_test:
+    container_name: tester
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        cd /tests;
+        go test -v ./...
+    depends_on:
+      validator-orchestrator:
+        condition: service_started
+      s3inbox:
+        condition: service_started
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: golang:1.25-alpine
+    profiles:
+      - tests
+    volumes:
+      - shared:/shared
+      - ./tests/validator-orchestrator:/tests
+
+volumes:
+  minio_data:
+  postgres_data:
+  rabbitmq_data:
+  shared:
+  validators:
