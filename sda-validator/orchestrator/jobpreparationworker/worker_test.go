@@ -164,6 +164,12 @@ func (m *mockDatabase) AllValidationJobsDone(_ context.Context, _ string) (bool,
 	panic("database.AllValidationJobsDone call not expected in unit tests")
 }
 
+func (m *mockDatabase) UpdateAllValidationJobFilesOnError(ctx context.Context, validationID string, validatorMessage *model.Message) error {
+	args := m.Called(validationID, validatorMessage)
+
+	return args.Error(0)
+}
+
 type mockBroker struct {
 	mock.Mock
 	messageChans map[string]chan amqp.Delivery
@@ -513,4 +519,82 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsume() {
 	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "ReadValidationInformation", 2)
 	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationInformation", validationInformation1.ValidationID)
 	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationInformation", validationInformation2.ValidationID)
+}
+
+func (ts *JobPreparationWorkerTestSuite) TestWorkersConsumeDownloadError() {
+	worker1MessageChan := make(chan amqp.Delivery)
+	ts.mockBroker.messageChans = map[string]chan amqp.Delivery{
+		"job-preparation-worker-0": worker1MessageChan,
+	}
+	ts.mockBroker.On("Subscribe", "job-preparation-queue", mock.Anything).Return(nil)
+
+	httpTestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprint(w, "expected error")
+	}))
+
+	workers, err := NewWorkers(
+		SourceQueue("job-preparation-queue"),
+		DestinationQueue("job-queue"),
+		SdaAPIURL(httpTestServer.URL),
+		SdaAPIToken("mock-token"),
+		Broker(ts.mockBroker),
+		ValidationWorkDirectory(ts.tempDir),
+		WorkerCount(1),
+	)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	ts.Len(workers.workers, 1)
+
+	ts.mockBroker.On("PublishMessage", "job-queue", mock.Anything).Return(nil)
+
+	for i, worker := range workers.workers {
+		ts.Equal(true, worker.running)
+		ts.Equal(fmt.Sprintf("job-preparation-worker-%d", i), worker.id)
+	}
+
+	validationInformation1 := &model.ValidationInformation{
+		ValidationID:     uuid.NewString(),
+		ValidatorIDs:     []string{"mock-validator"},
+		SubmissionUserID: "test_user",
+		Files: []*model.FileInformation{
+			{
+				FileID:             "testFileId1",
+				FilePath:           "test_dir/file1",
+				SubmissionFileSize: 1,
+			}, {
+				FileID:             "testFileId2",
+				FilePath:           "another_dir/file2",
+				SubmissionFileSize: 1,
+			}, {
+				FileID:             "testFileId3",
+				FilePath:           "file3",
+				SubmissionFileSize: 1,
+			},
+		},
+	}
+	ts.mockDatabase.On("ReadValidationInformation", validationInformation1.ValidationID).Return(validationInformation1, nil)
+	ts.mockDatabase.On("UpdateAllValidationJobFilesOnError", validationInformation1.ValidationID, mock.Anything).Return(nil)
+
+	message1, err := json.Marshal(&model.JobPreparationMessage{ValidationID: validationInformation1.ValidationID})
+	if err != nil {
+		ts.FailNow("failed to marshal job preparation message", err)
+	}
+	worker1MessageChan <- amqp.Delivery{
+		Body: message1,
+	}
+
+	workers.Shutdown()
+
+	for _, worker := range workers.workers {
+		ts.Equal(false, worker.running)
+	}
+
+	ts.mockBroker.AssertNumberOfCalls(ts.T(), "PublishMessage", 0)
+	ts.mockBroker.AssertCalled(ts.T(), "Subscribe", "job-preparation-queue", "job-preparation-worker-0")
+	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Subscribe", 1)
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "ReadValidationInformation", 1)
+	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationInformation", validationInformation1.ValidationID)
+	ts.mockDatabase.AssertCalled(ts.T(), "UpdateAllValidationJobFilesOnError", validationInformation1.ValidationID, mock.Anything)
 }
