@@ -52,7 +52,7 @@ AND finished_at IS NULL`,
 
 	updateAllValidationJobFilesOnErrorQuery: `
 UPDATE file_validation_job SET
-finished_at = $1, file_result = "error", validator_messages = $2, validator_result = "error"                               
+finished_at = $1, file_result = 'error', validator_messages = $2, validator_result = 'error'                               
 WHERE validation_id = $3`,
 }
 
@@ -68,9 +68,11 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 	validatorResults := make(map[string]*model.ValidatorResult)
 
 	for rows.Next() {
-		var validatorMessages, fileMessages, startedAt, finishedAt string
+		var startedAt string
 		fileResult := new(model.FileResult)
 		validatorResult := new(model.ValidatorResult)
+
+		var validatorMessages, fileMessages, finishedAt sql.NullString
 
 		if err := rows.Scan(
 			&validatorResult.ValidatorID,
@@ -84,8 +86,10 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 			return nil, err
 		}
 
-		if err := json.Unmarshal([]byte(fileMessages), &fileResult.Messages); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal file messages: %v", err)
+		if fileMessages.Valid {
+			if err := json.Unmarshal([]byte(fileMessages.String), &fileResult.Messages); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal file messages: %v", err)
+			}
 		}
 
 		if readValidatorResult, ok := validatorResults[validatorResult.ValidatorID]; ok {
@@ -94,17 +98,21 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 			continue
 		}
 
-		if err := json.Unmarshal([]byte(validatorMessages), &validatorResult.Messages); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal file messages: %v", err)
+		if validatorMessages.Valid {
+			if err := json.Unmarshal([]byte(validatorMessages.String), &validatorResult.Messages); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal file messages: %v", err)
+			}
 		}
 
 		validatorResult.StartedAt, err = time.Parse(time.RFC3339, startedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse started at: %v", err)
 		}
-		validatorResult.FinishedAt, err = time.Parse(time.RFC3339, startedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse started at: %v", err)
+		if finishedAt.Valid {
+			validatorResult.FinishedAt, err = time.Parse(time.RFC3339, finishedAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse started at: %v", err)
+			}
 		}
 		validatorResult.Files = append(validatorResult.Files, fileResult)
 		validatorResults[validatorResult.ValidatorID] = validatorResult
@@ -180,20 +188,34 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 }
 
 func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, params *model.UpdateFileValidationJobParameters) error {
-	fileMessagesJSON, err := json.Marshal(params.FileMessages)
-	if err != nil {
-		return fmt.Errorf("failed to marshal file messages: %v", err)
+
+	fileMessages := sql.NullString{}
+	if len(params.FileMessages) > 0 {
+		fileMessagesJSON, err := json.Marshal(params.FileMessages)
+		if err != nil {
+			return fmt.Errorf("failed to marshal file messages: %v", err)
+		}
+
+		fileMessages.Valid = true
+		fileMessages.String = string(fileMessagesJSON)
 	}
-	validatorMessagesJSON, err := json.Marshal(params.ValidatorMessages)
-	if err != nil {
-		return fmt.Errorf("failed to marshal validator messages: %v", err)
+
+	validatorMessages := sql.NullString{}
+	if len(params.ValidatorMessages) > 0 {
+		validatorMessagesJSON, err := json.Marshal(params.ValidatorMessages)
+		if err != nil {
+			return fmt.Errorf("failed to marshal validator messages: %v", err)
+		}
+
+		validatorMessages.Valid = true
+		validatorMessages.String = string(validatorMessagesJSON)
 	}
 
 	if _, err := stmt.ExecContext(ctx,
 		params.FinishedAt.Format(time.RFC3339),
 		params.FileResult,
-		validatorMessagesJSON,
-		fileMessagesJSON,
+		validatorMessages,
+		fileMessages,
 		params.ValidatorResult,
 		params.FileID,
 		params.ValidatorID,
@@ -236,14 +258,21 @@ func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 }
 
 func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sql.Stmt, validationId string, validatorMessage *model.Message) error {
-	validatorMessagesJSON, err := json.Marshal([]*model.Message{validatorMessage})
-	if err != nil {
-		return fmt.Errorf("failed to marshal validator message: %v", err)
+
+	validatorMessages := &sql.NullString{}
+	if validatorMessage != nil {
+		validatorMessagesJSON, err := json.Marshal([]*model.Message{validatorMessage})
+		if err != nil {
+			return fmt.Errorf("failed to marshal validator messages: %v", err)
+		}
+
+		validatorMessages.Valid = true
+		validatorMessages.String = string(validatorMessagesJSON)
 	}
 
 	if _, err := stmt.ExecContext(ctx,
 		time.Now().Format(time.RFC3339),
-		validatorMessagesJSON,
+		validatorMessages,
 		validationId); err != nil {
 		return err
 	}
