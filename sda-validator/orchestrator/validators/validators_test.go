@@ -3,6 +3,8 @@ package validators
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -11,12 +13,23 @@ import (
 
 type ValidatorsTestSuite struct {
 	suite.Suite
+
+	tempDir string
+
 	mockCommandExecutor *mockCommandExecutor
 }
 
 func (ts *ValidatorsTestSuite) SetupTest() {
 	ts.mockCommandExecutor = &mockCommandExecutor{}
 	commandExecutor = ts.mockCommandExecutor
+	ts.tempDir = ts.T().TempDir()
+
+	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-1.sif"), []byte("test validator"), 504); err != nil {
+		ts.FailNow("failed to write file", err.Error())
+	}
+	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-2.sif"), []byte("test validator"), 504); err != nil {
+		ts.FailNow("failed to write file", err.Error())
+	}
 }
 
 func TestJobPreparationWorkerTestSuite(t *testing.T) {
@@ -72,7 +85,7 @@ func (ts *ValidatorsTestSuite) TestInit() {
 			"--userns",
 			"--net",
 			"--network", "none",
-			"/mock-validator-1.sif",
+			filepath.Join(ts.tempDir, "/mock-validator-1.sif"),
 			"--describe"}).Return(vd1Json, nil)
 
 	ts.mockCommandExecutor.On("Execute",
@@ -81,23 +94,23 @@ func (ts *ValidatorsTestSuite) TestInit() {
 			"--userns",
 			"--net",
 			"--network", "none",
-			"/mock-validator-2.sif",
+			filepath.Join(ts.tempDir, "/mock-validator-2.sif"),
 			"--describe"}).Return(vd2Json, nil)
 
-	ts.NoError(Init([]string{"/mock-validator-1.sif", "/mock-validator-2.sif"}))
+	ts.NoError(Init([]string{filepath.Join(ts.tempDir, "/mock-validator-1.sif"), filepath.Join(ts.tempDir, "/mock-validator-2.sif")}))
 	ts.Len(Validators, 2)
 
 	vd1, ok := Validators["mock-validator-1"]
 	if !ok {
 		ts.FailNow("mock-validator-1 does not exist")
 	}
-	ts.Equal(vd1.ValidatorPath, "/mock-validator-1.sif")
+	ts.Equal(vd1.ValidatorPath, filepath.Join(ts.tempDir, "/mock-validator-1.sif"))
 
 	vd2, ok := Validators["mock-validator-2"]
 	if !ok {
 		ts.FailNow("mock-validator-2 does not exist")
 	}
-	ts.Equal(vd2.ValidatorPath, "/mock-validator-2.sif")
+	ts.Equal(vd2.ValidatorPath, filepath.Join(ts.tempDir, "/mock-validator-2.sif"))
 }
 
 func (ts *ValidatorsTestSuite) TestInit_Error() {
@@ -110,5 +123,5 @@ func (ts *ValidatorsTestSuite) TestInit_Error() {
 			"/mock-validator-1.sif",
 			"--describe"}).Return(nil, errors.New("expected error from apptainer"))
 
-	ts.EqualError(Init([]string{"/mock-validator-1.sif"}), "failed to execute describe command towards path: /mock-validator-1.sif, error: expected error from apptainer")
+	ts.EqualError(Init([]string{"/mock-validator-1.sif"}), "failed to stat file: /mock-validator-1.sif, error: stat /mock-validator-1.sif: no such file or directory")
 }
