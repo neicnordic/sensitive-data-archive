@@ -29,9 +29,12 @@ type functions interface {
 	// ReadValidationInformation returns the pending validator jobs for a validation
 	ReadValidationInformation(ctx context.Context, validationID string) (*model.ValidationInformation, error)
 
+	// InsertFileValidationJob inserts a file validation job
 	InsertFileValidationJob(ctx context.Context, insertFileValidationJobParameters *model.InsertFileValidationJobParameters) error
 	// UpdateFileValidationJob updates a file validation jobs with
 	UpdateFileValidationJob(ctx context.Context, fileValidationJobUpdateParameters *model.UpdateFileValidationJobParameters) error
+	// UpdateAllValidationJobFilesOnError updates the result of all validation_file_jobs to error by the validation id, with the validator message to provide details
+	UpdateAllValidationJobFilesOnError(ctx context.Context, validationID string, validatorMessage *model.Message) error
 	// AllValidationJobsDone checks if all validator jobs for a validation have finished
 	AllValidationJobsDone(ctx context.Context, validationID string) (bool, error)
 }
@@ -61,6 +64,11 @@ func ReadValidationInformation(ctx context.Context, validationID string) (*model
 // AllValidationJobsDone checks if all validator jobs for a validation have finished
 func AllValidationJobsDone(ctx context.Context, validationID string) (bool, error) {
 	return db.AllValidationJobsDone(ctx, validationID)
+}
+
+// UpdateAllValidationJobFilesOnError updates the result of all validation_file_jobs to error by the validation id, with the validator message to provide details
+func UpdateAllValidationJobFilesOnError(ctx context.Context, validationId string, validatorMessage *model.Message) error {
+	return db.UpdateAllValidationJobFilesOnError(ctx, validationId, validatorMessage)
 }
 
 // Close the database connection

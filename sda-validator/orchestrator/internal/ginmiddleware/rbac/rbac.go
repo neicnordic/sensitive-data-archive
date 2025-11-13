@@ -63,12 +63,12 @@ func (rbac *rbacCasbin) Enforce() gin.HandlerFunc {
 		ok, err := rbac.casbinEnforcer.Enforce(token.(jwt.Token).Subject(), c.Request.URL.Path, c.Request.Method)
 		if err != nil {
 			log.Infof("rbac enforcement failed, reason: %s", err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.AbortWithStatus(http.StatusInternalServerError)
 
 			return
 		}
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
+			c.AbortWithStatus(http.StatusUnauthorized)
 
 			return
 		}

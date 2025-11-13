@@ -1,4 +1,4 @@
-CREATE TABLE file_validation_job
+CREATE TABLE IF NOT EXISTS file_validation_job
 (
     id                   SERIAL PRIMARY KEY,
     validation_id        UUID,

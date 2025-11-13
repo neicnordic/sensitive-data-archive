@@ -45,3 +45,7 @@ func (tx *pgTx) UpdateFileValidationJob(ctx context.Context, updateFileValidatio
 func (tx *pgTx) AllValidationJobsDone(ctx context.Context, validationID string) (bool, error) {
 	return tx.allValidationJobsDone(ctx, tx.tx.Stmt(preparedStatements[allValidationJobsDoneQuery]), validationID)
 }
+
+func (tx *pgTx) UpdateAllValidationJobFilesOnError(ctx context.Context, validationID string, validatorMessage *model.Message) error {
+	return tx.updateAllValidationJobFilesOnError(ctx, tx.tx.Stmt(preparedStatements[allValidationJobsDoneQuery]), validationID, validatorMessage)
+}
