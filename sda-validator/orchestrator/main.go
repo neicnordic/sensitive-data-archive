@@ -23,10 +23,12 @@ import (
 	internalconfig "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/ginmiddleware/authenticator"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/ginmiddleware/rbac"
+	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/health"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/jobpreparationworker"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/jobworker"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/validators"
 	log "github.com/sirupsen/logrus"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func main() {
@@ -40,6 +42,12 @@ func main() {
 	if err := internalconfig.Load(); err != nil {
 		log.Fatalf("failed to load config due to: %v", err)
 	}
+
+	go func() {
+		if err := health.Start(config.HealthPort()); err != nil {
+			log.Fatalf("failed to start health server due to: %v", err)
+		}
+	}()
 
 	if err := validators.Init(config.ValidatorPaths()); err != nil {
 		log.Fatalf("failed to initialize validators due to: %v", err)
@@ -177,11 +185,13 @@ func main() {
 			cancel()
 		}
 	}()
-
+	health.SetServingStatus(healthpb.HealthCheckResponse_SERVING)
 	select {
 	case <-sigc:
 	case <-ctx.Done():
 	}
+
+	health.SetServingStatus(healthpb.HealthCheckResponse_NOT_SERVING)
 
 	log.Info("gracefully shutting down")
 
@@ -207,4 +217,7 @@ func main() {
 	if err := database.Close(); err != nil {
 		log.Errorf("failed to gracefully database connection")
 	}
+
+	health.Stop()
+	os.Exit(1)
 }
