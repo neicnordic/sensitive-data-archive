@@ -76,19 +76,25 @@ var fileListUsage = `Usage: sda-admin file list -user USERNAME
 Options:
   -user USERNAME 	Specify the username associated with the files.`
 
-var fileIngestUsage = `Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
-  Trigger the ingestion of a given file for a specific user.
+var fileIngestUsage = `Usage with file path and user: sda-admin file ingest -filepath FILEPATH -user USERNAME
+Usage with file ID: sda-admin file ingest -fileid FILEUUID
+
+  Trigger the ingestion either by providing filepath and user or file ID.
 
 Options:
   -filepath FILEPATH   Specify the path of the file to ingest.
-  -user USERNAME       Specify the username associated with the file.`
+  -user USERNAME       Specify the username associated with the file.
+  -fileid FILEUUID     Specify the file ID (UUID) of the file to ingest.`
 
-var fileAccessionUsage = `Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
-  Assign accession ID to a file and associate it with a user.
+var fileAccessionUsage = `Usage with file path and user: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
+Usage with file ID: sda-admin file set-accession -fileid FILEUUID -accession-id ACCESSION_ID
+
+  Assign accession ID to a file by providing filepath and user or file ID.
 
 Options:
   -filepath FILEPATH   Specify the path of the file to assign the accession ID.
   -user USERNAME       Specify the username associated with the file.
+  -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
 
 var datasetUsage = `Create a dataset:
@@ -336,55 +342,67 @@ func handleFileCommand() error {
 
 func handleFileIngestCommand() error {
 	fileIngestCmd := flag.NewFlagSet("ingest", flag.ExitOnError)
-	var filepath, username string
-	fileIngestCmd.StringVar(&filepath, "filepath", "", "Filepath to ingest")
-	fileIngestCmd.StringVar(&username, "user", "", "Username to associate with the file")
+	var ingestInfo helpers.FileInfo
+	ingestInfo.URL = apiURI
+	ingestInfo.Token = token
+	fileIngestCmd.StringVar(&ingestInfo.Path, "filepath", "", "Filepath to ingest")
+	fileIngestCmd.StringVar(&ingestInfo.User, "user", "", "Username to associate with the file")
+	fileIngestCmd.StringVar(&ingestInfo.ID, "fileid", "", "File ID (UUID) to ingest")
 
 	if err := fileIngestCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
 	}
 
-	if filepath == "" || username == "" {
-		return fmt.Errorf("error: both -filepath and -user are required.\n%s", fileIngestUsage)
-	}
+	switch {
+	case ingestInfo.Path == "" && ingestInfo.User == "" && ingestInfo.ID == "":
+		return fmt.Errorf("error: either -filepath and -user pair or -fileid are required.\n%s", fileIngestUsage)
+	case ingestInfo.ID != "" && (ingestInfo.Path != "" || ingestInfo.User != ""):
+		return fmt.Errorf("error: choose if -filepath and -user pair or -fileid will be used.\n%s", fileIngestUsage)
+	case ingestInfo.ID == "" && (ingestInfo.Path == "" || ingestInfo.User == ""):
+		return fmt.Errorf("error: both -filepath and -user must be provided together.\n%s", fileIngestUsage)
+	default:
+		err := file.Ingest(ingestInfo)
+		if err != nil {
+			return fmt.Errorf("error: failed to ingest file, reason: %v", err)
+		}
 
-	if err := helpers.CheckValidChars(filepath); err != nil {
-		return err
+		return nil
 	}
-
-	err := file.Ingest(apiURI, token, username, filepath)
-	if err != nil {
-		return fmt.Errorf("error: failed to ingest file, reason: %v", err)
-	}
-
-	return nil
 }
 
 func handleFileAccessionCommand() error {
 	fileAccessionCmd := flag.NewFlagSet("set-accession", flag.ExitOnError)
-	var filepath, username, accessionID string
-	fileAccessionCmd.StringVar(&filepath, "filepath", "", "Filepath to assign accession ID")
-	fileAccessionCmd.StringVar(&username, "user", "", "Username to associate with the file")
-	fileAccessionCmd.StringVar(&accessionID, "accession-id", "", "Accession ID to assign")
+	var accessionInfo helpers.FileInfo
+	accessionInfo.URL = apiURI
+	accessionInfo.Token = token
+	fileAccessionCmd.StringVar(&accessionInfo.Path, "filepath", "", "Filepath to assign accession ID")
+	fileAccessionCmd.StringVar(&accessionInfo.User, "user", "", "Username to associate with the file")
+	fileAccessionCmd.StringVar(&accessionInfo.Accession, "accession-id", "", "Accession ID to assign")
+	fileAccessionCmd.StringVar(&accessionInfo.ID, "fileid", "", "File ID (UUID) to ingest")
 
 	if err := fileAccessionCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
 	}
 
-	if filepath == "" || username == "" || accessionID == "" {
+	switch {
+	case accessionInfo.ID == "" && accessionInfo.Path == "" && accessionInfo.User == "" && accessionInfo.Accession == "":
+		return fmt.Errorf("error: no arguments provided.\n%s", fileAccessionUsage)
+	case accessionInfo.ID == "" && (accessionInfo.Path == "" || accessionInfo.User == "" || accessionInfo.Accession == ""):
 		return fmt.Errorf("error: -filepath, -user, and -accession-id are required.\n%s", fileAccessionUsage)
-	}
+	case accessionInfo.ID != "" && accessionInfo.Accession != "" && (accessionInfo.Path != "" || accessionInfo.User != ""):
+		return fmt.Errorf("error: when using -fileid, do not provide -filepath or -user together. Only -fileid and -accession-id are allowed.\n%s", fileAccessionUsage)
+	case accessionInfo.ID != "" && accessionInfo.Accession == "" && (accessionInfo.Path == "" && accessionInfo.User == ""):
+		return fmt.Errorf("error: -accession-id is required.\n%s", fileAccessionUsage)
+	case accessionInfo.ID == "" && accessionInfo.Path != "" && accessionInfo.User != "" && accessionInfo.Accession == "":
+		return fmt.Errorf("error: -accession-id is required.\n%s", fileAccessionUsage)
+	default:
+		err := file.SetAccession(accessionInfo)
+		if err != nil {
+			return fmt.Errorf("error: failed to assign accession ID to file, reason: %v", err)
+		}
 
-	if err := helpers.CheckValidChars(filepath); err != nil {
-		return err
+		return nil
 	}
-
-	err := file.SetAccession(apiURI, token, username, filepath, accessionID)
-	if err != nil {
-		return fmt.Errorf("error: failed to assign accession ID to file, reason: %v", err)
-	}
-
-	return nil
 }
 
 func handleDatasetCommand() error {
