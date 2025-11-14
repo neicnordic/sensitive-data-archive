@@ -295,7 +295,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Test sda-validator-orchestrator
-        run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
+        run: docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
 
   sda-doa:
     needs:
