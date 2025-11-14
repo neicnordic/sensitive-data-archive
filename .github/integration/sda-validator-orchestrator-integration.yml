@@ -203,6 +203,12 @@ services:
       - CONFIG_FILE=/validators/config/config.yaml
       - JWT_PUB_KEY_URL=http://localhost:8800/oidc/jwk
       - RBAC_POLICY_FILE_PATH=/validators/config/rbac.policy
+    healthcheck:
+      test:
+        [ "CMD", "/bin/grpc_health_probe", "--addr", "localhost:9000" ]
+      interval: 10s
+      timeout: 2s
+      retries: 6
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -341,7 +347,7 @@ services:
         go test -v ./...
     depends_on:
       validator-orchestrator:
-        condition: service_started
+        condition: service_healthy
       s3inbox:
         condition: service_started
     extra_hosts:
