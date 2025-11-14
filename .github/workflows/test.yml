@@ -136,3 +136,38 @@ jobs:
           file: ./sda-admin/coverage.txt
           flags: unittests
           fail_ci_if_error: false
+
+  test_sda_validator_orchestrator:
+    name: Test SDA Validator Orchestrator
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set up Go 1.25
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.25
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v5
+
+      - name: Get dependencies
+        run: |
+          cd ./sda-validator/orchestrator
+          go get -v -t -d ./...
+          if [ -f Gopkg.toml ]; then
+              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+              dep ensure
+          fi
+      - name: Test
+        run: |
+          cd ./sda-validator/orchestrator
+          go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Codecov
+        uses: codecov/codecov-action@v5.5.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./sda-validator/orchestrator/coverage.txt
+          flags: unittests
+          fail_ci_if_error: false
