@@ -207,7 +207,8 @@ services:
       - apparmor=unconfined
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-validator-orchestrator
     container_name: validator-orchestrator
-    user: root
+    privileged: true # testing
+    user: root # Running as root to give permission to container to write to the validators volume
     depends_on:
       api:
         condition: service_started
