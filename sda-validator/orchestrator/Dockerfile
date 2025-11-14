@@ -16,7 +16,6 @@ COPY . .
 
 RUN go build -buildvcs=false -o ./sda-validator-orchestrator
 
-
 FROM gcr.io/distroless/static-debian12
 
 ARG BUILD_DATE
@@ -28,7 +27,8 @@ LABEL org.label-schema.build-date=$BUILD_DATE
 LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-archive"
 LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
-
+# Add health probe binary such that it can be used for docker, etc
+COPY --from=ghcr.io/grpc-ecosystem/grpc-health-probe:v0.4.42 /ko-app/grpc-health-probe /bin/grpc_health_probe
 COPY --from=app_builder /go/sda-validator-orchestrator /usr/bin/
 COPY --from=app_builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 

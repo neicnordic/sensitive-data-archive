@@ -12,6 +12,7 @@ import (
 
 var (
 	apiPort           int
+	healthPort        int
 	validatorPaths    []string
 	sdaAPIURL         string
 	sdaAPIToken       string
@@ -47,6 +48,15 @@ func init() {
 			Required: true,
 			AssignFunc: func(flagName string) {
 				apiPort = viper.GetInt(flagName)
+			},
+		}, &config.Flag{
+			Name: "health-port",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 9000, "Port to host the gRPC Health server at")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				healthPort = viper.GetInt(flagName)
 			},
 		}, &config.Flag{
 			Name: "validator-paths",
@@ -157,4 +167,7 @@ func JobQueue() string {
 }
 func ValidationFileSizeLimit() int64 {
 	return validationFileSizeLimit
+}
+func HealthPort() int {
+	return healthPort
 }
