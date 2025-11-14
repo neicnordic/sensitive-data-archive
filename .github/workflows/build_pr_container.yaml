@@ -294,15 +294,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            sda-validator-orchestrator:
-              - "sda-validator/orchestrator
       - name: Test sda-validator-orchestrator
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
-        if: steps.changes.outputs.sda-validator-orchestrator == 'true'
 
   sda-doa:
     needs:
