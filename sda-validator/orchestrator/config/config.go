@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	apiPort       int
-	apiServerCert string
-	apiServerKey  string
-
+	apiPort           int
+	apiServerCert     string
+	apiServerKey      string
+	healthPort        int
 	validatorPaths    []string
 	sdaAPIURL         string
 	sdaAPIToken       string
@@ -65,6 +65,15 @@ func init() {
 			},
 			AssignFunc: func(flagName string) {
 				apiServerCert = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "health-port",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 9000, "Port to host the gRPC Health server at")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				healthPort = viper.GetInt(flagName)
 			},
 		}, &config.Flag{
 			Name: "validator-paths",
@@ -181,4 +190,7 @@ func APIServerCert() string {
 }
 func APIServerKey() string {
 	return apiServerKey
+}
+func HealthPort() int {
+	return healthPort
 }
