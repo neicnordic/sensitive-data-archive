@@ -168,6 +168,34 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  validator-orchestrator_apptainer_test:
+    build:
+      args:
+        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
+      context: ../../sda
+      target: debug
+    security_opt: # Unconfine seccomp and apparmor to allow apptainer to create usernamespaces within the container
+      - seccomp=unconfined
+      - apparmor=unconfined
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-validator-orchestrator
+    container_name: validator-orchestrator_apptainer_test
+    user: root
+    command:
+      - apptainer
+      - run
+      - --userns
+      - --net
+      - --network
+      - none
+      - /validators/100-200_word_validator.sif
+      - --describe
+    depends_on:
+      validator-orchestrator_init:
+        condition: service_completed_successfully
+    restart: always
+    volumes:
+      - validators:/validators
+
   validator-orchestrator:
     build:
       args:
