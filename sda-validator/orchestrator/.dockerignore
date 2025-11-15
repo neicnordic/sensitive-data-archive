@@ -1,0 +1,5 @@
+swagger_v1.yml
+README.md
+.kube
+Dockerfile
+.dockerignore
