@@ -291,11 +291,14 @@ jobs:
     needs:
       - build_go_images
       - build_server_images
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Test sda-validator-orchestrator
-        run: docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
+        run: |
+          echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-donotrestrict.conf
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
 
   sda-doa:
     needs:
