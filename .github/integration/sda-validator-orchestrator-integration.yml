@@ -123,6 +123,7 @@ services:
       - "/bin/sh"
       - "-c"
       - |
+        chmod 777 -R /validators/;
         wget -O /validators/100-200_word_validator.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/100-200_word_validator.sif;
         wget -O /validators/always_success.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/always_success.sif;
         mkdir /validators/config
@@ -179,7 +180,6 @@ services:
       - apparmor=unconfined
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-validator-orchestrator
     container_name: validator-orchestrator
-    user: root
     depends_on:
       api:
         condition: service_started

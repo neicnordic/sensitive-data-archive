@@ -291,7 +291,7 @@ jobs:
     needs:
       - build_go_images
       - build_server_images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
       - name: Test sda-validator-orchestrator
