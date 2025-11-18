@@ -6,6 +6,7 @@ on:
 
 env:
   go-version: '1.24'
+  go-version-validator-orchestrator: '1.25'
 
 jobs:
 
@@ -142,10 +143,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Set up Go 1.25
+      - name: Set up Go ${{ env.go-version-validator-orchestrator }}
         uses: actions/setup-go@v6
         with:
-          go-version: 1.25
+          go-version: ${{ env.go-version-validator-orchestrator }}
         id: go
 
       - name: Check out code into the Go module directory
