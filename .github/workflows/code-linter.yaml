@@ -9,6 +9,7 @@ on:
 
 env:
   go-version: '1.24'
+  go-version-validator-orchestrator: '1.25'
 
 jobs:
   check_changes:
@@ -78,13 +79,13 @@ jobs:
   lint_sda_validator_orchestrator:
     needs: check_changes
     if: needs.check_changes.outputs.sda-validator-orchestrator == 'true'
-    name: Lint sda code
+    name: Lint sda validator orchestrator
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go ${{ env.go-version }}
+      - name: Set up Go ${{ env.go-version-validator-orchestrator }}
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.go-version }}
+          go-version: ${{ env.go-version-validator-orchestrator }}
         id: go
 
       - name: Check out code into the Go module directory
