@@ -472,6 +472,9 @@ components:
         CreatedAt:
           type: string
           example: "2025-03-02T13:14:15.123Z"
+        SubmissionFileSize:
+          type: integer
+          description: The byte size of the submitted file if known
   securitySchemes:
     bearerAuth:
       type: http
