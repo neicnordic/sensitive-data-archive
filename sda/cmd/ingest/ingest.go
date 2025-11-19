@@ -201,19 +201,10 @@ func (app *Ingest) registerC4GHKey() error {
 	return nil
 }
 
-func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrigger) string {
-	fileID, err := app.DB.GetFileID(correlationID)
-	if err != nil {
-		log.Errorf("failed to get file-id for file from message (correlation-id: %s), reason: %s", correlationID, err.Error())
-		if strings.Contains(err.Error(), "sql: no rows in result set") {
-			return "reject"
-		}
-
-		return "nack"
-	}
+func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) string {
 
 	m, _ := json.Marshal(message)
-	if err := app.DB.UpdateFileEventLog(fileID, "disabled", correlationID, "ingest", "{}", string(m)); err != nil {
+	if err := app.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to update event log for file with id : %s", fileID)
 
 		return "nack"
@@ -222,23 +213,17 @@ func (app *Ingest) cancelFile(correlationID string, message schema.IngestionTrig
 	return "ack"
 }
 
-func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrigger) string {
-	var fileID string
-	status, err := app.DB.GetFileStatus(correlationID)
+func (app *Ingest) ingestFile(fileID string, message schema.IngestionTrigger) string {
+
+	status, err := app.DB.GetFileStatus(fileID)
 	if err != nil && err.Error() != "sql: no rows in result set" {
-		log.Errorf("failed to get status for file, correlation-id: %s, reason: (%s)", correlationID, err.Error())
+		log.Errorf("failed to get status for file, fileID: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
 	}
 
 	switch status {
 	case "disabled":
-		fileID, err = app.DB.GetFileID(correlationID)
-		if err != nil {
-			log.Errorf("failed to get file-id for file, correlation-id: %s, reason: %s", correlationID, err.Error())
-
-			return "nack"
-		}
 
 		fileInfo, err := app.DB.GetFileInfo(fileID)
 		if err != nil {
@@ -257,7 +242,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 				log.Errorf("Failed to open file to ingest, file-id: %s, inbox path: %s, reason: (%s)", fileID, message.FilePath, err.Error())
 				jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
 				m, _ := json.Marshal(message)
-				if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", string(jsonMsg), string(m)); err != nil {
+				if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
 					log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 				}
 				// Send the message to an error queue so it can be analyzed.
@@ -267,7 +252,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
-				if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
+				if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: %v", err)
 
 					return "reject"
@@ -307,13 +292,13 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			}
 
 			m, _ := json.Marshal(message)
-			if err = app.DB.UpdateFileEventLog(fileInfo.Path, "enabled", correlationID, "ingest", "{}", string(m)); err != nil {
+			if err = app.DB.UpdateFileEventLog(fileInfo.Path, "enabled", "ingest", "{}", string(m)); err != nil {
 				log.Errorf("failed to set ingestion status for file from message, file-id: %s", fileID)
 
 				return "nack"
 			}
 
-			if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
+			if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
 				log.Errorf("failed to publish message, reason: %v", err)
 
 				return "reject"
@@ -323,22 +308,17 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		}
 	case "":
 		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
-		log.Infof("registering file, correlation-id: %s", correlationID)
-		fileID, err = app.DB.RegisterFile(message.FilePath, message.User)
+		log.Infof("registering file, correlation-id: %s", fileID)
+		fileID, err = app.DB.RegisterFile(&fileID, message.FilePath, message.User)
 		if err != nil {
-			log.Errorf("failed to register file, correlation-id: %s, reason: (%s)", correlationID, err.Error())
+			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
 
 			return "nack"
 		}
 	case "uploaded":
-		fileID, err = app.DB.GetFileID(correlationID)
-		if err != nil {
-			log.Errorf("failed to get ID for file, correlation-id: %s, reason: %s", correlationID, err.Error())
 
-			return "nack"
-		}
 	default:
-		log.Warnf("unsupported file status: %s, correlation-id: %s", status, correlationID)
+		log.Warnf("unsupported file status: %s, correlation-id: %s", status, fileID)
 
 		return "reject"
 	}
@@ -350,7 +330,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
 			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
 			m, _ := json.Marshal(message)
-			if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", string(jsonMsg), string(m)); err != nil {
+			if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
 				log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 			}
 			// Send the message to an error queue so it can be analyzed.
@@ -360,7 +340,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 				OriginalMessage: message,
 			}
 			body, _ := json.Marshal(fileError)
-			if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
+			if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, "error", body); err != nil {
 				log.Errorf("failed to publish message, reason: %v", err)
 
 				return "reject"
@@ -389,7 +369,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 	}
 
 	m, _ := json.Marshal(message)
-	if err = app.DB.UpdateFileEventLog(fileID, "submitted", correlationID, "ingest", "{}", string(m)); err != nil {
+	if err = app.DB.UpdateFileEventLog(fileID, "submitted", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 	}
 
@@ -444,7 +424,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 			if privateKey == nil {
 				log.Errorf("All keys failed to decrypt the submitted file, file-id: %s", fileID)
 				m, _ := json.Marshal(message)
-				if err := app.DB.UpdateFileEventLog(fileID, "error", correlationID, "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(m)); err != nil {
+				if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(m)); err != nil {
 					log.Errorf("Failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 				}
 
@@ -455,7 +435,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
-				if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "error", body); err != nil {
+				if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: %v", err)
 				}
 
@@ -535,7 +515,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 
 	log.Debugf("Wrote archived file (file-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)", fileID, message.User, message.FilePath, fileID, fileInfo.Size)
 
-	status, err = app.DB.GetFileStatus(correlationID)
+	status, err = app.DB.GetFileStatus(fileID)
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: (%s)", fileID, err.Error())
 
@@ -554,7 +534,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		return "nack"
 	}
 
-	if err := app.DB.UpdateFileEventLog(fileID, "archived", correlationID, "ingest", "{}", string(m)); err != nil {
+	if err := app.DB.UpdateFileEventLog(fileID, "archived", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to set event log status for file, file-id: %s, reason: %s", fileID, err.Error())
 
 		return "nack"
@@ -580,7 +560,7 @@ func (app *Ingest) ingestFile(correlationID string, message schema.IngestionTrig
 		return "nack"
 	}
 
-	if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
+	if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, app.Conf.Broker.RoutingKey, archivedMsg); err != nil {
 		// TODO fix resend mechanism
 		log.Errorf("failed to publish message, reason: %v", err)
 

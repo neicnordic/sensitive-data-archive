@@ -62,9 +62,8 @@ type DatasetInfo struct {
 }
 
 type FileDetails struct {
-	User   string
-	Path   string
-	CorrID string
+	User string
+	Path string
 }
 
 // SchemaName is the name of the remote database schema to query

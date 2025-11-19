@@ -106,8 +106,7 @@ func main() {
 
 				continue
 
-			case "verified":
-			case "enabled":
+			case "verified", "enabled":
 			case "ready":
 				log.Infof("File with correlation-id: %s is already marked as ready.", delivered.CorrelationId)
 				if err := delivered.Ack(false); err != nil {
@@ -124,16 +123,7 @@ func main() {
 				continue
 			}
 
-			fileID, err := db.GetFileID(delivered.CorrelationId)
-			if err != nil {
-				log.Errorf("failed to get file-id for file with correlation-id: %s, reason: %v", delivered.CorrelationId, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-
-				continue
-			}
-
+			fileID := delivered.CorrelationId
 			c := schema.IngestionCompletion{
 				User:               message.User,
 				FilePath:           message.FilePath,
@@ -204,7 +194,7 @@ func main() {
 			}
 
 			// Mark file as "ready"
-			if err := db.UpdateFileEventLog(fileID, "ready", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
+			if err := db.UpdateFileEventLog(fileID, "ready", "finalize", "{}", string(delivered.Body)); err != nil {
 				log.Errorf("set status ready failed, file-id: %s, reason: %v", fileID, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
@@ -233,10 +223,7 @@ func main() {
 
 func backupFile(delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
-	fileID, err := db.GetFileID(delivered.CorrelationId)
-	if err != nil {
-		return fmt.Errorf("failed to get ID for file, reason: %s", err.Error())
-	}
+	fileID := delivered.CorrelationId
 
 	filePath, fileSize, err := db.GetArchived(fileID)
 	if err != nil {
@@ -272,7 +259,7 @@ func backupFile(delivered amqp.Delivery) error {
 	}
 
 	// Mark file as "backed up"
-	if err := db.UpdateFileEventLog(fileID, "backed up", delivered.CorrelationId, "finalize", "{}", string(delivered.Body)); err != nil {
+	if err := db.UpdateFileEventLog(fileID, "backed up", "finalize", "{}", string(delivered.Body)); err != nil {
 		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
 
