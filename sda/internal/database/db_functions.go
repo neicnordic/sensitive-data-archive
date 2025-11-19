@@ -19,48 +19,29 @@ import (
 // RegisterFile inserts a file in the database, along with a "registered" log
 // event. If the file already exists in the database, the entry is updated, but
 // a new file event is always inserted.
-func (dbs *SDAdb) RegisterFile(uploadPath, uploadUser string) (string, error) {
+// If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
+// If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
+// and a different fileId is provided, the fileId in the database will NOT be updated.
+func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	if dbs.Version < 4 {
 		return "", errors.New("database schema v4 required for RegisterFile()")
 	}
 
-	query := "SELECT sda.register_file($1, $2);"
+	query := "SELECT sda.register_file($1, $2, $3);"
 
-	var fileID string
+	var createdFileId string
 
-	err := dbs.DB.QueryRow(query, uploadPath, uploadUser).Scan(&fileID)
-
-	return fileID, err
-}
-
-func (dbs *SDAdb) GetFileID(corrID string) (string, error) {
-	var (
-		err   error
-		count int
-		ID    string
-	)
-
-	for count == 0 || (err != nil && count < RetryTimes) {
-		ID, err = dbs.getFileID(corrID)
-		count++
+	fileIDArg := sql.NullString{}
+	if fileID != nil {
+		fileIDArg.Valid = true
+		fileIDArg.String = *fileID
 	}
 
-	return ID, err
-}
-func (dbs *SDAdb) getFileID(corrID string) (string, error) {
-	dbs.checkAndReconnectIfNeeded()
-	db := dbs.DB
-	const getFileID = "SELECT DISTINCT file_id FROM sda.file_event_log where correlation_id = $1;"
+	err := dbs.DB.QueryRow(query, fileIDArg, uploadPath, uploadUser).Scan(&createdFileId)
 
-	var fileID string
-	err := db.QueryRow(getFileID, corrID).Scan(&fileID)
-	if err != nil {
-		return "", err
-	}
-
-	return fileID, nil
+	return createdFileId, err
 }
 
 // GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
@@ -140,26 +121,29 @@ AS subquery WHERE event = $3);`
 
 // UpdateFileEventLog updates the status in of the file in the database.
 // The message parameter is the rabbitmq message sent on file upload.
-func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
+func (dbs *SDAdb) UpdateFileEventLog(fileUUID, event, user, details, message string) error {
 	var (
 		err   error
 		count int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		err = dbs.updateFileEventLog(fileUUID, event, corrID, user, details, message)
+		err = dbs.updateFileEventLog(fileUUID, event, user, details, message)
 		count++
 	}
 
 	return err
 }
-func (dbs *SDAdb) updateFileEventLog(fileUUID, event, corrID, user, details, message string) error {
+func (dbs *SDAdb) updateFileEventLog(fileUUID, event, user, details, message string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, details, message) VALUES($1, $2, $3, $4, $5, $6);"
+	const query = `
+INSERT INTO sda.file_event_log(file_id, event, user_id, details, message) 
+VALUES($1, $2, $3, $4, $5);
+`
 
-	result, err := db.Exec(query, fileUUID, event, corrID, user, details, message)
+	result, err := db.Exec(query, fileUUID, event, user, details, message)
 	if err != nil {
 		return err
 	}
@@ -268,7 +252,7 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 	return nil
 }
 
-func (dbs *SDAdb) GetFileStatus(corrID string) (string, error) {
+func (dbs *SDAdb) GetFileStatus(fileID string) (string, error) {
 	var (
 		err    error
 		count  int
@@ -276,19 +260,19 @@ func (dbs *SDAdb) GetFileStatus(corrID string) (string, error) {
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		status, err = dbs.getFileStatus(corrID)
+		status, err = dbs.getFileStatus(fileID)
 		count++
 	}
 
 	return status, err
 }
-func (dbs *SDAdb) getFileStatus(corrID string) (string, error) {
+func (dbs *SDAdb) getFileStatus(fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const getFileID = "SELECT event from sda.file_event_log WHERE correlation_id = $1 ORDER BY id DESC LIMIT 1;"
+	const getFileID = "SELECT event from sda.file_event_log WHERE file_id = $1 ORDER BY id DESC LIMIT 1;"
 
 	var status string
-	err := db.QueryRow(getFileID, corrID).Scan(&status)
+	err := db.QueryRow(getFileID, fileID).Scan(&status)
 	if err != nil {
 		return "", err
 	}
@@ -372,7 +356,7 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(corrID string) (string, int, error) {
+func (dbs *SDAdb) GetArchived(fileID string) (string, int, error) {
 	var (
 		filePath string
 		fileSize int
@@ -381,13 +365,13 @@ func (dbs *SDAdb) GetArchived(corrID string) (string, int, error) {
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, fileSize, err = dbs.getArchived(corrID)
+		filePath, fileSize, err = dbs.getArchived(fileID)
 		count++
 	}
 
 	return filePath, fileSize, err
 }
-func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
+func (dbs *SDAdb) getArchived(fileID string) (string, int, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -395,7 +379,7 @@ func (dbs *SDAdb) getArchived(corrID string) (string, int, error) {
 
 	var filePath string
 	var fileSize int
-	if err := db.QueryRow(query, corrID).Scan(&filePath, &fileSize); err != nil {
+	if err := db.QueryRow(query, fileID).Scan(&filePath, &fileSize); err != nil {
 		return "", 0, err
 	}
 
@@ -832,11 +816,17 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*Subm
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = `SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f
 LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id
-WHERE f.submission_user = $1 and f.submission_file_path LIKE $2
+WHERE f.submission_user = $1 AND ($2 IS NULL OR f.submission_file_root_dir = $2)
 AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);`
 
+	pathPrefixArg := sql.NullString{}
+	if pathPrefix != "" {
+		pathPrefixArg.Valid = true
+		pathPrefixArg.String = pathPrefix
+	}
+
 	// nolint:rowserrcheck
-	rows, err := db.Query(query, userID, fmt.Sprintf("%s%%", pathPrefix))
+	rows, err := db.Query(query, userID, pathPrefixArg)
 	if err != nil {
 		return nil, err
 	}
@@ -863,53 +853,6 @@ AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);`
 	}
 
 	return files, nil
-}
-
-// get the correlation ID for a user-inbox_path combination
-func (dbs *SDAdb) GetCorrID(user, path, accession string) (string, error) {
-	var (
-		corrID string
-		err    error
-	)
-	// 2, 4, 8, 16, 32 seconds between each retry event.
-	for count := 1; count <= RetryTimes; count++ {
-		corrID, err = dbs.getCorrID(user, path, accession)
-		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return corrID, err
-}
-func (dbs *SDAdb) getCorrID(user, path, accession string) (string, error) {
-	dbs.checkAndReconnectIfNeeded()
-	db := dbs.DB
-	const query = `SELECT DISTINCT correlation_id FROM sda.file_event_log e
-RIGHT JOIN sda.files f ON e.file_id = f.id
-WHERE f.submission_file_path = $1 AND f.submission_user = $2 AND COALESCE(f.stable_id, '') = $3;`
-
-	rows, err := db.Query(query, path, user, accession)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-
-	var corrID sql.NullString
-	for rows.Next() {
-		err := rows.Scan(&corrID)
-		if err != nil {
-			return "", err
-		}
-		if corrID.Valid {
-			return corrID.String, nil
-		}
-	}
-	if rows.Err() != nil {
-		return "", rows.Err()
-	}
-
-	return "", errors.New("sql: no rows in result set")
 }
 
 // list all users with files not yet assigned to a dataset
@@ -1338,11 +1281,11 @@ func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID, event string) (FileDetails, e
 	var info FileDetails
 	dbs.checkAndReconnectIfNeeded()
 
-	const query = `SELECT f.submission_user, f.submission_file_path, fel.correlation_id 
+	const query = `SELECT f.submission_user, f.submission_file_path
 		from sda.files f
 		join sda.file_event_log fel on f.id = fel.file_id
 		WHERE f.id = $1 and fel.event=$2;`
-	if err := dbs.DB.QueryRow(query, fileUUID, event).Scan(&info.User, &info.Path, &info.CorrID); err != nil {
+	if err := dbs.DB.QueryRow(query, fileUUID, event).Scan(&info.User, &info.Path); err != nil {
 		return FileDetails{}, err
 	}
 

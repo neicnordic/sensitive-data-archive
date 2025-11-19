@@ -161,7 +161,7 @@ func main() {
 				log.Errorf("Failed to get archived file size, file-id: %s, archive-path: %s, reason: (%s)", message.FileID, message.ArchivePath, err.Error())
 				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
 					jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", string(jsonMsg), string(delivered.Body)); err != nil {
+					if err := db.UpdateFileEventLog(message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
 						log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
 					}
 				}
@@ -273,7 +273,7 @@ func main() {
 
 				if file.DecryptedChecksum != decrypted {
 					log.Errorf("encrypted checksum don't match for file, file-id: %s", message.FileID)
-					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+					if err := db.UpdateFileEventLog(message.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%v)", err)
@@ -290,7 +290,7 @@ func main() {
 
 				if file.ArchiveChecksum != message.EncryptedChecksums[0].Value {
 					log.Errorf("encrypted checksum mismatch for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
-					if err := db.UpdateFileEventLog(message.FileID, "error", delivered.CorrelationId, "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+					if err := db.UpdateFileEventLog(message.FileID, "error", "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 						log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: (%v)", err)
@@ -377,7 +377,7 @@ func main() {
 					log.Infof("file is already verified, file-id: %s", message.FileID)
 				}
 
-				if err := db.UpdateFileEventLog(message.FileID, "verified", delivered.CorrelationId, "ingest", "{}", string(verifiedMessage)); err != nil {
+				if err := db.UpdateFileEventLog(message.FileID, "verified", "ingest", "{}", string(verifiedMessage)); err != nil {
 					log.Errorf("failed to set event log status for file, file-id: %s", message.FileID)
 					if err := delivered.Nack(false, true); err != nil {
 						log.Errorf("failed to Nack message, reason: (%s)", err.Error())
