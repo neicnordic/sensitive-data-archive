@@ -27,6 +27,7 @@ func Start(port int) error {
 	if err != nil {
 		return err
 	}
+
 	return grpcServer.Serve(listener)
 }
 

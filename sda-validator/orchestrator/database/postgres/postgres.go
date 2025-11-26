@@ -93,6 +93,6 @@ func (db *pgDb) AllValidationJobsDone(ctx context.Context, validationID string) 
 	return db.allValidationJobsDone(ctx, preparedStatements[allValidationJobsDoneQuery], validationID)
 }
 
-func (db *pgDb) UpdateAllValidationJobFilesOnError(ctx context.Context, validationId string, validatorMessage *model.Message) error {
-	return db.updateAllValidationJobFilesOnError(ctx, preparedStatements[updateAllValidationJobFilesOnErrorQuery], validationId, validatorMessage)
+func (db *pgDb) UpdateAllValidationJobFilesOnError(ctx context.Context, validationID string, validatorMessage *model.Message) error {
+	return db.updateAllValidationJobFilesOnError(ctx, preparedStatements[updateAllValidationJobFilesOnErrorQuery], validationID, validatorMessage)
 }
