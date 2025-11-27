@@ -816,7 +816,7 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*Subm
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = `SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f
 LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id
-WHERE f.submission_user = $1 AND ($2 IS NULL OR f.submission_file_root_dir = $2)
+WHERE f.submission_user = $1 AND ($2::text IS NULL OR f.submission_file_root_dir = $2::text)
 AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);`
 
 	pathPrefixArg := sql.NullString{}
