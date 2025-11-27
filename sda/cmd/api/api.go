@@ -346,6 +346,7 @@ func ingestFile(c *gin.Context) {
 		// Add file info in the message payload
 		ingest.User = fileDetails.User
 		ingest.FilePath = fileDetails.Path
+		fileID = c.Query("fileid")
 
 	case c.Request.ContentLength > 0:
 		// Bind ingest and payload
@@ -616,6 +617,7 @@ func setAccession(c *gin.Context) {
 		accession.User = fileDetails.User
 		accession.FilePath = fileDetails.Path
 		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
+		fileID = c.Query("fileid")
 
 	case c.Request.ContentLength > 0:
 		if err = c.BindJSON(&accession); err != nil {
