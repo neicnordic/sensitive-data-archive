@@ -81,8 +81,8 @@ missing_file_payload=$(
         '$ARGS.named|@base64'
 )
 
-FILEID=$(psql -U postgres -h postgres -d sda -At -c "SELECT DISTINCT(file_id) FROM sda.file_event_log WHERE correlation_id = '$CORRID';")
-psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, correlation_id, user_id, message) VALUES('$FILEID', 'uploaded', '$CORRID', 'test@dummy.org', '{\"uploaded\": \"message\"}');"
+FILEID=$(psql -U postgres -h postgres -d sda -At -c "SELECT DISTINCT(file_id) FROM sda.file_event_log WHERE file_id = '$CORRID';")
+psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.file_event_log(file_id, event, user_id, message) VALUES('$FILEID', 'uploaded', 'test@dummy.org', '{\"uploaded\": \"message\"}');"
 
 properties=$(
     jq -c -n \
