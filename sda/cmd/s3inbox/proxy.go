@@ -169,8 +169,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		filePath: filepath,
 	}
 
-	log.Infof("fileidentifier: %v, fileId: %s", fileIdentifier, p.fileIDs[fileIdentifier])
-
 	// if this is an upload request
 	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
 		// register file in database
@@ -252,6 +250,8 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 			return
 		}
+
+		delete(p.fileIDs, fileIdentifier)
 	}
 
 	// Writing non-200 to the response before the headers propagate the error
