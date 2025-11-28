@@ -92,6 +92,13 @@
             "arguments": {}
         },
         {
+            "name": "completed",
+            "vhost": "sda",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
             "name": "completed_stream",
             "vhost": "sda",
             "durable": true,
@@ -223,14 +230,6 @@
             "arguments": {},
             "destination": "error_stream",
             "routing_key": "error"
-        },
-        {
-            "source": "sda",
-            "vhost": "sda",
-            "destination_type": "queue",
-            "arguments": {},
-            "destination": "files",
-            "routing_key": "files"
         },
         {
             "source": "sda",
