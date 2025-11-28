@@ -229,14 +229,6 @@
             "vhost": "sda",
             "destination_type": "queue",
             "arguments": {},
-            "destination": "files",
-            "routing_key": "files"
-        },
-        {
-            "source": "sda",
-            "vhost": "sda",
-            "destination_type": "queue",
-            "arguments": {},
             "destination": "inbox",
             "routing_key": "inbox"
         },
