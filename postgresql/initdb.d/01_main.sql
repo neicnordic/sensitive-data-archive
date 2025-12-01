@@ -30,7 +30,12 @@ VALUES (0, now(), 'Created with version'),
        (13, now(), 'Create API user'),
        (14, now(), 'Create Auth user'),
        (15, now(), 'Give API user insert priviledge in logs table'),
-       (16, now(), 'Give ingest user select priviledge in encryption_keys table');
+       (16, now(), 'Give ingest user select priviledge in encryption_keys table'),
+       (17, now(), 'Add submission user to constraint'),
+       (18, now(), 'Create rotatekey role and grant it priviledges to sda tables'),
+       (19, now(), 'Create new indexes on files and file_event_log tables'),
+       (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
+       (21, now(), 'Drop functions set_verified, and set_archived');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
