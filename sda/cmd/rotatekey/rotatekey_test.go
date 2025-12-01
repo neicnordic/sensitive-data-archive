@@ -158,7 +158,6 @@ func TestMain(m *testing.M) {
 type TestSuite struct {
 	suite.Suite
 	app            RotateKey
-	corrID         string
 	fileID         string
 	privateKeyList []*[32]byte
 }
@@ -174,7 +173,6 @@ func TestRotateKeyTestSuite(t *testing.T) {
 func (ts *TestSuite) SetupSuite() {
 	ts.app.Conf = &config.Config{}
 	ts.app.Conf.Broker.SchemasPath = "../../schemas/isolated"
-	ts.corrID = uuid.New().String()
 	var err error
 	ts.app.DB, err = database.NewSDAdb(database.DBConf{
 		Host:     "localhost",
@@ -214,12 +212,12 @@ func (ts *TestSuite) SetupSuite() {
 
 	ts.app.Conf.RotateKey.PublicKey = &publicKey
 
-	ts.fileID, err = ts.app.DB.RegisterFile("rotate-key-test/data.c4gh", "tester_example.org")
+	ts.fileID, err = ts.app.DB.RegisterFile(nil, "rotate-key-test/data.c4gh", "tester_example.org")
 	if err != nil {
 		ts.FailNow("Failed to register file in DB")
 	}
 	for _, status := range []string{"uploaded", "archived", "verified"} {
-		if err = ts.app.DB.UpdateFileEventLog(ts.fileID, status, ts.corrID, "tester_example.org", "{}", "{}"); err != nil {
+		if err = ts.app.DB.UpdateFileEventLog(ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
 			ts.FailNow("Failed to set status of file in DB")
 		}
 	}
@@ -290,7 +288,6 @@ func (s *server) ReencryptHeader(ctx context.Context, req *re.ReencryptRequest) 
 }
 
 func (ts *TestSuite) TestReEncryptHeader() {
-	fileID := ts.corrID
 
 	for _, test := range []struct {
 		corrID        string
@@ -305,16 +302,15 @@ func (ts *TestSuite) TestReEncryptHeader() {
 			expectedError: nil,
 			expectedMgs:   "",
 			expectedRes:   "ack",
-			corrID:        ts.corrID,
 			fileID:        ts.fileID,
 		},
 		{
 			testName:      "un-ingested file",
 			expectedError: errors.New("sql: no rows in result set"),
-			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID),
+			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", ts.fileID),
 			expectedRes:   "ackSendToError",
 			corrID:        uuid.New().String(),
-			fileID:        fileID,
+			fileID:        ts.fileID,
 		},
 	} {
 		ts.T().Run(test.testName, func(t *testing.T) {

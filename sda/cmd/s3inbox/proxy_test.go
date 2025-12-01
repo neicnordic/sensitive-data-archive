@@ -630,7 +630,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -653,7 +653,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -672,7 +672,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -699,7 +699,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/test/new_file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/test/new_file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 

@@ -110,7 +110,6 @@ FROM (
         LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
     WHERE f.submission_user = $1
       AND f.submission_file_path = $2
-      AND f.stable_id IS null
     ORDER BY f.id, fel.started_at DESC LIMIT 1
     ) AS id_and_event
 WHERE id_and_event.event = $3;`
@@ -150,6 +149,11 @@ VALUES($1, $2, $3, $4, $5);
 
 	result, err := db.Exec(query, fileUUID, event, user, details, message)
 	if err != nil {
+		// 23503 error code == foreign_key_violation, meaning the files row does not exits
+		// http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return sql.ErrNoRows
+		}
 		return err
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

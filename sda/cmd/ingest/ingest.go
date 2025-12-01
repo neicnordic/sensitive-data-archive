@@ -206,6 +206,9 @@ func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) st
 	m, _ := json.Marshal(message)
 	if err := app.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to update event log for file with id : %s", fileID)
+		if strings.Contains(err.Error(), "sql: no rows in result set") {
+			return "reject"
+		}
 
 		return "nack"
 	}
