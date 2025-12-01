@@ -201,7 +201,7 @@ func (dbs *SDAdb) checkAndReconnectIfNeeded() {
 }
 
 func (dbs *SDAdb) Reconnect() {
-	dbs.DB.Close()
+	_ = dbs.DB.Close()
 	dbs.DB, _ = sql.Open(dbs.Config.PgDataSource())
 }
 
@@ -213,6 +213,6 @@ func (dbs *SDAdb) Close() {
 	err := dbs.DB.Ping()
 	if err == nil {
 		log.Info("Closing database connection")
-		dbs.DB.Close()
+		_ = dbs.DB.Close()
 	}
 }

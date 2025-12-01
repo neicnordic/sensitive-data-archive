@@ -70,7 +70,7 @@ func main() {
 
 	go func() {
 		<-sigc // blocks here until it receives from sigc
-		fmt.Println("Interrupt signal received. Shutting down.")
+		_, _ = fmt.Println("Interrupt signal received. Shutting down.")
 		defer app.MQ.Channel.Close()
 		defer app.MQ.Connection.Close()
 		defer app.DB.Close()

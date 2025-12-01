@@ -133,7 +133,7 @@ func TestMain(m *testing.M) {
 		if err != nil || res.StatusCode != 200 {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {

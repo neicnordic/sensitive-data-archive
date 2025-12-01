@@ -140,7 +140,7 @@ func (s *ProxyTests) SetupTest() {
 	)
 	_, _ = s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: aws.String(s.S3conf.Bucket)})
 	if err != nil {
-		fmt.Println(err.Error())
+		_, _ = fmt.Println(err.Error())
 	}
 
 	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
@@ -176,11 +176,11 @@ func startFakeServer(port string) *FakeServer {
 		log.Warnf("hello fake will return %s", f.resp)
 		if f.resp != "" {
 			log.Warnf("fake writes %s", f.resp)
-			fmt.Fprint(w, f.resp)
+			_, _ = fmt.Fprint(w, f.resp)
 		}
 	})
 	ts := httptest.NewUnstartedServer(foo)
-	ts.Listener.Close()
+	_ = ts.Listener.Close()
 	ts.Listener = l
 	ts.Start()
 

@@ -53,5 +53,5 @@ func (ts *InfoTests) TestReadPublicKeyFile() {
 }
 
 func (ts *InfoTests) TearDownTest() {
-	os.RemoveAll(ts.TempDir)
+	_ = os.RemoveAll(ts.TempDir)
 }

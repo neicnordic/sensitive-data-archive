@@ -168,7 +168,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -229,7 +229,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -576,7 +576,7 @@ func (s *TestSuite) TearDownSuite() {
 		s.GrpcListener.gs.GracefulStop()
 	}
 	if s.GrpcListener.Listener != nil {
-		s.GrpcListener.Listener.Close()
+		_ = s.GrpcListener.Listener.Close()
 	}
 }
 func (s *TestSuite) SetupTest() {
@@ -614,7 +614,7 @@ func (s *TestSuite) SetupTest() {
 		req.SetBasicAuth("guest", "guest")
 		res, err := client.Do(req)
 		assert.NoError(s.T(), err, "failed to query broker")
-		res.Body.Close()
+		_ = res.Body.Close()
 	}
 }
 
@@ -867,8 +867,8 @@ func (s *TestSuite) TestGinLogLevel_Debug() {
 	logOutput = buf.String()
 
 	lines = strings.Split(strings.TrimSpace(logOutput), "\n")
-	fmt.Println("lines      : ", lines)
-	fmt.Println("len(lines) : ", len(lines))
+	_, _ = fmt.Println("lines      : ", lines)
+	_, _ = fmt.Println("len(lines) : ", len(lines))
 	if len(lines) > 1 {
 		assert.NotContains(s.T(), logOutput[len(logOutput)-1], "[GIN]")
 	} else {
@@ -944,8 +944,8 @@ func (s *TestSuite) TestGinLogLevel_Info() {
 	logOutput = buf.String()
 
 	lines = strings.Split(strings.TrimSpace(logOutput), "\n")
-	fmt.Println("lines      : ", lines)
-	fmt.Println("len(lines) : ", len(lines))
+	_, _ = fmt.Println("lines      : ", lines)
+	_, _ = fmt.Println("len(lines) : ", len(lines))
 	if len(lines) > 1 {
 		assert.NotContains(s.T(), logOutput[len(logOutput)-1], "[GIN]")
 	} else {
@@ -1121,7 +1121,7 @@ func (s *TestSuite) TestIngestFile_WithPayload() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -1278,7 +1278,7 @@ func (s *TestSuite) TestIngestFile_WithFileID() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -1403,7 +1403,7 @@ func (s *TestSuite) TestSetAccession_WithPayload() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -1516,7 +1516,7 @@ func (s *TestSuite) TestSetAccession_WithParams() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -1723,7 +1723,7 @@ func (s *TestSuite) TestCreateDataset() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	assert.NoError(s.T(), json.Unmarshal(body, &data), "failed to unmarshal response")
 	assert.Equal(s.T(), 1, data.MessagesReady)
@@ -1796,7 +1796,7 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
 	assert.NoError(s.T(), err)
-	response.Body.Close()
+	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
 	assert.Contains(s.T(), string(body), "does not match pattern")
@@ -1821,7 +1821,7 @@ func (s *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
 	assert.NoError(s.T(), err)
-	response.Body.Close()
+	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
 	assert.Contains(s.T(), string(body), "at least one accessionID is required")
@@ -1845,7 +1845,7 @@ func (s *TestSuite) TestCreateDataset_WrongIDs() {
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
 	assert.NoError(s.T(), err)
-	response.Body.Close()
+	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
 	assert.Contains(s.T(), string(body), "accession ID not found: ")
@@ -1904,7 +1904,7 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)
 	assert.NoError(s.T(), err)
-	response.Body.Close()
+	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
 	assert.Contains(s.T(), string(body), "accession ID owned by other user")
@@ -1975,7 +1975,7 @@ func (s *TestSuite) TestReleaseDataset() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -2737,7 +2737,7 @@ func (s *TestSuite) TestReVerifyFile() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")
@@ -2844,7 +2844,7 @@ func (s *TestSuite) TestReVerifyDataset() {
 		MessagesReady int `json:"messages_ready"`
 	}
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	assert.NoError(s.T(), err, "failed to read response from broker")
 	err = json.Unmarshal(body, &data)
 	assert.NoError(s.T(), err, "failed to unmarshal response")

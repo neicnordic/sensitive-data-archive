@@ -202,7 +202,6 @@ func (app *Ingest) registerC4GHKey() error {
 }
 
 func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) string {
-
 	m, _ := json.Marshal(message)
 	if err := app.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to update event log for file with id : %s", fileID)
@@ -217,7 +216,6 @@ func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) st
 }
 
 func (app *Ingest) ingestFile(fileID string, message schema.IngestionTrigger) string {
-
 	status, err := app.DB.GetFileStatus(fileID)
 	if err != nil && err.Error() != "sql: no rows in result set" {
 		log.Errorf("failed to get status for file, fileID: %s, reason: (%s)", fileID, err.Error())

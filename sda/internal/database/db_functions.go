@@ -31,7 +31,7 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 
 	query := "SELECT sda.register_file($1, $2, $3);"
 
-	var createdFileId string
+	var createdFileID string
 
 	fileIDArg := sql.NullString{}
 	if fileID != nil {
@@ -39,9 +39,9 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 		fileIDArg.String = *fileID
 	}
 
-	err := dbs.DB.QueryRow(query, fileIDArg, uploadPath, uploadUser).Scan(&createdFileId)
+	err := dbs.DB.QueryRow(query, fileIDArg, uploadPath, uploadUser).Scan(&createdFileID)
 
-	return createdFileId, err
+	return createdFileID, err
 }
 
 // GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
@@ -154,6 +154,7 @@ VALUES($1, $2, $3, $4, $5);
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
 			return sql.ErrNoRows
 		}
+
 		return err
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
@@ -843,6 +844,7 @@ ORDER BY f.id, fel.started_at DESC;`
 	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen)
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
+
 		return nil, err
 	}
 	defer rows.Close()
@@ -1107,7 +1109,7 @@ func (dbs *SDAdb) ListDatasets() ([]*DatasetInfo, error) {
 
 		datasets = append(datasets, &di)
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	return datasets, nil
 }
@@ -1149,7 +1151,7 @@ func (dbs *SDAdb) ListUserDatasets(submissionUser string) ([]DatasetInfo, error)
 
 		datasets = append(datasets, di)
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	return datasets, nil
 }
