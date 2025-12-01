@@ -288,8 +288,8 @@ func (s *server) ReencryptHeader(ctx context.Context, req *re.ReencryptRequest) 
 }
 
 func (ts *TestSuite) TestReEncryptHeader() {
+	newFileID := uuid.NewString()
 	for _, test := range []struct {
-		corrID        string
 		expectedError error
 		expectedMgs   string
 		expectedRes   string
@@ -306,14 +306,13 @@ func (ts *TestSuite) TestReEncryptHeader() {
 		{
 			testName:      "un-ingested file",
 			expectedError: errors.New("sql: no rows in result set"),
-			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", ts.fileID),
+			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", newFileID),
 			expectedRes:   "ackSendToError",
-			corrID:        uuid.New().String(),
-			fileID:        ts.fileID,
+			fileID:        newFileID,
 		},
 	} {
 		ts.T().Run(test.testName, func(t *testing.T) {
-			res, msg, err := ts.app.reEncryptHeader(test.corrID, test.fileID)
+			res, msg, err := ts.app.reEncryptHeader(test.fileID)
 			assert.Equal(t, res, test.expectedRes)
 			assert.Equal(t, msg, test.expectedMgs)
 			assert.Equal(t, err, test.expectedError)

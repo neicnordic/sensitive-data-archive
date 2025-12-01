@@ -161,7 +161,7 @@ func main() {
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 
-			ackNack, msg, err := app.reEncryptHeader(delivered.CorrelationId, message.FileID)
+			ackNack, msg, err := app.reEncryptHeader(message.FileID)
 
 			switch ackNack {
 			case "ack":
@@ -197,7 +197,7 @@ func main() {
 	<-forever
 }
 
-func (app *RotateKey) reEncryptHeader(correlationID, fileID string) (ackNack, msg string, err error) {
+func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err error) {
 	// Get current keyhash for the file, send to error queue if this fails
 	oldKeyHash, err := app.DB.GetKeyHash(fileID)
 	if err != nil {
@@ -270,7 +270,7 @@ func (app *RotateKey) reEncryptHeader(correlationID, fileID string) (ackNack, ms
 		return "ackSendToError", msg, err
 	}
 
-	if err := app.MQ.SendMessage(correlationID, app.Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
+	if err := app.MQ.SendMessage(fileID, app.Conf.Broker.Exchange, "archived", reVerifyMsg); err != nil {
 		msg := "failed to publish message"
 		log.Errorf("%s, reason: %v", msg, err)
 
