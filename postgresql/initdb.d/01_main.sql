@@ -78,7 +78,7 @@ CREATE TABLE files (
     CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path, submission_user)
 );
 -- Add indexes to the files table
-CREATE INDEX files_submission_user_submission_file_path_idx ON sda.files(submission_user, submission_file_path);
+CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_user, submission_file_path);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (
