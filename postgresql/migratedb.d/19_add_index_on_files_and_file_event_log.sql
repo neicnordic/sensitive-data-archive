@@ -12,13 +12,10 @@ BEGIN
     RAISE NOTICE 'Changes: %', changes;
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
+    CREATE INDEX file_event_log_file_id_started_at_idx ON sda.file_event_log(file_id, started_at);
 
-    ALTER TABLE sda.files
-        ADD COLUMN submission_file_root_dir TEXT GENERATED ALWAYS AS (split_part(submission_file_path, '/', 1)) STORED;
-
-
-    CREATE INDEX files_submission_user_submission_file_root_dir_idx
-        ON sda.files(submission_user, submission_file_root_dir);
+    CREATE INDEX files_submission_user_submission_file_path_idx
+        ON sda.files(submission_user, submission_file_path);
 
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;

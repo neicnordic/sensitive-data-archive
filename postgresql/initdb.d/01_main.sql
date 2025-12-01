@@ -58,7 +58,6 @@ CREATE TABLE files (
 
     submission_user      TEXT,
     submission_file_path TEXT DEFAULT '' NOT NULL,
-    submission_file_root_dir TEXT GENERATED ALWAYS AS (split_part(submission_file_path, '/', 1)) STORED,
 
     submission_file_size BIGINT,
     archive_file_path    TEXT DEFAULT '' NOT NULL,
@@ -79,7 +78,7 @@ CREATE TABLE files (
     CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path, submission_user)
 );
 -- Add indexes to the files table
-CREATE INDEX files_submission_user_submission_file_root_dir_idx ON sda.files(submission_user, submission_file_root_dir);
+CREATE INDEX files_submission_user_submission_file_path_idx ON sda.files(submission_user, submission_file_path);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (
@@ -169,7 +168,7 @@ CREATE TABLE file_event_log (
     error               TEXT
 );
 -- Add indexes to the file_event_log table
-CREATE INDEX file_event_log_file_id_started_at_idx ON sda.file_event_log(file_id, started_at);
+CREATE INDEX file_event_log_file_id_started_at_idx ON file_event_log(file_id, started_at);
 
 -- This table is used to define events for dataset event logging.
 CREATE TABLE dataset_events (

@@ -103,12 +103,17 @@ func (dbs *SDAdb) getFileIDByUserPathAndStatus(submissionUser, filePath, status 
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	const getFileID = `SELECT id from sda.files
-WHERE submission_user=$1 and submission_file_path =$2 and stable_id IS null
-AND EXISTS (SELECT 1 FROM
-(SELECT event from sda.file_event_log JOIN sda.files ON sda.files.id=sda.file_event_log.file_id
-WHERE submission_user=$1 and submission_file_path =$2 order by started_at desc limit 1)
-AS subquery WHERE event = $3);`
+	const getFileID = `
+SELECT id_and_event.id
+FROM (
+    SELECT DISTINCT ON (f.id) f.id, fel.event FROM sda.files AS f
+        LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
+    WHERE f.submission_user = $1
+      AND f.submission_file_path = $2
+      AND f.stable_id IS null
+    ORDER BY f.id, fel.started_at DESC LIMIT 1
+    ) AS id_and_event
+WHERE id_and_event.event = $3;`
 
 	var fileID string
 	err := db.QueryRow(getFileID, submissionUser, filePath, status).Scan(&fileID)
@@ -814,20 +819,26 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*Subm
 	db := dbs.DB
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = `SELECT f.id, f.submission_file_path, f.stable_id, e.event, f.created_at FROM sda.files f
-LEFT JOIN (SELECT DISTINCT ON (file_id) file_id, started_at, event FROM sda.file_event_log ORDER BY file_id, started_at DESC) e ON f.id = e.file_id
-WHERE f.submission_user = $1 AND ($2::text IS NULL OR f.submission_file_root_dir = $2::text)
-AND NOT EXISTS (SELECT 1 FROM sda.file_dataset d WHERE f.id = d.file_id);`
+	const query = `
+SELECT DISTINCT ON (f.id) f.id, f.submission_file_path, f.stable_id, fel.event, f.created_at FROM sda.files AS f
+    LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
+    LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
+WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
+    AND fd.file_id IS NULL
+ORDER BY f.id, fel.started_at DESC;`
 
+	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}
 	if pathPrefix != "" {
+		pathPrefixLen = len(pathPrefix)
 		pathPrefixArg.Valid = true
 		pathPrefixArg.String = pathPrefix
 	}
 
 	// nolint:rowserrcheck
-	rows, err := db.Query(query, userID, pathPrefixArg)
+	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen)
 	if err != nil {
+		log.Errorf("Error querying user files: %v", err)
 		return nil, err
 	}
 	defer rows.Close()

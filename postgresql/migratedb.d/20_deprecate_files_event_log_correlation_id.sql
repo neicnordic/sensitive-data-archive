@@ -72,6 +72,7 @@ BEGIN
     END;
     $register_file$ LANGUAGE plpgsql;
 
+    -- Drop the correlation_id column from sda.file_event_log
     ALTER TABLE sda.file_event_log
         DROP COLUMN correlation_id;
 
