@@ -699,35 +699,19 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
+	// Check that the files the accession ids are linked to belong to the user of the dataset
 	for _, stableID := range dataset.AccessionIDs {
-		inboxPath, err := Conf.API.DB.GetInboxPath(stableID)
+		belongsToUser, err := Conf.API.DB.CheckStableIDOwnedByUser(stableID, dataset.User)
 		if err != nil {
-			switch {
-			case err.Error() == "sql: no rows in result set":
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID not found: %s", stableID))
+			log.Errorln(err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
-				return
-			default:
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-				return
-			}
+			return
 		}
-		if _, err := Conf.API.DB.GetFileIDByUserPathAndStatus(dataset.User, inboxPath, "ready"); err != nil {
-			switch {
-			case err.Error() == "sql: no rows in result set":
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusBadRequest, "accession ID owned by other user")
+		if !belongsToUser {
+			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID: %s not found or owned by other user", stableID))
 
-				return
-			default:
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-				return
-			}
+			return
 		}
 	}
 

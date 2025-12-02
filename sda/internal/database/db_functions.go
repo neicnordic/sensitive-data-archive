@@ -110,6 +110,7 @@ FROM (
         LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
     WHERE f.submission_user = $1
       AND f.submission_file_path = $2
+      AND f.stable_id IS NULL
     ORDER BY f.id, fel.started_at DESC LIMIT 1
     ) AS id_and_event
 WHERE id_and_event.event = $3;`
@@ -121,6 +122,47 @@ WHERE id_and_event.event = $3;`
 	}
 
 	return fileID, nil
+}
+
+// CheckStableIDOwnedByUser checks if the file a stableID links to belongs to the user
+// Returns true if a file is found by the stableID and user, false if not found
+func (dbs *SDAdb) CheckStableIDOwnedByUser(stableID, user string) (bool, error) {
+	var (
+		err   error
+		found bool
+	)
+	// 2, 4, 8, 16, 32 seconds between each retry event.
+	for count := 1; count <= RetryTimes; count++ {
+		found, err = dbs.checkStableIDOwnedByUser(stableID, user)
+		if err == nil || strings.Contains(err.Error(), "sql: no rows in result set") {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return found, err
+}
+
+func (dbs *SDAdb) checkStableIDOwnedByUser(stableID, user string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const checkFileFound = `
+SELECT true
+FROM sda.files
+WHERE stable_id = $1
+AND submission_user = $2`
+
+	var found bool
+	if err := db.QueryRow(checkFileFound, stableID, user).Scan(&found); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 // UpdateFileEventLog updates the status in of the file in the database.

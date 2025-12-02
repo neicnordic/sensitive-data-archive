@@ -1848,7 +1848,7 @@ func (s *TestSuite) TestCreateDataset_WrongIDs() {
 	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
-	assert.Contains(s.T(), string(body), "accession ID not found: ")
+	assert.Contains(s.T(), string(body), "accession ID: API:accession-id-11 not found or owned by other user")
 }
 
 func (s *TestSuite) TestCreateDataset_WrongUser() {
@@ -1907,7 +1907,7 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
-	assert.Contains(s.T(), string(body), "accession ID owned by other user")
+	assert.Contains(s.T(), string(body), "accession ID: API:accession-id-11 not found or owned by other user")
 }
 
 func (s *TestSuite) TestReleaseDataset() {
