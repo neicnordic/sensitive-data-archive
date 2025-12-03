@@ -123,7 +123,7 @@ func main() {
 		}
 
 		for delivered := range messages {
-			log.Debugf("received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
+			log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			message := schema.IngestionTrigger{}
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.Conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
@@ -148,7 +148,7 @@ func main() {
 
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
-			log.Infof("Received work (corr-id: %s, filepath: %s, user: %s)", delivered.CorrelationId, message.FilePath, message.User)
+			log.Infof("Received work (correlation-id: %s, filepath: %s, user: %s)", delivered.CorrelationId, message.FilePath, message.User)
 
 			ackNack := ""
 			switch message.Type {
@@ -309,7 +309,7 @@ func (app *Ingest) ingestFile(fileID string, message schema.IngestionTrigger) st
 		}
 	case "":
 		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
-		log.Infof("registering file, correlation-id: %s", fileID)
+		log.Infof("registering file, file-id: %s", fileID)
 		fileID, err = app.DB.RegisterFile(&fileID, message.FilePath, message.User)
 		if err != nil {
 			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
@@ -319,7 +319,7 @@ func (app *Ingest) ingestFile(fileID string, message schema.IngestionTrigger) st
 	case "uploaded":
 
 	default:
-		log.Warnf("unsupported file status: %s, correlation-id: %s", status, fileID)
+		log.Warnf("unsupported file status: %s, file-id: %s", status, fileID)
 
 		return "reject"
 	}

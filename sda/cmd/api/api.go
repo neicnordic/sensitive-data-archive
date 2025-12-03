@@ -323,7 +323,7 @@ This endpoint supports two input modes:
 1. By file ID (via the "fileid" query parameter): Looks up the user and file path from the database.
 2. By JSON payload: Expects a JSON body with user and file path.
 The function constructs an ingest message, validates it
-and sends it to the broker with the appropriate correlation ID.
+and sends it to the broker with the appropriate file ID.
 */
 func ingestFile(c *gin.Context) {
 	var (
@@ -361,7 +361,6 @@ func ingestFile(c *gin.Context) {
 
 			return
 		}
-		// Find the correlation id of the file
 		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(ingest.User, ingest.FilePath, "uploaded")
 		if err != nil {
 			if fileID == "" {
@@ -575,7 +574,7 @@ func downloadFile(c *gin.Context) {
 setAccession handles requests to assign an accession ID to a file.
 This endpoint supports two input modes:
 1. By query parameters ("fileid" and "accessionid"): Retrieves user, file path, and decrypted checksum from the database using the file ID.
-2. By JSON payload: Expects a JSON body with user and file path, then looks up the correlation ID and decrypted checksum.
+2. By JSON payload: Expects a JSON body with user and file path, then looks up the file ID and decrypted checksum.
 If both query parameters and a JSON payload are provided, the request is rejected with a 400 Bad Request.
 The function constructs an accession message, validates it and sends it to the message broker.
 */
@@ -631,7 +630,6 @@ func setAccession(c *gin.Context) {
 
 			return
 		}
-		// Find the correlation id
 		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "verified")
 		if err != nil {
 			if fileID == "" {

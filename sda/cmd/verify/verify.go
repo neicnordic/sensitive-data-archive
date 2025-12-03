@@ -71,7 +71,7 @@ func main() {
 				err)
 		}
 		for delivered := range messages {
-			log.Debugf("received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
+			log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
 				log.Errorf("validation of incoming message (ingestion-verification) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
@@ -97,14 +97,14 @@ func main() {
 			_ = json.Unmarshal(delivered.Body, &message)
 
 			log.Infof(
-				"Received work (corr-id: %s, filepath: %s, user: %s)",
-				delivered.CorrelationId, message.FilePath, message.User,
+				"Received work (message.correlation-id: %s, file-id: %s, filepath: %s, user: %s)",
+				delivered.CorrelationId, message.FileID, message.FilePath, message.User,
 			)
 
 			// If the file has been canceled by the uploader, don't spend time working on it.
-			status, err := db.GetFileStatus(delivered.CorrelationId)
+			status, err := db.GetFileStatus(message.FileID)
 			if err != nil {
-				log.Errorf("failed to get file status, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+				log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "Getheader failed",
@@ -113,7 +113,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
@@ -124,7 +124,7 @@ func main() {
 				continue
 			}
 			if status == "disabled" {
-				log.Infof("file with correlation-id: %s is disabled, stopping verification", delivered.CorrelationId)
+				log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
@@ -148,7 +148,7 @@ func main() {
 				body, _ := json.Marshal(infoErrorMessage)
 
 				// Send the message to an error queue so it can be analyzed.
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
@@ -177,7 +177,7 @@ func main() {
 					OriginalMessage: message,
 				}
 				body, _ := json.Marshal(fileError)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
@@ -196,7 +196,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 				}
 
@@ -243,7 +243,7 @@ func main() {
 				}
 
 				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 					log.Errorf("Failed to publish error message, reason: (%s)", err.Error())
 				}
 
@@ -323,9 +323,9 @@ func main() {
 					// Logging is in ValidateJSON so just restart on new message
 					continue
 				}
-				status, err := db.GetFileStatus(delivered.CorrelationId)
+				status, err := db.GetFileStatus(message.FileID)
 				if err != nil {
-					log.Errorf("failed to get file status, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+					log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
 					// Send the message to an error queue so it can be analyzed.
 					infoErrorMessage := broker.InfoError{
 						Error:           "Getheader failed",
@@ -334,7 +334,7 @@ func main() {
 					}
 
 					body, _ := json.Marshal(infoErrorMessage)
-					if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
+					if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
 						log.Errorf("failed to publish message, reason: (%s)", err.Error())
 					}
 
@@ -346,7 +346,7 @@ func main() {
 				}
 
 				if status == "disabled" {
-					log.Infof("file with correlation-id: %s is disabled, stopping verification", delivered.CorrelationId)
+					log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
 					if err := delivered.Ack(false); err != nil {
 						log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 					}
@@ -387,7 +387,7 @@ func main() {
 				}
 
 				// Send message to verified queue
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, conf.Broker.RoutingKey, verifiedMessage); err != nil {
 					// TODO fix resend mechanism
 					log.Errorf("failed to publish message, reason: (%s)", err.Error())
 

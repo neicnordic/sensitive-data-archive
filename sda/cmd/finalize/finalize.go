@@ -73,7 +73,7 @@ func main() {
 			log.Fatal(err)
 		}
 		for delivered := range messages {
-			log.Debugf("Received a message (corr-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
+			log.Debugf("Received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
 				log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", delivered.CorrelationId, err)
@@ -84,12 +84,13 @@ func main() {
 				continue
 			}
 
+			fileID := delivered.CorrelationId
 			// we unmarshal the message in the validation step so this is safe to do
 			_ = json.Unmarshal(delivered.Body, &message)
 			// If the file has been canceled by the uploader, don't spend time working on it.
-			status, err := db.GetFileStatus(delivered.CorrelationId)
+			status, err := db.GetFileStatus(fileID)
 			if err != nil {
-				log.Errorf("failed to get file status, correlation-id: %s, reason: %v", delivered.CorrelationId, err)
+				log.Errorf("failed to get file status, file-id: %s, reason: %v", fileID, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)
 				}
@@ -99,7 +100,7 @@ func main() {
 
 			switch status {
 			case "disabled":
-				log.Infof("file with correlation-id: %s is disabled, aborting work", delivered.CorrelationId)
+				log.Infof("file with file-id: %s is disabled, aborting work", fileID)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
@@ -108,14 +109,14 @@ func main() {
 
 			case "verified", "enabled":
 			case "ready":
-				log.Infof("File with correlation-id: %s is already marked as ready.", delivered.CorrelationId)
+				log.Infof("File with file-id: %s is already marked as ready.", fileID)
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking message, reason: %v", err)
 				}
 
 				continue
 			default:
-				log.Warnf("file with correlation-id: %s is not verified yet, aborting work", delivered.CorrelationId)
+				log.Warnf("file with file-id: %s is not verified yet, aborting work", fileID)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("Failed acking canceled work, reason: %v", err)
 				}
@@ -123,7 +124,6 @@ func main() {
 				continue
 			}
 
-			fileID := delivered.CorrelationId
 			c := schema.IngestionCompletion{
 				User:               message.User,
 				FilePath:           message.FilePath,
@@ -160,7 +160,7 @@ func main() {
 				body, _ := json.Marshal(fileError)
 
 				// Send the message to an error queue so it can be analyzed.
-				if e := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); e != nil {
+				if e := mq.SendMessage(fileID, conf.Broker.Exchange, "error", body); e != nil {
 					log.Errorf("failed to publish message, reason: %v", err)
 				}
 
@@ -203,7 +203,7 @@ func main() {
 				continue
 			}
 
-			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
+			if err := mq.SendMessage(fileID, conf.Broker.Exchange, conf.Broker.RoutingKey, completeMsg); err != nil {
 				log.Errorf("failed to publish message, reason: %v", err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: %v", err)

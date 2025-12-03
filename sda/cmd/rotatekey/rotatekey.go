@@ -125,7 +125,7 @@ func main() {
 			panic(err)
 		}
 		for delivered := range messages {
-			log.Debugf("Received a message (corr-id: %s, message: %s)",
+			log.Debugf("Received a message (correlation-id: %s, message: %s)",
 				delivered.CorrelationId,
 				delivered.Body)
 
