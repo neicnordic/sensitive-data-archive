@@ -5,7 +5,7 @@ DECLARE
 -- The version we know how to do migration from, at the end of a successful migration
 -- we will no longer be at this version.
   sourcever INTEGER := 15;
-  changes VARCHAR := 'Give ingest user select priviledge in encryption_keys table';
+  changes VARCHAR := 'Give ingest user select privilege in encryption_keys table';
 BEGIN
   IF (select max(version) from sda.dbschema_version) = sourcever then
     RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;
