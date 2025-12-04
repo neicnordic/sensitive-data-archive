@@ -62,9 +62,8 @@ type DatasetInfo struct {
 }
 
 type FileDetails struct {
-	User   string
-	Path   string
-	CorrID string
+	User string
+	Path string
 }
 
 // SchemaName is the name of the remote database schema to query
@@ -202,7 +201,7 @@ func (dbs *SDAdb) checkAndReconnectIfNeeded() {
 }
 
 func (dbs *SDAdb) Reconnect() {
-	dbs.DB.Close()
+	_ = dbs.DB.Close()
 	dbs.DB, _ = sql.Open(dbs.Config.PgDataSource())
 }
 
@@ -214,6 +213,6 @@ func (dbs *SDAdb) Close() {
 	err := dbs.DB.Ping()
 	if err == nil {
 		log.Info("Closing database connection")
-		dbs.DB.Close()
+		_ = dbs.DB.Close()
 	}
 }

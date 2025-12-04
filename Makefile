@@ -90,6 +90,11 @@ sda-sync-down:
 integrationtest-postgres: build-postgresql
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/postgres.yml run tests
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/postgres.yml down -v --remove-orphans
+integrationtest-postgres-run: build-postgresql
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/postgres.yml run tests
+integrationtest-postgres-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/postgres.yml down -v --remove-orphans
+
 integrationtest-rabbitmq: build-rabbitmq build-sda
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/rabbitmq-federation.yml down -v --remove-orphans

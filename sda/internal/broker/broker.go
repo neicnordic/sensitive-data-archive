@@ -141,7 +141,7 @@ func NewMQ(config MQConf) (*AMQPBroker, error) {
 	}
 
 	if e := channel.Confirm(false); e != nil {
-		fmt.Printf("channel could not be put into confirm mode: %s", e)
+		_, _ = fmt.Printf("channel could not be put into confirm mode: %s", e)
 
 		return nil, fmt.Errorf("channel could not be put into confirm mode: %s", e)
 	}

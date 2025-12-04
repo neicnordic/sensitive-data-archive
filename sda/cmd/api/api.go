@@ -323,12 +323,12 @@ This endpoint supports two input modes:
 1. By file ID (via the "fileid" query parameter): Looks up the user and file path from the database.
 2. By JSON payload: Expects a JSON body with user and file path.
 The function constructs an ingest message, validates it
-and sends it to the broker with the appropriate correlation ID.
+and sends it to the broker with the appropriate file ID.
 */
 func ingestFile(c *gin.Context) {
 	var (
 		ingest schema.IngestionTrigger
-		corrID string
+		fileID string
 	)
 	switch {
 	case c.Query("fileid") != "" && c.Request.ContentLength > 0:
@@ -346,7 +346,8 @@ func ingestFile(c *gin.Context) {
 		// Add file info in the message payload
 		ingest.User = fileDetails.User
 		ingest.FilePath = fileDetails.Path
-		corrID = fileDetails.CorrID
+		fileID = c.Query("fileid")
+
 	case c.Request.ContentLength > 0:
 		// Bind ingest and payload
 		if err = c.BindJSON(&ingest); err != nil {
@@ -360,10 +361,9 @@ func ingestFile(c *gin.Context) {
 
 			return
 		}
-		// Find the correlation id of the file
-		corrID, err = Conf.API.DB.GetCorrID(ingest.User, ingest.FilePath, "")
+		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(ingest.User, ingest.FilePath, "uploaded")
 		if err != nil {
-			if corrID == "" {
+			if fileID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 			} else {
 				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -386,7 +386,7 @@ func ingestFile(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "ingest", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(fileID, Conf.Broker.Exchange, "ingest", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -443,7 +443,7 @@ func deleteFile(c *gin.Context) {
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	if err := Conf.API.DB.UpdateFileEventLog(fileID, "disabled", fileID, "api", "{}", "{}"); err != nil {
+	if err := Conf.API.DB.UpdateFileEventLog(fileID, "disabled", "api", "{}", "{}"); err != nil {
 		log.Errorf("set status deleted failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -574,14 +574,14 @@ func downloadFile(c *gin.Context) {
 setAccession handles requests to assign an accession ID to a file.
 This endpoint supports two input modes:
 1. By query parameters ("fileid" and "accessionid"): Retrieves user, file path, and decrypted checksum from the database using the file ID.
-2. By JSON payload: Expects a JSON body with user and file path, then looks up the correlation ID and decrypted checksum.
+2. By JSON payload: Expects a JSON body with user and file path, then looks up the file ID and decrypted checksum.
 If both query parameters and a JSON payload are provided, the request is rejected with a 400 Bad Request.
 The function constructs an accession message, validates it and sends it to the message broker.
 */
 func setAccession(c *gin.Context) {
 	var (
 		accession schema.IngestionAccession
-		corrID    string
+		fileID    string
 	)
 	hasQuery := c.Query("fileid") != "" || c.Query("accessionid") != ""
 	missingAccession := c.Query("fileid") != "" && c.Query("accessionid") == ""
@@ -616,8 +616,8 @@ func setAccession(c *gin.Context) {
 		accession.User = fileDetails.User
 		accession.FilePath = fileDetails.Path
 		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
-		// Corellation id
-		corrID = fileDetails.CorrID
+		fileID = c.Query("fileid")
+
 	case c.Request.ContentLength > 0:
 		if err = c.BindJSON(&accession); err != nil {
 			c.AbortWithStatusJSON(
@@ -630,21 +630,9 @@ func setAccession(c *gin.Context) {
 
 			return
 		}
-		// Find the correlation id
-		fileID, err := Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "verified")
+		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "verified")
 		if err != nil {
 			if fileID == "" {
-				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-			}
-
-			return
-		}
-		// Get correlation id
-		corrID, err = Conf.API.DB.GetCorrID(accession.User, accession.FilePath, "")
-		if err != nil {
-			if corrID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 			} else {
 				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -678,7 +666,7 @@ func setAccession(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "accession", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(fileID, Conf.Broker.Exchange, "accession", marshaledMsg)
 	if err != nil {
 		log.Debugln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -709,36 +697,19 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
+	// Check that the files the accession ids are linked to belong to the user of the dataset
 	for _, stableID := range dataset.AccessionIDs {
-		inboxPath, err := Conf.API.DB.GetInboxPath(stableID)
+		belongsToUser, err := Conf.API.DB.CheckStableIDOwnedByUser(stableID, dataset.User)
 		if err != nil {
-			switch {
-			case err.Error() == "sql: no rows in result set":
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID not found: %s", stableID))
+			log.Errorln(err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
-				return
-			default:
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-				return
-			}
+			return
 		}
-		_, err = Conf.API.DB.GetCorrID(dataset.User, inboxPath, stableID)
-		if err != nil {
-			switch {
-			case err.Error() == "sql: no rows in result set":
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusBadRequest, "accession ID owned by other user")
+		if !belongsToUser {
+			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID: %s not found or owned by other user", stableID))
 
-				return
-			default:
-				log.Errorln(err.Error())
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-				return
-			}
+			return
 		}
 	}
 
@@ -1008,13 +979,6 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 
 		return c, err
 	}
-	corrID, err := Conf.API.DB.GetCorrID(reVerify.User, reVerify.FilePath, accessionID)
-	if err != nil {
-		log.Errorf("failed to get CorrID for %s, %s", reVerify.User, reVerify.FilePath)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return c, err
-	}
 
 	marshaledMsg, _ := json.Marshal(&reVerify)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
@@ -1024,7 +988,7 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 		return c, err
 	}
 
-	err = Conf.API.MQ.SendMessage(corrID, Conf.Broker.Exchange, "archived", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(reVerify.FileID, Conf.Broker.Exchange, "archived", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

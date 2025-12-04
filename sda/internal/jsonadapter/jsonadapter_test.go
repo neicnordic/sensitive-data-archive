@@ -52,7 +52,7 @@ func (ts *AdapterTestSuite) SetupSuite() {
 }
 
 func (ts *AdapterTestSuite) TearDownSuite() {
-	os.RemoveAll(ts.File.Name())
+	_ = os.RemoveAll(ts.File.Name())
 }
 
 func (ts *AdapterTestSuite) TestAdapter_empty() {

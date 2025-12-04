@@ -29,6 +29,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type uniqueFileID struct {
+	username, filePath string
+}
+
 // Proxy represents the toplevel object in this application
 type Proxy struct {
 	s3        storage.S3Conf
@@ -36,7 +40,7 @@ type Proxy struct {
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
-	fileIDs   map[string]string
+	fileIDs   map[uniqueFileID]string
 }
 
 // The Event struct
@@ -82,7 +86,7 @@ func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *bro
 	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-	return &Proxy{s3conf, auth, messenger, db, client, make(map[string]string)}
+	return &Proxy{s3conf, auth, messenger, db, client, make(map[uniqueFileID]string)}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -160,12 +164,17 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		return
 	}
 
+	fileIdentifier := uniqueFileID{
+		username: username,
+		filePath: filepath,
+	}
+
 	// if this is an upload request
-	if p.detectRequestType(r) == Put && p.fileIDs[r.URL.Path] == "" {
+	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database", r.URL.Path)
-		p.fileIDs[r.URL.Path], err = p.database.RegisterFile(filepath, username)
-		log.Debugf("fileId: %v", p.fileIDs[r.URL.Path])
+		p.fileIDs[fileIdentifier], err = p.database.RegisterFile(nil, filepath, username)
+		log.Debugf("fileId: %v", p.fileIDs[fileIdentifier])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
@@ -174,7 +183,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// check if the file already exists, in that case send an overwrite message,
 		// so that the FEGA portal is informed that a new version of the file exists.
-		err = p.sendMessageOnOverwrite(r, rawFilepath, token)
+		err = p.sendMessageOnOverwrite(p.fileIDs[fileIdentifier], r, rawFilepath, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
@@ -207,7 +216,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			return
 		}
 
-		err = p.checkAndSendMessage(jsonMessage, r)
+		err = p.checkAndSendMessage(p.fileIDs[fileIdentifier], jsonMessage, r)
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
@@ -216,33 +225,33 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
-		if p.fileIDs[r.URL.Path] == "" {
-			p.fileIDs[r.URL.Path], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+		if p.fileIDs[fileIdentifier] == "" {
+			p.fileIDs[fileIdentifier], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
 				return
 			}
 
-			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[r.URL.Path])
+			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[fileIdentifier])
 		}
 
-		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[r.URL.Path]); err != nil {
+		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
 			return
 		}
 
-		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[r.URL.Path])
-		err = p.database.UpdateFileEventLog(p.fileIDs[r.URL.Path], "uploaded", p.fileIDs[r.URL.Path], "inbox", "{}", string(jsonMessage))
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[fileIdentifier])
+		err = p.database.UpdateFileEventLog(p.fileIDs[fileIdentifier], "uploaded", "inbox", "{}", string(jsonMessage))
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
 
-		delete(p.fileIDs, r.URL.Path)
+		delete(p.fileIDs, fileIdentifier)
 	}
 
 	// Writing non-200 to the response before the headers propagate the error
@@ -276,7 +285,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 }
 
 // Renew the connection to MQ if necessary, then send message
-func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
+func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte, r *http.Request) error {
 	var err error
 	if p.messenger == nil {
 		return errors.New("messenger is down")
@@ -297,8 +306,8 @@ func (p *Proxy) checkAndSendMessage(jsonMessage []byte, r *http.Request) error {
 		}
 	}
 
-	log.Debugf("Sending message with id %s", p.fileIDs[r.URL.Path])
-	if err := p.messenger.SendMessage(p.fileIDs[r.URL.Path], p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
+	log.Debugf("Sending message with id %s", fileID)
+	if err := p.messenger.SendMessage(fileID, p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
 
@@ -562,7 +571,7 @@ func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, token jwt.Token) error {
+func (p *Proxy) sendMessageOnOverwrite(fileID string, r *http.Request, rawFilepath string, token jwt.Token) error {
 	exist, err := p.checkFileExists(r.URL.Path)
 	if err != nil {
 		return err
@@ -583,7 +592,7 @@ func (p *Proxy) sendMessageOnOverwrite(r *http.Request, rawFilepath string, toke
 			return err
 		}
 
-		err = p.checkAndSendMessage(jsonMessage, r)
+		err = p.checkAndSendMessage(fileID, jsonMessage, r)
 		if err != nil {
 			return err
 		}
