@@ -192,6 +192,7 @@ func (w *worker) handleFunc(ctx context.Context, message amqp.Delivery) (err err
 			if err := os.RemoveAll(filepath.Join(w.conf.validationWorkDir, jobPreparationMessage.ValidationID)); err != nil {
 				log.Errorf("failed to remove validation directory after worker encountered an error due to: %v", err)
 			}
+
 			return database.UpdateAllValidationJobFilesOnError(ctx, jobPreparationMessage.ValidationID, &model.Message{
 				Level:   "error",
 				Time:    time.Now().Format(time.RFC3339),
