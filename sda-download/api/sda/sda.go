@@ -286,18 +286,19 @@ func Download(c *gin.Context) {
 
 		return
 	}
+	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
+	if err != nil {
+		log.Errorf("Byte range coordinates invalid! %v", err)
+		c.String(http.StatusBadRequest, "Range header byte coordinates invalid")
+
+		return
+	}
 
 	wholeFile := true //nolint:staticcheck
 	if start != 0 || end != 0 {
 		wholeFile = false
 	}
 
-	start, end, err = calculateCoords(start, end, c.GetHeader("Range"), fileDetails, c.Param("type"))
-	if err != nil {
-		log.Errorf("Byte range coordinates invalid! %v", err)
-
-		return
-	}
 	if c.Param("type") != "encrypted" {
 		// set the content-length for unencrypted files
 		if start == 0 && end == 0 {
