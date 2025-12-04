@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"math/rand/v2"
 	"regexp"
 	"time"
 
@@ -1550,7 +1549,7 @@ func (suite *DatabaseTests) TestSetSubmissionFileSize() {
 		suite.FailNow("failed to register file", err)
 	}
 
-	fileSize := rand.Int64N(100)
+	fileSize := int64(time.Now().Nanosecond())
 	err = db.setSubmissionFileSize(fileID, fileSize)
 	if err != nil {
 		suite.FailNow("failed to set submission file size", err)
