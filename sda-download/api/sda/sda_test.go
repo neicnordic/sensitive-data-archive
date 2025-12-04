@@ -939,3 +939,389 @@ func GenerateTestC4ghKey(t *testing.T) (string, error) {
 
 	return privateKeyFile.Name(), nil
 }
+
+func TestDownload_InvalidRange_NoEnd(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: "/mocks3/somepath",
+			ArchiveSize: 0,
+			Header:      []byte("mock header"),
+		}
+
+		return fileDetails, nil
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=0-"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+	assert.Contains(t, string(body), "Range header byte coordinates invalid")
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+}
+func TestDownload_InvalidRange_NoStart(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: "/mocks3/somepath",
+			ArchiveSize: 0,
+			Header:      []byte("mock header"),
+		}
+
+		return fileDetails, nil
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=-100"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+	assert.Contains(t, string(body), "Range header byte coordinates invalid")
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+}
+func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: "/mocks3/somepath",
+			ArchiveSize: 0,
+			Header:      []byte("mock header"),
+		}
+
+		return fileDetails, nil
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=-0-1"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+	assert.Contains(t, string(body), "Range header byte coordinates invalid")
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+}
+
+func TestDownload_Range_FromStartOfFile(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
+	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: "/mocks3/somepath",
+			ArchiveSize: 0,
+			Header:      []byte("mock header;"),
+		}
+
+		return fileDetails, nil
+	}
+
+	Backend = &mockBackend{
+		file: []byte("this is a mock file"),
+	}
+
+	// Fix to run fake GRPC server
+	faker := fakeGRPC{t: t}
+	server := httptest.NewUnstartedServer(&faker)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	// Figure out IP, port
+	serverdetails := strings.Split(server.Listener.Addr().String(), ":")
+
+	// Set up TLS for fake server
+	keyfile, err := os.CreateTemp("", "key")
+	assert.NoError(t, err, "Could not create temp file for key")
+	defer os.Remove(keyfile.Name())
+	privdata, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
+	assert.NoError(t, err, "Could not marshal private key")
+
+	privPEM := "-----BEGIN PRIVATE KEY-----\n" + base64.StdEncoding.EncodeToString(privdata) + "\n-----END PRIVATE KEY-----\n"
+	_, err = keyfile.Write([]byte(privPEM))
+	assert.NoError(t, err, "Could not write private key")
+	_ = keyfile.Close()
+
+	certfile, err := os.CreateTemp("", "cert")
+	assert.NoError(t, err, "Could not create temp file for cert")
+	defer os.Remove(certfile.Name())
+	pubPEM := "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(server.Certificate().Raw) + "\n-----END CERTIFICATE-----\n"
+	_, err = certfile.Write([]byte(pubPEM))
+	assert.NoError(t, err, "Could not write public key")
+	_ = certfile.Close()
+
+	// Configure Reencrypt to use fake server
+	config.Config.Reencrypt.Host = serverdetails[0]
+	port, _ := strconv.ParseInt(serverdetails[1], 10, 32)
+	config.Config.Reencrypt.Port = int(port)
+	config.Config.Reencrypt.CACert = certfile.Name()
+	config.Config.Reencrypt.ClientCert = certfile.Name()
+	config.Config.Reencrypt.ClientKey = keyfile.Name()
+	config.Config.Reencrypt.Timeout = 10
+
+	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
+	viper.Set("c4gh.transientPassphrase", "password")
+	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()
+	assert.NoError(t, err, "Could not load c4gh keys")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=0-15"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "mock header;this", string(body))
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
+	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
+	viper.Set("c4gh.transientKeyPath", "")
+	viper.Set("c4gh.transientPassphrase", "")
+	Backend = nil
+}
+
+func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
+	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath: "/mocks3/somepath",
+			ArchiveSize: 0,
+			Header:      []byte("mock header;"),
+		}
+
+		return fileDetails, nil
+	}
+
+	Backend = &mockBackend{
+		file: []byte("this is a mock file"),
+	}
+
+	// Fix to run fake GRPC server
+	faker := fakeGRPC{t: t}
+	server := httptest.NewUnstartedServer(&faker)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	// Figure out IP, port
+	serverdetails := strings.Split(server.Listener.Addr().String(), ":")
+
+	// Set up TLS for fake server
+	keyfile, err := os.CreateTemp("", "key")
+	assert.NoError(t, err, "Could not create temp file for key")
+	defer os.Remove(keyfile.Name())
+	privdata, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
+	assert.NoError(t, err, "Could not marshal private key")
+
+	privPEM := "-----BEGIN PRIVATE KEY-----\n" + base64.StdEncoding.EncodeToString(privdata) + "\n-----END PRIVATE KEY-----\n"
+	_, err = keyfile.Write([]byte(privPEM))
+	assert.NoError(t, err, "Could not write private key")
+	_ = keyfile.Close()
+
+	certfile, err := os.CreateTemp("", "cert")
+	assert.NoError(t, err, "Could not create temp file for cert")
+	defer os.Remove(certfile.Name())
+	pubPEM := "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(server.Certificate().Raw) + "\n-----END CERTIFICATE-----\n"
+	_, err = certfile.Write([]byte(pubPEM))
+	assert.NoError(t, err, "Could not write public key")
+	_ = certfile.Close()
+
+	// Configure Reencrypt to use fake server
+	config.Config.Reencrypt.Host = serverdetails[0]
+	port, _ := strconv.ParseInt(serverdetails[1], 10, 32)
+	config.Config.Reencrypt.Port = int(port)
+	config.Config.Reencrypt.CACert = certfile.Name()
+	config.Config.Reencrypt.ClientCert = certfile.Name()
+	config.Config.Reencrypt.ClientKey = keyfile.Name()
+	config.Config.Reencrypt.Timeout = 10
+
+	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
+	viper.Set("c4gh.transientPassphrase", "password")
+	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()
+	assert.NoError(t, err, "Could not load c4gh keys")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=12-25"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "this is a mock", string(body))
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
+	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
+	viper.Set("c4gh.transientKeyPath", "")
+	viper.Set("c4gh.transientPassphrase", "")
+	Backend = nil
+}
+
+type mockBackend struct {
+	file []byte
+}
+
+func (m *mockBackend) GetFileSize(_ string) (int64, error) {
+	return int64(len(m.file)), nil
+}
+
+func (m *mockBackend) NewFileReader(_ string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(m.file)), nil
+}
+
+type mockReedSeekCloser struct {
+	io.ReadSeeker
+	io.Closer
+}
+
+func (m *mockBackend) NewFileReadSeeker(_ string) (io.ReadSeekCloser, error) {
+	return mockReedSeekCloser{
+		ReadSeeker: io.ReadSeeker(bytes.NewReader(m.file)),
+	}, nil
+}
+
+func (m *mockBackend) NewFileWriter(_ string) (io.WriteCloser, error) {
+	panic("not expected to be used by unit tests")
+}
