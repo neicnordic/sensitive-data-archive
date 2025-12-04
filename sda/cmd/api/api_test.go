@@ -739,12 +739,12 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {
 	for i := 1; i <= 2; i++ {
-		fileID, err := Conf.API.DB.RegisterFile(fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
+		fileID, err := Conf.API.DB.RegisterFile(nil, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
-		err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", fileID, "dummy", "{}", "{}")
+		err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", "dummy", "{}", "{}")
 		if err != nil {
 			s.FailNow("failed to update status of file in database")
 		}
