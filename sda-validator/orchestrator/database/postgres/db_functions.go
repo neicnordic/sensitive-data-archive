@@ -188,7 +188,6 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 }
 
 func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, params *model.UpdateFileValidationJobParameters) error {
-
 	fileMessages := sql.NullString{}
 	if len(params.FileMessages) > 0 {
 		fileMessagesJSON, err := json.Marshal(params.FileMessages)
@@ -257,8 +256,7 @@ func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 	return nil
 }
 
-func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sql.Stmt, validationId string, validatorMessage *model.Message) error {
-
+func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sql.Stmt, validationID string, validatorMessage *model.Message) error {
 	validatorMessages := &sql.NullString{}
 	if validatorMessage != nil {
 		validatorMessagesJSON, err := json.Marshal([]*model.Message{validatorMessage})
@@ -273,7 +271,7 @@ func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sq
 	if _, err := stmt.ExecContext(ctx,
 		time.Now().Format(time.RFC3339),
 		validatorMessages,
-		validationId); err != nil {
+		validationID); err != nil {
 		return err
 	}
 

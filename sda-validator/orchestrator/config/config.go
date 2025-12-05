@@ -176,9 +176,9 @@ func JobQueue() string {
 func ValidationFileSizeLimit() int64 {
 	return validationFileSizeLimit
 }
-func ApiServerCert() string {
+func APIServerCert() string {
 	return apiServerCert
 }
-func ApiServerKey() string {
+func APIServerKey() string {
 	return apiServerKey
 }

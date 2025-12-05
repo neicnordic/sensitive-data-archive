@@ -67,8 +67,8 @@ func AllValidationJobsDone(ctx context.Context, validationID string) (bool, erro
 }
 
 // UpdateAllValidationJobFilesOnError updates the result of all validation_file_jobs to error by the validation id, with the validator message to provide details
-func UpdateAllValidationJobFilesOnError(ctx context.Context, validationId string, validatorMessage *model.Message) error {
-	return db.UpdateAllValidationJobFilesOnError(ctx, validationId, validatorMessage)
+func UpdateAllValidationJobFilesOnError(ctx context.Context, validationID string, validatorMessage *model.Message) error {
+	return db.UpdateAllValidationJobFilesOnError(ctx, validationID, validatorMessage)
 }
 
 // Close the database connection

@@ -71,7 +71,6 @@ func (api *validatorAPIImpl) ResultGet(c *gin.Context) {
 }
 
 func (api *validatorAPIImpl) result(c *gin.Context, validationID string, userID *string) {
-
 	if _, err := uuid.Parse(validationID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid validation id: %s", validationID)})
 
@@ -89,6 +88,7 @@ func (api *validatorAPIImpl) result(c *gin.Context, validationID string, userID 
 
 	if validationResult == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No validation with id: %s found for the given user", validationID)})
+
 		return
 	}
 

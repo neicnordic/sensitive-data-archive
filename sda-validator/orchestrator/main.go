@@ -157,9 +157,9 @@ func main() {
 	go func() {
 		var err error
 		switch {
-		case config.ApiServerCert() != "" && config.ApiServerKey() != "":
+		case config.APIServerCert() != "" && config.APIServerKey() != "":
 			log.Infof("server listening at: https://%s", srv.Addr)
-			err = srv.ListenAndServeTLS(config.ApiServerCert(), config.ApiServerKey())
+			err = srv.ListenAndServeTLS(config.APIServerCert(), config.APIServerKey())
 		default:
 			log.Infof("server listening at: http://%s", srv.Addr)
 			err = srv.ListenAndServe()
