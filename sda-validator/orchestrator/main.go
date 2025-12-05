@@ -33,6 +33,7 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	gin.SetMode(gin.ReleaseMode)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -135,45 +136,57 @@ func main() {
 		TLSConfig:         cfg,
 		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 		ReadHeaderTimeout: 20 * time.Second,
-		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      -1,
+		ReadTimeout:       1 * time.Minute,
+		WriteTimeout:      1 * time.Minute,
 	}
 
 	go func() {
 		if err := <-jobworkers.Monitor(); err != nil {
 			log.Errorf("job workers failed: %v", err)
-			sigc <- syscall.SIGTERM
+			cancel()
 		}
 	}()
 
 	go func() {
 		if err := <-jobpreparationworkers.Monitor(); err != nil {
 			log.Errorf("job preparation workers failed: %v", err)
-			sigc <- syscall.SIGTERM
+			cancel()
 		}
 	}()
 
 	go func() {
-		log.Infof("server listening at: %s", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		switch {
+		case config.ApiServerCert() != "" && config.ApiServerKey() != "":
+			log.Infof("server listening at: https://%s", srv.Addr)
+			err = srv.ListenAndServeTLS(config.ApiServerCert(), config.ApiServerKey())
+		default:
+			log.Infof("server listening at: http://%s", srv.Addr)
+			err = srv.ListenAndServe()
+		}
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Errorf("Error starting server, due to: %v", err)
-			sigc <- syscall.SIGTERM
+			cancel()
 		}
 	}()
 
 	go func() {
 		if err := <-amqpBroker.Monitor(); err != nil {
 			log.Errorf("broker connection error: %v", err)
-			sigc <- syscall.SIGTERM
+			cancel()
 		}
 	}()
 
-	<-sigc
+	select {
+	case <-sigc:
+	case <-ctx.Done():
+	}
 
 	log.Info("gracefully shutting down")
 
 	log.Infof("shutting down HTTP server")
-	serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
 	if err := srv.Shutdown(serverShutdownCtx); err != nil {
 		log.Errorf("failed to gracefully shutdown the server due to: %v", err)
 	}
@@ -194,6 +207,4 @@ func main() {
 	if err := database.Close(); err != nil {
 		log.Errorf("failed to gracefully database connection")
 	}
-
-	os.Exit(1)
 }

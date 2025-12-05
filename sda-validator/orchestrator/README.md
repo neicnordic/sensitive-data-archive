@@ -8,7 +8,7 @@ See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the Validator
 
 ## High level
 
-The following sections aims to describe to sda-validator-orchestrator on a high level
+The following sections aims to describe the sda-validator-orchestrator on a high level
 
 ### Diagram
 
@@ -27,10 +27,11 @@ request a set of files to be validated with a set of validators, and to fetch th
 
 The HTTP server will authenticate requests, expecting a Bearer token in the "Authorization" header, if not provided, not
 valid, or not signed by any key configured by either
-the [--jwt.pub-key-path or --jwt.pub-key-url configurations](#configuration) 401 (unauthorized) will be returned.
+the [--jwt.pub-key-path or --jwt.pub-key-url configurations](#configuration) an 401 (Unauthorized) code will be
+returned.
 The HTTP server also enforces RBAC (role based access control) towards the available APIs on
 the [ValidatorOrchestratorAPI](swagger_v1.yml), the RBAC policy is expected to be provided by
-the [rbac.policy-file-path configuration].
+the [rbac.policy-file-path configuration](#configuration).
 example policy
 
 ```json
@@ -120,7 +121,7 @@ the [--job-queue configuration](#configuration).
 
 #### Job worker
 
-The main responsibly of a job worker is to invocate the 3rd Party Validators(Apptainer) with the required inputs and to
+The main responsibly of a job worker is to invoke the 3rd Party Validators(Apptainer) with the required inputs and to
 read the result and store it in the [file_validation_job table](#postgres) postgres database.
 
 After each job is completed it checks if all jobs in a validation are finished and cleans up the files from the file
@@ -144,7 +145,7 @@ the [--broker.* configurations](#configuration)..
 
 Each job preparation and job worker will start consuming messages from the configured queues based
 on [--job-preparation-queue configuration](#configuration) and [--job-queue configuration](#configuration).
-It will publish messages to the exchange configured by the [--broker.exchange configuration] with routing keys based on
+It will publish messages to the exchange configured by the [--broker.exchange configuration]](#configuration) with routing keys based on
 the [--job-preparation-queue configuration](#configuration) and [--job-queue configuration](#configuration).
 
 ### File system
@@ -164,8 +165,10 @@ configuration.
 
 | Name:                          | Env variable:                | Type:   | Usage:                                                                                                                                                                                       | Default Value:             |         
 |--------------------------------|------------------------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|                               
-| --log.level                    | LOG_LEVEL                    | string  | Set the log level, supported levels: PANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE                                                                                                           | 0                          |        
-| --api-port                     | API_PORT                     | int     | Port to host the ValidationAPI server at                                                                                                                                                     | 0                          |        
+| --log.level                    | LOG_LEVEL                    | string  | Set the log level, supported levels: PANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE                                                                                                           | INFO                       |        
+| --api.port                     | API_PORT                     | int     | Port to host the ValidationAPI server at                                                                                                                                                     | 8080                       |        
+| --api.server-cert              | API_SERVER_CERT              | string  | Path to the server cert file to be used when hosting the server with TLS, required if api.server-key set                                                                                     |                            |                             
+| --api.server-key               | API_SERVER_KEY               | string  | Path to the server key file to be used when hosting the server with TLS, required if api.server-cert set                                                                                     |                            |           
 | --broker.ca-cert               | BROKER_CA_CERT               | string  | The broker ca cert                                                                                                                                                                           |                            |        
 | --broker.client-cert           | BROKER_CLIENT_CERT           | string  | The cert the client will use in communication with the broker                                                                                                                                |                            |        
 | --broker.client-key            | BROKER_CLIENT_KEY            | string  | The key for the client cert the client will use in communication with the broker                                                                                                             |                            |        
@@ -240,26 +243,20 @@ sda-validator-orchestrator is more resilient for restarts, etc, and for scaling.
 [Apptainer](https://apptainer.org/) is downloaded into the final image from a precompiled debian 13 binary, which then
 utilises the [apptainer.conf](apptainer.conf) to override the following default configration:
 
-- allow setuid = yes (default: no)
+- allow setuid = no (default: yes)
     - Reason: Only allow apptainer to run in unprivileged user namespaces.
 - config resolv_conf = no (default: yes)
     - Reason: Apptainer should not have access to internet, so no reason to config resolv.conf.
+
+And to enforce a strict security posture by limiting the container's access solely to essential validation directories, effectively isolating it from the host environment and other user resources. The following has been changed
 - mount proc = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
 - mount sys = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
 - mount dev = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
 - mount home = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
 - mount tmp = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
+- mount slave = no (default: yes)
 - enable fusemount = no (default: yes)
     - Reason: Fuse mounting is not needed
-- mount slave = no (default: yes)
-    - Reason: No additional mounting besides files to be validated.
-- Remove bind paths:
+- Removal of following bind paths:
     - bind path = /etc/localtime
-        - Reason: No additional mounting besides files to be validated.
     - bind path = /etc/hosts
-        - Reason: Apptainer should not have access to internet, so no reason to mount /etc/hosts

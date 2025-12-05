@@ -11,7 +11,10 @@ import (
 )
 
 var (
-	apiPort           int
+	apiPort       int
+	apiServerCert string
+	apiServerKey  string
+
 	validatorPaths    []string
 	sdaAPIURL         string
 	sdaAPIToken       string
@@ -40,13 +43,28 @@ func init() {
 				}
 			},
 		}, &config.Flag{
-			Name: "api-port",
+			Name: "api.port",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Int(flagName, 0, "Port to host the ValidationAPI server at")
+				flagSet.Int(flagName, 8080, "Port to host the ValidationAPI server at")
 			},
-			Required: true,
 			AssignFunc: func(flagName string) {
 				apiPort = viper.GetInt(flagName)
+			},
+		}, &config.Flag{
+			Name: "api.server-cert",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to the server cert file to be used when hosting the server with TLS, required if api.server-key set")
+			},
+			AssignFunc: func(flagName string) {
+				apiPort = viper.GetInt(flagName)
+			},
+		}, &config.Flag{
+			Name: "api.server-key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to the server key file to be used when hosting the server with TLS, required if api.server-cert set")
+			},
+			AssignFunc: func(flagName string) {
+				apiServerCert = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "validator-paths",
@@ -157,4 +175,10 @@ func JobQueue() string {
 }
 func ValidationFileSizeLimit() int64 {
 	return validationFileSizeLimit
+}
+func ApiServerCert() string {
+	return apiServerCert
+}
+func ApiServerKey() string {
+	return apiServerKey
 }

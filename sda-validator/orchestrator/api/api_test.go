@@ -395,7 +395,7 @@ func (ts *ValidatorAPITestSuite) TestValidatePost() {
 	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-2", "testFile2", int64(1024), "test_user", "test_user", mock.Anything)
 	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-5", "test_dir/testFile5", int64(1024), "test_user", "test_user", mock.Anything)
 	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Commit", 1)
-	ts.mockDatabase.AssertNotCalled(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
 
 	ts.mockBroker.AssertCalled(ts.T(), "PublishMessage", "job-preparation-queue", mock.Anything)
 }
@@ -434,7 +434,7 @@ func (ts *ValidatorAPITestSuite) TestAdminValidatePost() {
 	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-2", "testFile2", int64(1024), "different_user", "test_user", mock.Anything)
 	ts.mockDatabase.AssertCalled(ts.T(), "InsertFileValidationJob", mock.Anything, "mock-validator", "test-file-id-5", "test_dir/testFile5", int64(1024), "different_user", "test_user", mock.Anything)
 	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Commit", 1)
-	ts.mockDatabase.AssertNotCalled(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
+	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "Rollback", 1) // We expect rollback to have been called given its deferred to ensure tx is closed
 
 	ts.mockBroker.AssertCalled(ts.T(), "PublishMessage", "job-preparation-queue", mock.Anything)
 }
@@ -516,7 +516,7 @@ func (ts *ValidatorAPITestSuite) TestResultGet_NoTokenInContext() {
 			broker:                        ts.mockBroker,
 		}})
 
-	ts.ginEngine.Use(func(c *gin.Context) {
+	ginEngine.Use(func(c *gin.Context) {
 		c.Set("token", nil)
 	})
 

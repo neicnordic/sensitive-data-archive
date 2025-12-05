@@ -24,10 +24,10 @@ func (ts *ValidatorsTestSuite) SetupTest() {
 	commandExecutor = ts.mockCommandExecutor
 	ts.tempDir = ts.T().TempDir()
 
-	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-1.sif"), []byte("test validator"), 504); err != nil {
+	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-1.sif"), []byte("test validator"), 0600); err != nil {
 		ts.FailNow("failed to write file", err.Error())
 	}
-	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-2.sif"), []byte("test validator"), 504); err != nil {
+	if err := os.WriteFile(filepath.Join(ts.tempDir, "mock-validator-2.sif"), []byte("test validator"), 0600); err != nil {
 		ts.FailNow("failed to write file", err.Error())
 	}
 }
