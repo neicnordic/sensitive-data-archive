@@ -1,7 +1,7 @@
 # Sensitive Data Archive - validator-orchestrator
 
 The sda-validator-orchestrator is responsible for integrating with 3rd party apptainer validators, and for hosting an
-API which allows the callers to see the available validators, to invocate validation of a set of file paths
+API which allows the callers to see the available validators, to invoke validation of a set of file paths
 belonging to a user, and to read the result for a specific validation request.
 
 See [swagger_v1.yml](swagger_v1.yml) for the OpenAPI definition of the ValidatorOrchestratorAPI.
