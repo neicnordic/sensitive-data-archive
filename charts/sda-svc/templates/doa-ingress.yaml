@@ -14,19 +14,17 @@ metadata:
 {{ toYaml .Values.global.ingress.labels | indent 4 }}
 {{- end }}
   annotations:
-    {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
-    nginx.ingress.kubernetes.io/rewrite-target: "/"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    nginx.ingress.kubernetes.io/affinity: "cookie"
-    {{- end }}
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+{{- if .Values.doa.ingressAnnotations }}
+{{ toYaml .Values.doa.ingressAnnotations | indent 4 }}
+{{- end }}
     {{- if .Values.global.ingress.clusterIssuer }}
     cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
     {{- else if .Values.global.ingress.issuer }}
     cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
     {{- end }}
-{{- if .Values.global.ingress.annotations }}
-{{ toYaml .Values.global.ingress.annotations | indent 4 }}
-{{- end }}
 spec:
 {{- if .Values.global.ingress.ingressClassName }}
   ingressClassName: {{ .Values.global.ingress.ingressClassName }}
