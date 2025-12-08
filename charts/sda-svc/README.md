@@ -54,8 +54,8 @@ Parameter | Description | Default
 `global.ingress.secretNames.s3Inbox` | The name of a manually created secret holding the certificates for the ingrewss enpoint. | `""`
 `global.ingress.clusterIssuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured clusterIssuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
 `global.ingress.issuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured issuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
-`global.ingress.annotations` | extra annotations for the ingress objects | `""`
-`global.ingress.ingressClassName` | Class of ingress controller to use | `nginx`
+`global.ingress.annotations` | extra annotations shared by all ingress definitions | `""`
+`global.ingress.ingressClassName` | Class of ingress controller to use | `""`
 `global.log.format` | Log format for all services, JSON or TEXT. | `json`
 `global.log.level` | Log level for all services. | `info`
 `global.networkPolicy.create` | Use network isolation. | `false`
@@ -244,6 +244,7 @@ Parameter | Description | Default
 --------- | ----------- | -------
 `api.replicaCount` | Desired number of replicas | `2`
 `api.annotations` | Specific annotation for the auth pod | `{}`
+`api.ingressAnnotations | Ingress annotations specific to the api service | `{}`
 `api.livenessProbe` | Liveness definition for the api pod. |`{}`
 `api.readinessProbe` | Rediness definition for the api pod. |`{}`
 `api.resources.requests.memory` | Memory request for container. |`128Mi`
@@ -253,6 +254,7 @@ Parameter | Description | Default
 `api.tls.secretName` | Secret holding the application TLS certificates |``
 `auth.replicaCount` | desired number of replicas | `2`
 `auth.annotations` | Specific annotation for the auth pod | `{}`
+`auth.ingressAnnotations | Ingress annotations specific to the auth service | `{}`
 `auth.livenessProbe` | Liveness definition for the auth pod. |`{}`
 `auth.readinessProbe` | Rediness definition for the auth pod. |`{}`
 `auth.resources.requests.memory` | Memory request for container. |`128Mi`
@@ -262,6 +264,7 @@ Parameter | Description | Default
 `doa.replicaCount` | desired number of replicas | `2`
 `doa.keystorePass` | keystore password | `changeit`
 `doa.annotations` | Specific annotation for the doa pod | `{}`
+`doa.ingressAnnotations | Ingress annotations specific to the doa service | `{}`
 `doa.livenessProbe` | Liveness definition for the doa pod. |`{}`
 `doa.readinessProbe` | Rediness definition for the doa pod. |`{}`
 `doa.resources.requests.memory` | Memory request for dataedge container. |`128Mi`
@@ -271,6 +274,7 @@ Parameter | Description | Default
 `download.replicaCount` | desired number of replicas | `2`
 `download.keystorePass` | keystore password | `changeit`
 `download.annotations` | Specific annotation for the dataedge pod | `{}`
+`download.ingressAnnotations | Ingress annotations specific to the download service | `{}`
 `download.livenessProbe` | Liveness definition for the download pod. |`{}`
 `download.readinessProbe` | Rediness definition for the download pod. |`{}`
 `download.resources.requests.memory` | Memory request for dataedge container. |`256Mi`
@@ -296,6 +300,7 @@ Parameter | Description | Default
 `intercept.resources.limits.cpu` | CPU limit for intercept container. |`2000m`
 `s3Inbox.replicaCount`| desired number of S3inbox containers | `2`
 `s3Inbox.annotations` | Specific annotation for the S3inbox pod | `{}`
+`s3Inbox.ingressAnnotations | Ingress annotations specific to the s3Inbox service | `{}`
 `s3Inbox.livenessProbe` | Liveness definition for the s3Inbox pod. |`{}`
 `s3Inbox.readinessProbe` | Rediness definition for the S3inbox pod. |`{}`
 `s3Inbox.resources.requests.memory` | Memory request for s3Inbox container. |`128Mi`
@@ -319,13 +324,14 @@ Parameter | Description | Default
 `sync.resources.requests.cpu` | CPU request for sync container. |`100m`
 `sync.resources.limits.memory` | Memory limit for sync container. |`512Mi`
 `sync.resources.limits.cpu` | CPU limit for sync container. |`500m`
-`syncAPI.replicaCount`| desired number of syncAPI containers | `1`
-`syncAPI.annotations` | Specific annotation for the syncAPI pod | `{}`
-`syncAPI.readinessProbe` | Rediness definition for the syncAPI pod. |`{}`
-`syncAPI.resources.requests.memory` | Memory request for syncAPI container. |`64Mi`
-`syncAPI.resources.requests.cpu` | CPU request for syncAPI container. |`100m`
-`syncAPI.resources.limits.memory` | Memory limit for syncAPI container. |`256Mi`
-`syncAPI.resources.limits.cpu` | CPU limit for syncAPI container. |`500m`
+`syncapi.replicaCount`| desired number of syncAPI containers | `1`
+`syncapi.annotations` | Specific annotation for the syncAPI pod | `{}`
+`syncapi.ingressAnnotations | Ingress annotations specific to the syncapi service | `{}`
+`syncapi.readinessProbe` | Rediness definition for the syncAPI pod. |`{}`
+`syncapi.resources.requests.memory` | Memory request for syncAPI container. |`64Mi`
+`syncapi.resources.requests.cpu` | CPU request for syncAPI container. |`100m`
+`syncapi.resources.limits.memory` | Memory limit for syncAPI container. |`256Mi`
+`syncapi.resources.limits.cpu` | CPU limit for syncAPI container. |`500m`
 `verify.replicaCount`| desired number of verify containers | `1`
 `verify.annotations` | Specific annotation for the verify pod | `{}`
 `verify.resources.requests.memory` | Memory request for verify container. |`128Mi`

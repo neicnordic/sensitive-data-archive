@@ -32,7 +32,7 @@ global:
 
   ingress:
     deploy: true
-    ingressClassName: "nginx"
+    ingressClassName: ""
     hostName:
       api: ""
       auth: ""
@@ -51,11 +51,8 @@ global:
 # issuer requires a configured cert-manager
     issuer: ""
     clusterIssuer: ""
-    # extra annotations for the ingress
+    # @param global.ingress.annotations extra annotations shared by all ingress definitions
     annotations: {}
-    # |
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
 
   log:
     level: "info"
@@ -399,6 +396,9 @@ api:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param api.ingressAnnotations
+## Ingress annotations specific to the api service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -432,6 +432,9 @@ auth:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param auth.ingressAnnotations
+## Ingress annotations specific to the auth service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -462,6 +465,9 @@ doa:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param doa.ingressAnnotations
+## Ingress annotations specific to the doa service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -494,6 +500,9 @@ download:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param download.ingressAnnotations
+## Ingress annotations specific to the download service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -616,6 +625,9 @@ s3Inbox:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param s3Inbox.ingressAnnotations
+## Ingress annotations specific to the s3Inbox service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -689,6 +701,9 @@ syncapi:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param syncapi.ingressAnnotations
+## Ingress annotations specific to the syncapi service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
