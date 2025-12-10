@@ -48,11 +48,12 @@ type SyncData struct {
 }
 
 type SubmissionFileInfo struct {
-	AccessionID string `json:"accessionID,omitempty"`
-	FileID      string `json:"fileID"`
-	InboxPath   string `json:"inboxPath"`
-	Status      string `json:"fileStatus"`
-	CreateAt    string `json:"createAt"`
+	AccessionID        string `json:"accessionID,omitempty"`
+	FileID             string `json:"fileID"`
+	InboxPath          string `json:"inboxPath"`
+	Status             string `json:"fileStatus"`
+	SubmissionFileSize int64  `json:"submissionFileSize,omitempty"`
+	CreateAt           string `json:"createAt"`
 }
 
 type DatasetInfo struct {
