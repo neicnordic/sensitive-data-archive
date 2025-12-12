@@ -100,7 +100,7 @@ fi
 
 ## update values file with all credentials
 if [ "$2" == "federated" ]; then
-        yq -i '.global.schemaType = federated' "$values_file"
+        yq -i '.global.schemaType = "federated"' "$values_file"
 fi
 
 yq -i '
