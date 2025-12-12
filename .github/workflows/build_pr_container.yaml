@@ -343,7 +343,7 @@ jobs:
         run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}} ${{matrix.deployment}}
         shell: bash
       - name: debug
-        if: failure() && steps.deployMQ.outcome == 'failure'
+        if: always()
         run: |
           kubectl describe pod broker-sda-mq-0
           sleep 1
