@@ -18,6 +18,28 @@ BEGIN
     ALTER TABLE sda.file_event_log
     DROP CONSTRAINT file_event_log_file_id_fkey;
 
+    ALTER TABLE sda.checksums
+    DROP CONSTRAINT checksums_file_id_fkey;
+
+    ALTER TABLE sda.file_dataset
+    DROP CONSTRAINT file_dataset_file_id_fkey;
+
+     -- Update all checksums which have a file_event_log where file_id != correlation_id
+    UPDATE sda.checksums AS cs
+    SET file_id = fel.correlation_id
+        FROM sda.file_event_log AS fel
+    WHERE cs.file_id = fel.file_id
+      AND fel.file_id != fel.correlation_id
+      AND fel.correlation_id IS NOT NULL;
+
+    -- Update all file_datasets which have a file_event_log where file_id != correlation_id
+    UPDATE sda.file_dataset AS fd
+    SET file_id = fel.correlation_id
+        FROM sda.file_event_log AS fel
+    WHERE fd.file_id = fel.file_id
+      AND fel.file_id != fel.correlation_id
+      AND fel.correlation_id IS NOT NULL;
+
     -- Update all files which have a file_event_log where file_id != correlation_id
     UPDATE sda.files AS f
     SET id = fel.correlation_id
@@ -38,6 +60,16 @@ BEGIN
     ALTER TABLE sda.file_event_log
         ADD CONSTRAINT file_event_log_file_id_fkey FOREIGN KEY (file_id)
             REFERENCES sda.files(id);
+
+
+    ALTER TABLE sda.checksums
+        ADD CONSTRAINT checksums_file_id_fkey FOREIGN KEY (file_id)
+            REFERENCES sda.files(id);
+
+    ALTER TABLE sda.file_dataset
+        ADD CONSTRAINT file_dataset_file_id_fkey FOREIGN KEY (file_id)
+            REFERENCES sda.files(id);
+
 
 
     -- Update RegisterFile func
