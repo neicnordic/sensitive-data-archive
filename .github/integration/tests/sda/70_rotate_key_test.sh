@@ -130,6 +130,19 @@ curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$rotatekey_body" | jq
 
+# check that rotate key doesn't fail
+echo "waiting for rotatekey to complete"
+RETRY_TIMES=0
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/rotatekey/ | jq -r '.messages_ready')" -eq 0 ]; do
+    echo "waiting for rotatekey to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for rotatekey to complete"
+        exit 1
+    fi
+    sleep 2
+done
+
 # check DB for updated key hash in sda.files
 rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
 if [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where id='$fileID';" | grep -c "$rotatekeyHash")" -ne 1 ];
