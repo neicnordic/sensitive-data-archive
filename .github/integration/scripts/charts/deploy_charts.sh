@@ -50,7 +50,7 @@ if [ "$1" == "sda-mq" ]; then
         --wait
 
     if [ "$4" == "federated" ]; then
-        curl -kL -u "admin:$ADMINPASS" -X PUT "$PROTOCOL://broker.127.0.0.1.nip.io/api/queues/sda/from_cega"
+        curl --retry 100 -kL -u "admin:$ADMINPASS" -d '{"durable": true}' -H "Content-Type: application/json" -X PUT "$PROTOCOL://broker.127.0.0.1.nip.io/api/queues/sda/from_cega"
     fi
 fi
 
