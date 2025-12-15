@@ -12,38 +12,14 @@ BEGIN
     RAISE NOTICE 'Changes: %', changes;
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
-    -- Migrate data where files.id != file_event_log.correlation_id
-
-    -- First drop foreign key constraint so we can update values without constraint restriction
-    ALTER TABLE sda.file_event_log
-    DROP CONSTRAINT file_event_log_file_id_fkey;
-
-    -- Update all files which have a file_event_log where file_id != correlation_id
-    UPDATE sda.files AS f
-    SET id = fel.correlation_id
-        FROM sda.file_event_log AS fel
-    WHERE f.id = fel.file_id
-      AND fel.file_id != fel.correlation_id
-      AND fel.correlation_id IS NOT NULL;
-
-    -- Update all file_event_log where file_id != correlation_id
-    UPDATE sda.file_event_log AS f
-    SET file_id = fel.correlation_id
-        FROM sda.file_event_log AS fel
-    WHERE f.file_id = fel.file_id
-      AND fel.file_id != fel.correlation_id
-      AND fel.correlation_id IS NOT NULL;
-
-    -- Add back the foreign key constraint
-    ALTER TABLE sda.file_event_log
-        ADD CONSTRAINT file_event_log_file_id_fkey FOREIGN KEY (file_id)
-            REFERENCES sda.files(id);
-
+    -- Check that we have no file_event_log WHERE file_id != correlation_id before proceeding with migration
+    IF (SELECT COUNT(*) FROM sda.file_event_log WHERE file_id != correlation_id AND correlation_id IS NOT NULL) > 0 then
+        RAISE EXCEPTION 'Cannot proceed with migration since file_event_log rows exists where file_id != correlation_id';
+    END IF;
 
     -- Update RegisterFile func
     -- First drop it so we can create the updated version
     DROP FUNCTION IF EXISTS sda.register_file;
-
 
     -- Create updated function
     -- Function for registering files on upload
