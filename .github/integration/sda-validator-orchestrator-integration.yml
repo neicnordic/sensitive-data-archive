@@ -214,7 +214,6 @@ services:
     restart: always
     volumes:
       - validators:/validators
-      - ./sda/rbac.json:/rbac/policy.json
     ports:
       - "8082:8080"
       
