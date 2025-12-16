@@ -37,6 +37,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if db.Version < 21 {
+		log.Error("database schema v21 is required")
+		db.Close()
+		panic(err)
+	}
 
 	if conf.Backup.Type != "" && conf.Archive.Type != "" {
 		log.Debugln("initiating storage backends")

@@ -36,6 +36,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if db.Version < 21 {
+		log.Error("database schema v21 is required")
+		db.Close()
+		panic(err)
+	}
 	archive, err := storage.NewBackend(conf.Archive)
 	if err != nil {
 		log.Fatal(err)
