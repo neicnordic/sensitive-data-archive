@@ -3,23 +3,28 @@ package reader
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 
-	log "github.com/sirupsen/logrus"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 // NewFileReader returns an io.Reader instance
 func (reader *Reader) NewFileReader(_ context.Context, location, filePath string) (io.ReadCloser, error) {
 	if reader == nil {
-		return nil, ErrorNotInitialized
+		return nil, storageerrors.ErrorPosixReaderNotInitialized
 	}
 
-	file, err := os.Open(filepath.Join(location, filePath))
-	if err != nil {
-		log.Error(err)
+	fullFilePath := filepath.Join(location, filePath)
 
+	if _, err := os.Stat(fullFilePath); errors.Is(err, os.ErrNotExist) {
+		return nil, storageerrors.ErrorFileNotFoundInLocation
+	}
+
+	file, err := os.Open(fullFilePath)
+	if err != nil {
 		return nil, err
 	}
 

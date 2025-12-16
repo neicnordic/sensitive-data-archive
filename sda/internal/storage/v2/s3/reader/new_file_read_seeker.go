@@ -38,7 +38,7 @@ type s3SeekableReader struct {
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
 	if reader == nil {
-		return nil, ErrorNotInitialized
+		return nil, storageerrors.ErrorS3ReaderNotInitialized
 	}
 
 	endpoint, bucket, err := parseLocation(location)

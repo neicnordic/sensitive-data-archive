@@ -1,12 +1,11 @@
 package reader
 
 import (
-	"errors"
 	"fmt"
 	"os"
-)
 
-var ErrorNotInitialized = errors.New("posix reader has not been initialized")
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+)
 
 type Reader struct {
 	locations []string
@@ -32,7 +31,9 @@ func NewReader(backendName string) (*Reader, error) {
 		if !fileInfo.IsDir() {
 			return nil, fmt.Errorf("%s is not a directory", loc)
 		}
-
+	}
+	if len(backend.locations) == 0 {
+		return nil, storageerrors.ErrorNoValidLocations
 	}
 	return backend, nil
 }

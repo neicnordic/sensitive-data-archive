@@ -5,12 +5,13 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 // GetFileSize returns the size of a specific object
 func (reader *Reader) GetFileSize(ctx context.Context, location, filePath string) (int64, error) {
 	if reader == nil {
-		return 0, ErrorNotInitialized
+		return 0, storageerrors.ErrorS3ReaderNotInitialized
 	}
 
 	endpoint, bucket, err := parseLocation(location)

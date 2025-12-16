@@ -5,12 +5,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 // RemoveFile removes an object from a bucket
 func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string) error {
 	if writer == nil {
-		return ErrorNotInitialized
+		return storageerrors.ErrorS3WriterNotInitialized
 	}
 
 	ep, bucket, err := parseLocation(location)

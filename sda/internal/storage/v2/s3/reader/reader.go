@@ -15,11 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 
 	log "github.com/sirupsen/logrus"
 )
-
-var ErrorNotInitialized = errors.New("s3 reader has not been initialized")
 
 type Reader struct {
 	endpoints []*endpointConfig
@@ -48,6 +47,10 @@ func NewReader(ctx context.Context, backendName string) (*Reader, error) {
 			return nil, err
 		}
 	}
+	if len(backend.endpoints) == 0 {
+		return nil, storageerrors.ErrorNoValidLocations
+	}
+
 	return backend, nil
 }
 

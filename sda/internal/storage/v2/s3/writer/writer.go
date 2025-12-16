@@ -7,13 +7,10 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 
 	log "github.com/sirupsen/logrus"
 )
-
-var ErrorMaxBucketReached = errors.New("max bucket reached")
-var ErrorNoValidEndpoints = errors.New("no valid endpoints")
-var ErrorNotInitialized = errors.New("s3 writer has not been initialized")
 
 type Writer struct {
 	validEndpoints []*endpointConfig
@@ -39,7 +36,7 @@ func NewWriter(ctx context.Context, backendName string) (*Writer, error) {
 
 		bucket, err := e.findActiveBucket(ctx)
 		if err != nil {
-			if errors.Is(err, ErrorMaxBucketReached) {
+			if errors.Is(err, storageerrors.ErrorMaxBucketReached) {
 				log.Warningf("s3: %s has reach max bucket quota", e.Endpoint)
 				continue
 			}
@@ -57,7 +54,7 @@ func NewWriter(ctx context.Context, backendName string) (*Writer, error) {
 	}
 
 	if len(writer.validEndpoints) == 0 {
-		return nil, ErrorNoValidEndpoints
+		return nil, storageerrors.ErrorNoValidLocations
 	}
 	return writer, nil
 }
