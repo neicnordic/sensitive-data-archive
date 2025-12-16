@@ -5,11 +5,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 func (writer *Writer) WriteFile(_ context.Context, filePath string, fileContent io.Reader) (string, error) {
 	if writer == nil {
-		return "", ErrorNotInitialized
+		return "", storageerrors.ErrorPosixWriterNotInitialized
 	}
 
 	// TODO find valid location

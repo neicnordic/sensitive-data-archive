@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -160,7 +161,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context) (strin
 		}
 	}
 	if len(relevantBuckets) > endpointConf.MaxBuckets {
-		return "", ErrorMaxBucketReached
+		return "", storageerrors.ErrorMaxBucketReached
 	}
 
 	if len(relevantBuckets) == 0 {
