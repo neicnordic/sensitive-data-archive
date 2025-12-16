@@ -7,11 +7,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
 	if writer == nil {
-		return "", ErrorNotInitialized
+		return "", storageerrors.ErrorS3WriterNotInitialized
 	}
 
 	client, err := writer.activeEndpoint.conf.createClient(ctx)
