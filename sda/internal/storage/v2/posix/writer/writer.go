@@ -1,13 +1,11 @@
 package writer
 
 import (
-	"errors"
 	"fmt"
 	"os"
-)
 
-var ErrorNoValidLocations = errors.New("no valid locations")
-var ErrorNotInitialized = errors.New("posix writer has not been initialized")
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+)
 
 type Writer struct {
 	locations []string
@@ -37,7 +35,7 @@ func NewWriter(backendName string) (*Writer, error) {
 	}
 
 	if len(backend.locations) == 0 {
-		return nil, ErrorNoValidLocations
+		return nil, storageerrors.ErrorNoValidLocations
 	}
 
 	return backend, nil
