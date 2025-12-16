@@ -56,7 +56,7 @@ func init() {
 				flagSet.String(flagName, "", "Path to the server cert file to be used when hosting the server with TLS, required if api.server-key set")
 			},
 			AssignFunc: func(flagName string) {
-				apiPort = viper.GetInt(flagName)
+				apiServerCert = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "api.server-key",
@@ -64,7 +64,7 @@ func init() {
 				flagSet.String(flagName, "", "Path to the server key file to be used when hosting the server with TLS, required if api.server-cert set")
 			},
 			AssignFunc: func(flagName string) {
-				apiServerCert = viper.GetString(flagName)
+				apiServerKey = viper.GetString(flagName)
 			},
 		}, &config.Flag{
 			Name: "health-port",
