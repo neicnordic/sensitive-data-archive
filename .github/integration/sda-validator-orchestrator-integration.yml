@@ -124,8 +124,8 @@ services:
       - "-c"
       - |
         chmod 777 -R /validators/;
-        wget -O /validators/100-200_word_validator.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/100-200_word_validator.sif;
-        wget -O /validators/always_success.sif https://raw.githubusercontent.com/neicnordic/sensitive-data-archive/refs/heads/feature/validator-orchestrator/sda-validator/apptainer-example/always_success.sif;
+        wget -O /validators/100-200_word_validator.sif https://github.com/neicnordic/sensitive-data-archive/raw/18059f008da61d41ee54758b93f761c3ea6d318c/sda-validator/apptainer-example/100-200_word_validator.sif
+        wget -O /validators/always_success.sif https://github.com/neicnordic/sensitive-data-archive/raw/18059f008da61d41ee54758b93f761c3ea6d318c/sda-validator/apptainer-example/always_success.sif;
         mkdir /validators/config
         cp /config.yaml /validators/config/config.yaml;
         echo "sda-api-token: "$(cat /shared/token) >> /validators/config/config.yaml;
