@@ -579,7 +579,7 @@ reencrypt:
     periodSeconds: 10
     timeoutSeconds: 2
     grpc:
-      port: 50443
+      port: 50444
       service: "reencrypt.Reencrypt"
   resources:
     requests:

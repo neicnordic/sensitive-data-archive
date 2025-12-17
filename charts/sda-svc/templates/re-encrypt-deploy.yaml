@@ -57,7 +57,7 @@ spec:
           - name: grpc
             containerPort: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
           - name: grpchealth
-            containerPort: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
+            containerPort: {{add ( ternary 50444 50052 ( .Values.global.tls.enabled ) ) 1 }}
         readinessProbe:
 {{ toYaml .Values.reencrypt.readinessProbe | trim | indent 10 }}
         resources:
