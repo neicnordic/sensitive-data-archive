@@ -347,3 +347,5 @@ Parameter | Description | Default
 `jobs.image` | Container image used for running the DB migration jobs | `postgres:15.4-alpine`
 `jobs.setKeyHash` | Populate the key_hash table after migration from V1 | `false`
 `jobs.upgradeFromV1` | Upgrade database schema from a version 1 release. | `false`
+`jobs.removeUserName` | remove username from file path. | `false`
+`jobs.removeCorrID` | remove correlation ID column from file event log table. | `false`
