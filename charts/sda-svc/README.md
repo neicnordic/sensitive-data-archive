@@ -45,10 +45,10 @@ Parameter | Description | Default
 `global.confFilePath` | This path will be a subpath to the secretsPath | `""`
 `global.deploymentType` | Deployment can be split into `external` and `internal` components, available options are `all`, `external` and `internal`. | `all`
 `global.schemaType` | Standalone version requires a custom JOSN schema, available options are `federated` or `isolated`, unset defaults to federated. | `""`
-`global.ingress.deploy` |  | `false`
-`global.ingress.hostName.auth` |  | `""`
-`global.ingress.hostName.doa` |  | `""`
-`global.ingress.hostName.s3Inbox` |  | `""`
+`global.ingress.deploy` | | `false`
+`global.ingress.hostName.auth` | | `""`
+`global.ingress.hostName.doa` | | `""`
+`global.ingress.hostName.s3Inbox` | | `""`
 `global.ingress.secretNames.auth` | The name of a manually created secret holding the certificates for the ingrewss enpoint. | `""`
 `global.ingress.secretNames.doa` | The name of a manually created secret holding the certificates for the ingrewss enpoint. | `""`
 `global.ingress.secretNames.s3Inbox` | The name of a manually created secret holding the certificates for the ingrewss enpoint. | `""`
@@ -208,9 +208,9 @@ Parameter | Description | Default
 `credentials.auth.dbPassword` | Database password for auth | `""`
 `credentials.api.mqPassword` | Broker password for api | `""`
 `credentials.doa.dbUser` | Database user for doa | `""`
-`credentials.doa.dbPassword` | Database password for doa| `""`
+`credentials.doa.dbPassword` | Database password for doa | `""`
 `credentials.download.dbUser` | Database user for download | `""`
-`credentials.download.dbPassword` | Database password for download| `""`
+`credentials.download.dbPassword` | Database password for download | `""`
 `credentials.finalize.dbUser` | Database user for finalize | `""`
 `credentials.finalize.dbPassword` | Database password for finalize | `""`
 `credentials.finalize.mqUser` | Broker user for finalize | `""`
@@ -219,9 +219,9 @@ Parameter | Description | Default
 `credentials.inbox.mqPassword` | Broker password for inbox | `""`
 `credentials.ingest.dbUser` | Database user for ingest | `""`
 `credentials.ingest.dbPassword` | Database password for ingest | `""`
-`credentials.ingest.mqUser` | Broker user for ingest  | `""`
+`credentials.ingest.mqUser` | Broker user for ingest | `""`
 `credentials.ingest.mqPassword` | Broker password for ingest | `""`
-`credentials.intercept.mqUser` | Broker user for intercept  | `""`
+`credentials.intercept.mqUser` | Broker user for intercept | `""`
 `credentials.intercept.mqPassword` | Broker password for intercept | `""`
 `credentials.sync.dbUser` | Database user for sync | `""`
 `credentials.sync.dbPassword` | Database password for sync | `""`
@@ -294,20 +294,20 @@ Parameter | Description | Default
 `ingest.resources.limits.cpu` | CPU limit for ingest container. |`2000m`
 `intercept.replicaCount` | desired number of intercept workers | `1`
 `intercept.annotations` | Specific annotation for the intercept pod | `{}`
-`intercept.resources.requests.memory` | Memory request for intercept container. |`32Mi`
-`intercept.resources.requests.cpu` | CPU request for intercept container. |`100m`
-`intercept.resources.limits.memory` | Memory limit for intercept container. |`128Mi`
-`intercept.resources.limits.cpu` | CPU limit for intercept container. |`2000m`
-`s3Inbox.replicaCount`| desired number of S3inbox containers | `2`
+`intercept.resources.requests.memory` | Memory request for intercept container. | `32Mi`
+`intercept.resources.requests.cpu` | CPU request for intercept container. | `100m`
+`intercept.resources.limits.memory` | Memory limit for intercept container. | `128Mi`
+`intercept.resources.limits.cpu` | CPU limit for intercept container. | `2000m`
+`s3Inbox.replicaCount` | desired number of S3inbox containers | `2`
 `s3Inbox.annotations` | Specific annotation for the S3inbox pod | `{}`
 `s3Inbox.ingressAnnotations | Ingress annotations specific to the s3Inbox service | `{}`
-`s3Inbox.livenessProbe` | Liveness definition for the s3Inbox pod. |`{}`
-`s3Inbox.readinessProbe` | Rediness definition for the S3inbox pod. |`{}`
-`s3Inbox.resources.requests.memory` | Memory request for s3Inbox container. |`128Mi`
-`s3Inbox.resources.requests.cpu` | CPU request for s3Inbox container. |`100m`
-`s3Inbox.resources.limits.memory` | Memory limit for s3Inbox container. |`1024Mi`
-`s3Inbox.resources.limits.cpu` | CPU limit for s3Inbox container. |`1000m`
-`sftpInbox.replicaCount`| desired number of sftp inbox containers | `2`
+`s3Inbox.livenessProbe` | Liveness definition for the s3Inbox pod. | `{}`
+`s3Inbox.readinessProbe` | Rediness definition for the S3inbox pod. | `{}`
+`s3Inbox.resources.requests.memory` | Memory request for s3Inbox container. | `128Mi`
+`s3Inbox.resources.requests.cpu` | CPU request for s3Inbox container. | `100m`
+`s3Inbox.resources.limits.memory` | Memory limit for s3Inbox container. | `1024Mi`
+`s3Inbox.resources.limits.cpu` | CPU limit for s3Inbox container. | `1000m`
+`sftpInbox.replicaCount` | desired number of sftp inbox containers | `2`
 `sftpInbox.keystorePass` | sftp inbox keystore password | `changeit`
 `sftpInbox.nodeHostname` | Node name if the sftp inbox  needs to be deployed on a specific node | `""`
 `sftpInbox.annotations` | Specific annotation for the sftp inbox pod | `{}`
@@ -319,20 +319,20 @@ Parameter | Description | Default
 `sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. |`250m`
 `sync.annotations` | Specific annotation for the sync pod | `{}`
 `sync.deploy` | Set to true if the sync service should be active | `false`
-`sync.replicaCount`| desired number of sync containers | `1`
-`sync.resources.requests.memory` | Memory request for sync container. |`128Mi`
-`sync.resources.requests.cpu` | CPU request for sync container. |`100m`
-`sync.resources.limits.memory` | Memory limit for sync container. |`512Mi`
-`sync.resources.limits.cpu` | CPU limit for sync container. |`500m`
-`syncapi.replicaCount`| desired number of syncAPI containers | `1`
+`sync.replicaCount` | desired number of sync containers | `1`
+`sync.resources.requests.memory` | Memory request for sync container. | `128Mi`
+`sync.resources.requests.cpu` | CPU request for sync container. | `100m`
+`sync.resources.limits.memory` | Memory limit for sync container. | `512Mi`
+`sync.resources.limits.cpu` | CPU limit for sync container. | `500m`
+`syncapi.replicaCount` | desired number of syncAPI containers | `1`
 `syncapi.annotations` | Specific annotation for the syncAPI pod | `{}`
 `syncapi.ingressAnnotations | Ingress annotations specific to the syncapi service | `{}`
-`syncapi.readinessProbe` | Rediness definition for the syncAPI pod. |`{}`
-`syncapi.resources.requests.memory` | Memory request for syncAPI container. |`64Mi`
-`syncapi.resources.requests.cpu` | CPU request for syncAPI container. |`100m`
-`syncapi.resources.limits.memory` | Memory limit for syncAPI container. |`256Mi`
-`syncapi.resources.limits.cpu` | CPU limit for syncAPI container. |`500m`
-`verify.replicaCount`| desired number of verify containers | `1`
+`syncapi.readinessProbe` | Rediness definition for the syncAPI pod. | `{}`
+`syncapi.resources.requests.memory` | Memory request for syncAPI container. | `64Mi`
+`syncapi.resources.requests.cpu` | CPU request for syncAPI container. | `100m`
+`syncapi.resources.limits.memory` | Memory limit for syncAPI container. | `256Mi`
+`syncapi.resources.limits.cpu` | CPU limit for syncAPI container. | `500m`
+`verify.replicaCount` | desired number of verify containers | `1`
 `verify.annotations` | Specific annotation for the verify pod | `{}`
 `verify.resources.requests.memory` | Memory request for verify container. |`128Mi`
 `verify.resources.requests.cpu` | CPU request for verify container. |`100m`
@@ -347,3 +347,5 @@ Parameter | Description | Default
 `jobs.image` | Container image used for running the DB migration jobs | `postgres:15.4-alpine`
 `jobs.setKeyHash` | Populate the key_hash table after migration from V1 | `false`
 `jobs.upgradeFromV1` | Upgrade database schema from a version 1 release. | `false`
+`jobs.removeUserName` | remove username from file path. | `false`
+`jobs.removeCorrID` | remove correlation ID column from file event log table. | `false`
