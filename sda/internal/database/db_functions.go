@@ -840,6 +840,31 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 	return archivePath, nil
 }
 
+// SetSubmissionFileSize sets the submission file size for a file
+func (dbs *SDAdb) SetSubmissionFileSize(fileID string, submissionFileSize int64) error {
+	var err error
+	var count int
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		err = dbs.setSubmissionFileSize(fileID, submissionFileSize)
+		count++
+	}
+
+	return err
+}
+func (dbs *SDAdb) setSubmissionFileSize(fileID string, submissionFileSize int64) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const setSubmissionFileSize = "UPDATE sda.files set submission_file_size = $1 where id = $2;"
+
+	_, err := db.Exec(setSubmissionFileSize, submissionFileSize, fileID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetUserFiles retrieves all the files a user submitted
 func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
 	var err error
@@ -867,7 +892,7 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*Subm
 
 	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
 	const query = `
-SELECT DISTINCT ON (f.id) f.id, f.submission_file_path, f.stable_id, fel.event, f.created_at FROM sda.files AS f
+SELECT DISTINCT ON (f.id) f.id, f.submission_file_path, f.stable_id, fel.event, f.created_at, f.submission_file_size FROM sda.files AS f
     LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
     LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
@@ -896,9 +921,14 @@ ORDER BY f.id, fel.started_at DESC;`
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt)
+		var submissionFileSize sql.NullInt64
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize)
 		if err != nil {
 			return nil, err
+		}
+
+		if submissionFileSize.Valid {
+			fi.SubmissionFileSize = submissionFileSize.Int64
 		}
 
 		if allData {

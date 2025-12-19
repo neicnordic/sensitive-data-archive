@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: SDA validator orchestrator API
+  version: "1.0"
+  description: This is the API for the validator orchestrator.
+paths:
+  /validate:
+    post:
+      description: Request a set of files to be validated with a set of validators
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRequest"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation_id:
+                    description: "The validation id"
+                    type: string
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /admin/validate:
+    post:
+      description: Request a set of files to be validated with a set of validators for a specific user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminValidateRequest"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation_id:
+                    description: "The validation id"
+                    type: string
+        "400":
+          description: Bad payload
+        "401":
+          description: Authentication failure.
+        "500":
+          description: Internal application error.
+  /result:
+    get:
+      description: "Get the result of a validation"
+      parameters:
+        - in: path
+          name: validation_id
+          schema:
+            type: string
+            description: "The validation id to fetch result for"
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "500":
+          description: Internal application error.
+  /admin/result:
+    get:
+      description: "Get the result of a validation from any user"
+      parameters:
+        - in: path
+          name: validation_id
+          schema:
+            type: string
+            description: "The validation id to fetch result for"
+          required: true
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "500":
+          description: Internal application error.
+  /validators:
+    get:
+      description: Get the available validators
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                description: "The available validators to be executed"
+                type: array
+                items:
+                  type: string
+                example: [ "xml-validator", "file-structure-validator" ]
+        "500":
+          description: Internal application error.
+
+components:
+  schemas:
+    ValidateRequest:
+      type: object
+      properties:
+        file_paths:
+          description: "The file paths to be validated"
+          type: array
+          items:
+            type: string
+          example: ["dataset_001/metadata.xml", "dataset_001/datafile.bam", "dataset_001/datafile.bam.bai"]
+        validators:
+          description: "The validators to be executed"
+          type: array
+          items:
+            type: string
+          example: ["xml-validator", "file-structure-validator"]
+    AdminValidateRequest:
+      type: object
+      properties:
+        file_paths:
+          description: "The file paths to be validated"
+          type: array
+          items:
+            type: string
+          example: ["dataset_001/metadata.xml", "dataset_001/datafile.bam", "dataset_001/datafile.bam.bai"]
+        validators:
+          description: "The validators to be executed"
+          type: array
+          items:
+            type: string
+          example: ["xml-validator", "file-structure-validator"]
+        user_id:
+          type: string
+    ResultResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          validator_id:
+            description: "The id of the validator"
+            type: string
+          result:
+            description: "Denotes the overall result of the validator validation"
+            type: string
+            enum: ["Pending", "Success", "Failed", "Error"]
+          started_at:
+            type: string
+            description: "The time the validator validation was started RFC3339 format"
+            format: date-time
+          finished_at:
+            type: string
+            description: "The time the validator validation was finished RFC3339 format"
+            format: date-time
+          files:
+            type: array
+            items:
+              type: object
+              properties:
+                path:
+                  description: "Path of the file"
+                  type: string
+                result:
+                  description: "Denotes the result of validation of the file"
+                  type: string
+                  enum: ["Pending", "Success", "Failed", "Error"]
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      level:
+                        type: string
+                        description: "Level of message"
+                      time:
+                        type: string
+                        description: "Timestamp of message"
+                      message:
+                        type: string
+                        description: "Message"
+          messages:
+            type: array
+            items:
+              type: object
+              properties:
+                level:
+                  type: string
+                  description: "Level of message"
+                time:
+                  type: string
+                  description: "Timestamp of message"
+                message:
+                  type: string
+                  description: "Message"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

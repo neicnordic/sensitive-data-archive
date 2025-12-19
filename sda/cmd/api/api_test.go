@@ -737,6 +737,66 @@ func (s *TestSuite) TestAPIGetFiles() {
 	assert.NoError(s.T(), err)
 }
 
+func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {
+	for i := 1; i <= 2; i++ {
+		fileID, err := Conf.API.DB.RegisterFile(nil, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
+		if err != nil {
+			s.FailNow("failed to register file in database")
+		}
+
+		err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", "dummy", "{}", "{}")
+		if err != nil {
+			s.FailNow("failed to update status of file in database")
+		}
+
+		if err := Conf.API.DB.SetSubmissionFileSize(fileID, int64(2*i)); err != nil {
+			s.FailNow("failed to set submission file size")
+		}
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/files?path_prefix=submission_b", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.GET("/files", rbac(e), getFiles)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, okResponse.StatusCode)
+
+	files := []database.SubmissionFileInfo{}
+	err = json.NewDecoder(okResponse.Body).Decode(&files)
+	assert.NoError(s.T(), err, "failed to list files from DB")
+	assert.Equal(s.T(), 2, len(files))
+
+	for _, fileInfo := range files {
+		switch {
+		case strings.Contains(fileInfo.InboxPath, "001"):
+			assert.Equal(s.T(), int64(2), fileInfo.SubmissionFileSize)
+		case strings.Contains(fileInfo.InboxPath, "002"):
+			assert.Equal(s.T(), int64(4), fileInfo.SubmissionFileSize)
+		default:
+			s.Fail("unexpected file received", fileInfo.InboxPath)
+		}
+	}
+}
+
 func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 	testUsers := []string{"dummy", "User-B", "User-C"}
 	for _, user := range testUsers {

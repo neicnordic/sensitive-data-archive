@@ -87,6 +87,11 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
 
+      - name: Retag PR image for sda-validator-orchestrator
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-validator-orchestrator ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-validator-orchestrator
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-validator-orchestrator
+
       - name: Retag PR image for doa
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-doa ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-doa
