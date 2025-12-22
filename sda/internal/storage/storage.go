@@ -213,6 +213,8 @@ func NewS3Client(conf S3Conf) (*s3.Client, error) {
 			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.URL, "http:")
 			o.Region = conf.Region
 			o.UsePathStyle = true
+			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		},
 	)
 
