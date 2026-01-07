@@ -3,9 +3,12 @@ package reader
 
 import (
 	"context"
+	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 // GetFileSize returns the size of a specific object
@@ -33,6 +36,12 @@ func (reader *Reader) getFileSize(ctx context.Context, client *s3.Client, bucket
 	})
 
 	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
+			return 0, storageerrors.ErrorFileNotFoundInLocation
+		}
+		log.Errorf("failed to get object from backend: %v", err)
+
 		return 0, err
 	}
 
