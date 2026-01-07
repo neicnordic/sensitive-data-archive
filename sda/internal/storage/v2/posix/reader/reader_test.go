@@ -124,6 +124,6 @@ func (ts *ReaderTestSuite) TestGetFileSize() {
 		ts.FailNow(err.Error())
 	}
 
-	ts.Equal(len("file 6 content in dir2"), fileSize)
+	ts.Equal(int64(len("file 6 content in dir2")), fileSize)
 
 }
