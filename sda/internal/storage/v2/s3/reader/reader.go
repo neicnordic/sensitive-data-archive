@@ -5,9 +5,9 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -129,18 +129,22 @@ func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
 	return trConfig
 }
 
-// parseLocation attempts to parse a location to a s3 endpointConfig, and a bucket
+// parseLocation attempts to parse a location to a s3 endpoint, and a bucket
 // expected format of location is "${ENDPOINT}/${BUCKET}
 func parseLocation(location string) (string, string, error) {
-	split := strings.Split(location, "/")
-	if len(split) != 2 {
-		return "", "", errors.New("invalid location")
+	locAsUrl, err := url.Parse(location)
+	if err != nil {
+		return "", "", storageerrors.ErrorInvalidLocations
 	}
-	if split[0] == "" {
-		return "", "", errors.New("invalid location, empty endpoint")
+
+	endpoint := strings.TrimSuffix(location, locAsUrl.RequestURI())
+	if endpoint == "" {
+		return "", "", storageerrors.ErrorInvalidLocations
 	}
-	if split[1] == "" {
-		return "", "", errors.New("invalid location, empty bucket")
+	bucketName := strings.TrimPrefix(locAsUrl.RequestURI(), "/")
+	if bucketName == "" {
+		return "", "", storageerrors.ErrorInvalidLocations
 	}
-	return split[0], split[1], nil
+
+	return endpoint, bucketName, nil
 }
