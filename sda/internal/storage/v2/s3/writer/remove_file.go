@@ -14,11 +14,11 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 		return storageerrors.ErrorS3WriterNotInitialized
 	}
 
-	ep, bucket, err := parseLocation(location)
+	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		return err
 	}
-	client, err := writer.createClient(ctx, ep)
+	client, err := writer.createClient(ctx, endpoint)
 	if err != nil {
 		return err
 	}
@@ -30,6 +30,7 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 	if err != nil {
 		return err
 	}
+	// TODO should this become the active now that is has space again
 
 	return nil
 }
