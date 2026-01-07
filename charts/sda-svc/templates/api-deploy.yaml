@@ -38,6 +38,9 @@ spec:
       - maxSkew: 1
         whenUnsatisfiable: DoNotSchedule
         topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app: {{ template "sda.fullname" . }}-api
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
