@@ -5,61 +5,64 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
 	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type Writer struct {
-	validEndpoints []*endpointConfig
-	activeEndpoint *validEndpoint
-}
+	configuredEndpoints []*endpointConfig
+	activeEndpoint      *endpointConfig
 
-type validEndpoint struct {
-	conf   *endpointConfig
-	bucket string
+	locationBroker broker.LocationBroker
+
+	sync.RWMutex
 }
 
 // NewWriter initiates a storage backend
-func NewWriter(ctx context.Context, backendName string) (*Writer, error) {
+func NewWriter(ctx context.Context, backendName string, locationBroker broker.LocationBroker) (*Writer, error) {
 	endPointConf, err := loadConfig(backendName)
 	if err != nil {
 		return nil, err
 	}
 
-	writer := &Writer{}
+	if locationBroker == nil {
+		return nil, errors.New("locationBroker is required")
+	}
+
+	writer := &Writer{
+		locationBroker: locationBroker,
+	}
 
 	// Verify endpointConfig connections
 	for _, e := range endPointConf {
-
-		bucket, err := e.findActiveBucket(ctx)
+		_, err := e.findActiveBucket(ctx, writer.locationBroker)
 		if err != nil {
-			if errors.Is(err, storageerrors.ErrorMaxBucketReached) {
-				log.Warningf("s3: %s has reach max bucket quota", e.Endpoint)
+			if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
+				log.Warningf("s3: %s has no available bucket", e.Endpoint)
+				writer.configuredEndpoints = append(writer.configuredEndpoints, e)
 				continue
 			}
 			return nil, err
 		}
-		// TODO fix active bucket, eg evaluate object count / size, etc
-		writer.validEndpoints = append(writer.validEndpoints, e)
+		writer.configuredEndpoints = append(writer.configuredEndpoints, e)
 		// Set first active endpoint as current
 		if writer.activeEndpoint == nil {
-			writer.activeEndpoint = &validEndpoint{
-				conf:   e,
-				bucket: bucket,
-			}
+			writer.activeEndpoint = e
 		}
 	}
 
-	if len(writer.validEndpoints) == 0 {
+	if len(writer.configuredEndpoints) == 0 {
 		return nil, storageerrors.ErrorNoValidLocations
 	}
 	return writer, nil
 }
 func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Client, error) {
-	for _, e := range writer.validEndpoints {
+	for _, e := range writer.configuredEndpoints {
 		if e.Endpoint != endpoint {
 			continue
 		}
