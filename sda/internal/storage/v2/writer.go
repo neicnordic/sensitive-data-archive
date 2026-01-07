@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
 	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	posixwriter "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/posix/writer"
 	s3writer "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/s3/writer"
@@ -24,15 +25,15 @@ type writer struct {
 	s3Writer    Writer
 }
 
-func NewWriter(ctx context.Context, backendName string) (Writer, error) {
+func NewWriter(ctx context.Context, backendName string, locationBroker broker.LocationBroker) (Writer, error) {
 	w := &writer{}
 
 	var err error
-	w.s3Writer, err = s3writer.NewWriter(ctx, backendName)
+	w.s3Writer, err = s3writer.NewWriter(ctx, backendName, locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
-	w.posixWriter, err = posixwriter.NewWriter(backendName)
+	w.posixWriter, err = posixwriter.NewWriter(backendName, locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}

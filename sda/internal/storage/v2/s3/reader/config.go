@@ -55,7 +55,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			if e.ChunkSize != "" {
 				s, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
-					return nil, errors.New("could not parse chunk size as a valid data size")
+					return nil, errors.New("could not parse chunk_size as a valid data size")
 				}
 
 				if s > 5*datasize.MB {

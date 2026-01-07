@@ -5,9 +5,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
 	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -27,9 +30,10 @@ type endpointConfig struct {
 	CACert         string `mapstructure:"ca_cert"`
 	ChunkSize      string `mapstructure:"chunk_size"`
 	ChunkSizeBytes uint64 `mapstructure:"-"`
-	MaxBuckets     int    `mapstructure:"max_buckets"`
-	MaxObjects     int    `mapstructure:"max_objects"`
-	MaxQuota       string `mapstructure:"max_quota"`
+	MaxBuckets     uint64 `mapstructure:"max_buckets"`
+	MaxObjects     uint64 `mapstructure:"max_objects"`
+	MaxSize        string `mapstructure:"max_size"`
+	MaxSizeBytes   uint64 `mapstructure:"-"`
 	Region         string `mapstructure:"region"`
 	SecretKey      string `mapstructure:"secret_key"`
 	Endpoint       string `mapstructure:"endpoint"`
@@ -56,9 +60,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 		case e.Endpoint == "":
 			return nil, errors.New("missing required parameter: endpoint")
 		case e.AccessKey == "":
-			return nil, errors.New("missing required parameter: accessKey")
+			return nil, errors.New("missing required parameter: access_key")
 		case e.SecretKey == "":
-			return nil, errors.New("missing required parameter: secretKey")
+			return nil, errors.New("missing required parameter: secret_key")
+		case e.BucketPrefix == "":
+			return nil, errors.New("missing required parameter: bucket_prefix")
 		default:
 			switch {
 			case strings.HasPrefix(e.Endpoint, "http") && !e.DisableHTTPS:
@@ -68,14 +74,21 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			default:
 			}
 			if e.ChunkSize != "" {
-				s, err := datasize.ParseString(e.ChunkSize)
+				byteSize, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
-					return nil, errors.New("could not parse chunk size as a valid data size")
+					return nil, errors.New("could not parse chunk_size as a valid data size")
 				}
 
-				if s > 5*datasize.MB {
-					e.ChunkSizeBytes = s.Bytes()
+				if byteSize > 5*datasize.MB {
+					e.ChunkSizeBytes = byteSize.Bytes()
 				}
+			}
+			if e.MaxSize != "" {
+				byteSize, err := datasize.ParseString(e.MaxSize)
+				if err != nil {
+					return nil, errors.New("could not parse max_size as a valid data size")
+				}
+				e.MaxSizeBytes = byteSize.Bytes()
 			}
 		}
 	}
@@ -84,10 +97,15 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 }
 
 func (endpointConf *endpointConfig) createClient(ctx context.Context) (*s3.Client, error) {
+	transport, err := endpointConf.transportConfigS3()
+	if err != nil {
+		return nil, err
+	}
+
 	s3cfg, err := config.LoadDefaultConfig(
 		ctx,
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(endpointConf.AccessKey, endpointConf.SecretKey, "")),
-		config.WithHTTPClient(&http.Client{Transport: endpointConf.transportConfigS3()}),
+		config.WithHTTPClient(&http.Client{Transport: transport}),
 	)
 	if err != nil {
 		return nil, err
@@ -112,7 +130,7 @@ func (endpointConf *endpointConfig) createClient(ctx context.Context) (*s3.Clien
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
-func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
+func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, error) {
 	cfg := new(tls.Config)
 
 	// Read system CAs
@@ -124,11 +142,11 @@ func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
 	cfg.RootCAs = systemCAs
 
 	if endpointConf.CACert != "" {
-		cacert, e := os.ReadFile(endpointConf.CACert) // #nosec this file comes from our config
-		if e != nil {
-			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
+		caCert, err := os.ReadFile(endpointConf.CACert)
+		if err != nil {
+			return nil, err
 		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
 		}
 	}
@@ -137,10 +155,10 @@ func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
 		TLSClientConfig:   cfg,
 		ForceAttemptHTTP2: true}
 
-	return trConfig
+	return trConfig, nil
 }
 
-func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context) (string, error) {
+func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker broker.LocationBroker) (string, error) {
 
 	client, err := endpointConf.createClient(ctx)
 	if err != nil {
@@ -154,17 +172,14 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context) (strin
 		return "", err
 	}
 
-	var relevantBuckets []string
+	var bucketsWithPrefix []string
 	for _, bucket := range bucketsRsp.Buckets {
 		if strings.HasPrefix(aws.ToString(bucket.Name), endpointConf.BucketPrefix) {
-			relevantBuckets = append(relevantBuckets, aws.ToString(bucket.Name))
+			bucketsWithPrefix = append(bucketsWithPrefix, aws.ToString(bucket.Name))
 		}
 	}
-	if len(relevantBuckets) > endpointConf.MaxBuckets {
-		return "", storageerrors.ErrorMaxBucketReached
-	}
 
-	if len(relevantBuckets) == 0 {
+	if len(bucketsWithPrefix) == 0 {
 		activeBucket := endpointConf.BucketPrefix + "1"
 		_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &activeBucket})
 		if err != nil {
@@ -173,13 +188,46 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context) (strin
 		return activeBucket, nil
 	}
 
-	slices.SortFunc(relevantBuckets, func(a, b string) int {
+	slices.SortFunc(bucketsWithPrefix, func(a, b string) int {
 		return strings.Compare(a, b)
 	})
 
-	activeBucket := relevantBuckets[len(relevantBuckets)-1]
+	// find first bucket with available object count and size
+	for _, bucket := range bucketsWithPrefix {
 
-	// TODO check object count, etc
+		loc := endpointConf.Endpoint + "/" + bucket
+		count, err := locationBroker.GetObjectCount(ctx, loc)
+		if err != nil {
+			return "", err
+		}
+		if count >= endpointConf.MaxObjects && endpointConf.MaxObjects > 0 {
+			continue
+		}
 
+		size, err := locationBroker.GetSize(ctx, loc)
+		if err != nil {
+			return "", err
+		}
+		if size >= endpointConf.MaxSizeBytes && endpointConf.MaxSizeBytes > 0 {
+			continue
+		}
+
+		return bucket, nil
+	}
+
+	// All created buckets are full, check if we should create new one after latest increment
+	if uint64(len(bucketsWithPrefix)) >= endpointConf.MaxBuckets && endpointConf.MaxBuckets > 0 {
+		return "", storageerrors.ErrorNoFreeBucket
+	}
+
+	currentInc, err := strconv.Atoi(strings.TrimPrefix(bucketsWithPrefix[len(bucketsWithPrefix)-1], endpointConf.BucketPrefix))
+	if err != nil {
+		return "", err
+	}
+	activeBucket := fmt.Sprintf("%s%d", endpointConf.BucketPrefix, currentInc+1)
+	_, err = client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &activeBucket})
+	if err != nil {
+		return "", err
+	}
 	return activeBucket, nil
 }

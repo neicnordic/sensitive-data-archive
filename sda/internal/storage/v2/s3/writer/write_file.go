@@ -2,6 +2,7 @@ package writer
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,20 +16,41 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", storageerrors.ErrorS3WriterNotInitialized
 	}
 
-	client, err := writer.activeEndpoint.conf.createClient(ctx)
+	// TODO do we need to check this at each write?
+
+	// TODO locking????
+	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.locationBroker)
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoFreeBucket) {
+		return "", err
+	}
+	// Current active endpoint no longer has any free buckets, roll over to next endpoint
+	if activeBucket == "" {
+		for _, endpointConf := range writer.configuredEndpoints {
+			activeBucket, err = endpointConf.findActiveBucket(ctx, writer.locationBroker)
+			if err != nil {
+				if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
+					continue
+				}
+				return "", nil
+			}
+			writer.activeEndpoint = endpointConf
+			break
+		}
+	}
+
+	client, err := writer.activeEndpoint.createClient(ctx)
 	if err != nil {
 		return "", err
 	}
 
 	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
-		u.PartSize = int64(writer.activeEndpoint.conf.ChunkSizeBytes)
+		u.PartSize = int64(writer.activeEndpoint.ChunkSizeBytes)
 		u.LeavePartsOnError = false
 	})
 
-	// TODO error handling quatos, etc, switch bucket
 	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Body:            fileContent,
-		Bucket:          aws.String(writer.activeEndpoint.bucket),
+		Bucket:          aws.String(activeBucket),
 		Key:             aws.String(filePath),
 		ContentEncoding: aws.String("application/octet-stream"),
 	})
@@ -36,5 +58,5 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", err
 	}
 
-	return writer.activeEndpoint.conf.Endpoint + "/" + writer.activeEndpoint.bucket, nil
+	return writer.activeEndpoint.Endpoint + "/" + activeBucket, nil
 }

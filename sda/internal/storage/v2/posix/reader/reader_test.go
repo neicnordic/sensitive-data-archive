@@ -33,8 +33,8 @@ func (ts *ReaderTestSuite) SetupSuite() {
 storage:
   posix:
     test:
-    - %s
-    - %s
+    - path: %s
+    - path: %s
 `, ts.dir1, ts.dir2)), 0600); err != nil {
 		ts.FailNow(err.Error())
 	}
@@ -63,6 +63,8 @@ storage:
 		ts.FailNow(err.Error())
 	}
 }
+
+// TODO more test, eg config, etc
 
 func (ts *ReaderTestSuite) TestNewFileReader_ReadFromDir1() {
 	fileReader, err := ts.reader.NewFileReader(context.Background(), ts.dir1, "dir1_file2.txt")

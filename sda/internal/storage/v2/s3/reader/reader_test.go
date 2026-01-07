@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/suite"
 )
@@ -54,10 +53,6 @@ func (ts *ReaderTestSuite) SetupSuite() {
          <Name>mock_s3_1_bucket_2</Name>
       </Bucket>
    </Buckets>
-   <Owner>
-      <DisplayName>mock</DisplayName>
-      <ID>mock</ID>
-   </Owner>
 </ListAllMyBucketsResult>
 `)
 		case strings.HasPrefix(req.RequestURI, "/mock_s3_1_bucket_1"):
@@ -98,7 +93,6 @@ func (ts *ReaderTestSuite) SetupSuite() {
 	}))
 
 	ts.s3Mock2 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		log.Println(req.RequestURI)
 		switch {
 		case strings.HasSuffix(req.RequestURI, "ListBuckets"):
 			w.WriteHeader(http.StatusOK)
@@ -191,6 +185,8 @@ storage:
 		ts.FailNow(err.Error())
 	}
 }
+
+// TODO more test, eg config, etc
 
 func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom1Bucket1() {
 	fileReader, err := ts.reader.NewFileReader(context.Background(), ts.s3Mock1.URL+"/mock_s3_1_bucket_1", "file1.txt")
