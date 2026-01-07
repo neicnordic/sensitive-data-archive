@@ -8,7 +8,7 @@ import (
 )
 
 type Reader struct {
-	locations []string
+	locations []*endpointConfig
 }
 
 func NewReader(backendName string) (*Reader, error) {
@@ -22,7 +22,7 @@ func NewReader(backendName string) (*Reader, error) {
 	}
 	// Verify locations
 	for _, loc := range backend.locations {
-		fileInfo, err := os.Stat(loc)
+		fileInfo, err := os.Stat(loc.Path)
 
 		if err != nil {
 			return nil, err
