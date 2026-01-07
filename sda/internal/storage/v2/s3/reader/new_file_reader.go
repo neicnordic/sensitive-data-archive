@@ -1,12 +1,14 @@
-// Package storage provides interface for storage areas, e.g. s3 or POSIX file system.
 package reader
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,6 +34,10 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 	})
 
 	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
+			return nil, storageerrors.ErrorFileNotFoundInLocation
+		}
 		log.Errorf("failed to get object from backend: %v", err)
 
 		return nil, err

@@ -1,4 +1,3 @@
-// Package storage provides interface for storage areas, e.g. s3 or POSIX file system.
 package reader
 
 import (
@@ -12,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 )
 
 // s3CacheBlock is used to keep track of cached data

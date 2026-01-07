@@ -3,9 +3,11 @@ package storage
 import (
 	"context"
 	"errors"
+	"io"
+
+	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	posixwriter "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/posix/writer"
 	s3writer "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/s3/writer"
-	"io"
 )
 
 // Writer defines methods to write or delete files from a backend
@@ -27,12 +29,11 @@ func NewWriter(ctx context.Context, backendName string) (Writer, error) {
 
 	var err error
 	w.s3Writer, err = s3writer.NewWriter(ctx, backendName)
-	if err != nil && errors.Is(err, s3writer.ErrorNoValidEndpoints) {
-
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
 	w.posixWriter, err = posixwriter.NewWriter(backendName)
-	if err != nil && errors.Is(err, posixwriter.ErrorNoValidLocations) {
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
 
