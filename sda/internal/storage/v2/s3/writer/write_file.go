@@ -31,9 +31,11 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 				if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 					continue
 				}
+
 				return "", nil
 			}
 			writer.activeEndpoint = endpointConf
+
 			break
 		}
 	}
@@ -44,6 +46,8 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	}
 
 	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
+		// Type conversation safe as ChunkSizeBytes checked to be max math.MaxInt
+		//nolint:gosec // disable G115
 		u.PartSize = int64(writer.activeEndpoint.ChunkSizeBytes)
 		u.LeavePartsOnError = false
 	})

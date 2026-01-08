@@ -51,6 +51,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker broker.Lo
 		}
 		if !usable {
 			log.Infof("posix path: %s, has reached its max object count or max size", endpointConf.Path)
+
 			continue
 		}
 

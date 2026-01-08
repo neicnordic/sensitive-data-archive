@@ -16,6 +16,7 @@ func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) e
 	for _, endpoint := range writer.configuredEndpoints {
 		if endpoint.Path == location {
 			locationConfigured = true
+
 			break
 		}
 	}

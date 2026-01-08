@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"slices"
@@ -81,6 +82,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 
 				if byteSize > 5*datasize.MB {
 					e.ChunkSizeBytes = byteSize.Bytes()
+				}
+				if e.ChunkSizeBytes > math.MaxInt64 {
+					e.ChunkSizeBytes = math.MaxInt64
 				}
 			}
 			if e.MaxSize != "" {
@@ -159,16 +163,17 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 }
 
 func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker broker.LocationBroker) (string, error) {
-
 	client, err := endpointConf.createClient(ctx)
 	if err != nil {
 		log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
+
 		return "", err
 	}
 
 	bucketsRsp, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		log.Errorf("failed to call S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
+
 		return "", err
 	}
 
@@ -185,16 +190,14 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 		if err != nil {
 			return "", err
 		}
+
 		return activeBucket, nil
 	}
 
-	slices.SortFunc(bucketsWithPrefix, func(a, b string) int {
-		return strings.Compare(a, b)
-	})
+	slices.SortFunc(bucketsWithPrefix, strings.Compare)
 
 	// find first bucket with available object count and size
 	for _, bucket := range bucketsWithPrefix {
-
 		loc := endpointConf.Endpoint + "/" + bucket
 		count, err := locationBroker.GetObjectCount(ctx, loc)
 		if err != nil {
@@ -229,5 +232,6 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 	if err != nil {
 		return "", err
 	}
+
 	return activeBucket, nil
 }

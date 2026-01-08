@@ -38,12 +38,14 @@ func NewReader(ctx context.Context, backendName string) (*Reader, error) {
 		client, err := e.createClient(ctx)
 		if err != nil {
 			log.Errorf("failed to create S3 client: %v to endpoint: %s", err, e.Endpoint)
+
 			return nil, err
 		}
 		// Use list buckets to verify if client valid
 		_, err = client.ListBuckets(ctx, &s3.ListBucketsInput{})
 		if err != nil {
 			log.Errorf("failed to call S3 client: %v to endpoint: %s", err, e.Endpoint)
+
 			return nil, err
 		}
 	}
@@ -62,6 +64,7 @@ func (reader *Reader) createClient(ctx context.Context, endpoint string) (*s3.Cl
 		client, err := e.createClient(ctx)
 		if err != nil {
 			log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpoint)
+
 			return nil, err
 		}
 
@@ -69,6 +72,7 @@ func (reader *Reader) createClient(ctx context.Context, endpoint string) (*s3.Cl
 	}
 
 	log.Errorf("no valid reader endpoints configured for endpoint: %s", endpoint)
+
 	return nil, fmt.Errorf("no valid reader endpoints configured for endpoint: %s", endpoint)
 }
 func (endpointConf *endpointConfig) createClient(ctx context.Context) (*s3.Client, error) {
@@ -132,16 +136,16 @@ func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
 // parseLocation attempts to parse a location to a s3 endpoint, and a bucket
 // expected format of location is "${ENDPOINT}/${BUCKET}
 func parseLocation(location string) (string, string, error) {
-	locAsUrl, err := url.Parse(location)
+	locAsURL, err := url.Parse(location)
 	if err != nil {
 		return "", "", storageerrors.ErrorInvalidLocations
 	}
 
-	endpoint := strings.TrimSuffix(location, locAsUrl.RequestURI())
+	endpoint := strings.TrimSuffix(location, locAsURL.RequestURI())
 	if endpoint == "" {
 		return "", "", storageerrors.ErrorInvalidLocations
 	}
-	bucketName := strings.TrimPrefix(locAsUrl.RequestURI(), "/")
+	bucketName := strings.TrimPrefix(locAsURL.RequestURI(), "/")
 	if bucketName == "" {
 		return "", "", storageerrors.ErrorInvalidLocations
 	}

@@ -55,6 +55,7 @@ func (w *writer) RemoveFile(ctx context.Context, location, filePath string) erro
 	case w.posixWriter != nil:
 		return w.posixWriter.RemoveFile(ctx, location, filePath)
 	}
+
 	return ErrorNoValidWriter
 }
 
@@ -65,5 +66,6 @@ func (w *writer) WriteFile(ctx context.Context, filePath string, fileContent io.
 	case w.posixWriter != nil:
 		return w.posixWriter.WriteFile(ctx, filePath, fileContent)
 	}
+
 	return "", ErrorNoValidWriter
 }

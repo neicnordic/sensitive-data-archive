@@ -19,6 +19,7 @@ func (reader *Reader) NewFileReader(_ context.Context, location, filePath string
 	for _, endpoint := range reader.configuredEndpoints {
 		if endpoint.Path == location {
 			locationConfigured = true
+
 			break
 		}
 	}

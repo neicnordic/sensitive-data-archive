@@ -35,5 +35,6 @@ func NewReader(backendName string) (*Reader, error) {
 	if len(backend.configuredEndpoints) == 0 {
 		return nil, storageerrors.ErrorNoValidLocations
 	}
+
 	return backend, nil
 }
