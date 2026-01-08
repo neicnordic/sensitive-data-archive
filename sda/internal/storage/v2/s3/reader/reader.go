@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -138,16 +138,16 @@ func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
 func parseLocation(location string) (string, string, error) {
 	locAsURL, err := url.Parse(location)
 	if err != nil {
-		return "", "", storageerrors.ErrorInvalidLocations
+		return "", "", storageerrors.ErrorInvalidLocation
 	}
 
 	endpoint := strings.TrimSuffix(location, locAsURL.RequestURI())
 	if endpoint == "" {
-		return "", "", storageerrors.ErrorInvalidLocations
+		return "", "", storageerrors.ErrorInvalidLocation
 	}
 	bucketName := strings.TrimPrefix(locAsURL.RequestURI(), "/")
 	if bucketName == "" {
-		return "", "", storageerrors.ErrorInvalidLocations
+		return "", "", storageerrors.ErrorInvalidLocation
 	}
 
 	return endpoint, bucketName, nil

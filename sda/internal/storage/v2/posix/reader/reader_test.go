@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/suite"
 )
