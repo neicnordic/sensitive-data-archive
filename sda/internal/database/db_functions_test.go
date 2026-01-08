@@ -1539,3 +1539,29 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUID_NotFound() {
 
 	db.Close()
 }
+
+func (suite *DatabaseTests) TestSetSubmissionFileSize() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFile(nil, "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	fileSize := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID, fileSize)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	var sizeInDb int64
+	err = db.DB.QueryRow("SELECT submission_file_size FROM sda.files WHERE id=$1", fileID).Scan(&sizeInDb)
+	if err != nil {
+		suite.FailNow("failed to get submission file size from DB", err)
+	}
+
+	assert.Equal(suite.T(), fileSize, sizeInDb)
+
+	db.Close()
+}

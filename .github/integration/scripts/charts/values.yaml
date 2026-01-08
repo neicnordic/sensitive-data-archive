@@ -90,8 +90,8 @@ global:
     s3ReadyPath: "/minio/health/ready"
     existingClaim: inbox-pvc
   reencrypt:
-    host: reencrypt
-    port: 50443
+    host: pipeline-sda-svc-reencrypt
+    port: 50051
   sync:
     api:
       password: "apiuser"

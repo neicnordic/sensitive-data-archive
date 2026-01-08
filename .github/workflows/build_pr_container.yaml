@@ -47,6 +47,19 @@ jobs:
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             org.opencontainers.image.revision=${{ github.sha }}
 
+      - name: Build container for sda-validator-orchestrator
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sda-validator/orchestrator
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-validator-orchestrator
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-validator-orchestrator
+          labels: |
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            org.opencontainers.image.revision=${{ github.sha }}
+
       - name: Build container for sensitive-data-archive
         uses: docker/build-push-action@v6
         with:
@@ -273,6 +286,19 @@ jobs:
       - name: Test sda-sync
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
         if: steps.changes.outputs.sync == 'true' || steps.changes.outputs.sync-api == 'true'
+
+  sda-validator-orchestrator:
+    needs:
+      - build_go_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test sda-validator-orchestrator
+        run: |
+          echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-donotrestrict.conf
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
 
   sda-doa:
     needs:
