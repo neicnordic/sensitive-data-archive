@@ -1599,7 +1599,7 @@ func (suite *DatabaseTests) TestSetSubmissionFileSize() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
-	fileID, err := db.RegisterFile(nil, "/test.file", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/test.file", "user")
 	if err != nil {
 		suite.FailNow("failed to register file", err)
 	}
