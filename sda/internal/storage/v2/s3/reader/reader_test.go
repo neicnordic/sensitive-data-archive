@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -126,6 +127,29 @@ func (ts *ReaderTestSuite) SetupSuite() {
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "file3.txt") {
 				w.Header().Set("Content-Length", "103")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "seekable.txt") {
+				byteRange := req.Header.Get("Range")
+				start, _ := strconv.Atoi(strings.Split(strings.Split(byteRange, "=")[1], "-")[0])
+				end, _ := strconv.Atoi(strings.Split(strings.Split(byteRange, "=")[1], "-")[1])
+				content := "this file is mocked to be seekable following s3 logic in mock s3 2, bucket 1"
+
+				if len(content) < end {
+					end = len(content)
+				}
+				seekedContent := content[start:end]
+				w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(content), len(content)))
+				w.WriteHeader(http.StatusOK)
+
+				_, _ = fmt.Fprint(w, seekedContent)
+				return
+			}
+
+			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "seekable.txt") {
+				w.Header().Set("Content-Length", "77")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -263,6 +287,29 @@ func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket1() {
 	ts.Equal("file 3 content in mock s3 2, bucket 1", string(content))
 	_ = fileReader.Close()
 }
+
+func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFrom2Bucket1() {
+	fileSeekReader, err := ts.reader.NewFileReadSeeker(context.Background(), ts.s3Mock2.URL+"/mock_s3_2_bucket_1", "seekable.txt")
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	start := int64(5)
+	lenToRead := int64(14)
+
+	_, err = fileSeekReader.Seek(start, 0)
+	ts.NoError(err)
+
+	content := make([]byte, lenToRead)
+
+	read, err := fileSeekReader.Read(content)
+	ts.NoError(err)
+	ts.Equal(lenToRead, int64(read))
+
+	ts.Equal("file is mocked", string(content))
+	_ = fileSeekReader.Close()
+}
+
 func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket2() {
 	fileReader, err := ts.reader.NewFileReader(context.Background(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file4.txt")
 	if err != nil {
