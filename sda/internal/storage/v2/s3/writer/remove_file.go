@@ -31,7 +31,7 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 	if err != nil {
 		return err
 	}
-	// TODO should this become the active now that is has space again
+	// TODO should this become the active now that is has space again??
 
 	return nil
 }

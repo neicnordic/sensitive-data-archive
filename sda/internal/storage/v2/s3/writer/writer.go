@@ -3,6 +3,7 @@ package writer
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -81,19 +82,22 @@ func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Cl
 	return nil, storageerrors.ErrorNoEndpointConfiguredForLocation
 }
 
-// parseLocation attempts to parse a location to a s3 endpointConfig, and a bucket
+// parseLocation attempts to parse a location to a s3 endpoint, and a bucket
 // expected format of location is "${ENDPOINT}/${BUCKET}
 func parseLocation(location string) (string, string, error) {
-	split := strings.Split(location, "/")
-	if len(split) != 2 {
-		return "", "", errors.New("invalid location")
-	}
-	if split[0] == "" {
-		return "", "", errors.New("invalid location, empty endpointConfig")
-	}
-	if split[1] == "" {
-		return "", "", errors.New("invalid location, empty bucket")
+	locAsURL, err := url.Parse(location)
+	if err != nil {
+		return "", "", storageerrors.ErrorInvalidLocation
 	}
 
-	return split[0], split[1], nil
+	endpoint := strings.TrimSuffix(location, locAsURL.RequestURI())
+	if endpoint == "" {
+		return "", "", storageerrors.ErrorInvalidLocation
+	}
+	bucketName := strings.TrimPrefix(locAsURL.RequestURI(), "/")
+	if bucketName == "" {
+		return "", "", storageerrors.ErrorInvalidLocation
+	}
+
+	return endpoint, bucketName, nil
 }

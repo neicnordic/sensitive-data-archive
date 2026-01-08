@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -43,6 +44,8 @@ func (m *mockS3) handler(w http.ResponseWriter, req *http.Request) {
 		m.ListBuckets(w)
 	case req.Method == "PUT":
 		m.CreateBucket(w, req)
+	case req.Method == "DELETE":
+		m.Delete(w, req)
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
@@ -72,6 +75,13 @@ func (m *mockS3) ListBuckets(w http.ResponseWriter) {
 </ListAllMyBucketsResult>
 `
 	_, _ = w.Write([]byte(rsp))
+}
+func (m *mockS3) Delete(w http.ResponseWriter, req *http.Request) {
+	bucket := strings.Split(req.RequestURI, "/")[1]
+	fileName := strings.Split(strings.Split(req.RequestURI, "/")[2], "?")[0]
+
+	delete(m.buckets[bucket], fileName)
+	w.WriteHeader(http.StatusOK)
 }
 func (m *mockS3) PutObject(w http.ResponseWriter, req *http.Request) {
 	bucket := strings.Split(req.RequestURI, "/")[1]
@@ -188,7 +198,7 @@ func (ts *WriterTestSuite) SetupTest() {
 	}
 }
 
-func (ts *WriterTestSuite) TestUpload_AllEmpty() {
+func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
 	content := "test file 1"
 
 	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(0, nil)
@@ -205,7 +215,7 @@ func (ts *WriterTestSuite) TestUpload_AllEmpty() {
 	ts.Equal(ts.s3Mock1.buckets["bucket_in_1-1"]["test_file_1.txt"], content)
 	ts.Equal(fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL), location)
 }
-func (ts *WriterTestSuite) TestUpload_FirstFullSecondBucketExists() {
+func (ts *WriterTestSuite) TestWriteFile_FirstFullSecondBucketExists() {
 	content := "test file 1"
 
 	ts.s3Mock1.buckets["bucket_in_1-2"] = make(map[string]string)
@@ -226,7 +236,7 @@ func (ts *WriterTestSuite) TestUpload_FirstFullSecondBucketExists() {
 	ts.Equal(fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL), location)
 }
 
-func (ts *WriterTestSuite) TestUpload_FirstEndpoint_FirstBucketFull() {
+func (ts *WriterTestSuite) TestWriteFile_FirstEndpoint_FirstBucketFull() {
 	content := "test file 1"
 
 	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil)
@@ -241,7 +251,7 @@ func (ts *WriterTestSuite) TestUpload_FirstEndpoint_FirstBucketFull() {
 	ts.Equal(fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL), location)
 }
 
-func (ts *WriterTestSuite) TestUpload_FirstEndpointFull() {
+func (ts *WriterTestSuite) TestWriteFile_FirstEndpointFull() {
 	content := "test file 2"
 
 	ts.s3Mock1.buckets = map[string]map[string]string{"bucket_in_1-1": make(map[string]string), "bucket_in_1-2": make(map[string]string), "bucket_in_1-3": make(map[string]string)}
@@ -266,4 +276,19 @@ func (ts *WriterTestSuite) TestUpload_FirstEndpointFull() {
 	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL))
 	ts.Equal(ts.s3Mock2.buckets["bucket_in_2-1"]["test_file_1.txt"], content)
 	ts.Equal(fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL), location)
+}
+
+func (ts *WriterTestSuite) TestRemoveFile() {
+	ts.s3Mock1.buckets["bucket_in_1-1"]["file_to_be_removed"] = "file to be removed content"
+
+	err := ts.writer.RemoveFile(context.TODO(), fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL), "file_to_be_removed")
+	ts.NoError(err)
+
+	_, ok := ts.s3Mock1.buckets["bucket_in_1-1"]["file_to_be_removed"]
+	ts.False(ok, "file to be removed still exists")
+}
+
+func (ts *WriterTestSuite) TestRemoveFile_InvalidLocation() {
+	err := ts.writer.RemoveFile(context.TODO(), "http://different_s3_url/bucket", "file_to_be_removed")
+	ts.EqualError(err, storageerrors.ErrorNoEndpointConfiguredForLocation.Error())
 }
