@@ -10,3 +10,4 @@ var ErrorPosixReaderNotInitialized = errors.New("posix reader has not been initi
 var ErrorS3WriterNotInitialized = errors.New("s3 writer has not been initialized")
 var ErrorNoFreeBucket = errors.New("no free bucket")
 var ErrorPosixWriterNotInitialized = errors.New("posix writer has not been initialized")
+var ErrorNoEndpointConfiguredForLocation = errors.New("no endpoint configured for location")

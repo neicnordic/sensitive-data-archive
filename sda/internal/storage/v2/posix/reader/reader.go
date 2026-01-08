@@ -8,20 +8,20 @@ import (
 )
 
 type Reader struct {
-	locations []*endpointConfig
+	configuredEndpoints []*endpointConfig
 }
 
 func NewReader(backendName string) (*Reader, error) {
-	endPoints, err := loadConfig(backendName)
+	endPointsConfigurations, err := loadConfig(backendName)
 	if err != nil {
 		return nil, err
 	}
 
 	backend := &Reader{
-		locations: endPoints,
+		configuredEndpoints: endPointsConfigurations,
 	}
-	// Verify locations
-	for _, loc := range backend.locations {
+	// Verify configuredEndpoints
+	for _, loc := range backend.configuredEndpoints {
 		fileInfo, err := os.Stat(loc.Path)
 
 		if err != nil {
@@ -32,7 +32,7 @@ func NewReader(backendName string) (*Reader, error) {
 			return nil, fmt.Errorf("%s is not a directory", loc)
 		}
 	}
-	if len(backend.locations) == 0 {
+	if len(backend.configuredEndpoints) == 0 {
 		return nil, storageerrors.ErrorNoValidLocations
 	}
 	return backend, nil

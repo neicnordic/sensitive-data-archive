@@ -18,6 +18,7 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 	if err != nil {
 		return err
 	}
+
 	client, err := writer.createClient(ctx, endpoint)
 	if err != nil {
 		return err

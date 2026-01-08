@@ -18,7 +18,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 
 	// TODO do we need to check this at each write?
 
-	// TODO locking????
+	// TODO locking while finding active bucket????
 	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 		return "", err

@@ -3,7 +3,6 @@ package writer
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -75,8 +74,7 @@ func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Cl
 		return client, nil
 	}
 
-	log.Errorf("no valid endpoints configured for: %s", endpoint)
-	return nil, fmt.Errorf("no valid endpoints configured for: %s", endpoint)
+	return nil, storageerrors.ErrorNoEndpointConfiguredForLocation
 }
 
 // parseLocation attempts to parse a location to a s3 endpointConfig, and a bucket

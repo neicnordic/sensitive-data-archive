@@ -15,7 +15,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	}
 
 	// Find first location that is still usable
-	// TODO locking????
+	// TODO locking while finding active location????
 	var location string
 	for {
 		if len(writer.activeEndpoints) == 0 {

@@ -15,6 +15,16 @@ func (reader *Reader) NewFileReader(_ context.Context, location, filePath string
 	if reader == nil {
 		return nil, storageerrors.ErrorPosixReaderNotInitialized
 	}
+	var locationConfigured bool
+	for _, endpoint := range reader.configuredEndpoints {
+		if endpoint.Path == location {
+			locationConfigured = true
+			break
+		}
+	}
+	if !locationConfigured {
+		return nil, storageerrors.ErrorNoEndpointConfiguredForLocation
+	}
 
 	fullFilePath := filepath.Join(location, filePath)
 

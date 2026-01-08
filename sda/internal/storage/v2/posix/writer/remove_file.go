@@ -12,7 +12,16 @@ func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) e
 	if writer == nil {
 		return storageerrors.ErrorPosixWriterNotInitialized
 	}
-	// TODO validate location is in config
+	var locationConfigured bool
+	for _, endpoint := range writer.configuredEndpoints {
+		if endpoint.Path == location {
+			locationConfigured = true
+			break
+		}
+	}
+	if !locationConfigured {
+		return storageerrors.ErrorNoEndpointConfiguredForLocation
+	}
 
 	return os.Remove(filepath.Join(location, filePath))
 }
