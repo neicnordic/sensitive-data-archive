@@ -18,8 +18,6 @@ type Writer interface {
 	WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (location string, err error)
 }
 
-var ErrorNoValidWriter = errors.New("no valid writer configured")
-
 type writer struct {
 	posixWriter Writer
 	s3Writer    Writer
@@ -39,10 +37,10 @@ func NewWriter(ctx context.Context, backendName string, locationBroker broker.Lo
 	}
 
 	if w.s3Writer != nil && w.posixWriter != nil {
-		return nil, errors.New("s3 writer and posix writer cannot be used at the same time")
+		return nil, storageerrors.ErrorMultipleWritersNotSupported
 	}
 	if w.s3Writer == nil && w.posixWriter == nil {
-		return nil, ErrorNoValidWriter
+		return nil, storageerrors.ErrorNoValidWriter
 	}
 
 	return w, nil
@@ -56,7 +54,7 @@ func (w *writer) RemoveFile(ctx context.Context, location, filePath string) erro
 		return w.posixWriter.RemoveFile(ctx, location, filePath)
 	}
 
-	return ErrorNoValidWriter
+	return storageerrors.ErrorNoValidWriter
 }
 
 func (w *writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
@@ -67,5 +65,5 @@ func (w *writer) WriteFile(ctx context.Context, filePath string, fileContent io.
 		return w.posixWriter.WriteFile(ctx, filePath, fileContent)
 	}
 
-	return "", ErrorNoValidWriter
+	return "", storageerrors.ErrorNoValidWriter
 }
