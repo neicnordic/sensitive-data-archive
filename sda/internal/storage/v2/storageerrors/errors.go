@@ -11,3 +11,5 @@ var ErrorS3WriterNotInitialized = errors.New("s3 writer has not been initialized
 var ErrorNoFreeBucket = errors.New("no free bucket")
 var ErrorPosixWriterNotInitialized = errors.New("posix writer has not been initialized")
 var ErrorNoEndpointConfiguredForLocation = errors.New("no endpoint configured for location")
+var ErrorNoValidWriter = errors.New("no valid writer configured")
+var ErrorMultipleWritersNotSupported = errors.New("s3 writer and posix writer cannot be used at the same time")
