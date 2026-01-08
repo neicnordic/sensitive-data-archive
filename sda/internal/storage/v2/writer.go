@@ -33,7 +33,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker broker.Lo
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
-	w.posixWriter, err = posixwriter.NewWriter(backendName, locationBroker)
+	w.posixWriter, err = posixwriter.NewWriter(ctx, backendName, locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
