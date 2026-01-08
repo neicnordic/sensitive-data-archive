@@ -18,6 +18,7 @@ func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) 
 	for _, endpoint := range reader.configuredEndpoints {
 		if endpoint.Path == location {
 			locationConfigured = true
+
 			break
 		}
 	}
@@ -30,6 +31,7 @@ func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) 
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, storageerrors.ErrorFileNotFoundInLocation
 		}
+
 		return 0, err
 	}
 

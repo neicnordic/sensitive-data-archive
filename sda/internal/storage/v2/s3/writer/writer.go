@@ -44,8 +44,10 @@ func NewWriter(ctx context.Context, backendName string, locationBroker broker.Lo
 			if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 				log.Warningf("s3: %s has no available bucket", e.Endpoint)
 				writer.configuredEndpoints = append(writer.configuredEndpoints, e)
+
 				continue
 			}
+
 			return nil, err
 		}
 		writer.configuredEndpoints = append(writer.configuredEndpoints, e)
@@ -58,6 +60,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker broker.Lo
 	if len(writer.configuredEndpoints) == 0 {
 		return nil, storageerrors.ErrorNoValidLocations
 	}
+
 	return writer, nil
 }
 func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Client, error) {
@@ -68,6 +71,7 @@ func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Cl
 		client, err := e.createClient(ctx)
 		if err != nil {
 			log.Errorf("failed to create S3 client: %v to s3: %s", err, endpoint)
+
 			return nil, err
 		}
 
@@ -90,5 +94,6 @@ func parseLocation(location string) (string, string, error) {
 	if split[1] == "" {
 		return "", "", errors.New("invalid location, empty bucket")
 	}
+
 	return split[0], split[1], nil
 }

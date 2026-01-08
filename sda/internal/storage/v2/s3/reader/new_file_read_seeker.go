@@ -60,6 +60,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	for _, e := range reader.endpoints {
 		if e.Endpoint == endpoint {
 			chunkSizeBytes = e.ChunkSizeBytes
+
 			break
 		}
 	}
@@ -97,13 +98,9 @@ func (r *s3SeekableReader) pruneCache() {
 }
 
 func (r *s3SeekableReader) prefetchSize() int64 {
-	n := r.chunkSize
-
-	if n >= 5*1024*1024 {
-		return int64(n)
-	}
-
-	return 50 * 1024 * 1024
+	// Type conversation safe as chunkSize checked to be max math.MaxInt
+	//nolint:gosec // disable G115
+	return int64(r.chunkSize)
 }
 
 func (r *s3SeekableReader) prefetchAt(offset int64) {

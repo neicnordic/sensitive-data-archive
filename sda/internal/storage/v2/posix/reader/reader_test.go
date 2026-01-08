@@ -25,7 +25,6 @@ func TestReaderTestSuite(t *testing.T) {
 }
 
 func (ts *ReaderTestSuite) SetupSuite() {
-
 	ts.dir1 = ts.T().TempDir()
 	ts.dir2 = ts.T().TempDir()
 
@@ -125,5 +124,4 @@ func (ts *ReaderTestSuite) TestGetFileSize() {
 	}
 
 	ts.Equal(int64(len("file 6 content in dir2")), fileSize)
-
 }

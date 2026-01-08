@@ -28,9 +28,9 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		}
 		if usable {
 			location = writer.activeEndpoints[0].Path
+
 			break
 		}
-
 		writer.activeEndpoints = writer.activeEndpoints[1:]
 	}
 
