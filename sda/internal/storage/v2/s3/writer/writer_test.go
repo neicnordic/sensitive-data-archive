@@ -46,7 +46,6 @@ func (m *mockS3) handler(w http.ResponseWriter, req *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
-
 }
 func (m *mockS3) ListBuckets(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
@@ -79,12 +78,14 @@ func (m *mockS3) PutObject(w http.ResponseWriter, req *http.Request) {
 
 	if _, ok := m.buckets[bucket]; !ok {
 		w.WriteHeader(http.StatusNotFound)
+
 		return
 	}
 
 	content, err := io.ReadAll(req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 
@@ -94,11 +95,11 @@ func (m *mockS3) PutObject(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *mockS3) CreateBucket(w http.ResponseWriter, req *http.Request) {
-
 	bucket := strings.TrimPrefix(req.RequestURI, "/")
 
 	if _, ok := m.buckets[bucket]; ok {
 		w.WriteHeader(http.StatusBadRequest)
+
 		return
 	}
 
@@ -108,14 +109,22 @@ func (m *mockS3) CreateBucket(w http.ResponseWriter, req *http.Request) {
 
 func (m *mockLocationBroker) GetObjectCount(_ context.Context, location string) (uint64, error) {
 	args := m.Called(location)
-
-	return uint64(args.Int(0)), args.Error(1)
+	count := args.Int(0)
+	if count < 0 {
+		count = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(count), args.Error(1)
 }
 
 func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64, error) {
 	args := m.Called(location)
-
-	return uint64(args.Int(0)), args.Error(1)
+	size := args.Int(0)
+	if size < 0 {
+		size = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(size), args.Error(1)
 }
 
 func TestReaderTestSuite(t *testing.T) {

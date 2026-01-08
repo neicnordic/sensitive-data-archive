@@ -2,6 +2,7 @@ package reader
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/c2h5oh/datasize"
@@ -52,6 +53,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			default:
 			}
 
+			e.ChunkSizeBytes = 50 * 1024 * 1024
 			if e.ChunkSize != "" {
 				s, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
@@ -60,6 +62,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 
 				if s > 5*datasize.MB {
 					e.ChunkSizeBytes = s.Bytes()
+				}
+				if e.ChunkSizeBytes > math.MaxInt64 {
+					e.ChunkSizeBytes = math.MaxInt64
 				}
 			}
 		}

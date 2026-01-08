@@ -41,6 +41,7 @@ func (r *reader) NewFileReader(ctx context.Context, location, filePath string) (
 	if strings.HasPrefix(location, "/") {
 		return r.posixReader.NewFileReader(ctx, location, filePath)
 	}
+
 	return r.s3Reader.NewFileReader(ctx, location, filePath)
 }
 
@@ -48,6 +49,7 @@ func (r *reader) NewFileReadSeeker(ctx context.Context, location, filePath strin
 	if strings.HasPrefix(location, "/") {
 		return r.posixReader.NewFileReadSeeker(ctx, location, filePath)
 	}
+
 	return r.s3Reader.NewFileReadSeeker(ctx, location, filePath)
 }
 
@@ -55,5 +57,6 @@ func (r *reader) GetFileSize(ctx context.Context, location, filePath string) (in
 	if strings.HasPrefix(location, "/") {
 		return r.posixReader.GetFileSize(ctx, location, filePath)
 	}
+
 	return r.s3Reader.GetFileSize(ctx, location, filePath)
 }

@@ -31,7 +31,6 @@ func TestReaderTestSuite(t *testing.T) {
 }
 
 func (ts *ReaderTestSuite) SetupSuite() {
-
 	ts.configDir = ts.T().TempDir()
 
 	ts.s3Mock1 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -60,12 +59,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file1.txt") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, "file 1 content in mock s3 1, bucket 1")
+
 				return
 			}
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "file1.txt") {
 				w.Header().Set("Content-Length", "101")
 				w.WriteHeader(http.StatusOK)
+
 				return
 			}
 
@@ -76,12 +77,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file2.txt") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, "file 2 content in mock s3 1, bucket 2")
+
 				return
 			}
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "file2.txt") {
 				w.Header().Set("Content-Length", "102")
 				w.WriteHeader(http.StatusOK)
+
 				return
 			}
 
@@ -122,12 +125,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file3.txt") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, "file 3 content in mock s3 2, bucket 1")
+
 				return
 			}
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "file3.txt") {
 				w.Header().Set("Content-Length", "103")
 				w.WriteHeader(http.StatusOK)
+
 				return
 			}
 
@@ -145,12 +150,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 				w.WriteHeader(http.StatusOK)
 
 				_, _ = fmt.Fprint(w, seekedContent)
+
 				return
 			}
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "seekable.txt") {
 				w.Header().Set("Content-Length", "77")
 				w.WriteHeader(http.StatusOK)
+
 				return
 			}
 
@@ -160,12 +167,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file4.txt") {
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, "file 4 content in mock s3 2, bucket 2")
+
 				return
 			}
 
 			if req.Method == "HEAD" && strings.Contains(req.RequestURI, "file4.txt") {
 				w.Header().Set("Content-Length", "104")
 				w.WriteHeader(http.StatusOK)
+
 				return
 			}
 
