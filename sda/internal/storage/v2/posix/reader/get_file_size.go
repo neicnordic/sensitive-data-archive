@@ -14,6 +14,16 @@ func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) 
 	if reader == nil {
 		return 0, storageerrors.ErrorPosixReaderNotInitialized
 	}
+	var locationConfigured bool
+	for _, endpoint := range reader.configuredEndpoints {
+		if endpoint.Path == location {
+			locationConfigured = true
+			break
+		}
+	}
+	if !locationConfigured {
+		return 0, storageerrors.ErrorNoEndpointConfiguredForLocation
+	}
 
 	stat, err := os.Stat(filepath.Join(location, filePath))
 	if err != nil {
