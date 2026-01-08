@@ -6,9 +6,9 @@ import (
 	"io"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
 	posixwriter "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/posix/writer"
 	s3writer "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/s3/writer"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 // Writer defines methods to write or delete files from a backend
