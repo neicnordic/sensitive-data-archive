@@ -1,4 +1,4 @@
-package seekable_multi_reader
+package storage
 
 import (
 	"errors"
