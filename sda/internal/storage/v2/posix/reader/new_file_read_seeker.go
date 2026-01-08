@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {

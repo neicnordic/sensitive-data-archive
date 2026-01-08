@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 
 	log "github.com/sirupsen/logrus"
 )

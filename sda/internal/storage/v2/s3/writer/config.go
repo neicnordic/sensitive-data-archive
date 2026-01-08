@@ -20,7 +20,7 @@ import (
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )

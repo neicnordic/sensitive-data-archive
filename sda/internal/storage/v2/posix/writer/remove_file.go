@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) error {

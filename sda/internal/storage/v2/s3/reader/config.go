@@ -41,9 +41,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 		case e.Endpoint == "":
 			return nil, errors.New("missing required parameter: endpoint")
 		case e.AccessKey == "":
-			return nil, errors.New("missing required parameter: accessKey")
+			return nil, errors.New("missing required parameter: access_key")
 		case e.SecretKey == "":
-			return nil, errors.New("missing required parameter: secretKey")
+			return nil, errors.New("missing required parameter: secret_key")
 		default:
 			switch {
 			case strings.HasPrefix(e.Endpoint, "http") && !e.DisableHTTPS:
@@ -60,7 +60,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 					return nil, errors.New("could not parse chunk_size as a valid data size")
 				}
 
-				if s > 5*datasize.MB {
+				if s >= 5*datasize.MB {
 					e.ChunkSizeBytes = s.Bytes()
 				}
 				if e.ChunkSizeBytes > math.MaxInt64 {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 type Reader struct {

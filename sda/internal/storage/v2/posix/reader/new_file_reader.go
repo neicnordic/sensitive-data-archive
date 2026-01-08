@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	storageerrors "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/errors"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 // NewFileReader returns an io.Reader instance
