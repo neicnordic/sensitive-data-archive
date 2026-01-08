@@ -229,7 +229,7 @@ func (ts *StorageTestSuite) TestPosixBackend() {
 
 	writer, err := backend.NewFileWriter("testFile")
 	assert.NotNil(ts.T(), writer, "Got a nil reader for writer from posix")
-	assert.NoError(ts.T(), err, "posix WriteFile failed when it shouldn't")
+	assert.NoError(ts.T(), err, "posix NewFileWriter failed when it shouldn't")
 
 	written, err := writer.Write(writeData)
 	assert.NoError(ts.T(), err, "Failure when writing to posix writer")
@@ -244,7 +244,7 @@ func (ts *StorageTestSuite) TestPosixBackend() {
 	log.SetOutput(&buf)
 	writer, err = backend.NewFileWriter("posix/Not/Creatable")
 	assert.Nil(ts.T(), writer, "Got a non-nil reader for writer from posix")
-	assert.Error(ts.T(), err, "posix WriteFile worked when it shouldn't")
+	assert.Error(ts.T(), err, "posix NewFileWriter worked when it shouldn't")
 	assert.NotZero(ts.T(), buf.Len(), "Expected warning missing")
 	buf.Reset()
 	log.SetOutput(os.Stdout)
@@ -293,7 +293,7 @@ func (ts *StorageTestSuite) TestPosixBackend() {
 	assert.Nil(ts.T(), failReader, "Got a Reader when expected not to")
 
 	failWriter, err := dummyBackend.NewFileWriter("/")
-	assert.NotNil(ts.T(), err, "WriteFile worked when it should not")
+	assert.NotNil(ts.T(), err, "NewFileWriter worked when it should not")
 	assert.Nil(ts.T(), failWriter, "Got a Writer when expected not to")
 
 	_, err = dummyBackend.GetFileSize("/", false)
@@ -310,7 +310,7 @@ func (ts *StorageTestSuite) TestS3Backend() {
 
 	writer, err := s3back.NewFileWriter("s3Creatable")
 	assert.NotNil(ts.T(), writer, "Got a nil reader for writer from s3")
-	assert.Nil(ts.T(), err, "s3 WriteFile failed when it shouldn't")
+	assert.Nil(ts.T(), err, "s3 NewFileWriter failed when it shouldn't")
 
 	written, err := writer.Write(writeData)
 	assert.Nil(ts.T(), err, "Failure when writing to s3 writer")
@@ -337,7 +337,7 @@ func (ts *StorageTestSuite) TestS3Backend() {
 	assert.Error(ts.T(), err)
 	// rewrite file, do not wait before retrieving file size
 	writer, err = s3back.NewFileWriter("s3Creatable")
-	assert.Nil(ts.T(), err, "s3 WriteFile failed when it shouldn't")
+	assert.Nil(ts.T(), err, "s3 NewFileWriter failed when it shouldn't")
 	written, err = writer.Write(writeData)
 	assert.Equal(ts.T(), len(writeData), written, "Did not write all writeData")
 	assert.Nil(ts.T(), err, "Failure when writing to s3 writer")
@@ -385,7 +385,7 @@ func (ts *StorageTestSuite) TestSftpBackend() {
 
 	writer, err := sftpBack.NewFileWriter(sftpCreatable)
 	assert.NotNil(ts.T(), writer, "Got a nil reader for writer from sftp")
-	assert.Nil(ts.T(), err, "sftp WriteFile failed when it shouldn't")
+	assert.Nil(ts.T(), err, "sftp NewFileWriter failed when it shouldn't")
 
 	written, err := writer.Write(writeData)
 	assert.Nil(ts.T(), err, "Failure when writing to sftp writer")
@@ -458,7 +458,7 @@ func (ts *StorageTestSuite) TestSftpBackend() {
 	assert.Nil(ts.T(), failReader, "Got a Reader when expected not to")
 
 	failWriter, err := dummyBackend.NewFileWriter("/")
-	assert.NotNil(ts.T(), err, "WriteFile worked when it should not")
+	assert.NotNil(ts.T(), err, "NewFileWriter worked when it should not")
 	assert.Nil(ts.T(), failWriter, "Got a Writer when expected not to")
 
 	_, err = dummyBackend.GetFileSize("/", false)
