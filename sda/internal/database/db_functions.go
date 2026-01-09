@@ -53,8 +53,8 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	if dbs.Version < 4 {
-		return "", errors.New("database schema v4 required for RegisterFile()")
+	if dbs.Version < 22 {
+		return "", errors.New("database schema v22 required for RegisterFileWithLocation()")
 	}
 
 	query := "SELECT sda.register_file($1, $2, $3, $4);"
