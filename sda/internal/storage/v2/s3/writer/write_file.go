@@ -46,7 +46,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	}
 
 	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
-		// Type conversation safe as ChunkSizeBytes checked to be max math.MaxInt
+		// Type conversation safe as ChunkSizeBytes checked to be between 5mb and 1gb (in bytes)
 		//nolint:gosec // disable G115
 		u.PartSize = int64(writer.activeEndpoint.ChunkSizeBytes)
 		u.LeavePartsOnError = false
