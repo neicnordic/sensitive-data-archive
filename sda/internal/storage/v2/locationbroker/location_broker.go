@@ -2,6 +2,7 @@ package locationbroker
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"time"
@@ -82,6 +83,7 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 			}
 			count += subDirCount
 			subDirSize += subDirSize
+
 			continue
 		}
 		count++
@@ -91,6 +93,10 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 		}
 		size += fileInfo.Size()
 	}
+	if size < 0 {
+		return 0, 0, errors.New("unexpected negative size in location")
+	}
+
 	return uint64(size), count, nil
 }
 
