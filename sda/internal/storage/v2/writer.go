@@ -60,7 +60,7 @@ func (w *writer) RemoveFile(ctx context.Context, location, filePath string) erro
 func (w *writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
 	switch {
 	case w.s3Writer != nil:
-		return w.posixWriter.WriteFile(ctx, filePath, fileContent)
+		return w.s3Writer.WriteFile(ctx, filePath, fileContent)
 	case w.posixWriter != nil:
 		return w.posixWriter.WriteFile(ctx, filePath, fileContent)
 	}
