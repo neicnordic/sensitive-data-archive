@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 
 	log "github.com/sirupsen/logrus"
@@ -18,13 +18,13 @@ type Writer struct {
 	configuredEndpoints []*endpointConfig
 	activeEndpoint      *endpointConfig
 
-	locationBroker broker.LocationBroker
+	locationBroker locationbroker.LocationBroker
 
 	sync.RWMutex
 }
 
 // NewWriter initiates a storage backend
-func NewWriter(ctx context.Context, backendName string, locationBroker broker.LocationBroker) (*Writer, error) {
+func NewWriter(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (*Writer, error) {
 	endPointConf, err := loadConfig(backendName)
 	if err != nil {
 		return nil, err

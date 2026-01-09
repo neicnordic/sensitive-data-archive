@@ -7,7 +7,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/spf13/viper"
 )
 
@@ -49,7 +49,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	return endpointConf, nil
 }
 
-func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker broker.LocationBroker) (bool, error) {
+func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker locationbroker.LocationBroker) (bool, error) {
 	count, err := locationBroker.GetObjectCount(ctx, endpointConf.Path)
 	if err != nil {
 		return false, err
