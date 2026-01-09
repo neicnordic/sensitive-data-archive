@@ -14,7 +14,7 @@ Parameter | Description | Default
 `global.adminUser` | Username of admin user |`admin`
 `global.adminPassword` | Password for admin user. |`Random if unset`
 `global.ingress.annotations` | extra annotations for the ingress objects | `""`
-`global.ingress.ingressClassName` | class of the ingress controller | `"nginx"`
+`global.ingress.ingressClassName` | class of the ingress controller | `""`
 `global.ingress.clusterIssuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured clusterIssuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
 `global.ingress.hostName` | hostname for the ingress endpoint | `""`
 `global.ingress.issuer` | If cert-manager is set up to request certificates to the ingress endpoints, the configured issuer can be specified to automate certificate configuration for the ingress endpoint. | `""`
