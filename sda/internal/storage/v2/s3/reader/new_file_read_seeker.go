@@ -98,7 +98,7 @@ func (r *s3SeekableReader) pruneCache() {
 }
 
 func (r *s3SeekableReader) prefetchSize() int64 {
-	// Type conversation safe as chunkSize checked to be max math.MaxInt
+	// Type conversation safe as ChunkSizeBytes checked to be between 5mb and 1gb (in bytes)
 	//nolint:gosec // disable G115
 	return int64(r.chunkSize)
 }
