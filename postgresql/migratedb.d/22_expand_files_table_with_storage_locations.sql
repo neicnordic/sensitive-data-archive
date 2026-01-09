@@ -17,6 +17,10 @@ BEGIN
         ADD COLUMN backup_location TEXT,
         ADD COLUMN submission_location TEXT;
 
+    CREATE INDEX files_submission_location_idx ON sda.files(submission_location);
+    CREATE INDEX files_archive_location_idx ON sda.files(archive_location);
+    CREATE INDEX files_backup_location_idx ON sda.files(backup_location);
+
     DROP FUNCTION IF EXISTS sda.register_file;
     CREATE FUNCTION sda.register_file(file_id TEXT, submission_location TEXT, submission_file_path TEXT, submission_user TEXT)
         RETURNS TEXT AS $register_file$
