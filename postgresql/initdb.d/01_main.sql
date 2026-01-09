@@ -89,6 +89,9 @@ CREATE TABLE files (
 );
 -- Add indexes to the files table
 CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_user, submission_file_path);
+CREATE INDEX files_submission_location_idx ON files(submission_location);
+CREATE INDEX files_archive_location_idx ON files(archive_location);
+CREATE INDEX files_backup_location_idx ON files(backup_location);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (
