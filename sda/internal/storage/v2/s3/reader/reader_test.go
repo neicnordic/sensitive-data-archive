@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/suite"
 )
@@ -246,13 +245,11 @@ storage:
       secret_key: secret_key1
       disable_https: true
       region: us-east-1
-      chunk_size: 1mb
     - endpoint: %s
       access_key: access_key2
       secret_key: secret_key2
       disable_https: true
       region: us-east-1
-      chunk_size: 10000000tb
 `, ts.s3Mock1.URL, ts.s3Mock2.URL)), 0600); err != nil {
 		ts.FailNow(err.Error())
 	}
@@ -592,10 +589,6 @@ func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFrom1Bucket2_BigFile() {
 
 	ts.Equal("aaaaaaafile is end", string(content[len(content)-len("aaaaaaafile is end"):]))
 	ts.Equal("file for testing seekable s3 readeraaaaaaaaaa", string(content[:len("file for testing seekable s3 readeraaaaaaaaaa")]))
-	if content[0] != 0 {
-		log.Println(string(content[:25]))
-		log.Println(string(content[len(content)-15:]))
-	}
 	_ = fileSeekReader.Close()
 }
 
