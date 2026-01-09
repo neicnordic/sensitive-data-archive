@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -646,4 +647,72 @@ func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket1_NotFoundExp
 func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket2_NotFoundExpected() {
 	_, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file1.txt")
 	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
+}
+
+// s3 seekable reader internal test here, messing with internals to expose behaviour
+func (ts *ReaderTestSuite) TestFileReadSeeker_Internal_NoPrefetchFromSeek() {
+	fileSeekReader, err := ts.reader.NewFileReadSeeker(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "seekable_big_file.txt")
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	s3SeekableReaderCast, ok := fileSeekReader.(*s3SeekableReader)
+	if !ok {
+		ts.FailNow("could not cast io.ReadSeekerCloser to *s3SeekableReader returned from NewFileReadSeeker")
+	}
+	s3SeekableReaderCast.seeked = true
+
+	var readBackBuffer [4096]byte
+
+	_, err = s3SeekableReaderCast.Read(readBackBuffer[0:4096])
+	ts.Equal("This is a big file", string(readBackBuffer[:18]), "did not read back data as expected")
+	ts.NoError(err, "read returned unexpected error")
+	_ = fileSeekReader.Close()
+}
+
+// s3 seekable reader internal test here, messing with internals to expose behaviour
+func (ts *ReaderTestSuite) TestFileReadSeeker_Internal_Cache() {
+	fileSeekReader, err := ts.reader.NewFileReadSeeker(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "seekable_big_file.txt")
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	s3SeekableReaderCast, ok := fileSeekReader.(*s3SeekableReader)
+	if !ok {
+		ts.FailNow("could not cast io.ReadSeekerCloser to *s3SeekableReader returned from NewFileReadSeeker")
+	}
+	s3SeekableReaderCast.seeked = true
+
+	s3SeekableReaderCast.prefetchAt(0)
+	ts.Equal(1, len(s3SeekableReaderCast.local), "nothing cached after prefetch")
+	// Clear cache
+	s3SeekableReaderCast.local = s3SeekableReaderCast.local[:0]
+
+	s3SeekableReaderCast.outstandingPrefetches = []int64{0}
+
+	var readBackBuffer [4096]byte
+	n, err := s3SeekableReaderCast.Read(readBackBuffer[0:4096])
+	ts.Nil(err, "read returned unexpected error")
+	ts.Equal(0, n, "got data when we should get 0 because of prefetch")
+
+	for i := 0; i < 30; i++ {
+		s3SeekableReaderCast.local = append(s3SeekableReaderCast.local, s3CacheBlock{90000000, int64(0), nil})
+	}
+	s3SeekableReaderCast.prefetchAt(0)
+	ts.Equal(8, len(s3SeekableReaderCast.local), "unexpected length of cache after prefetch")
+
+	s3SeekableReaderCast.outstandingPrefetches = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	s3SeekableReaderCast.removeFromOutstanding(9)
+	ts.Equal(s3SeekableReaderCast.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	s3SeekableReaderCast.removeFromOutstanding(19)
+	ts.Equal(s3SeekableReaderCast.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	s3SeekableReaderCast.removeFromOutstanding(5)
+	// We don't care about the internal order, sort for simplicity
+	slices.Sort(s3SeekableReaderCast.outstandingPrefetches)
+	ts.Equal(s3SeekableReaderCast.outstandingPrefetches, []int64{0, 1, 2, 3, 4, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+
+	s3SeekableReaderCast.objectReader = nil
+	s3SeekableReaderCast.bucket = ""
+	s3SeekableReaderCast.filePath = ""
+	data := make([]byte, 100)
+	_, err = s3SeekableReaderCast.wholeReader(data)
+	ts.NotNil(err, "wholeReader object instantiation worked when it should have failed")
 }
