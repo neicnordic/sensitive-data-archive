@@ -1,10 +1,11 @@
 package database
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"regexp"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,30 +16,36 @@ import (
 
 // TestRegisterFile tests that RegisterFile() behaves as intended
 func (suite *DatabaseTests) TestRegisterFile() {
-	// create database connection
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
-
-	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/file1.c4gh", "testuser")
-	assert.NoError(suite.T(), err, "failed to register file in database")
-
-	// check that the returning fileID is a uuid
-	uuidPattern := "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-	r := regexp.MustCompile(uuidPattern)
-	assert.True(suite.T(), r.MatchString(fileID), "RegisterFile() did not return a valid UUID: "+fileID)
-
-	// check that the file is in the database
-	exists := false
-	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.files WHERE id=$1)", fileID).Scan(&exists)
-	assert.NoError(suite.T(), err, "Failed to check if registered file exists")
-	assert.True(suite.T(), exists, "RegisterFile() did not insert a row into sda.files with id: "+fileID)
-
-	// check that there is a "registered" file event connected to the file
-	err = db.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_event_log WHERE file_id=$1 AND event='registered')", fileID).Scan(&exists)
-	assert.NoError(suite.T(), err, "Failed to check if registered file event exists")
-	assert.True(suite.T(), exists, "RegisterFile() did not insert a row into sda.file_event_log with id: "+fileID)
-
+	for _, step := range []struct {
+		id       string
+		name     string
+		location string
+		filePath string
+		userName string
+	}{
+		{
+			id:       "",
+			name:     "inbox",
+			location: "/inbox",
+			filePath: "/first/file.c4gh",
+			userName: "first.user@example.org",
+		},
+		{
+			id:       "8d2bdbc0-3b1e-443d-96b4-69d5066b8142",
+			name:     "ingest",
+			location: "/inbox",
+			filePath: "/second/file.c4gh",
+			userName: "second.user@example.org",
+		},
+	} {
+		suite.T().Run(step.name, func(t *testing.T) {
+			fileID, err := db.RegisterFile(&step.id, step.filePath, step.userName)
+			assert.NoError(suite.T(), err, "RegisterFile encountered an unexpected error: ", err)
+			assert.NoError(suite.T(), uuid.Validate(fileID), "RegisterFile did not return a UUID")
+		})
+	}
 	db.Close()
 }
 
@@ -160,16 +167,39 @@ func (suite *DatabaseTests) TestSetArchived() {
 	fileID, err := db.RegisterFile(nil, "/testuser/TestSetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), -1, fmt.Sprintf("%x", sha256.New())}
-	err = db.SetArchived(fileInfo, fileID)
-	assert.NoError(suite.T(), err, "failed to mark file as Archived")
+	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/Test/SetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), -1, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, "00000000-0000-0000-0000-000000000000")
-	assert.ErrorContains(suite.T(), err, "violates foreign key constraint")
-
-	err = db.SetArchived(fileInfo, fileID)
-	assert.NoError(suite.T(), err, "failed to mark file as Archived")
-
+	for _, step := range []struct {
+		name          string
+		expectedError string
+		fileID        string
+		fileInfo      FileInfo
+		location      string
+	}{
+		{
+			name:          "all_ok",
+			location:      "/archive",
+			fileID:        fileID,
+			fileInfo:      fileInfo,
+			expectedError: "",
+		},
+		{
+			name:          "same_file_different_id",
+			location:      "/archive",
+			fileID:        "0d57f640-4669-44cc-91bf-5b2fcc605ddc",
+			fileInfo:      fileInfo,
+			expectedError: "violates foreign key constraint",
+		},
+	} {
+		suite.T().Run(step.name, func(t *testing.T) {
+			err := db.setArchived(step.location, step.fileInfo, step.fileID)
+			if step.expectedError != "" {
+				assert.ErrorContains(suite.T(), err, step.expectedError)
+			} else {
+				assert.NoError(suite.T(), err, "SetArchived encountered an unexpected error: ", err)
+			}
+		})
+	}
 	db.Close()
 }
 
@@ -671,7 +701,6 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 
 	db.Close()
 }
-
 func (suite *DatabaseTests) TestListActiveUsers() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
@@ -1562,6 +1591,115 @@ func (suite *DatabaseTests) TestSetSubmissionFileSize() {
 	}
 
 	assert.Equal(suite.T(), fileSize, sizeInDb)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_OnlySubmissionLocationSet() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID1, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file1", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileID2, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file2", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	fileSize1 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID1, fileSize1)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	fileSize2 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID2, fileSize2)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	size, count, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
+	suite.NoError(err)
+	//nolint:gosec // disable G115
+	suite.Equal(uint64(fileSize1+fileSize2), size)
+	suite.Equal(uint64(2), count)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyArchived() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID1, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file1", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize1 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID1, fileSize1)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	fileID2, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file2", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize2 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID2, fileSize2)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	fileID3, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file3", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize3 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID3, fileSize3)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              fileSize3 + 250,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     fileSize3 - 100,
+		UploadedChecksum:  "abc",
+	}, fileID3))
+
+	fileID4, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file4", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize4 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID4, fileSize4)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "124",
+		Size:              fileSize4 + 250,
+		Path:              "/test.file4",
+		DecryptedChecksum: "421",
+		DecryptedSize:     fileSize4 - 100,
+		UploadedChecksum:  "bcd",
+	}, fileID4))
+
+	inboxSize, inboxCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
+	suite.NoError(err)
+
+	//nolint:gosec // disable G115
+	suite.Equal(uint64(fileSize1+fileSize2), inboxSize)
+	suite.Equal(uint64(2), inboxCount)
+
+	archiveSize, archiveCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/archive")
+	suite.NoError(err)
+	//nolint:gosec // disable G115
+	suite.Equal(uint64(fileSize3+250+fileSize4+250), archiveSize)
+	suite.Equal(uint64(2), archiveCount)
 
 	db.Close()
 }
