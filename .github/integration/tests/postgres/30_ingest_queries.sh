@@ -7,7 +7,7 @@ fileID="33d29907-c565-4a90-98b4-e31b992ab376"
 
 for host in migrate postgres; do
     ## insert file
-    fileID=$(psql -U ingest -h "$host" -d sda -At -c "SELECT sda.register_file('/inbox', '$fileID', 'inbox/test-file.c4gh', '$user');")
+    fileID=$(psql -U ingest -h "$host" -d sda -At -c "SELECT sda.register_file('$fileID', '/inbox', 'inbox/test-file.c4gh', '$user');")
     if [ -z "$fileID" ]; then
         echo "register_file failed"
         exit 1
