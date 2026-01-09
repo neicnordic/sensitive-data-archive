@@ -3,6 +3,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -1462,4 +1463,31 @@ func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID, event string) (FileDetails, e
 	}
 
 	return info, nil
+}
+
+func (dbs *SDAdb) GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	// Sum the size and count of the files in a location
+	// We do not expect submission_location == archive_location || archive_location == backup_location
+	// Which is the reason for the OR statements
+	// But when archive_location is set(then archive_file_size will also have been set)
+	// the file will have been removed from the submission_location which is the reason we are excluding files which
+	// have archive_location set if the argument equals submission_location
+	const query = `
+SELECT SUM(COALESCE(archive_file_size, submission_file_size)) AS size, COUNT(id)
+FROM sda.files
+WHERE (submission_location = $1 AND archive_location IS NULL) OR archive_location = $1 OR backup_location = $1;
+`
+
+	var size, count uint64
+	if err := dbs.DB.QueryRowContext(ctx, query, location).Scan(&size, &count); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+
+	return size, count, nil
+
 }

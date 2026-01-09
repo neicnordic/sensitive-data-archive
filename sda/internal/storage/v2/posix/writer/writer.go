@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 )
@@ -14,10 +14,10 @@ import (
 type Writer struct {
 	configuredEndpoints []*endpointConfig
 	activeEndpoints     []*endpointConfig
-	locationBroker      broker.LocationBroker
+	locationBroker      locationbroker.LocationBroker
 }
 
-func NewWriter(ctx context.Context, backendName string, locationBroker broker.LocationBroker) (*Writer, error) {
+func NewWriter(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (*Writer, error) {
 	endPoints, err := loadConfig(backendName)
 	if err != nil {
 		return nil, err
