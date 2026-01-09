@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -161,7 +161,7 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 	return trConfig, nil
 }
 
-func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker broker.LocationBroker) (string, error) {
+func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker locationbroker.LocationBroker) (string, error) {
 	client, err := endpointConf.createClient(ctx)
 	if err != nil {
 		log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
