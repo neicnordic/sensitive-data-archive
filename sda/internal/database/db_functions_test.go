@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -1617,6 +1618,114 @@ func (suite *DatabaseTests) TestSetSubmissionFileSize() {
 	}
 
 	assert.Equal(suite.T(), fileSize, sizeInDb)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_OnlySubmissionLocationSet() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID1, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file1", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileID2, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file2", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	fileSize1 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID1, fileSize1)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	fileSize2 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID2, fileSize2)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	size, count, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
+	suite.NoError(err)
+
+	suite.Equal(uint64(fileSize1+fileSize2), size)
+	suite.Equal(uint64(2), count)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyArchived() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID1, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file1", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize1 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID1, fileSize1)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	fileID2, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file2", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize2 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID2, fileSize2)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+
+	fileID3, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file3", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize3 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID3, fileSize3)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              fileSize3 + 250,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     fileSize3 - 100,
+		UploadedChecksum:  "abc",
+	}, fileID3))
+
+	fileID4, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file4", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	fileSize4 := int64(time.Now().Nanosecond())
+	err = db.setSubmissionFileSize(fileID4, fileSize4)
+	if err != nil {
+		suite.FailNow("failed to set submission file size", err)
+	}
+	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "124",
+		Size:              fileSize4 + 250,
+		Path:              "/test.file4",
+		DecryptedChecksum: "421",
+		DecryptedSize:     fileSize4 - 100,
+		UploadedChecksum:  "bcd",
+	}, fileID4))
+
+	inboxSize, inboxCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
+	suite.NoError(err)
+
+	suite.Equal(uint64(fileSize1+fileSize2), inboxSize)
+	suite.Equal(uint64(2), inboxCount)
+
+	archiveSize, archiveCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/archive")
+	suite.NoError(err)
+
+	suite.Equal(uint64(fileSize3+250+fileSize4+250), archiveSize)
+	suite.Equal(uint64(2), archiveCount)
 
 	db.Close()
 }
