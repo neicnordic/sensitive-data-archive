@@ -1648,7 +1648,7 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_OnlySubmissionLo
 
 	size, count, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
 	suite.NoError(err)
-
+	//nolint:gosec // disable G115
 	suite.Equal(uint64(fileSize1+fileSize2), size)
 	suite.Equal(uint64(2), count)
 
@@ -1718,12 +1718,13 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyArchived()
 	inboxSize, inboxCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
 	suite.NoError(err)
 
+	//nolint:gosec // disable G115
 	suite.Equal(uint64(fileSize1+fileSize2), inboxSize)
 	suite.Equal(uint64(2), inboxCount)
 
 	archiveSize, archiveCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/archive")
 	suite.NoError(err)
-
+	//nolint:gosec // disable G115
 	suite.Equal(uint64(fileSize3+250+fileSize4+250), archiveSize)
 	suite.Equal(uint64(2), archiveCount)
 

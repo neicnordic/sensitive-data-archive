@@ -1485,9 +1485,9 @@ WHERE (submission_location = $1 AND archive_location IS NULL) OR archive_locatio
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, nil
 		}
+
 		return 0, 0, err
 	}
 
 	return size, count, nil
-
 }
