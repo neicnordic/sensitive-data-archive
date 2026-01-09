@@ -2,11 +2,13 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
 	posixreader "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/posix/reader"
 	s3reader "github.com/neicnordic/sensitive-data-archive/internal/storage/v2/s3/reader"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 // Reader defines methods to read files from a backend
@@ -26,12 +28,16 @@ func NewReader(ctx context.Context, backendName string) (Reader, error) {
 
 	var err error
 	r.s3Reader, err = s3reader.NewReader(ctx, backendName)
-	if err != nil {
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
 	r.posixReader, err = posixreader.NewReader(backendName)
-	if err != nil {
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
+	}
+
+	if r.s3Reader == nil && r.posixReader == nil {
+		return nil, storageerrors.ErrorNoValidReader
 	}
 
 	return r, nil
