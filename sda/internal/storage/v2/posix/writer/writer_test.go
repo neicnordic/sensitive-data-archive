@@ -61,8 +61,8 @@ func (ts *WriterTestSuite) SetupTest() {
 
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
-  posix:
-    test:
+  test:
+    posix:
     - path: %s
       max_objects: 10
       max_size: 10kb

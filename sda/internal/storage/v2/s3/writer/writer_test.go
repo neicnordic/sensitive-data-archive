@@ -153,8 +153,8 @@ func (ts *WriterTestSuite) SetupSuite() {
 
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
-  s3:
-    test:
+  test:
+    s3:
     - endpoint: %s
       access_key: access_key1
       secret_key: secret_key1

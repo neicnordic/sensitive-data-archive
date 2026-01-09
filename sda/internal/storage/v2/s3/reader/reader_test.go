@@ -239,8 +239,8 @@ func (ts *ReaderTestSuite) SetupSuite() {
 
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
-  s3:
-    test:
+  test:
+    s3:
     - endpoint: %s
       access_key: access_key1
       secret_key: secret_key1
@@ -274,8 +274,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_MissingConfigEndpoint() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_endpoint.yaml"), []byte(`
 storage:
-  s3:
-    missing:
+  missing:
+    s3:
     - access_key: access_key1
       secret_key: secret_key1
       disable_https: true
@@ -300,8 +300,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_MissingConfigAccessKey() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_access_key.yaml"), []byte(`
 storage:
-  s3:
-    missing:
+  missing:
+    s3:
     - endpoint: 123
       secret_key: secret_key1
       disable_https: true
@@ -326,8 +326,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_MissingConfigSecretKey() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_secret_key.yaml"), []byte(`
 storage:
-  s3:
-    missing:
+  missing:
+    s3:
     - endpoint: 123
       access_key: access_key1
       disable_https: true
@@ -352,8 +352,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_InvalidChunkSize() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_invalid_chunk_size.yaml"), []byte(`
 storage:
-  s3:
-    invalid:
+  invalid:
+    s3:
     - endpoint: 123
       access_key: access_key1
       secret_key: secret_key1
@@ -378,8 +378,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_HTTPSEndpointWithDisableHttps() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_https_endpoint_with_disabled.yaml"), []byte(`
 storage:
-  s3:
-    invalid:
+  invalid:
+    s3:
     - endpoint: https://123
       access_key: access_key1
       secret_key: secret_key1
@@ -404,8 +404,8 @@ storage:
 func (ts *ReaderTestSuite) TestNewReader_HTTPEndpointWithEnabledHttps() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_http_endpoint_with_enabled.yaml"), []byte(`
 storage:
-  s3:
-    invalid:
+  invalid:
+    s3:
     - endpoint: http://123
       access_key: access_key1
       secret_key: secret_key1

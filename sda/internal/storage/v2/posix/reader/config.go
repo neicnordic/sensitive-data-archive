@@ -17,7 +17,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 
 	// TODO ideally register these as flags so it could be included in --help, etc for easier usability
 	if err := viper.UnmarshalKey(
-		"storage.posix."+backendName,
+		"storage."+backendName+".posix",
 		&endpointConf,
 		func(config *mapstructure.DecoderConfig) {
 			config.WeaklyTypedInput = true

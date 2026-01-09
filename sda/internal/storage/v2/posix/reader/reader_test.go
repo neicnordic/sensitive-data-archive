@@ -30,8 +30,8 @@ func (ts *ReaderTestSuite) SetupSuite() {
 
 	if err := os.WriteFile(filepath.Join(ts.dir1, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
-  posix:
-    test:
+  test:
+    posix:
     - path: %s
     - path: %s
 `, ts.dir1, ts.dir2)), 0600); err != nil {
