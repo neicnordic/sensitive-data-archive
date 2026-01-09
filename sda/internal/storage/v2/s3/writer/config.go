@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"os"
 	"slices"
@@ -79,13 +78,13 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				if err != nil {
 					return nil, errors.New("could not parse chunk_size as a valid data size")
 				}
-
-				if byteSize > 5*datasize.MB {
-					e.ChunkSizeBytes = byteSize.Bytes()
+				if byteSize < 5*datasize.MB {
+					return nil, errors.New("chunk_size can not be smaller than 5mb")
 				}
-				if e.ChunkSizeBytes > math.MaxInt64 {
-					e.ChunkSizeBytes = math.MaxInt64
+				if byteSize > 1*datasize.GB {
+					return nil, errors.New("chunk_size can not be bigger than 1gb")
 				}
+				e.ChunkSizeBytes = byteSize.Bytes()
 			}
 			if e.MaxSize != "" {
 				byteSize, err := datasize.ParseString(e.MaxSize)
