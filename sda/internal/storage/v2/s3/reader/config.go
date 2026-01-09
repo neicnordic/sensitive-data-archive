@@ -2,7 +2,6 @@ package reader
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	"github.com/c2h5oh/datasize"
@@ -59,12 +58,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				if err != nil {
 					return nil, errors.New("could not parse chunk_size as a valid data size")
 				}
-
-				if s >= 5*datasize.MB {
-					e.ChunkSizeBytes = s.Bytes()
+				if s < 5*datasize.MB {
+					return nil, errors.New("chunk_size can not be smaller than 5mb")
 				}
-				if e.ChunkSizeBytes > math.MaxInt64 {
-					e.ChunkSizeBytes = math.MaxInt64
+				if s > 1*datasize.GB {
+					return nil, errors.New("chunk_size can not be bigger than 1gb")
 				}
 			}
 		}
