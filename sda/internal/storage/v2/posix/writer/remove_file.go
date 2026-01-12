@@ -9,9 +9,6 @@ import (
 )
 
 func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) error {
-	if writer == nil {
-		return storageerrors.ErrorPosixWriterNotInitialized
-	}
 	var locationConfigured bool
 	for _, endpoint := range writer.configuredEndpoints {
 		if endpoint.Path == location {

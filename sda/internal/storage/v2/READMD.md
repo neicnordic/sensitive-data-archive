@@ -20,7 +20,8 @@ storage:
       - ${STORAGE_IMPLEMENTATION_DEPENDANT_CONFIG}
 ```
 
-Where ${STORAGE_NAME} is the name of the storage, and this is decided when initializing the writer / reader, eg: `NewWriter(..., "Inbox", ...).`
+Where ${STORAGE_NAME} is the name of the storage, and this is decided when initializing the writer / reader, eg:
+`NewWriter(..., "Inbox", ...).`
 ${STORAGE_IMPLEMENTATION} is which storage implementation is to be loaded, there can be multiple storage $
 {STORAGE_IMPLEMENTATION},
 supported values are "s3", and "posix", eg if an application is to be able to read from both s3 and posix, but writer to
@@ -69,6 +70,7 @@ A s3 reader has the following configuration:
 | region        | string | us-east-1      | The region of the s3 bucket                                                                                                                   |        
 | endpoint      | string |                | The address of the s3 buckets                                                                                                                 |        
 | disable_https | bool   | false          | If to disable https when connecting to the s3 bucket                                                                                          |        
+| bucket_prefix | string |                | How the reader will identify which buckets to look through when looking for a file for which the location is not known by the caller          |
 
 ### S3 Writer Config
 
@@ -111,6 +113,9 @@ A posix writer has the following configuration:
 | writer_disabled | bool         | false          | If the writer for this config should be disabled, i.e if this is just the config for a reader |
 
 ## Location Broker
-The location broker is responsible for providing information of how many objects and how many bytes are stored in a location.
-The location broker is currently powered by the database where we keep store information of where files were written and how big the files are. 
+
+The location broker is responsible for providing information of how many objects and how many bytes are stored in a
+location.
+The location broker is currently powered by the database where we keep store information of where files were written and
+how big the files are.
 Meaning if the database is incorrect we risk exceeding any possible quotas on the storage implementation side.

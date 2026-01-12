@@ -11,7 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 // s3CacheBlock is used to keep track of cached data
@@ -37,10 +36,6 @@ type s3SeekableReader struct {
 }
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
-	if reader == nil {
-		return nil, storageerrors.ErrorS3ReaderNotInitialized
-	}
-
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		return nil, err

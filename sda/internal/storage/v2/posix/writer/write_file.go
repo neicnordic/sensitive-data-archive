@@ -10,10 +10,6 @@ import (
 )
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
-	if writer == nil {
-		return "", storageerrors.ErrorPosixWriterNotInitialized
-	}
-
 	// Find first location that is still usable
 	// TODO locking while finding active location????
 	var location string

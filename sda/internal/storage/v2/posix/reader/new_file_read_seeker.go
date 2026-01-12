@@ -4,15 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
-	if reader == nil {
-		return nil, storageerrors.ErrorPosixReaderNotInitialized
-	}
-
 	r, err := reader.NewFileReader(ctx, location, filePath)
 	if err != nil {
 		return nil, err

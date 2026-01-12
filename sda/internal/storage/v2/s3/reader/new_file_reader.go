@@ -12,12 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// NewFileReader returns an io.Reader instance
 func (reader *Reader) NewFileReader(ctx context.Context, location, filePath string) (io.ReadCloser, error) {
-	if reader == nil {
-		return nil, storageerrors.ErrorS3ReaderNotInitialized
-	}
-
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		return nil, err

@@ -11,9 +11,6 @@ import (
 
 // GetFileSize returns the size of a specific object
 func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) (int64, error) {
-	if reader == nil {
-		return 0, storageerrors.ErrorPosixReaderNotInitialized
-	}
 	var locationConfigured bool
 	for _, endpoint := range reader.configuredEndpoints {
 		if endpoint.Path == location {

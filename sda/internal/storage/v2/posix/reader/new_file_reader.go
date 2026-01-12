@@ -12,9 +12,6 @@ import (
 
 // NewFileReader returns an io.Reader instance
 func (reader *Reader) NewFileReader(_ context.Context, location, filePath string) (io.ReadCloser, error) {
-	if reader == nil {
-		return nil, storageerrors.ErrorPosixReaderNotInitialized
-	}
 	var locationConfigured bool
 	for _, endpoint := range reader.configuredEndpoints {
 		if endpoint.Path == location {
