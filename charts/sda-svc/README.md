@@ -250,7 +250,7 @@ Parameter | Description | Default
 `api.resources.requests.memory` | Memory request for container. | `128Mi`
 `api.resources.requests.cpu` | CPU request for container. | `100m`
 `api.resources.limits.memory` | Memory limit for container. | `256Mi`
-`api.resources.limits.cpu` | CPU limit for container. | `250m`
+`api.resources.limits.cpu` | CPU limit for container. | `1000m`
 `api.tls.secretName` | Secret holding the application TLS certificates | ``
 `auth.replicaCount` | desired number of replicas | `2`
 `auth.annotations` | Specific annotation for the auth pod | `{}`
@@ -260,7 +260,7 @@ Parameter | Description | Default
 `auth.resources.requests.memory` | Memory request for container. | `128Mi`
 `auth.resources.requests.cpu` | CPU request for container. | `100m`
 `auth.resources.limits.memory` | Memory limit for container. | `256Mi`
-`auth.resources.limits.cpu` | CPU limit for container. | 250m`
+`auth.resources.limits.cpu` | CPU limit for container. | 1000m`
 `doa.replicaCount` | desired number of replicas | `2`
 `doa.keystorePass` | keystore password | `changeit`
 `doa.annotations` | Specific annotation for the doa pod | `{}`
@@ -286,7 +286,7 @@ Parameter | Description | Default
 `finalize.resources.requests.memory` | Memory request for finalize container. | `128Mi`
 `finalize.resources.requests.cpu` | CPU request for finalize container. | `100m`
 `finalize.resources.limits.memory` | Memory limit for finalize container. | `256Mi`
-`finalize.resources.limits.cpu` | CPU limit for finalize container. | `250m`
+`finalize.resources.limits.cpu` | CPU limit for finalize container. | `1000m`
 `ingest.replicaCount` | desired number of ingest workers | `1`
 `ingest.annotations` | Specific annotation for the ingest pod | `{}`
 `ingest.resources.requests.memory` | Memory request for ingest container. | `128Mi`
@@ -298,7 +298,7 @@ Parameter | Description | Default
 `intercept.resources.requests.memory` | Memory request for intercept container. | `32Mi`
 `intercept.resources.requests.cpu` | CPU request for intercept container. | `100m`
 `intercept.resources.limits.memory` | Memory limit for intercept container. | `128Mi`
-`intercept.resources.limits.cpu` | CPU limit for intercept container. | `2000m`
+`intercept.resources.limits.cpu` | CPU limit for intercept container. | `1000m`
 `s3Inbox.replicaCount` | desired number of S3inbox containers | `2`
 `s3Inbox.annotations` | Specific annotation for the S3inbox pod | `{}`
 `s3Inbox.ingressAnnotations | Ingress annotations specific to the s3Inbox service | `{}`
@@ -317,14 +317,14 @@ Parameter | Description | Default
 `sftpInbox.resources.requests.memory` | Memory request for sftpInbox container. | `128Mi`
 `sftpInbox.resources.requests.cpu` | CPU request for sftpInbox container. | `100m`
 `sftpInbox.resources.limits.memory` | Memory limit for sftpInbox container. | `256Mi`
-`sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. | `250m`
+`sftpInbox.resources.limits.cpu` | CPU limit for sftpInbox container. | `1000m`
 `sync.annotations` | Specific annotation for the sync pod | `{}`
 `sync.deploy` | Set to true if the sync service should be active | `false`
 `sync.replicaCount` | desired number of sync containers | `1`
 `sync.resources.requests.memory` | Memory request for sync container. | `128Mi`
 `sync.resources.requests.cpu` | CPU request for sync container. | `100m`
 `sync.resources.limits.memory` | Memory limit for sync container. | `512Mi`
-`sync.resources.limits.cpu` | CPU limit for sync container. | `500m`
+`sync.resources.limits.cpu` | CPU limit for sync container. | `1000m`
 `syncapi.replicaCount` | desired number of syncAPI containers | `1`
 `syncapi.annotations` | Specific annotation for the syncAPI pod | `{}`
 `syncapi.ingressAnnotations | Ingress annotations specific to the syncapi service | `{}`
@@ -332,7 +332,7 @@ Parameter | Description | Default
 `syncapi.resources.requests.memory` | Memory request for syncAPI container. | `64Mi`
 `syncapi.resources.requests.cpu` | CPU request for syncAPI container. | `100m`
 `syncapi.resources.limits.memory` | Memory limit for syncAPI container. | `256Mi`
-`syncapi.resources.limits.cpu` | CPU limit for syncAPI container. | `500m`
+`syncapi.resources.limits.cpu` | CPU limit for syncAPI container. | `1000m`
 `verify.replicaCount` | desired number of verify containers | `1`
 `verify.annotations` | Specific annotation for the verify pod | `{}`
 `verify.resources.requests.memory` | Memory request for verify container. | `128Mi`

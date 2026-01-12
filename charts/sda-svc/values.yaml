@@ -391,7 +391,7 @@ api:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -427,7 +427,7 @@ auth:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -518,7 +518,7 @@ finalize:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -552,7 +552,7 @@ intercept:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -590,7 +590,7 @@ reencrypt:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -659,7 +659,7 @@ sftpInbox:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
   keystorePass: "changeit"
   nodeHostname: ""
 # Extra annotations to attach to the pod
@@ -678,7 +678,7 @@ sync:
       cpu: "100m"
     limits:
       memory: "512Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -699,7 +699,7 @@ syncapi:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
