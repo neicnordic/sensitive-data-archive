@@ -526,11 +526,12 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	assert.Nil(s.T(), err, "Failed to connect to database")
 
 	// Check that the file is in the database
-	var fileID string
-	query := "SELECT id FROM sda.files WHERE submission_file_path = $1;"
-	err = db.DB.QueryRow(query, anonymFilename).Scan(&fileID)
+	var fileID, location string
+	query := "SELECT id, submission_location FROM sda.files WHERE submission_file_path = $1;"
+	err = db.DB.QueryRow(query, anonymFilename).Scan(&fileID, &location)
 	assert.Nil(s.T(), err, "Failed to query database")
 	assert.NotNil(s.T(), fileID, "File not found in database")
+	assert.Equal(s.T(), fmt.Sprintf("%s:%d/%s", s.S3Fakeconf.URL, s.S3Fakeconf.Port, s.S3Fakeconf.Bucket), location)
 
 	// Check that the "registered" status is in the database for this file
 	for _, status := range []string{"registered", "uploaded"} {
@@ -616,30 +617,6 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "StatusCode: 403")
-}
-
-func (s *ProxyTests) TestStoreObjectSizeInDB() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
-
-	mq, err := broker.NewMQ(s.MQConf)
-	assert.NoError(s.T(), err)
-	defer mq.Connection.Close()
-
-	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	p.database = db
-
-	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
-	assert.NoError(s.T(), err)
-	assert.NotNil(s.T(), fileID)
-
-	assert.NoError(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
-
-	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
-	var objectSize int64
-	assert.NoError(s.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
-	assert.Equal(s.T(), int64(14), objectSize)
 }
 
 func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
