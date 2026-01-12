@@ -157,7 +157,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
 	anonymizedFilepath := helper.AnonymizeFilepath(rawFilepath, username)
 
-	filepath, err := formatUploadFilePath(anonymizedFilepath)
+	filePath, err := formatUploadFilePath(anonymizedFilepath)
 	if err != nil {
 		reportError(http.StatusNotAcceptable, err.Error(), w)
 
@@ -166,14 +166,15 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 	fileIdentifier := uniqueFileID{
 		username: username,
-		filePath: filepath,
+		filePath: filePath,
 	}
 
+	location := fmt.Sprintf("%s:%d/%s", p.s3.URL, p.s3.Port, p.s3.Bucket)
 	// if this is an upload request
 	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
 		// register file in database
-		log.Debugf("registering file %v in the database", r.URL.Path)
-		p.fileIDs[fileIdentifier], err = p.database.RegisterFile(nil, filepath, username)
+		log.Debugf("registering file %v in the database with location: %s", r.URL.Path, location)
+		p.fileIDs[fileIdentifier], err = p.database.RegisterFileWithLocation(nil, location, filePath, username)
 		log.Debugf("fileId: %v", p.fileIDs[fileIdentifier])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
@@ -226,7 +227,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
 		if p.fileIDs[fileIdentifier] == "" {
-			p.fileIDs[fileIdentifier], err = p.database.GetFileIDByUserPathAndStatus(username, filepath, "registered")
+			p.fileIDs[fileIdentifier], err = p.database.GetFileIDByUserPathAndStatus(username, filePath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
