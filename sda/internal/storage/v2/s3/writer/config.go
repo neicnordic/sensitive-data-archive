@@ -100,6 +100,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			if e.MaxBuckets == 0 {
 				e.MaxBuckets = 1
 			}
+			if e.Region == "" {
+				e.Region = "us-east-1"
+			}
 		}
 	}
 
