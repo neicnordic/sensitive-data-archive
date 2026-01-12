@@ -38,6 +38,7 @@ type endpointConfig struct {
 	SecretKey      string `mapstructure:"secret_key"`
 	Endpoint       string `mapstructure:"endpoint"`
 	DisableHTTPS   bool   `mapstructure:"disable_https"`
+	WriterDisabled bool   `mapstructure:"writer_disabled"`
 }
 
 func loadConfig(backendName string) ([]*endpointConfig, error) {
@@ -56,6 +57,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	}
 
 	for _, e := range endpointConf {
+		if e.WriterDisabled {
+			continue
+		}
 		switch {
 		case e.Endpoint == "":
 			return nil, errors.New("missing required parameter: endpoint")
@@ -92,6 +96,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 					return nil, errors.New("could not parse max_size as a valid data size")
 				}
 				e.MaxSizeBytes = byteSize.Bytes()
+			}
+			if e.MaxBuckets == 0 {
+				e.MaxBuckets = 1
 			}
 		}
 	}
