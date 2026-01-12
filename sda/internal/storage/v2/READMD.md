@@ -66,7 +66,7 @@ A s3 reader has the following configuration:
 | secret_key    | string |                | The secret key used to authenticate when connecting to the s3                                                                                 |
 | ca_cert       | string |                | The ca certificate of the s3 to be appended to the certs of the system                                                                        |        
 | chunk_size    | string | 50MB           | The chunk size (in bytes) when writing data S3, also when reading chunks with the Seekable Reader. The minimum allowed is 5MB, and max is 1gb |
-| region        | string | us-west-1      | The region of the s3 bucket                                                                                                                   |        
+| region        | string | us-east-1      | The region of the s3 bucket                                                                                                                   |        
 | endpoint      | string |                | The address of the s3 buckets                                                                                                                 |        
 | disable_https | bool   | false          | If to disable https when connecting to the s3 bucket                                                                                          |        
 
@@ -80,7 +80,7 @@ A s3 writer has the following configuration:
 | secret_key      | string       |                | The secret key used to authenticate when connecting to the s3                                                                                                 |
 | ca_cert         | string       |                | The ca certificate of the s3 to be appended to the certs of the system                                                                                        |        
 | chunk_size      | string       | 50MB           | The chunk size (in bytes) when writing data S3, also when reading chunks with the Seekable Reader. The minimum allowed is 5MB, and max is 1gb                 |
-| region          | string       | us-west-1      | The region of the s3 bucket                                                                                                                                   |        
+| region          | string       | us-east-1      | The region of the s3 bucket                                                                                                                                   |        
 | endpoint        | string       |                | The address of the s3 buckets                                                                                                                                 |        
 | disable_https   | bool         | false          | If to disable https when connecting to the s3 bucket                                                                                                          |        
 | bucket_prefix   | string       |                | How the writer will identify which buckets to be used or named if created, the buckets will be named by the bucket_prefix with a following incremental number |        
