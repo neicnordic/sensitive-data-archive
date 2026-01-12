@@ -505,6 +505,9 @@ download:
   ingressAnnotations: {}
   tls:
     secretName: ""
+## @param download.minClientVersion
+## Minimal version of the `sda-cli` to accept, defaults to `v0.3.0`
+  minClientVersion: ""
 
 finalize:
   name: finalize
