@@ -12,10 +12,11 @@ import (
 )
 
 type endpointConfig struct {
-	Path         string `mapstructure:"path"`
-	MaxObjects   uint64 `mapstructure:"max_objects"`
-	MaxSize      string `mapstructure:"max_size"`
-	MaxSizeBytes uint64 `mapstructure:"-"`
+	Path           string `mapstructure:"path"`
+	MaxObjects     uint64 `mapstructure:"max_objects"`
+	MaxSize        string `mapstructure:"max_size"`
+	MaxSizeBytes   uint64 `mapstructure:"-"`
+	WriterDisabled bool   `mapstructure:"writer_disabled"`
 }
 
 func loadConfig(backendName string) ([]*endpointConfig, error) {
@@ -34,6 +35,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	}
 
 	for _, e := range endpointConf {
+		if e.WriterDisabled {
+			continue
+		}
 		if !strings.HasPrefix(e.Path, "/") {
 			return nil, errors.New("posix paths must be absolute")
 		}
