@@ -17,6 +17,7 @@ type endpointConfig struct {
 	Region         string `mapstructure:"region"`
 	SecretKey      string `mapstructure:"secret_key"`
 	Endpoint       string `mapstructure:"endpoint"`
+	BucketPrefix   string `mapstructure:"bucket_prefix"`
 	DisableHTTPS   bool   `mapstructure:"disable_https"`
 }
 
