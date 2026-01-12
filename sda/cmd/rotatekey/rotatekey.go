@@ -236,6 +236,15 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 		}
 	}
 
+	// Backup old header before rotating
+	log.Debugf("Backing up old header for file-id: %s", fileID)
+	if err := app.DB.BackupHeader(fileID, header, oldKeyHash); err != nil {
+		msg := fmt.Sprintf("failed to backup encryption header for file %s", fileID)
+		log.Errorf("%s, reason: %v", msg, err)
+		// We Nack and requeue because if backup fails, rotation should not proceed
+		return "nackRequeue", msg, err
+	}
+
 	newHeader, err := reencrypt.CallReencryptHeader(header, app.PubKeyEncoded, app.Conf.RotateKey.Grpc)
 	if err != nil {
 		msg := fmt.Sprintf("failed to rotate c4gh key for file %s", fileID)

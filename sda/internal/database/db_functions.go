@@ -366,6 +366,43 @@ func (dbs *SDAdb) getHeader(fileID string) ([]byte, error) {
 	return header, nil
 }
 
+// BackupHeader takes a backup of the current encryption header before it is rotated.
+// It stores the fileID, the hex-encoded header, and the current timestamp in a backup table.
+func (dbs *SDAdb) BackupHeader(fileID string, header []byte, keyHash string) error {
+	var (
+		err   error
+		count int
+	)
+
+	for count == 0 || (err != nil && count < RetryTimes) {
+		err = dbs.backupHeader(fileID, header, keyHash)
+		count++
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) backupHeader(fileID string, header []byte, keyHash string) error {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const query = `
+		INSERT INTO sda.file_headers_backup (file_id, header, key_hash, backup_at)
+		VALUES ($1, $2, $3, NOW());`
+
+	result, err := db.Exec(query, fileID, hex.EncodeToString(header), keyHash)
+	if err != nil {
+		return fmt.Errorf("backupHeader error: %w", err)
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return errors.New("failed to backup header: zero rows were inserted")
+	}
+	log.Debugf("Successfully backed up header for file %s", fileID)
+
+	return nil
+}
+
 // MarkCompleted marks the file as "COMPLETED"
 func (dbs *SDAdb) SetVerified(file FileInfo, fileID string) error {
 	var (
