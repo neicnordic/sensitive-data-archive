@@ -125,3 +125,17 @@ func (ts *ReaderTestSuite) TestGetFileSize() {
 
 	ts.Equal(int64(len("file 6 content in dir2")), fileSize)
 }
+
+func (ts *ReaderTestSuite) TestFindFile_FoundInDir2() {
+	loc, err := ts.reader.FindFile(context.TODO(), "dir2_file9.txt")
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	ts.Equal(ts.dir2, loc)
+}
+func (ts *ReaderTestSuite) TestFindFile_NotFound() {
+	loc, err := ts.reader.FindFile(context.TODO(), "not_exist.txt")
+	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
+	ts.Equal("", loc)
+}

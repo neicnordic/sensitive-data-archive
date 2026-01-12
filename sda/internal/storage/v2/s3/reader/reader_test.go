@@ -428,17 +428,6 @@ storage:
 	ts.EqualError(err, "http scheme in endpoint when using HTTPS")
 }
 
-func (ts *ReaderTestSuite) TestNewFileReader_NotInitialized() {
-	var notInitializedReader *Reader
-	_, err := notInitializedReader.NewFileReader(context.TODO(), "", "")
-	ts.EqualError(err, storageerrors.ErrorS3ReaderNotInitialized.Error())
-}
-func (ts *ReaderTestSuite) TestNewFileReaderSeeker_NotInitialized() {
-	var notInitializedReader *Reader
-	_, err := notInitializedReader.NewFileReadSeeker(context.TODO(), "", "")
-	ts.EqualError(err, storageerrors.ErrorS3ReaderNotInitialized.Error())
-}
-
 func (ts *ReaderTestSuite) TestNewFileReader_InvalidLocation() {
 	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
 	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
@@ -637,6 +626,20 @@ func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket2() {
 	}
 
 	ts.Equal(int64(104), size)
+}
+
+func (ts *ReaderTestSuite) TestFindFile_FoundIn2Bucket2() {
+	loc, err := ts.reader.FindFile(context.TODO(), "file4.txt")
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	ts.Equal(ts.s3Mock2.URL+"/mock_s3_2_bucket_2", loc)
+}
+func (ts *ReaderTestSuite) TestFindFile_NotFound() {
+	loc, err := ts.reader.FindFile(context.TODO(), "not_exist.txt")
+	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
+	ts.Equal("", loc)
 }
 
 func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket1_NotFoundExpected() {

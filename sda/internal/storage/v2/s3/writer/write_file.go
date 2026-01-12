@@ -12,12 +12,6 @@ import (
 )
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
-	if writer == nil {
-		return "", storageerrors.ErrorS3WriterNotInitialized
-	}
-
-	// TODO do we need to check this at each write?
-
 	// TODO locking while finding active bucket????
 	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoFreeBucket) {

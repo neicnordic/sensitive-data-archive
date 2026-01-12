@@ -13,8 +13,13 @@ import (
 
 // Reader defines methods to read files from a backend
 type Reader interface {
+	// NewFileReader will open a reader of the file at the file path in the specified location
 	NewFileReader(ctx context.Context, location, filePath string) (io.ReadCloser, error)
+	// NewFileReadSeeker will open a read seeker of the file at the file path in the specified location
 	NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error)
+	// FindFile will look through all configured storages for the specified file path and return the first location in which it was found
+	FindFile(ctx context.Context, filePath string) (string, error)
+	// GetFileSize will return the size of the file specified by the file path and location
 	GetFileSize(ctx context.Context, location, filePath string) (int64, error)
 }
 
@@ -65,4 +70,27 @@ func (r *reader) GetFileSize(ctx context.Context, location, filePath string) (in
 	}
 
 	return r.s3Reader.GetFileSize(ctx, location, filePath)
+}
+
+func (r *reader) FindFile(ctx context.Context, filePath string) (string, error) {
+	if r.s3Reader != nil {
+		loc, err := r.s3Reader.FindFile(ctx, filePath)
+		if err != nil && !errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
+			return "", err
+		}
+		if loc != "" {
+			return loc, nil
+		}
+	}
+	if r.posixReader != nil {
+		loc, err := r.posixReader.FindFile(ctx, filePath)
+		if err != nil && !errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
+			return "", err
+		}
+		if loc != "" {
+			return loc, nil
+		}
+	}
+
+	return "", storageerrors.ErrorFileNotFoundInLocation
 }
