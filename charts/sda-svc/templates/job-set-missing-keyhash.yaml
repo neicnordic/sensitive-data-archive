@@ -1,4 +1,21 @@
 {{- if .Values.jobs.setKeyHash }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: set-key-hash
+data:
+  set-key-hash.sql: |
+    DO
+    $$
+    BEGIN
+      IF (select max(version) from sda.dbschema_version) > 11 then
+        RAISE NOTICE 'Fixing c4gh key references';
+        UPDATE sda.files SET key_hash = (SELECT key_hash FROM sda.encryption_keys WHERE deprecated_at IS NULL ORDER BY created_at ASC LIMIT 1)
+        WHERE header IS NOT NULL AND key_hash IS NULL;
+      END IF;
+    END
+    $$
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -72,21 +89,4 @@ spec:
       - name: sql
         configMap:
           name: set-key-hash
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: set-key-hash
-data:
-  set-key-hash.sql: |
-    DO
-    $$
-    BEGIN
-      IF (select max(version) from sda.dbschema_version) > 11 then
-        RAISE NOTICE 'Fixing c4gh key references';
-        UPDATE sda.files SET key_hash = (SELECT key_hash FROM sda.encryption_keys WHERE deprecated_at IS NULL ORDER BY created_at ASC LIMIT 1)
-        WHERE header IS NOT NULL AND key_hash IS NULL;
-      END IF;
-    END
-    $$
 {{- end }}
