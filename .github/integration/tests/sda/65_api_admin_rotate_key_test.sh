@@ -10,13 +10,13 @@ cd shared || true
 checkErrors() {
 	RETRY_TIMES=0
 	until [ $(("$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')"-"$errorStreamSize")) -eq 1 ]; do
-    	echo "checking for $1 error"
-    	RETRY_TIMES=$((RETRY_TIMES + 1))
+        echo "checking for $1 error"
+        RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 20 ]; then
-        	echo "::error::Time out while waiting for error message"
-        	exit 1
-    	fi
-    	sleep 2
+            echo "::error::Time out while waiting for error message"
+            exit 1
+        fi
+        sleep 2
 	done
 }
 
@@ -102,11 +102,11 @@ done
 
 # assign accession IDs to the files
 for i in 1 2; do
-    fileID=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_admin_rotatekey/testfile$i.c4gh';")
     payload=$(
         jq -c -n \
-            --arg accession_id "EGAF123456789$i" \
-            --arg file_id "$fileID" \
+            --arg accession_id "EGAF100000000$i" \
+            --arg user "test@dummy.org" \
+            --arg filepath "dataset_admin_rotatekey/testfile$i.c4gh" \
             '$ARGS.named'
     )
     resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$payload" "http://api:8080/file/accession")"
@@ -116,26 +116,69 @@ for i in 1 2; do
     fi
 done
 
-# create dataset with both files
-dataset_payload=$(
+# wait for accession IDs to be registered in the database
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) FROM sda.files WHERE stable_id LIKE 'EGAF100000000%';")" -eq 2 ]; do
+    echo "waiting for accession IDs to be registered"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for accession IDs to be registered"
+        exit 1
+    fi
+    sleep 2
+done
+
+## map files to dataset
+properties=$(
     jq -c -n \
-        --arg dataset_id "EGAD12345678901" \
-        --arg user "test@dummy.org" \
-        --argjson accession_ids '["EGAF1234567891", "EGAF1234567892"]' \
+        --argjson delivery_mode 2 \
+        --arg content_encoding UTF-8 \
+        --arg content_type application/json \
         '$ARGS.named'
 )
-resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$dataset_payload" "http://api:8080/dataset/create")"
-if [ "$resp" != "200" ]; then
-    echo "Error when creating dataset, expected 200 got: $resp"
-    exit 1
-fi
 
-# verify dataset was created and contains both files
-dataset_files_count="$(curl -s -k -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD12345678901/fileids" | jq '. | length')"
-if [ "$dataset_files_count" -ne 2 ]; then
-    echo "Expected 2 files in dataset, got: $dataset_files_count"
-    exit 1
-fi
+mappings=$(
+    jq -c -n \
+        '$ARGS.positional' \
+        --args "EGAF1000000001" \
+        --args "EGAF1000000002"
+)
+
+mapping_payload=$(
+    jq -r -c -n \
+        --arg type mapping \
+        --arg dataset_id EGAD100000000001 \
+        --argjson accession_ids "$mappings" \
+        '$ARGS.named|@base64'
+)
+
+mapping_body=$(
+    jq -c -n \
+        --arg vhost test \
+        --arg name sda \
+        --argjson properties "$properties" \
+        --arg routing_key "mappings" \
+        --arg payload_encoding base64 \
+        --arg payload "$mapping_payload" \
+        '$ARGS.named'
+)
+
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$mapping_body" | jq
+
+
+# wait for mapper to process the dataset mapping
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'EGAD100000000001');")" -eq 2 ]; do
+    echo "waiting for dataset mapping to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset mapping to complete"
+        exit 1
+    fi
+    sleep 2
+done
 
 echo "Dataset created successfully with 2 files"
 
@@ -152,10 +195,12 @@ echo "File IDs: $fileID1, $fileID2"
 echo "Testing dataset key rotation via sda-admin CLI tool"
 
 # Use sda-admin CLI tool to rotate keys for the dataset
-SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" /shared/sda-admin dataset rotatekey -dataset-id "EGAD12345678901"
+# SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "EGAD100000000001"
+# Replaced sda-admin with direct API call since sda-admin is not available in the container
+resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/EGAD100000000001/rotatekey")
 
-if [ $? -ne 0 ]; then
-    echo "Error when running sda-admin dataset rotatekey command"
+if [ "$resp" != "200" ]; then
+    echo "Error when running dataset rotatekey command, expected 200 got: $resp"
     exit 1
 fi
 
@@ -198,6 +243,7 @@ done
 sleep 5
 if [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')" -ne "$errorStreamSize" ]; then
     echo "something went wrong with the dataset key rotation"
+    curl -su guest:guest -X POST http://rabbitmq:15672/api/queues/sda/error_stream/get -d '{"count":10,"ackmode":"ack_requeue_true","encoding":"auto","truncate":50000}' | jq .
     exit 1
 fi
 
@@ -244,16 +290,19 @@ done
 ## test dataset key rotation with non-existent dataset
 echo "Testing dataset key rotation with non-existent dataset"
 
-SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" /shared/sda-admin dataset rotatekey -dataset-id "NONEXISTENT" 2>/dev/null
-if [ $? -eq 0 ]; then
-    echo "Expected sda-admin to fail with non-existent dataset, but it succeeded"
+# SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "NONEXISTENT" 2>/dev/null
+# Replaced sda-admin with direct API call
+resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/NONEXISTENT/rotatekey")
+
+if [ "$resp" != "404" ]; then
+    echo "Expected 404 for non-existent dataset, got: $resp"
     exit 1
 fi
 
 ## test getting dataset file IDs via API
 echo "Testing dataset file IDs endpoint"
 
-dataset_fileids="$(curl -s -k -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD12345678901/fileids")"
+dataset_fileids="$(curl -s -k -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD100000000001/fileids")"
 fileids_count="$(echo "$dataset_fileids" | jq '. | length')"
 if [ "$fileids_count" -ne 2 ]; then
     echo "Expected 2 file IDs, got: $fileids_count"
