@@ -50,6 +50,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if db.Version < 23 {
+		log.Error("database schema v23 is required")
+		db.Close()
+		panic(err)
+	}
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
