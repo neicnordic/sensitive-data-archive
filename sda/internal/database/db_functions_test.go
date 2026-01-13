@@ -1558,13 +1558,13 @@ func (suite *DatabaseTests) TestGetDatasetFileIDs() {
 	db.Close()
 }
 
-func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
+func (suite *DatabaseTests) TestGetSubmissionPathAndLocation() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	user := "UserX"
 	filePath := fmt.Sprintf("/%v/Deletefile1.c4gh", user)
-	fileID, err := db.RegisterFile(nil, filePath, user)
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", filePath, user)
 	if err != nil {
 		suite.FailNow("Failed to register file")
 	}
@@ -1572,13 +1572,14 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	if err != nil {
 		suite.FailNow("Failed to update file event log")
 	}
-	path, err := db.getSubmissionPathAndLocation(user, fileID)
+	path, location, err := db.GetSubmissionPathAndLocation(context.Background(), user, fileID)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), path, filePath)
+	assert.Equal(suite.T(), "/inbox", location)
 
 	err = db.UpdateFileEventLog(fileID, "archived", user, "{}", "{}")
 	assert.NoError(suite.T(), err)
-	_, err = db.getSubmissionPathAndLocation(user, fileID)
+	_, _, err = db.GetSubmissionPathAndLocation(context.Background(), user, fileID)
 	assert.Error(suite.T(), err)
 	db.Close()
 }
