@@ -390,6 +390,7 @@ func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
 type FileDownload struct {
 	ArchivePath       string
 	ArchiveSize       int
+	ArchiveLocation   string
 	DecryptedSize     int
 	DecryptedChecksum string
 	LastModified      string
@@ -427,6 +428,7 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 	const query = `
 		SELECT f.archive_file_path,
 			   f.archive_file_size,
+			   f.archive_location,
 			   f.decrypted_file_size,
 			   dc.checksum AS decrypted_checksum,
 			   f.last_modified,
@@ -440,7 +442,7 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 
 	fd := &FileDownload{}
 	var hexString string
-	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize,
+	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize, &fd.ArchiveLocation,
 		&fd.DecryptedSize, &fd.DecryptedChecksum, &fd.LastModified, &hexString)
 	if err != nil {
 		log.Errorf("could not retrieve details for file %s, reason %s", sanitizeString(fileID), err)
