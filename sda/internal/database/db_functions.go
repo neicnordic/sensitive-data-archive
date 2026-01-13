@@ -765,6 +765,23 @@ MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums w
 	return info, nil
 }
 
+func (dbs *SDAdb) GetSubmissionLocation(ctx context.Context, fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFileID = "SELECT submission_location FROM sda.files WHERE id = $1;"
+
+	var submissionLocation string
+	if err := db.QueryRowContext(ctx, getFileID, fileID).Scan(&submissionLocation); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	return submissionLocation, nil
+}
+
 // GetHeaderForStableID retrieves the file header by using stable id
 func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 	dbs.checkAndReconnectIfNeeded()
