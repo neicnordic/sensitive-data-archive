@@ -65,40 +65,36 @@ func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, upload
 	return createdFileID, err
 }
 
-// GetInboxFilePathFromID checks if a file exists in the database for a given user and fileID
+// GetSubmissionPathAndLocation checks if a file exists in the database for a given user and fileID
 // and that is not yet archived
-func (dbs *SDAdb) GetInboxFilePathFromID(submissionUser, fileID string) (string, error) {
-	var (
-		err      error
-		count    int
-		filePath string
-	)
-
-	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, err = dbs.getInboxFilePathFromID(submissionUser, fileID)
-		count++
-	}
-
-	return filePath, err
-}
-
-func (dbs *SDAdb) getInboxFilePathFromID(submissionUser, fileID string) (string, error) {
+func (dbs *SDAdb) GetSubmissionPathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	const getFilePath = `SELECT submission_file_path from sda.files where
-submission_user= $1 and id = $2
-AND EXISTS (SELECT 1 FROM
-(SELECT event from sda.file_event_log where file_id = $2 order by started_at desc limit 1)
-as subquery WHERE event = 'uploaded');`
+	const getFilePath = `
+SELECT submission_file_path, submission_location
+FROM sda.files
+WHERE
+  submission_user = $1 
+  AND id = $2
+  AND EXISTS (
+    SELECT 1 
+	  FROM (
+	    SELECT event 
+	    FROM sda.file_event_log 
+	    WHERE file_id = $2 
+	    ORDER BY started_at DESC limit 1
+	  ) AS subquery 
+	  WHERE event = 'uploaded'
+    );`
 
-	var filePath string
-	err := db.QueryRow(getFilePath, submissionUser, fileID).Scan(&filePath)
+	var filePath, location string
+	err := db.QueryRowContext(ctx, getFilePath, submissionUser, fileID).Scan(&filePath, &location)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return filePath, nil
+	return filePath, location, nil
 }
 
 // GetFileIDByUserPathAndStatus checks if a file exists in the database for a given user and submission filepath
