@@ -13,15 +13,12 @@ BEGIN
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
     CREATE TABLE IF NOT EXISTS sda.file_headers_backup (
-        id          SERIAL PRIMARY KEY,
-        file_id     UUID REFERENCES sda.files(id) NOT NULL,
+        file_id     UUID REFERENCES sda.files(id) PRIMARY KEY,
         header      TEXT NOT NULL,
         key_hash    TEXT REFERENCES sda.encryption_keys(key_hash),
         backup_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
     );
 
-    -- Create indexes for performance
-    CREATE INDEX IF NOT EXISTS file_headers_backup_file_id_idx ON sda.file_headers_backup(file_id);
 
     -- Grant permissions to the rotatekey role
     GRANT INSERT, SELECT ON sda.file_headers_backup TO rotatekey;

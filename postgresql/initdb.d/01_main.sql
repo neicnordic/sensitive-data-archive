@@ -202,11 +202,8 @@ CREATE TABLE dataset_event_log (
 -- `file_headers_backup` stores temporary copies of headers during key rotation.
 -- Designed to be manually truncated/cleaned after key rotation is complete.
 CREATE TABLE sda.file_headers_backup (
-    id          SERIAL PRIMARY KEY,
-    file_id     UUID REFERENCES sda.files(id) NOT NULL,
+    file_id     UUID REFERENCES sda.files(id) PRIMARY KEY,
     header      TEXT NOT NULL,
     key_hash    TEXT REFERENCES sda.encryption_keys(key_hash),
     backup_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
 );
-
-CREATE INDEX file_headers_backup_file_id_idx ON sda.file_headers_backup(file_id);
