@@ -107,36 +107,13 @@ These settings control how sync connects to the RabbitMQ message broker.
 
 
 ### Storage settings
-
-Storage backend is defined by the `ARCHIVE_TYPE`, and `SYNC_DESTINATION_TYPE` variables.
-Valid values for these options are `S3` or `POSIX` for `ARCHIVE_TYPE` and `POSIX`, `S3` or `SFTP` for `SYNC_DESTINATION_TYPE`.
-
-The value of these variables define what other variables are read.
-The same variables are available for all storage types, differing by prefix (`ARCHIVE_`, or  `SYNC_DESTINATION_`)
-
-if `*_TYPE` is `S3` then the following variables are available:
-
-- `*_URL`: URL to the S3 system
-- `*_ACCESSKEY`: The S3 access and secret key are used to authenticate to S3, [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `*_SECRETKEY`: The S3 access and secret key are used to authenticate to S3, [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `*_BUCKET`: The S3 bucket to use as the storage root
-- `*_PORT`: S3 connection port (default: `443`)
-- `*_REGION`: S3 region (default: `us-east-1`)
-- `*_CHUNKSIZE`: S3 chunk size for multipart uploads.
-- `*_CACERT`: Certificate Authority (CA) certificate for the storage system, CA certificate is only needed if the S3 server has a certificate signed by a private entity
-
-if `*_TYPE` is `POSIX`:
-
-- `*_LOCATION`: POSIX path to use as storage root
-
-and if `*_TYPE` is `SFTP`:
-
-- `*_HOST`: URL to the SFTP server
-- `*_PORT`: Port of the SFTP server to connect to
-- `*_USERNAME`: Username connection to the SFTP server
-- `*_HOSTKEY`: The SFTP server's public key
-- `*_PEMKEYPATH`: Path to the ssh private key used to connect to the SFTP server
-- `*_PEMKEYPASS`: Passphrase for the ssh private key
+The sync service requires access to the "archive" storage, to configure such the following config is needed:
+```yaml
+storage:
+  inbox:
+    ${STORAGE_IMPLEMENTATION}:
+```
+For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/READMD.md)
 
 ### Logging settings
 
