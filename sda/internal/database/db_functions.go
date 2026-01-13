@@ -781,6 +781,7 @@ func (dbs *SDAdb) GetSubmissionLocation(ctx context.Context, fileID string) (str
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
+
 		return "", err
 	}
 
