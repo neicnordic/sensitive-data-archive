@@ -10,4 +10,5 @@ type Database interface {
 	GetArchiveLocation(fileID string) (string, error)
 	GetArchivePathAndLocation(stableID string) (string, string, error)
 	GetMappingData(accessionID string) (*MappingData, error)
+	GetSubmissionLocation(ctx context.Context, fileID string) (string, error)
 }
