@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,20 +19,24 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
 var (
-	err                      error
-	key                      *[32]byte
-	db                       *database.SDAdb
-	conf                     *config.Config
-	archive, syncDestination storage.Backend
+	err           error
+	key           *[32]byte
+	db            *database.SDAdb
+	conf          *config.Config
+	archiveReader storage.Reader
+	syncWriter    storage.Writer
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	forever := make(chan bool)
 	conf, err = config.NewConfig("sync")
 	if err != nil {
@@ -46,11 +51,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	syncDestination, err = storage.NewBackend(conf.Sync.Destination)
+	lb, err := locationbroker.NewLocationBroker(db)
+	if err != nil {
+		log.Fatalf("failed to init new location broker due to: %v", err)
+	}
+	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
 	if err != nil {
 		log.Fatal(err)
 	}
-	archive, err = storage.NewBackend(conf.Archive)
+	archiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,6 +94,7 @@ func main() {
 			log.Fatal(err)
 		}
 		for delivered := range messages {
+			ctx := context.Background()
 			log.Debugf("Received a message (correlation-id: %s, message: %s)",
 				delivered.CorrelationId,
 				delivered.Body)
@@ -123,7 +133,7 @@ func main() {
 			}
 
 			for _, aID := range message.AccessionIDs {
-				if err := syncFiles(aID); err != nil {
+				if err := syncFiles(ctx, aID); err != nil {
 					log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
 					if err := delivered.Nack(false, false); err != nil {
 						log.Errorf("failed to nack following GetFileSize error message")
@@ -156,34 +166,30 @@ func main() {
 	<-forever
 }
 
-func syncFiles(stableID string) error {
+func syncFiles(ctx context.Context, stableID string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	log.Debugf("syncing file %s", stableID)
 	inboxPath, err := db.GetInboxPath(stableID)
 	if err != nil {
 		return fmt.Errorf("failed to get inbox path for file with stable ID: %s, reason: %v", stableID, err)
 	}
 
-	archivePath, err := db.GetArchivePath(stableID)
+	archivePath, archiveLocation, err := db.GetArchivePathAndLocation(stableID)
 	if err != nil {
 		return fmt.Errorf("failed to get archive path for file with stable ID: %s, reason: %v", stableID, err)
 	}
 
-	fileSize, err := archive.GetFileSize(archivePath, false)
+	fileSize, err := archiveReader.GetFileSize(ctx, archiveLocation, archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to get filesize for file with archivepath: %s, reason: %v", archivePath, err)
 	}
 
-	file, err := archive.NewFileReader(archivePath)
+	file, err := archiveReader.NewFileReader(ctx, archiveLocation, archivePath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-
-	dest, err := syncDestination.NewFileWriter(inboxPath)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
 
 	header, err := db.GetHeaderForStableID(stableID)
 	if err != nil {
@@ -197,21 +203,29 @@ func syncFiles(stableID string) error {
 		return err
 	}
 
-	_, err = dest.Write(newHeader)
+	contentReader, contentWriter := io.Pipe()
+	_, err = contentWriter.Write(newHeader)
 	if err != nil {
 		return err
 	}
 
 	// Copy the file and check is sizes match
-	copiedSize, err := io.Copy(dest, file)
-	if err != nil || copiedSize != int64(fileSize) {
+	copiedSize, err := io.Copy(contentWriter, file)
+	if err != nil || copiedSize != fileSize {
 		switch {
-		case copiedSize != int64(fileSize):
+		case copiedSize != fileSize:
 			return errors.New("copied size does not match file size")
 		default:
 			return err
 		}
 	}
+	_ = contentWriter.Close()
+
+	_, err = syncWriter.WriteFile(ctx, inboxPath, contentReader)
+	if err != nil {
+		return err
+	}
+	defer contentReader.Close()
 
 	return nil
 }
