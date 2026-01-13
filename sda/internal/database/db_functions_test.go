@@ -1508,13 +1508,13 @@ func (suite *DatabaseTests) TestGetInboxFilePathFromID() {
 	if err != nil {
 		suite.FailNow("Failed to update file event log")
 	}
-	path, err := db.getInboxFilePathFromID(user, fileID)
+	path, err := db.getSubmissionPathAndLocation(user, fileID)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), path, filePath)
 
 	err = db.UpdateFileEventLog(fileID, "archived", user, "{}", "{}")
 	assert.NoError(suite.T(), err)
-	_, err = db.getInboxFilePathFromID(user, fileID)
+	_, err = db.getSubmissionPathAndLocation(user, fileID)
 	assert.Error(suite.T(), err)
 	db.Close()
 }
