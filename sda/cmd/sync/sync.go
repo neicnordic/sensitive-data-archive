@@ -50,6 +50,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if db.Version < 22 {
+		log.Error("database schema v22 is required")
+		db.Close()
+		panic(err)
+	}
 
 	lb := locationbroker.NewLocationBroker(db, 60*time.Second)
 	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
