@@ -32,6 +32,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if db.Version < 23 {
+		log.Fatal("database schema v23 is required")
+	}
+
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
 		log.Fatalf("failed to init new location broker due to: %v", err)
