@@ -41,6 +41,13 @@ type FileInfo struct {
 	UploadedChecksum  string
 }
 
+type MappingData struct {
+	FileID             string
+	User               string
+	SubmissionFilePath string
+	SubmissionLocation string
+}
+
 type SyncData struct {
 	User     string
 	FilePath string
