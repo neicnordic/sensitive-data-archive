@@ -299,11 +299,11 @@ func (suite *DatabaseTests) TestGetArchived() {
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
-	filePath, fileSize, archiveLocation, err := db.GetArchived(fileID)
+	archiveData, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.Equal(suite.T(), 1000, fileSize)
-	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)
-	assert.Equal(suite.T(), "/archive", archiveLocation)
+	assert.Equal(suite.T(), 1000, archiveData.FileSize)
+	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", archiveData.FilePath)
+	assert.Equal(suite.T(), "/archive", archiveData.Location)
 
 	db.Close()
 }
