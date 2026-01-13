@@ -12,7 +12,9 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -31,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	inbox, err := storage.NewBackend(conf.Inbox)
+	inboxWriter, err := storage.NewWriter(context.Background(), "inbox", locationbroker.NewLocationBroker(db, 0))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,14 +107,14 @@ func main() {
 
 				for _, aID := range mappings.AccessionIDs {
 					log.Debugf("Mapped file to dataset (correlation-id: %s, datasetid: %s, accessionid: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
-					fileInfo, err := db.GetFileInfoFromAccessionID(aID)
+					fileMappingData, err := db.GetMappingData(aID)
 					if err != nil {
 						log.Errorf("failed to get file info for file with stable ID: %s", aID)
 					}
 
-					err = inbox.RemoveFile(helper.UnanonymizeFilepath(fileInfo.FilePath, fileInfo.User))
+					err = inboxWriter.RemoveFile(context.Background(), fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User))
 					if err != nil {
-						log.Errorf("Remove file from inbox %s failed, reason: %v", fileInfo.FilePath, err)
+						log.Errorf("Remove file: %s failed, reason: %v", fileMappingData.FileID, err)
 					}
 				}
 
