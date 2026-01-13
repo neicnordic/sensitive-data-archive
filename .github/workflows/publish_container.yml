@@ -57,7 +57,7 @@ jobs:
 
       - name: Pull PR containers
         run : |
-          for t in -download -postgres -rabbitmq -sftp-inbox -doa; do
+          for t in -download -postgres -rabbitmq -sftp-inbox -doa -validator-orchestrator; do
             docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}$t
           done
           docker pull ghcr.io/${{ github.repository }}:PR${{ github.event.number }}
