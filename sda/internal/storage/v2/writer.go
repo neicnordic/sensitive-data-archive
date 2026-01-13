@@ -19,27 +19,31 @@ type Writer interface {
 }
 
 type writer struct {
-	posixWriter Writer
-	s3Writer    Writer
+	writer Writer
 }
 
 func NewWriter(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (Writer, error) {
 	w := &writer{}
 
 	var err error
-	w.s3Writer, err = s3writer.NewWriter(ctx, backendName, locationBroker)
+	s3Writer, err := s3writer.NewWriter(ctx, backendName, locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
-	w.posixWriter, err = posixwriter.NewWriter(ctx, backendName, locationBroker)
+	posixWriter, err := posixwriter.NewWriter(ctx, backendName, locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
 
-	if w.s3Writer != nil && w.posixWriter != nil {
+	if s3Writer != nil && posixWriter != nil {
 		return nil, storageerrors.ErrorMultipleWritersNotSupported
 	}
-	if w.s3Writer == nil && w.posixWriter == nil {
+	switch {
+	case s3Writer != nil:
+		w.writer = s3Writer
+	case posixWriter != nil:
+		w.writer = posixWriter
+	default:
 		return nil, storageerrors.ErrorNoValidWriter
 	}
 
@@ -47,23 +51,9 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 }
 
 func (w *writer) RemoveFile(ctx context.Context, location, filePath string) error {
-	switch {
-	case w.s3Writer != nil:
-		return w.s3Writer.RemoveFile(ctx, location, filePath)
-	case w.posixWriter != nil:
-		return w.posixWriter.RemoveFile(ctx, location, filePath)
-	}
-
-	return storageerrors.ErrorNoValidWriter
+	return w.writer.RemoveFile(ctx, location, filePath)
 }
 
 func (w *writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
-	switch {
-	case w.s3Writer != nil:
-		return w.s3Writer.WriteFile(ctx, filePath, fileContent)
-	case w.posixWriter != nil:
-		return w.posixWriter.WriteFile(ctx, filePath, fileContent)
-	}
-
-	return "", storageerrors.ErrorNoValidWriter
+	return w.writer.WriteFile(ctx, filePath, fileContent)
 }
