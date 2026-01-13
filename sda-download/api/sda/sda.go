@@ -22,14 +22,14 @@ import (
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/internal/reencrypt"
-	"github.com/neicnordic/sda-download/internal/storage"
+	"github.com/neicnordic/sda-download/internal/storage/v2"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var Backend storage.Backend
+var ArchiveReader storage.Reader
 
 func sanitizeString(str string) string {
 	var pattern = regexp.MustCompile(`(https?://[^\s/$.?#].[^\s]+|[A-Za-z0-9-_:.]+)`)
@@ -312,11 +312,10 @@ func Download(c *gin.Context) {
 
 	// Get archive file handle
 	var file io.Reader
-
 	if wholeFile {
-		file, err = Backend.NewFileReader(fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReader(context.Background(), fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	} else {
-		file, err = Backend.NewFileReadSeeker(fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReadSeeker(context.Background(), fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	}
 
 	if err != nil {

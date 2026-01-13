@@ -142,15 +142,6 @@ func (ts *TestSuite) TestAppConfig() {
 	assert.ErrorContains(ts.T(), err, "chacha20poly1305: message authentication failed")
 }
 
-func (ts *TestSuite) TestArchiveConfig() {
-	viper.Set("archive.type", POSIX)
-	viper.Set("archive.location", "/test")
-
-	c := &Map{}
-	c.configArchive()
-	assert.Equal(ts.T(), "/test", c.Archive.Posix.Location)
-}
-
 func (ts *TestSuite) TestSessionConfig() {
 	viper.Set("session.expiration", 3600)
 	viper.Set("session.domain", "test")
