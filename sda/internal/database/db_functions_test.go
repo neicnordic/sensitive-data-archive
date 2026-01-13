@@ -289,21 +289,21 @@ func (suite *DatabaseTests) TestGetArchived() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFileWithLocation(nil, "/archive", "/testuser/TestGetArchived.c4gh", "testuser")
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/testuser/TestGetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestGetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchivedWithLocation("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
-	filePath, fileSize, archiveLocation, err := db.GetArchived(fileID)
+	archiveData, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.Equal(suite.T(), 1000, fileSize)
-	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)
-	assert.Equal(suite.T(), "/archive", archiveLocation)
+	assert.Equal(suite.T(), 1000, archiveData.FileSize)
+	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", archiveData.FilePath)
+	assert.Equal(suite.T(), "/archive", archiveData.Location)
 
 	db.Close()
 }
