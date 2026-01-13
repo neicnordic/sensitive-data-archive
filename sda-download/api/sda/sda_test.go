@@ -2,6 +2,7 @@ package sda
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
@@ -13,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,7 +33,7 @@ import (
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/internal/reencrypt"
 	"github.com/neicnordic/sda-download/internal/session"
-	"github.com/neicnordic/sda-download/internal/storage"
+	"github.com/neicnordic/sda-download/internal/storage/v2"
 )
 
 func TestDatasets(t *testing.T) {
@@ -62,7 +64,7 @@ func TestDatasets(t *testing.T) {
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("TestDatasets failed, got %d expected %d", response.StatusCode, expectedStatusCode)
 	}
-	if !bytes.Equal(body, []byte(expectedBody)) {
+	if !bytes.Equal(body, expectedBody) {
 		// visual byte comparison in terminal (easier to find string differences)
 		t.Error(body)
 		t.Error([]byte(expectedBody))
@@ -554,7 +556,27 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
-	Backend, _ = storage.NewBackend(config.Config.Archive)
+
+	tempDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  archive:
+    posix:
+    - path: %s
+`, tempDir)), 0600); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filepath.Join(tempDir, "config.yaml"))
+
+	if err := viper.ReadInConfig(); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	ArchiveReader, _ = storage.NewReader(context.Background(), "archive")
 
 	// Substitute mock functions
 	database.CheckFilePermission = func(_ string) (string, error) {
@@ -567,9 +589,10 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "non-existant-file.txt",
-			ArchiveSize: 0,
-			Header:      []byte{},
+			ArchivePath:     "non-existant-file.txt",
+			ArchiveSize:     0,
+			ArchiveLocation: tempDir,
+			Header:          []byte{},
 		}
 
 		return fileDetails, nil
@@ -722,9 +745,27 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
-	archive := config.Config.Archive
-	archive.Posix.Location = "."
-	Backend, _ = storage.NewBackend(archive)
+
+	tempDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  archive:
+    posix:
+    - path: %s
+`, tempDir)), 0600); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filepath.Join(tempDir, "config.yaml"))
+
+	if err := viper.ReadInConfig(); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	ArchiveReader, _ = storage.NewReader(context.TODO(), "archive")
 
 	// Fix to run fake GRPC server
 	faker := fakeGRPC{t: t}
@@ -771,7 +812,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.NoError(t, err, "Could not load c4gh keys")
 
 	// Make a file to hold the archive file
-	datafile, err := os.CreateTemp(".", "datafile.")
+	datafile, err := os.Create(filepath.Join(tempDir, "datafile.txt"))
 	assert.NoError(t, err, "Could not create datafile for test")
 	datafileName := datafile.Name()
 	defer os.Remove(datafileName)
@@ -821,9 +862,10 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: datafileName,
-			ArchiveSize: 0,
-			Header:      headerBytes,
+			ArchivePath:     strings.TrimPrefix(datafileName, tempDir+"/"),
+			ArchiveSize:     0,
+			ArchiveLocation: tempDir,
+			Header:          headerBytes,
 		}
 
 		return fileDetails, nil
@@ -1113,7 +1155,7 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 		return fileDetails, nil
 	}
 
-	Backend = &mockBackend{
+	ArchiveReader = &mockBackend{
 		file: []byte("this is a mock file"),
 	}
 
@@ -1158,7 +1200,7 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	if err != nil {
-		t.FailNow()
+		assert.FailNow(t, err.Error())
 	}
 	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
 	viper.Set("c4gh.transientPassphrase", "password")
@@ -1193,7 +1235,7 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
 	viper.Set("c4gh.transientPassphrase", "")
-	Backend = nil
+	ArchiveReader = nil
 }
 
 func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
@@ -1222,7 +1264,7 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 		return fileDetails, nil
 	}
 
-	Backend = &mockBackend{
+	ArchiveReader = &mockBackend{
 		file: []byte("this is a mock file"),
 	}
 
@@ -1267,7 +1309,7 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	if err != nil {
-		t.FailNow()
+		assert.FailNow(t, err.Error())
 	}
 	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
 	viper.Set("c4gh.transientPassphrase", "password")
@@ -1302,32 +1344,32 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
 	viper.Set("c4gh.transientPassphrase", "")
-	Backend = nil
+	ArchiveReader = nil
 }
 
 type mockBackend struct {
 	file []byte
 }
 
-func (m *mockBackend) GetFileSize(_ string) (int64, error) {
-	return int64(len(m.file)), nil
-}
-
-func (m *mockBackend) NewFileReader(_ string) (io.ReadCloser, error) {
+func (m *mockBackend) NewFileReader(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(m.file)), nil
 }
 
-type mockReedSeekCloser struct {
-	io.ReadSeeker
-	io.Closer
-}
-
-func (m *mockBackend) NewFileReadSeeker(_ string) (io.ReadSeekCloser, error) {
+func (m *mockBackend) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
 	return mockReedSeekCloser{
 		ReadSeeker: io.ReadSeeker(bytes.NewReader(m.file)),
 	}, nil
 }
 
-func (m *mockBackend) NewFileWriter(_ string) (io.WriteCloser, error) {
+func (m *mockBackend) FindFile(ctx context.Context, filePath string) (string, error) {
 	panic("not expected to be used by unit tests")
+}
+
+func (m *mockBackend) GetFileSize(_ context.Context, _, _ string) (int64, error) {
+	return int64(len(m.file)), nil
+}
+
+type mockReedSeekCloser struct {
+	io.ReadSeeker
+	io.Closer
 }
