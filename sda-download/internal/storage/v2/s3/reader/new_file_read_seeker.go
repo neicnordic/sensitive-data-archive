@@ -1,32 +1,17 @@
-// Package storage provides interface for storage areas, e.g. s3 or POSIX file system.
-package storage
+package reader
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
-
-// NewFileReadSeeker returns an io.ReadSeeker instance
-func (pb *posixBackend) NewFileReadSeeker(filePath string) (io.ReadSeekCloser, error) {
-	reader, err := pb.NewFileReader(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	seeker, ok := reader.(io.ReadSeekCloser)
-	if !ok {
-		return nil, errors.New("invalid posixBackend")
-	}
-
-	return seeker, nil
-}
 
 // s3CacheBlock is used to keep track of cached data
 type s3CacheBlock struct {
@@ -35,9 +20,10 @@ type s3CacheBlock struct {
 	data   []byte
 }
 
-// s3Reader is the vehicle to keep track of needed state for the reader
-type s3Reader struct {
-	s3Backend
+// s3SeekableReader is the vehicle to keep track of needed state for the reader
+type s3SeekableReader struct {
+	client                *s3.Client
+	bucket                string
 	currentOffset         int64
 	local                 []s3CacheBlock
 	filePath              string
@@ -46,35 +32,54 @@ type s3Reader struct {
 	outstandingPrefetches []int64
 	seeked                bool
 	objectReader          io.Reader
+	chunkSize             uint64
 }
 
-func (sb *s3Backend) NewFileReadSeeker(filePath string) (io.ReadSeekCloser, error) {
-	objectSize, err := sb.GetFileSize(filePath)
-
+func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
+	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		return nil, err
 	}
 
-	reader := &s3Reader{
-		*sb,
-		0,
-		make([]s3CacheBlock, 0, 32),
-		filePath,
-		objectSize,
-		sync.Mutex{},
-		make([]int64, 0, 32),
-		false,
-		nil,
+	client, err := reader.getS3ClientForEndpoint(ctx, endpoint)
+	if err != nil {
+		return nil, err
 	}
 
-	return reader, nil
+	objectSize, err := reader.getFileSize(ctx, client, bucket, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var chunkSizeBytes uint64
+	for _, e := range reader.endpoints {
+		if e.Endpoint == endpoint {
+			chunkSizeBytes = e.chunkSizeBytes
+
+			break
+		}
+	}
+
+	return &s3SeekableReader{
+		client:                client,
+		bucket:                bucket,
+		currentOffset:         0,
+		local:                 make([]s3CacheBlock, 0, 32),
+		filePath:              filePath,
+		objectSize:            objectSize,
+		lock:                  sync.Mutex{},
+		outstandingPrefetches: make([]int64, 0, 32),
+		seeked:                false,
+		objectReader:          nil,
+		chunkSize:             chunkSizeBytes,
+	}, nil
 }
 
-func (r *s3Reader) Close() (err error) {
+func (r *s3SeekableReader) Close() (err error) {
 	return nil
 }
 
-func (r *s3Reader) pruneCache() {
+func (r *s3SeekableReader) pruneCache() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -87,17 +92,13 @@ func (r *s3Reader) pruneCache() {
 	r.local = r.local[keepfrom:]
 }
 
-func (r *s3Reader) prefetchSize() int64 {
-	n := r.Conf.Chunksize
-
-	if n >= 5*1024*1024 {
-		return int64(n)
-	}
-
-	return 50 * 1024 * 1024
+func (r *s3SeekableReader) prefetchSize() int64 {
+	// Type conversation safe as chunkSizeBytes checked to be between 5mb and 1gb (in bytes)
+	//nolint:gosec // disable G115
+	return int64(r.chunkSize)
 }
 
-func (r *s3Reader) prefetchAt(offset int64) {
+func (r *s3SeekableReader) prefetchAt(offset int64) {
 	r.pruneCache()
 
 	r.lock.Lock()
@@ -117,8 +118,6 @@ func (r *s3Reader) prefetchAt(offset int64) {
 	}
 
 	// Not found in cache, we should fetch the data
-	bucket := aws.String(r.Bucket)
-	key := aws.String(r.filePath)
 	prefetchSize := r.prefetchSize()
 
 	r.outstandingPrefetches = append(r.outstandingPrefetches, offset)
@@ -127,9 +126,9 @@ func (r *s3Reader) prefetchAt(offset int64) {
 
 	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+prefetchSize-1))
 
-	object, err := r.Client.GetObject(&s3.GetObjectInput{
-		Bucket: bucket,
-		Key:    key,
+	object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(r.filePath),
 		Range:  wantedRange,
 	})
 
@@ -165,7 +164,7 @@ func (r *s3Reader) prefetchAt(offset int64) {
 	r.local = append(r.local, s3CacheBlock{offset, int64(len(cacheBytes)), cacheBytes})
 }
 
-func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
+func (r *s3SeekableReader) Seek(offset int64, whence int) (int64, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -216,7 +215,7 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 }
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
-func (r *s3Reader) removeFromOutstanding(toRemove int64) {
+func (r *s3SeekableReader) removeFromOutstanding(toRemove int64) {
 	switch len(r.outstandingPrefetches) {
 	case 0:
 		// Nothing to do
@@ -243,7 +242,7 @@ func (r *s3Reader) removeFromOutstanding(toRemove int64) {
 }
 
 // isPrefetching checks if the data is already being fetched
-func (r *s3Reader) isPrefetching(offset int64) bool {
+func (r *s3SeekableReader) isPrefetching(offset int64) bool {
 	// Walk through the outstanding prefetches
 	for _, p := range r.outstandingPrefetches {
 		if offset >= p && offset < p+r.prefetchSize() {
@@ -257,11 +256,11 @@ func (r *s3Reader) isPrefetching(offset int64) bool {
 }
 
 // wholeReader is a helper for when we read the whole object
-func (r *s3Reader) wholeReader(dst []byte) (int, error) {
+func (r *s3SeekableReader) wholeReader(dst []byte) (int, error) {
 	if r.objectReader == nil {
 		// First call, setup a reader for the object
-		object, err := r.Client.GetObject(&s3.GetObjectInput{
-			Bucket: aws.String(r.Bucket),
+		object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
+			Bucket: aws.String(r.bucket),
 			Key:    aws.String(r.filePath),
 		})
 
@@ -277,7 +276,7 @@ func (r *s3Reader) wholeReader(dst []byte) (int, error) {
 	return r.objectReader.Read(dst)
 }
 
-func (r *s3Reader) Read(dst []byte) (n int, err error) {
+func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -325,7 +324,7 @@ func (r *s3Reader) Read(dst []byte) (n int, err error) {
 
 	// Not found in cache, need to fetch data
 
-	bucket := aws.String(r.Bucket)
+	bucket := aws.String(r.bucket)
 	key := aws.String(r.filePath)
 
 	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", r.currentOffset, r.currentOffset+r.prefetchSize()-1))
@@ -334,7 +333,7 @@ func (r *s3Reader) Read(dst []byte) (n int, err error) {
 
 	r.lock.Unlock()
 
-	object, err := r.Client.GetObject(&s3.GetObjectInput{
+	object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: bucket,
 		Key:    key,
 		Range:  wantedRange,
@@ -367,102 +366,4 @@ func (r *s3Reader) Read(dst []byte) (n int, err error) {
 	go r.prefetchAt(r.currentOffset)
 
 	return n, err
-}
-
-// seekableMultiReader is a helper struct to allow io.MultiReader to be used with a seekable reader
-type seekableMultiReader struct {
-	readers       []io.Reader
-	sizes         []int64
-	currentOffset int64
-	totalSize     int64
-}
-
-// SeekableMultiReader constructs a multireader that supports seeking. Requires
-// all passed readers to be seekable
-func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
-	r := make([]io.Reader, len(readers))
-	sizes := make([]int64, len(readers))
-
-	copy(r, readers)
-
-	var totalSize int64
-	for i, reader := range readers {
-		seeker, ok := reader.(io.ReadSeeker)
-		if !ok {
-			return nil, fmt.Errorf("reader %d to SeekableMultiReader is not seekable", i)
-		}
-
-		size, err := seeker.Seek(0, io.SeekEnd)
-		if err != nil {
-			return nil, fmt.Errorf("size determination failed for reader %d to SeekableMultiReader: %v", i, err)
-		}
-
-		sizes[i] = size
-		totalSize += size
-	}
-
-	return &seekableMultiReader{r, sizes, 0, totalSize}, nil
-}
-
-func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
-	switch whence {
-	case io.SeekStart:
-		r.currentOffset = offset
-	case io.SeekCurrent:
-		r.currentOffset += offset
-	case io.SeekEnd:
-		r.currentOffset = r.totalSize + offset
-	default:
-		return 0, errors.New("unsupported whence")
-	}
-
-	return r.currentOffset, nil
-}
-
-func (r *seekableMultiReader) Read(dst []byte) (int, error) {
-	var readerStartAt int64
-
-	for i, reader := range r.readers {
-		if r.currentOffset < readerStartAt {
-			// We want data from a previous reader (? HELP ?)
-			readerStartAt += r.sizes[i]
-
-			continue
-		}
-
-		if readerStartAt+r.sizes[i] < r.currentOffset {
-			// We want data from a later reader
-			readerStartAt += r.sizes[i]
-
-			continue
-		}
-
-		// At least part of the data is in this reader
-
-		seekable, ok := reader.(io.ReadSeeker)
-		if !ok {
-			return 0, errors.New("expected seekable reader but changed")
-		}
-
-		_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)
-		if err != nil {
-			return 0, fmt.Errorf("unexpected error while seeking: %v", err)
-		}
-
-		n, err := seekable.Read(dst)
-		r.currentOffset += int64(n)
-
-		if n > 0 || err != io.EOF {
-			if err == io.EOF && r.currentOffset < r.totalSize {
-				// More data left, hold that EOF
-				err = nil
-			}
-
-			return n, err
-		}
-
-		readerStartAt += r.sizes[i]
-	}
-
-	return 0, io.EOF
 }

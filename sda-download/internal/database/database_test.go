@@ -278,6 +278,7 @@ func TestGetFile(t *testing.T) {
 		expected := &FileDownload{
 			ArchivePath:       "file.txt",
 			ArchiveSize:       32,
+			ArchiveLocation:   "/archive",
 			DecryptedSize:     1024,
 			DecryptedChecksum: "sha256checksum",
 			LastModified:      "now",
@@ -286,6 +287,7 @@ func TestGetFile(t *testing.T) {
 		query := `
 		SELECT f.archive_file_path,
 			   f.archive_file_size,
+			   f.archive_location,
 			   f.decrypted_file_size,
 			   dc.checksum AS decrypted_checksum,
 			   f.last_modified,
@@ -299,9 +301,9 @@ func TestGetFile(t *testing.T) {
 
 		mock.ExpectQuery(query).
 			WithArgs("file1").
-			WillReturnRows(sqlmock.NewRows([]string{"file_path", "archive_file_size",
+			WillReturnRows(sqlmock.NewRows([]string{"file_path", "archive_file_size", "archive_location",
 				"decrypted_file_size", "decrypted_checksum", "last_modified", "header"}).AddRow(
-				expected.ArchivePath, expected.ArchiveSize, expected.DecryptedSize,
+				expected.ArchivePath, expected.ArchiveSize, expected.ArchiveLocation, expected.DecryptedSize,
 				expected.DecryptedChecksum, expected.LastModified, "abc123"))
 
 		x, err := testDb.getFile("file1")
