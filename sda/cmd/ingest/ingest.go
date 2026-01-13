@@ -134,15 +134,19 @@ func main() {
 
 	log.Info("starting ingest service")
 
-	go app.run()
+	go func() {
+		if err := app.run(); err != nil {
+			panic(err)
+		}
+	}()
 
 	<-forever
 }
 
-func (app *Ingest) run() {
+func (app *Ingest) run() error {
 	messages, err := app.MQ.GetMessages(app.brokerConf.Queue)
 	if err != nil {
-		log.Panic(err)
+		return err
 	}
 
 	for delivered := range messages {
@@ -203,6 +207,8 @@ func (app *Ingest) run() {
 			}
 		}
 	}
+
+	return nil
 }
 
 func (app *Ingest) registerC4GHKey() error {
@@ -238,7 +244,7 @@ func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) st
 
 func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema.IngestionTrigger) string {
 	status, err := app.DB.GetFileStatus(fileID)
-	if err != nil && !errors.Is(sql.ErrNoRows, err) {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Errorf("failed to get status for file, fileID: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
@@ -423,7 +429,6 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	uploadCtx, uploadCancel := context.WithCancel(ctx)
 
 	go func() {
-
 		for bytesRead < fileSize {
 			i, _ := io.ReadFull(file, readBuffer)
 			if i == 0 {
