@@ -24,7 +24,7 @@ jobs:
       new_tag: ${{ steps.bump_tag.outputs.new_tag }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         fetch-depth: '0'
     - name: Bump version and push tag
@@ -46,7 +46,7 @@ jobs:
       packages: write
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v3
@@ -87,6 +87,11 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }} ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
           docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}
 
+      - name: Retag PR image for sda-validator-orchestrator
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-validator-orchestrator ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-validator-orchestrator
+          docker push ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-validator-orchestrator
+
       - name: Retag PR image for doa
         run: |
           docker tag ghcr.io/${{ github.repository }}:PR${{ github.event.number }}-doa ghcr.io/${{ github.repository }}:${{ needs.tag_release.outputs.tag }}-doa
@@ -101,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: '0'
 
@@ -120,7 +125,7 @@ jobs:
         shell: bash
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GHCR_TOKEN }}
           commit-message: Bump chart version

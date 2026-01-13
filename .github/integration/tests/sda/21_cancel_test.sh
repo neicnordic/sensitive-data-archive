@@ -55,7 +55,7 @@ curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -d "$cancel_body" | jq
 
 # check database to verify file status
-if [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where correlation_id = '$CORRID' order by id DESC LIMIT 1")" != "disabled" ]; then
+if [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where file_id = '$CORRID' order by id DESC LIMIT 1")" != "disabled" ]; then
     echo "canceling file failed"
     exit 1
 fi

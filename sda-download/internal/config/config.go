@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sda-download/internal/storage"
@@ -24,7 +25,7 @@ const S3 = "s3"
 
 // availableMiddlewares list the options for middlewares
 // empty string "" is an alias for default, for when the config key is not set, or it's empty
-var availableMiddlewares = []string{"", "default"}
+var availableMiddlewares = []string{"", "default", "token-clientversion"}
 
 // Config is a global configuration value store
 var Config Map
@@ -60,6 +61,12 @@ type AppConfig struct {
 	// Selected middleware for authentication and authorizaton
 	// Optional. Default value is "default" for TokenMiddleware
 	Middleware string
+
+	// Minimal version string for the sda-cli client (e.g., "v1.2.3")
+	// If the client version header does not match this, the request is blocked.
+	// Optional. Default value is "v0.0.0"
+	MinimalCliVersion    *semver.Version
+	MinimalCliVersionStr string // This is the original string from the config file
 }
 
 // Stores the Crypt4GH private key used internally
@@ -242,6 +249,7 @@ func (c *Map) applyDefaults() {
 	viper.SetDefault("app.host", "0.0.0.0")
 	viper.SetDefault("app.port", 8080)
 	viper.SetDefault("app.middleware", "default")
+	viper.SetDefault("app.minimalcliversion", "v0.0.0")
 	viper.SetDefault("session.expiration", -1)
 	viper.SetDefault("session.secure", true)
 	viper.SetDefault("session.httponly", true)
@@ -371,13 +379,20 @@ func (c *Map) appConfig() error {
 	c.App.ServerKey = viper.GetString("app.serverkey")
 	c.App.Middleware = viper.GetString("app.middleware")
 
+	// Validate and parse the configured minimum client version into a SemVer object
+	c.App.MinimalCliVersionStr = viper.GetString("app.minimalcliversion")
+	parsedVersion, err := semver.NewVersion(c.App.MinimalCliVersionStr)
+	if err != nil {
+		return fmt.Errorf("app.minimalcliversion value='%s' is not a valid semantic version: %v", c.App.MinimalCliVersionStr, err)
+	}
+	c.App.MinimalCliVersion = parsedVersion
+
 	if c.App.Port != 443 && c.App.Port != 8080 {
 		c.App.Port = viper.GetInt("app.port")
 	} else if c.App.ServerCert != "" && c.App.ServerKey != "" {
 		c.App.Port = 443
 	}
 
-	var err error
 	if viper.GetString("c4gh.transientKeyPath") != "" {
 		if !viper.IsSet("c4gh.transientPassphrase") {
 			return errors.New("c4gh.transientPassphrase is not set")
@@ -500,7 +515,7 @@ func GetC4GHKeys() ([32]byte, string, error) {
 	if err != nil {
 		return [32]byte{}, "", fmt.Errorf("error when reading private key: %v", err)
 	}
-	keyFile.Close()
+	_ = keyFile.Close()
 
 	public := keys.DerivePublicKey(private)
 	pem := bytes.Buffer{}

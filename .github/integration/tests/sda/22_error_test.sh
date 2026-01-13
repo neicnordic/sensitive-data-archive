@@ -71,7 +71,7 @@ curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
     -d "$ingest_body" | jq
 
 # check database to verify file status
-until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE correlation_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
     echo "waiting for file error to be logged by ingest"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -83,7 +83,7 @@ done
 
 ## give the file a non existing archive path
 psql -U postgres -h postgres -d sda -Atq -c "UPDATE sda.files SET archive_file_path = '$CORRID', header = '637279707434676801000000010000006c00000000000000' WHERE id = '$CORRID';"
-psql -U postgres -h postgres -d sda -Atq -c "INSERT INTO sda.file_event_log(file_id, correlation_id, event) VALUES('$CORRID', '$CORRID', 'archived');"
+psql -U postgres -h postgres -d sda -Atq -c "INSERT INTO sda.file_event_log(file_id, event) VALUES('$CORRID', 'archived');"
 
 encrypted_checksums=$(
     jq -c -n \
@@ -119,7 +119,7 @@ curl -k -u guest:guest "$URI/api/exchanges/sda/sda/publish" \
 
 # check database to verify file status
 RETRY_TIMES=0
-until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE correlation_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id = '$CORRID' ORDER BY ID DESC LIMIT 1;")" = "error" ]; do
     echo "waiting for file error to be logged by verify"
     date
     RETRY_TIMES=$((RETRY_TIMES + 1))

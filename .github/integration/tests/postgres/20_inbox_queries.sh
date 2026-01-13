@@ -1,16 +1,16 @@
 #!/bin/sh
 set -eou pipefail
-
+fileID="33d29907-c565-4a90-98b4-e31b992ab376"
 export PGPASSWORD=inbox
 
 for host in migrate postgres; do
-    fileID=$(psql -U inbox -h "$host" -d sda -At -c "SELECT sda.register_file('inbox/test-file.c4gh', 'test-user');")
+    fileID=$(psql -U inbox -h "$host" -d sda -At -c "SELECT sda.register_file('$fileID', 'inbox/test-file.c4gh', 'test-user');")
     if [ -z "$fileID" ]; then
         echo "register_file failed"
         exit 1
     fi
 
-    newFileID=$(psql -U inbox -h "$host" -d sda -At -c "SELECT sda.register_file('inbox/test-file.c4gh', 'other-user');")
+    newFileID=$(psql -U inbox -h "$host" -d sda -At -c "SELECT sda.register_file(null, 'inbox/test-file.c4gh', 'other-user');")
     if [ -z "$newFileID" ]; then
         echo "register_file failed"
         exit 1

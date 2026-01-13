@@ -68,7 +68,7 @@ func (ts *HelperTest) TestCreateRSAToken() {
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), set.AddKey(key))
 
-	fmt.Println(tok)
+	_, _ = fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 	assert.NoError(ts.T(), err)
 
@@ -120,7 +120,7 @@ func (ts *HelperTest) TestCreateHSToken() {
 
 	assert.NoError(ts.T(), set.AddKey(jwtKey))
 
-	fmt.Println(tok)
+	_, _ = fmt.Println(tok)
 	_, err = jwt.Parse([]byte(tok), jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 	assert.NoError(ts.T(), err)
 

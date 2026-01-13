@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -161,7 +161,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -218,7 +218,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {

@@ -48,17 +48,23 @@ type SyncData struct {
 }
 
 type SubmissionFileInfo struct {
-	AccessionID string `json:"accessionID,omitempty"`
-	FileID      string `json:"fileID"`
-	InboxPath   string `json:"inboxPath"`
-	Status      string `json:"fileStatus"`
-	CreateAt    string `json:"createAt"`
+	AccessionID        string `json:"accessionID,omitempty"`
+	FileID             string `json:"fileID"`
+	InboxPath          string `json:"inboxPath"`
+	Status             string `json:"fileStatus"`
+	SubmissionFileSize int64  `json:"submissionFileSize,omitempty"`
+	CreateAt           string `json:"createAt"`
 }
 
 type DatasetInfo struct {
 	DatasetID string `json:"datasetID"`
 	Status    string `json:"status"`
 	Timestamp string `json:"timeStamp"`
+}
+
+type FileDetails struct {
+	User string
+	Path string
 }
 
 // SchemaName is the name of the remote database schema to query
@@ -196,7 +202,7 @@ func (dbs *SDAdb) checkAndReconnectIfNeeded() {
 }
 
 func (dbs *SDAdb) Reconnect() {
-	dbs.DB.Close()
+	_ = dbs.DB.Close()
 	dbs.DB, _ = sql.Open(dbs.Config.PgDataSource())
 }
 
@@ -208,6 +214,6 @@ func (dbs *SDAdb) Close() {
 	err := dbs.DB.Ping()
 	if err == nil {
 		log.Info("Closing database connection")
-		dbs.DB.Close()
+		_ = dbs.DB.Close()
 	}
 }

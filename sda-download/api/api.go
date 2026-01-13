@@ -9,18 +9,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sda-download/api/middleware"
 	"github.com/neicnordic/sda-download/api/s3"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	log "github.com/sirupsen/logrus"
 )
 
-// SelectedMiddleware is used to control authentication and authorization
-// behaviour with config app.middleware
-// available middlewares:
-// "default" for TokenMiddleware
-var SelectedMiddleware = func() gin.HandlerFunc {
-	return nil
+// SelectedMiddleware returns the middleware chain based on configuration.
+// For example, config.Config.App.Middleware could be "default", "token-clientversion", etc.
+var SelectedMiddleware = func() []gin.HandlerFunc {
+	switch strings.ToLower(config.Config.App.Middleware) {
+	case "token-clientversion":
+		return []gin.HandlerFunc{
+			middleware.TokenMiddleware(),
+			middleware.ClientVersionMiddleware(),
+		}
+	default:
+		return []gin.HandlerFunc{middleware.TokenMiddleware()}
+	}
 }
 
 // healthResponse
@@ -65,12 +72,14 @@ func Setup() *http.Server {
 	}
 
 	router.HandleMethodNotAllowed = true
+	// protected endpoints
+	router.GET("/metadata/datasets", append(SelectedMiddleware(), sda.Datasets)...)
+	router.GET("/metadata/datasets/*dataset", append(SelectedMiddleware(), sda.Files)...)
+	router.GET("/files/:fileid", append(SelectedMiddleware(), sda.Download)...)
+	router.GET("/s3/*path", append(SelectedMiddleware(), s3.Download)...)
+	router.HEAD("/s3/*path", append(SelectedMiddleware(), s3.Download)...)
 
-	router.GET("/metadata/datasets", SelectedMiddleware(), sda.Datasets)
-	router.GET("/metadata/datasets/*dataset", SelectedMiddleware(), sda.Files)
-	router.GET("/files/:fileid", SelectedMiddleware(), sda.Download)
-	router.GET("/s3/*path", SelectedMiddleware(), s3.Download)
-	router.HEAD("/s3/*path", SelectedMiddleware(), s3.Download)
+	// public endpoints
 	router.GET("/health", healthResponse)
 	router.HEAD("/", healthResponse)
 

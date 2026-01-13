@@ -86,7 +86,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -103,7 +103,7 @@ func TestMain(m *testing.M) {
 		log.Panicf("Could not purge resource: %s", err)
 	}
 
-	os.RemoveAll(certPath)
+	_ = os.RemoveAll(certPath)
 	os.Exit(code)
 }
 

@@ -90,7 +90,7 @@ func main() {
 				continue
 			}
 
-			log.Infof("Routing message (corr-id: %s, routingkey: %s)", delivered.CorrelationId, routingKey)
+			log.Infof("Routing message (correlation-id: %s, routingkey: %s)", delivered.CorrelationId, routingKey)
 			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, routingKey, delivered.Body); err != nil {
 				log.Errorf("failed to publish message, reason: (%v)", err)
 			}

@@ -124,7 +124,7 @@ func TestSendEmail(t *testing.T) {
 	})
 
 	if err := server.Start(); err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Println(err)
 	}
 
 	hostAddress, portNumber := "127.0.0.1", server.PortNumber

@@ -86,7 +86,7 @@ func (ts *ReEncryptTests) SetupTest() {
 }
 
 func (ts *ReEncryptTests) TearDownTest() {
-	os.RemoveAll(ts.KeyPath)
+	_ = os.RemoveAll(ts.KeyPath)
 }
 
 func (ts *ReEncryptTests) TestReencryptHeader() {

@@ -111,7 +111,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		return nil
 	}); err != nil {
@@ -131,7 +131,7 @@ func TestMain(m *testing.M) {
 		log.Panicf("Could not purge resource: %s", err)
 	}
 
-	os.RemoveAll(sshPath)
+	_ = os.RemoveAll(sshPath)
 
 	os.Exit(code)
 }
@@ -234,7 +234,7 @@ func (ts *StorageTestSuite) TestPosixBackend() {
 	written, err := writer.Write(writeData)
 	assert.NoError(ts.T(), err, "Failure when writing to posix writer")
 	assert.Equal(ts.T(), len(writeData), written, "Did not write all writeData")
-	writer.Close()
+	_ = writer.Close()
 
 	reader, err := backend.NewFileReader("testFile")
 	assert.Nil(ts.T(), err, "posix NewFileReader failed when it should work")
@@ -315,7 +315,7 @@ func (ts *StorageTestSuite) TestS3Backend() {
 	written, err := writer.Write(writeData)
 	assert.Nil(ts.T(), err, "Failure when writing to s3 writer")
 	assert.Equal(ts.T(), len(writeData), written, "Did not write all writeData")
-	writer.Close()
+	_ = writer.Close()
 	// sleep to allow the write to complete, otherwise the next step will fail due to timing issues.
 	time.Sleep(1 * time.Second)
 
@@ -341,7 +341,7 @@ func (ts *StorageTestSuite) TestS3Backend() {
 	written, err = writer.Write(writeData)
 	assert.Equal(ts.T(), len(writeData), written, "Did not write all writeData")
 	assert.Nil(ts.T(), err, "Failure when writing to s3 writer")
-	writer.Close()
+	_ = writer.Close()
 	size, err = s3back.GetFileSize("s3Creatable", true)
 	assert.Nil(ts.T(), err, "s3 GetFileSize with expected delay failed when it should work")
 	assert.NotNil(ts.T(), size, "Got a nil size for s3")
@@ -390,7 +390,7 @@ func (ts *StorageTestSuite) TestSftpBackend() {
 	written, err := writer.Write(writeData)
 	assert.Nil(ts.T(), err, "Failure when writing to sftp writer")
 	assert.Equal(ts.T(), len(writeData), written, "Did not write all writeData")
-	writer.Close()
+	_ = writer.Close()
 
 	reader, err := sftpBack.NewFileReader(sftpCreatable)
 	assert.Nil(ts.T(), err, "sftp NewFileReader failed when it should work")

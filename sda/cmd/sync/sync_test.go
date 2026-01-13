@@ -159,7 +159,7 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	db, err = database.NewSDAdb(conf.Database)
 	assert.NoError(s.T(), err)
 
-	fileID, err := db.RegisterFile("dummy.user/test/file1.c4gh", "dummy.user")
+	fileID, err := db.RegisterFile(nil, "dummy.user/test/file1.c4gh", "dummy.user")
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = db.SetAccessionID("ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(s.T(), err)

@@ -5,7 +5,7 @@ DECLARE
 -- The version we know how to do migration from, at the end of a successful migration
 -- we will no longer be at this version.
   sourcever INTEGER := 17;
-  changes VARCHAR := 'Create rotatekey role and grant it priviledges to sda tables';
+  changes VARCHAR := 'Create rotatekey role and grant it privileges to sda tables';
 BEGIN
   IF (select max(version) from sda.dbschema_version) = sourcever then
     RAISE NOTICE 'Doing migration from schema version % to %', sourcever, sourcever+1;

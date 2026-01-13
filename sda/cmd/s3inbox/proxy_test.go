@@ -140,7 +140,7 @@ func (s *ProxyTests) SetupTest() {
 	)
 	_, _ = s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: aws.String(s.S3conf.Bucket)})
 	if err != nil {
-		fmt.Println(err.Error())
+		_, _ = fmt.Println(err.Error())
 	}
 
 	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
@@ -176,11 +176,11 @@ func startFakeServer(port string) *FakeServer {
 		log.Warnf("hello fake will return %s", f.resp)
 		if f.resp != "" {
 			log.Warnf("fake writes %s", f.resp)
-			fmt.Fprint(w, f.resp)
+			_, _ = fmt.Fprint(w, f.resp)
 		}
 	})
 	ts := httptest.NewUnstartedServer(foo)
-	ts.Listener.Close()
+	_ = ts.Listener.Close()
 	ts.Listener = l
 	ts.Start()
 
@@ -630,7 +630,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -653,7 +653,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -672,7 +672,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/dummy/file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -699,7 +699,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	p.database = db
 
-	fileID, err := db.RegisterFile("/test/new_file", "test-user")
+	fileID, err := db.RegisterFile(nil, "/test/new_file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 

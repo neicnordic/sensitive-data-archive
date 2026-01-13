@@ -53,7 +53,7 @@ func (ts *JWTTests) SetupTest() {
 }
 
 func (ts *JWTTests) TearDownTest() {
-	os.RemoveAll(ts.TempDir)
+	_ = os.RemoveAll(ts.TempDir)
 }
 
 func (ts *JWTTests) TestGenerateJwtToken() {

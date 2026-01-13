@@ -22,7 +22,7 @@ if [ "$status" -eq 0 ]; then
 fi
 
 ## verify that migrations worked
-migratedb=$(find /migratedb.d/ -name "*.sql" -printf '%f\n' |  sort -n | tail -1 | cut -d '.' -f1)
+migratedb=$(find /migratedb.d/ -name "*.sql" -printf '%f\n' |  sort -n | tail -1 | cut -d '.' -f1 | cut -d '_' -f1)
 version=$(psql -U postgres -h migrate -d sda -At -c "select max(version) from sda.dbschema_version;")
 if [ "$version" -ne "$migratedb" ]; then
     echo "Migration scripts failed"

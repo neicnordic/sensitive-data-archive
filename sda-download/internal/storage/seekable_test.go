@@ -47,7 +47,7 @@ func TestSeekableBackend(t *testing.T) {
 			assert.Equal(t, len(writeData), written, "Did not write all writeData")
 		}
 
-		writer.Close()
+		_ = writer.Close()
 
 		reader, err := backend.NewFileReadSeeker(path)
 		assert.Nil(t, err, "s3 NewFileReadSeeker failed when it should work")
@@ -182,7 +182,7 @@ func TestS3SeekablePrefetchSize(t *testing.T) {
 	assert.NotNil(t, writer, "Got a nil reader for writer from s3")
 	assert.Nil(t, err, "posix NewFileWriter failed when it shouldn't")
 
-	writer.Close()
+	_ = writer.Close()
 
 	reader, err := backend.NewFileReadSeeker(path)
 	assert.Nil(t, err, "s3 NewFileReadSeeker failed when it should work")
@@ -224,7 +224,7 @@ func TestS3SeekableSpecial(t *testing.T) {
 		assert.Equal(t, len(writeData), written, "Did not write all writeData")
 	}
 
-	writer.Close()
+	_ = writer.Close()
 
 	reader, err := backend.NewFileReadSeeker(path)
 	reader.(*s3Reader).seeked = true
