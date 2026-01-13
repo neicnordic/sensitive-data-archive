@@ -295,6 +295,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 		expectedRes   string
 		fileID        string
 		testName      string
+		verifyBackup  bool
 	}{
 		{
 			testName:      "ingested file",
@@ -302,6 +303,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 			expectedMgs:   "",
 			expectedRes:   "ack",
 			fileID:        ts.fileID,
+			verifyBackup:  true,
 		},
 		{
 			testName:      "un-ingested file",
@@ -309,6 +311,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", newFileID),
 			expectedRes:   "ackSendToError",
 			fileID:        newFileID,
+			verifyBackup:  false,
 		},
 	} {
 		ts.T().Run(test.testName, func(t *testing.T) {
@@ -316,6 +319,15 @@ func (ts *TestSuite) TestReEncryptHeader() {
 			assert.Equal(t, res, test.expectedRes)
 			assert.Equal(t, msg, test.expectedMgs)
 			assert.Equal(t, err, test.expectedError)
+
+			// Verify that the backup was actually created in the DB for successful cases
+			if test.verifyBackup {
+				var count int
+				query := "SELECT count(*) FROM sda.file_headers_backup WHERE file_id = $1"
+				err := ts.app.DB.DB.QueryRow(query, test.fileID).Scan(&count)
+				assert.NoError(t, err)
+				assert.GreaterOrEqual(t, count, 1, "Backup record should exist in sda.file_headers_backup")
+			}
 		})
 	}
 }
