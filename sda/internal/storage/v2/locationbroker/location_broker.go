@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -77,7 +78,7 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 	}
 	for _, entry := range dir {
 		if entry.IsDir() {
-			subDirSize, subDirCount, err := getSizeAndCountInDir(entry.Name())
+			subDirSize, subDirCount, err := getSizeAndCountInDir(filepath.Join(path, entry.Name()))
 			if err != nil {
 				return 0, 0, err
 			}

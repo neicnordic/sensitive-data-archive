@@ -31,45 +31,62 @@ type reader struct {
 func NewReader(ctx context.Context, backendName string) (Reader, error) {
 	r := &reader{}
 
-	var err error
-	r.s3Reader, err = s3reader.NewReader(ctx, backendName)
+	s3Reader, err := s3reader.NewReader(ctx, backendName)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
-	r.posixReader, err = posixreader.NewReader(backendName)
+	posixReader, err := posixreader.NewReader(backendName)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidLocations) {
 		return nil, err
 	}
 
-	if r.s3Reader == nil && r.posixReader == nil {
+	if s3Reader == nil && posixReader == nil {
 		return nil, storageerrors.ErrorNoValidReader
+	}
+	if posixReader != nil {
+		r.posixReader = posixReader
+	}
+	if s3Reader != nil {
+		r.s3Reader = s3Reader
 	}
 
 	return r, nil
 }
 
 func (r *reader) NewFileReader(ctx context.Context, location, filePath string) (io.ReadCloser, error) {
-	if strings.HasPrefix(location, "/") {
+	if strings.HasPrefix(location, "/") && r.posixReader != nil {
 		return r.posixReader.NewFileReader(ctx, location, filePath)
 	}
 
-	return r.s3Reader.NewFileReader(ctx, location, filePath)
+	if r.s3Reader != nil {
+		return r.s3Reader.NewFileReader(ctx, location, filePath)
+	}
+
+	return nil, storageerrors.ErrorNoValidReader
 }
 
 func (r *reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
-	if strings.HasPrefix(location, "/") {
+	if strings.HasPrefix(location, "/") && r.posixReader != nil {
 		return r.posixReader.NewFileReadSeeker(ctx, location, filePath)
 	}
 
-	return r.s3Reader.NewFileReadSeeker(ctx, location, filePath)
+	if r.s3Reader != nil {
+		return r.s3Reader.NewFileReadSeeker(ctx, location, filePath)
+	}
+
+	return nil, storageerrors.ErrorNoValidReader
 }
 
 func (r *reader) GetFileSize(ctx context.Context, location, filePath string) (int64, error) {
-	if strings.HasPrefix(location, "/") {
+	if strings.HasPrefix(location, "/") && r.posixReader != nil {
 		return r.posixReader.GetFileSize(ctx, location, filePath)
 	}
 
-	return r.s3Reader.GetFileSize(ctx, location, filePath)
+	if r.s3Reader != nil {
+		return r.s3Reader.GetFileSize(ctx, location, filePath)
+	}
+
+	return 0, storageerrors.ErrorNoValidReader
 }
 
 func (r *reader) FindFile(ctx context.Context, filePath string) (string, error) {
