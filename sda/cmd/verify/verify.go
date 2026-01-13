@@ -29,29 +29,39 @@ func main() {
 	forever := make(chan bool)
 	conf, err := config.NewConfig("verify")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	db, err := database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	if db.Version < 23 {
 		log.Error("database schema v23 is required")
-		db.Close()
-		panic(err)
+
+		return
 	}
 
 	archiveReader, err := storage.NewReader(ctx, "archive")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	archiveKeyList, err := config.GetC4GHprivateKeys()
 	if err != nil || len(archiveKeyList) == 0 {
-		log.Fatal("no C4GH private keys configured")
+		log.Error("no C4GH private keys configured")
+
+		return
 	}
 
 	defer mq.Channel.Close()
