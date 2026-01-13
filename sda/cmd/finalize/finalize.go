@@ -36,33 +36,47 @@ func main() {
 	forever := make(chan bool)
 	conf, err = config.NewConfig("finalize")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	if db.Version < 23 {
-		log.Fatal("database schema v23 is required")
+		log.Error("database schema v23 is required")
+
+		return
 	}
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
-		log.Fatal("failed to init new location broker due to: %v", err)
+		log.Errorf("failed to init new location broker due to: %v", err)
+
+		return
 	}
 
 	backupWriter, err = storage.NewWriter(ctx, "backup", lb)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidWriter) {
-		log.Fatalf("error creating backup writer: %v", err)
+		log.Errorf("error creating backup writer: %v", err)
+
+		return
 	}
 
 	archiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidReader) {
-		log.Fatalf("error creating archive reader: %v", err)
+		log.Errorf("error creating archive reader: %v", err)
+
+		return
 	}
 
 	if archiveReader != nil && backupWriter != nil {
@@ -246,22 +260,22 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
 	fileID := delivered.CorrelationId
 
-	filePath, fileSize, archiveLocation, err := db.GetArchived(fileID)
+	archiveData, err := db.GetArchived(fileID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archiveReader.GetFileSize(ctx, archiveLocation, filePath)
+	diskFileSize, err := archiveReader.GetFileSize(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
 
-	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, fileSize)
+	if diskFileSize != int64(archiveData.FileSize) {
+		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
 	}
 
-	file, err := archiveReader.NewFileReader(ctx, archiveLocation, filePath)
+	file, err := archiveReader.NewFileReader(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
@@ -271,13 +285,13 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	go func() {
 		// Copy the file and check is sizes match
 		copiedSize, err := io.Copy(contentWriter, file)
-		if err != nil || copiedSize != int64(fileSize) {
+		if err != nil || copiedSize != int64(archiveData.FileSize) {
 			log.Errorf("failed to copy file, reason: %v)", err)
 		}
 		_ = contentWriter.Close()
 	}()
 
-	_, err = backupWriter.WriteFile(ctx, filePath, contentReader)
+	_, err = backupWriter.WriteFile(ctx, archiveData.FilePath, contentReader)
 	if err != nil {
 		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
 	}
