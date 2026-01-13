@@ -2,7 +2,7 @@ package locationbroker
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +71,7 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (u
 // TODO is it more performant to just use the DB for posix as well?
 func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 	count := uint64(0)
-	size := int64(0)
+	size := uint64(0)
 	dir, err := os.ReadDir(path)
 	if err != nil {
 		return 0, 0, err
@@ -83,7 +83,7 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 				return 0, 0, err
 			}
 			count += subDirCount
-			subDirSize += subDirSize
+			size += subDirSize
 
 			continue
 		}
@@ -92,18 +92,20 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 		if err != nil {
 			return 0, 0, err
 		}
-		size += fileInfo.Size()
-	}
-	if size < 0 {
-		return 0, 0, errors.New("unexpected negative size in location")
+		fileSize := fileInfo.Size()
+		if fileSize < 0 {
+			return 0, 0, fmt.Errorf("file: %s has negative size", entry.Name())
+		}
+		//nolint:gosec // disable G115
+		size += uint64(fileInfo.Size())
 	}
 
-	return uint64(size), count, nil
+	return size, count, nil
 }
 
 func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, error) {
 	loc, ok := l.checkedLocations[location]
-	if ok && loc.lastChecked.After(time.Now()) {
+	if ok && loc.lastChecked.Add(l.cacheTTL).After(time.Now()) {
 		return loc.size, nil
 	}
 
@@ -123,6 +125,8 @@ func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, 
 			return 0, err
 		}
 	}
+
+	l.checkedLocations[location] = loc
 
 	return loc.size, nil
 }
