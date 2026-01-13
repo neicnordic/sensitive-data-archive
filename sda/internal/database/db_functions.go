@@ -388,7 +388,11 @@ func (dbs *SDAdb) backupHeader(fileID string, header []byte, keyHash string) err
 
 	const query = `
 		INSERT INTO sda.file_headers_backup (file_id, header, key_hash, backup_at)
-		VALUES ($1, $2, $3, NOW());`
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (file_id) DO UPDATE
+		SET header = EXCLUDED.header,
+		    key_hash = EXCLUDED.key_hash,
+		    backup_at = EXCLUDED.backup_at;`
 
 	result, err := db.Exec(query, fileID, hex.EncodeToString(header), keyHash)
 	if err != nil {
