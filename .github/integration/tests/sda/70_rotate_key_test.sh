@@ -151,6 +151,13 @@ then
 	exit 1
 fi
 
+echo "verifying header backup in sda.file_headers_backup"
+backupCount=$(psql -U postgres -h postgres -d sda -At -c "SELECT count(*) FROM sda.file_headers_backup WHERE file_id='$fileID';")
+if [ "$backupCount" -lt 1 ]; then
+    echo "::error::No backup found in sda.file_headers_backup for file $fileID"
+    exit 1
+fi
+
 # check that files were re-verified
 echo "waiting for re-verify to complete"
 RETRY_TIMES=0
