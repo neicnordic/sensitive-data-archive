@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/json"
@@ -17,12 +18,14 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	forever := make(chan bool)
 	conf, err := config.NewConfig("verify")
 	if err != nil {
@@ -36,12 +39,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if db.Version < 21 {
-		log.Error("database schema v21 is required")
+	if db.Version < 23 {
+		log.Error("database schema v23 is required")
 		db.Close()
 		panic(err)
 	}
-	archive, err := storage.NewBackend(conf.Archive)
+
+	archiveReader, err := storage.NewReader(ctx, "archive")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,6 +80,7 @@ func main() {
 				err)
 		}
 		for delivered := range messages {
+			ctx := context.Background()
 			log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
@@ -160,8 +165,31 @@ func main() {
 				continue
 			}
 
+			archiveLocation, err := db.GetArchiveLocation(message.FileID)
+			if err != nil {
+				log.Errorf("failed to get archive location of file: %s, error: %v", message.FileID, err)
+
+				// Send the message to an error queue so it can be analyzed.
+				infoErrorMessage := broker.InfoError{
+					Error:           "GetArchiveLocation failed",
+					Reason:          err.Error(),
+					OriginalMessage: message,
+				}
+
+				body, _ := json.Marshal(infoErrorMessage)
+				if err := mq.SendMessage(message.FileID, conf.Broker.Exchange, "error", body); err != nil {
+					log.Errorf("failed to publish message, reason: (%s)", err.Error())
+				}
+
+				if err := delivered.Ack(false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
+				}
+
+				continue
+			}
+
 			var file database.FileInfo
-			file.Size, err = archive.GetFileSize(message.ArchivePath, false)
+			file.Size, err = archiveReader.GetFileSize(ctx, archiveLocation, message.ArchivePath)
 			if err != nil { //nolint:nestif
 				log.Errorf("Failed to get archived file size, file-id: %s, archive-path: %s, reason: (%s)", message.FileID, message.ArchivePath, err.Error())
 				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
@@ -190,7 +218,7 @@ func main() {
 			}
 
 			archiveFileHash := sha256.New()
-			f, err := archive.NewFileReader(message.ArchivePath)
+			f, err := archiveReader.NewFileReader(ctx, archiveLocation, message.ArchivePath)
 			if err != nil {
 				log.Errorf("Failed to open archived file, file-id: %s, reason: %v ", message.FileID, err.Error())
 				// Send the message to an error queue so it can be analyzed.
