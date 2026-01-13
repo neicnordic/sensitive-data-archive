@@ -80,30 +80,14 @@ These settings control how `mapper` connects to the RabbitMQ message broker.
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
 
 ### Storage settings
-
-Storage backend is defined by the `INBOX_TYPE` variable.
-Valid values for these options are `S3` or `POSIX`
-(Defaults to `POSIX` on unknown values).
-
-The value of these variables define what other variables are read.
-The same variables are available for all storage types, differing by prefix (`INBOX_`)
-
-if `*_TYPE` is `S3` then the following variables are available:
-
-- `*_URL`: URL to the S3 system
-- `*_ACCESSKEY`: The S3 access and secret key are used to authenticate to S3,
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `*_SECRETKEY`: The S3 access and secret key are used to authenticate to S3,
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `*_BUCKET`: The S3 bucket to use as the storage root
-- `*_PORT`: S3 connection port (default: `443`)
-- `*_REGION`: S3 region (default: `us-east-1`)
-- `*_CHUNKSIZE`: S3 chunk size for multipart uploads.
-- `*_CACERT`: Certificate Authority (CA) certificate for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
-
-and if `*_TYPE` is `POSIX`:
-
-- `*_LOCATION`: POSIX path to use as storage root
+The mapper service requires access to the "inbox" storage, to configure such the following config is needed:
+Such as
+```yaml
+storage:
+  inbox:
+    ${STORAGE_IMPLEMENTATION}:
+```
+For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/READMD.md)
 
 ### Logging settings
 
