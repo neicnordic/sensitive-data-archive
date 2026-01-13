@@ -66,6 +66,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if Conf.API.DB.Version < 23 {
+		log.Fatalf("database schema v23 is required")
+	}
 
 	if err := setupJwtAuth(); err != nil {
 		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
