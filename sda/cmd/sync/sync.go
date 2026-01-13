@@ -40,20 +40,26 @@ func main() {
 	forever := make(chan bool)
 	conf, err = config.NewConfig("sync")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	if db.Version < 23 {
 		log.Error("database schema v23 is required")
-		db.Close()
-		panic(err)
+
+		return
 	}
 
 	lb, err := locationbroker.NewLocationBroker(db)
@@ -62,16 +68,22 @@ func main() {
 	}
 	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 	archiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 
 	key, err = config.GetC4GHKey()
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
+
+		return
 	}
 
 	defer mq.Channel.Close()
