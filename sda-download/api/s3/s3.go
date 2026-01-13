@@ -99,6 +99,8 @@ func ListBuckets(c *gin.Context) {
 		if err != nil {
 			log.Errorf("Failed to get dataset information: %v", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
+
+			return
 		}
 		// TODO: Add real creation date
 		buckets = append(buckets, Bucket{

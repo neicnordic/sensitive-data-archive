@@ -44,3 +44,12 @@ There is an README file in the [dev_utils](/dev_utils) folder with sections for 
 |---------------|------|
 | auth        | Auth pkg is used by the middleware to parse OIDC Details and extract GA4GH Visas from a [GA4GH Passport](https://github.com/ga4gh-duri/ga4gh-duri.github.io/blob/master/researcher_ids/ga4gh_passport_v1.md) |
 | request       | This pkg Stores a HTTP client, so that it doesn't need to be initialised on every request. |
+
+## Storage settings
+The download service requires access to the "archive" storage, to configure such the following config is needed:
+```yaml
+storage:
+  archive:
+    ${STORAGE_IMPLEMENTATION}:
+```
+For more details on available configuration see [storage/v2 README.md](internal/storage/v2/README.md)
