@@ -209,6 +209,33 @@ func (suite *DatabaseTests) TestGetHeader() {
 	db.Close()
 }
 
+func (suite *DatabaseTests) TestBackupHeader() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	fileID, err := db.RegisterFile(nil, "/testuser/TestBackupHeader.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	testKeyHash := "test-key-hash-123"
+	_, err = db.DB.Exec("INSERT INTO sda.encryption_keys (key_hash) VALUES ($1) ON CONFLICT DO NOTHING", testKeyHash)
+	assert.NoError(suite.T(), err, "failed to setup test encryption key")
+
+	testHeader := []byte{1, 2, 3, 4, 5}
+	err = db.BackupHeader(fileID, testHeader, testKeyHash)
+	assert.NoError(suite.T(), err, "failed to backup header")
+
+	var storedHeaderHex string
+	var storedKeyHash string
+
+	query := "SELECT header, key_hash FROM sda.file_headers_backup WHERE file_id = $1"
+	err = db.DB.QueryRow(query, fileID).Scan(&storedHeaderHex, &storedKeyHash)
+
+	assert.NoError(suite.T(), err, "failed to find backup record in database")
+	assert.Equal(suite.T(), hex.EncodeToString(testHeader), storedHeaderHex)
+	assert.Equal(suite.T(), testKeyHash, storedKeyHash)
+}
+
 func (suite *DatabaseTests) TestSetVerified() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
