@@ -32,7 +32,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -399,7 +400,14 @@ func ingestFile(c *gin.Context) {
 // The deleteFile function deletes files from the inbox and marks them as
 // discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
-	inbox, err := storage.NewBackend(Conf.Inbox)
+	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
+	if err != nil {
+		log.Error(err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+	inboxWriter, err := storage.NewWriter(c, "inbox", lb)
 	if err != nil {
 		log.Error(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -420,7 +428,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	filePath, location, err := Conf.API.DB.GetSubmissionPathAndLocation(c, submissionUser, fileID)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -430,7 +438,7 @@ func deleteFile(c *gin.Context) {
 
 	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
 	for count := 1; count <= 5; count++ {
-		err = inbox.RemoveFile(filePath)
+		err = inboxWriter.RemoveFile(c, location, filePath)
 		if err == nil {
 			break
 		}
@@ -502,9 +510,9 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	inbox, err := storage.NewBackend(Conf.Inbox)
+	inboxReader, err := storage.NewReader(c, "inbox")
 	if err != nil {
-		log.Errorf("failed to initialize inbox backend, reason: %v", err)
+		log.Errorf("failed to initialize inbox reader, reason: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
 
 		return
@@ -512,7 +520,7 @@ func downloadFile(c *gin.Context) {
 
 	// Retrieve the actual file path for the user's file.
 	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(
+	filePath, location, err := Conf.API.DB.GetSubmissionPathAndLocation(c,
 		strings.TrimPrefix(c.Param("username"), "/"),
 		fileID,
 	)
@@ -522,9 +530,14 @@ func downloadFile(c *gin.Context) {
 
 		return
 	}
+	if location == "" {
+		log.Errorf("fileID: %s has no known submission location", fileID)
+
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+	}
 
 	// Get inbox file handle #noqa
-	file, err := inbox.NewFileReader(
+	file, err := inboxReader.NewFileReader(c, location,
 		helper.UnanonymizeFilepath(
 			filePath,
 			strings.TrimPrefix(c.Param("username"), "/"),
