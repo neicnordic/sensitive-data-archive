@@ -3,7 +3,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,19 +13,26 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
 var db *database.SDAdb
-var archive, backup storage.Backend
+var archiveReader storage.Reader
+var backupWriter storage.Writer
 var conf *config.Config
 var err error
 var message schema.IngestionAccession
 
+var backupInStorage bool
+
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	forever := make(chan bool)
 	conf, err = config.NewConfig("finalize")
 	if err != nil {
@@ -37,22 +46,28 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if db.Version < 21 {
-		log.Error("database schema v21 is required")
-		db.Close()
-		panic(err)
+	if db.Version < 23 {
+		log.Fatal("database schema v23 is required")
 	}
 
-	if conf.Backup.Type != "" && conf.Archive.Type != "" {
-		log.Debugln("initiating storage backends")
-		backup, err = storage.NewBackend(conf.Backup)
-		if err != nil {
-			log.Fatal(err)
-		}
-		archive, err = storage.NewBackend(conf.Archive)
-		if err != nil {
-			log.Fatal(err)
-		}
+	lb, err := locationbroker.NewLocationBroker(db)
+	if err != nil {
+		log.Fatal("failed to init new location broker due to: %v", err)
+	}
+
+	backupWriter, err = storage.NewWriter(ctx, "backup", lb)
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidWriter) {
+		log.Fatalf("error creating backup writer: %v", err)
+	}
+
+	archiveReader, err = storage.NewReader(ctx, "archive")
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidReader) {
+		log.Fatalf("error creating archive reader: %v", err)
+	}
+
+	if archiveReader != nil && backupWriter != nil {
+		backupInStorage = true
+		log.Info("will back up files in backup storage")
 	}
 
 	defer mq.Channel.Close()
@@ -78,6 +93,7 @@ func main() {
 			log.Fatal(err)
 		}
 		for delivered := range messages {
+			ctx := context.Background()
 			log.Debugf("Received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 			err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", conf.Broker.SchemasPath), delivered.Body)
 			if err != nil {
@@ -177,8 +193,8 @@ func main() {
 			case "same":
 				log.Infof("file already has a stable ID, marking it as ready, file-id: %s", fileID)
 			default:
-				if conf.Backup.Type != "" && conf.Archive.Type != "" {
-					if err = backupFile(delivered); err != nil {
+				if backupInStorage {
+					if err = backupFile(ctx, delivered); err != nil {
 						log.Errorf("failed to backup file, file-id: %s, reason: %v", fileID, err)
 						if err := delivered.Nack(false, true); err != nil {
 							log.Errorf("failed to Nack message, reason: %v", err)
@@ -226,17 +242,17 @@ func main() {
 	<-forever
 }
 
-func backupFile(delivered amqp.Delivery) error {
+func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
 	fileID := delivered.CorrelationId
 
-	filePath, fileSize, err := db.GetArchived(fileID)
+	filePath, fileSize, archiveLocation, err := db.GetArchived(fileID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archive.GetFileSize(filePath, false)
+	diskFileSize, err := archiveReader.GetFileSize(ctx, archiveLocation, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
@@ -245,23 +261,27 @@ func backupFile(delivered amqp.Delivery) error {
 		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, fileSize)
 	}
 
-	file, err := archive.NewFileReader(filePath)
+	file, err := archiveReader.NewFileReader(ctx, archiveLocation, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
 	defer file.Close()
 
-	dest, err := backup.NewFileWriter(filePath)
+	contentReader, contentWriter := io.Pipe()
+	go func() {
+		// Copy the file and check is sizes match
+		copiedSize, err := io.Copy(contentWriter, file)
+		if err != nil || copiedSize != int64(fileSize) {
+			log.Errorf("failed to copy file, reason: %v)", err)
+		}
+		_ = contentWriter.Close()
+	}()
+
+	_, err = backupWriter.WriteFile(ctx, filePath, contentReader)
 	if err != nil {
 		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
 	}
-	defer dest.Close()
-
-	// Copy the file and check is sizes match
-	copiedSize, err := io.Copy(dest, file)
-	if err != nil || copiedSize != int64(fileSize) {
-		log.Errorf("failed to copy file, reason: %v)", err)
-	}
+	_ = contentReader.Close()
 
 	// Mark file as "backed up"
 	if err := db.UpdateFileEventLog(fileID, "backed up", "finalize", "{}", string(delivered.Body)); err != nil {
