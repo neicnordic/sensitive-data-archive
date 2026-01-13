@@ -67,6 +67,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	if app.DB.Version < 22 {
+		log.Error("database schema v22 is required")
+		app.DB.Close()
+		panic(err)
+	}
 
 	go func() {
 		<-sigc // blocks here until it receives from sigc
