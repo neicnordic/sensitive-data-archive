@@ -913,6 +913,20 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 	return archivePath, nil
 }
 
+func (dbs *SDAdb) GetArchiveLocation(fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+	const getFileID = "SELECT archive_location from sda.files WHERE id = $1;"
+
+	var archiveLocation string
+	err := db.QueryRow(getFileID, fileID).Scan(&archiveLocation)
+	if err != nil {
+		return "", err
+	}
+
+	return archiveLocation, nil
+}
+
 // SetSubmissionFileSize sets the submission file size for a file
 func (dbs *SDAdb) SetSubmissionFileSize(fileID string, submissionFileSize int64) error {
 	var err error
