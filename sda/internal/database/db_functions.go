@@ -882,33 +882,34 @@ func (dbs *SDAdb) checkIfDatasetExists(datasetID string) (bool, error) {
 	return yesNo, nil
 }
 
-// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
-func (dbs *SDAdb) GetArchivePath(stableID string) (string, error) {
+// GetArchivePathAndLocation retrieves the submission_fie_path for a file with a given accessionID
+func (dbs *SDAdb) GetArchivePathAndLocation(stableID string) (string, string, error) {
 	var (
-		err         error
-		count       int
-		archivePath string
+		err             error
+		count           int
+		archivePath     string
+		archiveLocation string
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		archivePath, err = dbs.getArchivePath(stableID)
+		archivePath, archiveLocation, err = dbs.getArchivePath(stableID)
 		count++
 	}
 
-	return archivePath, err
+	return archivePath, archiveLocation, err
 }
-func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
+func (dbs *SDAdb) getArchivePath(stableID string) (string, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const getFileID = "SELECT archive_file_path from sda.files WHERE stable_id = $1;"
+	const getFileID = "SELECT archive_file_path, archive_location from sda.files WHERE stable_id = $1;"
 
-	var archivePath string
-	err := db.QueryRow(getFileID, stableID).Scan(&archivePath)
+	var archivePath, archiveLocation string
+	err := db.QueryRow(getFileID, stableID).Scan(&archivePath, &archiveLocation)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return archivePath, nil
+	return archivePath, archiveLocation, nil
 }
 
 func (dbs *SDAdb) GetArchiveLocation(fileID string) (string, error) {
