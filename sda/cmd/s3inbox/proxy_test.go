@@ -157,9 +157,10 @@ func (s *ProxyTests) TearDownTest() {
 }
 
 type FakeServer struct {
-	ts     *httptest.Server
-	resp   string
-	pinged bool
+	ts          *httptest.Server
+	headHeaders map[string]string
+	resp        string
+	pinged      bool
 }
 
 func startFakeServer(port string) *FakeServer {
@@ -171,9 +172,15 @@ func startFakeServer(port string) *FakeServer {
 	f := FakeServer{}
 	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.pinged = true
-		log.Warnf("hello fake will return %s", f.resp)
+		if f.headHeaders != nil && r.Method == "HEAD" {
+			for k, v := range f.headHeaders {
+				w.Header().Set(k, v)
+			}
+			w.WriteHeader(http.StatusOK)
+
+			return
+		}
 		if f.resp != "" {
-			log.Warnf("fake writes %s", f.resp)
 			_, _ = fmt.Fprint(w, f.resp)
 		}
 	})
@@ -316,6 +323,7 @@ func (s *ProxyTests) TestServeHTTP_MQConnectionClosed() {
 	r, _ := http.NewRequest("PUT", "/dummy/connectionclosed-file", nil)
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
 	proxy.allowedResponse(w, r, s.token)
 	assert.Equal(s.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(s.T(), proxy.messenger.Connection.IsClosed())
@@ -334,6 +342,7 @@ func (s *ProxyTests) TestServeHTTP_MQChannelClosed() {
 	r, _ := http.NewRequest("PUT", "/dummy/channelclosed-file", nil)
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
 	proxy.allowedResponse(w, r, s.token)
 	assert.Equal(s.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(s.T(), proxy.messenger.Channel.IsClosed())
@@ -353,6 +362,7 @@ func (s *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 	r, _ := http.NewRequest("PUT", "/dummy/mqunavailable-file", nil)
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
 	proxy.allowedResponse(w, r, s.token)
 	assert.Equal(s.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
@@ -378,6 +388,7 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	r, err = http.NewRequest("PUT", "/dummy/file", nil)
 	assert.NoError(s.T(), err)
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\";", "Content-Length": "5"}
 	proxy.allowedResponse(w, r, s.token)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
@@ -472,6 +483,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 	// start proxy that denies everything
 	proxy := NewProxy(s.S3Fakeconf, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "1234"}
 	msg, err := proxy.CreateMessageFromRequest(r, claims, "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
@@ -512,6 +524,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	r, _ := http.NewRequest("PUT", filename, stringReader)
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
 	proxy.allowedResponse(w, r, s.token)
 	res := w.Result()
 	defer res.Body.Close()
