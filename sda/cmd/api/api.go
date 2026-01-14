@@ -22,6 +22,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -340,6 +341,11 @@ func ingestFile(c *gin.Context) {
 
 		return
 	case c.Query("fileid") != "":
+		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
+
+			return
+		}
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "uploaded")
 		if err != nil {
@@ -612,6 +618,11 @@ func setAccession(c *gin.Context) {
 
 		return
 	case c.Query("fileid") != "" && c.Query("accessionid") != "":
+		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
+
+			return
+		}
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "verified")
 		if err != nil {
