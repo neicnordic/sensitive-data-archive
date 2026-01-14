@@ -7,18 +7,16 @@ import (
 	"testing"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 type HealthcheckTestSuite struct {
 	suite.Suite
-	S3Fakeconf storage.S3Conf // fakeserver
-	S3conf     storage.S3Conf // actual s3 container
+	mockS3Conf config.S3InboxConf // fakeserver
 	DBConf     database.DBConf
 	fakeServer *FakeServer
 	MQConf     broker.MQConf
@@ -34,9 +32,8 @@ func (ts *HealthcheckTestSuite) SetupTest() {
 	ts.fakeServer = startFakeServer("9024")
 
 	// Create an s3config for the fake server
-	ts.S3Fakeconf = storage.S3Conf{
-		URL:       "http://127.0.0.1",
-		Port:      9024,
+	ts.mockS3Conf = config.S3InboxConf{
+		Endpoint:  "http://127.0.0.1:9024",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",
@@ -77,7 +74,7 @@ func (ts *HealthcheckTestSuite) TearDownTest() {
 }
 
 func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
 
 	url, _ := p.getS3ReadyPath()
 	assert.NoError(ts.T(), p.httpsGetCheck(url))
@@ -85,12 +82,12 @@ func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
 }
 
 func (ts *HealthcheckTestSuite) TestS3URL() {
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
 
 	_, err := p.getS3ReadyPath()
 	assert.NoError(ts.T(), err)
 
-	p.s3.URL = "://badurl"
+	p.s3Conf.Endpoint = "://badurl"
 	url, err := p.getS3ReadyPath()
 	assert.Empty(ts.T(), url)
 	assert.Error(ts.T(), err)
@@ -101,7 +98,7 @@ func (ts *HealthcheckTestSuite) TestHealthchecks() {
 	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
@@ -115,7 +112,7 @@ func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// Check that 200 is reported
 	w := httptest.NewRecorder()
@@ -138,11 +135,11 @@ func (ts *HealthcheckTestSuite) TestNoS3Healthchecks() {
 	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// S3 unavailable, check that 503 is reported
 	w := httptest.NewRecorder()
-	p.s3.URL = "http://badurl"
+	p.s3Conf.Endpoint = "http://badurl"
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp := w.Result()
 	defer resp.Body.Close()
@@ -154,7 +151,7 @@ func (ts *HealthcheckTestSuite) TestNoMQHealthchecks() {
 	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.S3Fakeconf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
 
 	// Messenger unavailable, check that 503 is reported
 	p.messenger.Conf.Port = 123456
