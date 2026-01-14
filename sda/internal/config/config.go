@@ -481,15 +481,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 		}
 
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
 	default:
 		return nil, fmt.Errorf("application '%s' doesn't exist", app)
 	}
@@ -727,7 +718,6 @@ func NewConfig(app string) (*Config, error) {
 		c.configSyncAPI()
 		c.configSchemas()
 	case "verify":
-		c.configArchive()
 
 		err := c.configBroker()
 		if err != nil {
