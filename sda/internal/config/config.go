@@ -79,7 +79,6 @@ type RotateKeyConf struct {
 
 type Sync struct {
 	CenterPrefix   string
-	Destination    storage.Conf
 	RemoteHost     string
 	RemotePassword string
 	RemotePort     int
@@ -430,25 +429,6 @@ func NewConfig(app string) (*Config, error) {
 			"sync.remote.password",
 		}
 
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
-		switch viper.GetString("sync.destination.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.url", "sync.destination.accesskey", "sync.destination.secretkey", "sync.destination.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.location"}...)
-		case SFTP:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
-		default:
-			return nil, errors.New("sync.destination.type not set")
-		}
 	case "sync-api":
 		requiredConfVars = []string{
 			"broker.exchange",
@@ -691,7 +671,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configArchive()
 		if err := c.configSync(); err != nil {
 			return nil, err
 		}
@@ -1120,20 +1099,6 @@ func (c *Config) configSMTP() {
 
 // configSync provides configuration for the sync destination storage
 func (c *Config) configSync() error {
-	switch viper.GetString("sync.destination.type") {
-	case S3:
-		c.Sync.Destination.Type = S3
-		c.Sync.Destination.S3 = configS3Storage("sync.destination")
-	case SFTP:
-		c.Sync.Destination.Type = SFTP
-		c.Sync.Destination.SFTP = configSFTP("sync.destination")
-	case POSIX:
-		c.Sync.Destination.Type = POSIX
-		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
-	default:
-		return errors.New("sync.destination.type not set")
-	}
-
 	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
 	if viper.IsSet("sync.remote.port") {
 		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
