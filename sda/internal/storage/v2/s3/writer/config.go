@@ -29,16 +29,18 @@ type endpointConfig struct {
 	BucketPrefix   string `mapstructure:"bucket_prefix"`
 	CACert         string `mapstructure:"ca_cert"`
 	ChunkSize      string `mapstructure:"chunk_size"`
-	ChunkSizeBytes uint64 `mapstructure:"-"`
+	chunkSizeBytes uint64
 	MaxBuckets     uint64 `mapstructure:"max_buckets"`
 	MaxObjects     uint64 `mapstructure:"max_objects"`
 	MaxSize        string `mapstructure:"max_size"`
-	MaxSizeBytes   uint64 `mapstructure:"-"`
+	maxSizeBytes   uint64
 	Region         string `mapstructure:"region"`
 	SecretKey      string `mapstructure:"secret_key"`
 	Endpoint       string `mapstructure:"endpoint"`
 	DisableHTTPS   bool   `mapstructure:"disable_https"`
 	WriterDisabled bool   `mapstructure:"writer_disabled"`
+
+	s3Client *s3.Client // cached s3 client for this endpoint, created by getS3Client
 }
 
 func loadConfig(backendName string) ([]*endpointConfig, error) {
@@ -88,14 +90,14 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				if byteSize > 1*datasize.GB {
 					return nil, errors.New("chunk_size can not be bigger than 1gb")
 				}
-				e.ChunkSizeBytes = byteSize.Bytes()
+				e.chunkSizeBytes = byteSize.Bytes()
 			}
 			if e.MaxSize != "" {
 				byteSize, err := datasize.ParseString(e.MaxSize)
 				if err != nil {
 					return nil, errors.New("could not parse max_size as a valid data size")
 				}
-				e.MaxSizeBytes = byteSize.Bytes()
+				e.maxSizeBytes = byteSize.Bytes()
 			}
 			if e.MaxBuckets == 0 {
 				e.MaxBuckets = 1
@@ -109,7 +111,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	return endpointConf, nil
 }
 
-func (endpointConf *endpointConfig) createClient(ctx context.Context) (*s3.Client, error) {
+func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client, error) {
+	if endpointConf.s3Client != nil {
+		return endpointConf.s3Client, nil
+	}
+
 	transport, err := endpointConf.transportConfigS3()
 	if err != nil {
 		return nil, err
@@ -132,14 +138,16 @@ func (endpointConf *endpointConfig) createClient(ctx context.Context) (*s3.Clien
 	default:
 	}
 
-	return s3.NewFromConfig(
+	endpointConf.s3Client = s3.NewFromConfig(
 		s3cfg,
 		func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 			o.EndpointOptions.DisableHTTPS = endpointConf.DisableHTTPS
 			o.Region = endpointConf.Region
 		},
-	), nil
+	)
+
+	return endpointConf.s3Client, nil
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
@@ -172,7 +180,7 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 }
 
 func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker locationbroker.LocationBroker) (string, error) {
-	client, err := endpointConf.createClient(ctx)
+	client, err := endpointConf.getS3Client(ctx)
 	if err != nil {
 		log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
 
@@ -220,7 +228,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 		if err != nil {
 			return "", err
 		}
-		if size >= endpointConf.MaxSizeBytes && endpointConf.MaxSizeBytes > 0 {
+		if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
 			continue
 		}
 
