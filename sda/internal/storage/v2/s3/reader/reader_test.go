@@ -269,8 +269,6 @@ storage:
 	}
 }
 
-// TODO more test, eg config, etc
-
 func (ts *ReaderTestSuite) TestNewReader_MissingConfigEndpoint() {
 	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_endpoint.yaml"), []byte(`
 storage:

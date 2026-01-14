@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
@@ -15,6 +16,8 @@ type Writer struct {
 	configuredEndpoints []*endpointConfig
 	activeEndpoints     []*endpointConfig
 	locationBroker      locationbroker.LocationBroker
+
+	sync.Mutex
 }
 
 func NewWriter(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (*Writer, error) {

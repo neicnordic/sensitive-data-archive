@@ -11,15 +11,19 @@ import (
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
 	// Find first location that is still usable
-	// TODO locking while finding active location????
+	writer.Lock()
 	var location string
 	for {
 		if len(writer.activeEndpoints) == 0 {
+			writer.Unlock()
+
 			return "", storageerrors.ErrorNoValidLocations
 		}
 
 		usable, err := writer.activeEndpoints[0].isUsable(ctx, writer.locationBroker)
 		if err != nil {
+			writer.Unlock()
+
 			return "", err
 		}
 		if usable {
@@ -29,6 +33,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		}
 		writer.activeEndpoints = writer.activeEndpoints[1:]
 	}
+	writer.Unlock()
 
 	file, err := os.OpenFile(filepath.Join(location, filePath), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0640)
 	if err != nil {

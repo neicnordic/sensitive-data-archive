@@ -12,9 +12,12 @@ import (
 )
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
-	// TODO locking while finding active bucket????
+	// Find endpoint / bucket that is to be used for writing
+	writer.Lock()
 	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoFreeBucket) {
+		writer.Unlock()
+
 		return "", err
 	}
 	// Current active endpoint no longer has any free buckets, roll over to next endpoint
@@ -25,14 +28,16 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 				if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 					continue
 				}
+				writer.Unlock()
 
-				return "", nil
+				return "", err
 			}
 			writer.activeEndpoint = endpointConf
 
 			break
 		}
 	}
+	writer.Unlock()
 
 	client, err := writer.activeEndpoint.getS3Client(ctx)
 	if err != nil {
