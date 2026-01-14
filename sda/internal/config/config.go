@@ -346,14 +346,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 		}
 
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
-		}
 	case "notify":
 		requiredConfVars = []string{
 			"broker.host",
@@ -601,7 +593,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configInbox()
 		c.configSchemas()
 	case "notify":
 		c.configSMTP()
