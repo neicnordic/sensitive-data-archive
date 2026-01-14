@@ -314,23 +314,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 		}
 
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			log.Warnln(" archive not configured, backup will not be performed.")
-		}
-
-		switch viper.GetString("backup.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"backup.url", "backup.accesskey", "backup.secretkey", "backup.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
-		default:
-			log.Warnln(" backup destination not configured, backup will not be performed.")
-		}
 	case "intercept":
 		requiredConfVars = []string{
 			"broker.host",
@@ -596,11 +579,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 	case "finalize":
-		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
-			c.configArchive()
-			c.configBackup()
-		}
-
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
