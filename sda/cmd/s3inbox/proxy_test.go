@@ -16,16 +16,16 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	s3config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -34,8 +34,8 @@ import (
 
 type ProxyTests struct {
 	suite.Suite
-	S3Fakeconf storage.S3Conf // fakeserver
-	S3conf     storage.S3Conf // actual s3 container
+	S3Fakeconf config.S3InboxConf // fakeserver
+	S3conf     config.S3InboxConf // actual s3 container
 	DBConf     database.DBConf
 	fakeServer *FakeServer
 	MQConf     broker.MQConf
@@ -54,18 +54,16 @@ func (s *ProxyTests) SetupTest() {
 	s.fakeServer = startFakeServer("9024")
 
 	// Create an s3config for the fake server
-	s.S3Fakeconf = storage.S3Conf{
-		URL:       "http://127.0.0.1",
-		Port:      9024,
+	s.S3Fakeconf = config.S3InboxConf{
+		Endpoint:  "http://127.0.0.1:9024",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",
 		Region:    "us-east-1",
 	}
 
-	s.S3conf = storage.S3Conf{
-		URL:       "http://127.0.0.1",
-		Port:      s3Port,
+	s.S3conf = config.S3InboxConf{
+		Endpoint:  fmt.Sprintf("http://127.0.0.1:%d", s3Port),
 		AccessKey: "access",
 		SecretKey: "secretKey",
 		Bucket:    "buckbuck",
@@ -125,15 +123,15 @@ func (s *ProxyTests) SetupTest() {
 		s.T().FailNow()
 	}
 
-	s3cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.S3conf.AccessKey, s.S3conf.SecretKey, "")))
+	s3cfg, err := s3config.LoadDefaultConfig(context.TODO(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.S3conf.AccessKey, s.S3conf.SecretKey, "")))
 	if err != nil {
 		s.FailNow("bad")
 	}
 	s3Client := s3.NewFromConfig(
 		s3cfg,
 		func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(fmt.Sprintf("%s:%d", s.S3conf.URL, s.S3conf.Port))
-			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(s.S3conf.URL, "http:")
+			o.BaseEndpoint = aws.String(s.S3conf.Endpoint)
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(s.S3conf.Endpoint, "http:")
 			o.Region = s.S3conf.Region
 			o.UsePathStyle = true
 		},
@@ -227,7 +225,7 @@ func (s *ProxyTests) TestServeHTTP_disallowed() {
 	r, _ := http.NewRequest("", "", nil)
 	w := httptest.NewRecorder()
 
-	log.Warnf("using proxy on port %d", s.S3Fakeconf.Port)
+	log.Warnf("using proxy at %s", s.S3Fakeconf.Endpoint)
 	// Remove bucket disallowed
 	r.Method = "DELETE"
 	r.URL, _ = url.Parse("/asdf/")
@@ -286,8 +284,8 @@ func (s *ProxyTests) TestServeHTTP_disallowed() {
 }
 
 func (s *ProxyTests) TestServeHTTPS3Unresponsive() {
-	s3conf := storage.S3Conf{
-		URL:       "http://localhost:40211",
+	s3conf := config.S3InboxConf{
+		Endpoint:  "http://localhost:40211",
 		AccessKey: "someAccess",
 		SecretKey: "someSecret",
 		Bucket:    "buckbuck",
@@ -531,7 +529,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	err = db.DB.QueryRow(query, anonymFilename).Scan(&fileID, &location)
 	assert.Nil(s.T(), err, "Failed to query database")
 	assert.NotNil(s.T(), fileID, "File not found in database")
-	assert.Equal(s.T(), fmt.Sprintf("%s:%d/%s", s.S3Fakeconf.URL, s.S3Fakeconf.Port, s.S3Fakeconf.Bucket), location)
+	assert.Equal(s.T(), fmt.Sprintf("%s/%s", s.S3Fakeconf.Endpoint, s.S3Fakeconf.Bucket), location)
 
 	// Check that the "registered" status is in the database for this file
 	for _, status := range []string{"registered", "uploaded"} {
@@ -603,7 +601,7 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 
 	// Unaccessible S3 (wrong port)
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	proxy.s3.Port = 1111
+	proxy.s3Conf.Endpoint = "http://127.0.0.1:1111"
 
 	res, err := proxy.checkFileExists("nonexistingfilepath")
 	assert.False(s.T(), res)
@@ -611,8 +609,8 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	assert.Contains(s.T(), err.Error(), "S3: HeadObject")
 
 	// Bad access key gives 403
-	proxy.s3.Port = s.S3conf.Port
-	proxy.s3.AccessKey = "invaild"
+	proxy.s3Conf.Endpoint = s.S3conf.Endpoint
+	proxy.s3Conf.AccessKey = "invaild"
 	res, err = proxy.checkFileExists("nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
@@ -654,11 +652,11 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 	assert.NotNil(s.T(), fileID)
 
 	// Detect autentication failure
-	p.s3.AccessKey = "badKey"
+	p.s3Conf.AccessKey = "badKey"
 	assert.Error(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
 
 	// Detect unresponsive backend service
-	p.s3.Port = 1234
+	p.s3Conf.Endpoint = "http://127.0.0.1:1234"
 	assert.Error(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
 }
 
@@ -680,15 +678,15 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
-	s3cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.S3conf.AccessKey, s.S3conf.SecretKey, "")))
+	s3cfg, err := s3config.LoadDefaultConfig(context.TODO(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.S3conf.AccessKey, s.S3conf.SecretKey, "")))
 	if err != nil {
 		s.FailNow("bad")
 	}
 	s3Client := s3.NewFromConfig(
 		s3cfg,
 		func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(fmt.Sprintf("%s:%d", s.S3conf.URL, s.S3conf.Port))
-			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(s.S3conf.URL, "http:")
+			o.BaseEndpoint = aws.String(s.S3conf.Endpoint)
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(s.S3conf.Endpoint, "http:")
 			o.Region = s.S3conf.Region
 			o.UsePathStyle = true
 		},

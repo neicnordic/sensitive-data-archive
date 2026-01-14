@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -11,20 +12,23 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	s3config "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 )
@@ -35,7 +39,7 @@ type uniqueFileID struct {
 
 // Proxy represents the toplevel object in this application
 type Proxy struct {
-	s3        storage.S3Conf
+	s3Conf    config.S3InboxConf
 	auth      userauth.Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
@@ -82,7 +86,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf storage.S3Conf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+func NewProxy(s3conf config.S3InboxConf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -154,7 +158,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	}
 
 	username := token.Subject()
-	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3.Bucket+"/", "", 1)
+	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3Conf.Bucket+"/", "", 1)
 	anonymizedFilepath := helper.AnonymizeFilepath(rawFilepath, username)
 
 	filePath, err := formatUploadFilePath(anonymizedFilepath)
@@ -169,7 +173,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		filePath: filePath,
 	}
 
-	location := fmt.Sprintf("%s:%d/%s", p.s3.URL, p.s3.Port, p.s3.Bucket)
+	location := p.s3Conf.Endpoint + "/" + p.s3Conf.Bucket
 	// if this is an upload request
 	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
 		// register file in database
@@ -340,10 +344,10 @@ func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Res
 }
 
 func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
-	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
+	p.resignHeader(r)
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
+	nr, err := http.NewRequest(r.Method, p.s3Conf.Endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -359,7 +363,7 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 
 // Add bucket to host path
 func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
-	bucket := p.s3.Bucket
+	bucket := p.s3Conf.Bucket
 
 	// Extract username for request's url path
 	str, err := url.ParseRequestURI(r.URL.Path)
@@ -422,8 +426,8 @@ func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
 // Function for signing the headers of the s3 requests
 // Used for for creating a signature for with the default
 // credentials of the s3 service and the user's signature (authentication)
-func (p *Proxy) resignHeader(r *http.Request, accessKey string, secretKey string, backendURL string) *http.Request {
-	log.Debugf("Generating resigning header for %s", backendURL)
+func (p *Proxy) resignHeader(r *http.Request) *http.Request {
+	log.Debugf("Generating resigning header for %s", p.s3Conf.Endpoint)
 	r.Header.Del("X-Amz-Security-Token")
 	r.Header.Del("X-Forwarded-Port")
 	r.Header.Del("X-Forwarded-Proto")
@@ -433,12 +437,12 @@ func (p *Proxy) resignHeader(r *http.Request, accessKey string, secretKey string
 	r.Header.Del("X-Real-Ip")
 	r.Header.Del("X-Request-Id")
 	r.Header.Del("X-Scheme")
-	if strings.Contains(backendURL, "//") {
-		host := strings.SplitN(backendURL, "//", 2)
+	if strings.Contains(p.s3Conf.Endpoint, "//") {
+		host := strings.SplitN(p.s3Conf.Endpoint, "//", 2)
 		r.Host = host[1]
 	}
 
-	return signer.SignV4(*r, accessKey, secretKey, "", p.s3.Region)
+	return signer.SignV4(*r, p.s3Conf.AccessKey, p.s3Conf.SecretKey, "", p.s3Conf.Region)
 }
 
 // Not necessarily a function on the struct since it does not use any of the
@@ -527,16 +531,16 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anon
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
 func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
-	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
-	client, err := storage.NewS3Client(p.s3)
+	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
+	client, err := newS3Client(p.s3Conf)
 	if err != nil {
 		return "", 0, err
 	}
 
 	input := &s3.ListObjectsV2Input{
-		Bucket:  &p.s3.Bucket,
+		Bucket:  aws.String(p.s3Conf.Bucket),
 		MaxKeys: aws.Int32(1),
-		Prefix:  &filePath,
+		Prefix:  aws.String(filePath),
 	}
 
 	result, err := client.ListObjectsV2(context.TODO(), input)
@@ -549,18 +553,67 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
 }
 
+func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
+	s3cfg, err := s3config.LoadDefaultConfig(
+		context.TODO(),
+		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
+		s3config.WithHTTPClient(&http.Client{Transport: transportConfigS3(conf)}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s3Client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(conf.Endpoint)
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.Endpoint, "http:")
+			o.Region = conf.Region
+			o.UsePathStyle = true
+			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+		},
+	)
+
+	return s3Client, nil
+}
+func transportConfigS3(conf config.S3InboxConf) http.RoundTripper {
+	cfg := new(tls.Config)
+
+	// Read system CAs
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+		systemCAs = x509.NewCertPool()
+	}
+
+	cfg.RootCAs = systemCAs
+
+	if conf.CAcert != "" {
+		cacert, e := os.ReadFile(conf.CAcert) // #nosec this file comes from our config
+		if e != nil {
+			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
+		}
+		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+			log.Debug("no certs appended, using system certs only")
+		}
+	}
+
+	return &http.Transport{TLSClientConfig: cfg, ForceAttemptHTTP2: true}
+}
+
 // checkFileExists makes a request to the S3 to check whether the file already
 // is uploaded. Returns a bool indicating whether the file was found.
 func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
-	filePath := strings.Replace(fullPath, "/"+p.s3.Bucket+"/", "", 1)
-	client, err := storage.NewS3Client(p.s3)
+	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
+	client, err := newS3Client(p.s3Conf)
 	if err != nil {
 		return false, fmt.Errorf("could not connect to s3: %v", err)
 	}
 
 	result, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
-		Bucket: &p.s3.Bucket,
-		Key:    &filePath,
+		Bucket: aws.String(p.s3Conf.Bucket),
+		Key:    aws.String(filePath),
 	})
 
 	if err != nil && strings.Contains(err.Error(), "StatusCode: 404") {
@@ -649,14 +702,14 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 }
 
 func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
-	client, err := storage.NewS3Client(p.s3)
+	client, err := newS3Client(p.s3Conf)
 	if err != nil {
 		return err
 	}
 
 	o, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
-		Bucket: &p.s3.Bucket,
-		Key:    &path,
+		Bucket: aws.String(p.s3Conf.Bucket),
+		Key:    aws.String(path),
 	})
 	if err != nil {
 		return err
