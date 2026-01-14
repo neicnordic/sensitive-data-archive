@@ -81,7 +81,8 @@ func main() {
 
 	if archiveReader != nil && backupWriter != nil {
 		backupInStorage = true
-		log.Info("will back up files in backup storage")
+	} else {
+		log.Warn("archive or backup destination not configured, backup will not be performed.")
 	}
 
 	defer mq.Channel.Close()
