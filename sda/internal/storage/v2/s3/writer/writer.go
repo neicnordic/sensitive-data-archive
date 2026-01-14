@@ -20,7 +20,7 @@ type Writer struct {
 
 	locationBroker locationbroker.LocationBroker
 
-	sync.RWMutex
+	sync.Mutex
 }
 
 // NewWriter initiates a storage backend
