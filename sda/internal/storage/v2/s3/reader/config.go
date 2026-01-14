@@ -1,11 +1,21 @@
 package reader
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"net/http"
+	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -13,12 +23,14 @@ type endpointConfig struct {
 	AccessKey      string `mapstructure:"access_key"`
 	CACert         string `mapstructure:"ca_cert"`
 	ChunkSize      string `mapstructure:"chunk_size"`
-	ChunkSizeBytes uint64 `mapstructure:"-"`
+	chunkSizeBytes uint64
 	Region         string `mapstructure:"region"`
 	SecretKey      string `mapstructure:"secret_key"`
 	Endpoint       string `mapstructure:"endpoint"`
 	BucketPrefix   string `mapstructure:"bucket_prefix"`
 	DisableHTTPS   bool   `mapstructure:"disable_https"`
+
+	s3Client *s3.Client // cached s3 client for this endpoint, created by getS3Client
 }
 
 func loadConfig(backendName string) ([]*endpointConfig, error) {
@@ -53,7 +65,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			default:
 			}
 
-			e.ChunkSizeBytes = 50 * 1024 * 1024
+			e.chunkSizeBytes = 50 * 1024 * 1024
 			if e.ChunkSize != "" {
 				s, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
@@ -73,4 +85,68 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	}
 
 	return endpointConf, nil
+}
+
+func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client, error) {
+	if endpointConf.s3Client != nil {
+		return endpointConf.s3Client, nil
+	}
+
+	s3cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(endpointConf.AccessKey, endpointConf.SecretKey, "")),
+		config.WithHTTPClient(&http.Client{Transport: endpointConf.transportConfigS3()}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	endpoint := endpointConf.Endpoint
+	switch {
+	case !strings.HasPrefix(endpoint, "http") && endpointConf.DisableHTTPS:
+		endpoint = "http://" + endpoint
+	case !strings.HasPrefix(endpoint, "https") && !endpointConf.DisableHTTPS:
+		endpoint = "https://" + endpoint
+	default:
+	}
+
+	endpointConf.s3Client = s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.EndpointOptions.DisableHTTPS = endpointConf.DisableHTTPS
+			o.Region = endpointConf.Region
+		},
+	)
+
+	return endpointConf.s3Client, nil
+}
+
+// transportConfigS3 is a helper method to setup TLS for the S3 client.
+func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
+	cfg := new(tls.Config)
+
+	// Read system CAs
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+		systemCAs = x509.NewCertPool()
+	}
+	cfg.RootCAs = systemCAs
+
+	if endpointConf.CACert != "" {
+		cacert, e := os.ReadFile(endpointConf.CACert) // #nosec this file comes from our config
+		if e != nil {
+			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
+		}
+		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+			log.Debug("no certs appended, using system certs only")
+		}
+	}
+
+	var trConfig http.RoundTripper = &http.Transport{
+		TLSClientConfig:   cfg,
+		ForceAttemptHTTP2: true}
+
+	return trConfig
 }
