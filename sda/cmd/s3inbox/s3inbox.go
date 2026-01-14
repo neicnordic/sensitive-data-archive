@@ -100,7 +100,7 @@ func main() {
 		}
 	}
 	router := mux.NewRouter()
-	proxy := NewProxy(conf.Inbox.S3, auth, messenger, sdaDB, tlsProxy)
+	proxy := NewProxy(conf.S3Inbox, auth, messenger, sdaDB, tlsProxy)
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
