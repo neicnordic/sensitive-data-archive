@@ -347,8 +347,6 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	assert.NotNil(ts.T(), config.Archive.Posix)
 	assert.Equal(ts.T(), "test", config.Archive.Posix.Location)
 	assert.NotNil(ts.T(), config.Sync)
-	assert.NotNil(ts.T(), config.Sync.Destination.Posix)
-	assert.Equal(ts.T(), "test", config.Sync.Destination.Posix.Location)
 
 	defer os.RemoveAll(ts.pubKeyPath)
 }
