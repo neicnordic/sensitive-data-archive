@@ -64,7 +64,9 @@ func main() {
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
-		log.Fatalf("failed to init new location broker due to: %v", err)
+		log.Errorf("failed to init new location broker due to: %v", err)
+
+		return
 	}
 	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
 	if err != nil {
