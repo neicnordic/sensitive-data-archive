@@ -537,20 +537,23 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 		return "", 0, err
 	}
 
-	input := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(p.s3Conf.Bucket),
-		MaxKeys: aws.Int32(1),
-		Prefix:  aws.String(filePath),
+	input := &s3.HeadObjectInput{
+		Bucket: aws.String(p.s3Conf.Bucket),
+		Key:    aws.String(filePath),
 	}
 
-	result, err := client.ListObjectsV2(context.TODO(), input)
+	result, err := client.HeadObject(context.TODO(), input)
 	if err != nil {
 		log.Debug(err.Error())
 
 		return "", 0, err
 	}
 
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.Contents[0].ETag, "\"", "")))), *result.Contents[0].Size, nil
+	if result == nil || result.ETag == nil || result.ContentLength == nil {
+		return "", 0, errors.New("unexpected response from s3, HeadObject response contains nil information")
+	}
+
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.ETag, "\"", "")))), *result.ContentLength, nil
 }
 
 func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
