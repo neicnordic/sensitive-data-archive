@@ -1382,7 +1382,7 @@ func (s *TestSuite) TestIngestFile_WithFileID_WrongID() {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
-	assert.Contains(s.T(), string(b), "file information not found")
+	assert.Contains(s.T(), string(b), "fileid param is invalid, not a uuid")
 }
 
 func (s *TestSuite) TestIngestFile_BothFileIDAndPayloadProvided() {
@@ -1622,7 +1622,7 @@ func (s *TestSuite) TestSetAccession_WithParams_WrongID() {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
-	assert.Contains(s.T(), string(b), "file details not found")
+	assert.Contains(s.T(), string(b), "fileid param is invalid, not a uuid")
 }
 
 func (s *TestSuite) TestSetAccession_WithParams_MissingAccession() {
