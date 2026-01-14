@@ -291,23 +291,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 		}
 
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
-		}
 	case "finalize":
 		requiredConfVars = []string{
 			"broker.host",
@@ -563,7 +546,6 @@ func NewConfig(app string) (*Config, error) {
 
 		c.configSchemas()
 	case "ingest":
-		c.configArchive()
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
@@ -573,7 +555,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configInbox()
 		c.configSchemas()
 	case "intercept":
 		err := c.configBroker()
