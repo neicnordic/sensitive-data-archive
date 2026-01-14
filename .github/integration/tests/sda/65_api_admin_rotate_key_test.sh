@@ -252,6 +252,7 @@ echo "Re-verification completed successfully"
 ## verify both files can be downloaded and decrypted with rotated key
 for i in 1 2; do
     fileID_var="fileID$i"
+    fileID=""
     eval fileID=\$$fileID_var
     
     echo "Testing download and decryption of file $i (ID: $fileID)"

@@ -174,7 +174,7 @@ func printVersion() {
 	fmt.Printf("sda-admin %s\n", version)
 }
 
-func parseFlagsAndEnv() error {
+func init() {
 	// Set up flags
 	flag.StringVar(&apiURI, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
 	flag.StringVar(&token, "token", "", "Set the authentication token (optional if ACCESS_TOKEN is set)")
@@ -183,10 +183,9 @@ func parseFlagsAndEnv() error {
 	flag.Usage = func() {
 		fmt.Println(usage)
 	}
+}
 
-	// Parse global flags first
-	flag.Parse()
-
+func validateFlagsAndEnv() error {
 	// If no command is provided, show usage
 	if flag.NArg() == 0 {
 		return errors.New(usage)
@@ -608,7 +607,9 @@ func handleC4ghHashListCommand() error {
 }
 
 func main() {
-	if err := parseFlagsAndEnv(); err != nil {
+	flag.Parse()
+
+	if err := validateFlagsAndEnv(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

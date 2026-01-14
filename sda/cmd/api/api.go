@@ -144,21 +144,21 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
 	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                    // start ingestion of a file
-	r.POST("/file/accession", rbac(e), setAccession)               // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)        // trigger reverification of a file
-	r.POST("/dataset/create", rbac(e), createDataset)              // maps a set of files to a dataset
-	r.GET("/dataset/:dataset/files", rbac(e), getDatasetFiles)     // get files in a dataset
-	r.GET("/dataset/:dataset/fileids", rbac(e), getDatasetFileIDs) // get file IDs (internal and accession) in a dataset
+	r.POST("/file/ingest", rbac(e), ingestFile)                       // start ingestion of a file
+	r.POST("/file/accession", rbac(e), setAccession)                  // assign accession ID to a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)           // trigger reverification of a file
+	r.POST("/dataset/create", rbac(e), createDataset)                 // maps a set of files to a dataset
+	r.GET("/dataset/:dataset/files", rbac(e), getDatasetFiles)        // get files in a dataset
+	r.GET("/dataset/:dataset/fileids", rbac(e), getDatasetFileIDs)    // get file IDs (internal and accession) in a dataset
 	r.POST("/dataset/:dataset/rotatekey", rbac(e), rotateDatasetKeys) // trigger key rotation for all files in a dataset
-	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)   // Releases a dataset to be accessible
-	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)    // Re-verify all files in the dataset
-	r.POST("/file/rotatekey/:fileid", rbac(e), rotateFileKey)      // trigger key rotation for a file
-	r.GET("/datasets/list", rbac(e), listAllDatasets)              // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)   // Lists datasets with their status for a specific user
-	r.GET("/users", rbac(e), listActiveUsers)                      // Lists all users
-	r.GET("/users/:username/files", rbac(e), listUserFiles)        // Lists all unmapped files for a user
-	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)  // Download a file from a users inbox
+	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)      // Releases a dataset to be accessible
+	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)       // Re-verify all files in the dataset
+	r.POST("/file/rotatekey/:fileid", rbac(e), rotateFileKey)         // trigger key rotation for a file
+	r.GET("/datasets/list", rbac(e), listAllDatasets)                 // Lists all datasets with their status
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)      // Lists datasets with their status for a specific user
+	r.GET("/users", rbac(e), listActiveUsers)                         // Lists all users
+	r.GET("/users/:username/files", rbac(e), listUserFiles)           // Lists all unmapped files for a user
+	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)     // Download a file from a users inbox
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -797,6 +797,7 @@ func getDatasetFiles(c *gin.Context) {
 
 	if datasetID == "" {
 		c.JSON(http.StatusBadRequest, "dataset ID is required")
+
 		return
 	}
 
@@ -804,11 +805,13 @@ func getDatasetFiles(c *gin.Context) {
 	if err != nil {
 		log.Errorf("failed to get dataset files for dataset %s, reason: %v", datasetID, err)
 		c.JSON(http.StatusInternalServerError, err.Error())
+
 		return
 	}
 
 	if len(files) == 0 {
 		c.JSON(http.StatusNotFound, "no files found for dataset")
+
 		return
 	}
 
@@ -831,6 +834,7 @@ func getDatasetFileIDs(c *gin.Context) {
 
 	if datasetID == "" {
 		c.JSON(http.StatusBadRequest, "dataset ID is required")
+
 		return
 	}
 
@@ -838,11 +842,13 @@ func getDatasetFileIDs(c *gin.Context) {
 	if err != nil {
 		log.Errorf("failed to get dataset file IDs for dataset %s, reason: %v", datasetID, err)
 		c.JSON(http.StatusInternalServerError, err.Error())
+
 		return
 	}
 
 	if len(files) == 0 {
 		c.JSON(http.StatusNotFound, "no files found for dataset")
+
 		return
 	}
 
@@ -855,6 +861,7 @@ func rotateFileKey(c *gin.Context) {
 
 	if fileID == "" {
 		c.JSON(http.StatusBadRequest, "file ID is required")
+
 		return
 	}
 
@@ -868,6 +875,7 @@ func rotateFileKey(c *gin.Context) {
 	if err != nil {
 		log.Errorf("failed to marshal rotation message, reason: %v", err)
 		c.JSON(http.StatusInternalServerError, "failed to marshal rotation message")
+
 		return
 	}
 
@@ -875,6 +883,7 @@ func rotateFileKey(c *gin.Context) {
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Errorf("rotation message validation failed, reason: %v", err)
 		c.JSON(http.StatusBadRequest, "rotation message validation failed")
+
 		return
 	}
 
@@ -883,6 +892,7 @@ func rotateFileKey(c *gin.Context) {
 	if err != nil {
 		log.Errorf("failed to send rotation message to queue, reason: %v", err)
 		c.JSON(http.StatusInternalServerError, "failed to send rotation message")
+
 		return
 	}
 
@@ -895,6 +905,7 @@ func rotateDatasetKeys(c *gin.Context) {
 
 	if datasetID == "" {
 		c.JSON(http.StatusBadRequest, "dataset ID is required")
+
 		return
 	}
 
@@ -903,11 +914,13 @@ func rotateDatasetKeys(c *gin.Context) {
 	if err != nil {
 		log.Errorf("failed to get dataset files for dataset %s, reason: %v", datasetID, err)
 		c.JSON(http.StatusInternalServerError, "failed to get dataset files")
+
 		return
 	}
 
 	if len(files) == 0 {
 		c.JSON(http.StatusNotFound, "no files found for dataset")
+
 		return
 	}
 
@@ -930,6 +943,7 @@ func rotateDatasetKeys(c *gin.Context) {
 		if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 			log.Errorf("rotation message validation failed for file %s, reason: %v", file.FileID, err)
 			c.JSON(http.StatusBadRequest, "rotation message validation failed")
+
 			return
 		}
 
@@ -938,6 +952,7 @@ func rotateDatasetKeys(c *gin.Context) {
 		if err != nil {
 			log.Errorf("failed to send rotation message for file %s to queue, reason: %v", file.FileID, err)
 			c.JSON(http.StatusInternalServerError, "failed to send rotation message")
+
 			return
 		}
 
