@@ -14,7 +14,7 @@ import (
 
 func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, error) {
 	for _, endpointConf := range reader.endpoints {
-		client, err := reader.createClient(ctx, endpointConf.Endpoint)
+		client, err := reader.getS3ClientForEndpoint(ctx, endpointConf.Endpoint)
 		if err != nil {
 			return "", err
 		}

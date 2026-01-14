@@ -64,14 +64,14 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 
 	return writer, nil
 }
-func (writer *Writer) createClient(ctx context.Context, endpoint string) (*s3.Client, error) {
+func (writer *Writer) getS3ClientForEndpoint(ctx context.Context, endpoint string) (*s3.Client, error) {
 	for _, e := range writer.configuredEndpoints {
 		if e.Endpoint != endpoint {
 			continue
 		}
-		client, err := e.createClient(ctx)
+		client, err := e.getS3Client(ctx)
 		if err != nil {
-			log.Errorf("failed to create S3 client: %v to s3: %s", err, endpoint)
+			log.Errorf("failed to get S3 client: %v to s3: %s", err, endpoint)
 
 			return nil, err
 		}

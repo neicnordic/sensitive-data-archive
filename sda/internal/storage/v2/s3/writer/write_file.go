@@ -34,15 +34,15 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		}
 	}
 
-	client, err := writer.activeEndpoint.createClient(ctx)
+	client, err := writer.activeEndpoint.getS3Client(ctx)
 	if err != nil {
 		return "", err
 	}
 
 	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
-		// Type conversation safe as ChunkSizeBytes checked to be between 5mb and 1gb (in bytes)
+		// Type conversation safe as chunkSizeBytes checked to be between 5mb and 1gb (in bytes)
 		//nolint:gosec // disable G115
-		u.PartSize = int64(writer.activeEndpoint.ChunkSizeBytes)
+		u.PartSize = int64(writer.activeEndpoint.chunkSizeBytes)
 		u.LeavePartsOnError = false
 	})
 

@@ -14,7 +14,7 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 		return err
 	}
 
-	client, err := writer.createClient(ctx, endpoint)
+	client, err := writer.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		return err
 	}
