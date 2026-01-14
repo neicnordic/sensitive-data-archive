@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	log "github.com/sirupsen/logrus"
@@ -87,15 +85,12 @@ func (p *Proxy) httpsGetCheck(uri string) error {
 }
 
 func (p *Proxy) getS3ReadyPath() (string, error) {
-	s3URL, err := url.Parse(p.s3.URL)
+	s3URL, err := url.Parse(p.s3Conf.Endpoint)
 	if err != nil {
 		return "", err
 	}
-	if p.s3.Port != 0 {
-		s3URL.Host = net.JoinHostPort(s3URL.Hostname(), strconv.Itoa(p.s3.Port))
-	}
-	if p.s3.Readypath != "" {
-		s3URL.Path = path.Join(s3URL.Path, p.s3.Readypath)
+	if p.s3Conf.ReadyPath != "" {
+		s3URL.Path = path.Join(s3URL.Path, p.s3Conf.ReadyPath)
 	}
 
 	return s3URL.String(), nil
