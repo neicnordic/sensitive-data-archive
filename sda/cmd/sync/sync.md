@@ -107,10 +107,12 @@ These settings control how sync connects to the RabbitMQ message broker.
 
 
 ### Storage settings
-The sync service requires access to the "archive" storage, to configure such the following config is needed:
+The sync service requires access to the "archive", and "sync" storage, to configure such the following config is needed:
 ```yaml
 storage:
-  inbox:
+  archive:
+    ${STORAGE_IMPLEMENTATION}:
+  sync:
     ${STORAGE_IMPLEMENTATION}:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/READMD.md)
