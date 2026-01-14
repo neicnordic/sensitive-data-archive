@@ -244,14 +244,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 			"grpc.host",
 		}
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
-		}
 	case "auth":
 		requiredConfVars = []string{
 			"auth.s3Inbox",
@@ -520,8 +512,6 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		c.configInbox()
 
 		err = c.configAPI()
 		if err != nil {
