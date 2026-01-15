@@ -28,6 +28,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -357,6 +358,28 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 	file, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(message.FilePath, message.User))
 	if err != nil {
+		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
+			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
+			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
+			m, _ := json.Marshal(message)
+			if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
+				log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
+			}
+			// Send the message to an error queue so it can be analyzed.
+			fileError := broker.InfoError{
+				Error:           "Failed to open file to ingest",
+				Reason:          err.Error(),
+				OriginalMessage: message,
+			}
+			body, _ := json.Marshal(fileError)
+			if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
+				log.Errorf("failed to publish message, reason: %v", err)
+
+				return "reject"
+			}
+
+			return "ack"
+		}
 		log.Errorf("unexpected error when opening file for reading, file-id: %s, filepath: %s, reason: %s", fileID, message.FilePath, err.Error())
 
 		return "nack"
