@@ -96,8 +96,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init new location broker due to: %v", err)
 	}
-
 	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
+	if err != nil {
+		log.Error(err)
+		sigc <- syscall.SIGINT
+		panic(err)
+	}
+	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
