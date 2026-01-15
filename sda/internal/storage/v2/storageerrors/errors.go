@@ -4,7 +4,7 @@ import "errors"
 
 var ErrorFileNotFoundInLocation = errors.New("file not found in location")
 var ErrorNoValidLocations = errors.New("no valid locations")
-var ErrorInvalidLocation = errors.New("invalid valid location")
+var ErrorInvalidLocation = errors.New("invalid location")
 var ErrorNoFreeBucket = errors.New("no free bucket")
 var ErrorNoEndpointConfiguredForLocation = errors.New("no endpoint configured for location")
 var ErrorNoValidWriter = errors.New("no valid writer configured")
