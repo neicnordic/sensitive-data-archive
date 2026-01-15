@@ -642,7 +642,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		return "ack"
 	}
 
-	if err := app.DB.SetArchived(fileInfo, fileID); err != nil {
+	if err := app.DB.SetArchivedWithLocation(location, fileInfo, fileID); err != nil {
 		log.Errorf("SetArchived failed, file-id: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
