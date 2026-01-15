@@ -37,7 +37,8 @@ VALUES (0, now(), 'Created with version'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
-       (23, now(), 'Expand files table with storage locations');
+       (23, now(), 'Expand files table with storage locations'),
+       (24, now(), 'Grant ingest user SELECT access to file_dataset, and DELETE on checksums');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
