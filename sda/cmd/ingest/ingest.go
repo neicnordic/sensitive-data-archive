@@ -181,7 +181,7 @@ func (app *Ingest) run() error {
 		ackNack := ""
 		switch message.Type {
 		case "cancel":
-			ackNack = app.cancelFile(delivered.CorrelationId, message)
+			ackNack = app.cancelFile(ctx, delivered.CorrelationId, message)
 		case "ingest":
 			ackNack = app.ingestFile(ctx, delivered.CorrelationId, message)
 		default:
@@ -228,10 +228,63 @@ func (app *Ingest) registerC4GHKey() error {
 	return nil
 }
 
-func (app *Ingest) cancelFile(fileID string, message schema.IngestionTrigger) string {
+func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema.IngestionTrigger) string {
 	m, _ := json.Marshal(message)
+
+	// Check if file can be cancelled
+	inDataset, err := app.DB.IsFileInDataset(ctx, fileID)
+	if err != nil {
+		log.Errorf("failed to check if file with id: %s is in a dataset, due to %v", fileID, err)
+
+		return "nack"
+	}
+	if inDataset {
+		log.Warnf("can not cancel file with id: %s, as it has been added to a dataset", fileID)
+
+		fileError := broker.InfoError{
+			Error:           "Cancel of file not possible",
+			Reason:          "File has been added to a dataset",
+			OriginalMessage: message,
+		}
+		body, _ := json.Marshal(fileError)
+		if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: %v", err)
+
+			return "reject"
+		}
+
+		return "ack"
+	}
+
+	archiveData, err := app.DB.GetArchived(fileID)
+	if err != nil {
+		log.Errorf("failed to get archive data for file with id: %s, due to %v", fileID, err)
+
+		return "nack"
+	}
+
+	if archiveData != nil && archiveData.Location != "" {
+		if err := app.ArchiveWriter.RemoveFile(ctx, archiveData.Location, archiveData.FilePath); err != nil {
+			log.Errorf("failed to remove file with id %s from archive due to %v", fileID, err)
+
+			return "nack"
+		}
+	}
+
+	if err := app.DB.UnsetArchived(ctx, fileID); err != nil {
+		log.Errorf("failed to unset file with id: %s as archived due to %v", fileID, err)
+
+		return "nack"
+	}
+
+	if err := app.DB.UnsetAccessionID(ctx, fileID); err != nil {
+		log.Errorf("failed to unset accession id of file with id: %s due to %v", fileID, err)
+
+		return "nack"
+	}
+
 	if err := app.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to update event log for file with id : %s", fileID)
+		log.Errorf("failed to update event log for file with id: %s, due to %v", fileID, err)
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			return "reject"
 		}

@@ -417,7 +417,7 @@ func (ts *TestSuite) TestCancelFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(context.TODO(), fileID, message))
 }
 
 func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
@@ -437,7 +437,7 @@ func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(uuid.NewString(), message))
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.TODO(), uuid.NewString(), message))
 }
 
 // messages of type `ingest`
