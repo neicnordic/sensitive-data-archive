@@ -321,10 +321,6 @@ storage:
 	if err != nil {
 		ts.FailNow("failed to setup archive reader")
 	}
-	ts.ingest.InboxWriter, err = storage.NewWriter(context.TODO(), "inbox", lb)
-	if err != nil {
-		ts.FailNow("failed to setup inbox writer")
-	}
 	ts.ingest.InboxReader, err = storage.NewReader(context.TODO(), "inbox")
 	if err != nil {
 		ts.FailNow("failed to setup inbox reader")
