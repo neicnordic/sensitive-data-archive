@@ -179,10 +179,23 @@ func main() {
 			if err != nil {
 				log.Errorf("failed to get archive location of file: %s, error: %v", message.FileID, err)
 
+				if err := delivered.Nack(false, false); err != nil {
+					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
+				}
+
+				continue
+			}
+			if archiveLocation == "" {
+				log.Errorf("archive location for file: %s, not known in database", message.FileID)
+				jsonMsg, _ := json.Marshal(map[string]string{"error": "archive location for file not known in database"})
+				if err := db.UpdateFileEventLog(message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
+					log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
+				}
+
 				// Send the message to an error queue so it can be analyzed.
 				infoErrorMessage := broker.InfoError{
 					Error:           "GetArchiveLocation failed",
-					Reason:          err.Error(),
+					Reason:          "archive location for file not known in database",
 					OriginalMessage: message,
 				}
 
@@ -194,8 +207,6 @@ func main() {
 				if err := delivered.Ack(false); err != nil {
 					log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 				}
-
-				continue
 			}
 
 			var file database.FileInfo
