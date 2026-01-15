@@ -312,89 +312,6 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	}
 
 	switch status {
-	case "disabled":
-
-		fileInfo, err := app.DB.GetFileInfo(fileID)
-		if err != nil {
-			log.Errorf("failed to get info for file, file-id: %s, reason: %s", fileID, err.Error())
-
-			return "nack"
-		}
-
-		// What if the file in the inbox is different this time?
-		// Check uploaded checksum in the DB against the checksum of the file.
-		// Would be easy if the inbox message had the checksum or that the s3inbox added the checksum to the DB.
-		file, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(message.FilePath, message.User))
-		if err != nil {
-			switch {
-			case strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:"):
-				log.Errorf("Failed to open file to ingest, file-id: %s, inbox path: %s, reason: (%s)", fileID, message.FilePath, err.Error())
-				jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-				m, _ := json.Marshal(message)
-				if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
-					log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
-				}
-				// Send the message to an error queue so it can be analyzed.
-				fileError := broker.InfoError{
-					Error:           "Failed to open file to ingest",
-					Reason:          err.Error(),
-					OriginalMessage: message,
-				}
-				body, _ := json.Marshal(fileError)
-				if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: %v", err)
-
-					return "reject"
-				}
-
-				return "ack"
-			default:
-				return "nack"
-			}
-		}
-		defer file.Close()
-
-		inboxChecksum := sha256.New()
-		_, err = io.Copy(inboxChecksum, file)
-		if err != nil {
-			log.Errorf("failed to calculate the checksum for file, file-id: %s, reason: %s", fileID, err.Error())
-
-			return "nack"
-		}
-
-		if fileInfo.UploadedChecksum == string(inboxChecksum.Sum(nil)) && fileInfo.ArchiveChecksum != "" {
-			msg := schema.IngestionVerification{
-				User:        message.User,
-				FilePath:    message.FilePath,
-				FileID:      fileID,
-				ArchivePath: fileInfo.Path,
-				EncryptedChecksums: []schema.Checksums{
-					{Type: "sha256", Value: fileInfo.ArchiveChecksum},
-				},
-			}
-			archivedMsg, _ := json.Marshal(&msg)
-			err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.brokerConf.SchemasPath), archivedMsg)
-			if err != nil {
-				log.Errorf("Validation of outgoing message failed, file-id: %s, reason: (%s)", fileID, err.Error())
-
-				return "nack"
-			}
-
-			m, _ := json.Marshal(message)
-			if err = app.DB.UpdateFileEventLog(fileInfo.Path, "enabled", "ingest", "{}", string(m)); err != nil {
-				log.Errorf("failed to set ingestion status for file from message, file-id: %s", fileID)
-
-				return "nack"
-			}
-
-			if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, app.brokerConf.RoutingKey, archivedMsg); err != nil {
-				log.Errorf("failed to publish message, reason: %v", err)
-
-				return "reject"
-			}
-
-			return "ack"
-		}
 	case "":
 		fileID, err = app.DB.RegisterFile(&fileID, message.FilePath, message.User)
 		if err != nil {
@@ -430,7 +347,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		}
 		log.Infof("registering file, file-id: %s", fileID)
 
-	case "uploaded":
+	case "uploaded", "disabled":
 
 	default:
 		log.Warnf("unsupported file status: %s, file-id: %s", status, fileID)
