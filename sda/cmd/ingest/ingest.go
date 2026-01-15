@@ -81,21 +81,21 @@ func main() {
 	}
 
 	if err := app.registerC4GHKey(); err != nil {
-		log.Fatal("failed to register c4gh key due to: %v", err)
+		log.Fatalf("failed to register c4gh key due to: %v", err)
 	}
 
 	storageLocationBroker := locationbroker.NewLocationBroker(app.DB, time.Second*60)
 	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
 	if err != nil {
-		log.Fatal("failed to init archive writer due to: %v", err)
+		log.Fatalf("failed to init archive writer due to: %v", err)
 	}
 	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
-		log.Fatal("failed to init archive reader due to: %v", err)
+		log.Fatalf("failed to init archive reader due to: %v", err)
 	}
 	app.InboxReader, err = storage.NewReader(ctx, "inbox")
 	if err != nil {
-		log.Fatal("failed to init inbox reader due to: %v", err)
+		log.Fatalf("failed to init inbox reader due to: %v", err)
 	}
 
 	defer app.MQ.Channel.Close()
@@ -121,7 +121,6 @@ func main() {
 			panic(err)
 		}
 	}()
-
 	<-forever
 }
 
@@ -395,12 +394,19 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	}()
 
 	uploadCtx, uploadCancel := context.WithCancel(ctx)
+	defer uploadCancel()
+	readFileAck := make(chan string, 1)
 
 	go func() {
 		for bytesRead < fileSize {
+			// If storageWriter has encountered an error, and we've exited, we want to stop this goroutine as well
+			if uploadCtx.Err() != nil {
+				return
+			}
 			i, _ := io.ReadFull(file, readBuffer)
 			if i == 0 {
 				log.Errorf("readBuffer returned 0 bytes, this should not happen, file-id: %s", fileID)
+				readFileAck <- "reject"
 				uploadCancel()
 
 				return
@@ -415,6 +421,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 			h := bytes.NewReader(readBuffer)
 			if _, err = io.Copy(hash, h); err != nil {
 				log.Errorf("Copy to hash failed while reading file, file-id: %s, reason: (%s)", fileID, err.Error())
+				readFileAck <- "nack"
 				uploadCancel()
 
 				return
@@ -453,6 +460,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 					if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
 						log.Errorf("failed to publish message, reason: %v", err)
 					}
+					readFileAck <- "ack"
 					uploadCancel()
 
 					return
@@ -465,6 +473,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				err = app.DB.SetKeyHash(keyhash, fileID)
 				if err != nil {
 					log.Errorf("Key hash %s could not be set for file, file-id: %s, reason: (%s)", keyhash, fileID, err.Error())
+					readFileAck <- "nack"
 					uploadCancel()
 
 					return
@@ -473,6 +482,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				log.Debugln("store header")
 				if err := app.DB.StoreHeader(header, fileID); err != nil {
 					log.Errorf("StoreHeader failed, file-id: %s, reason: (%s)", fileID, err.Error())
+					readFileAck <- "nack"
 					uploadCancel()
 
 					return
@@ -480,6 +490,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 				if _, err = byteBuf.Write(readBuffer); err != nil {
 					log.Errorf("Failed to write to read buffer for header read, file-id: %s, reason: %v)", fileID, err.Error())
+					readFileAck <- "nack"
 					uploadCancel()
 
 					return
@@ -489,6 +500,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				h := make([]byte, len(header))
 				if _, err = byteBuf.Read(h); err != nil {
 					log.Errorf("Failed to strip header from buffer, file-id: %s, reason: (%s)", fileID, err.Error())
+					readFileAck <- "nack"
 					uploadCancel()
 
 					return
@@ -499,6 +511,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				}
 				if _, err = byteBuf.Write(readBuffer); err != nil {
 					log.Errorf("Failed to write to read buffer for full read, file-id: %s, reason: (%s)", fileID, err.Error())
+					readFileAck <- "nack"
 					uploadCancel()
 
 					return
@@ -508,8 +521,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 			// Write data to file
 			if _, err = byteBuf.WriteTo(contentWriter); err != nil {
 				log.Errorf("Failed to write to archive file, file-id: %s, reason: (%s)", fileID, err.Error())
-
-				_ = file.Close()
+				readFileAck <- "nack"
 				uploadCancel()
 
 				return
@@ -520,11 +532,26 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		_ = file.Close()
 	}()
 
-	location, err := app.ArchiveWriter.WriteFile(uploadCtx, fileID, contentReader)
-	if err != nil {
-		log.Errorf("Failed to upload archive file, file-id: %s, reason: (%s)", fileID, err.Error())
-		// NewFileWriter returns an error when the backend itself fails so this is reasonable to requeue.
-		return "nack"
+	uploadErr := make(chan error, 1)
+	var location string
+	go func() {
+		var err error
+		location, err = app.ArchiveWriter.WriteFile(uploadCtx, fileID, contentReader)
+		uploadErr <- err
+	}()
+
+	// React to first issue, either from storage writer of file reader
+	select {
+	case ack := <-readFileAck:
+		// if ack != "" the reading of data has encountered an error and we should ack this message with the code
+		if ack != "" {
+			return ack
+		}
+	case err := <-uploadErr:
+		if err != nil {
+			log.Errorf("Failed to upload archive file, file-id: %s, reason: (%s)", fileID, err.Error())
+			return "nack"
+		}
 	}
 	// As we are done with uploadCtx now, we cancel it
 	uploadCancel()
