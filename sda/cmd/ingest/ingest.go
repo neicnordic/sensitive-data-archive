@@ -93,8 +93,14 @@ func main() {
 		panic(err)
 	}
 
-	storageLocationbroker := locationbroker.NewLocationBroker(app.DB, time.Second*60)
-	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationbroker)
+	storageLocationBroker := locationbroker.NewLocationBroker(app.DB, time.Second*60)
+	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
+	if err != nil {
+		log.Error(err)
+		sigc <- syscall.SIGINT
+		panic(err)
+	}
+	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
@@ -106,7 +112,7 @@ func main() {
 		sigc <- syscall.SIGINT
 		panic(err)
 	}
-	app.InboxWriter, err = storage.NewWriter(ctx, "inbox", storageLocationbroker)
+	app.InboxWriter, err = storage.NewWriter(ctx, "inbox", storageLocationBroker)
 	if err != nil {
 		log.Error(err)
 		sigc <- syscall.SIGINT
