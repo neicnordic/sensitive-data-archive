@@ -15,8 +15,8 @@ type endpointConfig struct {
 	Path           string `mapstructure:"path"`
 	MaxObjects     uint64 `mapstructure:"max_objects"`
 	MaxSize        string `mapstructure:"max_size"`
-	MaxSizeBytes   uint64 `mapstructure:"-"`
-	WriterDisabled bool   `mapstructure:"writer_disabled"`
+	maxSizeBytes   uint64
+	WriterDisabled bool `mapstructure:"writer_disabled"`
 }
 
 func loadConfig(backendName string) ([]*endpointConfig, error) {
@@ -45,7 +45,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			if err != nil {
 				return nil, errors.New("could not parse maxsize as a valid data size")
 			}
-			e.MaxSizeBytes = byteSize.Bytes()
+			e.maxSizeBytes = byteSize.Bytes()
 		}
 	}
 
@@ -65,7 +65,7 @@ func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker
 	if err != nil {
 		return false, err
 	}
-	if size >= endpointConf.MaxSizeBytes && endpointConf.MaxSizeBytes > 0 {
+	if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
 		return false, err
 	}
 
