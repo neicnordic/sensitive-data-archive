@@ -1,19 +1,24 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	log "github.com/sirupsen/logrus"
@@ -33,51 +38,37 @@ func main() {
 
 	conf, err := config.NewConfig("s3inbox")
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to config due to: %v", err)
 	}
 
 	tlsProxy, err := config.TLSConfigProxy(conf)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to setup tls config due to: %v", err)
 	}
 
 	sdaDB, err := database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to init new db due to: %v", err)
 	}
 	if sdaDB.Version < 23 {
-		log.Error("database schema v23 is required")
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("database schema v23 is required")
 	}
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
-
-	s3, err := storage.NewS3Client(conf.Inbox.S3)
+	log.Println(conf.S3Inbox.Endpoint + "/BUCKET == " + conf.S3Inbox.Bucket)
+	s3, err := newS3Client(conf.S3Inbox)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to init new S3 client due to: %v", err)
 	}
 
-	err = storage.CheckS3Bucket(conf.Inbox.S3.Bucket, s3)
+	err = checkS3Bucket(conf.S3Inbox.Bucket, s3)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
 	messenger, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to init broker due to: %v", err)
 	}
 
 	go func() {
@@ -123,4 +114,24 @@ func main() {
 			panic(err)
 		}
 	}
+}
+
+func checkS3Bucket(bucket string, s3Client *s3.Client) error {
+	_, err := s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: &bucket})
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			var bae *types.BucketAlreadyExists
+			var baoby *types.BucketAlreadyOwnedByYou
+			if errors.As(err, &bae) || errors.As(err, &baoby) {
+				return nil
+			}
+
+			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
+		}
+
+		return fmt.Errorf("verifying bucket failed, check S3 configuration: %s", err.Error())
+	}
+
+	return nil
 }
