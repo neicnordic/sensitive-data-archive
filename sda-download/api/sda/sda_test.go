@@ -1157,6 +1157,9 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 	config.Config.Reencrypt.Timeout = 10
 
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	if err != nil {
+		t.FailNow()
+	}
 	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
 	viper.Set("c4gh.transientPassphrase", "password")
 	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()
@@ -1263,6 +1266,9 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 	config.Config.Reencrypt.Timeout = 10
 
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	if err != nil {
+		t.FailNow()
+	}
 	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
 	viper.Set("c4gh.transientPassphrase", "password")
 	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()

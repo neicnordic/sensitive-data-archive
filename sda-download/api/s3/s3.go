@@ -72,7 +72,7 @@ func GetBucketLocation(c *gin.Context) {
 		return
 	}
 	c.XML(http.StatusAccepted, LocationConstraint{
-		XMLns:    "http://s3.amazonaws.com/doc/2006-03-01/",
+		XMLns:    "https://s3.amazonaws.com/doc/2006-03-01/",
 		Location: "us-west-2",
 	})
 }
