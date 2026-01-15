@@ -337,6 +337,115 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 	return nil
 }
 
+// UnsetArchived unsets the file as 'ARCHIVED' happens if file is cancelled
+func (dbs *SDAdb) UnsetArchived(ctx context.Context, fileID string) error {
+	var err error
+
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.unsetArchived(ctx, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) unsetArchived(ctx context.Context, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const unsetArchived = `
+UPDATE sda.files 
+SET archive_location = NULL, 
+    archive_file_path = NULL, 
+    archive_file_size = NULL 
+WHERE id = $1;`
+
+	if _, err := db.ExecContext(ctx, unsetArchived, fileID); err != nil {
+		return err
+	}
+
+	const addChecksum = `
+DELETE FROM sda.checksums
+WHERE file_id = $1
+AND source = 'UPLOADED'`
+
+	if _, err := db.ExecContext(ctx, addChecksum, fileID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UnsetAccessionID unsets the accession id from a file if the file is cancelled
+func (dbs *SDAdb) UnsetAccessionID(ctx context.Context, fileID string) error {
+	var err error
+
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.unsetAccessionID(ctx, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+
+func (dbs *SDAdb) unsetAccessionID(ctx context.Context, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const unsetAccessionID = `
+UPDATE sda.files 
+SET stable_id = NULL
+WHERE id = $1;`
+
+	if _, err := db.ExecContext(ctx, unsetAccessionID, fileID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsFileInDataset checks if a file has been added to a dataset
+func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (bool, error) {
+	var err error
+	var inDataset bool
+
+	for count := 1; count <= RetryTimes; count++ {
+		inDataset, err = dbs.isFileInDataset(ctx, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return inDataset, err
+}
+
+func (dbs *SDAdb) isFileInDataset(ctx context.Context, fileID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const isFileInDataset = `
+SELECT true 
+FROM sda.file_dataset
+WHERE file_id = $1;`
+
+	var inDataset bool
+	if err := db.QueryRowContext(ctx, isFileInDataset, fileID).Scan(&inDataset); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return inDataset, nil
+}
+
 func (dbs *SDAdb) GetFileStatus(fileID string) (string, error) {
 	var (
 		err    error
@@ -481,9 +590,9 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(fileID string) (ArchiveData, error) {
+func (dbs *SDAdb) GetArchived(fileID string) (*ArchiveData, error) {
 	var (
-		archiveData ArchiveData
+		archiveData *ArchiveData
 		err         error
 		count       int
 	)
@@ -495,21 +604,33 @@ func (dbs *SDAdb) GetArchived(fileID string) (ArchiveData, error) {
 
 	return archiveData, err
 }
-func (dbs *SDAdb) getArchived(fileID string) (ArchiveData, error) {
+func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
 	const query = "SELECT archive_file_path, archive_file_size, archive_location from sda.files WHERE id = $1;"
 
-	var archiveData ArchiveData
-	if err := db.QueryRow(query, fileID).Scan(&archiveData.FilePath, &archiveData.FileSize, &archiveData.Location); err != nil {
-		return ArchiveData{}, err
+	var archiveFilePath, archiveLocation sql.NullString
+	var archiveFileSize sql.Null[int]
+	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if archiveFilePath.Valid || archiveFileSize.Valid || archiveLocation.Valid {
+		return &ArchiveData{
+			FilePath: archiveFilePath.String,
+			Location: archiveLocation.String,
+			FileSize: archiveFileSize.V,
+		}, nil
 	}
 
-	return archiveData, nil
+	// We have a files table entry but archive data has not been set
+	return nil, nil
 }
 
-// CheckAccessionIdExists validates if an accessionID exists in the db
+// CheckAccessionIDExists validates if an accessionID exists in the db
 func (dbs *SDAdb) CheckAccessionIDExists(accessionID, fileID string) (string, error) {
 	var err error
 	var exists string
