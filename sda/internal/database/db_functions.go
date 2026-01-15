@@ -359,7 +359,7 @@ func (dbs *SDAdb) unsetArchived(ctx context.Context, fileID string) error {
 	const unsetArchived = `
 UPDATE sda.files 
 SET archive_location = NULL, 
-    archive_file_path = NULL, 
+    archive_file_path = '', 
     archive_file_size = NULL 
 WHERE id = $1;`
 
