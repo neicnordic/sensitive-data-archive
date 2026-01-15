@@ -39,6 +39,7 @@ VALUES (0, now(), 'Created with version'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
        (23, now(), 'Expand files table with storage locations');
 
+
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
 CREATE TABLE datasets (
