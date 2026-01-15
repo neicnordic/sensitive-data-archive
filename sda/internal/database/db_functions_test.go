@@ -1655,6 +1655,19 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_OnlySubmissionLo
 	db.Close()
 }
 
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_NoData() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	size, count, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
+	suite.NoError(err)
+	//nolint:gosec // disable G115
+	suite.Equal(uint64(0), size)
+	suite.Equal(uint64(0), count)
+
+	db.Close()
+}
+
 func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyArchived() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")

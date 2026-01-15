@@ -1479,7 +1479,7 @@ FROM sda.files
 WHERE (submission_location = $1 AND stable_id IS NULL) OR archive_location = $1 OR backup_location = $1;
 `
 
-	var size, count uint64
+	var size, count sql.Null[uint64]
 	if err := dbs.DB.QueryRowContext(ctx, query, location).Scan(&size, &count); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, nil
@@ -1488,5 +1488,5 @@ WHERE (submission_location = $1 AND stable_id IS NULL) OR archive_location = $1 
 		return 0, 0, err
 	}
 
-	return size, count, nil
+	return size.V, count.V, nil
 }
