@@ -337,12 +337,12 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 	return nil
 }
 
-// UnsetArchived unsets the file as 'ARCHIVED' happens if file is cancelled
-func (dbs *SDAdb) UnsetArchived(ctx context.Context, fileID string) error {
+// CancelFile cancels the file and all actions that have been taken (eg, setting checksums, archiving, etc)
+func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string) error {
 	var err error
 
 	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.unsetArchived(ctx, fileID)
+		err = dbs.cancelFile(ctx, fileID)
 		if err == nil {
 			break
 		}
@@ -352,7 +352,7 @@ func (dbs *SDAdb) UnsetArchived(ctx context.Context, fileID string) error {
 	return err
 }
 
-func (dbs *SDAdb) unsetArchived(ctx context.Context, fileID string) error {
+func (dbs *SDAdb) cancelFile(ctx context.Context, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -360,50 +360,20 @@ func (dbs *SDAdb) unsetArchived(ctx context.Context, fileID string) error {
 UPDATE sda.files 
 SET archive_location = NULL, 
     archive_file_path = '', 
-    archive_file_size = NULL 
+    archive_file_size = NULL, 
+    decrypted_file_size = NULL, 
+	stable_id = NULL
 WHERE id = $1;`
 
 	if _, err := db.ExecContext(ctx, unsetArchived, fileID); err != nil {
 		return err
 	}
 
-	const addChecksum = `
+	const deleteChecksums = `
 DELETE FROM sda.checksums
-WHERE file_id = $1
-AND source = 'UPLOADED'`
+WHERE file_id = $1`
 
-	if _, err := db.ExecContext(ctx, addChecksum, fileID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// UnsetAccessionID unsets the accession id from a file if the file is cancelled
-func (dbs *SDAdb) UnsetAccessionID(ctx context.Context, fileID string) error {
-	var err error
-
-	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.unsetAccessionID(ctx, fileID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return err
-}
-
-func (dbs *SDAdb) unsetAccessionID(ctx context.Context, fileID string) error {
-	dbs.checkAndReconnectIfNeeded()
-
-	db := dbs.DB
-	const unsetAccessionID = `
-UPDATE sda.files 
-SET stable_id = NULL
-WHERE id = $1;`
-
-	if _, err := db.ExecContext(ctx, unsetAccessionID, fileID); err != nil {
+	if _, err := db.ExecContext(ctx, deleteChecksums, fileID); err != nil {
 		return err
 	}
 

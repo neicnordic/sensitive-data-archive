@@ -272,14 +272,8 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		}
 	}
 
-	if err := app.DB.UnsetArchived(ctx, fileID); err != nil {
+	if err := app.DB.CancelFile(ctx, fileID); err != nil {
 		log.Errorf("failed to unset file with id: %s as archived due to %v", fileID, err)
-
-		return "nack"
-	}
-
-	if err := app.DB.UnsetAccessionID(ctx, fileID); err != nil {
-		log.Errorf("failed to unset accession id of file with id: %s due to %v", fileID, err)
 
 		return "nack"
 	}
