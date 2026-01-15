@@ -115,6 +115,9 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 			o.BaseEndpoint = aws.String(endpoint)
 			o.EndpointOptions.DisableHTTPS = endpointConf.DisableHTTPS
 			o.Region = endpointConf.Region
+			o.UsePathStyle = true
+			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		},
 	)
 
