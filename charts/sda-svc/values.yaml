@@ -32,7 +32,7 @@ global:
 
   ingress:
     deploy: true
-    ingressClassName: "nginx"
+    ingressClassName: ""
     hostName:
       api: ""
       auth: ""
@@ -51,11 +51,8 @@ global:
 # issuer requires a configured cert-manager
     issuer: ""
     clusterIssuer: ""
-    # extra annotations for the ingress
+    # @param global.ingress.annotations extra annotations shared by all ingress definitions
     annotations: {}
-    # |
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
 
   log:
     level: "info"
@@ -394,11 +391,14 @@ api:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param api.ingressAnnotations
+## Ingress annotations specific to the api service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -427,11 +427,14 @@ auth:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param auth.ingressAnnotations
+## Ingress annotations specific to the auth service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -462,6 +465,9 @@ doa:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param doa.ingressAnnotations
+## Ingress annotations specific to the doa service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -494,8 +500,14 @@ download:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param download.ingressAnnotations
+## Ingress annotations specific to the download service
+  ingressAnnotations: {}
   tls:
     secretName: ""
+## @param download.minClientVersion
+## Minimal version of the `sda-cli` to accept, defaults to `v0.3.0`
+  minClientVersion: ""
 
 finalize:
   name: finalize
@@ -506,7 +518,7 @@ finalize:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -540,7 +552,7 @@ intercept:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -570,7 +582,7 @@ reencrypt:
     periodSeconds: 10
     timeoutSeconds: 2
     grpc:
-      port: 50443
+      port: 50444
       service: "reencrypt.Reencrypt"
   resources:
     requests:
@@ -578,7 +590,7 @@ reencrypt:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -616,6 +628,9 @@ s3Inbox:
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param s3Inbox.ingressAnnotations
+## Ingress annotations specific to the s3Inbox service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 
@@ -644,7 +659,7 @@ sftpInbox:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "250m"
+      cpu: "1000m"
   keystorePass: "changeit"
   nodeHostname: ""
 # Extra annotations to attach to the pod
@@ -663,7 +678,7 @@ sync:
       cpu: "100m"
     limits:
       memory: "512Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
@@ -684,11 +699,14 @@ syncapi:
       cpu: "100m"
     limits:
       memory: "256Mi"
-      cpu: "500m"
+      cpu: "1000m"
 # Extra annotations to attach to the service pods
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
   annotations: {}
+## @param syncapi.ingressAnnotations
+## Ingress annotations specific to the syncapi service
+  ingressAnnotations: {}
   tls:
     secretName: ""
 

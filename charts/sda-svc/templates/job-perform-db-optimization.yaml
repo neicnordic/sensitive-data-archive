@@ -1,4 +1,56 @@
 {{- if .Values.jobs.removeCorrID }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: optimize-db
+data:
+  optimize-db.sql: |
+    DO
+    $$
+    BEGIN
+      IF (select max(version) from sda.dbschema_version) BETWEEN 16 and 18 then
+        RAISE NOTICE 'Doing migration to schema version 21';
+
+        INSERT INTO sda.dbschema_version VALUES(19, now(), 'Create new indexes on files and file_event_log tables');
+        CREATE INDEX file_event_log_file_id_started_at_idx ON sda.file_event_log(file_id, started_at);
+        CREATE INDEX files_submission_user_submission_file_path_idx ON sda.files(submission_user, submission_file_path);
+
+        IF (SELECT COUNT(*) FROM sda.file_event_log WHERE file_id != correlation_id AND correlation_id IS NOT NULL) > 0 then
+            RAISE EXCEPTION 'Cannot proceed with migration since file_event_log rows exists where file_id != correlation_id';
+        END IF;
+        INSERT INTO sda.dbschema_version VALUES(20, now(), 'Deprecate file_event_log.correlation_id column');
+
+        ALTER TABLE sda.file_event_log DROP COLUMN correlation_id;
+
+        DROP FUNCTION IF EXISTS sda.register_file;
+        CREATE FUNCTION sda.register_file(file_id TEXT, submission_file_path TEXT, submission_user TEXT) RETURNS TEXT AS $register_file$
+        DECLARE file_uuid UUID;
+        BEGIN
+          INSERT INTO sda.files( id, submission_file_path, submission_user, encryption_method )
+          VALUES(  COALESCE(CAST(NULLIF(file_id, '') AS UUID), gen_random_uuid()), submission_file_path, submission_user, 'CRYPT4GH' )
+              ON CONFLICT ON CONSTRAINT unique_ingested
+              DO UPDATE SET submission_file_path = EXCLUDED.submission_file_path,
+                    submission_user = EXCLUDED.submission_user,
+                    encryption_method = EXCLUDED.encryption_method
+                    RETURNING id INTO file_uuid;
+
+          INSERT INTO sda.file_event_log( file_id, event, user_id )
+          VALUES (file_uuid, 'registered', submission_user);
+
+          RETURN file_uuid;
+        END;
+        $register_file$ LANGUAGE plpgsql;
+
+        INSERT INTO sda.dbschema_version VALUES(21, now(), 'Drop functions set_verified, and set_archived');
+        DROP FUNCTION IF EXISTS sda.set_verified;
+        DROP FUNCTION IF EXISTS sda.set_archived;
+
+      ELSE
+        RAISE NOTICE 'Schema migration to 21 does not apply now, skipping';
+      END IF;
+    END
+    $$
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -72,56 +124,4 @@ spec:
       - name: sql
         configMap:
           name: optimize-db
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: optimize-db
-data:
-  optimize-db.sql: |
-    DO
-    $$
-    BEGIN
-      IF (select max(version) from sda.dbschema_version) BETWEEN 16 and 18 then
-        RAISE NOTICE 'Doing migration to schema version 21';
-
-        INSERT INTO sda.dbschema_version VALUES(19, now(), 'Create new indexes on files and file_event_log tables');
-        CREATE INDEX file_event_log_file_id_started_at_idx ON sda.file_event_log(file_id, started_at);
-        CREATE INDEX files_submission_user_submission_file_path_idx ON sda.files(submission_user, submission_file_path);
-
-        IF (SELECT COUNT(*) FROM sda.file_event_log WHERE file_id != correlation_id AND correlation_id IS NOT NULL) > 0 then
-            RAISE EXCEPTION 'Cannot proceed with migration since file_event_log rows exists where file_id != correlation_id';
-        END IF;
-        INSERT INTO sda.dbschema_version VALUES(20, now(), 'Deprecate file_event_log.correlation_id column');
-
-        ALTER TABLE sda.file_event_log DROP COLUMN correlation_id;
-
-        DROP FUNCTION IF EXISTS sda.register_file;
-        CREATE FUNCTION sda.register_file(file_id TEXT, submission_file_path TEXT, submission_user TEXT) RETURNS TEXT AS $register_file$
-        DECLARE file_uuid UUID;
-        BEGIN
-          INSERT INTO sda.files( id, submission_file_path, submission_user, encryption_method )
-          VALUES(  COALESCE(CAST(NULLIF(file_id, '') AS UUID), gen_random_uuid()), submission_file_path, submission_user, 'CRYPT4GH' )
-              ON CONFLICT ON CONSTRAINT unique_ingested
-              DO UPDATE SET submission_file_path = EXCLUDED.submission_file_path,
-                    submission_user = EXCLUDED.submission_user,
-                    encryption_method = EXCLUDED.encryption_method
-                    RETURNING id INTO file_uuid;
-
-          INSERT INTO sda.file_event_log( file_id, event, user_id )
-          VALUES (file_uuid, 'registered', submission_user);
-
-          RETURN file_uuid;
-        END;
-        $register_file$ LANGUAGE plpgsql;
-
-        INSERT INTO sda.dbschema_version VALUES(21, now(), 'Drop functions set_verified, and set_archived');
-        DROP FUNCTION IF EXISTS sda.set_verified;
-        DROP FUNCTION IF EXISTS sda.set_archived;
-
-      ELSE
-        RAISE NOTICE 'Schema migration to 21 does not apply now, skipping';
-      END IF;
-    END
-    $$
 {{- end }}
