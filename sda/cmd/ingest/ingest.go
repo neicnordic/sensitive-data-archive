@@ -37,7 +37,6 @@ type Ingest struct {
 	ArchiveKeyList []*[32]byte
 	DB             *database.SDAdb
 	InboxReader    storage.Reader
-	InboxWriter    storage.Writer // Used to delete files from inbox
 	brokerConf     broker.MQConf
 	MQ             *broker.AMQPBroker
 }
@@ -60,65 +59,62 @@ func main() {
 
 	ingestConf, err := config.NewConfig("ingest")
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Errorf("failed to load config due to: %v", err)
+
+		return
 	}
 	app.brokerConf = ingestConf.Broker
 	app.MQ, err = broker.NewMQ(app.brokerConf)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Fatalf("failed to init broker due to: %v", err)
 	}
 	app.DB, err = database.NewSDAdb(ingestConf.Database)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Errorf("failed to init db due to: %v", err)
+
+		return
 	}
 	if app.DB.Version < 23 {
 		log.Error("database schema v23 is required")
-		sigc <- syscall.SIGINT
-		panic(err)
+
+		return
 	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
-		sigc <- syscall.SIGINT
-		panic(errors.New("no C4GH private keys configured"))
+		log.Error("no C4GH private keys configured")
+
+		return
 	}
 
 	if err := app.registerC4GHKey(); err != nil {
-		panic(err)
+		log.Error("failed to register c4gh key due to: %v", err)
+
+		return
 	}
 
 	storageLocationBroker, err := locationbroker.NewLocationBroker(app.DB)
 	if err != nil {
-		log.Fatalf("failed to init new location broker due to: %v", err)
+		log.Errorf("failed to init new location broker due to: %v", err)
+
+		return
 	}
 	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Errorf("failed to init archive writer due to: %v", err)
+
+		return
 	}
 	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Errorf("failed to init archive reader due to: %v", err)
+
+		return
 	}
 	app.InboxReader, err = storage.NewReader(ctx, "inbox")
 	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
-	}
-	app.InboxWriter, err = storage.NewWriter(ctx, "inbox", storageLocationBroker)
-	if err != nil {
-		log.Error(err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		log.Errorf("failed to init inbox reader due to: %v", err)
+
+		return
 	}
 
 	defer app.MQ.Channel.Close()
