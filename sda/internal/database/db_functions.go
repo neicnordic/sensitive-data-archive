@@ -402,7 +402,6 @@ func (dbs *SDAdb) backupHeader(fileID string, header []byte, keyHash string) err
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("failed to backup header: zero rows were inserted")
 	}
-	log.Debugf("Successfully backed up header for file %s", fileID)
 
 	return nil
 }

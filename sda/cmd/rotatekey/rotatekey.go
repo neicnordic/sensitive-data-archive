@@ -70,7 +70,7 @@ func main() {
 	if app.DB.Version < 22 {
 		log.Error("database schema v22 is required")
 		app.DB.Close()
-		panic(err)
+		panic("unsupported database schema version")
 	}
 
 	go func() {
