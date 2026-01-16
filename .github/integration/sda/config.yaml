@@ -3,15 +3,40 @@ log:
   level: "debug"
 api:
   rbacFile: /rbac.json
-archive:
-  type: s3
-  url: "http://s3"
-  port: 9000
-  readypath: "/minio/health/ready"
-  accessKey: "access"
-  secretKey: "secretKey"
-  bucket: "archive"
+
+storage:
+  archive:
+    s3:
+      endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretKey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      disable_https: true
+  backup:
+    s3:
+      endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretKey"
+      bucket_prefix: "backup"
+      region: "us-east-1"
+      disable_https: true
+  inbox:
+    s3:
+      endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretKey"
+      bucket_prefix: "inbox"
+      region: "us-east-1"
+      disable_https: true
+
+s3inbox:
+  endpoint: "http://s3:9000"
+  access_key: "access"
+  secret_key: "secretKey"
+  bucket: "inbox"
   region: "us-east-1"
+  ready_path: "/minio/health/ready"
 
 grpc:
   host: "reencrypt"
@@ -32,33 +57,6 @@ auth:
   publicFile: "/shared/c4gh.pub.pem"
   resignJwt:
   s3Inbox: "http://inbox:8000"
-
-backup:
-  type: s3
-  url: "http://s3"
-  port: 9000
-  readypath: "/minio/health/ready"
-  accessKey: "access"
-  secretKey: "secretKey"
-  bucket: "backup"
-  region: "us-east-1"
-inbox:
-  type: s3
-  url: "http://s3"
-  port: 9000
-  readypath: "/minio/health/ready"
-  accessKey: "access"
-  secretKey: "secretKey"
-  bucket: "inbox"
-  region: "us-east-1"
-
-s3inbox:
-  endpoint: "http://s3:9000"
-  access_key: "access"
-  secret_key: "secretKey"
-  bucket: "inbox"
-  region: "us-east-1"
-  ready_path: "/minio/health/ready"
 
 broker:
   host: "rabbitmq"
@@ -107,15 +105,6 @@ sync:
     password: "pass"
     user: "user"
   centerPrefix: "SYNC"
-  destination:
-    type: "s3"
-    url: "http://s3"
-    port: 9000
-    readypath: "/minio/health/ready"
-    accessKey: "access"
-    secretKey: "secretKey"
-    bucket: "sync"
-    region: "us-east-1"
   remote:
     host: "http://sync-api"
     port: "8080"
