@@ -33,10 +33,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if db.Version < 22 {
-		log.Error("database schema v22 is required")
-		db.Close()
-		panic(err)
+	if db.Version < 23 {
+		log.Fatal("database schema v23 is required")
 	}
 
 	inboxWriter, err := storage.NewWriter(context.Background(), "inbox", locationbroker.NewLocationBroker(db, 0))
