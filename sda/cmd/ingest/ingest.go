@@ -72,8 +72,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init db due to: %v", err)
 	}
-	if app.DB.Version < 22 {
-		log.Fatal("database schema v22 is required")
+	if app.DB.Version < 24 {
+		log.Fatal("database schema v24 is required")
 	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
