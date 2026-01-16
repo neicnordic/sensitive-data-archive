@@ -66,7 +66,7 @@ func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker
 		return false, err
 	}
 	if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
-		return false, err
+		return false, nil
 	}
 
 	return true, nil
