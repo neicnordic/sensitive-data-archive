@@ -7,7 +7,7 @@ fileID="33d29907-c565-4a90-98b4-e31b992ab376"
 
 for host in migrate postgres; do
     ## insert file
-    fileID=$(psql -U ingest -h "$host" -d sda -At -c "SELECT sda.register_file('$fileID', 'inbox/test-file.c4gh', '$user');")
+    fileID=$(psql -U ingest -h "$host" -d sda -At -c "SELECT sda.register_file('$fileID', '/inbox', 'inbox/test-file.c4gh', '$user');")
     if [ -z "$fileID" ]; then
         echo "register_file failed"
         exit 1
@@ -31,7 +31,7 @@ for host in migrate postgres; do
     size="2035150"
     checksum="f03775a50feea74c579d459fdbeb27adafd543b87f6692703543a6ebe7daa1ff"
 
-    resp=$(psql -U ingest -h "$host" -d sda -At -c "UPDATE sda.files SET archive_file_path = '$archive_path', archive_file_size = '$size' WHERE id = '$fileID';")
+    resp=$(psql -U ingest -h "$host" -d sda -At -c "UPDATE sda.files SET archive_location = '/archive', archive_file_path = '$archive_path', archive_file_size = '$size' WHERE id = '$fileID';")
     if [ "$resp" != "UPDATE 1" ]; then
         echo "update of files.archive_file_path, archive_file_size failed: $resp"
         exit 1
