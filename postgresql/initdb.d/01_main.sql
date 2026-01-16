@@ -36,7 +36,8 @@ VALUES (0, now(), 'Created with version'),
        (19, now(), 'Create new indexes on files and file_event_log tables'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
-       (22, now(), 'Add file_headers_backup table for key rotation safekeeping');
+       (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
+       (23, now(), 'Expand files table with storage locations');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -63,12 +64,15 @@ CREATE TABLE files (
     stable_id            TEXT UNIQUE,
 
     submission_user      TEXT,
+    submission_location  TEXT,
     submission_file_path TEXT DEFAULT '' NOT NULL,
 
     submission_file_size BIGINT,
+    archive_location     TEXT,
     archive_file_path    TEXT DEFAULT '' NOT NULL,
     archive_file_size    BIGINT,
     decrypted_file_size  BIGINT,
+    backup_location      TEXT,
     backup_path          TEXT,
 
     header               TEXT,
@@ -85,6 +89,9 @@ CREATE TABLE files (
 );
 -- Add indexes to the files table
 CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_user, submission_file_path);
+CREATE INDEX files_submission_location_idx ON files(submission_location);
+CREATE INDEX files_archive_location_idx ON files(archive_location);
+CREATE INDEX files_backup_location_idx ON files(backup_location);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (
