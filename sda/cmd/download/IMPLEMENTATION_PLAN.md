@@ -51,24 +51,36 @@ Create a new download service within `sda/cmd/download/` that:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    sda/cmd/download                              │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
-│  │  /info/*     │  │  /file/*     │  │  /health/*           │   │
-│  │  handlers    │  │  handlers    │  │  handlers            │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘   │
-│         │                 │                                      │
-│  ┌──────▼───────┐  ┌──────▼───────┐                             │
-│  │   database   │  │  storage/v2  │  ← Multi-backend support    │
-│  └──────────────┘  └──────┬───────┘                             │
-│                           │                                      │
-│                    ┌──────▼───────┐                             │
-│                    │   reencrypt  │  ← gRPC service             │
-│                    │   (c4gh)     │                             │
-│                    └──────────────┘                             │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph download["sda/cmd/download"]
+        subgraph handlers["HTTP Handlers"]
+            info["/info/*<br/>handlers"]
+            file["/file/*<br/>handlers"]
+            health["/health/*<br/>handlers"]
+        end
+
+        subgraph deps["Dependencies"]
+            db["database"]
+            storage["storage/v2<br/>(multi-backend)"]
+            reencrypt["reencrypt<br/>(gRPC c4gh)"]
+        end
+    end
+
+    info --> db
+    file --> db
+    file --> storage
+    storage --> reencrypt
+
+    subgraph external["External Services"]
+        postgres[(PostgreSQL)]
+        s3["S3 / POSIX"]
+        grpc["gRPC Reencrypt Service"]
+    end
+
+    db --> postgres
+    storage --> s3
+    reencrypt --> grpc
 ```
 
 ## File Structure
