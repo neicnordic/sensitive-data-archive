@@ -110,35 +110,40 @@ global:
     rbacFileSecret: ""
   archive:
     storageType: "" # s3 or posix
+    maxObjects: null
+    maxSize: ""
   # The six lines below is only used with S3 backend
     s3Url: ""
-    s3Bucket: ""
+    s3BucketPrefix: "archive"
     s3Region: "us-east-1"
-    s3ChunkSize: 15 # Chunk size in MB > 5
+    s3ChunkSize: ""
     s3AccessKey: null
     s3SecretKey: null
     s3CaFile: null
     s3Port: 443
+    maxBuckets: 1
   # The lines below is only used with POSIX backend
     volumePath: "/archive"
     nfsServer: ""
     nfsPath: ""
 
   backupArchive:
-    storageType: "" # s3 or posix
+    storageType: "" # s3 or posix, leave empty for no backup
+    maxObjects: null
+    maxSize: ""
   # The six lines below is only used with S3 backend
     s3Url: ""
-    s3Bucket: ""
+    s3BucketPrefix: "backup"
     s3Region: "us-east-1"
-    s3ChunkSize: 15 # Chunk size in MB > 5
+    s3ChunkSize: ""
     s3AccessKey: null
     s3SecretKey: null
     s3Port: 443
+    maxBuckets: 1
   # The lines below is only used with POSIX backend
     volumePath: "/backup"
     nfsServer: ""
     nfsPath: ""
-    copyHeader: false
 
   auth:
     # @param jwtSecret, name of the secret holding the jwt signing key
@@ -253,22 +258,30 @@ global:
     id: ""
     secret: ""
 
+  s3Inbox:
+    url: ""
+    port: 443
+    bucket: "inbox"
+    accessKey: null
+    secretKey: null
+    caFile: null
+    region: "us-east-1"
+    readyPath: ""
+
   inbox:
-    servicePort: 2222
     storageType: ""
   # These lines below are only used with posix
-    path: "/inbox"
-    user: "lega"
+    volumePath: "/inbox"
     nfsServer: ""
     nfsPath: ""
     existingClaim: ""
   # These lines below are only used with s3
     s3Url: ""
-    s3Bucket: "inbox"
+    s3BucketPrefix: "inbox"
     s3AccessKey: null
     s3SecretKey: null
     s3Port: 443
-    s3ReadyPath: ""
+    s3CaFile: null
     s3Region: ""
 
   reencrypt:
@@ -283,14 +296,12 @@ global:
     brokerQueue: ""
     centerPrefix: ""
     destination:
-      storageType: "s3"
-      url: ""
-      port: 443
-      readypath: ""
-      accessKey: ""
-      secretKey: ""
-      bucket: ""
-      region: ""
+      s3Url: ""
+      s3Port: 443
+      s3AccessKey: ""
+      s3SecretKey: ""
+      s3BucketPrefix: "sync"
+      s3Region: "us-east-1"
     remote:
       host: ""
       port: ""
