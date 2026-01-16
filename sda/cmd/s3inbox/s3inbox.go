@@ -50,8 +50,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init new db due to: %v", err)
 	}
-	if sdaDB.Version < 22 {
-		log.Fatalf("database schema v22 is required")
+	if sdaDB.Version < 23 {
+		log.Fatalf("database schema v23 is required")
 	}
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
