@@ -67,6 +67,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	if app.DB.Version < 22 {
+		log.Error("database schema v22 is required")
+		app.DB.Close()
+		panic("unsupported database schema version")
+	}
 
 	go func() {
 		<-sigc // blocks here until it receives from sigc
@@ -234,6 +239,15 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 		default:
 			return "nackRequeue", msg, err
 		}
+	}
+
+	// Backup old header before rotating
+	log.Debugf("Backing up old header for file-id: %s", fileID)
+	if err := app.DB.BackupHeader(fileID, header, oldKeyHash); err != nil {
+		msg := fmt.Sprintf("failed to backup encryption header for file %s", fileID)
+		log.Errorf("%s, reason: %v", msg, err)
+		// We Nack and requeue because if backup fails, rotation should not proceed
+		return "nackRequeue", msg, err
 	}
 
 	newHeader, err := reencrypt.CallReencryptHeader(header, app.PubKeyEncoded, app.Conf.RotateKey.Grpc)
