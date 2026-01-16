@@ -56,8 +56,8 @@ func main() {
 
 		return
 	}
-	if db.Version < 22 {
-		log.Error("database schema v22 is required")
+	if db.Version < 23 {
+		log.Error("database schema v23 is required")
 
 		return
 	}
