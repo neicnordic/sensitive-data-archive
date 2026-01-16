@@ -185,7 +185,7 @@ psql -U postgres -h postgres -d sda -At -c "select header from sda.files where i
 
 # get archive file
 archivePath=$(psql -U postgres -h postgres -d sda -At -c "select archive_file_path from sda.files where id='$fileID';")
-s3cmd --access_key=access --secret_key=secretKey --host=minio:9000 --no-ssl --host-bucket=minio:9000 get s3://archive/"$archivePath" --force
+s3cmd --access_key=access --secret_key=secretKey --host=minio:9000 --no-ssl --host-bucket=minio:9000 get s3://archive1/"$archivePath" --force
 
 # concatenate and decrypt
 cat testfile1_rotated.c4gh "$archivePath" > tmp_file && mv tmp_file testfile1_rotated.c4gh
