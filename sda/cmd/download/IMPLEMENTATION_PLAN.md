@@ -15,14 +15,17 @@ Create a new download service within `sda/cmd/download/` that:
 
 ## Decisions Made
 
-| Question                | Decision          | Rationale                                               |
-| ----------------------- | ----------------- | ------------------------------------------------------- |
-| Base on storage/v2?     | ✅ Yes            | Recommended by Karl, provides multi-backend support     |
-| Separate go.mod?        | ❌ No             | Build within `sda/go.mod` to reuse `internal/` packages |
-| Unencrypted downloads?  | ❌ Not supported  | New service requires `public_key` header (more secure)  |
-| Two download endpoints? | ✅ Yes            | Bigpicture needs file path lookup, others use file ID   |
-| Deprecate sda-download? | ⏳ Later          | Keep until new service has all functionality + HTSget   |
-| HTSget support?         | 📋 Separate issue | Out of scope for initial implementation                 |
+| Question                | Decision              | Rationale                                                  |
+| ----------------------- | --------------------- | ---------------------------------------------------------- |
+| Base on storage/v2?     | ✅ Yes                | Recommended by Karl, provides multi-backend support        |
+| Separate go.mod?        | ❌ No                 | Build within `sda/go.mod` to reuse `internal/` packages    |
+| Unencrypted downloads?  | ❌ Not supported      | New service requires `public_key` header (more secure)     |
+| Two download endpoints? | ✅ Yes                | Bigpicture needs file path lookup, others use file ID      |
+| Deprecate sda-download? | ⏳ Later              | Keep until new service has all functionality + HTSget      |
+| HTSget support?         | 📋 Separate issue     | Out of scope for initial implementation                    |
+| App code in internal/?  | ❌ No                 | App-specific code in `cmd/<app>/`, not `internal/`         |
+| Shared config pattern?  | ✅ internal/config/v2 | Apps register their config, follows validator-orchestrator |
+| Per-app database pkg?   | ✅ Yes                | Each app has own DB queries, reduces cross-app coupling    |
 
 ## API Endpoints (from swagger_v1.yml)
 
@@ -85,32 +88,36 @@ flowchart TB
 
 ## File Structure
 
+> **Architecture Decision (from @KarlG-nbis):** Application-specific code lives in `cmd/<app>/`, NOT in
+> `internal/`. The `internal/` directory contains only shared packages that support applications.
+> Each application has its own database package with app-specific queries.
+
 ```
 sda/
 ├── cmd/
 │   └── download/
 │       ├── main.go                  # Entry point
 │       ├── swagger_v1.yml           # API spec (existing)
-│       └── IMPLEMENTATION_PLAN.md   # This file
+│       ├── IMPLEMENTATION_PLAN.md   # This file
+│       │
+│       ├── config/                  # App-specific config registration
+│       │   └── config.go
+│       ├── database/                # App-specific DB queries
+│       │   └── database.go
+│       ├── handlers/
+│       │   ├── info.go              # /info/* endpoint handlers
+│       │   ├── file.go              # /file/* endpoint handlers
+│       │   └── health.go            # /health/* endpoint handlers
+│       ├── middleware/
+│       │   └── auth.go              # OIDC/visa authentication
+│       └── reencrypt/
+│           └── client.go            # gRPC client for re-encryption
 │
 └── internal/
-    ├── storage/v2/                  # From feature/multiple-backends-wip
+    ├── storage/v2/                  # Shared storage abstraction
     │
-    └── download/                    # NEW - download-specific packages
-        ├── config/
-        │   └── config.go            # Flag-based configuration
-        ├── database/
-        │   ├── database.go          # Interface definition
-        │   └── postgres/
-        │       └── postgres.go      # PostgreSQL implementation
-        ├── handlers/
-        │   ├── info.go              # /info/* endpoint handlers
-        │   ├── file.go              # /file/* endpoint handlers
-        │   └── health.go            # /health/* endpoint handlers
-        ├── middleware/
-        │   └── auth.go              # OIDC/visa authentication
-        └── reencrypt/
-            └── client.go            # gRPC client for re-encryption
+    └── config/v2/                   # NEW - shared config registration framework
+        └── config.go                # Allows apps to register their own config
 ```
 
 ## Implementation Phases
@@ -123,7 +130,8 @@ sda/
 
 ### Phase 2: Configuration
 
-- [ ] Create `internal/download/config/config.go`
+- [ ] Create `internal/config/v2/config.go` (shared framework if not exists)
+- [ ] Create `cmd/download/config/config.go` (app-specific registration)
 - [ ] Use flag-based registration pattern (like sda-validator/orchestrator)
 - [ ] Configuration options:
   - `download.host`, `download.port`
@@ -135,9 +143,8 @@ sda/
 
 ### Phase 3: Database Layer
 
-- [ ] Create `internal/download/database/database.go` with interface
-- [ ] Implement PostgreSQL backend in `postgres/`
-- [ ] Required queries:
+- [ ] Create `cmd/download/database/database.go` (app-specific queries)
+- [ ] Required queries (specific to download service):
   - `GetUserDatasets(ctx, visas)` - datasets from user's visas
   - `GetDatasetInfo(ctx, datasetID)` - metadata (date, file count, total size)
   - `GetDatasetFiles(ctx, datasetID)` - list files with metadata
@@ -147,7 +154,7 @@ sda/
 
 ### Phase 4: Authentication Middleware
 
-- [ ] Create `internal/download/middleware/auth.go`
+- [ ] Create `cmd/download/middleware/auth.go`
 - [ ] OIDC token validation
 - [ ] Visa extraction for dataset permissions
 - [ ] Session caching (optional, for performance)
@@ -261,14 +268,14 @@ Phase 5: Remove sda-download/ from repository
 
 ### Can Port Directly (with minor adjustments)
 
-| Component             | Source                             | Changes Needed                        |
-| --------------------- | ---------------------------------- | ------------------------------------- |
-| Database queries      | `sda-download/internal/database/`  | Change imports, use interface pattern |
-| SQL mock tests        | `database_test.go`                 | Change imports                        |
-| gRPC reencrypt client | `api/sda/sda.go:reencryptHeader()` | Extract to separate package           |
-| Fake gRPC server      | `sda_test.go:fakeGRPC`             | Port for testing                      |
-| SeekableMultiReader   | Already in `storage/v2`            | ✅ No porting needed                  |
-| Handler test patterns | `api/sda/sda_test.go`              | Adapt to new endpoints                |
+| Component             | Source                             | Changes Needed                       |
+| --------------------- | ---------------------------------- | ------------------------------------ |
+| Database queries      | `sda-download/internal/database/`  | Copy to `cmd/download/database/`     |
+| SQL mock tests        | `database_test.go`                 | Change imports                       |
+| gRPC reencrypt client | `api/sda/sda.go:reencryptHeader()` | Extract to `cmd/download/reencrypt/` |
+| Fake gRPC server      | `sda_test.go:fakeGRPC`             | Port for testing                     |
+| SeekableMultiReader   | Already in `storage/v2`            | ✅ No porting needed                 |
+| Handler test patterns | `api/sda/sda_test.go`              | Adapt to new endpoints               |
 
 ### Must Rewrite
 
