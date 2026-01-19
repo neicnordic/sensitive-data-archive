@@ -24,9 +24,13 @@ var (
 	dbSSLMode  string
 	dbCACert   string
 
+	// Storage configuration
+	storageBackend string
+
 	// gRPC reencrypt service configuration
 	grpcHost       string
 	grpcPort       int
+	grpcTimeout    int
 	grpcCACert     string
 	grpcClientCert string
 	grpcClientKey  string
@@ -172,6 +176,18 @@ func init() {
 			},
 		},
 
+		// Storage flags
+		&config.Flag{
+			Name: "storage.backend",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "archive", "Storage backend name (used for storage/v2 configuration)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				storageBackend = viper.GetString(flagName)
+			},
+		},
+
 		// gRPC reencrypt service flags
 		&config.Flag{
 			Name: "grpc.host",
@@ -191,6 +207,16 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				grpcPort = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "grpc.timeout",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 10, "gRPC request timeout in seconds")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				grpcTimeout = viper.GetInt(flagName)
 			},
 		},
 		&config.Flag{
@@ -390,6 +416,11 @@ func DBCACert() string {
 	return dbCACert
 }
 
+// StorageBackend returns the storage backend name.
+func StorageBackend() string {
+	return storageBackend
+}
+
 // GRPCHost returns the gRPC service host.
 func GRPCHost() string {
 	return grpcHost
@@ -398,6 +429,11 @@ func GRPCHost() string {
 // GRPCPort returns the gRPC service port.
 func GRPCPort() int {
 	return grpcPort
+}
+
+// GRPCTimeout returns the gRPC request timeout in seconds.
+func GRPCTimeout() int {
+	return grpcTimeout
 }
 
 // GRPCCACert returns the path to the gRPC CA certificate.

@@ -103,7 +103,8 @@ sda/
 │       ├── config/                  # App-specific config registration
 │       │   └── config.go
 │       ├── database/                # App-specific DB queries
-│       │   └── database.go
+│       │   ├── database.go
+│       │   └── database_test.go
 │       ├── handlers/
 │       │   ├── handlers.go          # Handler struct + route registration
 │       │   ├── options.go           # Options pattern for dependencies
@@ -111,17 +112,24 @@ sda/
 │       │   ├── file.go              # /file/* endpoint handlers
 │       │   └── health.go            # /health/* endpoint handlers
 │       ├── health/
-│       │   └── health.go            # gRPC health server for K8s probes
+│       │   ├── health.go            # gRPC health server for K8s probes
+│       │   └── health_test.go
 │       ├── middleware/
-│       │   └── auth.go              # OIDC/visa authentication
-│       └── reencrypt/
-│           └── client.go            # gRPC client for re-encryption
+│       │   ├── auth.go              # OIDC/visa authentication
+│       │   └── auth_test.go
+│       ├── reencrypt/
+│       │   ├── reencrypt.go         # gRPC client for re-encryption
+│       │   └── reencrypt_test.go
+│       └── streaming/
+│           ├── streaming.go         # File streaming with Range header
+│           └── streaming_test.go
 │
 └── internal/
     ├── storage/v2/                  # Shared storage abstraction
     │
-    └── config/v2/                   # NEW - shared config registration framework
-        └── config.go                # Allows apps to register their own config
+    └── config/v2/                   # Shared config registration framework
+        ├── config.go                # Allows apps to register their own config
+        └── config_test.go
 ```
 
 ## Implementation Phases
@@ -170,20 +178,23 @@ sda/
 - [x] `GET /info/dataset/files` - return file list with metadata
 - [x] Auth middleware integration with dataset access checks
 
-### Phase 6: Download Endpoints 🔄
+### Phase 6: Download Endpoints ✅
 
-- [x] `GET /file/{fileId}` - download with path parameter (structure ready)
+- [x] `GET /file/{fileId}` - download with path parameter
   - [x] Require `public_key` header
   - [x] Permission check via auth context
-  - [ ] Parse `Range` header (RFC 7233)
-  - [ ] Use `storage/v2` Reader for file access
-  - [ ] Re-encrypt header via gRPC
-  - [ ] Stream file content to client
-- [x] `GET /file` - download with query parameters (structure ready)
+  - [x] Parse `Range` header (RFC 7233)
+  - [x] Use `storage/v2` Reader for file access
+  - [x] Re-encrypt header via gRPC
+  - [x] Stream file content to client
+- [x] `GET /file` - download with query parameters
   - [x] Support `fileId` OR `filePath` (not both)
   - [x] Require `dataset` parameter
   - [x] Lookup fileId from path when needed
-  - [ ] Implement actual file streaming
+  - [x] Implement actual file streaming
+- [x] New packages:
+  - [x] `cmd/download/reencrypt/` - gRPC client for re-encryption service
+  - [x] `cmd/download/streaming/` - File streaming with Range header support
 
 ### Phase 7: Health Endpoints ✅
 

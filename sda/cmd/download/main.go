@@ -20,7 +20,9 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/handlers"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/health"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	internalconfig "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 )
 
 func main() {
@@ -73,8 +75,31 @@ func run() error {
 		return fmt.Errorf("failed to initialize auth: %w", err)
 	}
 
-	// TODO: Initialize storage/v2 reader
-	// TODO: Initialize gRPC reencrypt client
+	// Initialize storage/v2 reader
+	storageReader, err := storage.NewReader(ctx, config.StorageBackend())
+	if err != nil {
+		return fmt.Errorf("failed to initialize storage reader: %w", err)
+	}
+	log.Infof("storage reader initialized for backend: %s", config.StorageBackend())
+
+	// Initialize gRPC reencrypt client
+	reencryptOpts := []reencrypt.ClientOption{
+		reencrypt.WithTimeout(time.Duration(config.GRPCTimeout()) * time.Second),
+	}
+	if config.GRPCClientCert() != "" && config.GRPCClientKey() != "" {
+		reencryptOpts = append(reencryptOpts, reencrypt.WithTLS(
+			config.GRPCCACert(),
+			config.GRPCClientCert(),
+			config.GRPCClientKey(),
+		))
+	}
+	reencryptClient := reencrypt.NewClient(config.GRPCHost(), config.GRPCPort(), reencryptOpts...)
+	defer func() {
+		if err := reencryptClient.Close(); err != nil {
+			log.Errorf("failed to close reencrypt client: %v", err)
+		}
+	}()
+	log.Infof("reencrypt client configured for %s:%d", config.GRPCHost(), config.GRPCPort())
 
 	// Setup HTTP server
 	router := gin.New()
@@ -101,8 +126,8 @@ func run() error {
 	// Create handlers with dependencies
 	h, err := handlers.New(
 		handlers.WithDatabase(database.GetDB()),
-		handlers.WithGRPCReencryptHost(config.GRPCHost()),
-		handlers.WithGRPCReencryptPort(config.GRPCPort()),
+		handlers.WithStorageReader(storageReader),
+		handlers.WithReencryptClient(reencryptClient),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create handlers: %w", err)

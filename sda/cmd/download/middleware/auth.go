@@ -489,12 +489,9 @@ func (sc *SessionCache) Get(key string) (AuthContext, bool) {
 	return authCtx, true
 }
 
-// Set stores a value in the session cache.
+// Set stores a value in the session cache with the specified TTL.
 func (sc *SessionCache) Set(key string, value AuthContext, ttl time.Duration) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	// Note: older ristretto doesn't have SetWithTTL, use Set instead
-	// TTL is handled by cache eviction policy
-	_ = ttl // TTL not supported in this version
-	sc.cache.Set(key, value, 1)
+	sc.cache.SetWithTTL(key, value, 1, ttl)
 }

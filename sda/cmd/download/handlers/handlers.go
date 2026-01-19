@@ -7,15 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 )
 
 // Handlers holds the dependencies for HTTP handlers.
 type Handlers struct {
-	db            database.Database
-	storageReader storage.Reader
-	grpcHost      string
-	grpcPort      int
+	db              database.Database
+	storageReader   storage.Reader
+	reencryptClient *reencrypt.Client
+	grpcHost        string
+	grpcPort        int
 }
 
 // New creates a new Handlers instance with the given options.
