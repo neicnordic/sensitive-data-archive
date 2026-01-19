@@ -198,4 +198,4 @@ db/
 *.sec.pem
 
 # sda-admin binary
-sda-admin/sda-admin
+sda-admin/sda-adminsda/coverage.txt
