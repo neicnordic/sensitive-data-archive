@@ -57,6 +57,9 @@ type ArchiveData struct {
 	FilePath string
 	Location string
 	FileSize int
+
+	BackupFilePath string
+	BackupLocation string
 }
 
 type SubmissionFileInfo struct {
