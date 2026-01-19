@@ -80,4 +80,16 @@ if [ "$key_hashes" -eq 0 ]; then
 	exit 1
 fi
 
+num_in_archive_1="$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(id) FROM sda.files WHERE archive_location LIKE '%archive1'")"
+if [ "$num_in_archive_1" -ne 3 ]; then
+	echo "::error::Unexpected amount of files in archive bucket 1: $num_in_archive_1, expected 3"
+	exit 1
+fi
+
+num_in_archive_2="$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(id) FROM sda.files WHERE archive_location LIKE '%archive2'")"
+if [ "$num_in_archive_2" -ne 1 ]; then
+	echo "::error::Unexpected amount of files in archive bucket 2: : $num_in_archive_2, expected 1"
+	exit 1
+fi
+
 echo "ingestion and verification test completed successfully"
