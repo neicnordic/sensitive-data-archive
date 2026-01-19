@@ -34,6 +34,7 @@ import (
 
 type Ingest struct {
 	ArchiveWriter  storage.Writer
+	BackupWriter   storage.Writer
 	ArchiveReader  storage.Reader
 	ArchiveKeyList []*[32]byte
 	DB             *database.SDAdb
@@ -116,6 +117,17 @@ func main() {
 		log.Errorf("failed to init inbox reader due to: %v", err)
 
 		return
+	}
+
+	backupWriter, err := storage.NewWriter(ctx, "backup", storageLocationBroker)
+	if err != nil && errors.Is(err, storageerrors.ErrorNoValidWriter) {
+		log.Fatalf("failed to init backup writer due to: %v", err)
+	}
+	if backupWriter != nil {
+		log.Info("backup writer initialized, will clean cancelled files from backup storage")
+		app.BackupWriter = backupWriter
+	} else {
+		log.Info("no backup writer initialized, will NOT clean cancelled files from backup storage")
 	}
 
 	defer app.MQ.Channel.Close()
@@ -267,6 +279,14 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 	if archiveData != nil && archiveData.Location != "" {
 		if err := app.ArchiveWriter.RemoveFile(ctx, archiveData.Location, archiveData.FilePath); err != nil {
 			log.Errorf("failed to remove file with id %s from archive due to %v", fileID, err)
+
+			return "nack"
+		}
+	}
+
+	if app.BackupWriter != nil && archiveData != nil && archiveData.BackupFilePath != "" && archiveData.BackupLocation != "" {
+		if err := app.BackupWriter.RemoveFile(ctx, archiveData.BackupLocation, archiveData.BackupFilePath); err != nil {
+			log.Errorf("failed to remove file with id %s from backup due to %v", fileID, err)
 
 			return "nack"
 		}
