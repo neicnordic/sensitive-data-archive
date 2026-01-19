@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -331,4 +332,259 @@ func TestHasDatasetAccess(t *testing.T) {
 			assert.Equal(t, tc.hasAccess, result)
 		})
 	}
+}
+
+// InfoDatasets tests
+
+func TestInfoDatasets_Success(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"dataset1", "dataset2"})
+	mockDB := &mockDatabase{
+		datasets: []database.Dataset{
+			{ID: "dataset1", Title: "Dataset 1"},
+			{ID: "dataset2", Title: "Dataset 2"},
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/datasets", h.InfoDatasets)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/datasets", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []database.Dataset
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Len(t, response, 2)
+}
+
+func TestInfoDatasets_Empty(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{})
+	mockDB := &mockDatabase{
+		datasets: []database.Dataset{},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/datasets", h.InfoDatasets)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/datasets", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []database.Dataset
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Len(t, response, 0)
+}
+
+// InfoDataset tests
+
+func TestInfoDataset_Success(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		datasetInfo: &database.DatasetInfo{
+			ID:        "test-dataset",
+			Title:     "Test Dataset",
+			FileCount: 10,
+			TotalSize: 1024000,
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset", h.InfoDataset)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response database.DatasetInfo
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "test-dataset", response.ID)
+	assert.Equal(t, 10, response.FileCount)
+}
+
+func TestInfoDataset_NotFound(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		datasetInfo: nil, // Not found
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset", h.InfoDataset)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// InfoDatasetFiles tests
+
+func TestInfoDatasetFiles_Success(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		datasetFiles: []database.File{
+			{ID: "file1", SubmittedPath: "path/to/file1.c4gh"},
+			{ID: "file2", SubmittedPath: "path/to/file2.c4gh"},
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset/files", h.InfoDatasetFiles)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset/files?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []database.File
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Len(t, response, 2)
+}
+
+func TestInfoDatasetFiles_AccessDenied(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"other-dataset"})
+	mockDB := &mockDatabase{}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset/files", h.InfoDatasetFiles)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset/files?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// DownloadByFileID tests
+
+func TestDownloadByFileID_FileNotFound(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		hasPermission: true,
+		fileByID:      nil, // Not found
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file/:fileId", h.DownloadByFileID)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file/nonexistent-id", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5") // base64 encoded
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestDownloadByFileID_AccessDenied(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"other-dataset"})
+	mockDB := &mockDatabase{
+		hasPermission: false,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file/:fileId", h.DownloadByFileID)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file/test-file-id", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestDownloadByFileID_StorageNotConfigured(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		hasPermission: true,
+		fileByID: &database.File{
+			ID:          "test-file",
+			Header:      []byte("header"),
+			ArchivePath: "/archive/test.c4gh",
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+	// Note: storageReader is nil
+
+	router.GET("/file/:fileId", h.DownloadByFileID)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file/test-file", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "storage not configured")
+}
+
+// DownloadByQuery tests
+
+func TestDownloadByQuery_ByFileID_FileNotFound(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		fileByID: nil, // Not found
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test-dataset&fileId=nonexistent", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestDownloadByQuery_ByFilePath_FileNotFound(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		fileByPath: nil, // Not found
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test-dataset&filePath=nonexistent/path.c4gh", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	log "github.com/sirupsen/logrus"
 )
@@ -19,7 +18,7 @@ func (h *Handlers) InfoDatasets(c *gin.Context) {
 		return
 	}
 
-	datasets, err := database.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
+	datasets, err := h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
 	if err != nil {
 		log.Errorf("failed to retrieve datasets: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve datasets"})
@@ -54,7 +53,7 @@ func (h *Handlers) InfoDataset(c *gin.Context) {
 		return
 	}
 
-	info, err := database.GetDatasetInfo(c.Request.Context(), datasetID)
+	info, err := h.db.GetDatasetInfo(c.Request.Context(), datasetID)
 	if err != nil {
 		log.Errorf("failed to retrieve dataset info: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve dataset info"})
@@ -95,7 +94,7 @@ func (h *Handlers) InfoDatasetFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := database.GetDatasetFiles(c.Request.Context(), datasetID)
+	files, err := h.db.GetDatasetFiles(c.Request.Context(), datasetID)
 	if err != nil {
 		log.Errorf("failed to retrieve dataset files: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve dataset files"})

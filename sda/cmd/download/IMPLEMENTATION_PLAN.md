@@ -203,39 +203,56 @@ sda/
 - [x] gRPC Health Server for Kubernetes probes (port 8081)
 - [x] Options pattern for dependency injection (like sda-validator/orchestrator)
 
-### Phase 8: Testing (Parallel with Development)
+### Phase 8: Testing (In Progress) 🚧
 
 **Strategy:** Write tests alongside implementation, not after.
 
-#### Database Tests (Port from sda-download)
+**Current Coverage:**
+- `database`: 59.2%
+- `handlers`: 56.4%
+- `streaming`: 83.1%
+- `health`: 36.4%
+- `middleware`: 22.2%
+- `reencrypt`: 19.4%
 
-- [ ] `TestBuildConnInfo` - Connection string building
-- [ ] `TestNewDB` - Database connection
-- [ ] `TestCheckFilePermission` - Permission queries
-- [ ] `TestGetFile` - File metadata queries
-- [ ] `TestGetFiles` - File list queries
-- [ ] `TestGetDatasetInfo` - Dataset metadata
-- [ ] `TestGetFileByPath` - NEW: Path-based lookup (Bigpicture)
-- [ ] `TestGetDatasetMetadata` - NEW: File count, total size
+#### Database Tests ✅
 
-#### Handler Tests (New, based on sda-download patterns)
+- [x] `TestGetUserDatasets` - User dataset queries
+- [x] `TestGetDatasetInfo` - Dataset metadata
+- [x] `TestGetDatasetFiles` - File list queries
+- [x] `TestGetFileByID` - File metadata by ID
+- [x] `TestGetFileByPath` - Path-based lookup (Bigpicture)
+- [x] `TestCheckFilePermission` - Permission queries
 
-- [ ] `TestInfoDatasets_Success` / `_Unauthorized` / `_Empty`
-- [ ] `TestInfoDataset_Success` / `_NotFound` / `_NoAccess`
-- [ ] `TestInfoDatasetFiles_Success` / `_NotFound`
-- [ ] `TestDownloadByFileId_Success` / `_NotFound` / `_NoPermission`
-- [ ] `TestDownloadByFilePath_Success` / `_DatasetRequired`
-- [ ] `TestDownload_PublicKeyRequired` - NEW: Mandatory header
-- [ ] `TestDownload_RangeHeader_*` - RFC 7233 parsing
-- [ ] `TestDownload_Reencryption` - gRPC integration
-- [ ] `TestHealthReady_*` / `TestHealthLive_*`
+#### Handler Tests ✅
+
+- [x] `TestInfoDatasets_Success` / `_Empty`
+- [x] `TestInfoDataset_Success` / `_NotFound` / `_AccessDenied` / `_MissingParameter`
+- [x] `TestInfoDatasetFiles_Success` / `_AccessDenied` / `_MissingParameter`
+- [x] `TestDownloadByFileID_FileNotFound` / `_AccessDenied` / `_MissingPublicKey` / `_StorageNotConfigured`
+- [x] `TestDownloadByQuery_*` - All parameter validation tests
+- [x] `TestHasDatasetAccess` - Helper function tests
+- [x] `TestHealthReady` / `TestHealthLive`
+
+#### Streaming Tests ✅
+
+- [x] `TestParseRangeHeader_*` - RFC 7233 parsing (12 test cases)
+- [x] `TestStreamFile_WholeFile` / `_RangeRequest_*` - File streaming
+- [x] `TestSeekOrSkipBody_*` - Seek/skip functionality
+
+#### Middleware Tests ✅
+
+- [x] `TestGetToken_*` - Token extraction
+- [x] `TestGetAuthContext_*` - Context retrieval
+- [x] `TestSessionCache_*` - Session caching
+- [x] `TestGetPermissions_*` - Visa extraction
 
 #### Integration Tests
 
 - [ ] End-to-end test with mock services
 - [ ] Manual testing with dev environment
 
-#### Test Utilities to Create
+#### Test Utilities Created ✅
 
 - [ ] `mockDatabase` - Interface mock for handlers
 - [ ] `mockStorage` - storage/v2 Reader mock
