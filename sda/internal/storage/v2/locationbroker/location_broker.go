@@ -2,6 +2,7 @@ package locationbroker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ type LocationBroker interface {
 
 type locationBroker struct {
 	checkedLocations map[string]*locationEntry
-	cacheTTL         time.Duration
+	config           *config
 	db               database.Database
 }
 
@@ -31,17 +32,27 @@ type locationEntry struct {
 	size        uint64
 }
 
-func NewLocationBroker(db database.Database, cacheTTL time.Duration) LocationBroker {
+func NewLocationBroker(db database.Database, options ...func(*config)) (LocationBroker, error) {
+	if db == nil {
+		return nil, errors.New("database option required")
+	}
+
+	conf := loadConfig()
+
+	for _, option := range options {
+		option(conf)
+	}
+
 	return &locationBroker{
 		checkedLocations: make(map[string]*locationEntry),
-		cacheTTL:         cacheTTL,
+		config:           conf,
 		db:               db,
-	}
+	}, nil
 }
 
 func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (uint64, error) {
 	loc, ok := l.checkedLocations[location]
-	if ok && loc.lastChecked.Add(l.cacheTTL).After(time.Now()) {
+	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.objectCount, nil
 	}
 
@@ -105,7 +116,7 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 
 func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, error) {
 	loc, ok := l.checkedLocations[location]
-	if ok && loc.lastChecked.Add(l.cacheTTL).After(time.Now()) {
+	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.size, nil
 	}
 

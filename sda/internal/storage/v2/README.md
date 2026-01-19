@@ -119,3 +119,16 @@ location.
 The location broker is currently powered by the database where we keep store information of where files were written and
 how big the files are.
 Meaning if the database is incorrect we risk exceeding any possible quotas on the storage implementation side.
+
+The location broker will cache the count of objects and size of a location based on
+the [cacheTTL](#location-broker-config) config.
+Meaning the higher the value the higher the risk is that we could exceed the configured quota in favour of performance
+due to fewer requests to get the current count and size.
+
+### Location Broker Config
+
+A posix reader has the following configuration:
+
+| Name:                     | Type:         | Default Value: | Description:                                                  |         
+|---------------------------|---------------|----------------|---------------------------------------------------------------|                               
+| location_broker.cache_ttl | time.Duration | 60s            | How long to cache the count of object and size of a location. |
