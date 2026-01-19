@@ -188,9 +188,8 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
   - Error codes
     - `200` Key rotation triggered successfully.
-    - `400` Dataset ID not provided or message validation failed.
+    - `400` Dataset ID not provided.
     - `401` Token user is not in the list of admins.
-    - `404` No files found for dataset.
     - `500` Internal error due to DB or MQ failures.
 
     Example:

@@ -144,19 +144,19 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
 	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                       // start ingestion of a file
-	r.POST("/file/accession", rbac(e), setAccession)                  // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)           // trigger reverification of a file
-	r.POST("/dataset/create", rbac(e), createDataset)                 // maps a set of files to a dataset
-	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateDatasetKeys) // trigger key rotation for all files in a dataset
-	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)      // Releases a dataset to be accessible
-	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)       // Re-verify all files in the dataset
-	r.POST("/file/rotatekey/:fileid", rbac(e), rotateFileKey)         // trigger key rotation for a file
-	r.GET("/datasets/list", rbac(e), listAllDatasets)                 // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)      // Lists datasets with their status for a specific user
-	r.GET("/users", rbac(e), listActiveUsers)                         // Lists all users
-	r.GET("/users/:username/files", rbac(e), listUserFiles)           // Lists all unmapped files for a user
-	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)     // Download a file from a users inbox
+	r.POST("/file/ingest", rbac(e), ingestFile)                      // start ingestion of a file
+	r.POST("/file/accession", rbac(e), setAccession)                 // assign accession ID to a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)          // trigger reverification of a file
+	r.POST("/dataset/create", rbac(e), createDataset)                // maps a set of files to a dataset
+	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateKeyDataset) // trigger key rotation for all files in a dataset
+	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)     // Releases a dataset to be accessible
+	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)      // Re-verify all files in the dataset
+	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
+	r.GET("/datasets/list", rbac(e), listAllDatasets)                // Lists all datasets with their status
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)     // Lists datasets with their status for a specific user
+	r.GET("/users", rbac(e), listActiveUsers)                        // Lists all users
+	r.GET("/users/:username/files", rbac(e), listUserFiles)          // Lists all unmapped files for a user
+	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)    // Download a file from a users inbox
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -788,8 +788,8 @@ func releaseDataset(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// rotateFileKey triggers key rotation for a specific file
-func rotateFileKey(c *gin.Context) {
+// rotateKeyFile triggers key rotation for a specific file
+func rotateKeyFile(c *gin.Context) {
 	fileID := c.Param("fileid")
 
 	if fileID == "" {
@@ -832,8 +832,8 @@ func rotateFileKey(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// rotateDatasetKeys triggers key rotation for all files in a dataset
-func rotateDatasetKeys(c *gin.Context) {
+// rotateKeyDataset triggers key rotation for all files in a dataset
+func rotateKeyDataset(c *gin.Context) {
 	datasetID := c.Param("dataset")
 
 	if datasetID == "" {
@@ -852,7 +852,8 @@ func rotateDatasetKeys(c *gin.Context) {
 	}
 
 	if len(files) == 0 {
-		c.JSON(http.StatusBadRequest, "no files found for dataset")
+		log.Warnf("no files found for dataset %s", datasetID)
+		c.Status(http.StatusOK)
 
 		return
 	}
@@ -869,14 +870,6 @@ func rotateDatasetKeys(c *gin.Context) {
 		if err != nil {
 			log.Errorf("failed to marshal rotation message for file %s, reason: %v", fileID, err)
 			c.JSON(http.StatusInternalServerError, "failed to marshal rotation message")
-
-			return
-		}
-
-		// Validate the message against schema
-		if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-			log.Errorf("rotation message validation failed for file %s, reason: %v", fileID, err)
-			c.JSON(http.StatusBadRequest, "rotation message validation failed")
 
 			return
 		}
