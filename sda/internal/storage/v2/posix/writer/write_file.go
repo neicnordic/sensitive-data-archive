@@ -40,6 +40,12 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", err
 	}
 	if _, err := io.Copy(file, fileContent); err != nil {
+		_ = file.Close()
+
+		return "", err
+	}
+
+	if err := file.Close(); err != nil {
 		return "", err
 	}
 
