@@ -852,7 +852,7 @@ func rotateDatasetKeys(c *gin.Context) {
 	}
 
 	if len(files) == 0 {
-		c.JSON(http.StatusNotFound, "no files found for dataset")
+		c.JSON(http.StatusBadRequest, "no files found for dataset")
 
 		return
 	}
@@ -869,6 +869,7 @@ func rotateDatasetKeys(c *gin.Context) {
 		if err != nil {
 			log.Errorf("failed to marshal rotation message for file %s, reason: %v", fileID, err)
 			c.JSON(http.StatusInternalServerError, "failed to marshal rotation message")
+
 			return
 		}
 

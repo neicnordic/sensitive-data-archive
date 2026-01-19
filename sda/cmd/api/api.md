@@ -207,7 +207,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     - `200` Query execute ok.
     - `400` File ID not provided or message validation failed.
     - `401` Token user is not in the list of admins.
-    - `500` Internal error due to MQ failures.
+    - `500` Internal error due to MQ or DB failures.
 
     Example:
 
