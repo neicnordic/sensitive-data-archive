@@ -1744,7 +1744,7 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyArchived()
 	db.Close()
 }
 
-func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyAccession() {
+func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyDataset() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
@@ -1777,7 +1777,7 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyAccession(
 	if err != nil {
 		suite.FailNow("failed to set submission file size", err)
 	}
-	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+	suite.NoError(db.setArchived("/archive", FileInfo{
 		ArchiveChecksum:   "123",
 		Size:              fileSize3 + 250,
 		Path:              "/test.file3",
@@ -1785,7 +1785,7 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyAccession(
 		DecryptedSize:     fileSize3 - 100,
 		UploadedChecksum:  "abc",
 	}, fileID3))
-	suite.NoError(db.SetAccessionID("accession-id-3", fileID3))
+	suite.NoError(db.setAccessionID("accession-id-3", fileID3))
 
 	fileID4, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file4", "user")
 	if err != nil {
@@ -1796,7 +1796,7 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyAccession(
 	if err != nil {
 		suite.FailNow("failed to set submission file size", err)
 	}
-	suite.NoError(db.SetArchivedWithLocation("/archive", FileInfo{
+	suite.NoError(db.setArchived("/archive", FileInfo{
 		ArchiveChecksum:   "124",
 		Size:              fileSize4 + 250,
 		Path:              "/test.file4",
@@ -1804,7 +1804,9 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation_PartlyAccession(
 		DecryptedSize:     fileSize4 - 100,
 		UploadedChecksum:  "bcd",
 	}, fileID4))
-	suite.NoError(db.SetAccessionID("accession-id-4", fileID4))
+	suite.NoError(db.setAccessionID("accession-id-4", fileID4))
+
+	suite.NoError(db.mapFilesToDataset("dataset-id-1", []string{"accession-id-3", "accession-id-4"}))
 
 	inboxSize, inboxCount, err := db.GetSizeAndObjectCountOfLocation(context.TODO(), "/inbox")
 	suite.NoError(err)

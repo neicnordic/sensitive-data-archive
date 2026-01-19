@@ -1471,12 +1471,19 @@ func (dbs *SDAdb) GetSizeAndObjectCountOfLocation(ctx context.Context, location 
 	// Sum the size and count of the files in a location
 	// We do not expect submission_location == archive_location || archive_location == backup_location
 	// Which is the reason for the OR statements
-	// When stable_id is set then file will have been removed from the inbox location
+	// When a file has been added to a dataset(i.e file id exists in the file_dataset table) then file will have been removed from the inbox location
 	// the file size will be the same in both archive and backup
 	const query = `
-SELECT SUM(CASE WHEN submission_location = $1 AND stable_id IS NULL THEN submission_file_size ELSE archive_file_size END ) AS size, COUNT(id)
-FROM sda.files
-WHERE (submission_location = $1 AND stable_id IS NULL) OR archive_location = $1 OR backup_location = $1;
+SELECT SUM(CASE WHEN f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE THEN f.submission_file_size ELSE f.archive_file_size END ) AS size, COUNT(*)
+FROM (
+SELECT f.submission_file_size, f.archive_file_size, f.submission_location, f.archive_location, f.backup_location,
+      (EXISTS (SELECT 1
+         FROM sda.file_dataset fd
+         WHERE fd.file_id = f.id)
+      ) AS file_in_dataset
+  FROM sda.files AS f
+) as f
+WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archive_location = $1 OR f.backup_location = $1;
 `
 
 	var size, count sql.Null[uint64]
