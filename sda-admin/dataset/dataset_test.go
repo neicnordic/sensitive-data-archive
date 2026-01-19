@@ -103,10 +103,6 @@ func TestRelease_PostRequestFailure(t *testing.T) {
 func TestRotateKey_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 
-	originalGet := helpers.GetResponseBody
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalGet }()
-
 	originalPost := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
 	defer func() { helpers.PostRequest = originalPost }()
@@ -115,69 +111,17 @@ func TestRotateKey_Success(t *testing.T) {
 	token := "test-token"
 	datasetID := "dataset-123"
 
-	// Mock getting file IDs
-	filesURL := "http://example.com/dataset/dataset-123/fileids"
-	filesResponse := []byte(`[{"fileID":"file-1","accessionID":"acc-1"},{"fileID":"file-2","accessionID":"acc-2"}]`)
-	mockHelpers.On("GetResponseBody", filesURL, token).Return(filesResponse, nil)
-
-	// Mock rotating keys for each file
-	rotateURL1 := "http://example.com/file/rotatekey/file-1"
-	mockHelpers.On("PostRequest", rotateURL1, token, []byte(nil)).Return([]byte(`{}`), nil)
-
-	rotateURL2 := "http://example.com/file/rotatekey/file-2"
-	mockHelpers.On("PostRequest", rotateURL2, token, []byte(nil)).Return([]byte(`{}`), nil)
+	// Mock rotating keys for dataset
+	rotateURL := "http://example.com/dataset/rotatekey/dataset-123"
+	mockHelpers.On("PostRequest", rotateURL, token, []byte(nil)).Return([]byte(`{}`), nil)
 
 	err := RotateKey(apiURI, token, datasetID)
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestRotateKey_GetFilesFailure(t *testing.T) {
+func TestRotateKey_Failure(t *testing.T) {
 	mockHelpers := new(MockHelpers)
-
-	originalGet := helpers.GetResponseBody
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalGet }()
-
-	apiURI := "http://example.com"
-	token := "test-token"
-	datasetID := "dataset-123"
-
-	filesURL := "http://example.com/dataset/dataset-123/fileids"
-	mockHelpers.On("GetResponseBody", filesURL, token).Return([]byte(nil), errors.New("API error"))
-
-	err := RotateKey(apiURI, token, datasetID)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get dataset file IDs")
-	mockHelpers.AssertExpectations(t)
-}
-
-func TestRotateKey_NoFiles(t *testing.T) {
-	mockHelpers := new(MockHelpers)
-
-	originalGet := helpers.GetResponseBody
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalGet }()
-
-	apiURI := "http://example.com"
-	token := "test-token"
-	datasetID := "dataset-123"
-
-	filesURL := "http://example.com/dataset/dataset-123/fileids"
-	mockHelpers.On("GetResponseBody", filesURL, token).Return([]byte(`[]`), nil)
-
-	err := RotateKey(apiURI, token, datasetID)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no files found for dataset")
-	mockHelpers.AssertExpectations(t)
-}
-
-func TestRotateKey_RotateFailure(t *testing.T) {
-	mockHelpers := new(MockHelpers)
-
-	originalGet := helpers.GetResponseBody
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalGet }()
 
 	originalPost := helpers.PostRequest
 	helpers.PostRequest = mockHelpers.PostRequest
@@ -187,15 +131,12 @@ func TestRotateKey_RotateFailure(t *testing.T) {
 	token := "test-token"
 	datasetID := "dataset-123"
 
-	filesURL := "http://example.com/dataset/dataset-123/fileids"
-	filesResponse := []byte(`[{"fileID":"file-1","accessionID":"acc-1"}]`)
-	mockHelpers.On("GetResponseBody", filesURL, token).Return(filesResponse, nil)
-
-	rotateURL := "http://example.com/file/rotatekey/file-1"
+	rotateURL := "http://example.com/dataset/rotatekey/dataset-123"
 	mockHelpers.On("PostRequest", rotateURL, token, []byte(nil)).Return([]byte(nil), errors.New("rotation failed"))
 
 	err := RotateKey(apiURI, token, datasetID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rotation failed")
 	mockHelpers.AssertExpectations(t)
+
 }

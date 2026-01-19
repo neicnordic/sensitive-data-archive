@@ -197,7 +197,7 @@ echo "Testing dataset key rotation via sda-admin CLI tool"
 # Use sda-admin CLI tool to rotate keys for the dataset
 # SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "EGAD100000000001"
 # Replaced sda-admin with direct API call since sda-admin is not available in the container
-resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/EGAD100000000001/rotatekey")
+resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/rotatekey/EGAD100000000001")
 
 if [ "$resp" != "200" ]; then
     echo "Error when running dataset rotatekey command, expected 200 got: $resp"
@@ -293,32 +293,11 @@ echo "Testing dataset key rotation with non-existent dataset"
 
 # SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "NONEXISTENT" 2>/dev/null
 # Replaced sda-admin with direct API call
-resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/NONEXISTENT/rotatekey")
+resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/rotatekey/NONEXISTENT")
 
 if [ "$resp" != "404" ]; then
     echo "Expected 404 for non-existent dataset, got: $resp"
     exit 1
 fi
 
-## test getting dataset file IDs via API
-echo "Testing dataset file IDs endpoint"
-
-dataset_fileids="$(curl -s -k -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD100000000001/fileids")"
-fileids_count="$(echo "$dataset_fileids" | jq '. | length')"
-if [ "$fileids_count" -ne 2 ]; then
-    echo "Expected 2 file IDs, got: $fileids_count"
-    exit 1
-fi
-
-# verify the file IDs contain both fileID and accessionID
-file1_has_fileid="$(echo "$dataset_fileids" | jq -r '.[0].fileID' | grep -c "$fileID1" || true)"
-file1_has_accession="$(echo "$dataset_fileids" | jq -r '.[0].accessionID' | grep -c "EGAF123456789" || true)"
-if [ "$file1_has_fileid" -ne 1 ] || [ "$file1_has_accession" -ne 1 ]; then
-    echo "File IDs endpoint doesn't return correct structure"
-    echo "Response: $dataset_fileids"
-    exit 1
-fi
-
-echo "Dataset file IDs endpoint working correctly"
-
-printf "\033[32mDataset admin CLI rotate key integration tests completed successfully\033[0m\n"
+echo "Dataset admin CLI rotate key integration tests completed successfully"

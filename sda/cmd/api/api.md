@@ -182,38 +182,21 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X PUT  https://HOSTNAME/dataset/verify/my-dataset-01
     ```
 
-- `/dataset/:dataset/files`
-  - accepts `GET` requests with the dataset name as parameter
-  - Returns all files in the dataset as a JSON array.
+- `/dataset/rotatekey/:dataset`
+  - accepts `POST` requests with the dataset name as parameter
+  - Triggers key rotation for all files in the dataset by sending a message to the rotatekey queue for each file.
 
   - Error codes
-    - `200` Query execute ok.
-    - `400` Dataset ID not provided.
+    - `200` Key rotation triggered successfully.
+    - `400` Dataset ID not provided or message validation failed.
     - `401` Token user is not in the list of admins.
     - `404` No files found for dataset.
-    - `500` Internal error due to DB failures.
+    - `500` Internal error due to DB or MQ failures.
 
     Example:
 
     ```bash
-    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/dataset/my-dataset-01/files
-    ```
-
-- `/dataset/:dataset/fileids`
-  - accepts `GET` requests with the dataset name as parameter
-  - Returns file IDs (both internal file ID and accession ID) for all files in the dataset as a JSON array.
-
-  - Error codes
-    - `200` Query execute ok.
-    - `400` Dataset ID not provided.
-    - `401` Token user is not in the list of admins.
-    - `404` No files found for dataset.
-    - `500` Internal error due to DB failures.
-
-    Example:
-
-    ```bash
-    curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/dataset/my-dataset-01/fileids
+    curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/rotatekey/my-dataset-01
     ```
 
 - `/file/rotatekey/:fileid`

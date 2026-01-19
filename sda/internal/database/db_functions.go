@@ -1320,18 +1320,13 @@ func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 	return unencryptedChecksum, nil
 }
 
-// DatasetFileIDs holds both the internal file ID and stable accession ID
-type DatasetFileIDs struct {
-	FileID      string `json:"fileID"`
-	AccessionID string `json:"accessionID"`
-}
-
-func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]DatasetFileIDs, error) {
+// GetDatasetFiles returns all files in a dataset
+func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
-	var files []DatasetFileIDs
-	rows, err := db.Query("SELECT id, stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
+	var accessions []string
+	rows, err := db.Query("SELECT stable_id FROM sda.files WHERE id IN (SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1));", dataset)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,16 +1336,44 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]DatasetFileIDs, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var file DatasetFileIDs
-		err := rows.Scan(&file.FileID, &file.AccessionID)
+		var accession string
+		err := rows.Scan(&accession)
 		if err != nil {
 			return nil, err
 		}
 
-		files = append(files, file)
+		accessions = append(accessions, accession)
 	}
 
-	return files, nil
+	return accessions, nil
+}
+
+// GetDatasetFileIDs returns all file IDs in a dataset
+func (dbs *SDAdb) GetDatasetFileIDs(dataset string) ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var fileIDs []string
+	rows, err := db.Query("SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1);", dataset)
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var fileID string
+		err := rows.Scan(&fileID)
+		if err != nil {
+			return nil, err
+		}
+
+		fileIDs = append(fileIDs, fileID)
+	}
+
+	return fileIDs, nil
 }
 
 // GetFileDetailsFromUUID() retrieves user, path and correlation id by giving the file UUID
