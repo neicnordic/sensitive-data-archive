@@ -104,12 +104,15 @@ These settings control how `ingest` connects to the RabbitMQ message broker.
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
 
 ### Storage settings
-The ingest service requires access to the "inbox", and "archive" storages, to configure such the following config is needed:
+The ingest service requires access to the "inbox", and "archive" storages, "backup" storage is optional if to also delete files from backup storage when a file is cancelled, 
+to configure such the following config is needed:
 ```yaml
 storage:
   inbox:
     ${STORAGE_IMPLEMENTATION}:
   archive:
+    ${STORAGE_IMPLEMENTATION}:
+  backup: # Exclude if no backup storage
     ${STORAGE_IMPLEMENTATION}:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/READMD.md)

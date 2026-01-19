@@ -410,6 +410,7 @@ WHERE file_id = $1;`
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
+
 		return false, err
 	}
 
@@ -578,22 +579,32 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT archive_file_path, archive_file_size, archive_location from sda.files WHERE id = $1;"
+	const query = "SELECT archive_file_path, archive_file_size, archive_location, backup_path, backup_location from sda.files WHERE id = $1;"
 
-	var archiveFilePath, archiveLocation sql.NullString
+	var archiveFilePath, archiveLocation, backupFilePath, backupLocation sql.NullString
 	var archiveFileSize sql.Null[int]
-	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation); err != nil {
+	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation, &backupFilePath, &backupLocation); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
 	if archiveFilePath.Valid || archiveFileSize.Valid || archiveLocation.Valid {
-		return &ArchiveData{
-			FilePath: archiveFilePath.String,
-			Location: archiveLocation.String,
-			FileSize: archiveFileSize.V,
-		}, nil
+		ad := &ArchiveData{
+			FilePath:       archiveFilePath.String,
+			Location:       archiveLocation.String,
+			FileSize:       archiveFileSize.V,
+			BackupFilePath: backupFilePath.String,
+			BackupLocation: backupLocation.String,
+		}
+		if backupFilePath.Valid {
+			ad.BackupFilePath = backupFilePath.String
+		}
+		if backupLocation.Valid {
+			ad.BackupLocation = backupLocation.String
+		}
+
+		return ad, nil
 	}
 
 	// We have a files table entry but archive data has not been set
