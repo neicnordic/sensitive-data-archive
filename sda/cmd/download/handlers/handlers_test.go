@@ -588,3 +588,213 @@ func TestDownloadByQuery_ByFilePath_FileNotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// Database error tests for info handlers
+
+func TestInfoDatasets_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"dataset1"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/datasets", h.InfoDatasets)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/datasets", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "failed to retrieve datasets")
+}
+
+func TestInfoDataset_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset", h.InfoDataset)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "failed to retrieve dataset info")
+}
+
+func TestInfoDatasetFiles_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/info/dataset/files", h.InfoDatasetFiles)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset/files?dataset=test-dataset", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "failed to retrieve dataset files")
+}
+
+// Unauthenticated tests for info endpoints
+
+func TestInfoDatasets_Unauthenticated(t *testing.T) {
+	router := gin.New()
+	h := newTestHandlers(t)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/datasets", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestInfoDatasetFiles_Unauthenticated(t *testing.T) {
+	router := gin.New()
+	h := newTestHandlers(t)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/info/dataset/files?dataset=test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// Download handler database error tests
+
+func TestDownloadByFileID_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file/:fileId", h.DownloadByFileID)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file/test-file-id", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDownloadByQuery_ByFileID_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test-dataset&fileId=test-id", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDownloadByQuery_ByFilePath_DatabaseError(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"test-dataset"})
+	mockDB := &mockDatabase{
+		err: assert.AnError,
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test-dataset&filePath=/path/file.c4gh", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDownloadByQuery_AccessDenied(t *testing.T) {
+	// User has access to "other-dataset" but not "test-dataset"
+	router := setupTestRouterWithAuth([]string{"other-dataset"})
+	mockDB := &mockDatabase{
+		// File exists but user doesn't have access to the dataset
+		fileByID: &database.File{
+			ID:          "test-id",
+			DatasetID:   "test-dataset",
+			Header:      []byte("header"),
+			ArchivePath: "/archive/test.c4gh",
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test-dataset&fileId=test-id", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestDownloadByQuery_Unauthenticated(t *testing.T) {
+	router := gin.New()
+	h := newTestHandlers(t)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=test&fileId=test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestDownloadByFileID_Unauthenticated(t *testing.T) {
+	router := gin.New()
+	h := newTestHandlers(t)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/file/test-id", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}

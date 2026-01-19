@@ -260,3 +260,205 @@ func TestCheckFilePermission_Denied(t *testing.T) {
 	assert.False(t, hasPermission)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// Error handling tests
+
+func TestGetUserDatasets_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[getUserDatasetsQuery]).
+		WithArgs(pq.Array([]string{"visa1"})).
+		WillReturnError(sql.ErrConnDone)
+
+	datasets, err := db.GetUserDatasets(context.Background(), []string{"visa1"})
+
+	assert.Error(t, err)
+	assert.Nil(t, datasets)
+	assert.Contains(t, err.Error(), "failed to query datasets")
+}
+
+func TestGetDatasetInfo_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[getDatasetInfoQuery]).
+		WithArgs("dataset-1").
+		WillReturnError(sql.ErrConnDone)
+
+	info, err := db.GetDatasetInfo(context.Background(), "dataset-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, info)
+	assert.Contains(t, err.Error(), "failed to query dataset info")
+}
+
+func TestGetDatasetFiles_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[getDatasetFilesQuery]).
+		WithArgs("dataset-1").
+		WillReturnError(sql.ErrConnDone)
+
+	files, err := db.GetDatasetFiles(context.Background(), "dataset-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, files)
+	assert.Contains(t, err.Error(), "failed to query dataset files")
+}
+
+func TestGetDatasetFiles_Empty(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum", "decrypted_file_checksum_type",
+	})
+
+	mock.ExpectQuery(queries[getDatasetFilesQuery]).
+		WithArgs("empty-dataset").
+		WillReturnRows(rows)
+
+	files, err := db.GetDatasetFiles(context.Background(), "empty-dataset")
+
+	assert.NoError(t, err)
+	assert.Empty(t, files)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetFileByID_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[getFileByIDQuery]).
+		WithArgs("file-1").
+		WillReturnError(sql.ErrConnDone)
+
+	file, err := db.GetFileByID(context.Background(), "file-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "failed to query file by ID")
+}
+
+func TestGetFileByPath_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[getFileByPathQuery]).
+		WithArgs("dataset-1", "/path/file.txt").
+		WillReturnError(sql.ErrConnDone)
+
+	file, err := db.GetFileByPath(context.Background(), "dataset-1", "/path/file.txt")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "failed to query file by path")
+}
+
+func TestGetFileByPath_NotFound(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header",
+	})
+
+	mock.ExpectQuery(queries[getFileByPathQuery]).
+		WithArgs("dataset-1", "/nonexistent").
+		WillReturnRows(rows)
+
+	file, err := db.GetFileByPath(context.Background(), "dataset-1", "/nonexistent")
+
+	assert.NoError(t, err)
+	assert.Nil(t, file)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckFilePermission_QueryError(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mock.ExpectQuery(queries[checkFilePermissionQuery]).
+		WithArgs("file-1", pq.Array([]string{"visa1"})).
+		WillReturnError(sql.ErrConnDone)
+
+	hasPermission, err := db.CheckFilePermission(context.Background(), "file-1", []string{"visa1"})
+
+	assert.Error(t, err)
+	assert.False(t, hasPermission)
+	assert.Contains(t, err.Error(), "failed to check file permission")
+}
+
+// Package-level function tests
+
+func TestRegisterAndGetDB(t *testing.T) {
+	mockDB := &mockTestDatabase{}
+
+	RegisterDatabase(mockDB)
+	defer RegisterDatabase(nil)
+
+	retrieved := GetDB()
+	assert.Equal(t, mockDB, retrieved)
+}
+
+func TestClose_WithNilDB(t *testing.T) {
+	// Save current db
+	oldDB := db
+	defer func() { db = oldDB }()
+
+	db = nil
+	err := Close()
+	assert.NoError(t, err)
+}
+
+func TestClose_WithDB(t *testing.T) {
+	// Save current db
+	oldDB := db
+	defer func() { db = oldDB }()
+
+	mockDB := &mockTestDatabase{}
+	db = mockDB
+	err := Close()
+	assert.NoError(t, err)
+	assert.True(t, mockDB.closed)
+}
+
+// mockTestDatabase for package-level function tests
+type mockTestDatabase struct {
+	closed bool
+}
+
+func (m *mockTestDatabase) Close() error {
+	m.closed = true
+
+	return nil
+}
+
+func (m *mockTestDatabase) GetUserDatasets(_ context.Context, _ []string) ([]Dataset, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) GetDatasetInfo(_ context.Context, _ string) (*DatasetInfo, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) GetDatasetFiles(_ context.Context, _ string) ([]File, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) GetFileByID(_ context.Context, _ string) (*File, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) GetFileByPath(_ context.Context, _, _ string) (*File, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) CheckFilePermission(_ context.Context, _ string, _ []string) (bool, error) {
+	return false, nil
+}
