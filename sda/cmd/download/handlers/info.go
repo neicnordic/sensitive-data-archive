@@ -5,16 +5,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	log "github.com/sirupsen/logrus"
 )
 
 // InfoDatasets returns a list of datasets the user has access to.
 // GET /info/datasets
 func (h *Handlers) InfoDatasets(c *gin.Context) {
-	// TODO: Extract visas from authenticated user context
-	visas := []string{} // Placeholder
+	authCtx, ok := middleware.GetAuthContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 
-	datasets, err := database.GetUserDatasets(c.Request.Context(), visas)
+		return
+	}
+
+	datasets, err := database.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
 	if err != nil {
+		log.Errorf("failed to retrieve datasets: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve datasets"})
 
 		return
@@ -33,10 +40,23 @@ func (h *Handlers) InfoDataset(c *gin.Context) {
 		return
 	}
 
-	// TODO: Check user has access to this dataset
+	// Check user has access to this dataset
+	authCtx, ok := middleware.GetAuthContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+
+		return
+	}
+
+	if !hasDatasetAccess(authCtx.Datasets, datasetID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied to dataset"})
+
+		return
+	}
 
 	info, err := database.GetDatasetInfo(c.Request.Context(), datasetID)
 	if err != nil {
+		log.Errorf("failed to retrieve dataset info: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve dataset info"})
 
 		return
@@ -61,14 +81,38 @@ func (h *Handlers) InfoDatasetFiles(c *gin.Context) {
 		return
 	}
 
-	// TODO: Check user has access to this dataset
+	// Check user has access to this dataset
+	authCtx, ok := middleware.GetAuthContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+
+		return
+	}
+
+	if !hasDatasetAccess(authCtx.Datasets, datasetID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied to dataset"})
+
+		return
+	}
 
 	files, err := database.GetDatasetFiles(c.Request.Context(), datasetID)
 	if err != nil {
+		log.Errorf("failed to retrieve dataset files: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve dataset files"})
 
 		return
 	}
 
 	c.JSON(http.StatusOK, files)
+}
+
+// hasDatasetAccess checks if the user has access to a specific dataset.
+func hasDatasetAccess(userDatasets []string, datasetID string) bool {
+	for _, d := range userDatasets {
+		if d == datasetID {
+			return true
+		}
+	}
+
+	return false
 }

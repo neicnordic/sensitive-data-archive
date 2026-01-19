@@ -105,9 +105,13 @@ sda/
 │       ├── database/                # App-specific DB queries
 │       │   └── database.go
 │       ├── handlers/
+│       │   ├── handlers.go          # Handler struct + route registration
+│       │   ├── options.go           # Options pattern for dependencies
 │       │   ├── info.go              # /info/* endpoint handlers
 │       │   ├── file.go              # /file/* endpoint handlers
 │       │   └── health.go            # /health/* endpoint handlers
+│       ├── health/
+│       │   └── health.go            # gRPC health server for K8s probes
 │       ├── middleware/
 │       │   └── auth.go              # OIDC/visa authentication
 │       └── reencrypt/
@@ -122,69 +126,71 @@ sda/
 
 ## Implementation Phases
 
-### Phase 1: Project Setup
+### Phase 1: Project Setup ✅
 
-- [ ] Create branch from `feature/multiple-backends-wip`
-- [ ] Set up directory structure under `sda/cmd/download/`
-- [ ] Create `main.go` with basic server setup
+- [x] Create branch from `feature/multiple-backends-wip`
+- [x] Set up directory structure under `sda/cmd/download/`
+- [x] Create `main.go` with basic server setup
 
-### Phase 2: Configuration
+### Phase 2: Configuration ✅
 
-- [ ] Create `internal/config/v2/config.go` (shared framework if not exists)
-- [ ] Create `cmd/download/config/config.go` (app-specific registration)
-- [ ] Use flag-based registration pattern (like sda-validator/orchestrator)
-- [ ] Configuration options:
-  - `download.host`, `download.port`
-  - `download.serverCert`, `download.serverKey`
+- [x] Create `internal/config/v2/config.go` (shared framework if not exists)
+- [x] Create `cmd/download/config/config.go` (app-specific registration)
+- [x] Use flag-based registration pattern (like sda-validator/orchestrator)
+- [x] Configuration options:
+  - `api.host`, `api.port`
+  - `api.server-cert`, `api.server-key`
   - `grpc.*` (reencrypt service connection)
   - `oidc.*` (authentication)
-  - `storage.archive.*` (uses storage/v2 format)
+  - `session.*` (session caching)
   - `db.*` (database connection)
 
-### Phase 3: Database Layer
+### Phase 3: Database Layer ✅
 
-- [ ] Create `cmd/download/database/database.go` (app-specific queries)
-- [ ] Required queries (specific to download service):
+- [x] Create `cmd/download/database/database.go` (app-specific queries)
+- [x] Required queries (specific to download service):
   - `GetUserDatasets(ctx, visas)` - datasets from user's visas
   - `GetDatasetInfo(ctx, datasetID)` - metadata (date, file count, total size)
   - `GetDatasetFiles(ctx, datasetID)` - list files with metadata
   - `GetFileByID(ctx, fileID)` - file info for download
   - `GetFileByPath(ctx, datasetID, filePath)` - lookup by submitted path
-  - `CheckFilePermission(ctx, fileID)` - verify access rights
+  - `CheckFilePermission(ctx, fileID, visas)` - verify access rights
 
-### Phase 4: Authentication Middleware
+### Phase 4: Authentication Middleware ✅
 
-- [ ] Create `cmd/download/middleware/auth.go`
-- [ ] OIDC token validation
-- [ ] Visa extraction for dataset permissions
-- [ ] Session caching (optional, for performance)
+- [x] Create `cmd/download/middleware/auth.go`
+- [x] OIDC token validation (JWT verification via JWKS)
+- [x] Visa extraction for dataset permissions (GA4GH passport v1)
+- [x] Session caching with ristretto
 
-### Phase 5: Info Endpoints
+### Phase 5: Info Endpoints ✅
 
-- [ ] `GET /info/datasets` - return user's accessible datasets
-- [ ] `GET /info/dataset` - return dataset metadata
-- [ ] `GET /info/dataset/files` - return file list with metadata
+- [x] `GET /info/datasets` - return user's accessible datasets
+- [x] `GET /info/dataset` - return dataset metadata
+- [x] `GET /info/dataset/files` - return file list with metadata
+- [x] Auth middleware integration with dataset access checks
 
-### Phase 6: Download Endpoints
+### Phase 6: Download Endpoints 🔄
 
-- [ ] `GET /file/{fileId}` - download with path parameter
-  - Parse `Range` header (RFC 7233)
-  - Require `public_key` header
-  - Use `storage/v2` Reader for file access
-  - Re-encrypt header via gRPC
-- [ ] `GET /file` - download with query parameters
-  - Support `fileId` OR `filePath` (not both)
-  - Require `dataset` parameter
-  - Lookup fileId from path when needed
+- [x] `GET /file/{fileId}` - download with path parameter (structure ready)
+  - [x] Require `public_key` header
+  - [x] Permission check via auth context
+  - [ ] Parse `Range` header (RFC 7233)
+  - [ ] Use `storage/v2` Reader for file access
+  - [ ] Re-encrypt header via gRPC
+  - [ ] Stream file content to client
+- [x] `GET /file` - download with query parameters (structure ready)
+  - [x] Support `fileId` OR `filePath` (not both)
+  - [x] Require `dataset` parameter
+  - [x] Lookup fileId from path when needed
+  - [ ] Implement actual file streaming
 
-### Phase 7: Health Endpoints
+### Phase 7: Health Endpoints ✅
 
-- [ ] `GET /health/ready` - check all dependencies:
-  - Database connection
-  - Storage backend(s)
-  - gRPC reencrypt service
-  - OIDC endpoint
-- [ ] `GET /health/live` - simple 200 OK
+- [x] `GET /health/ready` - check all dependencies (placeholder)
+- [x] `GET /health/live` - simple 200 OK
+- [x] gRPC Health Server for Kubernetes probes (port 8081)
+- [x] Options pattern for dependency injection (like sda-validator/orchestrator)
 
 ### Phase 8: Testing (Parallel with Development)
 

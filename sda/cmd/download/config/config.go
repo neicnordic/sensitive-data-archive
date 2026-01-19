@@ -13,6 +13,7 @@ var (
 	apiPort       int
 	apiServerCert string
 	apiServerKey  string
+	healthPort    int
 
 	// Database configuration
 	dbHost     string
@@ -31,9 +32,18 @@ var (
 	grpcClientKey  string
 
 	// OIDC configuration
-	oidcIssuer   string
-	oidcJWKSURL  string
-	oidcAudience string
+	oidcIssuer      string
+	oidcJWKSURL     string
+	oidcAudience    string
+	oidcTrustedList []string
+	oidcUserinfoURL string
+
+	// Session configuration
+	sessionExpiration int
+	sessionDomain     string
+	sessionSecure     bool
+	sessionHTTPOnly   bool
+	sessionName       string
 )
 
 func init() {
@@ -77,6 +87,16 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				apiServerKey = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "health.port",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 8081, "Port for gRPC health check server")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				healthPort = viper.GetInt(flagName)
 			},
 		},
 
@@ -235,6 +255,78 @@ func init() {
 				oidcAudience = viper.GetString(flagName)
 			},
 		},
+		&config.Flag{
+			Name: "oidc.trusted-issuers",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.StringSlice(flagName, []string{}, "List of trusted OIDC issuers for visa validation")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				oidcTrustedList = viper.GetStringSlice(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "oidc.userinfo-url",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "OIDC userinfo endpoint URL (optional, derived from issuer if not set)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				oidcUserinfoURL = viper.GetString(flagName)
+			},
+		},
+
+		// Session flags
+		&config.Flag{
+			Name: "session.expiration",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 3600, "Session expiration time in seconds")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sessionExpiration = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "session.domain",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Cookie domain for session")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sessionDomain = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "session.secure",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Bool(flagName, true, "Use secure cookies (HTTPS only)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sessionSecure = viper.GetBool(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "session.http-only",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Bool(flagName, true, "HTTP only cookies (not accessible via JavaScript)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sessionHTTPOnly = viper.GetBool(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "session.name",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "sda_session", "Session cookie name")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sessionName = viper.GetString(flagName)
+			},
+		},
 	)
 }
 
@@ -256,6 +348,11 @@ func APIServerCert() string {
 // APIServerKey returns the path to the server key.
 func APIServerKey() string {
 	return apiServerKey
+}
+
+// HealthPort returns the port for the gRPC health check server.
+func HealthPort() int {
+	return healthPort
 }
 
 // DBHost returns the database host.
@@ -331,4 +428,39 @@ func OIDCJWKSURL() string {
 // OIDCAudience returns the expected OIDC audience.
 func OIDCAudience() string {
 	return oidcAudience
+}
+
+// OIDCTrustedList returns the list of trusted OIDC issuers.
+func OIDCTrustedList() []string {
+	return oidcTrustedList
+}
+
+// OIDCUserinfoURL returns the OIDC userinfo endpoint URL.
+func OIDCUserinfoURL() string {
+	return oidcUserinfoURL
+}
+
+// SessionExpiration returns the session expiration time in seconds.
+func SessionExpiration() int {
+	return sessionExpiration
+}
+
+// SessionDomain returns the cookie domain for sessions.
+func SessionDomain() string {
+	return sessionDomain
+}
+
+// SessionSecure returns whether to use secure cookies.
+func SessionSecure() bool {
+	return sessionSecure
+}
+
+// SessionHTTPOnly returns whether cookies are HTTP only.
+func SessionHTTPOnly() bool {
+	return sessionHTTPOnly
+}
+
+// SessionName returns the session cookie name.
+func SessionName() string {
+	return sessionName
 }

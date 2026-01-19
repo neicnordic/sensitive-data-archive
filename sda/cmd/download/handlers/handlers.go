@@ -2,17 +2,36 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 )
 
 // Handlers holds the dependencies for HTTP handlers.
 type Handlers struct {
-	// Add dependencies here as needed (database, storage, etc.)
+	db            database.Database
+	storageReader storage.Reader
+	grpcHost      string
+	grpcPort      int
 }
 
-// New creates a new Handlers instance with the given dependencies.
-func New() *Handlers {
-	return &Handlers{}
+// New creates a new Handlers instance with the given options.
+func New(options ...func(*Handlers)) (*Handlers, error) {
+	h := &Handlers{}
+
+	for _, option := range options {
+		option(h)
+	}
+
+	// Validate required dependencies
+	if h.db == nil {
+		return nil, errors.New("database is required")
+	}
+
+	return h, nil
 }
 
 // RegisterRoutes registers all HTTP routes with the given gin engine.
@@ -26,7 +45,7 @@ func (h *Handlers) RegisterRoutes(r *gin.Engine) {
 
 	// Info endpoints (auth required)
 	info := r.Group("/info")
-	// TODO: Add auth middleware
+	info.Use(middleware.TokenMiddleware())
 	{
 		info.GET("/datasets", h.InfoDatasets)
 		info.GET("/dataset", h.InfoDataset)
@@ -35,7 +54,7 @@ func (h *Handlers) RegisterRoutes(r *gin.Engine) {
 
 	// File download endpoints (auth required)
 	file := r.Group("/file")
-	// TODO: Add auth middleware
+	file.Use(middleware.TokenMiddleware())
 	{
 		file.GET("/:fileId", h.DownloadByFileID)
 		file.GET("", h.DownloadByQuery)

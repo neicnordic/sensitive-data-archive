@@ -4,6 +4,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,98 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	log "github.com/sirupsen/logrus"
 )
+
+// Query name constants
+const (
+	getUserDatasetsQuery     = "getUserDatasets"
+	getDatasetInfoQuery      = "getDatasetInfo"
+	getDatasetFilesQuery     = "getDatasetFiles"
+	getFileByIDQuery         = "getFileByID"
+	getFileByPathQuery       = "getFileByPath"
+	checkFilePermissionQuery = "checkFilePermission"
+)
+
+// queries contains all SQL queries used by the download service.
+// These are prepared at startup to verify correctness and improve performance.
+var queries = map[string]string{
+	getUserDatasetsQuery: `
+		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
+		FROM sda.datasets d
+		INNER JOIN sda.dataset_permission_table dp ON d.id = dp.dataset_id
+		WHERE dp.title = ANY($1)
+		ORDER BY d.created_at DESC`,
+
+	getDatasetInfoQuery: `
+		SELECT
+			d.stable_id,
+			d.title,
+			d.description,
+			d.created_at,
+			COUNT(f.id) as file_count,
+			COALESCE(SUM(f.decrypted_file_size), 0) as total_size
+		FROM sda.datasets d
+		LEFT JOIN sda.file_dataset fd ON d.id = fd.dataset_id
+		LEFT JOIN sda.files f ON fd.file_id = f.id
+		WHERE d.stable_id = $1
+		GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at`,
+
+	getDatasetFilesQuery: `
+		SELECT
+			f.stable_id,
+			d.stable_id as dataset_id,
+			f.submission_file_path,
+			f.archive_file_path,
+			f.archive_file_size,
+			f.decrypted_file_size,
+			f.decrypted_file_checksum,
+			f.decrypted_file_checksum_type
+		FROM sda.files f
+		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		WHERE d.stable_id = $1 AND f.stable_id IS NOT NULL
+		ORDER BY f.submission_file_path`,
+
+	getFileByIDQuery: `
+		SELECT
+			f.stable_id,
+			d.stable_id as dataset_id,
+			f.submission_file_path,
+			f.archive_file_path,
+			f.archive_file_size,
+			f.decrypted_file_size,
+			f.decrypted_file_checksum,
+			f.decrypted_file_checksum_type,
+			f.header
+		FROM sda.files f
+		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		WHERE f.stable_id = $1`,
+
+	getFileByPathQuery: `
+		SELECT
+			f.stable_id,
+			d.stable_id as dataset_id,
+			f.submission_file_path,
+			f.archive_file_path,
+			f.archive_file_size,
+			f.decrypted_file_size,
+			f.decrypted_file_checksum,
+			f.decrypted_file_checksum_type,
+			f.header
+		FROM sda.files f
+		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		WHERE d.stable_id = $1 AND f.submission_file_path = $2`,
+
+	checkFilePermissionQuery: `
+		SELECT EXISTS(
+			SELECT 1
+			FROM sda.files f
+			INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+			INNER JOIN sda.dataset_permission_table dp ON fd.dataset_id = dp.dataset_id
+			WHERE f.stable_id = $1 AND dp.title = ANY($2)
+		)`,
+}
 
 // Database defines the interface for download service database operations.
 type Database interface {
@@ -56,20 +149,21 @@ type DatasetInfo struct {
 
 // File represents a file in the archive.
 type File struct {
-	ID                  string `json:"fileId"`
-	DatasetID           string `json:"datasetId"`
-	SubmittedPath       string `json:"filePath"`
-	ArchivePath         string `json:"-"`
-	ArchiveSize         int64  `json:"archiveSize"`
-	DecryptedSize       int64  `json:"decryptedSize"`
-	DecryptedChecksum   string `json:"decryptedChecksum"`
+	ID                    string `json:"fileId"`
+	DatasetID             string `json:"datasetId"`
+	SubmittedPath         string `json:"filePath"`
+	ArchivePath           string `json:"-"`
+	ArchiveSize           int64  `json:"archiveSize"`
+	DecryptedSize         int64  `json:"decryptedSize"`
+	DecryptedChecksum     string `json:"decryptedChecksum"`
 	DecryptedChecksumType string `json:"decryptedChecksumType"`
-	Header              []byte `json:"-"`
+	Header                []byte `json:"-"`
 }
 
 // PostgresDB implements the Database interface for PostgreSQL.
 type PostgresDB struct {
-	db *sql.DB
+	db                 *sql.DB
+	preparedStatements map[string]*sql.Stmt
 }
 
 var db Database
@@ -79,7 +173,13 @@ func RegisterDatabase(d Database) {
 	db = d
 }
 
+// GetDB returns the registered database instance.
+func GetDB() Database {
+	return db
+}
+
 // Init initializes the database connection using configuration values.
+// All queries are prepared at startup to verify correctness and improve runtime performance.
 func Init() error {
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
@@ -115,7 +215,25 @@ func Init() error {
 
 	log.Info("Database connection established")
 
-	RegisterDatabase(&PostgresDB{db: sqlDB})
+	// Prepare all statements to verify correctness and improve performance
+	preparedStatements := make(map[string]*sql.Stmt)
+	for queryName, query := range queries {
+		preparedStmt, err := sqlDB.PrepareContext(ctx, query)
+		if err != nil {
+			log.Errorf("failed to prepare query: %s, due to: %v", queryName, err)
+
+			return errors.Join(fmt.Errorf("failed to prepare query: %s", queryName), err)
+		}
+		preparedStatements[queryName] = preparedStmt
+		log.Debugf("Prepared query: %s", queryName)
+	}
+
+	log.Infof("Successfully prepared %d database queries", len(preparedStatements))
+
+	RegisterDatabase(&PostgresDB{
+		db:                 sqlDB,
+		preparedStatements: preparedStatements,
+	})
 
 	return nil
 }
@@ -129,22 +247,22 @@ func Close() error {
 	return nil
 }
 
-// Close closes the PostgreSQL database connection.
+// Close closes the PostgreSQL database connection and all prepared statements.
 func (p *PostgresDB) Close() error {
+	// Close all prepared statements first
+	for name, stmt := range p.preparedStatements {
+		if err := stmt.Close(); err != nil {
+			log.Warnf("failed to close prepared statement %s: %v", name, err)
+		}
+	}
+
 	return p.db.Close()
 }
 
 // GetUserDatasets returns datasets the user has access to based on their visas.
 func (p *PostgresDB) GetUserDatasets(ctx context.Context, visas []string) ([]Dataset, error) {
-	query := `
-		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
-		FROM sda.datasets d
-		INNER JOIN sda.dataset_permission_table dp ON d.id = dp.dataset_id
-		WHERE dp.title = ANY($1)
-		ORDER BY d.created_at DESC
-	`
-
-	rows, err := p.db.QueryContext(ctx, query, pq.Array(visas))
+	stmt := p.preparedStatements[getUserDatasetsQuery]
+	rows, err := stmt.QueryContext(ctx, pq.Array(visas))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query datasets: %w", err)
 	}
@@ -171,24 +289,11 @@ func (p *PostgresDB) GetUserDatasets(ctx context.Context, visas []string) ([]Dat
 
 // GetDatasetInfo returns metadata for a specific dataset.
 func (p *PostgresDB) GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error) {
-	query := `
-		SELECT 
-			d.stable_id, 
-			d.title, 
-			d.description, 
-			d.created_at,
-			COUNT(f.id) as file_count,
-			COALESCE(SUM(f.decrypted_file_size), 0) as total_size
-		FROM sda.datasets d
-		LEFT JOIN sda.file_dataset fd ON d.id = fd.dataset_id
-		LEFT JOIN sda.files f ON fd.file_id = f.id
-		WHERE d.stable_id = $1
-		GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at
-	`
+	stmt := p.preparedStatements[getDatasetInfoQuery]
 
 	var info DatasetInfo
 	var title, description sql.NullString
-	err := p.db.QueryRowContext(ctx, query, datasetID).Scan(
+	err := stmt.QueryRowContext(ctx, datasetID).Scan(
 		&info.ID,
 		&title,
 		&description,
@@ -211,24 +316,8 @@ func (p *PostgresDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Dat
 
 // GetDatasetFiles returns files in a dataset.
 func (p *PostgresDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error) {
-	query := `
-		SELECT 
-			f.stable_id,
-			d.stable_id as dataset_id,
-			f.submission_file_path,
-			f.archive_file_path,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		WHERE d.stable_id = $1 AND f.stable_id IS NOT NULL
-		ORDER BY f.submission_file_path
-	`
-
-	rows, err := p.db.QueryContext(ctx, query, datasetID)
+	stmt := p.preparedStatements[getDatasetFilesQuery]
+	rows, err := stmt.QueryContext(ctx, datasetID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query dataset files: %w", err)
 	}
@@ -268,27 +357,12 @@ func (p *PostgresDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]F
 
 // GetFileByID returns file information by stable ID.
 func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, error) {
-	query := `
-		SELECT 
-			f.stable_id,
-			d.stable_id as dataset_id,
-			f.submission_file_path,
-			f.archive_file_path,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type,
-			f.header
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		WHERE f.stable_id = $1
-	`
+	stmt := p.preparedStatements[getFileByIDQuery]
 
 	var f File
 	var archivePath, decryptedChecksum, decryptedChecksumType sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
-	err := p.db.QueryRowContext(ctx, query, fileID).Scan(
+	err := stmt.QueryRowContext(ctx, fileID).Scan(
 		&f.ID,
 		&f.DatasetID,
 		&f.SubmittedPath,
@@ -317,27 +391,12 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 
 // GetFileByPath returns file information by dataset and submitted path.
 func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath string) (*File, error) {
-	query := `
-		SELECT 
-			f.stable_id,
-			d.stable_id as dataset_id,
-			f.submission_file_path,
-			f.archive_file_path,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type,
-			f.header
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		WHERE d.stable_id = $1 AND f.submission_file_path = $2
-	`
+	stmt := p.preparedStatements[getFileByPathQuery]
 
 	var f File
 	var archivePath, decryptedChecksum, decryptedChecksumType sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
-	err := p.db.QueryRowContext(ctx, query, datasetID, filePath).Scan(
+	err := stmt.QueryRowContext(ctx, datasetID, filePath).Scan(
 		&f.ID,
 		&f.DatasetID,
 		&f.SubmittedPath,
@@ -366,18 +425,10 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 
 // CheckFilePermission verifies the user has access to download a file.
 func (p *PostgresDB) CheckFilePermission(ctx context.Context, fileID string, visas []string) (bool, error) {
-	query := `
-		SELECT EXISTS(
-			SELECT 1
-			FROM sda.files f
-			INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-			INNER JOIN sda.dataset_permission_table dp ON fd.dataset_id = dp.dataset_id
-			WHERE f.stable_id = $1 AND dp.title = ANY($2)
-		)
-	`
+	stmt := p.preparedStatements[checkFilePermissionQuery]
 
 	var hasPermission bool
-	err := p.db.QueryRowContext(ctx, query, fileID, pq.Array(visas)).Scan(&hasPermission)
+	err := stmt.QueryRowContext(ctx, fileID, pq.Array(visas)).Scan(&hasPermission)
 	if err != nil {
 		return false, fmt.Errorf("failed to check file permission: %w", err)
 	}

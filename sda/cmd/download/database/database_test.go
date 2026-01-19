@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -11,20 +12,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetUserDatasets(t *testing.T) {
-	// Create mock database
-	mockDB, mock, err := sqlmock.New()
+// setupMockDB creates a mock database with prepared statements for testing.
+// It prepares all queries defined in the queries map and returns the mock for expectations.
+func setupMockDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, func()) {
+	t.Helper()
+
+	// Use QueryMatcherEqual to avoid regex issues with SQL queries
+	mockDB, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	require.NoError(t, err)
-	defer mockDB.Close()
 
-	db := &PostgresDB{db: mockDB}
+	// Prepare all statements
+	preparedStatements := make(map[string]*sql.Stmt)
+	for queryName, query := range queries {
+		mock.ExpectPrepare(query)
+		stmt, err := mockDB.Prepare(query)
+		require.NoError(t, err, "failed to prepare query: %s", queryName)
+		preparedStatements[queryName] = stmt
+	}
 
-	// Setup expected query
+	db := &PostgresDB{
+		db:                 mockDB,
+		preparedStatements: preparedStatements,
+	}
+
+	cleanup := func() {
+		mockDB.Close()
+	}
+
+	return db, mock, cleanup
+}
+
+func TestGetUserDatasets(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	// Setup expected query - use the full query from the queries map
 	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at"}).
 		AddRow("dataset-1", "Test Dataset", "Description", time.Now()).
 		AddRow("dataset-2", nil, nil, time.Now())
 
-	mock.ExpectQuery("SELECT DISTINCT d.stable_id").
+	mock.ExpectQuery(queries[getUserDatasetsQuery]).
 		WithArgs(pq.Array([]string{"visa1", "visa2"})).
 		WillReturnRows(rows)
 
@@ -43,15 +70,12 @@ func TestGetUserDatasets(t *testing.T) {
 }
 
 func TestGetUserDatasets_Empty(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at"})
 
-	mock.ExpectQuery("SELECT DISTINCT d.stable_id").
+	mock.ExpectQuery(queries[getUserDatasetsQuery]).
 		WithArgs(pq.Array([]string{})).
 		WillReturnRows(rows)
 
@@ -63,17 +87,14 @@ func TestGetUserDatasets_Empty(t *testing.T) {
 }
 
 func TestGetDatasetInfo(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	createdAt := time.Now()
 	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at", "file_count", "total_size"}).
 		AddRow("dataset-1", "Test Dataset", "Description", createdAt, 5, int64(1024000))
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getDatasetInfoQuery]).
 		WithArgs("dataset-1").
 		WillReturnRows(rows)
 
@@ -89,15 +110,12 @@ func TestGetDatasetInfo(t *testing.T) {
 }
 
 func TestGetDatasetInfo_NotFound(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at", "file_count", "total_size"})
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getDatasetInfoQuery]).
 		WithArgs("nonexistent").
 		WillReturnRows(rows)
 
@@ -109,11 +127,8 @@ func TestGetDatasetInfo_NotFound(t *testing.T) {
 }
 
 func TestGetDatasetFiles(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
@@ -122,7 +137,7 @@ func TestGetDatasetFiles(t *testing.T) {
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", int64(1024), int64(900), "abc123", "SHA256").
 		AddRow("file-2", "dataset-1", "/path/to/file2.txt", nil, nil, nil, nil, nil)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getDatasetFilesQuery]).
 		WithArgs("dataset-1").
 		WillReturnRows(rows)
 
@@ -139,11 +154,8 @@ func TestGetDatasetFiles(t *testing.T) {
 }
 
 func TestGetFileByID(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	header := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68} // "crypt4gh"
 	rows := sqlmock.NewRows([]string{
@@ -154,7 +166,7 @@ func TestGetFileByID(t *testing.T) {
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh",
 			int64(1024), int64(900), "abc123", "SHA256", header)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("file-1").
 		WillReturnRows(rows)
 
@@ -169,11 +181,8 @@ func TestGetFileByID(t *testing.T) {
 }
 
 func TestGetFileByID_NotFound(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
@@ -181,7 +190,7 @@ func TestGetFileByID_NotFound(t *testing.T) {
 		"decrypted_file_checksum_type", "header",
 	})
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("nonexistent").
 		WillReturnRows(rows)
 
@@ -193,11 +202,8 @@ func TestGetFileByID_NotFound(t *testing.T) {
 }
 
 func TestGetFileByPath(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	header := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68}
 	rows := sqlmock.NewRows([]string{
@@ -208,7 +214,7 @@ func TestGetFileByPath(t *testing.T) {
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh",
 			int64(1024), int64(900), "abc123", "SHA256", header)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(queries[getFileByPathQuery]).
 		WithArgs("dataset-1", "/path/to/file.txt").
 		WillReturnRows(rows)
 
@@ -222,15 +228,12 @@ func TestGetFileByPath(t *testing.T) {
 }
 
 func TestCheckFilePermission(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{"exists"}).AddRow(true)
 
-	mock.ExpectQuery("SELECT EXISTS").
+	mock.ExpectQuery(queries[checkFilePermissionQuery]).
 		WithArgs("file-1", pq.Array([]string{"visa1"})).
 		WillReturnRows(rows)
 
@@ -242,15 +245,12 @@ func TestCheckFilePermission(t *testing.T) {
 }
 
 func TestCheckFilePermission_Denied(t *testing.T) {
-	mockDB, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer mockDB.Close()
-
-	db := &PostgresDB{db: mockDB}
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{"exists"}).AddRow(false)
 
-	mock.ExpectQuery("SELECT EXISTS").
+	mock.ExpectQuery(queries[checkFilePermissionQuery]).
 		WithArgs("file-1", pq.Array([]string{"wrong-visa"})).
 		WillReturnRows(rows)
 

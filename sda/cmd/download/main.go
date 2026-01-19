@@ -18,6 +18,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/handlers"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/health"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	internalconfig "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 )
 
@@ -25,6 +27,12 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	gin.SetMode(gin.ReleaseMode)
 
+	if err := run(); err != nil {
+		log.Fatalf("application error: %v", err)
+	}
+}
+
+func run() error {
 	// Setup context with cancellation for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -37,12 +45,32 @@ func main() {
 	// Note: config package init() registers flags with internalconfig
 	_ = config.APIPort() // Ensure config package is imported and init() runs
 	if err := internalconfig.Load(); err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
+
+	// Start gRPC health server
+	go func() {
+		if err := health.Start(config.HealthPort()); err != nil {
+			log.Errorf("health server error: %v", err)
+			cancel()
+		}
+	}()
+	defer health.Stop()
 
 	// Initialize database
 	if err := database.Init(); err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer func() {
+		log.Info("closing database connection...")
+		if err := database.Close(); err != nil {
+			log.Errorf("database close error: %v", err)
+		}
+	}()
+
+	// Initialize authentication middleware
+	if err := middleware.InitAuth(); err != nil {
+		return fmt.Errorf("failed to initialize auth: %w", err)
 	}
 
 	// TODO: Initialize storage/v2 reader
@@ -70,8 +98,15 @@ func main() {
 		}))
 	}
 
-	// Register routes
-	h := handlers.New()
+	// Create handlers with dependencies
+	h, err := handlers.New(
+		handlers.WithDatabase(database.GetDB()),
+		handlers.WithGRPCReencryptHost(config.GRPCHost()),
+		handlers.WithGRPCReencryptPort(config.GRPCPort()),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create handlers: %w", err)
+	}
 	h.RegisterRoutes(router)
 
 	// Configure TLS if certificates are provided
@@ -104,6 +139,10 @@ func main() {
 		}
 	}()
 
+	// Mark service as ready
+	health.SetServingStatus(health.Serving)
+	log.Infof("health server listening at: :%d", config.HealthPort())
+
 	// Wait for shutdown signal
 	select {
 	case <-sigc:
@@ -111,6 +150,9 @@ func main() {
 	case <-ctx.Done():
 		log.Info("context cancelled")
 	}
+
+	// Mark service as not serving
+	health.SetServingStatus(health.NotServing)
 
 	// Graceful shutdown
 	log.Info("shutting down server...")
@@ -122,10 +164,7 @@ func main() {
 		log.Errorf("server shutdown error: %v", err)
 	}
 
-	log.Info("closing database connection...")
-	if err := database.Close(); err != nil {
-		log.Errorf("database close error: %v", err)
-	}
-
 	log.Info("shutdown complete")
+
+	return nil
 }

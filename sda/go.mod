@@ -13,6 +13,7 @@ require (
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/coreos/go-oidc/v3 v3.17.0
+	github.com/dgraph-io/ristretto v0.0.3-0.20200630154024-f66de99634de
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
@@ -75,6 +76,7 @@ require (
 	github.com/casbin/govaluate v1.6.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
