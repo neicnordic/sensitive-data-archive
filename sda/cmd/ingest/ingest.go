@@ -68,7 +68,9 @@ func main() {
 	app.brokerConf = ingestConf.Broker
 	app.MQ, err = broker.NewMQ(app.brokerConf)
 	if err != nil {
-		log.Fatalf("failed to init broker due to: %v", err)
+		log.Errorf("failed to init broker due to: %v", err)
+
+		return
 	}
 	app.DB, err = database.NewSDAdb(ingestConf.Database)
 	if err != nil {
@@ -121,7 +123,9 @@ func main() {
 
 	backupWriter, err := storage.NewWriter(ctx, "backup", storageLocationBroker)
 	if err != nil && errors.Is(err, storageerrors.ErrorNoValidWriter) {
-		log.Fatalf("failed to init backup writer due to: %v", err)
+		log.Errorf("failed to init backup writer due to: %v", err)
+
+		return
 	}
 	if backupWriter != nil {
 		log.Info("backup writer initialized, will clean cancelled files from backup storage")
@@ -345,21 +349,11 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		submissionLocation, err = app.InboxReader.FindFile(ctx, message.FilePath)
 		if err != nil {
 			log.Errorf("failed to find submission location for file in all configured storage locations, file-id: %s", fileID)
-			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-			m, _ := json.Marshal(message)
-			if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
-				log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
-			}
-			// Send the message to an error queue so it can be analyzed.
-			fileError := broker.InfoError{
-				Error:           "Failed to open file to ingest",
+			if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
+				Error:           "Failed to open file to ingest, file not found in any of the configured storage locations",
 				Reason:          err.Error(),
 				OriginalMessage: message,
-			}
-			body, _ := json.Marshal(fileError)
-			if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, reason: %v", err)
-
+			}); err != nil {
 				return "reject"
 			}
 
@@ -379,21 +373,11 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	if err != nil {
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
 			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
-			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-			m, _ := json.Marshal(message)
-			if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
-				log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
-			}
-			// Send the message to an error queue so it can be analyzed.
-			fileError := broker.InfoError{
+			if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
 				Error:           "Failed to open file to ingest",
 				Reason:          err.Error(),
 				OriginalMessage: message,
-			}
-			body, _ := json.Marshal(fileError)
-			if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, reason: %v", err)
-
+			}); err != nil {
 				return "reject"
 			}
 
@@ -485,20 +469,15 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				// Check if decryption was successful with any key
 				if privateKey == nil {
 					log.Errorf("All keys failed to decrypt the submitted file, file-id: %s", fileID)
-					m, _ := json.Marshal(message)
-					if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", `{"error" : "Decryption failed with all available key(s)"}`, string(m)); err != nil {
-						log.Errorf("Failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
-					}
-
-					// Send the message to an error queue so it can be analyzed.
-					fileError := broker.InfoError{
+					if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
 						Error:           "Trying to decrypt the submitted file failed",
 						Reason:          "Decryption failed with the available key(s)",
 						OriginalMessage: message,
-					}
-					body, _ := json.Marshal(fileError)
-					if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
-						log.Errorf("failed to publish message, reason: %v", err)
+					}); err != nil {
+						readFileAck <- "reject"
+						uploadCancel()
+
+						return
 					}
 					readFileAck <- "ack"
 					uploadCancel()
@@ -590,6 +569,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	case err := <-uploadErr:
 		if err != nil {
 			log.Errorf("Failed to upload archive file, file-id: %s, reason: (%s)", fileID, err.Error())
+
 			return "nack"
 		}
 	}
@@ -691,4 +671,20 @@ func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 	}
 
 	return header, nil
+}
+
+func (app *Ingest) setFileEventErrorAndSendToErrorQueue(fileID string, infoError *broker.InfoError) error {
+	jsonMsg, _ := json.Marshal(map[string]string{"error": infoError.Error, "reason": infoError.Reason})
+	m, _ := json.Marshal(infoError.OriginalMessage)
+	if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
+		log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
+	}
+	body, _ := json.Marshal(infoError)
+	if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
+		log.Errorf("failed to publish message, reason: %v", err)
+
+		return err
+	}
+
+	return nil
 }

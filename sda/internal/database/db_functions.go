@@ -587,6 +587,7 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
+
 		return nil, err
 	}
 	if archiveFilePath.Valid || archiveFileSize.Valid || archiveLocation.Valid {
