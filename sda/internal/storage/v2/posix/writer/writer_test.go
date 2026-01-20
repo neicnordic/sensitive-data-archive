@@ -94,8 +94,8 @@ storage:
 func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
 	content := "test file 1"
 
-	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
@@ -107,15 +107,15 @@ func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
 	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir2)
 	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
 	ts.NoError(err)
-	ts.Equal(string(readContent), content)
+	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir1, location)
 }
 func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	content := "test file 2"
 
-	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(11, nil)
-	ts.locationBrokerMock.On("GetObjectCount", ts.dir2).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", ts.dir2).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(11, nil).Once()
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir2).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", ts.dir2).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_2.txt", contentReader)
@@ -128,33 +128,24 @@ func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir2)
 	readContent, err := os.ReadFile(filepath.Join(ts.dir2, "test_file_2.txt"))
 	ts.NoError(err)
-	ts.Equal(string(readContent), content)
+	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir2, location)
 }
 
 func (ts *WriterTestSuite) TestRemoveFile() {
 	content := "test file 1"
 
-	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
-	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
+	_, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
-
-	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
-	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir2)
-	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
-	ts.NoError(err)
-	ts.Equal(string(readContent), content)
-	ts.Equal(ts.dir1, location)
 
 	err = ts.writer.RemoveFile(context.TODO(), ts.dir1, "test_file_1.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
+	ts.NoError(err)
 	_, err = os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
 	ts.ErrorContains(err, "no such file or directory")
 }

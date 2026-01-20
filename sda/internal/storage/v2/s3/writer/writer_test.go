@@ -201,8 +201,8 @@ func (ts *WriterTestSuite) SetupTest() {
 func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
 	content := "test file 1"
 
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
@@ -219,9 +219,9 @@ func (ts *WriterTestSuite) TestWriteFile_FirstFullSecondBucketExists() {
 	content := "test file 1"
 
 	ts.s3Mock1.buckets["bucket_in_1-2"] = make(map[string]string)
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil)
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil).Once()
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
@@ -239,7 +239,7 @@ func (ts *WriterTestSuite) TestWriteFile_FirstFullSecondBucketExists() {
 func (ts *WriterTestSuite) TestWriteFile_FirstEndpoint_FirstBucketFull() {
 	content := "test file 1"
 
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil)
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
@@ -255,12 +255,12 @@ func (ts *WriterTestSuite) TestWriteFile_FirstEndpointFull() {
 	content := "test file 2"
 
 	ts.s3Mock1.buckets = map[string]map[string]string{"bucket_in_1-1": make(map[string]string), "bucket_in_1-2": make(map[string]string), "bucket_in_1-3": make(map[string]string)}
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil)
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(11, nil)
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-3", ts.s3Mock1.server.URL)).Return(11, nil)
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(11, nil).Once()
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(11, nil).Once()
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-3", ts.s3Mock1.server.URL)).Return(11, nil).Once()
 
-	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL)).Return(0, nil)
-	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL)).Return(0, nil)
+	ts.locationBrokerMock.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL)).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", fmt.Sprintf("%s/bucket_in_2-1", ts.s3Mock2.server.URL)).Return(0, nil).Once()
 
 	contentReader := bytes.NewReader([]byte(content))
 	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
