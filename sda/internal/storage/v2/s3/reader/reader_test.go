@@ -15,6 +15,7 @@ import (
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -269,88 +270,56 @@ storage:
 	}
 }
 
-func (ts *ReaderTestSuite) TestNewReader_MissingConfigEndpoint() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_endpoint.yaml"), []byte(`
+func (ts *ReaderTestSuite) TestLoadConfig() {
+	for _, test := range []struct {
+		testName         string
+		config           string
+		expectedErrorMsg string
+	}{
+		{
+			testName: "MissingEndpoint",
+			config: `
 storage:
-  missing:
+  config_test:
     s3:
     - access_key: access_key1
       secret_key: secret_key1
       disable_https: true
       region: us-east-1
       chunk_size: 1mb
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_missing_endpoint.yaml"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	_, err := NewReader(context.TODO(), "missing")
-	ts.EqualError(err, "missing required parameter: endpoint")
-}
-
-func (ts *ReaderTestSuite) TestNewReader_MissingConfigAccessKey() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_access_key.yaml"), []byte(`
+`,
+			expectedErrorMsg: "missing required parameter: endpoint",
+		}, {
+			testName: "MissingAccessKey",
+			config: `
 storage:
-  missing:
+  config_test:
     s3:
     - endpoint: 123
       secret_key: secret_key1
       disable_https: true
       region: us-east-1
       chunk_size: 1mb
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_missing_access_key.yaml"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	_, err := NewReader(context.TODO(), "missing")
-	ts.EqualError(err, "missing required parameter: access_key")
-}
-
-func (ts *ReaderTestSuite) TestNewReader_MissingConfigSecretKey() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_missing_secret_key.yaml"), []byte(`
+`,
+			expectedErrorMsg: "missing required parameter: access_key",
+		}, {
+			testName: "MissingSecretKey",
+			config: `
 storage:
-  missing:
+  config_test:
     s3:
     - endpoint: 123
       access_key: access_key1
       disable_https: true
       region: us-east-1
       chunk_size: 1mb
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_missing_secret_key.yaml"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	_, err := NewReader(context.TODO(), "missing")
-	ts.EqualError(err, "missing required parameter: secret_key")
-}
-
-func (ts *ReaderTestSuite) TestNewReader_InvalidChunkSize() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_invalid_chunk_size.yaml"), []byte(`
+`,
+			expectedErrorMsg: "missing required parameter: secret_key",
+		}, {
+			testName: "InvalidChunkSize",
+			config: `
 storage:
-  invalid:
+  config_test:
     s3:
     - endpoint: 123
       access_key: access_key1
@@ -358,25 +327,13 @@ storage:
       disable_https: true
       region: us-east-1
       chunk_size: -100
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_invalid_chunk_size.yaml"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	_, err := NewReader(context.TODO(), "invalid")
-	ts.EqualError(err, "could not parse chunk_size as a valid data size")
-}
-func (ts *ReaderTestSuite) TestNewReader_HTTPSEndpointWithDisableHttps() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_https_endpoint_with_disabled.yaml"), []byte(`
+`,
+			expectedErrorMsg: "could not parse chunk_size as a valid data size",
+		}, {
+			testName: "HTTPSEndpointWithDisableHttps",
+			config: `
 storage:
-  invalid:
+  config_test:
     s3:
     - endpoint: https://123
       access_key: access_key1
@@ -384,25 +341,13 @@ storage:
       disable_https: true
       region: us-east-1
       chunk_size: -100
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_https_endpoint_with_disabled.yaml"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	_, err := NewReader(context.TODO(), "invalid")
-	ts.EqualError(err, "https scheme in endpoint when HTTPS is disabled")
-}
-func (ts *ReaderTestSuite) TestNewReader_HTTPEndpointWithEnabledHttps() {
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config_http_endpoint_with_enabled.yaml"), []byte(`
+`,
+			expectedErrorMsg: "https scheme in endpoint when HTTPS is disabled",
+		}, {
+			testName: "HTTPEndpointWithEnabledHttps",
+			config: `
 storage:
-  invalid:
+  config_test:
     s3:
     - endpoint: http://123
       access_key: access_key1
@@ -410,105 +355,243 @@ storage:
       disable_https: false
       region: us-east-1
       chunk_size: -100
-`), 0600); err != nil {
-		ts.FailNow(err.Error())
+`,
+			expectedErrorMsg: "http scheme in endpoint when using HTTPS",
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(ts.configDir, "config_.yaml"), []byte(test.config), 0600); err != nil {
+				assert.FailNow(t, err.Error())
+			}
+
+			viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+			viper.SetConfigType("yaml")
+			viper.SetConfigFile(filepath.Join(ts.configDir, "config_.yaml"))
+
+			if err := viper.ReadInConfig(); err != nil {
+				assert.FailNow(t, err.Error())
+			}
+
+			_, err := NewReader(context.TODO(), "config_test")
+			assert.EqualError(t, err, test.expectedErrorMsg)
+		})
 	}
+}
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.configDir, "config_http_endpoint_with_enabled.yaml"))
+func (ts *ReaderTestSuite) TestNewFileReader() {
+	for _, test := range []struct {
+		testName string
 
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
+		endpointToReadFrom  string
+		bucketToReadFrom    string
+		filePathToRead      string
+		expectedError       error
+		expectedFileContent string
+	}{
+		{
+			testName:            "InvalidLocation",
+			endpointToReadFrom:  "",
+			bucketToReadFrom:    "",
+			filePathToRead:      "",
+			expectedError:       storageerrors.ErrorInvalidLocation,
+			expectedFileContent: "",
+		}, {
+			testName:            "ReadFrom1Bucket1",
+			endpointToReadFrom:  ts.s3Mock1.URL,
+			bucketToReadFrom:    "mock_s3_1_bucket_1",
+			filePathToRead:      "file1.txt",
+			expectedError:       nil,
+			expectedFileContent: "file 1 content in mock s3 1, bucket 1",
+		}, {
+			testName:            "ReadFrom1Bucket2",
+			endpointToReadFrom:  ts.s3Mock1.URL,
+			bucketToReadFrom:    "mock_s3_1_bucket_2",
+			filePathToRead:      "file2.txt",
+			expectedError:       nil,
+			expectedFileContent: "file 2 content in mock s3 1, bucket 2",
+		}, {
+			testName:            "ReadFrom2Bucket1",
+			endpointToReadFrom:  ts.s3Mock2.URL,
+			bucketToReadFrom:    "mock_s3_2_bucket_1",
+			filePathToRead:      "file3.txt",
+			expectedError:       nil,
+			expectedFileContent: "file 3 content in mock s3 2, bucket 1",
+		}, {
+			testName:            "ReadFrom2Bucket2",
+			endpointToReadFrom:  ts.s3Mock2.URL,
+			bucketToReadFrom:    "mock_s3_2_bucket_2",
+			filePathToRead:      "file4.txt",
+			expectedError:       nil,
+			expectedFileContent: "file 4 content in mock s3 2, bucket 2",
+		}, {
+			testName:            "ReadFrom1Bucket1_NotFound",
+			endpointToReadFrom:  ts.s3Mock1.URL,
+			bucketToReadFrom:    "mock_s3_1_bucket_1",
+			filePathToRead:      "file2.txt",
+			expectedError:       storageerrors.ErrorFileNotFoundInLocation,
+			expectedFileContent: "",
+		}, {
+			testName:            "ReadFrom1Bucket2_NotFound",
+			endpointToReadFrom:  ts.s3Mock1.URL,
+			bucketToReadFrom:    "mock_s3_1_bucket_2",
+			filePathToRead:      "file1.txt",
+			expectedError:       storageerrors.ErrorFileNotFoundInLocation,
+			expectedFileContent: "",
+		}, {
+			testName:            "ReadFrom2Bucket1_NotFound",
+			endpointToReadFrom:  ts.s3Mock2.URL,
+			bucketToReadFrom:    "mock_s3_2_bucket_1",
+			filePathToRead:      "file1.txt",
+			expectedError:       storageerrors.ErrorFileNotFoundInLocation,
+			expectedFileContent: "",
+		}, {
+			testName:            "ReadFrom2Bucket2_NotFound",
+			endpointToReadFrom:  ts.s3Mock2.URL,
+			bucketToReadFrom:    "mock_s3_2_bucket_2",
+			filePathToRead:      "file1.txt",
+			expectedError:       storageerrors.ErrorFileNotFoundInLocation,
+			expectedFileContent: "",
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			fileReader, err := ts.reader.NewFileReader(context.TODO(), test.endpointToReadFrom+"/"+test.bucketToReadFrom, test.filePathToRead)
+			assert.Equal(t, test.expectedError, err)
+
+			if fileReader != nil {
+				content, err := io.ReadAll(fileReader)
+				assert.NoError(t, err)
+
+				assert.Equal(t, test.expectedFileContent, string(content))
+				_ = fileReader.Close()
+			}
+		})
 	}
-
-	_, err := NewReader(context.TODO(), "invalid")
-	ts.EqualError(err, "http scheme in endpoint when using HTTPS")
 }
 
-func (ts *ReaderTestSuite) TestNewFileReader_InvalidLocation() {
-	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
-	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
-}
-func (ts *ReaderTestSuite) TestNewFileReaderSeeker_InvalidLocation() {
-	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
-	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
-}
+func (ts *ReaderTestSuite) TestGetFileSize() {
+	for _, test := range []struct {
+		testName string
 
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom1Bucket1() {
-	fileReader, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_1", "file1.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
+		endpointToReadFrom string
+		bucketToReadFrom   string
+		filePathToRead     string
+		expectedError      error
+		expectedSize       int64
+	}{
+		{
+			testName:           "InvalidLocation",
+			endpointToReadFrom: "",
+			bucketToReadFrom:   "",
+			filePathToRead:     "",
+			expectedError:      storageerrors.ErrorInvalidLocation,
+			expectedSize:       0,
+		}, {
+			testName:           "ReadFrom1Bucket1",
+			endpointToReadFrom: ts.s3Mock1.URL,
+			bucketToReadFrom:   "mock_s3_1_bucket_1",
+			filePathToRead:     "file1.txt",
+			expectedError:      nil,
+			expectedSize:       101,
+		}, {
+			testName:           "ReadFrom1Bucket2",
+			endpointToReadFrom: ts.s3Mock1.URL,
+			bucketToReadFrom:   "mock_s3_1_bucket_2",
+			filePathToRead:     "file2.txt",
+			expectedError:      nil,
+			expectedSize:       102,
+		}, {
+			testName:           "ReadFrom2Bucket1",
+			endpointToReadFrom: ts.s3Mock2.URL,
+			bucketToReadFrom:   "mock_s3_2_bucket_1",
+			filePathToRead:     "file3.txt",
+			expectedError:      nil,
+			expectedSize:       103,
+		}, {
+			testName:           "ReadFrom2Bucket2",
+			endpointToReadFrom: ts.s3Mock2.URL,
+			bucketToReadFrom:   "mock_s3_2_bucket_2",
+			filePathToRead:     "file4.txt",
+			expectedError:      nil,
+			expectedSize:       104,
+		}, {
+			testName:           "ReadFrom1Bucket1_NotFound",
+			endpointToReadFrom: ts.s3Mock1.URL,
+			bucketToReadFrom:   "mock_s3_1_bucket_1",
+			filePathToRead:     "file2.txt",
+			expectedError:      storageerrors.ErrorFileNotFoundInLocation,
+			expectedSize:       0,
+		}, {
+			testName:           "ReadFrom1Bucket2_NotFound",
+			endpointToReadFrom: ts.s3Mock1.URL,
+			bucketToReadFrom:   "mock_s3_1_bucket_2",
+			filePathToRead:     "file1.txt",
+			expectedError:      storageerrors.ErrorFileNotFoundInLocation,
+			expectedSize:       0,
+		}, {
+			testName:           "ReadFrom2Bucket2_NotFound",
+			endpointToReadFrom: ts.s3Mock2.URL,
+			bucketToReadFrom:   "mock_s3_2_bucket_2",
+			filePathToRead:     "file1.txt",
+			expectedError:      storageerrors.ErrorFileNotFoundInLocation,
+			expectedSize:       0,
+		}, {
+			testName:           "ReadFrom2Bucket2_NotFound",
+			endpointToReadFrom: ts.s3Mock2.URL,
+			bucketToReadFrom:   "mock_s3_2_bucket_2",
+			filePathToRead:     "file1.txt",
+			expectedError:      storageerrors.ErrorFileNotFoundInLocation,
+			expectedSize:       0,
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			size, err := ts.reader.GetFileSize(context.TODO(), test.endpointToReadFrom+"/"+test.bucketToReadFrom, test.filePathToRead)
+			assert.Equal(t, test.expectedError, err)
+			assert.Equal(t, test.expectedSize, size)
+		})
 	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 1 content in mock s3 1, bucket 1", string(content))
-	_ = fileReader.Close()
 }
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom1Bucket2() {
-	fileReader, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "file2.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
+
+func (ts *ReaderTestSuite) TestFindFile() {
+	for _, test := range []struct {
+		testName string
+
+		fileToFind       string
+		expectedLocation string
+		expectedError    error
+	}{
+		{
+			testName:         "NotFound",
+			fileToFind:       "not_found.txt",
+			expectedLocation: "",
+			expectedError:    storageerrors.ErrorFileNotFoundInLocation,
+		}, {
+			testName:         "FoundIn1Bucket1",
+			fileToFind:       "file1.txt",
+			expectedLocation: ts.s3Mock1.URL + "/mock_s3_1_bucket_1",
+			expectedError:    nil,
+		}, {
+			testName:         "FoundIn1Bucket2",
+			fileToFind:       "file2.txt",
+			expectedLocation: ts.s3Mock1.URL + "/mock_s3_1_bucket_2",
+			expectedError:    nil,
+		}, {
+			testName:         "FoundIn2Bucket1",
+			fileToFind:       "file3.txt",
+			expectedLocation: ts.s3Mock2.URL + "/mock_s3_2_bucket_1",
+			expectedError:    nil,
+		}, {
+			testName:         "FoundIn2Bucket2",
+			fileToFind:       "file4.txt",
+			expectedLocation: ts.s3Mock2.URL + "/mock_s3_2_bucket_2",
+			expectedError:    nil,
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			location, err := ts.reader.FindFile(context.TODO(), test.fileToFind)
+			assert.Equal(t, test.expectedError, err)
+			assert.Equal(t, test.expectedLocation, location)
+		})
 	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 2 content in mock s3 1, bucket 2", string(content))
-	_ = fileReader.Close()
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom1Bucket1_NotFoundExpected() {
-	_, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_1", "file2.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom1Bucket2_NotFoundExpected() {
-	_, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom1Bucket1() {
-	size, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_1", "file1.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	ts.Equal(int64(101), size)
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom1Bucket2() {
-	size, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "file2.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	ts.Equal(int64(102), size)
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom1Bucket1_NotFoundExpected() {
-	_, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_1", "file2.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom1Bucket2_NotFoundExpected() {
-	_, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket1() {
-	fileReader, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_1", "file3.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 3 content in mock s3 2, bucket 1", string(content))
-	_ = fileReader.Close()
 }
 
 func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFrom2Bucket1() {
@@ -585,71 +668,6 @@ func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFrom2Bucket1FileNotFound() 
 	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
 }
 
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket2() {
-	fileReader, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file4.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 4 content in mock s3 2, bucket 2", string(content))
-	_ = fileReader.Close()
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket1_NotFoundExpected() {
-	_, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_1", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFrom2Bucket2_NotFoundExpected() {
-	_, err := ts.reader.NewFileReader(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket1() {
-	size, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_1", "file3.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	ts.Equal(int64(103), size)
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket2() {
-	size, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file4.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	ts.Equal(int64(104), size)
-}
-
-func (ts *ReaderTestSuite) TestFindFile_FoundIn2Bucket2() {
-	loc, err := ts.reader.FindFile(context.TODO(), "file4.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	ts.Equal(ts.s3Mock2.URL+"/mock_s3_2_bucket_2", loc)
-}
-func (ts *ReaderTestSuite) TestFindFile_NotFound() {
-	loc, err := ts.reader.FindFile(context.TODO(), "not_exist.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-	ts.Equal("", loc)
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket1_NotFoundExpected() {
-	_, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_1", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_GetFileSizeFrom2Bucket2_NotFoundExpected() {
-	_, err := ts.reader.GetFileSize(context.TODO(), ts.s3Mock2.URL+"/mock_s3_2_bucket_2", "file1.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-}
-
 // s3 seekable reader internal test here, messing with internals to expose behaviour
 func (ts *ReaderTestSuite) TestFileReadSeeker_Internal_NoPrefetchFromSeek() {
 	fileSeekReader, err := ts.reader.NewFileReadSeeker(context.TODO(), ts.s3Mock1.URL+"/mock_s3_1_bucket_2", "seekable_big_file.txt")
@@ -716,4 +734,9 @@ func (ts *ReaderTestSuite) TestFileReadSeeker_Internal_Cache() {
 	data := make([]byte, 100)
 	_, err = s3SeekableReaderCast.wholeReader(data)
 	ts.NotNil(err, "wholeReader object instantiation worked when it should have failed")
+}
+
+func (ts *ReaderTestSuite) TestNewFileReaderSeeker_InvalidLocation() {
+	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
+	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
 }
