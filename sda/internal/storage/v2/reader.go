@@ -58,7 +58,7 @@ func (r *reader) NewFileReader(ctx context.Context, location, filePath string) (
 		return r.posixReader.NewFileReader(ctx, location, filePath)
 	}
 
-	if r.s3Reader != nil {
+	if !strings.HasPrefix(location, "/") && r.s3Reader != nil {
 		return r.s3Reader.NewFileReader(ctx, location, filePath)
 	}
 
@@ -70,7 +70,7 @@ func (r *reader) NewFileReadSeeker(ctx context.Context, location, filePath strin
 		return r.posixReader.NewFileReadSeeker(ctx, location, filePath)
 	}
 
-	if r.s3Reader != nil {
+	if !strings.HasPrefix(location, "/") && r.s3Reader != nil {
 		return r.s3Reader.NewFileReadSeeker(ctx, location, filePath)
 	}
 
@@ -82,7 +82,7 @@ func (r *reader) GetFileSize(ctx context.Context, location, filePath string) (in
 		return r.posixReader.GetFileSize(ctx, location, filePath)
 	}
 
-	if r.s3Reader != nil {
+	if !strings.HasPrefix(location, "/") && r.s3Reader != nil {
 		return r.s3Reader.GetFileSize(ctx, location, filePath)
 	}
 
