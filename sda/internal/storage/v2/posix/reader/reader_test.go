@@ -63,34 +63,49 @@ storage:
 	}
 }
 
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFromDir1() {
-	fileReader, err := ts.reader.NewFileReader(context.Background(), ts.dir1, "dir1_file2.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
+func (ts *ReaderTestSuite) TestNewFileReader() {
+	for _, test := range []struct {
+		testName            string
+		locationToReadFrom  string
+		filePathToRead      string
+		expectedError       error
+		expectedFileContent string
+	}{
+		{
+			testName:            "FromDir1",
+			expectedError:       nil,
+			expectedFileContent: "file 2 content in dir1",
+			locationToReadFrom:  ts.dir1,
+			filePathToRead:      "dir1_file2.txt",
+		},
+		{
+			testName:            "FromDir2",
+			expectedError:       nil,
+			expectedFileContent: "file 9 content in dir2",
+			locationToReadFrom:  ts.dir2,
+			filePathToRead:      "dir2_file9.txt",
+		},
+		{
+			testName:            "FromDir1_FileNotExists",
+			expectedError:       storageerrors.ErrorFileNotFoundInLocation,
+			expectedFileContent: "",
+			locationToReadFrom:  ts.dir1,
+			filePathToRead:      "not_exists.txt",
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			fileReader, err := ts.reader.NewFileReader(context.Background(), test.locationToReadFrom, test.filePathToRead)
+			ts.Equal(test.expectedError, err)
+
+			if fileReader != nil {
+				content, err := io.ReadAll(fileReader)
+				ts.NoError(err)
+
+				ts.Equal(test.expectedFileContent, string(content))
+				_ = fileReader.Close()
+			}
+		})
 	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 2 content in dir1", string(content))
-	_ = fileReader.Close()
-}
-
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFromDir2() {
-	fileReader, err := ts.reader.NewFileReader(context.Background(), ts.dir2, "dir2_file9.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	content, err := io.ReadAll(fileReader)
-	ts.NoError(err)
-
-	ts.Equal("file 9 content in dir2", string(content))
-	_ = fileReader.Close()
-}
-func (ts *ReaderTestSuite) TestNewFileReader_ReadFromDir2_FileNotExist() {
-	_, err := ts.reader.NewFileReader(context.Background(), ts.dir2, "not_exist.txt")
-	ts.Equal(storageerrors.ErrorFileNotFoundInLocation, err)
 }
 
 func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFromDir() {
@@ -124,16 +139,36 @@ func (ts *ReaderTestSuite) TestGetFileSize() {
 	ts.Equal(int64(len("file 6 content in dir2")), fileSize)
 }
 
-func (ts *ReaderTestSuite) TestFindFile_FoundInDir2() {
-	loc, err := ts.reader.FindFile(context.TODO(), "dir2_file9.txt")
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
+func (ts *ReaderTestSuite) TestFindFile() {
+	for _, test := range []struct {
+		testName         string
+		filePathToFind   string
+		expectedError    error
+		expectedLocation string
+	}{
+		{
+			testName:         "FoundInDir1",
+			expectedError:    nil,
+			expectedLocation: ts.dir1,
+			filePathToFind:   "dir1_file3.txt",
+		}, {
+			testName:         "FoundInDir2",
+			expectedError:    nil,
+			expectedLocation: ts.dir2,
+			filePathToFind:   "dir2_file9.txt",
+		},
+		{
+			testName:         "NotFound",
+			expectedError:    storageerrors.ErrorFileNotFoundInLocation,
+			expectedLocation: "",
+			filePathToFind:   "not_exists.txt",
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			loc, err := ts.reader.FindFile(context.TODO(), test.filePathToFind)
+			ts.Equal(test.expectedError, err)
 
-	ts.Equal(ts.dir2, loc)
-}
-func (ts *ReaderTestSuite) TestFindFile_NotFound() {
-	loc, err := ts.reader.FindFile(context.TODO(), "not_exist.txt")
-	ts.EqualError(err, storageerrors.ErrorFileNotFoundInLocation.Error())
-	ts.Equal("", loc)
+			ts.Equal(test.expectedLocation, loc)
+		})
+	}
 }
