@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"time"
@@ -83,32 +83,23 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (u
 func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 	count := uint64(0)
 	size := uint64(0)
-	dir, err := os.ReadDir(path)
-	if err != nil {
-		return 0, 0, err
-	}
-	for _, entry := range dir {
-		if entry.IsDir() {
-			subDirSize, subDirCount, err := getSizeAndCountInDir(filepath.Join(path, entry.Name()))
-			if err != nil {
-				return 0, 0, err
-			}
-			count += subDirCount
-			size += subDirSize
 
-			continue
+	if err := filepath.Walk(path, func(_ string, info fs.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
 		}
-		count++
-		fileInfo, err := entry.Info()
-		if err != nil {
-			return 0, 0, err
-		}
-		fileSize := fileInfo.Size()
+
+		fileSize := info.Size()
 		if fileSize < 0 {
-			return 0, 0, fmt.Errorf("file: %s has negative size", entry.Name())
+			return fmt.Errorf("file: %s has negative size", info.Name())
 		}
 		//nolint:gosec // disable G115
-		size += uint64(fileInfo.Size())
+		size += uint64(fileSize)
+		count++
+
+		return nil
+	}); err != nil {
+		return 0, 0, err
 	}
 
 	return size, count, nil
