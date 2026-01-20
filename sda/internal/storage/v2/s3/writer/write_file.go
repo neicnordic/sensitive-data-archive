@@ -23,6 +23,11 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	// Current active endpoint no longer has any free buckets, roll over to next endpoint
 	if activeBucket == "" {
 		for _, endpointConf := range writer.configuredEndpoints {
+			// We dont need to evaluate the currently active bucket as we know it doesnt have any active buckets now
+			if endpointConf.Endpoint == writer.activeEndpoint.Endpoint {
+				continue
+			}
+
 			activeBucket, err = endpointConf.findActiveBucket(ctx, writer.locationBroker)
 			if err != nil {
 				if errors.Is(err, storageerrors.ErrorNoFreeBucket) {

@@ -23,7 +23,6 @@ func NewReader(backendName string) (*Reader, error) {
 	// Verify configuredEndpoints
 	for _, loc := range backend.configuredEndpoints {
 		fileInfo, err := os.Stat(loc.Path)
-
 		if err != nil {
 			return nil, err
 		}
