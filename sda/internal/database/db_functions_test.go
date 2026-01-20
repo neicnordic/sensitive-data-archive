@@ -1696,6 +1696,8 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 			assert.NoError(t, err)
 			_, err = db.DB.Exec("DELETE FROM sda.file_dataset")
 			assert.NoError(t, err)
+			_, err = db.DB.Exec("DELETE FROM sda.dataset_event_log")
+			assert.NoError(t, err)
 			_, err = db.DB.Exec("DELETE FROM sda.datasets")
 			assert.NoError(t, err)
 			_, err = db.DB.Exec("DELETE FROM sda.checksums")
