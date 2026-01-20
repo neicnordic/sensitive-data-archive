@@ -37,6 +37,10 @@ func (m *mockDatabase) GetMappingData(_ string) (*database.MappingData, error) {
 	panic("function not expected to be called in unit tests")
 }
 
+func (m *mockDatabase) GetSubmissionLocation(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
 func TestLocationBrokerTestSuite(t *testing.T) {
 	suite.Run(t, new(LocationBrokerTestSuite))
 }
