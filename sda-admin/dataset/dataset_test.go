@@ -138,5 +138,4 @@ func TestRotateKey_Failure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rotation failed")
 	mockHelpers.AssertExpectations(t)
-
 }
