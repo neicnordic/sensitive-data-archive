@@ -67,7 +67,7 @@ func TestCheckAndReconnect(t *testing.T) {
 
 	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing bad conn"))
 
-	err := CatchPanicCheckAndReconnect(SQLdb{db, ""})
+	err := CatchPanicCheckAndReconnect(SQLdb{DB: db, ConnInfo: "", Version: 0})
 	assert.Error(t, err, "Should have received error from checkAndReconnectOnNeeded fataling")
 }
 
