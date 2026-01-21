@@ -82,6 +82,9 @@ func (ts *TestSuite) generateToken(sub string) (string, error) {
 
 	token.Header["kid"] = "rsa1"
 	block, _ := pem.Decode(keyPem)
+	if block == nil {
+		return "", fmt.Errorf("failed to decode PEM block containing private key")
+	}
 	keyRaw, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse private key: %w", err)
