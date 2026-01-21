@@ -3,6 +3,7 @@ package writer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -63,7 +64,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		ContentEncoding: aws.String("application/octet-stream"),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to upload object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, activeBucket, writer.activeEndpoint.Endpoint, err)
 	}
 
 	return writer.activeEndpoint.Endpoint + "/" + activeBucket, nil

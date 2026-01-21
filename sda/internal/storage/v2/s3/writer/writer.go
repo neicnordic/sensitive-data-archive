@@ -3,6 +3,7 @@ package writer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -71,9 +72,7 @@ func (writer *Writer) getS3ClientForEndpoint(ctx context.Context, endpoint strin
 		}
 		client, err := e.getS3Client(ctx)
 		if err != nil {
-			log.Errorf("failed to get S3 client: %v to s3: %s", err, endpoint)
-
-			return nil, err
+			return nil, fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpoint, err)
 		}
 
 		return client, nil

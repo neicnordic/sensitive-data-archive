@@ -2,6 +2,7 @@ package writer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -24,7 +25,7 @@ func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string)
 		Key:    aws.String(filePath),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, bucket, endpoint, err)
 	}
 
 	return nil

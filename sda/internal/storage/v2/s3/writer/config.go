@@ -117,7 +117,7 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 
 	transport, err := endpointConf.transportConfigS3()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to config s3 transport, due to: %v", err)
 	}
 
 	s3cfg, err := config.LoadDefaultConfig(
@@ -126,7 +126,7 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 		config.WithHTTPClient(&http.Client{Transport: transport}),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load default S3 config, due to: %v", err)
 	}
 	endpoint := endpointConf.Endpoint
 	switch {
@@ -167,33 +167,28 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 	if endpointConf.CACert != "" {
 		caCert, err := os.ReadFile(endpointConf.CACert)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to append %q to RootCAs, due to: %v", caCert, err)
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
 		}
 	}
 
-	var trConfig http.RoundTripper = &http.Transport{
+	return &http.Transport{
 		TLSClientConfig:   cfg,
-		ForceAttemptHTTP2: true}
-
-	return trConfig, nil
+		ForceAttemptHTTP2: true,
+	}, nil
 }
 
 func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker locationbroker.LocationBroker) (string, error) {
 	client, err := endpointConf.getS3Client(ctx)
 	if err != nil {
-		log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
-
-		return "", err
+		return "", fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpointConf.Endpoint, err)
 	}
 
 	bucketsRsp, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
-		log.Errorf("failed to call S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
-
-		return "", err
+		return "", fmt.Errorf("failed to call S3 client at endpoint: %s, due to %v", endpointConf.Endpoint, err)
 	}
 
 	var bucketsWithPrefix []string
@@ -207,7 +202,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 		activeBucket := endpointConf.BucketPrefix + "1"
 		_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &activeBucket})
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create S3 bucket: %s at endpoint: %s, due to %v", activeBucket, endpointConf.Endpoint, err)
 		}
 
 		return activeBucket, nil
@@ -220,7 +215,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 		loc := endpointConf.Endpoint + "/" + bucket
 		count, err := locationBroker.GetObjectCount(ctx, loc)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to get object count of location %s, due to %v", loc, err)
 		}
 		if count >= endpointConf.MaxObjects && endpointConf.MaxObjects > 0 {
 			continue
@@ -228,7 +223,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 
 		size, err := locationBroker.GetSize(ctx, loc)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to get size of location %s, due to %v", loc, err)
 		}
 		if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
 			continue
@@ -244,12 +239,12 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 
 	currentInc, err := strconv.Atoi(strings.TrimPrefix(bucketsWithPrefix[len(bucketsWithPrefix)-1], endpointConf.BucketPrefix))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate next bucket increment after bucket %s, due to %v", bucketsWithPrefix[len(bucketsWithPrefix)-1], err)
 	}
 	activeBucket := fmt.Sprintf("%s%d", endpointConf.BucketPrefix, currentInc+1)
 	_, err = client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &activeBucket})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create S3 bucket: %s at endpoint: %s, due to %v", activeBucket, endpointConf.Endpoint, err)
 	}
 
 	return activeBucket, nil

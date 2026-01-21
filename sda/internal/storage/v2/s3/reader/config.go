@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -91,13 +92,17 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 		return endpointConf.s3Client, nil
 	}
 
+	transport, err := endpointConf.transportConfigS3()
+	if err != nil {
+		return nil, fmt.Errorf("failed to config s3 transport, due to: %v", err)
+	}
 	s3cfg, err := config.LoadDefaultConfig(
 		ctx,
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(endpointConf.AccessKey, endpointConf.SecretKey, "")),
-		config.WithHTTPClient(&http.Client{Transport: endpointConf.transportConfigS3()}),
+		config.WithHTTPClient(&http.Client{Transport: transport}),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load default S3 config, due to: %v", err)
 	}
 
 	endpoint := endpointConf.Endpoint
@@ -125,30 +130,29 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 }
 
 // transportConfigS3 is a helper method to setup TLS for the S3 client.
-func (endpointConf *endpointConfig) transportConfigS3() http.RoundTripper {
+func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, error) {
 	cfg := new(tls.Config)
 
 	// Read system CAs
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
-		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+		log.Warnf("failed to read system CAs: %v, using an empty pool as base", err)
 		systemCAs = x509.NewCertPool()
 	}
 	cfg.RootCAs = systemCAs
 
 	if endpointConf.CACert != "" {
-		cacert, e := os.ReadFile(endpointConf.CACert) // #nosec this file comes from our config
-		if e != nil {
-			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
+		caCert, err := os.ReadFile(endpointConf.CACert)
+		if err != nil {
+			return nil, fmt.Errorf("failed to append %q to RootCAs, due to: %v", caCert, err)
 		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
 		}
 	}
 
-	var trConfig http.RoundTripper = &http.Transport{
+	return &http.Transport{
 		TLSClientConfig:   cfg,
-		ForceAttemptHTTP2: true}
-
-	return trConfig
+		ForceAttemptHTTP2: true,
+	}, nil
 }

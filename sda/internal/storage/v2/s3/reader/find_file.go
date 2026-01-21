@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
-	log "github.com/sirupsen/logrus"
 )
 
 func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, error) {
@@ -21,8 +20,6 @@ func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, er
 
 		bucketsRsp, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
 		if err != nil {
-			log.Errorf("failed to call S3 client: %v to endpoint: %s", err, endpointConf.Endpoint)
-
 			return "", err
 		}
 

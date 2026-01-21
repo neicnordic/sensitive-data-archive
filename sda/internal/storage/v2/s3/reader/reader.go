@@ -9,8 +9,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type Reader struct {
@@ -30,16 +28,12 @@ func NewReader(ctx context.Context, backendName string) (*Reader, error) {
 	for _, e := range backend.endpoints {
 		client, err := e.getS3Client(ctx)
 		if err != nil {
-			log.Errorf("failed to create S3 client: %v to endpoint: %s", err, e.Endpoint)
-
 			return nil, err
 		}
 		// Use list buckets to verify if client valid
 		_, err = client.ListBuckets(ctx, &s3.ListBucketsInput{})
 		if err != nil {
-			log.Errorf("failed to call S3 client: %v to endpoint: %s", err, e.Endpoint)
-
-			return nil, err
+			return nil, fmt.Errorf("failed to call S3 client at endpoint: %s, due to: %v", e.Endpoint, err)
 		}
 	}
 	if len(backend.endpoints) == 0 {
@@ -56,17 +50,13 @@ func (reader *Reader) getS3ClientForEndpoint(ctx context.Context, endpoint strin
 		}
 		client, err := e.getS3Client(ctx)
 		if err != nil {
-			log.Errorf("failed to create S3 client: %v to endpoint: %s", err, endpoint)
-
-			return nil, err
+			return nil, fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpoint, err)
 		}
 
 		return client, nil
 	}
 
-	log.Errorf("no valid reader endpoints configured for endpoint: %s", endpoint)
-
-	return nil, fmt.Errorf("no valid reader endpoints configured for endpoint: %s", endpoint)
+	return nil, storageerrors.ErrorNoEndpointConfiguredForLocation
 }
 
 // parseLocation attempts to parse a location to a s3 endpoint, and a bucket

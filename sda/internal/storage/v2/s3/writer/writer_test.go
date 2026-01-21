@@ -53,28 +53,29 @@ func (m *mockS3) handler(w http.ResponseWriter, req *http.Request) {
 func (m *mockS3) ListBuckets(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 
-	rsp := `
+	var b strings.Builder
+	_, _ = b.WriteString(`
 <?xml version="1.0" encoding="UTF-8"?>
 <ListAllMyBucketsResult>
-   <Buckets>`
+   <Buckets>`)
 
 	for bucket := range m.buckets {
-		rsp += fmt.Sprintf(`
+		_, _ = b.WriteString(fmt.Sprintf(`
       <Bucket>
          <BucketArn>%s</BucketArn>
          <BucketRegion>us-east-1</BucketRegion>
          <Name>%s</Name>
-      </Bucket>`, bucket, bucket)
+      </Bucket>`, bucket, bucket))
 	}
-	rsp += `
+	_, _ = b.WriteString(`
    </Buckets>
    <Owner>
       <DisplayName>mock</DisplayName>
       <ID>mock</ID>
    </Owner>
 </ListAllMyBucketsResult>
-`
-	_, _ = w.Write([]byte(rsp))
+`)
+	_, _ = w.Write([]byte(b.String()))
 }
 func (m *mockS3) Delete(w http.ResponseWriter, req *http.Request) {
 	bucket := strings.Split(req.RequestURI, "/")[1]

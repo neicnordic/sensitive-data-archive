@@ -3,13 +3,13 @@ package reader
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
-	log "github.com/sirupsen/logrus"
 )
 
 func (reader *Reader) NewFileReader(ctx context.Context, location, filePath string) (io.ReadCloser, error) {
@@ -33,9 +33,8 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
 			return nil, storageerrors.ErrorFileNotFoundInLocation
 		}
-		log.Errorf("failed to get object from backend: %v", err)
 
-		return nil, err
+		return nil, fmt.Errorf("failed to get object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, bucket, endpoint, err)
 	}
 
 	return r.Body, nil
