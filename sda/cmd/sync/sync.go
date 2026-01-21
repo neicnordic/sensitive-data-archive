@@ -151,15 +151,21 @@ func main() {
 				continue
 			}
 
+			var syncFilesErr error
 			for _, aID := range message.AccessionIDs {
 				if err := syncFiles(ctx, aID); err != nil {
 					log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
-					if err := delivered.Nack(false, false); err != nil {
-						log.Errorf("failed to nack following GetFileSize error message")
-					}
+					syncFilesErr = err
 
-					continue
+					break
 				}
+			}
+			if syncFilesErr != nil {
+				if err := delivered.Nack(false, false); err != nil {
+					log.Errorf("failed to nack following GetFileSize error message")
+				}
+
+				continue
 			}
 
 			log.Infoln("buildSyncDatasetJSON")
@@ -191,60 +197,64 @@ func syncFiles(ctx context.Context, stableID string) error {
 	log.Debugf("syncing file %s", stableID)
 	inboxPath, err := db.GetInboxPath(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get inbox path for file with stable ID: %s, reason: %v", stableID, err)
+		return fmt.Errorf("failed to get inbox path, reason: %v", err)
 	}
 
 	archivePath, archiveLocation, err := db.GetArchivePathAndLocation(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get archive path for file with stable ID: %s, reason: %v", stableID, err)
+		return fmt.Errorf("failed to get archive path and location, reason: %v", err)
 	}
 
 	fileSize, err := archiveReader.GetFileSize(ctx, archiveLocation, archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to get filesize for file with archivepath: %s, reason: %v", archivePath, err)
+		return fmt.Errorf("failed to get file size from archive storage, location: %s, path: %s, reason: %v", archiveLocation, archivePath, err)
 	}
 
 	file, err := archiveReader.NewFileReader(ctx, archiveLocation, archivePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read file from archive storage, location: %s, path: %s, reason: %v", archiveLocation, archivePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	header, err := db.GetHeaderForStableID(stableID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get header from db, reason: %v", err)
 	}
 
-	pubkeyList := [][chacha20poly1305.KeySize]byte{}
-	pubkeyList = append(pubkeyList, *conf.Sync.PublicKey)
-	newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
+	newHeader, err := headers.ReEncryptHeader(header, *key, [][chacha20poly1305.KeySize]byte{*conf.Sync.PublicKey})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to reencrypt header, reason: %v", err)
 	}
 
 	contentReader, contentWriter := io.Pipe()
-	_, err = contentWriter.Write(newHeader)
-	if err != nil {
-		return err
+	// Ensure contentReader, contentWriter are closed in case error
+	defer func() {
+		_ = contentWriter.Close()
+		_ = contentReader.Close()
+	}()
+
+	if _, err := contentWriter.Write(newHeader); err != nil {
+		return fmt.Errorf("failed to write header, reason: %v", err)
 	}
 
 	// Copy the file and check is sizes match
 	copiedSize, err := io.Copy(contentWriter, file)
-	if err != nil || copiedSize != fileSize {
-		switch {
-		case copiedSize != fileSize:
-			return errors.New("copied size does not match file size")
-		default:
-			return err
-		}
+	switch {
+	case err != nil:
+		return fmt.Errorf("failed to write file content, reason: %v", err)
+	case copiedSize != fileSize:
+		return errors.New("copied size does not match file size")
+	default:
 	}
 	_ = contentWriter.Close()
 
 	_, err = syncWriter.WriteFile(ctx, inboxPath, contentReader)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to upload file to storage, reason: %v", err)
 	}
-	defer contentReader.Close()
+	_ = contentReader.Close()
 
 	return nil
 }
