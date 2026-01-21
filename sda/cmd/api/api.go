@@ -882,8 +882,6 @@ func rotateKeyDataset(c *gin.Context) {
 
 			return
 		}
-
-		log.Infof("rotation message sent for file %s in dataset %s", fileID, datasetID)
 	}
 
 	log.Infof("rotation messages sent for %d files in dataset %s", len(files), datasetID)
