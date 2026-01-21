@@ -120,11 +120,11 @@ metadata:
   name: archive-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
-      storage: 1G
-  storageClassName: local-path
+      storage: 100Mi
+  storageClassName: nfs
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -132,11 +132,11 @@ metadata:
   name: backup-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
-      storage: 1G
-  storageClassName: local-path
+      storage: 100Mi
+  storageClassName: nfs
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -144,11 +144,11 @@ metadata:
   name: inbox-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
-      storage: 1G
-  storageClassName: local-path
+      storage: 100Mi
+  storageClassName: nfs
 ---
 apiVersion: apps/v1
 kind: Deployment
