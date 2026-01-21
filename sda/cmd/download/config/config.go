@@ -50,6 +50,12 @@ var (
 	sessionSecure     bool
 	sessionHTTPOnly   bool
 	sessionName       string
+
+	// Cache configuration
+	cacheEnabled       bool
+	cacheFileTTL       int
+	cachePermissionTTL int
+	cacheDatasetTTL    int
 )
 
 func init() {
@@ -357,6 +363,48 @@ func init() {
 				sessionName = viper.GetString(flagName)
 			},
 		},
+
+		// Cache flags
+		&config.Flag{
+			Name: "cache.enabled",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Bool(flagName, true, "Enable database query caching")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				cacheEnabled = viper.GetBool(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "cache.file-ttl",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 300, "TTL for file query cache in seconds")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				cacheFileTTL = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "cache.permission-ttl",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 120, "TTL for permission check cache in seconds")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				cachePermissionTTL = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "cache.dataset-ttl",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 300, "TTL for dataset query cache in seconds")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				cacheDatasetTTL = viper.GetInt(flagName)
+			},
+		},
 	)
 }
 
@@ -504,4 +552,24 @@ func SessionHTTPOnly() bool {
 // SessionName returns the session cookie name.
 func SessionName() string {
 	return sessionName
+}
+
+// CacheEnabled returns whether database query caching is enabled.
+func CacheEnabled() bool {
+	return cacheEnabled
+}
+
+// CacheFileTTL returns the TTL for file query cache in seconds.
+func CacheFileTTL() int {
+	return cacheFileTTL
+}
+
+// CachePermissionTTL returns the TTL for permission check cache in seconds.
+func CachePermissionTTL() int {
+	return cachePermissionTTL
+}
+
+// CacheDatasetTTL returns the TTL for dataset query cache in seconds.
+func CacheDatasetTTL() int {
+	return cacheDatasetTTL
 }

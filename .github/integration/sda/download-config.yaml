@@ -36,6 +36,13 @@ session:
   http-only: true
   name: "sda_session"
 
+# Database query cache
+cache:
+  enabled: true
+  file-ttl: 300      # 5 minutes
+  permission-ttl: 120  # 2 minutes
+  dataset-ttl: 300   # 5 minutes
+
 # Storage configuration (S3 backend)
 storage:
   backend: "archive"

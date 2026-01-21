@@ -70,6 +70,20 @@ func run() error {
 		}
 	}()
 
+	// Wrap database with cache if enabled
+	if config.CacheEnabled() {
+		cachedDB, err := database.NewCachedDB(database.GetDB(), database.CacheConfig{
+			FileTTL:       time.Duration(config.CacheFileTTL()) * time.Second,
+			PermissionTTL: time.Duration(config.CachePermissionTTL()) * time.Second,
+			DatasetTTL:    time.Duration(config.CacheDatasetTTL()) * time.Second,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to initialize database cache: %w", err)
+		}
+		database.RegisterDatabase(cachedDB)
+		log.Info("Database caching enabled")
+	}
+
 	// Initialize authentication middleware
 	if err := middleware.InitAuth(); err != nil {
 		return fmt.Errorf("failed to initialize auth: %w", err)

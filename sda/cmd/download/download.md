@@ -275,6 +275,30 @@ storage:
 | `SESSION_HTTP_ONLY`   | `session.http-only` | HTTP-only cookies                 |
 | `SESSION_NAME`        | `session.name`      | Session cookie name               |
 
+### Cache Settings
+
+Database query results are cached in-memory to reduce database roundtrips, which is
+particularly beneficial for streaming use cases where the same file metadata may be
+requested multiple times (e.g., HTTP Range requests).
+
+| Variable               | Config Key            | Description                          | Default |
+|------------------------|-----------------------|--------------------------------------|---------|
+| `CACHE_ENABLED`        | `cache.enabled`       | Enable database query caching        | `true`  |
+| `CACHE_FILE_TTL`       | `cache.file-ttl`      | TTL for file queries (seconds)       | `300`   |
+| `CACHE_PERMISSION_TTL` | `cache.permission-ttl`| TTL for permission checks (seconds)  | `120`   |
+| `CACHE_DATASET_TTL`    | `cache.dataset-ttl`   | TTL for dataset queries (seconds)    | `300`   |
+
+The cache uses [ristretto](https://github.com/dgraph-io/ristretto), a high-performance
+concurrent cache. Cached queries include:
+
+- File lookups by ID and path
+- Permission checks (user-scoped via dataset IDs)
+- Dataset listings and metadata
+- Dataset file listings
+
+Cache keys for permission checks are scoped by the user's accessible datasets, ensuring
+that users with different permissions get appropriately cached results.
+
 ## Testing
 
 ### Integration Tests
