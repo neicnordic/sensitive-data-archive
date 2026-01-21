@@ -85,6 +85,9 @@ func getSizeAndCountInDir(path string) (uint64, uint64, error) {
 	size := uint64(0)
 
 	if err := filepath.Walk(path, func(_ string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
 		if info.IsDir() {
 			return nil
 		}
