@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	log "github.com/sirupsen/logrus"
 )
@@ -11,14 +13,25 @@ import (
 // InfoDatasets returns a list of datasets the user has access to.
 // GET /info/datasets
 func (h *Handlers) InfoDatasets(c *gin.Context) {
-	authCtx, ok := middleware.GetAuthContext(c)
+	_, ok := middleware.GetAuthContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 
 		return
 	}
 
-	datasets, err := h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
+	// In allow-all-data mode (for testing), return all datasets
+	// Otherwise, return datasets based on user's permissions
+	var err error
+	var datasets []database.Dataset
+
+	if config.JWTAllowAllData() {
+		datasets, err = h.db.GetAllDatasets(c.Request.Context())
+	} else {
+		authCtx, _ := middleware.GetAuthContext(c)
+		datasets, err = h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
+	}
+
 	if err != nil {
 		log.Errorf("failed to retrieve datasets: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve datasets"})
@@ -106,7 +119,13 @@ func (h *Handlers) InfoDatasetFiles(c *gin.Context) {
 }
 
 // hasDatasetAccess checks if the user has access to a specific dataset.
+// In allow-all-data mode, all authenticated users have access to all datasets.
 func hasDatasetAccess(userDatasets []string, datasetID string) bool {
+	// In allow-all-data mode, grant access to all datasets
+	if config.JWTAllowAllData() {
+		return true
+	}
+
 	for _, d := range userDatasets {
 		if d == datasetID {
 			return true

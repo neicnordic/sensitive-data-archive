@@ -9,6 +9,7 @@ import (
 // mockDatabase is a mock implementation of the database.Database interface for testing.
 type mockDatabase struct {
 	datasets      []database.Dataset
+	datasetIDs    []string
 	datasetInfo   *database.DatasetInfo
 	datasetFiles  []database.File
 	fileByID      *database.File
@@ -19,6 +20,22 @@ type mockDatabase struct {
 
 func (m *mockDatabase) Close() error {
 	return nil
+}
+
+func (m *mockDatabase) GetAllDatasets(_ context.Context) ([]database.Dataset, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return m.datasets, nil
+}
+
+func (m *mockDatabase) GetDatasetIDsByUser(_ context.Context, _ string) ([]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return m.datasetIDs, nil
 }
 
 func (m *mockDatabase) GetUserDatasets(_ context.Context, _ []string) ([]database.Dataset, error) {

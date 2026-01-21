@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/streaming"
@@ -37,19 +38,21 @@ func (h *Handlers) DownloadByFileID(c *gin.Context) {
 		return
 	}
 
-	// Check permission
-	hasPermission, err := h.db.CheckFilePermission(c.Request.Context(), fileID, authCtx.Datasets)
-	if err != nil {
-		log.Errorf("failed to check file permission: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check file permission"})
+	// Check permission (skip in allow-all-data mode)
+	if !config.JWTAllowAllData() {
+		hasPermission, err := h.db.CheckFilePermission(c.Request.Context(), fileID, authCtx.Datasets)
+		if err != nil {
+			log.Errorf("failed to check file permission: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check file permission"})
 
-		return
-	}
+			return
+		}
 
-	if !hasPermission {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		if !hasPermission {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 
-		return
+			return
+		}
 	}
 
 	// Get file info
@@ -257,7 +260,13 @@ func (h *Handlers) getFileByIDOrPath(c *gin.Context, fileID, datasetID, filePath
 
 // checkFilePermission checks if user has permission to access the file.
 // Returns true if permission granted, false otherwise (error response already sent).
+// In allow-all-data mode, all authenticated users have access to all files.
 func (h *Handlers) checkFilePermission(c *gin.Context, fileID string, datasets []string) bool {
+	// In allow-all-data mode, skip permission check
+	if config.JWTAllowAllData() {
+		return true
+	}
+
 	hasPermission, err := h.db.CheckFilePermission(c.Request.Context(), fileID, datasets)
 	if err != nil {
 		log.Errorf("failed to check file permission: %v", err)

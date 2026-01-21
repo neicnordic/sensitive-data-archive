@@ -26,6 +26,8 @@ Create a new download service within `sda/cmd/download/` that:
 | App code in internal/?  | ❌ No                 | App-specific code in `cmd/<app>/`, not `internal/`         |
 | Shared config pattern?  | ✅ internal/config/v2 | Apps register their config, follows validator-orchestrator |
 | Per-app database pkg?   | ✅ Yes                | Each app has own DB queries, reduces cross-app coupling    |
+| Auth via userinfo?      | ❌ No                 | Use JWKS-based JWT validation (matches API service pattern)|
+| Permission model?       | ✅ Data ownership     | Users access datasets where they are submission_user (like API) |
 
 ## API Endpoints (from swagger_v1.yml)
 
@@ -115,7 +117,7 @@ sda/
 │       │   ├── health.go            # gRPC health server for K8s probes
 │       │   └── health_test.go
 │       ├── middleware/
-│       │   ├── auth.go              # OIDC/visa authentication
+│       │   ├── auth.go              # JWT auth + data ownership permissions
 │       │   └── auth_test.go
 │       ├── reencrypt/
 │       │   ├── reencrypt.go         # gRPC client for re-encryption
@@ -167,9 +169,10 @@ sda/
 ### Phase 4: Authentication Middleware ✅
 
 - [x] Create `cmd/download/middleware/auth.go`
-- [x] OIDC token validation (JWT verification via JWKS)
-- [x] Visa extraction for dataset permissions (GA4GH passport v1)
+- [x] JWT validation via JWKS (matches API service pattern)
+- [x] Data ownership permission model (users access datasets they submitted)
 - [x] Session caching with ristretto
+- [x] `allow-all-data` config for testing environments
 
 ### Phase 5: Info Endpoints ✅
 
@@ -245,7 +248,7 @@ sda/
 - [x] `TestGetToken_*` - Token extraction
 - [x] `TestGetAuthContext_*` - Context retrieval
 - [x] `TestSessionCache_*` - Session caching
-- [x] `TestGetPermissions_*` - Visa extraction
+- [x] `TestTokenMiddleware_*` - Authentication flow
 
 #### Integration Tests
 

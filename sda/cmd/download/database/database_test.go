@@ -42,6 +42,83 @@ func setupMockDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, func()) {
 	return db, mock, cleanup
 }
 
+func TestGetAllDatasets(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at"}).
+		AddRow("dataset-1", "Test Dataset", "Description", time.Now()).
+		AddRow("dataset-2", "Another Dataset", nil, time.Now())
+
+	mock.ExpectQuery(queries[getAllDatasetsQuery]).
+		WillReturnRows(rows)
+
+	datasets, err := db.GetAllDatasets(context.Background())
+
+	assert.NoError(t, err)
+	assert.Len(t, datasets, 2)
+	assert.Equal(t, "dataset-1", datasets[0].ID)
+	assert.Equal(t, "dataset-2", datasets[1].ID)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetAllDatasets_Empty(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{"stable_id", "title", "description", "created_at"})
+
+	mock.ExpectQuery(queries[getAllDatasetsQuery]).
+		WillReturnRows(rows)
+
+	datasets, err := db.GetAllDatasets(context.Background())
+
+	assert.NoError(t, err)
+	assert.Empty(t, datasets)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDatasetIDsByUser(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{"stable_id"}).
+		AddRow("dataset-1").
+		AddRow("dataset-2").
+		AddRow("dataset-3")
+
+	mock.ExpectQuery(queries[getDatasetIDsByUserQuery]).
+		WithArgs("test-user").
+		WillReturnRows(rows)
+
+	datasetIDs, err := db.GetDatasetIDsByUser(context.Background(), "test-user")
+
+	assert.NoError(t, err)
+	assert.Len(t, datasetIDs, 3)
+	assert.Equal(t, "dataset-1", datasetIDs[0])
+	assert.Equal(t, "dataset-2", datasetIDs[1])
+	assert.Equal(t, "dataset-3", datasetIDs[2])
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDatasetIDsByUser_Empty(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{"stable_id"})
+
+	mock.ExpectQuery(queries[getDatasetIDsByUserQuery]).
+		WithArgs("test-user").
+		WillReturnRows(rows)
+
+	datasetIDs, err := db.GetDatasetIDsByUser(context.Background(), "test-user")
+
+	assert.NoError(t, err)
+	assert.Empty(t, datasetIDs)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetUserDatasets(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
@@ -157,14 +234,16 @@ func TestGetFileByID(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
 
-	header := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68} // "crypt4gh"
+	// Header is stored as hex string in database
+	headerBytes := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68} // "crypt4gh"
+	headerHex := "6372797074346768"                                       // hex encoding of headerBytes
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
 		"decrypted_file_checksum_type", "header",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh",
-			int64(1024), int64(900), "abc123", "SHA256", header)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
 
 	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("file-1").
@@ -176,7 +255,7 @@ func TestGetFileByID(t *testing.T) {
 	require.NotNil(t, file)
 	assert.Equal(t, "file-1", file.ID)
 	assert.Equal(t, "dataset-1", file.DatasetID)
-	assert.Equal(t, header, file.Header)
+	assert.Equal(t, headerBytes, file.Header)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -205,14 +284,15 @@ func TestGetFileByPath(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
 
-	header := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68}
+	// Header is stored as hex string in database
+	headerHex := "6372797074346768"
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
 		"decrypted_file_checksum_type", "header",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh",
-			int64(1024), int64(900), "abc123", "SHA256", header)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
 
 	mock.ExpectQuery(queries[getFileByPathQuery]).
 		WithArgs("dataset-1", "/path/to/file.txt").
@@ -437,6 +517,14 @@ func (m *mockTestDatabase) Close() error {
 	m.closed = true
 
 	return nil
+}
+
+func (m *mockTestDatabase) GetAllDatasets(_ context.Context) ([]Dataset, error) {
+	return nil, nil
+}
+
+func (m *mockTestDatabase) GetDatasetIDsByUser(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
 }
 
 func (m *mockTestDatabase) GetUserDatasets(_ context.Context, _ []string) ([]Dataset, error) {

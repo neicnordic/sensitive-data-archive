@@ -35,12 +35,14 @@ var (
 	grpcClientCert string
 	grpcClientKey  string
 
-	// OIDC configuration
-	oidcIssuer      string
-	oidcJWKSURL     string
-	oidcAudience    string
-	oidcTrustedList []string
-	oidcUserinfoURL string
+	// JWT configuration (for token validation)
+	jwtPubKeyPath   string
+	jwtPubKeyURL    string
+	jwtAllowAllData bool // For testing: allow authenticated users access to all datasets
+
+	// OIDC configuration (optional, for discovery)
+	oidcIssuer   string
+	oidcAudience string
 
 	// Session configuration
 	sessionExpiration int
@@ -250,55 +252,57 @@ func init() {
 			},
 		},
 
-		// OIDC flags
+		// JWT flags (for token validation - at least one of path or url must be set)
+		&config.Flag{
+			Name: "jwt.pubkey-path",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to directory containing JWT public key files (PEM format)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				jwtPubKeyPath = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "jwt.pubkey-url",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "URL to JWKS endpoint for JWT verification")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				jwtPubKeyURL = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "jwt.allow-all-data",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Bool(flagName, false, "Allow authenticated users access to all datasets (for testing only)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				jwtAllowAllData = viper.GetBool(flagName)
+			},
+		},
+
+		// OIDC flags (optional, for token validation settings)
 		&config.Flag{
 			Name: "oidc.issuer",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "OIDC issuer URL")
+				flagSet.String(flagName, "", "Expected OIDC issuer in tokens (optional)")
 			},
-			Required: true,
+			Required: false,
 			AssignFunc: func(flagName string) {
 				oidcIssuer = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
-			Name: "oidc.jwks-url",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "OIDC JWKS URL (optional, derived from issuer if not set)")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				oidcJWKSURL = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
 			Name: "oidc.audience",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Expected audience in OIDC tokens")
+				flagSet.String(flagName, "", "Expected audience in tokens (optional)")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
 				oidcAudience = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "oidc.trusted-issuers",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.StringSlice(flagName, []string{}, "List of trusted OIDC issuers for visa validation")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				oidcTrustedList = viper.GetStringSlice(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "oidc.userinfo-url",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "OIDC userinfo endpoint URL (optional, derived from issuer if not set)")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				oidcUserinfoURL = viper.GetString(flagName)
 			},
 		},
 
@@ -451,29 +455,30 @@ func GRPCClientKey() string {
 	return grpcClientKey
 }
 
-// OIDCIssuer returns the OIDC issuer URL.
-func OIDCIssuer() string {
-	return oidcIssuer
+// JWTPubKeyPath returns the path to the JWT public key directory.
+func JWTPubKeyPath() string {
+	return jwtPubKeyPath
 }
 
-// OIDCJWKSURL returns the OIDC JWKS URL.
-func OIDCJWKSURL() string {
-	return oidcJWKSURL
+// JWTPubKeyURL returns the JWKS URL for JWT verification.
+func JWTPubKeyURL() string {
+	return jwtPubKeyURL
+}
+
+// JWTAllowAllData returns whether authenticated users have access to all datasets.
+// This should only be used for testing purposes.
+func JWTAllowAllData() bool {
+	return jwtAllowAllData
+}
+
+// OIDCIssuer returns the expected OIDC issuer.
+func OIDCIssuer() string {
+	return oidcIssuer
 }
 
 // OIDCAudience returns the expected OIDC audience.
 func OIDCAudience() string {
 	return oidcAudience
-}
-
-// OIDCTrustedList returns the list of trusted OIDC issuers.
-func OIDCTrustedList() []string {
-	return oidcTrustedList
-}
-
-// OIDCUserinfoURL returns the OIDC userinfo endpoint URL.
-func OIDCUserinfoURL() string {
-	return oidcUserinfoURL
 }
 
 // SessionExpiration returns the session expiration time in seconds.

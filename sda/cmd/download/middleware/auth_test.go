@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -104,6 +105,7 @@ func TestGetAuthContext_Exists(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	expected := AuthContext{
+		Subject:  "user@example.com",
 		Datasets: []string{"dataset1", "dataset2"},
 	}
 	c.Set(ContextKey, expected)
@@ -111,6 +113,7 @@ func TestGetAuthContext_Exists(t *testing.T) {
 	authCtx, exists := GetAuthContext(c)
 
 	assert.True(t, exists)
+	assert.Equal(t, expected.Subject, authCtx.Subject)
 	assert.Equal(t, expected.Datasets, authCtx.Datasets)
 }
 
@@ -121,6 +124,7 @@ func TestGetAuthContext_NotExists(t *testing.T) {
 	authCtx, exists := GetAuthContext(c)
 
 	assert.False(t, exists)
+	assert.Empty(t, authCtx.Subject)
 	assert.Empty(t, authCtx.Datasets)
 }
 
@@ -135,6 +139,7 @@ func TestSessionCache_SetAndGet(t *testing.T) {
 	sc := &SessionCache{cache: cache}
 
 	authCtx := AuthContext{
+		Subject:  "user@example.com",
 		Datasets: []string{"test-dataset"},
 	}
 
@@ -146,6 +151,7 @@ func TestSessionCache_SetAndGet(t *testing.T) {
 	retrieved, exists := sc.Get("test-key")
 
 	assert.True(t, exists)
+	assert.Equal(t, authCtx.Subject, retrieved.Subject)
 	assert.Equal(t, authCtx.Datasets, retrieved.Datasets)
 }
 
@@ -164,40 +170,16 @@ func TestSessionCache_GetNotExists(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestCheckVisaType_Valid(t *testing.T) {
-	// This is a minimal JWT structure for testing
-	// In real tests, you'd use a properly signed JWT
-	// For now, we test the parsing logic with an unsigned token
-
-	// Skip this test as it requires a valid JWT
-	t.Skip("Requires valid JWT token for testing")
-}
-
-func TestGetPermissions_NilVisas(t *testing.T) {
-	datasets := GetPermissions(nil)
-	assert.Empty(t, datasets)
-}
-
-func TestGetPermissions_EmptyVisas(t *testing.T) {
-	visas := &Visas{Visa: []string{}}
-	datasets := GetPermissions(visas)
-	assert.Empty(t, datasets)
-}
-
 func TestTokenMiddleware_NoToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("GET", "/test", nil)
 
-	// Initialize session cache for test
-	cache, _ := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-	sessionCache = &SessionCache{cache: cache}
+	// Initialize auth middleware for testing
+	err := InitAuthForTesting()
+	assert.NoError(t, err)
 
-	handler := TokenMiddleware()
+	handler := TokenMiddleware(nil) // nil database - not testing dataset lookup
 	handler(c)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -226,13 +208,16 @@ func setupTestRouter() *gin.Engine {
 	return r
 }
 
-func TestExtractDatasets_NoDuplicates(t *testing.T) {
-	existing := []string{"dataset1", "dataset2"}
+func TestAuthenticator_NoKeys(t *testing.T) {
+	auth := &Authenticator{
+		Keyset: jwk.NewSet(), // Empty keyset
+	}
 
-	// Create a mock visa token (would need proper JWT in real test)
-	// This tests the deduplication logic
-	result := extractDatasets(nil, existing)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
 
-	// Should return existing unchanged when visa is nil
-	assert.Equal(t, existing, result)
+	_, err := auth.Authenticate(req)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no keys configured")
 }

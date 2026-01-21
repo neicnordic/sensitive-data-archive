@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
@@ -116,14 +115,9 @@ func TestHealthReady(t *testing.T) {
 
 // Test auth middleware blocks unauthenticated requests
 func TestInfoDataset_Unauthenticated(t *testing.T) {
-	// Initialize session cache for middleware
-	cache, _ := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-	_ = cache
-	time.Sleep(10 * time.Millisecond)
+	// Initialize middleware for testing (with empty keyset)
+	err := middleware.InitAuthForTesting()
+	require.NoError(t, err)
 
 	router := gin.New()
 	h := newTestHandlers(t)
@@ -663,6 +657,9 @@ func TestInfoDatasetFiles_DatabaseError(t *testing.T) {
 // Unauthenticated tests for info endpoints
 
 func TestInfoDatasets_Unauthenticated(t *testing.T) {
+	err := middleware.InitAuthForTesting()
+	require.NoError(t, err)
+
 	router := gin.New()
 	h := newTestHandlers(t)
 	h.RegisterRoutes(router)
@@ -676,6 +673,9 @@ func TestInfoDatasets_Unauthenticated(t *testing.T) {
 }
 
 func TestInfoDatasetFiles_Unauthenticated(t *testing.T) {
+	err := middleware.InitAuthForTesting()
+	require.NoError(t, err)
+
 	router := gin.New()
 	h := newTestHandlers(t)
 	h.RegisterRoutes(router)
@@ -774,6 +774,9 @@ func TestDownloadByQuery_AccessDenied(t *testing.T) {
 }
 
 func TestDownloadByQuery_Unauthenticated(t *testing.T) {
+	err := middleware.InitAuthForTesting()
+	require.NoError(t, err)
+
 	router := gin.New()
 	h := newTestHandlers(t)
 	h.RegisterRoutes(router)
@@ -787,6 +790,9 @@ func TestDownloadByQuery_Unauthenticated(t *testing.T) {
 }
 
 func TestDownloadByFileID_Unauthenticated(t *testing.T) {
+	err := middleware.InitAuthForTesting()
+	require.NoError(t, err)
+
 	router := gin.New()
 	h := newTestHandlers(t)
 	h.RegisterRoutes(router)

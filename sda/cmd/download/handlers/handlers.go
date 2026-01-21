@@ -47,7 +47,7 @@ func (h *Handlers) RegisterRoutes(r *gin.Engine) {
 
 	// Info endpoints (auth required)
 	info := r.Group("/info")
-	info.Use(middleware.TokenMiddleware())
+	info.Use(middleware.TokenMiddleware(h.db))
 	{
 		info.GET("/datasets", h.InfoDatasets)
 		info.GET("/dataset", h.InfoDataset)
@@ -56,7 +56,7 @@ func (h *Handlers) RegisterRoutes(r *gin.Engine) {
 
 	// File download endpoints (auth required)
 	file := r.Group("/file")
-	file.Use(middleware.TokenMiddleware())
+	file.Use(middleware.TokenMiddleware(h.db))
 	{
 		file.GET("/:fileId", h.DownloadByFileID)
 		file.GET("", h.DownloadByQuery)

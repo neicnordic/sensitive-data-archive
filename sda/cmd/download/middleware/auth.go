@@ -3,9 +3,12 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -23,27 +26,27 @@ import (
 // ContextKey is the key used to store auth data in the request context.
 const ContextKey = "authContext"
 
+// DatasetLookup is an interface for looking up datasets by user.
+// This allows the middleware to populate user datasets without depending on the full database package.
+type DatasetLookup interface {
+	// GetDatasetIDsByUser returns dataset IDs where the user is the data owner (submission_user).
+	GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error)
+}
+
 // AuthContext holds the authenticated user's information.
 type AuthContext struct {
-	// Datasets the user has access to (from visas)
+	// Subject is the user identifier from the JWT token
+	Subject string
+	// Datasets the user has access to (populated from database based on subject)
 	Datasets []string
+	// Token is the parsed JWT token
+	Token jwt.Token
 }
 
-// OIDCDetails holds OIDC provider configuration.
-type OIDCDetails struct {
-	Userinfo string `json:"userinfo_endpoint"`
-	JWKSURI  string `json:"jwks_uri"`
-}
-
-// Visas holds the GA4GH passport visas from userinfo.
-type Visas struct {
-	Visa []string `json:"ga4gh_passport_v1"`
-}
-
-// VisaClaim holds the visa type and value.
-type VisaClaim struct {
-	Type  string `json:"type"`
-	Value string `json:"value"`
+// Authenticator validates JWT tokens.
+type Authenticator struct {
+	Keyset jwk.Set
+	mu     sync.RWMutex
 }
 
 // SessionCache holds cached session data using ristretto.
@@ -53,23 +56,16 @@ type SessionCache struct {
 }
 
 var (
-	// oidcDetails holds the cached OIDC configuration.
-	oidcDetails     OIDCDetails
-	oidcDetailsOnce sync.Once
+	// auth is the global authenticator instance.
+	auth *Authenticator
 
 	// sessionCache is the in-memory session cache.
 	sessionCache *SessionCache
-
-	// httpClient is used for OIDC requests.
-	httpClient = &http.Client{
-		Timeout: 10 * time.Second,
-	}
 )
 
-// InitAuth initializes the authentication middleware.
-// This should be called during application startup.
-func InitAuth() error {
-	// Initialize session cache
+// InitAuthForTesting initializes the auth middleware with an empty keyset for testing.
+// This allows middleware to run without valid keys, causing authentication to fail.
+func InitAuthForTesting() error {
 	cache, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e6,
 		MaxCost:     100000,
@@ -79,57 +75,200 @@ func InitAuth() error {
 		return err
 	}
 	sessionCache = &SessionCache{cache: cache}
+	auth = &Authenticator{
+		Keyset: jwk.NewSet(),
+	}
 
-	// Fetch OIDC configuration
-	var initErr error
-	oidcDetailsOnce.Do(func() {
-		issuer := config.OIDCIssuer()
-		if issuer == "" {
-			initErr = errors.New("OIDC issuer not configured")
+	return nil
+}
 
-			return
-		}
-
-		// Fetch OIDC discovery document
-		configURL := strings.TrimSuffix(issuer, "/") + "/.well-known/openid-configuration"
-		resp, err := httpClient.Get(configURL)
-		if err != nil {
-			initErr = err
-
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			initErr = errors.New("failed to fetch OIDC configuration")
-
-			return
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&oidcDetails); err != nil {
-			initErr = err
-
-			return
-		}
-
-		// Override with config values if set
-		if jwksURL := config.OIDCJWKSURL(); jwksURL != "" {
-			oidcDetails.JWKSURI = jwksURL
-		}
-		if userinfoURL := config.OIDCUserinfoURL(); userinfoURL != "" {
-			oidcDetails.Userinfo = userinfoURL
-		}
-
-		log.Infof("OIDC configuration loaded from %s", configURL)
+// InitAuth initializes the authentication middleware.
+// This should be called during application startup.
+// It loads JWT public keys from either a local path or remote JWKS URL.
+func InitAuth() error {
+	// Initialize session cache
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e6,
+		MaxCost:     100000,
+		BufferItems: 64,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize session cache: %w", err)
+	}
+	sessionCache = &SessionCache{cache: cache}
 
-	return initErr
+	// Initialize authenticator with empty keyset
+	auth = &Authenticator{
+		Keyset: jwk.NewSet(),
+	}
+
+	// Load keys from path or URL
+	pubKeyPath := config.JWTPubKeyPath()
+	pubKeyURL := config.JWTPubKeyURL()
+
+	if pubKeyPath == "" && pubKeyURL == "" {
+		return errors.New("either jwt.pubkey-path or jwt.pubkey-url must be configured")
+	}
+
+	// Load from local path if configured
+	if pubKeyPath != "" {
+		if err := auth.loadKeysFromPath(pubKeyPath); err != nil {
+			return fmt.Errorf("failed to load JWT keys from path: %w", err)
+		}
+		log.Infof("JWT keys loaded from path: %s", pubKeyPath)
+	}
+
+	// Load from URL if configured (can be used in addition to or instead of path)
+	if pubKeyURL != "" {
+		if err := auth.loadKeysFromURL(pubKeyURL); err != nil {
+			return fmt.Errorf("failed to load JWT keys from URL: %w", err)
+		}
+		log.Infof("JWT keys loaded from URL: %s", pubKeyURL)
+	}
+
+	return nil
+}
+
+// loadKeysFromPath loads public keys from a directory containing PEM files.
+func (a *Authenticator) loadKeysFromPath(keyPath string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return filepath.Walk(keyPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.Mode().IsRegular() {
+			log.Debugf("Loading key from file: %s", path)
+
+			keyData, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("failed to read key file %s: %w", path, err)
+			}
+
+			key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+			if err != nil {
+				log.Warnf("failed to parse key from %s: %v (skipping)", path, err)
+
+				return nil
+			}
+
+			if err := jwk.AssignKeyID(key); err != nil {
+				return fmt.Errorf("failed to assign key ID: %w", err)
+			}
+
+			if err := a.Keyset.AddKey(key); err != nil {
+				return fmt.Errorf("failed to add key to set: %w", err)
+			}
+
+			log.Debugf("Loaded key with ID: %s", key.KeyID())
+		}
+
+		return nil
+	})
+}
+
+// loadKeysFromURL fetches keys from a JWKS endpoint.
+func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	parsedURL, err := url.ParseRequestURI(jwksURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return fmt.Errorf("invalid JWKS URL: %s", jwksURL)
+	}
+
+	keySet, err := jwk.Fetch(context.Background(), jwksURL)
+	if err != nil {
+		return fmt.Errorf("failed to fetch JWKS: %w", err)
+	}
+
+	// Add all keys from the fetched keyset
+	for iter := keySet.Keys(context.Background()); iter.Next(context.Background()); {
+		key := iter.Pair().Value.(jwk.Key)
+		if err := jwk.AssignKeyID(key); err != nil {
+			log.Warnf("failed to assign key ID: %v", err)
+
+			continue
+		}
+		if err := a.Keyset.AddKey(key); err != nil {
+			log.Warnf("failed to add key: %v", err)
+
+			continue
+		}
+	}
+
+	return nil
+}
+
+// Authenticate verifies a token and returns the parsed JWT.
+func (a *Authenticator) Authenticate(r *http.Request) (jwt.Token, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.Keyset.Len() == 0 {
+		return nil, errors.New("no keys configured for token validation")
+	}
+
+	// Extract token from request
+	tokenStr, _, err := GetToken(r.Header)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse and verify token
+	// Use WithRequireKid(false) to allow matching keys without requiring key ID match
+	// This is necessary when loading PEM keys that don't have explicit key IDs
+	token, err := jwt.Parse(
+		[]byte(tokenStr),
+		jwt.WithKeySet(a.Keyset,
+			jws.WithInferAlgorithmFromKey(true),
+			jws.WithRequireKid(false),
+		),
+		jwt.WithValidate(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	// Validate issuer if configured
+	if issuer := config.OIDCIssuer(); issuer != "" {
+		tokenIssuer := token.Issuer()
+		if tokenIssuer != issuer && tokenIssuer != strings.TrimSuffix(issuer, "/") {
+			return nil, fmt.Errorf("invalid issuer: got %s, expected %s", tokenIssuer, issuer)
+		}
+	}
+
+	// Validate audience if configured
+	if audience := config.OIDCAudience(); audience != "" {
+		aud := token.Audience()
+		found := false
+		for _, a := range aud {
+			if a == audience {
+				found = true
+
+				break
+			}
+		}
+		if !found {
+			return nil, errors.New("invalid audience")
+		}
+	}
+
+	// Validate subject exists
+	iss, err := url.ParseRequestURI(token.Issuer())
+	if err != nil || iss.Hostname() == "" {
+		return nil, fmt.Errorf("invalid issuer in token: %v", token.Issuer())
+	}
+
+	return token, nil
 }
 
 // TokenMiddleware performs access token verification and validation.
-// JWTs are verified and validated, then visas are fetched from userinfo.
-// The datasets are stored in a session cache and request context.
-func TokenMiddleware() gin.HandlerFunc {
+// The authenticated user's subject is stored in the request context.
+// If db is provided and allow-all-data is disabled, the user's datasets are populated from the database.
+func TokenMiddleware(db DatasetLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check for cached session
 		sessionCookie, err := c.Cookie(config.SessionName())
@@ -144,39 +283,31 @@ func TokenMiddleware() gin.HandlerFunc {
 		}
 
 		// No session, authenticate via token
-		token, code, err := GetToken(c.Request.Header)
+		token, err := auth.Authenticate(c.Request)
 		if err != nil {
-			c.JSON(code, gin.H{"error": err.Error()})
+			log.Debugf("authentication failed: %v", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			c.Abort()
 
 			return
 		}
-
-		// Verify token signature
-		_, err = VerifyJWT(token)
-		if err != nil {
-			log.Debugf("token verification failed: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			c.Abort()
-
-			return
-		}
-
-		// Fetch visas from userinfo
-		visas, err := GetVisas(token)
-		if err != nil {
-			log.Debugf("failed to get visas: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "failed to get visas"})
-			c.Abort()
-
-			return
-		}
-
-		// Extract dataset permissions from visas
-		datasets := GetPermissions(visas)
 
 		authCtx := AuthContext{
-			Datasets: datasets,
+			Subject: token.Subject(),
+			Token:   token,
+		}
+
+		// Populate datasets based on user's subject (data ownership model)
+		// Skip if allow-all-data is enabled (for testing) or no database provided
+		if db != nil && !config.JWTAllowAllData() {
+			datasets, err := db.GetDatasetIDsByUser(c.Request.Context(), token.Subject())
+			if err != nil {
+				log.Warnf("failed to get datasets for user %s: %v", token.Subject(), err)
+				// Don't fail authentication, just leave datasets empty
+			} else {
+				authCtx.Datasets = datasets
+				log.Debugf("user %s has access to %d datasets", token.Subject(), len(datasets))
+			}
 		}
 
 		// Create new session
@@ -196,7 +327,7 @@ func TokenMiddleware() gin.HandlerFunc {
 
 		// Store in request context
 		c.Set(ContextKey, authCtx)
-		log.Debug("authentication successful")
+		log.Debugf("authentication successful for subject: %s", token.Subject())
 
 		c.Next()
 	}
@@ -227,234 +358,6 @@ var GetToken = func(headers http.Header) (string, int, error) {
 	}
 
 	return parts[1], 0, nil
-}
-
-// VerifyJWT verifies the token signature using JWKS.
-var VerifyJWT = func(token string) (jwt.Token, error) {
-	if oidcDetails.JWKSURI == "" {
-		return nil, errors.New("JWKS URI not configured")
-	}
-
-	// Fetch JWKS
-	keySet, err := jwk.Fetch(context.Background(), oidcDetails.JWKSURI)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse and verify token
-	parsedToken, err := jwt.Parse(
-		[]byte(token),
-		jwt.WithKeySet(keySet),
-		jwt.WithValidate(true),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate audience if configured
-	if audience := config.OIDCAudience(); audience != "" {
-		aud := parsedToken.Audience()
-		found := false
-		for _, a := range aud {
-			if a == audience {
-				found = true
-
-				break
-			}
-		}
-		if !found {
-			return nil, errors.New("invalid audience")
-		}
-	}
-
-	return parsedToken, nil
-}
-
-// GetVisas fetches visas from the userinfo endpoint.
-var GetVisas = func(token string) (*Visas, error) {
-	if oidcDetails.Userinfo == "" {
-		return nil, errors.New("userinfo endpoint not configured")
-	}
-
-	req, err := http.NewRequest("GET", oidcDetails.Userinfo, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("userinfo request failed")
-	}
-
-	var visas Visas
-	if err := json.NewDecoder(resp.Body).Decode(&visas); err != nil {
-		return nil, err
-	}
-
-	return &visas, nil
-}
-
-// GetPermissions extracts dataset permissions from visas.
-var GetPermissions = func(visas *Visas) []string {
-	if visas == nil {
-		return []string{}
-	}
-
-	datasets := []string{}
-	trustedIssuers := config.OIDCTrustedList()
-
-	for _, visa := range visas.Visa {
-		// Check visa type
-		if !checkVisaType(visa, "ControlledAccessGrants") {
-			continue
-		}
-
-		// Validate visa
-		verifiedVisa, valid := validateVisa(visa, trustedIssuers)
-		if !valid {
-			continue
-		}
-
-		// Extract dataset from visa
-		datasets = extractDatasets(verifiedVisa, datasets)
-	}
-
-	log.Debugf("matched datasets: %v", datasets)
-
-	return datasets
-}
-
-// checkVisaType checks if a visa is of the specified type.
-func checkVisaType(visa string, visaType string) bool {
-	parsedToken, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
-	if err != nil {
-		log.Debugf("failed to parse visa: %v", err)
-
-		return false
-	}
-
-	visaClaim := parsedToken.PrivateClaims()["ga4gh_visa_v1"]
-	if visaClaim == nil {
-		return false
-	}
-
-	claimJSON, err := json.Marshal(visaClaim)
-	if err != nil {
-		return false
-	}
-
-	var claim VisaClaim
-	if err := json.Unmarshal(claimJSON, &claim); err != nil {
-		return false
-	}
-
-	return claim.Type == visaType
-}
-
-// validateVisa validates a visa's signature and claims.
-func validateVisa(visa string, trustedIssuers []string) (jwt.Token, bool) {
-	// Parse header to get JKU
-	header, err := jws.Parse([]byte(visa))
-	if err != nil {
-		log.Debugf("failed to parse visa header: %v", err)
-
-		return nil, false
-	}
-
-	// Get JKU from header
-	jku := header.Signatures()[0].ProtectedHeaders().JWKSetURL()
-	if jku == "" {
-		log.Debug("visa has no JKU")
-
-		return nil, false
-	}
-
-	// Parse payload to get issuer
-	payload, err := jwt.Parse([]byte(visa), jwt.WithVerify(false))
-	if err != nil {
-		log.Debugf("failed to parse visa payload: %v", err)
-
-		return nil, false
-	}
-
-	// Check if issuer is trusted
-	if len(trustedIssuers) > 0 {
-		issuer := payload.Issuer()
-		trusted := false
-		for _, ti := range trustedIssuers {
-			if ti == issuer {
-				trusted = true
-
-				break
-			}
-		}
-		if !trusted {
-			log.Debugf("visa issuer %s not trusted", issuer)
-
-			return nil, false
-		}
-	}
-
-	// Fetch JWKS and verify signature
-	keySet, err := jwk.Fetch(context.Background(), jku)
-	if err != nil {
-		log.Debugf("failed to fetch visa JWKS: %v", err)
-
-		return nil, false
-	}
-
-	verifiedVisa, err := jwt.Parse(
-		[]byte(visa),
-		jwt.WithKeySet(keySet),
-		jwt.WithValidate(true),
-	)
-	if err != nil {
-		log.Debugf("failed to verify visa: %v", err)
-
-		return nil, false
-	}
-
-	return verifiedVisa, true
-}
-
-// extractDatasets extracts dataset values from a verified visa.
-func extractDatasets(visa jwt.Token, datasets []string) []string {
-	if visa == nil {
-		return datasets
-	}
-
-	visaClaim := visa.PrivateClaims()["ga4gh_visa_v1"]
-	if visaClaim == nil {
-		return datasets
-	}
-
-	claimJSON, err := json.Marshal(visaClaim)
-	if err != nil {
-		return datasets
-	}
-
-	var claim VisaClaim
-	if err := json.Unmarshal(claimJSON, &claim); err != nil {
-		return datasets
-	}
-
-	if claim.Value != "" {
-		// Check for duplicates
-		for _, d := range datasets {
-			if d == claim.Value {
-				return datasets
-			}
-		}
-		datasets = append(datasets, claim.Value)
-	}
-
-	return datasets
 }
 
 // GetAuthContext retrieves the auth context from a gin context.

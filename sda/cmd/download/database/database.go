@@ -4,6 +4,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -15,6 +16,8 @@ import (
 
 // Query name constants
 const (
+	getAllDatasetsQuery      = "getAllDatasets"
+	getDatasetIDsByUserQuery = "getDatasetIDsByUser"
 	getUserDatasetsQuery     = "getUserDatasets"
 	getDatasetInfoQuery      = "getDatasetInfo"
 	getDatasetFilesQuery     = "getDatasetFiles"
@@ -26,11 +29,26 @@ const (
 // queries contains all SQL queries used by the download service.
 // These are prepared at startup to verify correctness and improve performance.
 var queries = map[string]string{
+	// getAllDatasets returns all datasets (for allow-all-data mode)
+	getAllDatasetsQuery: `
+		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
+		FROM sda.datasets d
+		ORDER BY d.created_at DESC`,
+
+	// getDatasetIDsByUser returns dataset stable_ids where the user is the submission_user
+	// This follows the data ownership model used by the API service
+	getDatasetIDsByUserQuery: `
+		SELECT DISTINCT d.stable_id
+		FROM sda.datasets d
+		INNER JOIN sda.file_dataset fd ON d.id = fd.dataset_id
+		INNER JOIN sda.files f ON fd.file_id = f.id
+		WHERE f.submission_user = $1 AND f.stable_id IS NOT NULL`,
+
+	// getUserDatasets returns datasets where the stable_id matches any of the allowed dataset IDs
 	getUserDatasetsQuery: `
 		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
 		FROM sda.datasets d
-		INNER JOIN sda.dataset_permission_table dp ON d.id = dp.dataset_id
-		WHERE dp.title = ANY($1)
+		WHERE d.stable_id = ANY($1)
 		ORDER BY d.created_at DESC`,
 
 	getDatasetInfoQuery: `
@@ -47,6 +65,8 @@ var queries = map[string]string{
 		WHERE d.stable_id = $1
 		GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at`,
 
+	// getDatasetFiles returns files in a dataset
+	// Checksums are stored in sda.checksums table, not in files table
 	getDatasetFilesQuery: `
 		SELECT
 			f.stable_id,
@@ -55,11 +75,12 @@ var queries = map[string]string{
 			f.archive_file_path,
 			f.archive_file_size,
 			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type
+			c.checksum as decrypted_checksum,
+			c.type as decrypted_checksum_type
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
 		WHERE d.stable_id = $1 AND f.stable_id IS NOT NULL
 		ORDER BY f.submission_file_path`,
 
@@ -71,12 +92,13 @@ var queries = map[string]string{
 			f.archive_file_path,
 			f.archive_file_size,
 			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type,
+			c.checksum as decrypted_checksum,
+			c.type as decrypted_checksum_type,
 			f.header
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
 		WHERE f.stable_id = $1`,
 
 	getFileByPathQuery: `
@@ -87,21 +109,24 @@ var queries = map[string]string{
 			f.archive_file_path,
 			f.archive_file_size,
 			f.decrypted_file_size,
-			f.decrypted_file_checksum,
-			f.decrypted_file_checksum_type,
+			c.checksum as decrypted_checksum,
+			c.type as decrypted_checksum_type,
 			f.header
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
 		WHERE d.stable_id = $1 AND f.submission_file_path = $2`,
 
+	// checkFilePermission verifies user has access to the file's dataset
+	// by checking if the dataset stable_id is in the user's visas
 	checkFilePermissionQuery: `
 		SELECT EXISTS(
 			SELECT 1
 			FROM sda.files f
 			INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-			INNER JOIN sda.dataset_permission_table dp ON fd.dataset_id = dp.dataset_id
-			WHERE f.stable_id = $1 AND dp.title = ANY($2)
+			INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+			WHERE f.stable_id = $1 AND d.stable_id = ANY($2)
 		)`,
 }
 
@@ -110,8 +135,15 @@ type Database interface {
 	// Close closes the database connection.
 	Close() error
 
-	// GetUserDatasets returns datasets the user has access to based on their visas.
-	GetUserDatasets(ctx context.Context, visas []string) ([]Dataset, error)
+	// GetAllDatasets returns all datasets (for allow-all-data mode).
+	GetAllDatasets(ctx context.Context) ([]Dataset, error)
+
+	// GetDatasetIDsByUser returns dataset IDs where the user is the submission_user (data owner).
+	// This follows the data ownership model - users have access to datasets containing files they submitted.
+	GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error)
+
+	// GetUserDatasets returns datasets the user has access to based on their allowed dataset IDs.
+	GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error)
 
 	// GetDatasetInfo returns metadata for a specific dataset.
 	GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error)
@@ -126,7 +158,7 @@ type Database interface {
 	GetFileByPath(ctx context.Context, datasetID, filePath string) (*File, error)
 
 	// CheckFilePermission verifies the user has access to download a file.
-	CheckFilePermission(ctx context.Context, fileID string, visas []string) (bool, error)
+	CheckFilePermission(ctx context.Context, fileID string, datasetIDs []string) (bool, error)
 }
 
 // Dataset represents a dataset the user has access to.
@@ -259,10 +291,63 @@ func (p *PostgresDB) Close() error {
 	return p.db.Close()
 }
 
-// GetUserDatasets returns datasets the user has access to based on their visas.
-func (p *PostgresDB) GetUserDatasets(ctx context.Context, visas []string) ([]Dataset, error) {
+// GetAllDatasets returns all datasets (for allow-all-data mode).
+func (p *PostgresDB) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
+	stmt := p.preparedStatements[getAllDatasetsQuery]
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all datasets: %w", err)
+	}
+	defer rows.Close()
+
+	var datasets []Dataset
+	for rows.Next() {
+		var d Dataset
+		var title, description sql.NullString
+		if err := rows.Scan(&d.ID, &title, &description, &d.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan dataset row: %w", err)
+		}
+		d.Title = title.String
+		d.Description = description.String
+		datasets = append(datasets, d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating dataset rows: %w", err)
+	}
+
+	return datasets, nil
+}
+
+// GetDatasetIDsByUser returns dataset IDs where the user is the submission_user (data owner).
+func (p *PostgresDB) GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error) {
+	stmt := p.preparedStatements[getDatasetIDsByUserQuery]
+	rows, err := stmt.QueryContext(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query datasets by user: %w", err)
+	}
+	defer rows.Close()
+
+	var datasetIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan dataset ID: %w", err)
+		}
+		datasetIDs = append(datasetIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating dataset ID rows: %w", err)
+	}
+
+	return datasetIDs, nil
+}
+
+// GetUserDatasets returns datasets the user has access to based on their allowed dataset IDs.
+func (p *PostgresDB) GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error) {
 	stmt := p.preparedStatements[getUserDatasetsQuery]
-	rows, err := stmt.QueryContext(ctx, pq.Array(visas))
+	rows, err := stmt.QueryContext(ctx, pq.Array(datasetIDs))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query datasets: %w", err)
 	}
@@ -360,7 +445,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 	stmt := p.preparedStatements[getFileByIDQuery]
 
 	var f File
-	var archivePath, decryptedChecksum, decryptedChecksumType sql.NullString
+	var archivePath, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
 	err := stmt.QueryRowContext(ctx, fileID).Scan(
 		&f.ID,
@@ -371,7 +456,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 		&decryptedSize,
 		&decryptedChecksum,
 		&decryptedChecksumType,
-		&f.Header,
+		&headerHex,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -386,6 +471,14 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 	f.DecryptedChecksum = decryptedChecksum.String
 	f.DecryptedChecksumType = decryptedChecksumType.String
 
+	// Header is stored as hex string in database, decode it
+	if headerHex.Valid && headerHex.String != "" {
+		f.Header, err = hex.DecodeString(headerHex.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode header from hex: %w", err)
+		}
+	}
+
 	return &f, nil
 }
 
@@ -394,7 +487,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 	stmt := p.preparedStatements[getFileByPathQuery]
 
 	var f File
-	var archivePath, decryptedChecksum, decryptedChecksumType sql.NullString
+	var archivePath, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
 	err := stmt.QueryRowContext(ctx, datasetID, filePath).Scan(
 		&f.ID,
@@ -405,7 +498,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 		&decryptedSize,
 		&decryptedChecksum,
 		&decryptedChecksumType,
-		&f.Header,
+		&headerHex,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -420,15 +513,23 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 	f.DecryptedChecksum = decryptedChecksum.String
 	f.DecryptedChecksumType = decryptedChecksumType.String
 
+	// Header is stored as hex string in database, decode it
+	if headerHex.Valid && headerHex.String != "" {
+		f.Header, err = hex.DecodeString(headerHex.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode header from hex: %w", err)
+		}
+	}
+
 	return &f, nil
 }
 
 // CheckFilePermission verifies the user has access to download a file.
-func (p *PostgresDB) CheckFilePermission(ctx context.Context, fileID string, visas []string) (bool, error) {
+func (p *PostgresDB) CheckFilePermission(ctx context.Context, fileID string, datasetIDs []string) (bool, error) {
 	stmt := p.preparedStatements[checkFilePermissionQuery]
 
 	var hasPermission bool
-	err := stmt.QueryRowContext(ctx, fileID, pq.Array(visas)).Scan(&hasPermission)
+	err := stmt.QueryRowContext(ctx, fileID, pq.Array(datasetIDs)).Scan(&hasPermission)
 	if err != nil {
 		return false, fmt.Errorf("failed to check file permission: %w", err)
 	}
@@ -438,9 +539,14 @@ func (p *PostgresDB) CheckFilePermission(ctx context.Context, fileID string, vis
 
 // Package-level functions that delegate to the registered database
 
-// GetUserDatasets returns datasets the user has access to based on their visas.
-func GetUserDatasets(ctx context.Context, visas []string) ([]Dataset, error) {
-	return db.GetUserDatasets(ctx, visas)
+// GetAllDatasets returns all datasets (for allow-all-data mode).
+func GetAllDatasets(ctx context.Context) ([]Dataset, error) {
+	return db.GetAllDatasets(ctx)
+}
+
+// GetUserDatasets returns datasets the user has access to based on their allowed dataset IDs.
+func GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error) {
+	return db.GetUserDatasets(ctx, datasetIDs)
 }
 
 // GetDatasetInfo returns metadata for a specific dataset.
