@@ -147,11 +147,11 @@ func setup(conf *config.Config) *http.Server {
 	r.POST("/file/ingest", rbac(e), ingestFile)                      // start ingestion of a file
 	r.POST("/file/accession", rbac(e), setAccession)                 // assign accession ID to a file
 	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)          // trigger reverification of a file
+	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
 	r.POST("/dataset/create", rbac(e), createDataset)                // maps a set of files to a dataset
 	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateKeyDataset) // trigger key rotation for all files in a dataset
 	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)     // Releases a dataset to be accessible
 	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)      // Re-verify all files in the dataset
-	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
 	r.GET("/datasets/list", rbac(e), listAllDatasets)                // Lists all datasets with their status
 	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)     // Lists datasets with their status for a specific user
 	r.GET("/users", rbac(e), listActiveUsers)                        // Lists all users
@@ -815,7 +815,7 @@ func rotateKeyFile(c *gin.Context) {
 	// Validate the message against schema
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Errorf("rotation message validation failed, reason: %v", err)
-		c.JSON(http.StatusBadRequest, "rotation message validation failed")
+		c.JSON(http.StatusBadRequest, "file ID not a proper UUID")
 
 		return
 	}
@@ -824,7 +824,7 @@ func rotateKeyFile(c *gin.Context) {
 	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "rotatekey", marshaledMsg)
 	if err != nil {
 		log.Errorf("failed to send rotation message to queue, reason: %v", err)
-		c.JSON(http.StatusInternalServerError, "failed to send rotation message")
+		c.JSON(http.StatusInternalServerError, "failed to send message")
 
 		return
 	}
