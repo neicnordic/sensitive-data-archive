@@ -39,7 +39,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 		fileInfo, err := os.Stat(endpointConf.Path)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to describe path: %s, reason: %v", endpointConf.Path, err)
 		}
 
 		if !fileInfo.IsDir() {

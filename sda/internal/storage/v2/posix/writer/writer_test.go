@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +50,7 @@ func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64
 	return uint64(size), args.Error(1)
 }
 
-func TestReaderTestSuite(t *testing.T) {
+func TestWriterTestSuite(t *testing.T) {
 	suite.Run(t, new(WriterTestSuite))
 }
 
@@ -110,6 +111,25 @@ func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
 	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir1, location)
 }
+func (ts *WriterTestSuite) TestWriteFile_InSubDirectory() {
+	content := "test file 1 in sub directory"
+
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
+
+	contentReader := bytes.NewReader([]byte(content))
+	location, err := ts.writer.WriteFile(context.TODO(), "subdir1/subdi2/test_file_1.txt", contentReader)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir2)
+	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "subdir1/subdi2/test_file_1.txt"))
+	ts.NoError(err)
+	ts.Equal(content, string(readContent))
+	ts.Equal(ts.dir1, location)
+}
 func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	content := "test file 2"
 
@@ -138,16 +158,56 @@ func (ts *WriterTestSuite) TestRemoveFile() {
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 
-	contentReader := bytes.NewReader([]byte(content))
-	_, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
-	if err != nil {
+	if _, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte(content))); err != nil {
 		ts.FailNow(err.Error())
 	}
 
-	err = ts.writer.RemoveFile(context.TODO(), ts.dir1, "test_file_1.txt")
+	ts.NoError(ts.writer.RemoveFile(context.TODO(), ts.dir1, "test_file_1.txt"))
+	_, err := os.Stat(filepath.Join(ts.dir1, "test_file_1.txt"))
+	ts.ErrorIs(err, fs.ErrNotExist)
+}
+
+func (ts *WriterTestSuite) TestRemoveFile_InSubDirectory() {
+	content := "test file"
+
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Twice()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Twice()
+
+	// Create two test files in different directories
+	rootParentDir := "dir1"
+	dirInRootParent1 := "subdir2"
+	dirInRootParent2 := "subdir3"
+	file1 := filepath.Join(rootParentDir, dirInRootParent1, "test_file.txt")
+	file2 := filepath.Join(rootParentDir, dirInRootParent2, "test_file.txt")
+
+	if _, err := ts.writer.WriteFile(context.TODO(), file1, bytes.NewReader([]byte(content))); err != nil {
+		ts.FailNow(err.Error())
+	}
+	if _, err := ts.writer.WriteFile(context.TODO(), file2, bytes.NewReader([]byte(content))); err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	// Delete one file
+	ts.NoError(ts.writer.RemoveFile(context.TODO(), ts.dir1, file1))
+	_, err := os.Stat(filepath.Join(ts.dir1, file1))
+	ts.ErrorIs(err, fs.ErrNotExist)
+
+	// Check that the parent directory "dubdir2" is deleted, but subdir1 remains
+	_, err = os.Stat(filepath.Join(ts.dir1, filepath.Join(rootParentDir, dirInRootParent1)))
+	ts.ErrorIs(err, fs.ErrNotExist)
+	_, err = os.Stat(filepath.Join(ts.dir1, rootParentDir))
 	ts.NoError(err)
-	_, err = os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
-	ts.ErrorContains(err, "no such file or directory")
+
+	// Delete one other file
+	ts.NoError(ts.writer.RemoveFile(context.TODO(), ts.dir1, file2))
+	_, err = os.Stat(filepath.Join(ts.dir1, file2))
+	ts.ErrorIs(err, fs.ErrNotExist)
+
+	// Check that all sub directories are now deleted since no files remain within
+	_, err = os.Stat(filepath.Join(ts.dir1, filepath.Join(rootParentDir, dirInRootParent2)))
+	ts.ErrorIs(err, fs.ErrNotExist)
+	_, err = os.Stat(filepath.Join(ts.dir1, rootParentDir))
+	ts.ErrorIs(err, fs.ErrNotExist)
 }
 func (ts *WriterTestSuite) TestRemoveFile_LocationNotConfigured() {
 	err := ts.writer.RemoveFile(context.TODO(), "/tmp/no_access_here", "test_file_1.txt")
