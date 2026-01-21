@@ -33,6 +33,11 @@ func init() {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
 	defer db.Close()
+	if db.Version < 23 {
+		log.Error("database schema v23 is required")
+
+		return
+	}
 	database.DB = db
 
 	// Initialise HTTP client for making requests
