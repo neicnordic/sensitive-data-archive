@@ -147,9 +147,11 @@ func (c *CachedDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Datas
 	key := "dataset:info:" + datasetID
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: GetDatasetInfo(%s)", datasetID)
+		if rval, ok := val.(*DatasetInfo); ok {
+			log.Debugf("cache hit: GetDatasetInfo(%s)", datasetID)
 
-		return val.(*DatasetInfo), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: GetDatasetInfo(%s)", datasetID)
@@ -195,9 +197,11 @@ func (c *CachedDB) GetFileByID(ctx context.Context, fileID string) (*File, error
 	key := "file:id:" + fileID
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: GetFileByID(%s)", fileID)
+		if rval, ok := val.(*File); ok {
+			log.Debugf("cache hit: GetFileByID(%s)", fileID)
 
-		return val.(*File), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: GetFileByID(%s)", fileID)
@@ -219,9 +223,11 @@ func (c *CachedDB) GetFileByPath(ctx context.Context, datasetID, filePath string
 	key := "file:path:" + datasetID + ":" + filePath
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: GetFileByPath(%s, %s)", datasetID, filePath)
+		if rval, ok := val.(*File); ok {
+			log.Debugf("cache hit: GetFileByPath(%s, %s)", datasetID, filePath)
 
-		return val.(*File), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: GetFileByPath(%s, %s)", datasetID, filePath)
