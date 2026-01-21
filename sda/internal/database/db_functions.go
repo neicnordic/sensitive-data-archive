@@ -26,10 +26,6 @@ import (
 func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	if dbs.Version < 4 {
-		return "", errors.New("database schema v4 required for RegisterFile()")
-	}
-
 	query := "SELECT sda.register_file($1, $2, $3, $4);"
 
 	var createdFileID string
@@ -53,10 +49,6 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 // and a different fileId is provided, the fileId in the database will NOT be updated.
 func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
-
-	if dbs.Version < 22 {
-		return "", errors.New("database schema v22 required for RegisterFileWithLocation()")
-	}
 
 	query := "SELECT sda.register_file($1, $2, $3, $4);"
 
