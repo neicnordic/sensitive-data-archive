@@ -3,6 +3,7 @@ package reader
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -29,7 +30,7 @@ func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) 
 			return 0, storageerrors.ErrorFileNotFoundInLocation
 		}
 
-		return 0, err
+		return 0, fmt.Errorf("failed to stat file: %s, at location: %s, due to: %v", filePath, location, err)
 	}
 
 	return stat.Size(), nil

@@ -3,6 +3,7 @@ package reader
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ func (reader *Reader) FindFile(_ context.Context, filePath string) (string, erro
 				continue
 			}
 
-			return "", err
+			return "", fmt.Errorf("failed to stat file: %s, at location: %s, due to: %v", filePath, endpointConf.Path, err)
 		}
 
 		return endpointConf.Path, nil

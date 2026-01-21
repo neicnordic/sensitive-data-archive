@@ -24,7 +24,7 @@ func NewReader(backendName string) (*Reader, error) {
 	for _, loc := range backend.configuredEndpoints {
 		fileInfo, err := os.Stat(loc.Path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to stat location: %s, due to: %v", loc.Path, err)
 		}
 
 		if !fileInfo.IsDir() {

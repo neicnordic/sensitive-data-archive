@@ -3,6 +3,7 @@ package reader
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,7 +33,7 @@ func (reader *Reader) NewFileReader(_ context.Context, location, filePath string
 
 	file, err := os.Open(fullFilePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open file: %s, at location: %s, due to: %v", filePath, location, err)
 	}
 
 	return file, nil
