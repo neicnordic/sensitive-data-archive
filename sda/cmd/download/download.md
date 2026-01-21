@@ -274,3 +274,23 @@ storage:
 | `SESSION_SECURE`      | `session.secure`    | Use secure cookies                |
 | `SESSION_HTTP_ONLY`   | `session.http-only` | HTTP-only cookies                 |
 | `SESSION_NAME`        | `session.name`      | Session cookie name               |
+
+## Testing
+
+### Integration Tests
+
+Run the standalone Go-based integration tests:
+
+```bash
+docker compose -f .github/integration/sda-download-integration.yml run integration_test
+```
+
+Or run as part of the full SDA pipeline:
+
+```bash
+make integrationtest-sda-s3-run
+```
+
+### Local Development
+
+See [TESTING.md](TESTING.md) for detailed local testing instructions.

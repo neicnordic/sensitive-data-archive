@@ -2,7 +2,49 @@
 
 This guide explains how to test the new download service locally against the integration test infrastructure.
 
-## Prerequisites
+## Integration Tests
+
+There are two ways to run integration tests for the download service:
+
+### Option 1: Standalone Go-based Tests (Recommended)
+
+The download service has its own Docker Compose-based Go integration tests:
+
+```bash
+# From repository root
+docker compose -f .github/integration/sda-download-integration.yml run integration_test
+```
+
+This runs a minimal environment with:
+- PostgreSQL (with seeded test data)
+- MinIO (S3 storage)
+- Mock OIDC provider
+- Reencrypt gRPC service
+- Download service
+- Go test suite
+
+**Tests included:**
+- Health endpoints (live, ready)
+- Authentication (valid/invalid tokens)
+- List datasets and files
+- File download with re-encryption
+- Range requests
+- Access control
+
+### Option 2: Full Pipeline Tests
+
+The download service is also tested as part of the full SDA integration suite:
+
+```bash
+# Run full S3 integration tests (includes download tests)
+make integrationtest-sda-s3-run
+```
+
+This tests the download service with real data that has been processed through the full ingest pipeline (upload → ingest → verify → finalize → mapper).
+
+## Local Development Testing
+
+### Prerequisites
 
 - Docker and Docker Compose v2+
 - Go 1.20+
