@@ -874,6 +874,14 @@ func rotateKeyDataset(c *gin.Context) {
 			return
 		}
 
+		// Validate the message against schema
+		if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+			log.Errorf("rotation message validation failed for file %s, reason: %v", fileID, err)
+			c.JSON(http.StatusInternalServerError, "rotation message validation failed")
+
+			return
+		}
+
 		// Send message to rotatekey queue
 		err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "rotatekey", marshaledMsg)
 		if err != nil {
