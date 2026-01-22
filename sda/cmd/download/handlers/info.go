@@ -13,7 +13,7 @@ import (
 // InfoDatasets returns a list of datasets the user has access to.
 // GET /info/datasets
 func (h *Handlers) InfoDatasets(c *gin.Context) {
-	_, ok := middleware.GetAuthContext(c)
+	authCtx, ok := middleware.GetAuthContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 
@@ -28,7 +28,6 @@ func (h *Handlers) InfoDatasets(c *gin.Context) {
 	if config.JWTAllowAllData() {
 		datasets, err = h.db.GetAllDatasets(c.Request.Context())
 	} else {
-		authCtx, _ := middleware.GetAuthContext(c)
 		datasets, err = h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
 	}
 
