@@ -115,6 +115,14 @@ func (h *Handlers) DownloadByQuery(c *gin.Context) {
 		return
 	}
 
+	// Validate dataset access BEFORE querying for files
+	// This prevents information disclosure about files in unauthorized datasets
+	if !hasDatasetAccess(authCtx.Datasets, datasetID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied to dataset"})
+
+		return
+	}
+
 	// Get file info - either by ID or by path
 	file, err := h.getFileByIDOrPath(c, fileID, datasetID, filePath)
 	if err != nil {
@@ -127,7 +135,7 @@ func (h *Handlers) DownloadByQuery(c *gin.Context) {
 		return
 	}
 
-	// Check permission for the file
+	// Check permission for the file (verifies file belongs to an authorized dataset)
 	if !h.checkFilePermission(c, file.ID, authCtx.Datasets) {
 		return // Error response already sent
 	}
