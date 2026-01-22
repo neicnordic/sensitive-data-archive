@@ -87,9 +87,11 @@ func (c *CachedDB) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
 	const key = "datasets:all"
 
 	if val, found := c.cache.Get(key); found {
-		log.Debug("cache hit: GetAllDatasets")
+		if rval, ok := val.([]Dataset); ok {
+			log.Debug("cache hit: GetAllDatasets")
 
-		return val.([]Dataset), nil
+			return rval, nil
+		}
 	}
 
 	log.Debug("cache miss: GetAllDatasets")
@@ -109,9 +111,11 @@ func (c *CachedDB) GetDatasetIDsByUser(ctx context.Context, user string) ([]stri
 	key := "datasets:user:" + user
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: GetDatasetIDsByUser(%s)", user)
+		if rval, ok := val.([]string); ok {
+			log.Debugf("cache hit: GetDatasetIDsByUser(%s)", user)
 
-		return val.([]string), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: GetDatasetIDsByUser(%s)", user)
@@ -131,9 +135,11 @@ func (c *CachedDB) GetUserDatasets(ctx context.Context, datasetIDs []string) ([]
 	key := "datasets:ids:" + hashStrings(datasetIDs)
 
 	if val, found := c.cache.Get(key); found {
-		log.Debug("cache hit: GetUserDatasets")
+		if rval, ok := val.([]Dataset); ok {
+			log.Debug("cache hit: GetUserDatasets")
 
-		return val.([]Dataset), nil
+			return rval, nil
+		}
 	}
 
 	log.Debug("cache miss: GetUserDatasets")
@@ -179,9 +185,11 @@ func (c *CachedDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]Fil
 	key := "dataset:files:" + datasetID
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: GetDatasetFiles(%s)", datasetID)
+		if rval, ok := val.([]File); ok {
+			log.Debugf("cache hit: GetDatasetFiles(%s)", datasetID)
 
-		return val.([]File), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: GetDatasetFiles(%s)", datasetID)
@@ -256,9 +264,11 @@ func (c *CachedDB) CheckFilePermission(ctx context.Context, fileID string, datas
 	key := "perm:" + fileID + ":" + hashStrings(datasetIDs)
 
 	if val, found := c.cache.Get(key); found {
-		log.Debugf("cache hit: CheckFilePermission(%s)", fileID)
+		if rval, ok := val.(bool); ok {
+			log.Debugf("cache hit: CheckFilePermission(%s)", fileID)
 
-		return val.(bool), nil
+			return rval, nil
+		}
 	}
 
 	log.Debugf("cache miss: CheckFilePermission(%s)", fileID)
