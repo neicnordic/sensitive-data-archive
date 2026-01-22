@@ -526,7 +526,6 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 // it will be used as is. If not, the functions parameters will be used.
 // If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
 var calculateCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
-	log.Warnf("calculate")
 	if htsget_range != "" {
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {
