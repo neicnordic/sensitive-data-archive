@@ -169,12 +169,19 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 	}
 
 	// Determine file location in storage
-	location, err := h.storageReader.FindFile(c.Request.Context(), file.ArchivePath)
-	if err != nil {
-		log.Errorf("failed to find file in storage: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "file not found in storage"})
+	// Use stored archive_location if available, otherwise search for it
+	var location string
+	if file.ArchiveLocation != "" {
+		location = file.ArchiveLocation
+	} else {
+		var err error
+		location, err = h.storageReader.FindFile(c.Request.Context(), file.ArchivePath)
+		if err != nil {
+			log.Errorf("failed to find file in storage: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "file not found in storage"})
 
-		return
+			return
+		}
 	}
 
 	// Re-encrypt the header with the user's public key

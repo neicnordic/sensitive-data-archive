@@ -138,7 +138,7 @@ services:
         # Insert test file
         psql -c "INSERT INTO sda.files (
           id, stable_id, submission_user, submission_file_path, 
-          archive_file_path, archive_file_size, decrypted_file_size,
+          archive_file_path, archive_location, archive_file_size, decrypted_file_size,
           header, encryption_method
         ) VALUES (
           'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -146,6 +146,7 @@ services:
           'integration_test@example.org',
           'test-file.c4gh',
           'test-file.c4gh',
+          's3:9000/archive',
           1000,
           500,
           'Y3J5cHQ0Z2g=',

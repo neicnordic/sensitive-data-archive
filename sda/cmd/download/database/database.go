@@ -73,6 +73,7 @@ var queries = map[string]string{
 			d.stable_id as dataset_id,
 			f.submission_file_path,
 			f.archive_file_path,
+			f.archive_location,
 			f.archive_file_size,
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
@@ -90,6 +91,7 @@ var queries = map[string]string{
 			d.stable_id as dataset_id,
 			f.submission_file_path,
 			f.archive_file_path,
+			f.archive_location,
 			f.archive_file_size,
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
@@ -107,6 +109,7 @@ var queries = map[string]string{
 			d.stable_id as dataset_id,
 			f.submission_file_path,
 			f.archive_file_path,
+			f.archive_location,
 			f.archive_file_size,
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
@@ -185,6 +188,7 @@ type File struct {
 	DatasetID             string `json:"datasetId"`
 	SubmittedPath         string `json:"filePath"`
 	ArchivePath           string `json:"-"`
+	ArchiveLocation       string `json:"-"` // Storage backend location (e.g., "s3:9000/archive" or "/archive")
 	ArchiveSize           int64  `json:"archiveSize"`
 	DecryptedSize         int64  `json:"decryptedSize"`
 	DecryptedChecksum     string `json:"decryptedChecksum"`
@@ -411,13 +415,14 @@ func (p *PostgresDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]F
 	var files []File
 	for rows.Next() {
 		var f File
-		var archivePath, decryptedChecksum, decryptedChecksumType sql.NullString
+		var archivePath, archiveLocation, decryptedChecksum, decryptedChecksumType sql.NullString
 		var archiveSize, decryptedSize sql.NullInt64
 		if err := rows.Scan(
 			&f.ID,
 			&f.DatasetID,
 			&f.SubmittedPath,
 			&archivePath,
+			&archiveLocation,
 			&archiveSize,
 			&decryptedSize,
 			&decryptedChecksum,
@@ -426,6 +431,7 @@ func (p *PostgresDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]F
 			return nil, fmt.Errorf("failed to scan file row: %w", err)
 		}
 		f.ArchivePath = archivePath.String
+		f.ArchiveLocation = archiveLocation.String
 		f.ArchiveSize = archiveSize.Int64
 		f.DecryptedSize = decryptedSize.Int64
 		f.DecryptedChecksum = decryptedChecksum.String
@@ -445,13 +451,14 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 	stmt := p.preparedStatements[getFileByIDQuery]
 
 	var f File
-	var archivePath, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
+	var archivePath, archiveLocation, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
 	err := stmt.QueryRowContext(ctx, fileID).Scan(
 		&f.ID,
 		&f.DatasetID,
 		&f.SubmittedPath,
 		&archivePath,
+		&archiveLocation,
 		&archiveSize,
 		&decryptedSize,
 		&decryptedChecksum,
@@ -466,6 +473,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 	}
 
 	f.ArchivePath = archivePath.String
+	f.ArchiveLocation = archiveLocation.String
 	f.ArchiveSize = archiveSize.Int64
 	f.DecryptedSize = decryptedSize.Int64
 	f.DecryptedChecksum = decryptedChecksum.String
@@ -487,13 +495,14 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 	stmt := p.preparedStatements[getFileByPathQuery]
 
 	var f File
-	var archivePath, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
+	var archivePath, archiveLocation, decryptedChecksum, decryptedChecksumType, headerHex sql.NullString
 	var archiveSize, decryptedSize sql.NullInt64
 	err := stmt.QueryRowContext(ctx, datasetID, filePath).Scan(
 		&f.ID,
 		&f.DatasetID,
 		&f.SubmittedPath,
 		&archivePath,
+		&archiveLocation,
 		&archiveSize,
 		&decryptedSize,
 		&decryptedChecksum,
@@ -508,6 +517,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 	}
 
 	f.ArchivePath = archivePath.String
+	f.ArchiveLocation = archiveLocation.String
 	f.ArchiveSize = archiveSize.Int64
 	f.DecryptedSize = decryptedSize.Int64
 	f.DecryptedChecksum = decryptedChecksum.String
