@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -149,8 +150,9 @@ func TestNewDB(t *testing.T) {
 	if err = mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
-
-	mock.ExpectPing()
+	db, mock, _ = sqlmock.New(sqlmock.MonitorPingsOption(true))
+	mock.ExpectPing().WillReturnError(nil)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MAX(version) FROM sda.dbschema_version`)).WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow(1))
 	_, err = NewDB(testPgconf)
 
 	assert.Nilf(t, err, "NewDB failed unexpectedly: %s", err)
@@ -167,6 +169,7 @@ func sqlTesterHelper(t *testing.T, f func(sqlmock.Sqlmock, *SQLdb) error) error 
 		return db, err
 	}
 
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MAX(version) FROM sda.dbschema_version`)).WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow(1))
 	testDb, err := NewDB(testPgconf)
 
 	assert.Nil(t, err, "NewDB failed unexpectedly")
