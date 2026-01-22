@@ -135,6 +135,9 @@ var queries = map[string]string{
 
 // Database defines the interface for download service database operations.
 type Database interface {
+	// Ping verifies the database connection is alive.
+	Ping(ctx context.Context) error
+
 	// Close closes the database connection.
 	Close() error
 
@@ -281,6 +284,11 @@ func Close() error {
 	}
 
 	return nil
+}
+
+// Ping verifies the database connection is alive.
+func (p *PostgresDB) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
 }
 
 // Close closes the PostgreSQL database connection and all prepared statements.

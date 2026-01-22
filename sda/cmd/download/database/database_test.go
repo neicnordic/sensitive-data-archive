@@ -517,6 +517,10 @@ type mockTestDatabase struct {
 	closed bool
 }
 
+func (m *mockTestDatabase) Ping(_ context.Context) error {
+	return nil
+}
+
 func (m *mockTestDatabase) Close() error {
 	m.closed = true
 

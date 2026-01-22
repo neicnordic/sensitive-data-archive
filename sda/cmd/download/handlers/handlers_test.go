@@ -94,7 +94,8 @@ func TestHealthLive(t *testing.T) {
 	assert.Equal(t, "ok", response["status"])
 }
 
-func TestHealthReady(t *testing.T) {
+func TestHealthReady_Degraded(t *testing.T) {
+	// Handler with only database (no storage or grpc) should be degraded
 	router := gin.New()
 	h := newTestHandlers(t)
 	h.RegisterRoutes(router)
@@ -104,13 +105,16 @@ func TestHealthReady(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
 	var response HealthStatus
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "ok", response.Status)
+	assert.Equal(t, "degraded", response.Status)
 	assert.NotEmpty(t, response.Services)
+	assert.Equal(t, "ok", response.Services["database"])
+	assert.Contains(t, response.Services["storage"], "not configured")
+	assert.Contains(t, response.Services["grpc"], "not configured")
 }
 
 // Test auth middleware blocks unauthenticated requests

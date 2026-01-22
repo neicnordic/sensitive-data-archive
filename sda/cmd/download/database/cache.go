@@ -68,6 +68,12 @@ func NewCachedDB(db Database, cfg CacheConfig) (*CachedDB, error) {
 	}, nil
 }
 
+// Ping verifies the database connection is alive.
+// This delegates directly to the underlying database without caching.
+func (c *CachedDB) Ping(ctx context.Context) error {
+	return c.db.Ping(ctx)
+}
+
 // Close closes the underlying database connection and the cache.
 func (c *CachedDB) Close() error {
 	c.cache.Close()

@@ -193,6 +193,11 @@ func (c *Client) ReencryptHeaderWithEditList(ctx context.Context, oldHeader []by
 	return res.GetHeader(), nil
 }
 
+// HealthCheck verifies the gRPC connection can be established.
+func (c *Client) HealthCheck() error {
+	return c.connect()
+}
+
 // Close closes the gRPC connection.
 func (c *Client) Close() error {
 	c.mu.Lock()

@@ -16,6 +16,12 @@ type MockDatabase struct {
 	mock.Mock
 }
 
+func (m *MockDatabase) Ping(ctx context.Context) error {
+	args := m.Called(ctx)
+
+	return args.Error(0)
+}
+
 func (m *MockDatabase) Close() error {
 	args := m.Called()
 

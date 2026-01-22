@@ -16,6 +16,11 @@ type mockDatabase struct {
 	fileByPath    *database.File
 	hasPermission bool
 	err           error
+	pingErr       error
+}
+
+func (m *mockDatabase) Ping(_ context.Context) error {
+	return m.pingErr
 }
 
 func (m *mockDatabase) Close() error {
