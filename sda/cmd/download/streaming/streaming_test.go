@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// readSeekCloser wraps bytes.Reader to implement io.ReadSeekCloser
+type readSeekCloser struct {
+	*bytes.Reader
+}
+
+func (r *readSeekCloser) Close() error {
+	return nil
+}
+
+// newReadSeekCloser creates a new io.ReadSeekCloser from a byte slice
+func newReadSeekCloser(data []byte) *readSeekCloser {
+	return &readSeekCloser{Reader: bytes.NewReader(data)}
+}
 
 func TestParseRangeHeader_Empty(t *testing.T) {
 	result := ParseRangeHeader("", 1000)
@@ -94,7 +109,7 @@ func TestStreamFile_WholeFile(t *testing.T) {
 	err := StreamFile(StreamConfig{
 		Writer:          recorder,
 		NewHeader:       header,
-		FileReader:      io.NopCloser(bytes.NewReader(body)),
+		FileReader:      newReadSeekCloser(body),
 		ArchiveFileSize: int64(len(body)),
 		Range:           nil,
 	})
@@ -114,7 +129,7 @@ func TestStreamFile_RangeRequest_HeaderOnly(t *testing.T) {
 	err := StreamFile(StreamConfig{
 		Writer:          recorder,
 		NewHeader:       header,
-		FileReader:      io.NopCloser(bytes.NewReader(body)),
+		FileReader:      newReadSeekCloser(body),
 		ArchiveFileSize: int64(len(body)),
 		Range:           &RangeSpec{Start: 0, End: 9}, // First 10 bytes (header only)
 	})
@@ -135,7 +150,7 @@ func TestStreamFile_RangeRequest_BodyOnly(t *testing.T) {
 	err := StreamFile(StreamConfig{
 		Writer:          recorder,
 		NewHeader:       header,
-		FileReader:      io.NopCloser(bytes.NewReader(body)),
+		FileReader:      newReadSeekCloser(body),
 		ArchiveFileSize: int64(len(body)),
 		Range:           &RangeSpec{Start: 25, End: 30}, // Bytes 25-30 (body only)
 	})
@@ -158,7 +173,7 @@ func TestStreamFile_RangeRequest_SpanningHeaderAndBody(t *testing.T) {
 	err := StreamFile(StreamConfig{
 		Writer:          recorder,
 		NewHeader:       header,
-		FileReader:      io.NopCloser(bytes.NewReader(body)),
+		FileReader:      newReadSeekCloser(body),
 		ArchiveFileSize: int64(len(body)),
 		Range:           &RangeSpec{Start: 15, End: 24}, // Last 5 bytes of header + first 5 bytes of body
 	})
@@ -180,7 +195,7 @@ func TestStreamFile_RangeRequest_LastBytes(t *testing.T) {
 	err := StreamFile(StreamConfig{
 		Writer:          recorder,
 		NewHeader:       header,
-		FileReader:      io.NopCloser(bytes.NewReader(body)),
+		FileReader:      newReadSeekCloser(body),
 		ArchiveFileSize: int64(len(body)),
 		Range:           &RangeSpec{Start: totalSize - 5, End: totalSize - 1}, // Last 5 bytes
 	})
@@ -188,6 +203,105 @@ func TestStreamFile_RangeRequest_LastBytes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 206, recorder.Code)
 	assert.Equal(t, "_DATA", recorder.Body.String())
+}
+
+// Tests for OriginalHeaderSize (skipping original crypt4gh header)
+
+func TestStreamFile_SkipsOriginalHeader(t *testing.T) {
+	// Simulates the real scenario where archive file contains [ORIGINAL_HEADER][BODY]
+	// and we want to stream [NEW_HEADER][BODY]
+	newHeader := []byte("NEW_CRYPT4GH_HDR")
+	originalHeader := []byte("OLD_HDR_DATA") // 12 bytes to skip
+	body := []byte("ENCRYPTED_FILE_BODY")
+	archiveFile := make([]byte, 0, len(originalHeader)+len(body))
+	archiveFile = append(archiveFile, originalHeader...)
+	archiveFile = append(archiveFile, body...) // [OLD_HDR_DATA][ENCRYPTED_FILE_BODY]
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:             recorder,
+		NewHeader:          newHeader,
+		FileReader:         newReadSeekCloser(archiveFile),
+		ArchiveFileSize:    int64(len(archiveFile)),
+		OriginalHeaderSize: int64(len(originalHeader)),
+		Range:              nil,
+	})
+
+	require.NoError(t, err)
+
+	// Total size should be: newHeader + (archiveFile - originalHeader)
+	// = 16 + (31 - 12) = 16 + 19 = 35
+	expectedSize := len(newHeader) + len(body)
+	assert.Equal(t, fmt.Sprintf("%d", expectedSize), recorder.Header().Get("Content-Length"))
+
+	// Output should be [NEW_HEADER][BODY], not [NEW_HEADER][OLD_HEADER][BODY]
+	expectedOutput := string(newHeader) + string(body)
+	assert.Equal(t, expectedOutput, recorder.Body.String())
+
+	// Verify the original header is NOT in the output
+	assert.NotContains(t, recorder.Body.String(), string(originalHeader))
+}
+
+func TestStreamFile_SkipsOriginalHeader_RangeInBody(t *testing.T) {
+	newHeader := []byte("NEW_HDR")           // 7 bytes
+	originalHeader := []byte("ORIGINAL_HDR") // 12 bytes to skip
+	body := []byte("THE_ACTUAL_BODY_DATA")   // 20 bytes
+	archiveFile := make([]byte, 0, len(originalHeader)+len(body))
+	archiveFile = append(archiveFile, originalHeader...)
+	archiveFile = append(archiveFile, body...)
+
+	recorder := httptest.NewRecorder()
+
+	// Request bytes 10-19, which should be in the body portion
+	// New header is 7 bytes, so bytes 10-19 means body[3:13]
+	err := StreamFile(StreamConfig{
+		Writer:             recorder,
+		NewHeader:          newHeader,
+		FileReader:         newReadSeekCloser(archiveFile),
+		ArchiveFileSize:    int64(len(archiveFile)),
+		OriginalHeaderSize: int64(len(originalHeader)),
+		Range:              &RangeSpec{Start: 10, End: 19},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 206, recorder.Code)
+
+	// totalSize = 7 + 20 = 27
+	assert.Equal(t, "bytes 10-19/27", recorder.Header().Get("Content-Range"))
+	assert.Equal(t, "10", recorder.Header().Get("Content-Length"))
+	// body[3:13] = "_ACTUAL_BO"
+	assert.Equal(t, "_ACTUAL_BO", recorder.Body.String())
+}
+
+func TestStreamFile_SkipsOriginalHeader_RangeSpanningHeaderAndBody(t *testing.T) {
+	newHeader := []byte("NEW_HDR")           // 7 bytes
+	originalHeader := []byte("ORIGINAL_HDR") // 12 bytes to skip
+	body := []byte("BODY_CONTENT")           // 12 bytes
+	archiveFile := make([]byte, 0, len(originalHeader)+len(body))
+	archiveFile = append(archiveFile, originalHeader...)
+	archiveFile = append(archiveFile, body...)
+
+	recorder := httptest.NewRecorder()
+
+	// Request bytes 5-10, spanning new header (5-6) and body (7-10 -> body[0:4])
+	err := StreamFile(StreamConfig{
+		Writer:             recorder,
+		NewHeader:          newHeader,
+		FileReader:         newReadSeekCloser(archiveFile),
+		ArchiveFileSize:    int64(len(archiveFile)),
+		OriginalHeaderSize: int64(len(originalHeader)),
+		Range:              &RangeSpec{Start: 5, End: 10},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 206, recorder.Code)
+
+	// totalSize = 7 + 12 = 19
+	assert.Equal(t, "bytes 5-10/19", recorder.Header().Get("Content-Range"))
+	assert.Equal(t, "6", recorder.Header().Get("Content-Length"))
+	// newHeader[5:7] = "DR" + body[0:4] = "BODY" -> "DRBODY"
+	assert.Equal(t, "DRBODY", recorder.Body.String())
 }
 
 // seekOrSkipBody tests

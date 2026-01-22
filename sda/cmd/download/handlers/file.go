@@ -186,8 +186,8 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 		return
 	}
 
-	// Open file reader from storage
-	fileReader, err := h.storageReader.NewFileReader(c.Request.Context(), location, file.ArchivePath)
+	// Open file reader from storage (needs to support seeking to skip original header)
+	fileReader, err := h.storageReader.NewFileReadSeeker(c.Request.Context(), location, file.ArchivePath)
 	if err != nil {
 		log.Errorf("failed to open file: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
@@ -195,11 +195,11 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 		return
 	}
 
-	// Calculate total size (new header + archive file body)
-	// Note: We use the archive size minus the original header size for the body
-	// but for simplicity, we stream the whole archive file
-	headerSize := int64(len(newHeader))
-	totalSize := headerSize + file.ArchiveSize
+	// Calculate total size: new header + body (archive minus original header)
+	newHeaderSize := int64(len(newHeader))
+	originalHeaderSize := int64(len(file.Header))
+	bodySize := file.ArchiveSize - originalHeaderSize
+	totalSize := newHeaderSize + bodySize
 
 	// Parse Range header if present
 	var rangeSpec *streaming.RangeSpec
@@ -222,11 +222,12 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 
 	// Stream the file
 	err = streaming.StreamFile(streaming.StreamConfig{
-		Writer:          c.Writer,
-		NewHeader:       newHeader,
-		FileReader:      fileReader,
-		ArchiveFileSize: file.ArchiveSize,
-		Range:           rangeSpec,
+		Writer:             c.Writer,
+		NewHeader:          newHeader,
+		FileReader:         fileReader,
+		ArchiveFileSize:    file.ArchiveSize,
+		OriginalHeaderSize: originalHeaderSize,
+		Range:              rangeSpec,
 	})
 	if err != nil {
 		log.Errorf("error streaming file: %v", err)

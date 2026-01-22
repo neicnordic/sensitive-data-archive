@@ -99,23 +99,35 @@ type StreamConfig struct {
 	Writer http.ResponseWriter
 	// NewHeader is the re-encrypted crypt4gh header
 	NewHeader []byte
-	// FileReader is the reader for the encrypted file body (without header)
-	FileReader io.ReadCloser
-	// ArchiveFileSize is the size of the encrypted file in the archive
+	// FileReader is the reader for the encrypted file (including original header)
+	FileReader io.ReadSeekCloser
+	// ArchiveFileSize is the total size of the encrypted file in the archive (header + body)
 	ArchiveFileSize int64
+	// OriginalHeaderSize is the size of the original crypt4gh header to skip
+	OriginalHeaderSize int64
 	// Range is the optional byte range to stream (nil for whole file)
 	Range *RangeSpec
 }
 
 // StreamFile streams a file to the HTTP response writer.
 // It combines the new header with the file body and handles range requests.
+// The original crypt4gh header in the archive file is skipped.
 func StreamFile(cfg StreamConfig) error {
 	defer cfg.FileReader.Close()
 
-	headerSize := int64(len(cfg.NewHeader))
-	totalSize := headerSize + cfg.ArchiveFileSize
+	newHeaderSize := int64(len(cfg.NewHeader))
+	// Body size is archive size minus the original header
+	bodySize := cfg.ArchiveFileSize - cfg.OriginalHeaderSize
+	totalSize := newHeaderSize + bodySize
 
-	// Create combined reader: new header + file body
+	// Skip the original header in the archive file
+	if cfg.OriginalHeaderSize > 0 {
+		if _, err := cfg.FileReader.Seek(cfg.OriginalHeaderSize, io.SeekStart); err != nil {
+			return fmt.Errorf("failed to skip original header: %w", err)
+		}
+	}
+
+	// Create reader for the new header
 	headerReader := bytes.NewReader(cfg.NewHeader)
 
 	if cfg.Range == nil {
@@ -123,7 +135,7 @@ func StreamFile(cfg StreamConfig) error {
 		cfg.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", totalSize))
 		cfg.Writer.Header().Set("Content-Type", "application/octet-stream")
 
-		// Stream header then body
+		// Stream new header then body (with original header already skipped)
 		if _, err := io.Copy(cfg.Writer, headerReader); err != nil {
 			return fmt.Errorf("failed to stream header: %w", err)
 		}
@@ -142,8 +154,8 @@ func StreamFile(cfg StreamConfig) error {
 	cfg.Writer.Header().Set("Content-Type", "application/octet-stream")
 	cfg.Writer.WriteHeader(http.StatusPartialContent)
 
-	// Stream the requested range
-	return streamRange(cfg.Writer, headerReader, cfg.FileReader, headerSize, cfg.Range)
+	// Stream the requested range (body reader already positioned after original header)
+	return streamRange(cfg.Writer, headerReader, cfg.FileReader, newHeaderSize, cfg.Range)
 }
 
 // streamRange streams a specific byte range from combined header + body.
@@ -203,14 +215,16 @@ func streamBodyRange(w io.Writer, body io.ReadCloser, start, headerSize, bytesRe
 	return nil
 }
 
-// seekOrSkipBody positions the body reader at the given offset.
+// seekOrSkipBody positions the body reader at the given offset from the current position.
+// Note: This uses io.SeekCurrent because the body reader may have already been positioned
+// past the original crypt4gh header.
 func seekOrSkipBody(body io.Reader, offset int64) error {
 	if offset == 0 {
 		return nil
 	}
 
 	if seeker, ok := body.(io.Seeker); ok {
-		if _, err := seeker.Seek(offset, io.SeekStart); err != nil {
+		if _, err := seeker.Seek(offset, io.SeekCurrent); err != nil {
 			return fmt.Errorf("failed to seek body: %w", err)
 		}
 
