@@ -62,6 +62,7 @@ kubectl create configmap oidc --from-file="$SELF/../../sda/oidc.py"
 
 helm repo add jetstack https://charts.jetstack.io
 helm repo add minio https://charts.min.io/
+helm repo add nfs-ganesha-server-and-external-provisioner https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
 
 helm repo update
 
@@ -71,17 +72,21 @@ helm install \
         --create-namespace \
         --set installCRDs=true
 
+helm install --namespace default nfs-ganesha nfs-ganesha-server-and-external-provisioner/nfs-server-provisioner --set "storageClass.mountOptions={tcp,nfsvers=4.1,retrans=2,timeo=30}"
+
 kubectl create namespace minio
 kubectl apply -f .github/integration/scripts/charts/dependencies.yaml
 
-## S3 storage backend
-MINIO_ACCESS="$(random-string)"
-export MINIO_ACCESS
-MINIO_SECRET="$(random-string)"
-export MINIO_SECRET
-helm install minio minio/minio \
-        --namespace minio \
-        --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+if [ "$2" == "s3" ]; then
+        ## S3 storage backend
+        MINIO_ACCESS="$(random-string)"
+        export MINIO_ACCESS
+        MINIO_SECRET="$(random-string)"
+        export MINIO_SECRET
+        helm install minio minio/minio \
+                --namespace minio \
+                --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+fi
 
 PGPASSWORD="$(random-string)"
 export PGPASSWORD
