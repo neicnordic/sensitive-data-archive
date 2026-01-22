@@ -30,6 +30,8 @@ Commands:
                                 Trigger ingestion of a given file.
   file set-accession -filepath FILEPATH -user USERNAME -accession-id accessionID
                                 Assign accession ID to a file.
+  file rotatekey -file-id FILEUUID
+                                Rotate encryption key for a specific file.
   dataset create -user SUBMISSION_USER -dataset-id DATASET_ID accessionID [accessionID ...]
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
@@ -65,10 +67,15 @@ Set accession ID to a file:
   Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
     Assign an accession ID to a file for a given user.
 
+Rotate key for a file:
+  Usage: sda-admin file rotatekey -file-id FILEUUID
+    Rotate encryption key for a specific file.
+
 Options:
   -user USERNAME       Specify the username associated with the file.
   -filepath FILEPATH   Specify the path of the file to ingest.
   -accession-id ID     Specify the accession ID to assign to the file.
+  -file-id FILEUUID    Specify the file ID of the file to rotate key.
 
 Use 'sda-admin help file <command>' for information on a specific command.`
 
@@ -98,6 +105,12 @@ Options:
   -user USERNAME       Specify the username associated with the file.
   -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
+
+var fileRotateKeyUsage = `Usage: sda-admin file rotatekey -file-id FILEUUID
+  Rotate encryption key for a specific file.
+
+Options:
+  -file-id FILEUUID     Specify the file ID of the file to rotate key.`
 
 var datasetUsage = `Create a dataset:
   Usage: sda-admin dataset create -user SUBMISSION_USER -dataset-id DATASET_ID [ACCESSION_ID ...]
@@ -267,6 +280,8 @@ func handleHelpFile() error {
 		fmt.Println(fileIngestUsage)
 	case flag.Arg(2) == "set-accession":
 		fmt.Println(fileAccessionUsage)
+	case flag.Arg(2) == "rotatekey":
+		fmt.Println(fileRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -344,6 +359,10 @@ func handleFileCommand() error {
 		}
 	case "set-accession":
 		if err := handleFileAccessionCommand(); err != nil {
+			return err
+		}
+	case "rotatekey":
+		if err := handleFileRotateKeyCommand(); err != nil {
 			return err
 		}
 	default:

@@ -194,9 +194,6 @@ echo "File IDs: $fileID1, $fileID2"
 ## test dataset key rotation via sda-admin CLI tool
 echo "Testing dataset key rotation via sda-admin CLI tool"
 
-# Use sda-admin CLI tool to rotate keys for the dataset
-# SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "EGAD100000000001"
-# Replaced sda-admin with direct API call since sda-admin is not available in the container
 resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/rotatekey/EGAD100000000001")
 
 if [ "$resp" != "200" ]; then
@@ -291,8 +288,6 @@ done
 ## test dataset key rotation with non-existent dataset
 echo "Testing dataset key rotation with non-existent dataset"
 
-# SDA_ADMIN_API_URI="http://api:8080" SDA_ADMIN_TOKEN="$token" sda-admin dataset rotatekey -dataset-id "NONEXISTENT" 2>/dev/null
-# Replaced sda-admin with direct API call
 resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/rotatekey/NONEXISTENT")
 
 if [ "$resp" != "404" ]; then
