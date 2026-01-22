@@ -437,6 +437,29 @@ func handleFileAccessionCommand() error {
 	}
 }
 
+func handleFileRotateKeyCommand() error {
+	fileRotateKeyCmd := flag.NewFlagSet("rotatekey", flag.ExitOnError)
+	var fileInfo helpers.FileInfo
+	fileInfo.URL = apiURI
+	fileInfo.Token = token
+	fileRotateKeyCmd.StringVar(&fileInfo.ID, "file-id", "", "File ID (UUID) to rotate key for")
+
+	if err := fileRotateKeyCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	if fileInfo.ID == "" {
+		return fmt.Errorf("error: -file-id is required.\n%s", fileRotateKeyUsage)
+	}
+
+	err := file.RotateKey(fileInfo.URL, fileInfo.Token, fileInfo.ID)
+	if err != nil {
+		return fmt.Errorf("error: failed to rotate key for file, reason: %v", err)
+	}
+
+	return nil
+}
+
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
 		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release, rotatekey).\n%s", datasetUsage)
