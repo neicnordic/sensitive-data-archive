@@ -2,8 +2,6 @@ package locationbroker
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -13,10 +11,6 @@ import (
 
 type LocationBrokerTestSuite struct {
 	suite.Suite
-	tempDir string
-
-	createdFiles uint64
-	createdSize  uint64
 }
 
 type mockDatabase struct {
@@ -33,81 +27,7 @@ func TestLocationBrokerTestSuite(t *testing.T) {
 	suite.Run(t, new(LocationBrokerTestSuite))
 }
 
-func (ts *LocationBrokerTestSuite) SetupSuite() {
-	ts.tempDir = ts.T().TempDir()
-
-	if err := ts.createDummyDirectoriesAndFiles(ts.tempDir, 0, 3); err != nil {
-		ts.FailNow(err.Error())
-	}
-}
-
-func (ts *LocationBrokerTestSuite) createDummyDirectoriesAndFiles(path string, currentDept, depth int) error {
-	for range 3 {
-		file, err := os.CreateTemp(path, "sub_dir_file")
-		if err != nil {
-			_ = file.Close()
-			ts.FailNow(err.Error())
-		}
-
-		written, err := fmt.Fprintf(file, "file content in sub dir: %s", path)
-		if err != nil {
-			_ = file.Close()
-			ts.FailNow(err.Error())
-		}
-		_ = file.Close()
-		ts.createdFiles++
-		//nolint:gosec // disable G115
-		ts.createdSize += uint64(written)
-	}
-
-	if currentDept >= depth {
-		return nil
-	}
-	for range depth {
-		subDir, err := os.MkdirTemp(path, "sub_dir")
-		if err != nil {
-			ts.FailNow(err.Error())
-		}
-
-		if err := ts.createDummyDirectoriesAndFiles(subDir, currentDept+1, depth); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (ts *LocationBrokerTestSuite) TestGetSizeAndCountInDir() {
-	size, count, err := getSizeAndCountInDir(ts.tempDir)
-	ts.NoError(err)
-
-	ts.Equal(ts.createdSize, size)
-	ts.Equal(ts.createdFiles, count)
-}
-
-func (ts *LocationBrokerTestSuite) TestGetSize_FromDir() {
-	lb, err := NewLocationBroker(&mockDatabase{})
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	size, err := lb.GetSize(context.TODO(), ts.tempDir)
-	ts.NoError(err)
-	ts.Equal(ts.createdSize, size)
-}
-
-func (ts *LocationBrokerTestSuite) TestGetObjectCount_FromDir() {
-	lb, err := NewLocationBroker(&mockDatabase{})
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	count, err := lb.GetObjectCount(context.TODO(), ts.tempDir)
-	ts.NoError(err)
-	ts.Equal(ts.createdFiles, count)
-}
-
-func (ts *LocationBrokerTestSuite) TestGetSize_FromMockDB() {
+func (ts *LocationBrokerTestSuite) TestGetSize() {
 	mockDb := &mockDatabase{}
 	mockDb.On("GetSizeAndObjectCountOfLocation", "mock_location").Return(uint64(123), uint64(321), nil).Once()
 
@@ -121,7 +41,7 @@ func (ts *LocationBrokerTestSuite) TestGetSize_FromMockDB() {
 	ts.Equal(uint64(123), size)
 }
 
-func (ts *LocationBrokerTestSuite) TestGetObjectCount_FromMockDB() {
+func (ts *LocationBrokerTestSuite) TestGetObjectCount() {
 	mockDb := &mockDatabase{}
 	mockDb.On("GetSizeAndObjectCountOfLocation", "mock_location").Return(uint64(123), uint64(321), nil).Once()
 

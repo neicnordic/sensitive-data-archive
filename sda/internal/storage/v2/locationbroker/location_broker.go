@@ -3,10 +3,7 @@ package locationbroker
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
-	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -24,6 +21,7 @@ type locationBroker struct {
 	checkedLocations map[string]*locationEntry
 	config           *config
 	db               database.Database
+	sync.Mutex
 }
 
 type locationEntry struct {
@@ -51,87 +49,47 @@ func NewLocationBroker(db database.Database, options ...func(*config)) (Location
 }
 
 func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (uint64, error) {
+	l.Lock()
+	defer l.Unlock()
+
 	loc, ok := l.checkedLocations[location]
 	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.objectCount, nil
 	}
 
-	loc = &locationEntry{
+	size, objectCount, err := l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	if err != nil {
+		return 0, err
+	}
+
+	l.checkedLocations[location] = &locationEntry{
 		lastChecked: time.Now(),
+		size:        size,
+		objectCount: objectCount,
 	}
 
-	var err error
-	switch {
-	case strings.HasPrefix(location, "/"):
-		loc.size, loc.objectCount, err = getSizeAndCountInDir(location)
-		if err != nil {
-			return 0, err
-		}
-	default:
-		loc.size, loc.objectCount, err = l.db.GetSizeAndObjectCountOfLocation(ctx, location)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	l.checkedLocations[location] = loc
-
-	return loc.objectCount, nil
-}
-
-// TODO is it more performant to just use the DB for posix as well?
-func getSizeAndCountInDir(path string) (uint64, uint64, error) {
-	count := uint64(0)
-	size := uint64(0)
-
-	if err := filepath.Walk(path, func(_ string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-
-		fileSize := info.Size()
-		if fileSize < 0 {
-			return fmt.Errorf("file: %s has negative size", info.Name())
-		}
-		//nolint:gosec // disable G115
-		size += uint64(fileSize)
-		count++
-
-		return nil
-	}); err != nil {
-		return 0, 0, err
-	}
-
-	return size, count, nil
+	return objectCount, nil
 }
 
 func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, error) {
+	l.Lock()
+	defer l.Unlock()
+
 	loc, ok := l.checkedLocations[location]
 	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.size, nil
 	}
 
-	loc = &locationEntry{
+	size, objectCount, err := l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	if err != nil {
+		return 0, err
+	}
+
+	l.checkedLocations[location] = &locationEntry{
 		lastChecked: time.Now(),
-	}
-	var err error
-	switch {
-	case strings.HasPrefix(location, "/"):
-		loc.size, loc.objectCount, err = getSizeAndCountInDir(location)
-		if err != nil {
-			return 0, err
-		}
-	default:
-		loc.size, loc.objectCount, err = l.db.GetSizeAndObjectCountOfLocation(ctx, location)
-		if err != nil {
-			return 0, err
-		}
+		size:        size,
+		objectCount: objectCount,
 	}
 
-	l.checkedLocations[location] = loc
-
-	return loc.size, nil
+	return size, nil
 }
