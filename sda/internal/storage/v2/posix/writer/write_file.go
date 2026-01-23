@@ -2,21 +2,22 @@ package writer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	log "github.com/sirupsen/logrus"
 )
 
-func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
+func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (location string, err error) {
 	// Find first location that is still usable
 	// We need lock for whole WriteFile so no delete occurs while writing
 	writer.Lock()
 	defer writer.Unlock()
 
-	var location string
 	for {
 		if len(writer.activeEndpoints) == 0 {
 			return "", storageerrors.ErrorNoValidLocations
@@ -34,24 +35,48 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		writer.activeEndpoints = writer.activeEndpoints[1:]
 	}
 
+	// Ensure a directory is created for temporary write files
+	if err = os.MkdirAll(filepath.Join(location, "tmp"), 0700); err != nil {
+		return "", fmt.Errorf("failed to create tmp directory at location: %s, due to %v", location, err)
+	}
+
+	var tempFile *os.File
+	tempFile, err = os.CreateTemp(filepath.Join(location, "tmp"), filepath.Base(filePath))
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file for writing due to: %v", err)
+	}
+	defer func() {
+		// If we did not have any error with writing / renaming, etc no need to clean
+		if err == nil {
+			return
+		}
+		// As we might have created empty directories but then encountered error, we need to ensure we do not leave any empty directories since we failed to write the file
+		if noEmptyParentsErr := writer.ensureNoEmptyParentDirectories(location, filePath); noEmptyParentsErr != nil {
+			log.Errorf("failed to ensure no empty parent directories exist due to: %v", noEmptyParentsErr)
+		}
+		if osRemoveErr := os.Remove(tempFile.Name()); err != nil && !errors.Is(osRemoveErr, os.ErrNotExist) {
+			log.Errorf("failed to remove temp file due to: %v after write failed", osRemoveErr)
+		}
+	}()
+
+	if _, err = io.Copy(tempFile, fileContent); err != nil {
+		_ = tempFile.Close()
+
+		return "", fmt.Errorf("failed to write to file: %s at location: %s, due to: %v", tempFile.Name(), location, err)
+	}
+
+	if err = tempFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close write file: %s at location: %s, due to: %v", tempFile.Name(), location, err)
+	}
+
 	// Ensure any parent directories to file exists
 	parentDirectories := filepath.Dir(filePath)
-	if err := os.MkdirAll(filepath.Join(location, parentDirectories), 0700); err != nil {
-		return "", fmt.Errorf("failed to ensure parent directories exists, due to: %v", err)
+	if err = os.MkdirAll(filepath.Join(location, parentDirectories), 0700); err != nil {
+		return "", fmt.Errorf("failed to ensure parent directories: %s parentDirectories exists at location: %s, due to: %v", parentDirectories, location, err)
 	}
 
-	file, err := os.OpenFile(filepath.Join(location, filePath), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %s at location: %s, due to: %v", filePath, location, err)
-	}
-	if _, err := io.Copy(file, fileContent); err != nil {
-		_ = file.Close()
-
-		return "", fmt.Errorf("failed to write to file: %s at location: %s, due to: %v", filePath, location, err)
-	}
-
-	if err := file.Close(); err != nil {
-		return "", fmt.Errorf("failed to close file: %s at location: %s, due to: %v", filePath, location, err)
+	if err = os.Rename(tempFile.Name(), filepath.Join(location, filePath)); err != nil {
+		return "", fmt.Errorf("failed to rename temporary file: %s to %s at location: %s, due to: %v", tempFile.Name(), filePath, location, err)
 	}
 
 	return location, nil

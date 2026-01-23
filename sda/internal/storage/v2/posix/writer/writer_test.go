@@ -3,7 +3,9 @@ package writer
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -92,33 +94,122 @@ storage:
 	}
 }
 
-func (ts *WriterTestSuite) TestWriteFile_AllEmpty() {
+func (ts *WriterTestSuite) TestWriteFile() {
 	content := "test file 1"
 
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 
-	contentReader := bytes.NewReader([]byte(content))
-	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte(content)))
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
 	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
-	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir2)
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir1)
 	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
 	ts.NoError(err)
 	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir1, location)
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir1, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
 }
+func (ts *WriterTestSuite) TestWriteFile_FaultyContentReader() {
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
+
+	reader, writer := io.Pipe()
+	go func() {
+		_, _ = writer.Write([]byte("partial file content"))
+		_ = writer.CloseWithError(errors.New("mock error"))
+	}()
+
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", reader)
+	ts.ErrorContains(err, "mock error")
+	ts.ErrorContains(err, "failed to write to file")
+	ts.Equal("", location)
+
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir1)
+	_, err = os.Stat(filepath.Join(ts.dir1, "test_file_1.txt"))
+	ts.ErrorIs(err, fs.ErrNotExist)
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir1, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
+
+	_ = reader.Close()
+}
+func (ts *WriterTestSuite) TestWriteFile_FileExist_FaultyContentReader() {
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Twice()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Twice()
+
+	content := "test file 1 not be overwritten by writeFile with err"
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte(content)))
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	ts.Equal(ts.dir1, location)
+
+	reader, writer := io.Pipe()
+	go func() {
+		_, _ = writer.Write([]byte("partial file content"))
+		_ = writer.CloseWithError(errors.New("mock error"))
+	}()
+
+	location, err = ts.writer.WriteFile(context.TODO(), "test_file_1.txt", reader)
+	ts.ErrorContains(err, "mock error")
+	ts.ErrorContains(err, "failed to write to file")
+	ts.Equal("", location)
+
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir1)
+
+	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
+	ts.NoError(err)
+	ts.Equal(content, string(readContent))
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir1, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
+	_ = reader.Close()
+}
+func (ts *WriterTestSuite) TestWriteFile_OverWriteFile() {
+	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Twice()
+	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Twice()
+
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte("test file 1 to be overwritten")))
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	ts.Equal(ts.dir1, location)
+
+	content := "new file content"
+	location, err = ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte(content)))
+	ts.NoError(err)
+	ts.Equal(ts.dir1, location)
+
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetObjectCount", ts.dir1)
+	ts.locationBrokerMock.AssertCalled(ts.T(), "GetSize", ts.dir1)
+
+	readContent, err := os.ReadFile(filepath.Join(ts.dir1, "test_file_1.txt"))
+	ts.NoError(err)
+	ts.Equal(content, string(readContent))
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir1, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
+}
+
 func (ts *WriterTestSuite) TestWriteFile_InSubDirectory() {
 	content := "test file 1 in sub directory"
 
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 
-	contentReader := bytes.NewReader([]byte(content))
-	location, err := ts.writer.WriteFile(context.TODO(), "subdir1/subdi2/test_file_1.txt", contentReader)
+	location, err := ts.writer.WriteFile(context.TODO(), "subdir1/subdi2/test_file_1.txt", bytes.NewReader([]byte(content)))
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
@@ -129,6 +220,10 @@ func (ts *WriterTestSuite) TestWriteFile_InSubDirectory() {
 	ts.NoError(err)
 	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir1, location)
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir1, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
 }
 func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	content := "test file 2"
@@ -137,8 +232,7 @@ func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir2).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir2).Return(0, nil).Once()
 
-	contentReader := bytes.NewReader([]byte(content))
-	location, err := ts.writer.WriteFile(context.TODO(), "test_file_2.txt", contentReader)
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_2.txt", bytes.NewReader([]byte(content)))
 	if err != nil {
 		ts.FailNow(err.Error())
 	}
@@ -150,6 +244,10 @@ func (ts *WriterTestSuite) TestWriteFile_FirstDirFull() {
 	ts.NoError(err)
 	ts.Equal(content, string(readContent))
 	ts.Equal(ts.dir2, location)
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir2, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
 }
 
 func (ts *WriterTestSuite) TestRemoveFile() {

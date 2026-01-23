@@ -32,6 +32,10 @@ func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) e
 		return fmt.Errorf("failed to remove file: %s, from location: %s, due to: %v", filePath, location, err)
 	}
 
+	return writer.ensureNoEmptyParentDirectories(location, filePath)
+}
+
+func (writer *Writer) ensureNoEmptyParentDirectories(location, filePath string) error {
 	// Check if any parent directories are empty and delete if empty
 	fileParentDirectories := filepath.Dir(filePath)
 
