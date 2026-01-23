@@ -3,6 +3,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -25,11 +26,7 @@ import (
 func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
-	if dbs.Version < 4 {
-		return "", errors.New("database schema v4 required for RegisterFile()")
-	}
-
-	query := "SELECT sda.register_file($1, $2, $3);"
+	query := "SELECT sda.register_file($1, $2, $3, $4);"
 
 	var createdFileID string
 
@@ -39,7 +36,31 @@ func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (s
 		fileIDArg.String = *fileID
 	}
 
-	err := dbs.DB.QueryRow(query, fileIDArg, uploadPath, uploadUser).Scan(&createdFileID)
+	err := dbs.DB.QueryRow(query, fileIDArg, "", uploadPath, uploadUser).Scan(&createdFileID)
+
+	return createdFileID, err
+}
+
+// RegisterFileWithLocation inserts a file in the database with its inbox location, along with a "registered" log
+// event. If the file already exists in the database, the entry is updated, but
+// a new file event is always inserted.
+// If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
+// If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
+// and a different fileId is provided, the fileId in the database will NOT be updated.
+func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	query := "SELECT sda.register_file($1, $2, $3, $4);"
+
+	var createdFileID string
+
+	fileIDArg := sql.NullString{}
+	if fileID != nil {
+		fileIDArg.Valid = true
+		fileIDArg.String = *fileID
+	}
+
+	err := dbs.DB.QueryRow(query, fileIDArg, inboxLocation, uploadPath, uploadUser).Scan(&createdFileID)
 
 	return createdFileID, err
 }
@@ -274,7 +295,7 @@ func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
 	var err error
 
 	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.setArchived(file, fileID)
+		err = dbs.setArchived("", file, fileID)
 		if err == nil {
 			break
 		}
@@ -283,12 +304,27 @@ func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
 
 	return err
 }
-func (dbs *SDAdb) setArchived(file FileInfo, fileID string) error {
+
+// SetArchivedWithLocation marks the file as 'ARCHIVED' with its archive location
+func (dbs *SDAdb) SetArchivedWithLocation(location string, file FileInfo, fileID string) error {
+	var err error
+
+	for count := 1; count <= RetryTimes; count++ {
+		err = dbs.setArchived(location, file, fileID)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	return err
+}
+func (dbs *SDAdb) setArchived(location string, file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const setArchived = "UPDATE sda.files SET archive_file_path = $1, archive_file_size = $2 WHERE id = $3;"
-	if _, err := db.Exec(setArchived, file.Path, file.Size, fileID); err != nil {
+	const setArchived = "UPDATE sda.files SET archive_location = $1, archive_file_path = $2, archive_file_size = $3 WHERE id = $4;"
+	if _, err := db.Exec(setArchived, location, file.Path, file.Size, fileID); err != nil {
 		return fmt.Errorf("setArchived error: %s", err.Error())
 	}
 
@@ -1419,4 +1455,37 @@ func (dbs *SDAdb) getFileDetailsFromUUID(fileUUID, event string) (FileDetails, e
 	}
 
 	return info, nil
+}
+
+func (dbs *SDAdb) GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	// Sum the size and count of the files in a location
+	// We do not expect submission_location == archive_location || archive_location == backup_location
+	// Which is the reason for the OR statements
+	// When a file has been added to a dataset(i.e file id exists in the file_dataset table) then file will have been removed from the inbox location
+	// the file size will be the same in both archive and backup
+	const query = `
+SELECT SUM(CASE WHEN f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE THEN f.submission_file_size ELSE f.archive_file_size END ) AS size, COUNT(*)
+FROM (
+SELECT f.submission_file_size, f.archive_file_size, f.submission_location, f.archive_location, f.backup_location,
+      (EXISTS (SELECT 1
+         FROM sda.file_dataset fd
+         WHERE fd.file_id = f.id)
+      ) AS file_in_dataset
+  FROM sda.files AS f
+) as f
+WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archive_location = $1 OR f.backup_location = $1;
+`
+
+	var size, count sql.Null[uint64]
+	if err := dbs.DB.QueryRowContext(ctx, query, location).Scan(&size, &count); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, nil
+		}
+
+		return 0, 0, err
+	}
+
+	return size.V, count.V, nil
 }
