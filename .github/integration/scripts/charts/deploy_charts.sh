@@ -7,12 +7,10 @@ if [ -z "$2" ]; then
 fi
 
 MQ_PORT=5672
-PROTOCOL=http
 SCHEME=HTTP
 GRPC_PORT=50051
 if [ "$3" == "true" ]; then
     MQ_PORT=5671
-    PROTOCOL=https
     SCHEME=HTTPS
     GRPC_PORT=50444
 fi
@@ -50,7 +48,11 @@ if [ "$1" == "sda-mq" ]; then
         --wait
 
     if [ "$4" == "federated" ]; then
-        curl --retry 100 -kL -u "admin:$ADMINPASS" -d '{"durable": true}' -H "Content-Type: application/json" -X PUT "$PROTOCOL://broker.127.0.0.1.nip.io/api/queues/sda/from_cega"
+      if [ "$3" = true ] ; then
+        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username=admin --port=15671 --ssl --ssl-cert-file=/etc/rabbitmq/tls/tls.crt --ssl-key-file=/etc/rabbitmq/tls/tls.key --ssl-ca-cert-file=/etc/rabbitmq/tls/ca.crt --ssl-disable-hostname-verification --password="$ADMINPASS" declare queue --vhost=sda name=from_cega durable=true
+      else
+        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username=admin --password="$ADMINPASS" declare queue --vhost=sda name=from_cega durable=true
+      fi
     fi
 fi
 
