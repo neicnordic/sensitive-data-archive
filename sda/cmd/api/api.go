@@ -853,7 +853,7 @@ func rotateKeyDataset(c *gin.Context) {
 
 	if len(files) == 0 {
 		log.Warnf("no files found for dataset %s", datasetID)
-		c.Status(http.StatusOK)
+		c.AbortWithStatusJSON(http.StatusBadRequest, "dataset not found")
 
 		return
 	}
