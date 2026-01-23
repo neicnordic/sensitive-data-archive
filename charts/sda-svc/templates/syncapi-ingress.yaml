@@ -1,7 +1,7 @@
 {{- if eq "isolated" .Values.global.schemaType }}
 {{- if and (ne "" .Values.global.sync.api.password) (ne "" .Values.global.sync.api.user) }}
 {{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
-{{- if and .Values.global.ingress.deploy }}
+{{- if .Values.global.ingress.deploy }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -15,18 +15,17 @@ metadata:
 {{ toYaml .Values.global.ingress.labels | indent 4 }}
 {{- end }}
   annotations:
-    {{- if eq "nginx" .Values.global.ingress.ingressClassName }}
-    nginx.ingress.kubernetes.io/rewrite-target: "/"
-    nginx.ingress.kubernetes.io/backend-protocol: "{{ ternary "HTTPS" "HTTP" .Values.global.tls.enabled }}"
-    {{- end }}
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+{{- if .Values.syncapi.ingressAnnotations }}
+{{ toYaml .Values.syncapi.ingressAnnotations | indent 4 }}
+{{- end }}
     {{- if .Values.global.ingress.clusterIssuer }}
     cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
     {{- else if .Values.global.ingress.issuer }}
     cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
     {{- end }}
-{{- if .Values.global.ingress.annotations }}
-{{ toYaml .Values.global.ingress.annotations | indent 4 }}
-{{- end }}
 spec:
 {{- if .Values.global.ingress.ingressClassName }}
   ingressClassName: {{ .Values.global.ingress.ingressClassName }}

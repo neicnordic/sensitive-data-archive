@@ -136,6 +136,7 @@ GRANT SELECT ON sda.checksums TO rotatekey;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO rotatekey;
 GRANT SELECT ON sda.file_event_log TO rotatekey;
 GRANT SELECT ON sda.encryption_keys TO rotatekey;
+GRANT INSERT, SELECT, UPDATE ON sda.file_headers_backup TO rotatekey;
 
 --------------------------------------------------------------------------------
 

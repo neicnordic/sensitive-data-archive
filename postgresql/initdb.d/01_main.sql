@@ -35,7 +35,8 @@ VALUES (0, now(), 'Created with version'),
        (18, now(), 'Create rotatekey role and grant it privileges to sda tables'),
        (19, now(), 'Create new indexes on files and file_event_log tables'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
-       (21, now(), 'Drop functions set_verified, and set_archived');
+       (21, now(), 'Drop functions set_verified, and set_archived'),
+       (22, now(), 'Add file_headers_backup table for key rotation safekeeping');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -196,4 +197,13 @@ CREATE TABLE dataset_event_log (
     event      TEXT REFERENCES dataset_events(title),
     message    JSONB, -- The rabbitMQ message that initiated the dataset event
     event_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+);
+
+-- `file_headers_backup` stores temporary copies of headers during key rotation.
+-- Designed to be manually truncated/cleaned after key rotation is complete.
+CREATE TABLE sda.file_headers_backup (
+    file_id     UUID REFERENCES sda.files(id) PRIMARY KEY,
+    header      TEXT NOT NULL,
+    key_hash    TEXT REFERENCES sda.encryption_keys(key_hash),
+    backup_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
 );

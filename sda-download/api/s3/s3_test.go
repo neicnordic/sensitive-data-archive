@@ -72,7 +72,7 @@ func (ts *S3TestSuite) TestGetBucketLocation() {
 	assert.Nil(ts.T(), err, "failed to parse body from location response")
 	defer response.Body.Close()
 
-	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">us-west-2</LocationConstraint>"
+	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<LocationConstraint xmlns=\"https://s3.amazonaws.com/doc/2006-03-01/\">us-west-2</LocationConstraint>"
 
 	assert.Equal(ts.T(), expected, string(body), "Wrong location from S3")
 }

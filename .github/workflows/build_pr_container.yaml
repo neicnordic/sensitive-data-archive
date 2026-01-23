@@ -293,7 +293,7 @@ jobs:
       - build_server_images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Test sda-validator-orchestrator
         run: |
           echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-donotrestrict.conf
@@ -351,7 +351,7 @@ jobs:
         shell: bash
 
       - name: Deploy external services
-        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}}
+        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}} ${{matrix.storage}}
         shell: bash
 
       - name: Deploy DB
