@@ -24,44 +24,30 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	forever := make(chan bool)
 	conf, err := config.NewConfig("verify")
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize mq broker, due to: %v", err)
 	}
 	db, err := database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize sda db, due to: %v", err)
 	}
 	if db.Version < 23 {
-		log.Error("database schema v23 is required")
-
-		return
+		log.Fatal("database schema v23 is required")
 	}
 
-	archiveReader, err := storage.NewReader(ctx, "archive")
+	archiveReader, err := storage.NewReader(context.Background(), "archive")
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize archive reader, due to: %v", err)
 	}
 	archiveKeyList, err := config.GetC4GHprivateKeys()
 	if err != nil || len(archiveKeyList) == 0 {
-		log.Error("no C4GH private keys configured")
-
-		return
+		log.Fatal("no C4GH private keys configured")
 	}
 
 	defer mq.Channel.Close()
