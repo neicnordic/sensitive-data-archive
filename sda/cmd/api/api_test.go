@@ -36,6 +36,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	log "github.com/sirupsen/logrus"
@@ -504,6 +506,13 @@ storage:
 	if err := viper.ReadInConfig(); err != nil {
 		s.FailNow(err.Error())
 	}
+
+	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
+	assert.NoError(s.T(), err)
+	inboxWriter, err = storage.NewWriter(context.Background(), "inbox", lb)
+	assert.NoError(s.T(), err)
+	inboxReader, err = storage.NewReader(context.Background(), "inbox")
+	assert.NoError(s.T(), err)
 
 	s.UserKey.PublicKey, s.UserKey.PrivateKey, err = keys.GenerateKeyPair()
 	if err != nil {
