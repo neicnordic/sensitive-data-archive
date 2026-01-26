@@ -135,6 +135,16 @@ func (h *Handlers) DownloadByQuery(c *gin.Context) {
 		return
 	}
 
+	// When fileId is specified, verify the file actually belongs to the specified dataset.
+	// This prevents users from using dataset=X to access files from dataset=Z
+	// (even if they have access to both datasets).
+	if fileID != "" && file.DatasetID != datasetID {
+		log.Warnf("file %s belongs to dataset %s, not requested dataset %s", file.ID, file.DatasetID, datasetID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found in specified dataset"})
+
+		return
+	}
+
 	// Check permission for the file (verifies file belongs to an authorized dataset)
 	if !h.checkFilePermission(c, file.ID, authCtx.Datasets) {
 		return // Error response already sent
@@ -227,7 +237,15 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 	var rangeSpec *streaming.RangeSpec
 	rangeHeader := c.GetHeader("Range")
 	if rangeHeader != "" {
-		rangeSpec = streaming.ParseRangeHeader(rangeHeader, totalSize)
+		var rangeErr error
+		rangeSpec, rangeErr = streaming.ParseRangeHeader(rangeHeader, totalSize)
+		if rangeErr == streaming.ErrRangeNotSatisfiable {
+			c.Header("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+			c.JSON(http.StatusRequestedRangeNotSatisfiable, gin.H{"error": "range not satisfiable"})
+
+			return
+		}
+		// Other errors (nil) mean invalid format - per RFC 7233, ignore and serve full file
 	}
 
 	// Set response headers

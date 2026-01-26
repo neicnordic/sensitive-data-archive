@@ -587,6 +587,38 @@ func TestDownloadByQuery_ByFilePath_FileNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+func TestDownloadByQuery_FileNotInSpecifiedDataset(t *testing.T) {
+	// User requests dataset=X but fileId belongs to dataset=Z
+	// Even if user has access to both, this should return 404
+	router := setupTestRouterWithAuth([]string{"dataset-X", "dataset-Z"})
+	mockDB := &mockDatabase{
+		fileByID: &database.File{
+			ID:        "file-1",
+			DatasetID: "dataset-Z", // File belongs to different dataset than requested
+			Header:    make([]byte, 16),
+		},
+		hasPermission: true, // User has permission to the file's actual dataset
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/file", h.DownloadByQuery)
+
+	// Request with dataset=dataset-X but file belongs to dataset-Z
+	req, _ := http.NewRequest(http.MethodGet, "/file?dataset=dataset-X&fileId=file-1", nil)
+	req.Header.Set("public_key", "dGVzdC1wdWJsaWMta2V5")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	var response map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "file not found in specified dataset")
+}
+
 // Database error tests for info handlers
 
 func TestInfoDatasets_DatabaseError(t *testing.T) {

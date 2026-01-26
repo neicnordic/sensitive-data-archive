@@ -19,21 +19,31 @@ type RangeSpec struct {
 	End   int64 // -1 means until end of file
 }
 
+// ErrRangeNotSatisfiable indicates the requested range cannot be satisfied.
+// The handler should return HTTP 416 Range Not Satisfiable.
+var ErrRangeNotSatisfiable = fmt.Errorf("range not satisfiable")
+
 // ParseRangeHeader parses an RFC 7233 Range header.
-// Returns nil if no range is specified or if the range is invalid.
+// Returns:
+//   - (nil, nil) if no range is specified - serve full file with 200
+//   - (*RangeSpec, nil) if range is valid - serve partial content with 206
+//   - (nil, ErrRangeNotSatisfiable) if range is unsatisfiable - return 416
+//   - (nil, nil) if range format is invalid - per RFC 7233, ignore and serve full file with 200
+//
 // Only supports a single byte range (not multiple ranges).
-func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
+func ParseRangeHeader(rangeHeader string, fileSize int64) (*RangeSpec, error) {
 	if rangeHeader == "" {
-		return nil
+		return nil, nil
 	}
 
 	// Match: bytes=START-END or bytes=START- or bytes=-SUFFIX
 	re := regexp.MustCompile(`^bytes=(\d*)-(\d*)$`)
 	matches := re.FindStringSubmatch(rangeHeader)
 	if matches == nil {
+		// Per RFC 7233, invalid range format should be ignored (serve full file)
 		log.Warnf("invalid range header format: %s", rangeHeader)
 
-		return nil
+		return nil, nil
 	}
 
 	var start, end int64
@@ -44,7 +54,7 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 		if err != nil {
 			log.Warnf("invalid range suffix: %s", matches[2])
 
-			return nil
+			return nil, nil
 		}
 		start = fileSize - suffix
 		if start < 0 {
@@ -52,7 +62,7 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 		}
 		end = fileSize - 1
 
-		return &RangeSpec{Start: start, End: end}
+		return &RangeSpec{Start: start, End: end}, nil
 	}
 
 	// bytes=START- or bytes=START-END
@@ -62,7 +72,7 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 		if err != nil {
 			log.Warnf("invalid range start: %s", matches[1])
 
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -72,17 +82,23 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 		if err != nil {
 			log.Warnf("invalid range end: %s", matches[2])
 
-			return nil
+			return nil, nil
 		}
 	} else {
 		end = fileSize - 1 // Until end of file
 	}
 
-	// Validate range
-	if start > end || start >= fileSize {
-		log.Warnf("invalid range: start=%d, end=%d, fileSize=%d", start, end, fileSize)
+	// Validate range - unsatisfiable ranges should return 416
+	if start >= fileSize {
+		log.Warnf("range not satisfiable: start=%d >= fileSize=%d", start, fileSize)
 
-		return nil
+		return nil, ErrRangeNotSatisfiable
+	}
+
+	if start > end {
+		log.Warnf("range not satisfiable: start=%d > end=%d", start, end)
+
+		return nil, ErrRangeNotSatisfiable
 	}
 
 	// Clamp end to file size
@@ -90,7 +106,7 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 		end = fileSize - 1
 	}
 
-	return &RangeSpec{Start: start, End: end}
+	return &RangeSpec{Start: start, End: end}, nil
 }
 
 // StreamConfig holds configuration for streaming a file.

@@ -26,73 +26,87 @@ func newReadSeekCloser(data []byte) *readSeekCloser {
 }
 
 func TestParseRangeHeader_Empty(t *testing.T) {
-	result := ParseRangeHeader("", 1000)
+	result, err := ParseRangeHeader("", 1000)
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_FullRange(t *testing.T) {
-	result := ParseRangeHeader("bytes=0-499", 1000)
+	result, err := ParseRangeHeader("bytes=0-499", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(0), result.Start)
 	assert.Equal(t, int64(499), result.End)
 }
 
 func TestParseRangeHeader_OpenEndedRange(t *testing.T) {
-	result := ParseRangeHeader("bytes=500-", 1000)
+	result, err := ParseRangeHeader("bytes=500-", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(500), result.Start)
 	assert.Equal(t, int64(999), result.End) // End of file
 }
 
 func TestParseRangeHeader_SuffixRange(t *testing.T) {
-	result := ParseRangeHeader("bytes=-100", 1000)
+	result, err := ParseRangeHeader("bytes=-100", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(900), result.Start)
 	assert.Equal(t, int64(999), result.End)
 }
 
 func TestParseRangeHeader_SuffixLargerThanFile(t *testing.T) {
-	result := ParseRangeHeader("bytes=-2000", 1000)
+	result, err := ParseRangeHeader("bytes=-2000", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(0), result.Start) // Clamped to 0
 	assert.Equal(t, int64(999), result.End)
 }
 
 func TestParseRangeHeader_EndBeyondFileSize(t *testing.T) {
-	result := ParseRangeHeader("bytes=500-2000", 1000)
+	result, err := ParseRangeHeader("bytes=500-2000", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(500), result.Start)
 	assert.Equal(t, int64(999), result.End) // Clamped to file size - 1
 }
 
 func TestParseRangeHeader_StartBeyondFileSize(t *testing.T) {
-	result := ParseRangeHeader("bytes=2000-3000", 1000)
-	assert.Nil(t, result) // Invalid range
+	result, err := ParseRangeHeader("bytes=2000-3000", 1000)
+	assert.ErrorIs(t, err, ErrRangeNotSatisfiable)
+	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_StartGreaterThanEnd(t *testing.T) {
-	result := ParseRangeHeader("bytes=500-100", 1000)
-	assert.Nil(t, result) // Invalid range
+	result, err := ParseRangeHeader("bytes=500-100", 1000)
+	assert.ErrorIs(t, err, ErrRangeNotSatisfiable)
+	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_InvalidFormat(t *testing.T) {
-	result := ParseRangeHeader("invalid", 1000)
+	// Per RFC 7233, invalid format should be ignored (no error, serve full file)
+	result, err := ParseRangeHeader("invalid", 1000)
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_WrongUnit(t *testing.T) {
-	result := ParseRangeHeader("chars=0-100", 1000)
+	// Per RFC 7233, wrong unit should be ignored (no error, serve full file)
+	result, err := ParseRangeHeader("chars=0-100", 1000)
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_MultipleRanges(t *testing.T) {
-	// We only support single ranges, this should fail
-	result := ParseRangeHeader("bytes=0-100,200-300", 1000)
+	// We only support single ranges, this should be ignored (serve full file)
+	result, err := ParseRangeHeader("bytes=0-100,200-300", 1000)
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestParseRangeHeader_SingleByte(t *testing.T) {
-	result := ParseRangeHeader("bytes=0-0", 1000)
+	result, err := ParseRangeHeader("bytes=0-0", 1000)
+	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(0), result.Start)
 	assert.Equal(t, int64(0), result.End)
