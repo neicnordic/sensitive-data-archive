@@ -922,6 +922,7 @@ func (dbs *SDAdb) GetArchiveLocation(fileID string) (string, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
+
 		return "", err
 	}
 
