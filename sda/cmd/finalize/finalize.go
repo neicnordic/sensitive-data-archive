@@ -230,28 +230,32 @@ func backupFile(delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
 	fileID := delivered.CorrelationId
 
-	filePath, fileSize, err := db.GetArchived(fileID)
+	archivedData, err := db.GetArchived(fileID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
+	if archivedData == nil {
+		return fmt.Errorf("file archive data not found in database, file-id: %s", fileID)
+	}
+
 	// Get size on disk, will also give some time for the file to appear if it has not already
-	diskFileSize, err := archive.GetFileSize(filePath, false)
+	diskFileSize, err := archive.GetFileSize(archivedData.FilePath, false)
 	if err != nil {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
 
-	if diskFileSize != int64(fileSize) {
-		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, fileSize)
+	if diskFileSize != int64(archivedData.FileSize) {
+		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archivedData.FileSize)
 	}
 
-	file, err := archive.NewFileReader(filePath)
+	file, err := archive.NewFileReader(archivedData.FilePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
 	defer file.Close()
 
-	dest, err := backup.NewFileWriter(filePath)
+	dest, err := backup.NewFileWriter(archivedData.FilePath)
 	if err != nil {
 		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
 	}
@@ -259,7 +263,7 @@ func backupFile(delivered amqp.Delivery) error {
 
 	// Copy the file and check is sizes match
 	copiedSize, err := io.Copy(dest, file)
-	if err != nil || copiedSize != int64(fileSize) {
+	if err != nil || copiedSize != int64(archivedData.FileSize) {
 		log.Errorf("failed to copy file, reason: %v)", err)
 	}
 
