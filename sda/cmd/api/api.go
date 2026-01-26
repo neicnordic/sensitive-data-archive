@@ -36,6 +36,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -56,68 +57,102 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	Conf, err = config.NewConfig("api")
 	if err != nil {
-		log.Fatalf("failed to load config, due to: %v", err)
+		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	if err != nil {
-		log.Fatalf("failed to initialize mq broker, due to: %v", err)
-	}
+
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
-		log.Fatalf("failed to initialize sda db, due to: %v", err)
+		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
+	defer Conf.API.DB.Close()
 	if Conf.API.DB.Version < 23 {
-		log.Fatal("database schema v23 is required")
+		return errors.New("database schema v23 is required")
 	}
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	if err != nil {
+		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
+	}
+	defer func() {
+		if err := Conf.API.MQ.Channel.Close(); err != nil {
+			log.Errorf("failed to close mq broker channel due to: %v", err)
+		}
+		if err := Conf.API.MQ.Connection.Close(); err != nil {
+			log.Errorf("failed to close mq broker connection due to: %v", err)
+		}
+	}()
+
 	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
 	if err != nil {
-		log.Fatalf("failed to initialize new location broker, due to: %v", err)
+		return fmt.Errorf("failed to initialize new location broker, due to: %v", err)
 	}
-	inboxWriter, err = storage.NewWriter(context.Background(), "inbox", lb)
+	inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
 	if err != nil {
-		log.Fatalf("failed to initialize inbox writer, due to: %v", err)
+		return fmt.Errorf("failed to initialize inbox writer, due to: %v", err)
 	}
-	inboxReader, err = storage.NewReader(context.Background(), "inbox")
+	inboxReader, err = storage.NewReader(ctx, "inbox")
 	if err != nil {
-		log.Fatalf("failed to initialize inbox reader, reason: %v", err)
+		return fmt.Errorf("failed to initialize inbox reader, reason: %v", err)
 	}
 
 	if err := setupJwtAuth(); err != nil {
-		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
+		return fmt.Errorf("error when setting up JWT auth, reason %s", err.Error())
 	}
 
-	sigc := make(chan os.Signal, 5)
-	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	serverErr := make(chan error, 1)
+	srv, err := setup(Conf)
+	if err != nil {
+		return fmt.Errorf("failed to setup http/https server, due to: %v", err)
+	}
 	go func() {
-		<-sigc
-		shutdown()
-		os.Exit(0)
+		if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
+			log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
+			if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
+				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
+			}
+		} else {
+			log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
+			if err := srv.ListenAndServe(); err != nil {
+				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
+			}
+		}
 	}()
 
-	srv := setup(Conf)
-	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
-		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
-		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
-			shutdown()
-			log.Fatalf("failed to start https server, due to: %v", err)
-		}
-	} else {
-		log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
-		if err := srv.ListenAndServe(); err != nil {
-			shutdown()
-			log.Fatalf("failed to start http server, due to: %v", err)
-		}
+	sigc := make(chan os.Signal, 5)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	select {
+	case <-sigc:
+	case err := <-Conf.API.MQ.Connection.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-Conf.API.MQ.Channel.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-serverErr:
+		return err
 	}
+
+	if err := srv.Shutdown(context.Background()); err != nil {
+		log.Errorf("failed to close http/https server due to: %v", err)
+	}
+
+	return nil
 }
 
-func setup(conf *config.Config) *http.Server {
+func setup(conf *config.Config) (*http.Server, error) {
 	m, _ := model.NewModelFromString(jsonadapter.Model)
 	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
-		shutdown()
-		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
+		return nil, err
 	}
 
 	r := gin.New()
@@ -186,7 +221,7 @@ func setup(conf *config.Config) *http.Server {
 		WriteTimeout:      2 * time.Minute,
 	}
 
-	return srv
+	return srv, nil
 }
 
 func setupJwtAuth() error {
@@ -203,12 +238,6 @@ func setupJwtAuth() error {
 	}
 
 	return nil
-}
-
-func shutdown() {
-	defer Conf.API.MQ.Channel.Close()
-	defer Conf.API.MQ.Connection.Close()
-	defer Conf.API.DB.Close()
 }
 
 func readinessResponse(c *gin.Context) {
@@ -235,7 +264,7 @@ func readinessResponse(c *gin.Context) {
 		}
 	}
 
-	if dbRes := checkDB(Conf.API.DB, 5*time.Millisecond); dbRes != nil {
+	if dbRes := checkDB(c, Conf.API.DB, 5*time.Millisecond); dbRes != nil {
 		log.Debugf("DB connection error :%v", dbRes)
 		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
@@ -244,8 +273,8 @@ func readinessResponse(c *gin.Context) {
 	c.JSON(statusCode, "")
 }
 
-func checkDB(db *database.SDAdb, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func checkDB(ctx context.Context, db *database.SDAdb, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if db.DB == nil {
 		return errors.New("database is nil")
@@ -473,7 +502,7 @@ func deleteFile(c *gin.Context) {
 // gRPC to communicate with the re-encrypt service and handles TLS configuration
 // if needed. The function also handles the case where the CA certificate is
 // provided for secure communication.
-func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
+func reencryptHeader(ctx context.Context, oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case Conf.API.Grpc.ClientCreds != nil:
@@ -490,7 +519,7 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(Conf.API.Grpc.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(Conf.API.Grpc.Timeout)*time.Second)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
@@ -558,7 +587,7 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	newHeader, err := reencryptHeader(header, c4ghPubKey)
+	newHeader, err := reencryptHeader(c, header, c4ghPubKey)
 	if err != nil {
 		log.Errorf("failed to reencrypt header, reason: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to reencrypt header")
