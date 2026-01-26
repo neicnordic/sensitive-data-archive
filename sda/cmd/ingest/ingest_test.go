@@ -229,8 +229,7 @@ func (ts *TestSuite) SetupSuite() {
 	if err != nil {
 		ts.FailNowf("failed to setup database connection: %s", err.Error())
 	}
-	ts.ingest.brokerConf = ingestConf.Broker
-	ts.ingest.MQ, err = broker.NewMQ(ts.ingest.brokerConf)
+	ts.ingest.MQ, err = broker.NewMQ(ingestConf.Broker)
 	if err != nil {
 		ts.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
 	}
