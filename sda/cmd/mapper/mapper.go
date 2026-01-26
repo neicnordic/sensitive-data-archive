@@ -22,15 +22,15 @@ func main() {
 	forever := make(chan bool)
 	conf, err := config.NewConfig("mapper")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initalize mq broker, due to: %v", err)
 	}
 	db, err := database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initalize sda db, due to: %v", err)
 	}
 	if db.Version < 23 {
 		log.Fatal("database schema v23 is required")
@@ -38,11 +38,11 @@ func main() {
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
-		log.Fatalf("failed to init new location broker due to: %v", err)
+		log.Fatalf("failed to initialize location broker, due to: %v", err)
 	}
 	inboxWriter, err := storage.NewWriter(context.Background(), "inbox", lb)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initialize inbox writer, due to: %v", err)
 	}
 
 	defer mq.Channel.Close()
