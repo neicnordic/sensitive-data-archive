@@ -488,16 +488,20 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 	f.DecryptedChecksumType = decryptedChecksumType.String
 
 	// Header is stored as hex string in database, decode it.
-	// The ingest pipeline stores the exact crypt4gh file header as a hex-encoded string.
+	// The ingest pipeline (sda/internal/database/db_functions.go:StoreHeader) stores the
+	// crypt4gh file header as a hex-encoded string using hex.EncodeToString().
 	// After decoding, the header bytes represent the complete crypt4gh header which includes:
 	// - magic number (8 bytes: "crypt4gh")
 	// - version (4 bytes)
 	// - header packet count (4 bytes)
 	// - header packets (variable length, contains encryption info)
+	// NOTE: If you encounter "encoding/hex: invalid byte" errors, ensure the header was
+	// stored using hex encoding, not base64. The SDA pipeline consistently uses hex.
 	if headerHex.Valid && headerHex.String != "" {
 		f.Header, err = hex.DecodeString(headerHex.String)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode header from hex: %w", err)
+			return nil, fmt.Errorf("failed to decode header from hex (expected hex-encoded string, got %d chars): %w",
+				len(headerHex.String), err)
 		}
 		// Validate header has minimum crypt4gh structure (magic + version + count = 16 bytes minimum)
 		if len(f.Header) < 16 {
@@ -542,11 +546,12 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 	f.DecryptedChecksumType = decryptedChecksumType.String
 
 	// Header is stored as hex string in database, decode it.
-	// See GetFileByID for details on the header format.
+	// See GetFileByID for details on the header format and encoding.
 	if headerHex.Valid && headerHex.String != "" {
 		f.Header, err = hex.DecodeString(headerHex.String)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode header from hex: %w", err)
+			return nil, fmt.Errorf("failed to decode header from hex (expected hex-encoded string, got %d chars): %w",
+				len(headerHex.String), err)
 		}
 		// Validate header has minimum crypt4gh structure
 		if len(f.Header) < 16 {

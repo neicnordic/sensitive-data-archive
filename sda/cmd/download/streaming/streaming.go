@@ -121,6 +121,18 @@ type StreamConfig struct {
 func StreamFile(cfg StreamConfig) error {
 	defer cfg.FileReader.Close()
 
+	// Validate configuration to prevent negative sizes
+	if cfg.OriginalHeaderSize < 0 {
+		return fmt.Errorf("invalid config: OriginalHeaderSize cannot be negative (%d)", cfg.OriginalHeaderSize)
+	}
+	if cfg.ArchiveFileSize < 0 {
+		return fmt.Errorf("invalid config: ArchiveFileSize cannot be negative (%d)", cfg.ArchiveFileSize)
+	}
+	if cfg.OriginalHeaderSize > cfg.ArchiveFileSize {
+		return fmt.Errorf("invalid config: OriginalHeaderSize (%d) cannot exceed ArchiveFileSize (%d)",
+			cfg.OriginalHeaderSize, cfg.ArchiveFileSize)
+	}
+
 	newHeaderSize := int64(len(cfg.NewHeader))
 	// Body size is archive size minus any original header that needs to be skipped
 	bodySize := cfg.ArchiveFileSize - cfg.OriginalHeaderSize

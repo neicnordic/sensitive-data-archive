@@ -343,3 +343,59 @@ func TestSeekOrSkipBody_NonSeekable(t *testing.T) {
 	data, _ := io.ReadAll(body)
 	assert.Equal(t, "data", string(data))
 }
+
+// StreamFile validation tests
+
+func TestStreamFile_InvalidConfig_NegativeOriginalHeaderSize(t *testing.T) {
+	header := []byte("HEADER")
+	body := []byte("BODY")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:             recorder,
+		NewHeader:          header,
+		FileReader:         newReadSeekCloser(body),
+		ArchiveFileSize:    int64(len(body)),
+		OriginalHeaderSize: -1, // Invalid
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OriginalHeaderSize cannot be negative")
+}
+
+func TestStreamFile_InvalidConfig_NegativeArchiveFileSize(t *testing.T) {
+	header := []byte("HEADER")
+	body := []byte("BODY")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:          recorder,
+		NewHeader:       header,
+		FileReader:      newReadSeekCloser(body),
+		ArchiveFileSize: -1, // Invalid
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ArchiveFileSize cannot be negative")
+}
+
+func TestStreamFile_InvalidConfig_HeaderSizeExceedsArchiveSize(t *testing.T) {
+	header := []byte("HEADER")
+	body := []byte("BODY")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:             recorder,
+		NewHeader:          header,
+		FileReader:         newReadSeekCloser(body),
+		ArchiveFileSize:    10,
+		OriginalHeaderSize: 20, // Exceeds archive size
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OriginalHeaderSize")
+	assert.Contains(t, err.Error(), "cannot exceed ArchiveFileSize")
+}
