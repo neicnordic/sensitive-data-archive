@@ -31,52 +31,34 @@ var message schema.IngestionAccession
 var backupInStorage bool
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	forever := make(chan bool)
 	conf, err = config.NewConfig("finalize")
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize mq broker, due to: %v", err)
 	}
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize sda db, due to: %v", err)
 	}
 	if db.Version < 23 {
-		log.Error("database schema v23 is required")
-
-		return
+		log.Fatal("database schema v23 is required")
 	}
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
-		log.Errorf("failed to init new location broker due to: %v", err)
-
-		return
+		log.Fatalf("failed to init new location broker, due to: %v", err)
 	}
-
-	backupWriter, err = storage.NewWriter(ctx, "backup", lb)
+	backupWriter, err = storage.NewWriter(context.Background(), "backup", lb)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidWriter) {
-		log.Errorf("error creating backup writer: %v", err)
-
-		return
+		log.Fatalf("failed to initialize backup writer, due to: %v", err)
 	}
-
-	archiveReader, err = storage.NewReader(ctx, "archive")
+	archiveReader, err = storage.NewReader(context.Background(), "archive")
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidReader) {
-		log.Errorf("error creating archive reader: %v", err)
-
-		return
+		log.Fatalf("failed to initialize archive reader: %v", err)
 	}
 
 	if archiveReader != nil && backupWriter != nil {
