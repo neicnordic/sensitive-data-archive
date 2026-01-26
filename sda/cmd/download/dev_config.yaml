@@ -1,0 +1,59 @@
+# Development configuration for sda/cmd/download
+# Use with: CONFIGFILE=cmd/download/dev_config.yaml go run cmd/download/main.go
+
+# API Server configuration
+api:
+  host: "0.0.0.0"
+  port: 8080
+
+# gRPC Health check server
+health:
+  port: 8081
+
+# Database configuration (connects to integration test PostgreSQL)
+db:
+  host: "localhost"
+  port: 15432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+# gRPC reencrypt service
+grpc:
+  host: "localhost"
+  port: 50051
+  timeout: 10
+
+# JWT configuration
+# At least one of pubkey-path or pubkey-url must be set for token validation
+jwt:
+  # For local development against integration test environment, use JWKS URL:
+  pubkey-url: "http://localhost:8800/oidc/jwk"
+  # For testing: allow authenticated users access to all datasets
+  allow-all-data: true
+
+# OIDC configuration (optional token validation settings)
+# oidc:
+#   issuer: "http://localhost:8800/oidc/"
+#   audience: ""
+
+# Session configuration
+session:
+  expiration: 3600
+  secure: false
+  http-only: true
+  name: "sda_session"
+
+# Storage configuration for storage/v2
+# The backend name is "archive" by default (see config.StorageBackend())
+storage:
+  backend: "archive"
+  archive:
+    s3:
+      - endpoint: "localhost:19000"
+        access_key: "access"
+        secret_key: "secretKey"
+        region: "us-east-1"
+        bucket_prefix: "archive"
+        disable_https: true
