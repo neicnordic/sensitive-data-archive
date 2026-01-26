@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
@@ -39,13 +38,6 @@ func setupTestRouter() *gin.Engine {
 func setupTestRouterWithAuth(datasets []string) *gin.Engine {
 	router := gin.New()
 
-	// Initialize session cache
-	cache, _ := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-
 	// Mock middleware that injects auth context
 	router.Use(func(c *gin.Context) {
 		authCtx := middleware.AuthContext{
@@ -55,23 +47,12 @@ func setupTestRouterWithAuth(datasets []string) *gin.Engine {
 		c.Next()
 	})
 
-	// Keep cache reference for cleanup
-	_ = cache
-
 	return router
 }
 
 // setupTestRouterWithRealAuth creates a router with real auth middleware
 func setupTestRouterWithRealAuth() *gin.Engine {
 	router := gin.New()
-
-	// Initialize session cache for middleware
-	cache, _ := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-	_ = cache
 
 	return router
 }
