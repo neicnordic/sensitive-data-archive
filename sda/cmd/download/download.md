@@ -299,6 +299,31 @@ concurrent cache. Cached queries include:
 Cache keys for permission checks are scoped by the user's accessible datasets, ensuring
 that users with different permissions get appropriately cached results.
 
+#### Cache Behavior and Considerations
+
+**Cache Invalidation:** The cache uses time-based expiration (TTL) but does not support
+explicit invalidation. This means:
+
+- If a file's permissions change, the cached permission check will be stale until the
+  TTL expires (default: 2 minutes for permissions, 5 minutes for file/dataset metadata)
+- For most use cases this is acceptable, as permission changes are infrequent
+- If immediate permission revocation is required, the cache can be disabled or the
+  service restarted
+
+**Memory Usage:** The ristretto cache is configured with:
+
+- `MaxCost: 100,000` - Maximum number of items to cache
+- `NumCounters: 1,000,000` - Counters for admission policy
+
+Estimated memory usage:
+
+- Base overhead: ~8 MB for counters
+- Per-item overhead: varies by cached data size
+- Typical total: 50-200 MB depending on active dataset/file counts
+
+For production deployments, monitor memory usage and adjust `MaxCost` if needed. The
+cache automatically evicts least-recently-used items when capacity is reached.
+
 ## Testing
 
 ### Integration Tests
