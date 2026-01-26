@@ -51,24 +51,37 @@ var (
 	Conf        *config.Config
 	err         error
 	auth        *userauth.ValidateFromToken
-	auditLogger *log.Logger
+	inboxReader storage.Reader
+	inboxWriter storage.Writer
 )
 
 func main() {
 	Conf, err = config.NewConfig("api")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initialize mq broker, due to: %v", err)
 	}
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initialize sda db, due to: %v", err)
 	}
 	if Conf.API.DB.Version < 23 {
 		log.Fatal("database schema v23 is required")
+	}
+	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
+	if err != nil {
+		log.Fatalf("failed to initialize new location broker, due to: %v", err)
+	}
+	inboxWriter, err = storage.NewWriter(context.Background(), "inbox", lb)
+	if err != nil {
+		log.Fatalf("failed to initialize inbox writer, due to: %v", err)
+	}
+	inboxReader, err = storage.NewReader(context.Background(), "inbox")
+	if err != nil {
+		log.Fatalf("failed to initialize inbox reader, reason: %v", err)
 	}
 
 	if err := setupJwtAuth(); err != nil {
@@ -88,13 +101,13 @@ func main() {
 		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
 			shutdown()
-			log.Fatalln(err)
+			log.Fatalf("failed to start https server, due to: %v", err)
 		}
 	} else {
 		log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
 		if err := srv.ListenAndServe(); err != nil {
 			shutdown()
-			log.Fatalln(err)
+			log.Fatalf("failed to start http server, due to: %v", err)
 		}
 	}
 }
@@ -409,21 +422,6 @@ func ingestFile(c *gin.Context) {
 // The deleteFile function deletes files from the inbox and marks them as
 // discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
-	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
-	if err != nil {
-		log.Error(err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-	inboxWriter, err := storage.NewWriter(c, "inbox", lb)
-	if err != nil {
-		log.Error(err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
 	submissionUser := c.Param("username")
 	log.Debug("submission user:", submissionUser)
 
@@ -515,14 +513,6 @@ func downloadFile(c *gin.Context) {
 	if err != nil || len(pubKey) == 0 {
 		log.Errorf("bad public key, error: %v", err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, "bad public key")
-
-		return
-	}
-
-	inboxReader, err := storage.NewReader(c, "inbox")
-	if err != nil {
-		log.Errorf("failed to initialize inbox reader, reason: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
 
 		return
 	}
