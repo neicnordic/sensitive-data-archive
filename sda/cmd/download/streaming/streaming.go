@@ -57,6 +57,16 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) (*RangeSpec, error) {
 
 			return nil, nil
 		}
+
+		// Handle edge cases:
+		// - suffix=0 (bytes=-0) is unsatisfiable (requesting 0 bytes)
+		// - fileSize=0 means no content to serve
+		if suffix <= 0 || fileSize <= 0 {
+			log.Warnf("range not satisfiable: suffix=%d, fileSize=%d", suffix, fileSize)
+
+			return nil, ErrRangeNotSatisfiable
+		}
+
 		start = fileSize - suffix
 		if start < 0 {
 			start = 0
@@ -136,6 +146,10 @@ type StreamConfig struct {
 // It combines the new header with the file body and handles range requests.
 // If OriginalHeaderSize > 0, the original crypt4gh header in the archive file is skipped.
 func StreamFile(cfg StreamConfig) error {
+	// Guard against nil FileReader to prevent panic on defer
+	if cfg.FileReader == nil {
+		return fmt.Errorf("invalid config: FileReader cannot be nil")
+	}
 	defer cfg.FileReader.Close()
 
 	// Validate configuration to prevent negative sizes

@@ -104,6 +104,20 @@ func TestParseRangeHeader_MultipleRanges(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestParseRangeHeader_SuffixZero(t *testing.T) {
+	// bytes=-0 requests 0 bytes, which is unsatisfiable
+	result, err := ParseRangeHeader("bytes=-0", 1000)
+	assert.ErrorIs(t, err, ErrRangeNotSatisfiable)
+	assert.Nil(t, result)
+}
+
+func TestParseRangeHeader_ZeroFileSize(t *testing.T) {
+	// Empty file - suffix range is unsatisfiable
+	result, err := ParseRangeHeader("bytes=-100", 0)
+	assert.ErrorIs(t, err, ErrRangeNotSatisfiable)
+	assert.Nil(t, result)
+}
+
 func TestParseRangeHeader_SingleByte(t *testing.T) {
 	result, err := ParseRangeHeader("bytes=0-0", 1000)
 	assert.NoError(t, err)
@@ -376,6 +390,22 @@ func TestStreamFile_InvalidConfig_NegativeOriginalHeaderSize(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "OriginalHeaderSize cannot be negative")
+}
+
+func TestStreamFile_InvalidConfig_NilFileReader(t *testing.T) {
+	header := []byte("HEADER")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:          recorder,
+		NewHeader:       header,
+		FileReader:      nil, // nil would panic without guard
+		ArchiveFileSize: 100,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "FileReader cannot be nil")
 }
 
 func TestStreamFile_InvalidConfig_NegativeArchiveFileSize(t *testing.T) {
