@@ -301,5 +301,5 @@ func hashStrings(strs []string) string {
 		h.Write([]byte{0}) // Separator to avoid collision between ["ab", "c"] and ["a", "bc"]
 	}
 
-	return hex.EncodeToString(h.Sum(nil))[:16] // Use first 16 chars for reasonable key length
+	return hex.EncodeToString(h.Sum(nil))[:24] // Use first 24 chars (96 bits) for low collision probability
 }
