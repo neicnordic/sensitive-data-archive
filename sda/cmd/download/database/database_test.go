@@ -314,6 +314,32 @@ func TestGetFileByID_HeaderTooSmall(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGetFileByID_InvalidHexHeader(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	// Invalid hex string (contains non-hex characters)
+	headerHex := "ZZZ_NOT_VALID_HEX"
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header",
+	}).
+		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+
+	mock.ExpectQuery(queries[getFileByIDQuery]).
+		WithArgs("file-1").
+		WillReturnRows(rows)
+
+	file, err := db.GetFileByID(context.Background(), "file-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "failed to decode header from hex")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetFileByPath(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
@@ -366,6 +392,32 @@ func TestGetFileByPath_HeaderTooSmall(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, file)
 	assert.Contains(t, err.Error(), "decoded header too small")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetFileByPath_InvalidHexHeader(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	// Invalid hex string (contains non-hex characters) - guards against corrupt DB data
+	headerHex := "GHIJ_CORRUPT_DATA"
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header",
+	}).
+		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+
+	mock.ExpectQuery(queries[getFileByPathQuery]).
+		WithArgs("dataset-1", "/path/to/file.txt").
+		WillReturnRows(rows)
+
+	file, err := db.GetFileByPath(context.Background(), "dataset-1", "/path/to/file.txt")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "failed to decode header from hex")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
