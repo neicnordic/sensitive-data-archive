@@ -842,6 +842,21 @@ func rotateKeyDataset(c *gin.Context) {
 		return
 	}
 
+	// Check if dataset exists
+	exists, err := Conf.API.DB.CheckIfDatasetExists(datasetID)
+	if err != nil {
+		log.Errorf("failed to check if dataset %s exists, reason: %v", datasetID, err)
+		c.JSON(http.StatusInternalServerError, "failed to check dataset existence")
+
+		return
+	}
+	if !exists {
+		log.Warnf("dataset %s not found", datasetID)
+		c.JSON(http.StatusNotFound, fmt.Sprintf("dataset %s not found", datasetID))
+
+		return
+	}
+
 	// Get all files in the dataset
 	files, err := Conf.API.DB.GetDatasetFileIDs(datasetID)
 	if err != nil {

@@ -5,7 +5,7 @@ if [ -n "$SYNCTEST" ]; then
     exit 0
 fi
 
-cd shared || true
+cd /shared
 
 checkErrors() {
 	RETRY_TIMES=0
@@ -191,8 +191,6 @@ fileID2=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files w
 
 echo "File IDs: $fileID1, $fileID2"
 
-## test dataset key rotation via sda-admin CLI tool
-echo "Testing dataset key rotation via sda-admin CLI tool"
 
 resp=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/rotatekey/EGAD100000000001")
 
