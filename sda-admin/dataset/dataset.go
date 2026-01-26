@@ -57,3 +57,19 @@ func Release(apiURI, token, datasetID string) error {
 
 	return nil
 }
+
+// RotateKey rotates the encryption key for all files in a dataset
+func RotateKey(apiURI, token, datasetID string) error {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return err
+	}
+	parsedURL.Path = path.Join(parsedURL.Path, "dataset", "rotatekey", datasetID)
+
+	_, err = helpers.PostRequest(parsedURL.String(), token, nil)
+	if err != nil {
+		return fmt.Errorf("failed to rotate key for dataset %s, reason: %v", datasetID, err)
+	}
+
+	return nil
+}

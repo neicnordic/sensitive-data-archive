@@ -209,3 +209,40 @@ func TestSetAccessionID_PostRequestFailure(t *testing.T) {
 	assert.EqualError(t, err, "failed to send request")
 	mockHelpers.AssertExpectations(t)
 }
+
+func TestRotateKey_Success(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalPost := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalPost }()
+
+	apiURI := "http://example.com"
+	token := "test-token"
+	fileID := "file-uuid"
+
+	mockHelpers.On("PostRequest", "http://example.com/file/rotatekey/file-uuid", "test-token", []byte(nil)).Return([]byte(`{}`), nil)
+
+	err := RotateKey(apiURI, token, fileID)
+
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestRotateKey_Failure(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	originalPost := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalPost }()
+
+	apiURI := "http://example.com"
+	token := "test-token"
+	fileID := "file-uuid"
+
+	mockHelpers.On("PostRequest", "http://example.com/file/rotatekey/file-uuid", "test-token", []byte(nil)).Return([]byte(nil), errors.New("post request failed"))
+
+	err := RotateKey(apiURI, token, fileID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "post request failed")
+	mockHelpers.AssertExpectations(t)
+}

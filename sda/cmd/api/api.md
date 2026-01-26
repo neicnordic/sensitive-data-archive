@@ -182,6 +182,38 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X PUT  https://HOSTNAME/dataset/verify/my-dataset-01
     ```
 
+- `/dataset/rotatekey/:dataset`
+  - accepts `POST` requests with the dataset name as parameter
+  - Triggers key rotation for all files in the dataset by sending a message to the rotatekey queue for each file.
+
+  - Error codes
+    - `200` Key rotation triggered successfully.
+    - `400` Dataset ID not provided.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/rotatekey/my-dataset-01
+    ```
+
+- `/file/rotatekey/:fileid`
+  - accepts `POST` requests with the file ID as parameter
+  - Triggers key rotation for the specified file by sending a message to the rotatekey queue.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` File ID not provided or message validation failed.
+    - `401` Token user is not in the list of admins.
+    - `500` Internal error due to MQ or DB failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/file/rotatekey/c2acecc6-f208-441c-877a-2670e4cbb040
+    ```
+
 - `/datasets/list`
   - accepts `GET` requests
   - Returns all datasets together with their status and last modified timestamp.

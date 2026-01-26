@@ -118,3 +118,19 @@ func SetAccession(accessionInfo helpers.FileInfo) error {
 
 	return nil
 }
+
+// RotateKey rotates the encryption key for a file
+func RotateKey(apiURI, token, fileID string) error {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return err
+	}
+	parsedURL.Path = path.Join(parsedURL.Path, "file", "rotatekey", fileID)
+
+	_, err = helpers.PostRequest(parsedURL.String(), token, nil)
+	if err != nil {
+		return fmt.Errorf("failed to rotate key for file %s, reason: %v", fileID, err)
+	}
+
+	return nil
+}

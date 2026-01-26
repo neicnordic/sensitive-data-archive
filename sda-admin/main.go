@@ -30,10 +30,14 @@ Commands:
                                 Trigger ingestion of a given file.
   file set-accession -filepath FILEPATH -user USERNAME -accession-id accessionID
                                 Assign accession ID to a file.
+  file rotatekey -file-id FILEUUID
+                                Rotate encryption key for a specific file.
   dataset create -user SUBMISSION_USER -dataset-id DATASET_ID accessionID [accessionID ...]
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
                                 Release a dataset for downloading.
+  dataset rotatekey -dataset-id DATASET_ID
+                                Rotate encryption keys for all files in a dataset.
   
 Global Options:
   -uri URI         Set the URI for the API server (optional if API_HOST is set).
@@ -63,10 +67,15 @@ Set accession ID to a file:
   Usage: sda-admin file set-accession -filepath FILEPATH -user USERNAME -accession-id ACCESSION_ID
     Assign an accession ID to a file for a given user.
 
+Rotate key for a file:
+  Usage: sda-admin file rotatekey -file-id FILEUUID
+    Rotate encryption key for a specific file.
+
 Options:
   -user USERNAME       Specify the username associated with the file.
   -filepath FILEPATH   Specify the path of the file to ingest.
   -accession-id ID     Specify the accession ID to assign to the file.
+  -file-id FILEUUID    Specify the file ID of the file to rotate key.
 
 Use 'sda-admin help file <command>' for information on a specific command.`
 
@@ -97,6 +106,12 @@ Options:
   -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
 
+var fileRotateKeyUsage = `Usage: sda-admin file rotatekey -file-id FILEUUID
+  Rotate encryption key for a specific file.
+
+Options:
+  -file-id FILEUUID     Specify the file ID of the file to rotate key.`
+
 var datasetUsage = `Create a dataset:
   Usage: sda-admin dataset create -user SUBMISSION_USER -dataset-id DATASET_ID [ACCESSION_ID ...]
     Create a dataset from a list of accession IDs and a dataset ID.
@@ -104,6 +119,10 @@ var datasetUsage = `Create a dataset:
 Release a dataset:
   Usage: sda-admin dataset release -dataset-id DATASET_ID
     Release a dataset for downloading based on its dataset ID.
+
+Rotate keys for a dataset:
+  Usage: sda-admin dataset rotatekey -dataset-id DATASET_ID
+    Rotate encryption keys for all files in a dataset.
 
 Options:
   -dataset-id DATASET_ID   Specify the unique identifier for the dataset.
@@ -120,6 +139,12 @@ Options:
 
 var datasetReleaseUsage = `Usage: sda-admin dataset release -dataset-id DATASET_ID
   Release a dataset for downloading based on its dataset ID.
+
+Options:
+  -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
+
+var datasetRotateKeyUsage = `Usage: sda-admin dataset rotatekey -dataset-id DATASET_ID
+  Rotate encryption keys for all files in a dataset.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.`
@@ -162,7 +187,7 @@ func printVersion() {
 	fmt.Printf("sda-admin %s\n", version)
 }
 
-func parseFlagsAndEnv() error {
+func init() {
 	// Set up flags
 	flag.StringVar(&apiURI, "uri", "", "Set the URI for the SDA server (optional if API_HOST is set)")
 	flag.StringVar(&token, "token", "", "Set the authentication token (optional if ACCESS_TOKEN is set)")
@@ -171,10 +196,9 @@ func parseFlagsAndEnv() error {
 	flag.Usage = func() {
 		fmt.Println(usage)
 	}
+}
 
-	// Parse global flags first
-	flag.Parse()
-
+func validateFlagsAndEnv() error {
 	// If no command is provided, show usage
 	if flag.NArg() == 0 {
 		return errors.New(usage)
@@ -256,6 +280,8 @@ func handleHelpFile() error {
 		fmt.Println(fileIngestUsage)
 	case flag.Arg(2) == "set-accession":
 		fmt.Println(fileAccessionUsage)
+	case flag.Arg(2) == "rotatekey":
+		fmt.Println(fileRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -271,6 +297,8 @@ func handleHelpDataset() error {
 		fmt.Println(datasetCreateUsage)
 	case flag.Arg(2) == "release":
 		fmt.Println(datasetReleaseUsage)
+	case flag.Arg(2) == "rotatekey":
+		fmt.Println(datasetRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
@@ -331,6 +359,10 @@ func handleFileCommand() error {
 		}
 	case "set-accession":
 		if err := handleFileAccessionCommand(); err != nil {
+			return err
+		}
+	case "rotatekey":
+		if err := handleFileRotateKeyCommand(); err != nil {
 			return err
 		}
 	default:
@@ -405,9 +437,32 @@ func handleFileAccessionCommand() error {
 	}
 }
 
+func handleFileRotateKeyCommand() error {
+	fileRotateKeyCmd := flag.NewFlagSet("rotatekey", flag.ExitOnError)
+	var fileInfo helpers.FileInfo
+	fileInfo.URL = apiURI
+	fileInfo.Token = token
+	fileRotateKeyCmd.StringVar(&fileInfo.ID, "file-id", "", "File ID (UUID) to rotate key for")
+
+	if err := fileRotateKeyCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	if fileInfo.ID == "" {
+		return fmt.Errorf("error: -file-id is required.\n%s", fileRotateKeyUsage)
+	}
+
+	err := file.RotateKey(fileInfo.URL, fileInfo.Token, fileInfo.ID)
+	if err != nil {
+		return fmt.Errorf("error: failed to rotate key for file, reason: %v", err)
+	}
+
+	return nil
+}
+
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
-		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release).\n%s", datasetUsage)
+		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release, rotatekey).\n%s", datasetUsage)
 	}
 
 	switch flag.Arg(1) {
@@ -417,6 +472,10 @@ func handleDatasetCommand() error {
 		}
 	case "release":
 		if err := handleDatasetReleaseCommand(); err != nil {
+			return err
+		}
+	case "rotatekey":
+		if err := handleDatasetRotateKeyCommand(); err != nil {
 			return err
 		}
 	default:
@@ -470,6 +529,27 @@ func handleDatasetReleaseCommand() error {
 	err := dataset.Release(apiURI, token, datasetID)
 	if err != nil {
 		return fmt.Errorf("error: failed to release dataset, reason: %v", err)
+	}
+
+	return nil
+}
+
+func handleDatasetRotateKeyCommand() error {
+	datasetRotateKeyCmd := flag.NewFlagSet("rotatekey", flag.ExitOnError)
+	var datasetID string
+	datasetRotateKeyCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to rotate keys for")
+
+	if err := datasetRotateKeyCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	if datasetID == "" {
+		return fmt.Errorf("error: -dataset-id is required.\n%s", datasetRotateKeyUsage)
+	}
+
+	err := dataset.RotateKey(apiURI, token, datasetID)
+	if err != nil {
+		return fmt.Errorf("error: failed to rotate keys for dataset, reason: %v", err)
 	}
 
 	return nil
@@ -569,7 +649,9 @@ func handleC4ghHashListCommand() error {
 }
 
 func main() {
-	if err := parseFlagsAndEnv(); err != nil {
+	flag.Parse()
+
+	if err := validateFlagsAndEnv(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

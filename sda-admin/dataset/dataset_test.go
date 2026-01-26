@@ -20,6 +20,12 @@ func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, e
 	return args.Get(0).([]byte), args.Error(1)
 }
 
+func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
+	args := m.Called(url, token)
+
+	return args.Get(0).([]byte), args.Error(1)
+}
+
 func TestCreate_Success(t *testing.T) {
 	mockHelpers := new(MockHelpers)
 	originalFunc := helpers.PostRequest
@@ -91,5 +97,45 @@ func TestRelease_PostRequestFailure(t *testing.T) {
 	err := Release("http://example.com", token, "dataset-123")
 	assert.Error(t, err)
 	assert.EqualError(t, err, "failed to send request")
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestRotateKey_Success(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+
+	originalPost := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalPost }()
+
+	apiURI := "http://example.com"
+	token := "test-token"
+	datasetID := "dataset-123"
+
+	// Mock rotating keys for dataset
+	rotateURL := "http://example.com/dataset/rotatekey/dataset-123"
+	mockHelpers.On("PostRequest", rotateURL, token, []byte(nil)).Return([]byte(`{}`), nil)
+
+	err := RotateKey(apiURI, token, datasetID)
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestRotateKey_Failure(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+
+	originalPost := helpers.PostRequest
+	helpers.PostRequest = mockHelpers.PostRequest
+	defer func() { helpers.PostRequest = originalPost }()
+
+	apiURI := "http://example.com"
+	token := "test-token"
+	datasetID := "dataset-123"
+
+	rotateURL := "http://example.com/dataset/rotatekey/dataset-123"
+	mockHelpers.On("PostRequest", rotateURL, token, []byte(nil)).Return([]byte(nil), errors.New("rotation failed"))
+
+	err := RotateKey(apiURI, token, datasetID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rotation failed")
 	mockHelpers.AssertExpectations(t)
 }
