@@ -35,57 +35,39 @@ var (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	forever := make(chan bool)
 	conf, err = config.NewConfig("sync")
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	mq, err := broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize mq broker, due to: %v", err)
 	}
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize sda db, due to: %v", err)
 	}
 	if db.Version < 23 {
-		log.Error("database schema v23 is required")
-
-		return
+		log.Fatal("database schema v23 is required")
 	}
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
-		log.Errorf("failed to init new location broker due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize location broker, due to: %v", err)
 	}
-	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
+	syncWriter, err = storage.NewWriter(context.Background(), "sync", lb)
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize sync writer, due to: %v", err)
 	}
-	archiveReader, err = storage.NewReader(ctx, "archive")
+	archiveReader, err = storage.NewReader(context.Background(), "archive")
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to initialize archive reader, due to: %v", err)
 	}
 
 	key, err = config.GetC4GHKey()
 	if err != nil {
-		log.Error(err.Error())
-
-		return
+		log.Fatalf("failed to get c4gh key from config, due to: %v", err)
 	}
 
 	defer mq.Channel.Close()
