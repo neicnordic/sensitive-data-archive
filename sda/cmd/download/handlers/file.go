@@ -182,6 +182,9 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 	if file.ArchiveLocation != "" {
 		location = file.ArchiveLocation
 	} else {
+		// Fallback to searching for the file - this is slower and may indicate
+		// missing data in the database (archive_location not populated during ingest)
+		log.Warnf("file %s has no archive_location stored, falling back to FindFile search", file.ID)
 		var err error
 		location, err = h.storageReader.FindFile(c.Request.Context(), file.ArchivePath)
 		if err != nil {
@@ -210,10 +213,14 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 		return
 	}
 
-	// Calculate total size: new header + body (archive minus original header)
+	// Calculate total size: new header + body
+	// Note: The archive file is header-stripped during ingest (see cmd/ingest/ingest.go).
+	// The header is stored separately in the database, so:
+	// - archive_file_size = body size only (encrypted data blocks, no header)
+	// - file.Header = the original crypt4gh header stored separately
+	// For download, we prepend the re-encrypted header to the body.
 	newHeaderSize := int64(len(newHeader))
-	originalHeaderSize := int64(len(file.Header))
-	bodySize := file.ArchiveSize - originalHeaderSize
+	bodySize := file.ArchiveSize // Archive is already header-stripped
 	totalSize := newHeaderSize + bodySize
 
 	// Parse Range header if present
@@ -236,12 +243,14 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 	}
 
 	// Stream the file
+	// Note: OriginalHeaderSize is 0 because the archive file is header-stripped during ingest.
+	// The body starts at offset 0 in the archive file.
 	err = streaming.StreamFile(streaming.StreamConfig{
 		Writer:             c.Writer,
 		NewHeader:          newHeader,
 		FileReader:         fileReader,
 		ArchiveFileSize:    file.ArchiveSize,
-		OriginalHeaderSize: originalHeaderSize,
+		OriginalHeaderSize: 0, // Archive is header-stripped
 		Range:              rangeSpec,
 	})
 	if err != nil {

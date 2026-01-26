@@ -97,13 +97,19 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) *RangeSpec {
 type StreamConfig struct {
 	// Writer is the HTTP response writer
 	Writer http.ResponseWriter
-	// NewHeader is the re-encrypted crypt4gh header
+	// NewHeader is the re-encrypted crypt4gh header to prepend
 	NewHeader []byte
-	// FileReader is the reader for the encrypted file (including original header)
+	// FileReader is the reader for the encrypted file body in the archive.
+	// Note: In the SDA pipeline, archive files are header-stripped during ingest,
+	// so this reader typically starts at the encrypted body data, not the header.
 	FileReader io.ReadSeekCloser
-	// ArchiveFileSize is the total size of the encrypted file in the archive (header + body)
+	// ArchiveFileSize is the size of the file in the archive.
+	// For header-stripped archives (standard SDA), this is the body size only.
+	// For archives with headers, this is header + body size.
 	ArchiveFileSize int64
-	// OriginalHeaderSize is the size of the original crypt4gh header to skip
+	// OriginalHeaderSize is the size of the original crypt4gh header to skip.
+	// Set to 0 if the archive file is header-stripped (standard SDA).
+	// Set to the header size if the archive contains the original header.
 	OriginalHeaderSize int64
 	// Range is the optional byte range to stream (nil for whole file)
 	Range *RangeSpec
@@ -111,16 +117,17 @@ type StreamConfig struct {
 
 // StreamFile streams a file to the HTTP response writer.
 // It combines the new header with the file body and handles range requests.
-// The original crypt4gh header in the archive file is skipped.
+// If OriginalHeaderSize > 0, the original crypt4gh header in the archive file is skipped.
 func StreamFile(cfg StreamConfig) error {
 	defer cfg.FileReader.Close()
 
 	newHeaderSize := int64(len(cfg.NewHeader))
-	// Body size is archive size minus the original header
+	// Body size is archive size minus any original header that needs to be skipped
 	bodySize := cfg.ArchiveFileSize - cfg.OriginalHeaderSize
 	totalSize := newHeaderSize + bodySize
 
-	// Skip the original header in the archive file
+	// Skip the original header in the archive file (if present)
+	// For header-stripped archives (standard SDA), OriginalHeaderSize is 0 and no seek is needed
 	if cfg.OriginalHeaderSize > 0 {
 		if _, err := cfg.FileReader.Seek(cfg.OriginalHeaderSize, io.SeekStart); err != nil {
 			return fmt.Errorf("failed to skip original header: %w", err)

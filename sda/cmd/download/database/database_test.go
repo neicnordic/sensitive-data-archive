@@ -237,8 +237,13 @@ func TestGetFileByID(t *testing.T) {
 	defer cleanup()
 
 	// Header is stored as hex string in database
-	headerBytes := []byte{0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68} // "crypt4gh"
-	headerHex := "6372797074346768"                                       // hex encoding of headerBytes
+	// Minimum valid crypt4gh header: magic (8 bytes) + version (4 bytes) + packet count (4 bytes) = 16 bytes
+	headerBytes := []byte{
+		0x63, 0x72, 0x79, 0x70, 0x74, 0x34, 0x67, 0x68, // "crypt4gh" magic
+		0x01, 0x00, 0x00, 0x00, // version 1
+		0x01, 0x00, 0x00, 0x00, // 1 header packet
+	}
+	headerHex := "63727970743467680100000001000000" // 32 hex chars = 16 bytes
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
@@ -283,12 +288,39 @@ func TestGetFileByID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGetFileByID_HeaderTooSmall(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	// Header with only 8 bytes (too small, minimum is 16 bytes for crypt4gh)
+	headerHex := "6372797074346768" // only "crypt4gh" magic, missing version and packet count
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header",
+	}).
+		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+
+	mock.ExpectQuery(queries[getFileByIDQuery]).
+		WithArgs("file-1").
+		WillReturnRows(rows)
+
+	file, err := db.GetFileByID(context.Background(), "file-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "decoded header too small")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetFileByPath(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
 
 	// Header is stored as hex string in database
-	headerHex := "6372797074346768"
+	// Minimum valid crypt4gh header: magic (8 bytes) + version (4 bytes) + packet count (4 bytes) = 16 bytes
+	headerHex := "63727970743467680100000001000000"
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
@@ -308,6 +340,32 @@ func TestGetFileByPath(t *testing.T) {
 	assert.Equal(t, "file-1", file.ID)
 	assert.Equal(t, "/path/to/file.txt", file.SubmittedPath)
 	assert.Equal(t, "s3:9000/archive", file.ArchiveLocation)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetFileByPath_HeaderTooSmall(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	// Header with only 8 bytes (too small, minimum is 16 bytes for crypt4gh)
+	headerHex := "6372797074346768" // only "crypt4gh" magic, missing version and packet count
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
+		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header",
+	}).
+		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
+			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+
+	mock.ExpectQuery(queries[getFileByPathQuery]).
+		WithArgs("dataset-1", "/path/to/file.txt").
+		WillReturnRows(rows)
+
+	file, err := db.GetFileByPath(context.Background(), "dataset-1", "/path/to/file.txt")
+
+	assert.Error(t, err)
+	assert.Nil(t, file)
+	assert.Contains(t, err.Error(), "decoded header too small")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
