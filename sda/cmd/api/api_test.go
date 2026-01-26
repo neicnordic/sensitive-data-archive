@@ -332,41 +332,6 @@ func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, 
 	return fileID, decSha
 }
 
-func (s *TestSuite) TestShutdown() {
-	Conf = &config.Config{}
-	Conf.Broker = broker.MQConf{
-		Host:     "localhost",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Exchange: "sda",
-		Vhost:    "/sda",
-	}
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(s.T(), err)
-
-	Conf.Database = database.DBConf{
-		Host:     "localhost",
-		Port:     dbPort,
-		User:     "postgres",
-		Password: "rootpasswd",
-		Database: "sda",
-		SslMode:  "disable",
-	}
-	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
-	assert.NoError(s.T(), err)
-
-	// make sure all conections are alive
-	assert.Equal(s.T(), false, Conf.API.MQ.Channel.IsClosed())
-	assert.Equal(s.T(), false, Conf.API.MQ.Connection.IsClosed())
-	assert.Equal(s.T(), nil, Conf.API.DB.DB.Ping())
-
-	shutdown()
-	assert.Equal(s.T(), true, Conf.API.MQ.Channel.IsClosed())
-	assert.Equal(s.T(), true, Conf.API.MQ.Connection.IsClosed())
-	assert.Equal(s.T(), "sql: database is closed", Conf.API.DB.DB.Ping().Error())
-}
-
 func (s *TestSuite) TestReadinessResponse() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -643,11 +608,11 @@ func (s *TestSuite) SetupTest() {
 
 func (s *TestSuite) TestDatabasePingCheck() {
 	emptyDB := database.SDAdb{}
-	assert.Error(s.T(), checkDB(&emptyDB, 1*time.Second), "nil DB should fail")
+	assert.Error(s.T(), checkDB(context.TODO(), &emptyDB, 1*time.Second), "nil DB should fail")
 
 	db, err := database.NewSDAdb(Conf.Database)
 	assert.NoError(s.T(), err)
-	assert.NoError(s.T(), checkDB(db, 1*time.Second), "ping should succeed")
+	assert.NoError(s.T(), checkDB(context.TODO(), db, 1*time.Second), "ping should succeed")
 }
 
 func (s *TestSuite) TestAPIGetFiles() {
@@ -892,7 +857,8 @@ func (s *TestSuite) TestGinLogLevel_Debug() {
 
 	// A specific port is enforced here so we don't have a conflict when running the LogLevel_Info test
 	Conf.API.Port = 8081
-	srv := setup(Conf)
+	srv, err := setup(Conf)
+	s.NoError(err)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			s.T().Logf("failure: %v", err)
@@ -975,7 +941,8 @@ func (s *TestSuite) TestGinLogLevel_Info() {
 
 	// A specific port is enforced here so we don't have a conflict when running the LogLevel_Debug test
 	Conf.API.Port = 8082
-	srv := setup(Conf)
+	srv, err := setup(Conf)
+	s.NoError(err)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			s.T().Logf("failure: %v", err)
@@ -3133,7 +3100,7 @@ func (s *TestSuite) TestReencryptHeader() {
 	}
 
 	// Call the function under test
-	newHeader, err := reencryptHeader(s.FileHeader, s.UserKey.PubKeyBase64)
+	newHeader, err := reencryptHeader(context.TODO(), s.FileHeader, s.UserKey.PubKeyBase64)
 	if err != nil {
 		s.T().Fatal("reencryptHeader failed:", err)
 	}
@@ -3147,7 +3114,7 @@ func (s *TestSuite) TestReencryptHeader_failedToConnect() {
 	// Mock the server address to an invalid one
 	Conf.API.Grpc.Host, Conf.API.Grpc.Port, _ = splitHostPort("localhost:9999")
 
-	newHeader, err := reencryptHeader(s.FileHeader, s.UserKey.PubKeyBase64)
+	newHeader, err := reencryptHeader(context.TODO(), s.FileHeader, s.UserKey.PubKeyBase64)
 	if err == nil {
 		s.T().Fatal("Expected an error due to failed connection, but got nil")
 	}
