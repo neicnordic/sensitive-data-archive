@@ -44,88 +44,52 @@ type Ingest struct {
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	app := Ingest{}
-	var err error
-	sigc := make(chan os.Signal, 5)
-	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	// Create a function to handle panic and exit gracefully
-	defer func() {
-		if err := recover(); err != nil {
-			log.Fatal("Could not recover, exiting")
-		}
-	}()
-
-	forever := make(chan bool)
-
 	ingestConf, err := config.NewConfig("ingest")
 	if err != nil {
-		log.Errorf("failed to load config due to: %v", err)
-
-		return
+		log.Fatalf("failed to load config, due to: %v", err)
 	}
 	app.brokerConf = ingestConf.Broker
 	app.MQ, err = broker.NewMQ(app.brokerConf)
 	if err != nil {
-		log.Errorf("failed to init broker due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize mq broker, due to: %v", err)
 	}
 	app.DB, err = database.NewSDAdb(ingestConf.Database)
 	if err != nil {
-		log.Errorf("failed to init db due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize sda db due to: %v", err)
 	}
 	if app.DB.Version < 23 {
-		log.Error("database schema v23 is required")
-
-		return
+		log.Fatal("database schema v23 is required")
 	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
-		log.Error("no C4GH private keys configured")
-
-		return
+		log.Fatal("no C4GH private keys configured")
 	}
 
 	if err := app.registerC4GHKey(); err != nil {
-		log.Errorf("failed to register c4gh key due to: %v", err)
-
-		return
+		log.Fatalf("failed to register c4gh key, due to: %v", err)
 	}
 
 	storageLocationBroker, err := locationbroker.NewLocationBroker(app.DB)
 	if err != nil {
-		log.Errorf("failed to init new location broker due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize location broker, due to: %v", err)
 	}
-	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
+	app.ArchiveWriter, err = storage.NewWriter(context.Background(), "archive", storageLocationBroker)
 	if err != nil {
-		log.Errorf("failed to init archive writer due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize archive writer, due to: %v", err)
 	}
-	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
+	app.ArchiveReader, err = storage.NewReader(context.Background(), "archive")
 	if err != nil {
-		log.Errorf("failed to init archive reader due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize archive reader, due to: %v", err)
 	}
-	app.InboxReader, err = storage.NewReader(ctx, "inbox")
+	app.InboxReader, err = storage.NewReader(context.Background(), "inbox")
 	if err != nil {
-		log.Errorf("failed to init inbox reader due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize inbox reader, due to: %v", err)
 	}
 
-	backupWriter, err := storage.NewWriter(ctx, "backup", storageLocationBroker)
+	backupWriter, err := storage.NewWriter(context.Background(), "backup", storageLocationBroker)
 	if err != nil && errors.Is(err, storageerrors.ErrorNoValidWriter) {
-		log.Errorf("failed to init backup writer due to: %v", err)
-
-		return
+		log.Fatalf("failed to initialize backup writer due to: %v", err)
 	}
 	if backupWriter != nil {
 		log.Info("backup writer initialized, will clean cancelled files from backup storage")
@@ -137,6 +101,10 @@ func main() {
 	defer app.MQ.Channel.Close()
 	defer app.MQ.Connection.Close()
 	defer app.DB.Close()
+
+	sigc := make(chan os.Signal, 5)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	forever := make(chan bool)
 
 	go func() {
 		connError := app.MQ.ConnectionWatcher()
@@ -154,7 +122,8 @@ func main() {
 
 	go func() {
 		if err := app.run(); err != nil {
-			panic(err)
+			log.Error(err)
+			forever <- false
 		}
 	}()
 	<-forever
