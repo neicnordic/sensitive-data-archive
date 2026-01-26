@@ -14,9 +14,10 @@ import (
 )
 
 // RangeSpec represents a parsed HTTP Range header.
+// Both Start and End are inclusive byte positions (0-indexed).
 type RangeSpec struct {
 	Start int64
-	End   int64 // -1 means until end of file
+	End   int64 // Inclusive end position, always clamped to fileSize-1
 }
 
 // ErrRangeNotSatisfiable indicates the requested range cannot be satisfied.
@@ -179,6 +180,17 @@ func StreamFile(cfg StreamConfig) error {
 		}
 
 		return nil
+	}
+
+	// Validate range bounds (defensive - ParseRangeHeader should already ensure this)
+	if cfg.Range.Start < 0 || cfg.Range.End < 0 {
+		return fmt.Errorf("invalid range: negative values (start=%d, end=%d)", cfg.Range.Start, cfg.Range.End)
+	}
+	if cfg.Range.Start > cfg.Range.End {
+		return fmt.Errorf("invalid range: start (%d) > end (%d)", cfg.Range.Start, cfg.Range.End)
+	}
+	if cfg.Range.End >= totalSize {
+		return fmt.Errorf("invalid range: end (%d) >= totalSize (%d)", cfg.Range.End, totalSize)
 	}
 
 	// Handle range request

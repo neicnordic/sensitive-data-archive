@@ -413,3 +413,59 @@ func TestStreamFile_InvalidConfig_HeaderSizeExceedsArchiveSize(t *testing.T) {
 	assert.Contains(t, err.Error(), "OriginalHeaderSize")
 	assert.Contains(t, err.Error(), "cannot exceed ArchiveFileSize")
 }
+
+func TestStreamFile_InvalidRange_EndExceedsTotalSize(t *testing.T) {
+	header := []byte("HEADER") // 6 bytes
+	body := []byte("BODY")     // 4 bytes, totalSize = 10
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:          recorder,
+		NewHeader:       header,
+		FileReader:      newReadSeekCloser(body),
+		ArchiveFileSize: int64(len(body)),
+		Range:           &RangeSpec{Start: 0, End: 100}, // End exceeds totalSize (10)
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "end")
+	assert.Contains(t, err.Error(), "totalSize")
+}
+
+func TestStreamFile_InvalidRange_NegativeStart(t *testing.T) {
+	header := []byte("HEADER")
+	body := []byte("BODY")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:          recorder,
+		NewHeader:       header,
+		FileReader:      newReadSeekCloser(body),
+		ArchiveFileSize: int64(len(body)),
+		Range:           &RangeSpec{Start: -1, End: 5},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "negative values")
+}
+
+func TestStreamFile_InvalidRange_StartGreaterThanEnd(t *testing.T) {
+	header := []byte("HEADER")
+	body := []byte("BODY")
+
+	recorder := httptest.NewRecorder()
+
+	err := StreamFile(StreamConfig{
+		Writer:          recorder,
+		NewHeader:       header,
+		FileReader:      newReadSeekCloser(body),
+		ArchiveFileSize: int64(len(body)),
+		Range:           &RangeSpec{Start: 8, End: 5},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "start")
+	assert.Contains(t, err.Error(), "> end")
+}
