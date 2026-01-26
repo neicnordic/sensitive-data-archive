@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -239,7 +240,7 @@ func (h *Handlers) streamFile(c *gin.Context, file *database.File, publicKey str
 	if rangeHeader != "" {
 		var rangeErr error
 		rangeSpec, rangeErr = streaming.ParseRangeHeader(rangeHeader, totalSize)
-		if rangeErr == streaming.ErrRangeNotSatisfiable {
+		if errors.Is(rangeErr, streaming.ErrRangeNotSatisfiable) {
 			c.Header("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
 			c.JSON(http.StatusRequestedRangeNotSatisfiable, gin.H{"error": "range not satisfiable"})
 
