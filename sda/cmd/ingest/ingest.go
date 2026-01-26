@@ -29,6 +29,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,57 +40,72 @@ type Ingest struct {
 	ArchiveKeyList []*[32]byte
 	DB             *database.SDAdb
 	InboxReader    storage.Reader
-	brokerConf     broker.MQConf
 	MQ             *broker.AMQPBroker
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	app := Ingest{}
 	ingestConf, err := config.NewConfig("ingest")
 	if err != nil {
-		log.Fatalf("failed to load config, due to: %v", err)
+		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	app.brokerConf = ingestConf.Broker
-	app.MQ, err = broker.NewMQ(app.brokerConf)
+	app.MQ, err = broker.NewMQ(ingestConf.Broker)
 	if err != nil {
-		log.Fatalf("failed to initialize mq broker, due to: %v", err)
+		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
+	defer func() {
+		if err := app.MQ.Channel.Close(); err != nil {
+			log.Errorf("failed to close mq broker channel due to: %v", err)
+		}
+		if err := app.MQ.Connection.Close(); err != nil {
+			log.Errorf("failed to close mq broker connection due to: %v", err)
+		}
+	}()
 	app.DB, err = database.NewSDAdb(ingestConf.Database)
 	if err != nil {
-		log.Fatalf("failed to initialize sda db due to: %v", err)
+		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
+	defer app.DB.Close()
 	if app.DB.Version < 23 {
-		log.Fatal("database schema v23 is required")
+		return errors.New("database schema v23 is required")
 	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
-		log.Fatal("no C4GH private keys configured")
+		return errors.New("no C4GH private keys configured")
 	}
 
 	if err := app.registerC4GHKey(); err != nil {
-		log.Fatalf("failed to register c4gh key, due to: %v", err)
+		return fmt.Errorf("failed to register c4gh key, due to: %v", err)
 	}
 
 	storageLocationBroker, err := locationbroker.NewLocationBroker(app.DB)
 	if err != nil {
-		log.Fatalf("failed to initialize location broker, due to: %v", err)
+		return fmt.Errorf("failed to initialize location broker, due to: %v", err)
 	}
-	app.ArchiveWriter, err = storage.NewWriter(context.Background(), "archive", storageLocationBroker)
+	app.ArchiveWriter, err = storage.NewWriter(ctx, "archive", storageLocationBroker)
 	if err != nil {
-		log.Fatalf("failed to initialize archive writer, due to: %v", err)
+		return fmt.Errorf("failed to initialize archive writer, due to: %v", err)
 	}
-	app.ArchiveReader, err = storage.NewReader(context.Background(), "archive")
+	app.ArchiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
-		log.Fatalf("failed to initialize archive reader, due to: %v", err)
+		return fmt.Errorf("failed to initialize archive reader, due to: %v", err)
 	}
-	app.InboxReader, err = storage.NewReader(context.Background(), "inbox")
+	app.InboxReader, err = storage.NewReader(ctx, "inbox")
 	if err != nil {
-		log.Fatalf("failed to initialize inbox reader, due to: %v", err)
+		return fmt.Errorf("failed to initialize inbox reader, due to: %v", err)
 	}
 
-	backupWriter, err := storage.NewWriter(context.Background(), "backup", storageLocationBroker)
+	backupWriter, err := storage.NewWriter(ctx, "backup", storageLocationBroker)
 	if err != nil && errors.Is(err, storageerrors.ErrorNoValidWriter) {
-		log.Fatalf("failed to initialize backup writer due to: %v", err)
+		return fmt.Errorf("failed to initialize backup writer due to: %v", err)
 	}
 	if backupWriter != nil {
 		log.Info("backup writer initialized, will clean cancelled files from backup storage")
@@ -97,40 +113,31 @@ func main() {
 	} else {
 		log.Info("no backup writer initialized, will NOT clean cancelled files from backup storage")
 	}
+	log.Info("starting ingest service")
 
-	defer app.MQ.Channel.Close()
-	defer app.MQ.Connection.Close()
-	defer app.DB.Close()
+	consumeErr := make(chan error, 1)
+	go func() {
+		consumeErr <- app.startConsumer()
+	}()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	forever := make(chan bool)
 
-	go func() {
-		connError := app.MQ.ConnectionWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
+	select {
+	case <-sigc:
+	case err := <-app.MQ.Connection.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-app.MQ.Channel.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-consumeErr:
+		return err
+	}
 
-	go func() {
-		connError := app.MQ.ChannelWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
-
-	log.Info("starting ingest service")
-
-	go func() {
-		if err := app.run(); err != nil {
-			log.Error(err)
-			forever <- false
-		}
-	}()
-	<-forever
+	return nil
 }
 
-func (app *Ingest) run() error {
-	messages, err := app.MQ.GetMessages(app.brokerConf.Queue)
+func (app *Ingest) startConsumer() error {
+	messages, err := app.MQ.GetMessages(app.MQ.Conf.Queue)
 	if err != nil {
 		return err
 	}
@@ -139,7 +146,7 @@ func (app *Ingest) run() error {
 		ctx := context.Background()
 		log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 		message := schema.IngestionTrigger{}
-		err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.brokerConf.SchemasPath), delivered.Body)
+		err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.MQ.Conf.SchemasPath), delivered.Body)
 		if err != nil {
 			log.Errorf("validation of incoming message (ingestion-trigger) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 			// Send the message to an error queue so it can be analyzed.
@@ -150,7 +157,7 @@ func (app *Ingest) run() error {
 			}
 
 			body, _ := json.Marshal(infoErrorMessage)
-			if err := app.MQ.SendMessage(delivered.CorrelationId, app.brokerConf.Exchange, "error", body); err != nil {
+			if err := app.MQ.SendMessage(delivered.CorrelationId, app.MQ.Conf.Exchange, "error", body); err != nil {
 				log.Errorf("failed to publish message, reason: %v", err)
 			}
 			if err := delivered.Ack(false); err != nil {
@@ -233,7 +240,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 			OriginalMessage: message,
 		}
 		body, _ := json.Marshal(fileError)
-		if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
+		if err := app.MQ.SendMessage(fileID, app.MQ.Conf.Exchange, "error", body); err != nil {
 			log.Errorf("failed to publish message, reason: %v", err)
 
 			return "reject"
@@ -597,14 +604,14 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	}
 	archivedMsg, _ := json.Marshal(&msg)
 
-	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.brokerConf.SchemasPath), archivedMsg)
+	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.MQ.Conf.SchemasPath), archivedMsg)
 	if err != nil {
 		log.Errorf("Validation of outgoing message failed, file-id: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
 	}
 
-	if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, app.brokerConf.RoutingKey, archivedMsg); err != nil {
+	if err := app.MQ.SendMessage(fileID, app.MQ.Conf.Exchange, app.MQ.Conf.RoutingKey, archivedMsg); err != nil {
 		// TODO fix resend mechanism
 		log.Errorf("failed to publish message, reason: %v", err)
 
@@ -649,7 +656,7 @@ func (app *Ingest) setFileEventErrorAndSendToErrorQueue(fileID string, infoError
 		log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 	}
 	body, _ := json.Marshal(infoError)
-	if err := app.MQ.SendMessage(fileID, app.brokerConf.Exchange, "error", body); err != nil {
+	if err := app.MQ.SendMessage(fileID, app.MQ.Conf.Exchange, "error", body); err != nil {
 		log.Errorf("failed to publish message, reason: %v", err)
 
 		return err
