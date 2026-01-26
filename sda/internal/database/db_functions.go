@@ -484,34 +484,32 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(fileID string) (string, int, error) {
+func (dbs *SDAdb) GetArchived(fileID string) (ArchiveData, error) {
 	var (
-		filePath string
-		fileSize int
-		err      error
-		count    int
+		archiveData ArchiveData
+		err         error
+		count       int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, fileSize, err = dbs.getArchived(fileID)
+		archiveData, err = dbs.getArchived(fileID)
 		count++
 	}
 
-	return filePath, fileSize, err
+	return archiveData, err
 }
-func (dbs *SDAdb) getArchived(fileID string) (string, int, error) {
+func (dbs *SDAdb) getArchived(fileID string) (ArchiveData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT archive_file_path, archive_file_size from sda.files WHERE id = $1;"
+	const query = "SELECT archive_file_path, archive_file_size, archive_location from sda.files WHERE id = $1;"
 
-	var filePath string
-	var fileSize int
-	if err := db.QueryRow(query, fileID).Scan(&filePath, &fileSize); err != nil {
-		return "", 0, err
+	var archiveData ArchiveData
+	if err := db.QueryRow(query, fileID).Scan(&archiveData.FilePath, &archiveData.FileSize, &archiveData.Location); err != nil {
+		return ArchiveData{}, err
 	}
 
-	return filePath, fileSize, nil
+	return archiveData, nil
 }
 
 // CheckAccessionIdExists validates if an accessionID exists in the db
