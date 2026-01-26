@@ -275,6 +275,10 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
+	if archiveData == nil {
+		return fmt.Errorf("file archive data not found in database, file-id: %s", fileID)
+	}
+
 	// Get size on disk, will also give some time for the file to appear if it has not already
 	diskFileSize, err := archiveReader.GetFileSize(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
