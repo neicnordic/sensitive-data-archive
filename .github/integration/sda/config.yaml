@@ -52,6 +52,14 @@ inbox:
   bucket: "inbox"
   region: "us-east-1"
 
+s3inbox:
+  endpoint: "http://s3:9000"
+  access_key: "access"
+  secret_key: "secretKey"
+  bucket: "inbox"
+  region: "us-east-1"
+  ready_path: "/minio/health/ready"
+
 broker:
   host: "rabbitmq"
   port: "5672"

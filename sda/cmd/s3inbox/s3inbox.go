@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,7 +37,7 @@ func run() error {
 		return fmt.Errorf("failed to load config due to: %v", err)
 	}
 
-	tlsProxy, err := config.TLSConfigProxy(conf)
+	tlsProxy, err := configTLS(conf.S3Inbox)
 	if err != nil {
 		return fmt.Errorf("failed to setup tls config due to: %v", err)
 	}
@@ -147,4 +149,32 @@ func checkS3Bucket(bucket string, s3Client *s3.Client) error {
 	}
 
 	return nil
+}
+
+func configTLS(c config.S3InboxConf) (*tls.Config, error) {
+	cfg := new(tls.Config)
+
+	log.Debug("setting up TLS for S3 connection")
+
+	// Read system CAs
+	systemCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Errorf("failed to read system CAs: %v", err)
+
+		return nil, err
+	}
+
+	cfg.RootCAs = systemCAs
+
+	if c.CAcert != "" {
+		cacert, e := os.ReadFile(c.CAcert) // #nosec this file comes from our configuration
+		if e != nil {
+			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
+		}
+		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+			log.Debug("no certs appended, using system certs only")
+		}
+	}
+
+	return cfg, nil
 }
