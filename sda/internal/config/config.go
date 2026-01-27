@@ -43,6 +43,7 @@ type Config struct {
 	Inbox        storage.Conf
 	Backup       storage.Conf
 	Server       ServerConfig
+	S3Inbox      S3InboxConf
 	API          APIConf
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
@@ -94,6 +95,15 @@ type SyncAPIConf struct {
 	MappingRouting   string `default:"mappings"`
 }
 
+type S3InboxConf struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Region    string
+	CAcert    string
+	ReadyPath string
+}
 type APIConf struct {
 	RBACpolicy  []byte
 	CACert      string
@@ -418,12 +428,12 @@ func NewConfig(app string) (*Config, error) {
 			"broker.user",
 			"broker.password",
 			"broker.routingkey",
-			"inbox.url",
-			"inbox.accesskey",
-			"inbox.secretkey",
-			"inbox.bucket",
+			"s3inbox.endpoint",
+			"s3inbox.access_key",
+			"s3inbox.secret_key",
+			"s3inbox.bucket",
+			"s3inbox.region",
 		}
-		viper.Set("inbox.type", S3)
 	case "sync":
 		requiredConfVars = []string{
 			"broker.host",
@@ -704,7 +714,13 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configInbox()
+		c.S3Inbox.Endpoint = viper.GetString("s3inbox.endpoint")
+		c.S3Inbox.AccessKey = viper.GetString("s3inbox.access_key")
+		c.S3Inbox.SecretKey = viper.GetString("s3inbox.secret_key")
+		c.S3Inbox.Bucket = viper.GetString("s3inbox.bucket")
+		c.S3Inbox.Region = viper.GetString("s3inbox.region")
+		c.S3Inbox.CAcert = viper.GetString("s3inbox.ca_cert")
+		c.S3Inbox.ReadyPath = viper.GetString("s3inbox.ready_path")
 
 		err = c.configServer()
 		if err != nil {
@@ -1335,35 +1351,6 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 		}
 		if certs, e := tls.X509KeyPair(cert, key); e == nil {
 			cfg.Certificates = append(cfg.Certificates, certs)
-		}
-	}
-
-	return cfg, nil
-}
-
-// TLSConfigProxy is a helper method to setup TLS for the S3 backend.
-func TLSConfigProxy(c *Config) (*tls.Config, error) {
-	cfg := new(tls.Config)
-
-	log.Debug("setting up TLS for S3 connection")
-
-	// Read system CAs
-	systemCAs, err := x509.SystemCertPool()
-	if err != nil {
-		log.Errorf("failed to read system CAs: %v", err)
-
-		return nil, err
-	}
-
-	cfg.RootCAs = systemCAs
-
-	if c.Inbox.S3.CAcert != "" {
-		cacert, e := os.ReadFile(c.Inbox.S3.CAcert) // #nosec this file comes from our configuration
-		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
-		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
-			log.Debug("no certs appended, using system certs only")
 		}
 	}
 
