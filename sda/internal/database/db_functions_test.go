@@ -632,21 +632,22 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetArchivePath-001.c4gh", "testuser")
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/testuser/TestGetArchivePath-001.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	checksum := fmt.Sprintf("%x", sha256.New())
 	corrID := uuid.New().String()
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1234, corrID, checksum, 999, fmt.Sprintf("%x", sha256.New())}
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchivedWithLocation("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = db.SetAccessionID("acession-0001", fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
-	path, err := db.getArchivePath("acession-0001")
+	path, location, err := db.getArchivePath("acession-0001")
 	assert.NoError(suite.T(), err, "getArchivePath failed")
-	assert.Equal(suite.T(), path, corrID)
+	assert.Equal(suite.T(), corrID, path)
+	assert.Equal(suite.T(), "/archive", location)
 
 	db.Close()
 }
