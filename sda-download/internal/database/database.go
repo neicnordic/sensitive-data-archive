@@ -21,6 +21,7 @@ var DB *SQLdb
 // SQLdb struct that acts as a receiver for the DB update methods
 type SQLdb struct {
 	DB       *sql.DB
+	Version  int
 	ConnInfo string
 }
 
@@ -72,15 +73,15 @@ func NewDB(conf config.DatabaseConfig) (*SQLdb, error) {
 		return nil, err
 	}
 
-	if err = db.Ping(); err != nil {
-		log.Errorf("could not get response from database, %s", err)
-
-		return nil, err
+	pgdb := &SQLdb{DB: db, ConnInfo: connInfo}
+	pgdb.Version, err = pgdb.getVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch database schema version: %v", err)
 	}
 
 	log.Debug("database connection formed")
 
-	return &SQLdb{DB: db, ConnInfo: connInfo}, nil
+	return pgdb, nil
 }
 
 // buildConnInfo builds a connection string for the database
@@ -123,6 +124,19 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 		log.Debugln("Reconnecting to DB")
 		dbs.DB, _ = sqlOpen("postgres", dbs.ConnInfo)
 	}
+}
+
+func (dbs *SQLdb) getVersion() (int, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	log.Debug("Fetching database schema version")
+
+	query := "SELECT MAX(version) FROM sda.dbschema_version;"
+
+	var dbVersion = -1
+	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
+
+	return dbVersion, err
 }
 
 // GetFiles retrieves the file details
@@ -390,6 +404,7 @@ func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
 type FileDownload struct {
 	ArchivePath       string
 	ArchiveSize       int
+	ArchiveLocation   string
 	DecryptedSize     int
 	DecryptedChecksum string
 	LastModified      string
@@ -427,6 +442,7 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 	const query = `
 		SELECT f.archive_file_path,
 			   f.archive_file_size,
+			   f.archive_location,
 			   f.decrypted_file_size,
 			   dc.checksum AS decrypted_checksum,
 			   f.last_modified,
@@ -440,7 +456,7 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 
 	fd := &FileDownload{}
 	var hexString string
-	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize,
+	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize, &fd.ArchiveLocation,
 		&fd.DecryptedSize, &fd.DecryptedChecksum, &fd.LastModified, &hexString)
 	if err != nil {
 		log.Errorf("could not retrieve details for file %s, reason %s", sanitizeString(fileID), err)

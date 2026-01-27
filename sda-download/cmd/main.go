@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
+
 	"github.com/neicnordic/sda-download/api"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/internal/session"
-	"github.com/neicnordic/sda-download/internal/storage"
+	"github.com/neicnordic/sda-download/internal/storage/v2"
 	"github.com/neicnordic/sda-download/pkg/auth"
 	"github.com/neicnordic/sda-download/pkg/request"
 	log "github.com/sirupsen/logrus"
@@ -31,6 +33,11 @@ func init() {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
 	defer db.Close()
+	if db.Version < 23 {
+		log.Error("database schema v23 is required")
+
+		return
+	}
 	database.DB = db
 
 	// Initialise HTTP client for making requests
@@ -55,11 +62,11 @@ func init() {
 	}
 	session.SessionCache = sessionCache
 
-	backend, err := storage.NewBackend(conf.Archive)
+	archiveReader, err := storage.NewReader(context.Background(), "archive")
 	if err != nil {
 		log.Panicf("Error initiating storage backend, reason: %v", err)
 	}
-	sda.Backend = backend
+	sda.ArchiveReader = archiveReader
 }
 
 // main starts the web server
