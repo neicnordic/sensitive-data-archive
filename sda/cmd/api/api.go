@@ -474,6 +474,13 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
+	if location == "" {
+		log.Errorf("fileID: %s has no known submission location", fileID)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+
+		return
+	}
+
 	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
 	for count := 1; count <= 5; count++ {
 		err = inboxWriter.RemoveFile(c, location, filePath)
@@ -562,8 +569,9 @@ func downloadFile(c *gin.Context) {
 	}
 	if location == "" {
 		log.Errorf("fileID: %s has no known submission location", fileID)
-
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+
+		return
 	}
 
 	// Get inbox file handle #noqa
