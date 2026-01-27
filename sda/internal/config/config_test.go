@@ -129,6 +129,12 @@ func (ts *ConfigTestSuite) TestNoConfig() {
 }
 
 func (ts *ConfigTestSuite) TestMissingRequiredConfVar() {
+	viper.Set("s3inbox.endpoint", "mock-value")
+	viper.Set("s3inbox.access_key", "mock-value")
+	viper.Set("s3inbox.secret_key", "mock-value")
+	viper.Set("s3inbox.bucket", "mock-value")
+	viper.Set("s3inbox.region", "mock-value")
+
 	for _, requiredConfVar := range requiredConfVars {
 		requiredConfVarValue := viper.Get(requiredConfVar)
 		viper.Set(requiredConfVar, nil)
@@ -143,17 +149,28 @@ func (ts *ConfigTestSuite) TestMissingRequiredConfVar() {
 }
 
 func (ts *ConfigTestSuite) TestConfigS3Storage() {
+	viper.Set("s3inbox.endpoint", "testurl")
+	viper.Set("s3inbox.access_key", "testaccess")
+	viper.Set("s3inbox.secret_key", "testsecret")
+	viper.Set("s3inbox.bucket", "testbucket")
+	viper.Set("s3inbox.region", "testregion")
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
 	assert.NotNil(ts.T(), config.Inbox.S3)
-	assert.Equal(ts.T(), "testurl", config.Inbox.S3.URL)
-	assert.Equal(ts.T(), "testaccess", config.Inbox.S3.AccessKey)
-	assert.Equal(ts.T(), "testsecret", config.Inbox.S3.SecretKey)
-	assert.Equal(ts.T(), "testbucket", config.Inbox.S3.Bucket)
+	assert.Equal(ts.T(), "testurl", config.S3Inbox.Endpoint)
+	assert.Equal(ts.T(), "testaccess", config.S3Inbox.AccessKey)
+	assert.Equal(ts.T(), "testsecret", config.S3Inbox.SecretKey)
+	assert.Equal(ts.T(), "testbucket", config.S3Inbox.Bucket)
+	assert.Equal(ts.T(), "testregion", config.S3Inbox.Region)
 }
 
 func (ts *ConfigTestSuite) TestConfigBroker() {
+	viper.Set("s3inbox.endpoint", "mock-value")
+	viper.Set("s3inbox.access_key", "mock-value")
+	viper.Set("s3inbox.secret_key", "mock-value")
+	viper.Set("s3inbox.bucket", "mock-value")
+	viper.Set("s3inbox.region", "mock-value")
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
@@ -181,6 +198,12 @@ func (ts *ConfigTestSuite) TestTLSConfigBroker() {
 	viper.Set("broker.serverName", "broker")
 	viper.Set("broker.ssl", true)
 	viper.Set("broker.cacert", certPath+"/ca.crt")
+	viper.Set("s3inbox.endpoint", "mock-value")
+	viper.Set("s3inbox.access_key", "mock-value")
+	viper.Set("s3inbox.secret_key", "mock-value")
+	viper.Set("s3inbox.bucket", "mock-value")
+	viper.Set("s3inbox.region", "mock-value")
+
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
@@ -208,18 +231,13 @@ func (ts *ConfigTestSuite) TestTLSConfigBroker() {
 	assert.Error(ts.T(), err)
 }
 
-func (ts *ConfigTestSuite) TestTLSConfigProxy() {
-	viper.Set("inbox.cacert", certPath+"/ca.crt")
-	config, err := NewConfig("s3inbox")
-	assert.NotNil(ts.T(), config)
-	assert.NoError(ts.T(), err)
-	tlsProxy, err := TLSConfigProxy(config)
-	assert.NotNil(ts.T(), tlsProxy)
-	assert.NoError(ts.T(), err)
-}
-
 func (ts *ConfigTestSuite) TestDefaultLogLevel() {
 	viper.Set("log.level", "test")
+	viper.Set("s3inbox.endpoint", "mock-value")
+	viper.Set("s3inbox.access_key", "mock-value")
+	viper.Set("s3inbox.secret_key", "mock-value")
+	viper.Set("s3inbox.bucket", "mock-value")
+	viper.Set("s3inbox.region", "mock-value")
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
