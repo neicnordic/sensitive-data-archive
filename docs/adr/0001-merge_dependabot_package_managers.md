@@ -61,8 +61,11 @@ for [sda-validator/orchestrator](../../sda-validator/orchestrator)
 
 ## Decision Outcome
 
-Chosen option: TBD,
-because ?
+Chosen option: Option 3, with "/sda-sftp-inbox", and "/sda-doa" being seperated
+because docker updates rarely occur, and when they do it is often a major version increment meaning additional changes 
+could need to take place for it to be successful. The "/sda-sftp-inbox", and "/sda-doa" are split since the
+"/sda-sftp-inbox" is quite unmaintained, and often require manual intervention during dependency updates, which shouldnt 
+hinder the "/sda-doa".
 
 ## Pros and Cons of the Options
 
