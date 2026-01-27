@@ -1324,32 +1324,3 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 
 	return cfg, nil
 }
-
-// TLSConfigProxy is a helper method to setup TLS for the S3 backend.
-func TLSConfigProxy(c *Config) (*tls.Config, error) {
-	cfg := new(tls.Config)
-
-	log.Debug("setting up TLS for S3 connection")
-
-	// Read system CAs
-	systemCAs, err := x509.SystemCertPool()
-	if err != nil {
-		log.Errorf("failed to read system CAs: %v", err)
-
-		return nil, err
-	}
-
-	cfg.RootCAs = systemCAs
-
-	if c.Inbox.S3.CAcert != "" {
-		cacert, e := os.ReadFile(c.Inbox.S3.CAcert) // #nosec this file comes from our configuration
-		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
-		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
-			log.Debug("no certs appended, using system certs only")
-		}
-	}
-
-	return cfg, nil
-}
