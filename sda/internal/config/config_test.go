@@ -320,8 +320,6 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	viper.Set("archive.type", "posix")
 	viper.Set("archive.location", "test")
 	viper.Set("sync.centerPrefix", "prefix")
-	viper.Set("sync.destination.type", "posix")
-	viper.Set("sync.destination.location", "test")
 	viper.Set("sync.remote.host", "https://test.org")
 	viper.Set("sync.remote.user", "test")
 	viper.Set("sync.remote.password", "test")
@@ -343,9 +341,6 @@ func (ts *ConfigTestSuite) TestSyncConfig() {
 	assert.Equal(ts.T(), "test", config.Database.User)
 	assert.Equal(ts.T(), "test", config.Database.Password)
 	assert.Equal(ts.T(), "test", config.Database.Database)
-	assert.NotNil(ts.T(), config.Archive)
-	assert.NotNil(ts.T(), config.Archive.Posix)
-	assert.Equal(ts.T(), "test", config.Archive.Posix.Location)
 	assert.NotNil(ts.T(), config.Sync)
 
 	defer os.RemoveAll(ts.pubKeyPath)
