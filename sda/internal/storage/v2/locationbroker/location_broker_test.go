@@ -23,6 +23,10 @@ func (m *mockDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, locati
 	return args.Get(0).(uint64), args.Get(1).(uint64), args.Error(2)
 }
 
+func (m *mockDatabase) GetSubmissionPathAndLocation(_ context.Context, _, _ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
 func TestLocationBrokerTestSuite(t *testing.T) {
 	suite.Run(t, new(LocationBrokerTestSuite))
 }
