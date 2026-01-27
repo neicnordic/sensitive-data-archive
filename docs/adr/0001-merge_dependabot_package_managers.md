@@ -1,4 +1,4 @@
-# Merge Dependapot package managers
+# ADR-0001. Merge Dependapot package managers
 
 * Status: Proposed
 * Deciders: [Karl Grönberg](https://github.com/KarlG-nbis), [Parisa Tejari](https://github.com/Parisa68)
@@ -12,7 +12,7 @@ PRs
 runs their own integration tests, image building, etc, and needs to be manually reviewed, merged, etc.
 
 See [dependabot.yaml](../../.github/dependabot.yaml) for current configuration,
-this configuration is also currently missing, docker, and gomod package-ecosystem
+this configuration is also currently missing docker, and gomod package-ecosystem
 for [sda-validator/orchestrator](../../sda-validator/orchestrator)
 
 ## Considered Options
