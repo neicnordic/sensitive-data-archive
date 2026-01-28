@@ -339,20 +339,6 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 
 // CancelFile cancels the file and all actions that have been taken (eg, setting checksums, archiving, etc)
 func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string) error {
-	var err error
-
-	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.cancelFile(ctx, fileID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return err
-}
-
-func (dbs *SDAdb) cancelFile(ctx context.Context, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -382,21 +368,6 @@ WHERE file_id = $1`
 
 // IsFileInDataset checks if a file has been added to a dataset
 func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (bool, error) {
-	var err error
-	var inDataset bool
-
-	for count := 1; count <= RetryTimes; count++ {
-		inDataset, err = dbs.isFileInDataset(ctx, fileID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return inDataset, err
-}
-
-func (dbs *SDAdb) isFileInDataset(ctx context.Context, fileID string) (bool, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -581,7 +552,8 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 	db := dbs.DB
 	const query = "SELECT archive_file_path, archive_file_size, archive_location, backup_path, backup_location from sda.files WHERE id = $1;"
 
-	var archiveFilePath, archiveLocation, backupFilePath, backupLocation sql.NullString
+	var archiveFilePath string
+	var archiveLocation, backupFilePath, backupLocation sql.NullString
 	var archiveFileSize sql.Null[int]
 	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation, &backupFilePath, &backupLocation); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -590,9 +562,9 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 
 		return nil, err
 	}
-	if archiveFilePath.Valid || archiveFileSize.Valid || archiveLocation.Valid {
+	if archiveFilePath != "" || archiveFileSize.Valid || archiveLocation.Valid {
 		ad := &ArchiveData{
-			FilePath:       archiveFilePath.String,
+			FilePath:       archiveFilePath,
 			Location:       archiveLocation.String,
 			FileSize:       archiveFileSize.V,
 			BackupFilePath: backupFilePath.String,
