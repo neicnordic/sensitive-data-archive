@@ -1803,3 +1803,68 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 		})
 	}
 }
+
+func (suite *DatabaseTests) TestCancelFile() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              500,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     550,
+		UploadedChecksum:  "abc",
+	}, fileID))
+
+	assert.NoError(suite.T(), db.CancelFile(context.TODO(), fileID))
+
+	// Check that data has been unset
+	archiveData, err := db.getArchived(fileID)
+	assert.NoError(suite.T(), err)
+	assert.Nil(suite.T(), archiveData)
+}
+
+func (suite *DatabaseTests) TestIsFileInDataset_No() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	inDataset, err := db.IsFileInDataset(context.TODO(), fileID)
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), inDataset)
+}
+
+func (suite *DatabaseTests) TestIsFileInDataset_Yes() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              500,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     550,
+		UploadedChecksum:  "abc",
+	}, fileID))
+
+	assert.NoError(suite.T(), db.setAccessionID("accessionID-1", fileID))
+	assert.NoError(suite.T(), db.mapFilesToDataset("unit-test-dataset-id", []string{"accessionID-1"}))
+
+	inDataset, err := db.IsFileInDataset(context.TODO(), fileID)
+	assert.NoError(suite.T(), err)
+	assert.True(suite.T(), inDataset)
+}
