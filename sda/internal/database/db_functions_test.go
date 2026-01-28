@@ -289,20 +289,21 @@ func (suite *DatabaseTests) TestGetArchived() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetArchived.c4gh", "testuser")
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/testuser/TestGetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestGetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchivedWithLocation("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
 
-	filePath, fileSize, err := db.GetArchived(fileID)
+	archiveData, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.Equal(suite.T(), 1000, fileSize)
-	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", filePath)
+	assert.Equal(suite.T(), 1000, archiveData.FileSize)
+	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", archiveData.FilePath)
+	assert.Equal(suite.T(), "/archive", archiveData.Location)
 
 	db.Close()
 }
@@ -1735,4 +1736,69 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 			assert.Equal(t, test.expectedCount, count)
 		})
 	}
+}
+
+func (suite *DatabaseTests) TestCancelFile() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              500,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     550,
+		UploadedChecksum:  "abc",
+	}, fileID))
+
+	assert.NoError(suite.T(), db.CancelFile(context.TODO(), fileID))
+
+	// Check that data has been unset
+	archiveData, err := db.getArchived(fileID)
+	assert.NoError(suite.T(), err)
+	assert.Nil(suite.T(), archiveData)
+}
+
+func (suite *DatabaseTests) TestIsFileInDataset_No() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+
+	inDataset, err := db.IsFileInDataset(context.TODO(), fileID)
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), inDataset)
+}
+
+func (suite *DatabaseTests) TestIsFileInDataset_Yes() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "failed to create new connection")
+
+	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	if err != nil {
+		suite.FailNow("failed to register file", err)
+	}
+	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              500,
+		Path:              "/test.file3",
+		DecryptedChecksum: "321",
+		DecryptedSize:     550,
+		UploadedChecksum:  "abc",
+	}, fileID))
+
+	assert.NoError(suite.T(), db.setAccessionID("accessionID-1", fileID))
+	assert.NoError(suite.T(), db.mapFilesToDataset("unit-test-dataset-id", []string{"accessionID-1"}))
+
+	inDataset, err := db.IsFileInDataset(context.TODO(), fileID)
+	assert.NoError(suite.T(), err)
+	assert.True(suite.T(), inDataset)
 }

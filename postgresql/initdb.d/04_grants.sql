@@ -39,6 +39,7 @@ GRANT SELECT ON sda.file_dataset TO ingest;
 GRANT INSERT ON sda.checksums TO ingest;
 GRANT UPDATE ON sda.checksums TO ingest;
 GRANT SELECT ON sda.checksums TO ingest;
+GRANT DELETE ON sda.checksums TO ingest;
 GRANT INSERT ON sda.file_events TO ingest;
 GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO ingest;
 GRANT INSERT ON sda.file_event_log TO ingest;

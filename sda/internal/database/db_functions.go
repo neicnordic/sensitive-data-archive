@@ -340,6 +340,57 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 	return nil
 }
 
+// CancelFile cancels the file and all actions that have been taken (eg, setting checksums, archiving, etc)
+func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const unsetArchived = `
+UPDATE sda.files 
+SET archive_location = NULL, 
+    archive_file_path = '', 
+    archive_file_size = NULL, 
+    decrypted_file_size = NULL, 
+	stable_id = NULL
+WHERE id = $1;`
+
+	if _, err := db.ExecContext(ctx, unsetArchived, fileID); err != nil {
+		return err
+	}
+
+	const deleteChecksums = `
+DELETE FROM sda.checksums
+WHERE file_id = $1`
+
+	if _, err := db.ExecContext(ctx, deleteChecksums, fileID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsFileInDataset checks if a file has been added to a dataset
+func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (bool, error) {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const isFileInDataset = `
+SELECT true 
+FROM sda.file_dataset
+WHERE file_id = $1;`
+
+	var inDataset bool
+	if err := db.QueryRowContext(ctx, isFileInDataset, fileID).Scan(&inDataset); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return inDataset, nil
+}
+
 func (dbs *SDAdb) GetFileStatus(fileID string) (string, error) {
 	var (
 		err    error
@@ -484,37 +535,59 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 // GetArchived retrieves the location and size of archive
-func (dbs *SDAdb) GetArchived(fileID string) (string, int, error) {
+func (dbs *SDAdb) GetArchived(fileID string) (*ArchiveData, error) {
 	var (
-		filePath string
-		fileSize int
-		err      error
-		count    int
+		archiveData *ArchiveData
+		err         error
+		count       int
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		filePath, fileSize, err = dbs.getArchived(fileID)
+		archiveData, err = dbs.getArchived(fileID)
 		count++
 	}
 
-	return filePath, fileSize, err
+	return archiveData, err
 }
-func (dbs *SDAdb) getArchived(fileID string) (string, int, error) {
+func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = "SELECT archive_file_path, archive_file_size from sda.files WHERE id = $1;"
+	const query = "SELECT archive_file_path, archive_file_size, archive_location, backup_path, backup_location from sda.files WHERE id = $1;"
 
-	var filePath string
-	var fileSize int
-	if err := db.QueryRow(query, fileID).Scan(&filePath, &fileSize); err != nil {
-		return "", 0, err
+	var archiveFilePath string
+	var archiveLocation, backupFilePath, backupLocation sql.NullString
+	var archiveFileSize sql.Null[int]
+	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation, &backupFilePath, &backupLocation); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+	if archiveFilePath != "" || archiveFileSize.Valid || archiveLocation.Valid {
+		ad := &ArchiveData{
+			FilePath:       archiveFilePath,
+			Location:       archiveLocation.String,
+			FileSize:       archiveFileSize.V,
+			BackupFilePath: backupFilePath.String,
+			BackupLocation: backupLocation.String,
+		}
+		if backupFilePath.Valid {
+			ad.BackupFilePath = backupFilePath.String
+		}
+		if backupLocation.Valid {
+			ad.BackupLocation = backupLocation.String
+		}
+
+		return ad, nil
 	}
 
-	return filePath, fileSize, nil
+	// We have a files table entry but archive data has not been set
+	return nil, nil
 }
 
-// CheckAccessionIdExists validates if an accessionID exists in the db
+// CheckAccessionIDExists validates if an accessionID exists in the db
 func (dbs *SDAdb) CheckAccessionIDExists(accessionID, fileID string) (string, error) {
 	var err error
 	var exists string
@@ -768,6 +841,24 @@ MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums w
 	info.UploadedChecksum = uploadedChecksum.String
 
 	return info, nil
+}
+
+func (dbs *SDAdb) GetSubmissionLocation(ctx context.Context, fileID string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFileID = "SELECT submission_location FROM sda.files WHERE id = $1;"
+
+	var submissionLocation string
+	if err := db.QueryRowContext(ctx, getFileID, fileID).Scan(&submissionLocation); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+
+		return "", err
+	}
+
+	return submissionLocation, nil
 }
 
 // GetHeaderForStableID retrieves the file header by using stable id

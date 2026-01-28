@@ -46,6 +46,14 @@ type SyncData struct {
 	FilePath string
 	Checksum string
 }
+type ArchiveData struct {
+	FilePath string
+	Location string
+	FileSize int
+
+	BackupFilePath string
+	BackupLocation string
+}
 
 type SubmissionFileInfo struct {
 	AccessionID        string `json:"accessionID,omitempty"`
