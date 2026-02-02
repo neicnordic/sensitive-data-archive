@@ -301,7 +301,7 @@ func (suite *DatabaseTests) TestGetArchived() {
 
 	archiveData, err := db.GetArchived(fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
-	assert.Equal(suite.T(), 1000, archiveData.FileSize)
+	assert.Equal(suite.T(), int64(1000), archiveData.FileSize)
 	assert.Equal(suite.T(), "/tmp/TestGetArchived.c4gh", archiveData.FilePath)
 	assert.Equal(suite.T(), "/archive", archiveData.Location)
 

@@ -554,7 +554,7 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 
 	var archiveFilePath string
 	var archiveLocation, backupFilePath, backupLocation sql.NullString
-	var archiveFileSize sql.Null[int]
+	var archiveFileSize sql.NullInt64
 	if err := db.QueryRow(query, fileID).Scan(&archiveFilePath, &archiveFileSize, &archiveLocation, &backupFilePath, &backupLocation); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -566,7 +566,7 @@ func (dbs *SDAdb) getArchived(fileID string) (*ArchiveData, error) {
 		ad := &ArchiveData{
 			FilePath:       archiveFilePath,
 			Location:       archiveLocation.String,
-			FileSize:       archiveFileSize.V,
+			FileSize:       archiveFileSize.Int64,
 			BackupFilePath: backupFilePath.String,
 			BackupLocation: backupLocation.String,
 		}
