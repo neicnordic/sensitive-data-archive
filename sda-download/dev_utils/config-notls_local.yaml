@@ -21,10 +21,10 @@ grpc:
   port: 50051
 
 db:
-  host: "localhost"
+  host: "s3"
   port: 15432
-  user: "postgres"
-  password: "rootpasswd"
+  user: "download"
+  password: "download"
   database: "sda"
   sslmode: "disable"
 
