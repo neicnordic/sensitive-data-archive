@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+sudo apt install -y jq s3cmd
+
 cd dev_utils || exit 1
 
 # Make buckets if they don't exist already 
