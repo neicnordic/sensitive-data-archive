@@ -17,37 +17,54 @@ services:
       - ./certs:/origcerts
       - certs:/certs
   db:
-    command: server /data
+    user: postgres
     container_name: db
     depends_on:
       - certfixer
     environment:
-      - DB_LEGA_IN_PASSWORD=lega_in
-      - DB_LEGA_OUT_PASSWORD=lega_out
       - PKI_VOLUME_PATH=/certs/
       - PG_CA=/var/lib/postgresql/tls/ca.pem
       - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
       - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
       - POSTGRES_PASSWORD=rootpassword
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.4
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "5432:5432"
     volumes:
       - /tmp/data:/data
       - certs:/var/lib/postgresql/tls/
+  database_user_creation:
+    container_name: database_user_creation
+    image: postgres:15.4-alpine
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        pg_isready 
+        psql -U postgres -h db -d sda -c "ALTER ROLE download LOGIN PASSWORD 'download';"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=rootpassword
   s3:
     command: server /data
     container_name: s3
     environment:
-      - MINIO_ACCESS_KEY=access
-      - MINIO_SECRET_KEY=secretkey
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
     healthcheck:
-      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-fkq", "https//localhost:9000/minio/health/live"]
       interval: 5s
       timeout: 20s
       retries: 3
@@ -78,10 +95,10 @@ services:
     container_name: download
     depends_on:
       - certfixer
-      - db
+      - database_user_creation
       - mockauth
     env_file: ./env.download
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
@@ -97,10 +114,17 @@ services:
       - /bin/sh
       - -c
       - |
+        apt update
+        apt install curl -y
         pip install --upgrade pip
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
+    healthcheck:
+      test: [ "CMD", "curl", "-fkq", "https://localhost:8000/.well-known/openid-configuration" ]
+      interval: 10s
+      timeout: 30s
+      retries: 10
     image: python:3.11-slim
     volumes:
       - ./mockoidc/mockoidc.py:/mockoidc.py
