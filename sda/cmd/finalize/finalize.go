@@ -285,7 +285,7 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
 
-	if diskFileSize != int64(archiveData.FileSize) {
+	if diskFileSize != archiveData.FileSize {
 		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
 	}
 
@@ -305,7 +305,7 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 
 		if copiedSize, err := io.Copy(contentWriter, file); err != nil {
 			_ = contentWriter.CloseWithError(fmt.Errorf("failed to copy file, reason: %v)", err))
-		} else if copiedSize != int64(archiveData.FileSize) {
+		} else if copiedSize != archiveData.FileSize {
 			_ = contentWriter.CloseWithError(errors.New("copied size does not match file size"))
 		}
 	}()
