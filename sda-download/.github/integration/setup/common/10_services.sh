@@ -1,15 +1,12 @@
 #!/bin/bash
 
 # Build containers
-docker build -t neicnordic/sda-download:latest . || exit 1
-
 cd dev_utils || exit 1
 
 bash ./make_certs.sh
 
 if [ "$STORAGETYPE" = s3notls ]; then
-
-    docker compose -f compose-no-tls.yml up -d
+     PR_NUMBER=$(date +%F) docker compose -f compose-no-tls.yml up -d
 
     RETRY_TIMES=0
     for p in db s3 download; do
@@ -34,7 +31,7 @@ else
 
     # We need to leave the $tostart variable unquoted here since we want it to split
     # shellcheck disable=SC2086
-    docker compose -f compose.yml up -d $tostart
+    PR_NUMBER=$(date +%F) docker compose -f compose.yml up -d $tostart database_user_creation
 
     for p in $tostart; do
         RETRY_TIMES=0
@@ -54,7 +51,7 @@ else
         done
     done
 
-    docker compose -f compose.yml up -d
+    PR_NUMBER=$(date +%F) docker compose -f compose.yml up -d
 
     RETRY_TIMES=0
     until docker ps -f name="download" --format "{{.Status}}" | grep "Up"
