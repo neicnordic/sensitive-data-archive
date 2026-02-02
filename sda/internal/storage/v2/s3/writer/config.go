@@ -72,9 +72,9 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			return nil, errors.New("missing required parameter: bucket_prefix")
 		default:
 			switch {
-			case strings.HasPrefix(e.Endpoint, "http") && !e.DisableHTTPS:
+			case strings.HasPrefix(e.Endpoint, "http:") && !e.DisableHTTPS:
 				return nil, errors.New("http scheme in endpoint when using HTTPS")
-			case strings.HasPrefix(e.Endpoint, "https") && e.DisableHTTPS:
+			case strings.HasPrefix(e.Endpoint, "https:") && e.DisableHTTPS:
 				return nil, errors.New("https scheme in endpoint when HTTPS is disabled")
 			default:
 			}
