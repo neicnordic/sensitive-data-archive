@@ -56,7 +56,7 @@ type SyncData struct {
 type ArchiveData struct {
 	FilePath string
 	Location string
-	FileSize int
+	FileSize int64
 
 	BackupFilePath string
 	BackupLocation string
