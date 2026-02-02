@@ -260,6 +260,13 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	if fileDetails.ArchiveLocation == "" {
+		log.Errorf("archive location for file: %s not known", fileID)
+		c.String(http.StatusInternalServerError, "archive location not known")
+
+		return
+	}
+
 	// Get query params
 	qStart := c.DefaultQuery("startCoordinate", "0")
 	qEnd := c.DefaultQuery("endCoordinate", "0")
