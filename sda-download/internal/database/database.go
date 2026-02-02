@@ -455,13 +455,18 @@ func (dbs *SQLdb) getFile(fileID string) (*FileDownload, error) {
 		WHERE stable_id = $1`
 
 	fd := &FileDownload{}
+	var archiveLocation sql.NullString
 	var hexString string
-	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize, &fd.ArchiveLocation,
+	err := db.QueryRow(query, fileID).Scan(&fd.ArchivePath, &fd.ArchiveSize, &archiveLocation,
 		&fd.DecryptedSize, &fd.DecryptedChecksum, &fd.LastModified, &hexString)
 	if err != nil {
 		log.Errorf("could not retrieve details for file %s, reason %s", sanitizeString(fileID), err)
 
 		return nil, err
+	}
+
+	if archiveLocation.Valid {
+		fd.ArchiveLocation = archiveLocation.String
 	}
 
 	fd.Header, err = hex.DecodeString(hexString)
