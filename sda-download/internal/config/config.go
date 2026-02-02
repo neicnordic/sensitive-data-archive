@@ -185,12 +185,6 @@ func NewConfig() (*Map, error) {
 		"db.host", "db.user", "db.password", "db.database", "oidc.configuration.url", "grpc.host",
 	}
 
-	if viper.GetString("archive.type") == S3 {
-		requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-	} else if viper.GetString("archive.type") == POSIX {
-		requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-	}
-
 	for _, s := range requiredConfVars {
 		if !viper.IsSet(s) || viper.GetString(s) == "" {
 			return nil, fmt.Errorf("%s not set", s)
