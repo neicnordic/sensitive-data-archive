@@ -19,7 +19,7 @@ sh make_certs.sh
 ## Getting up and running fast with docker compose
 
 ```command
-docker compose -f compose-no-tls.yml up -d
+PR_NUMBER=$(date +%F) docker compose -f compose-no-tls.yml up -d
 ```
 
 For testing the API
@@ -33,13 +33,13 @@ sh run_integration_test_no_tls.sh
 To start all the backend services using docker compose.
 
 ```command
-docker compose up -d db s3 mockauth
+PR_NUMBER=$(date +%F) docker compose up -d db s3 mockauth
 ```
 
 To start all the sda services using docker compose.
 
 ```command
-docker compose up -d
+PR_NUMBER=$(date +%F) docker compose up -d
 ```
 
 To see brief real-time logs at the terminal remove the -d flag.
