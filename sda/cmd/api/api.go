@@ -36,7 +36,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -127,25 +126,21 @@ func run() error {
 			}
 		}
 	}()
+	defer func() {
+		if err := srv.Shutdown(context.Background()); err != nil {
+			log.Errorf("failed to close http/https server due to: %v", err)
+		}
+	}()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
 	case <-sigc:
-	case err := <-Conf.API.MQ.Connection.NotifyClose(make(chan *amqp.Error)):
-		return err
-	case err := <-Conf.API.MQ.Channel.NotifyClose(make(chan *amqp.Error)):
-		return err
+		return nil
 	case err := <-serverErr:
 		return err
 	}
-
-	if err := srv.Shutdown(context.Background()); err != nil {
-		log.Errorf("failed to close http/https server due to: %v", err)
-	}
-
-	return nil
 }
 
 func setup(conf *config.Config) (*http.Server, error) {
