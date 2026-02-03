@@ -892,13 +892,13 @@ func (dbs *SDAdb) GetArchivePathAndLocation(stableID string) (string, string, er
 	)
 
 	for count == 0 || (err != nil && count < RetryTimes) {
-		archivePath, archiveLocation, err = dbs.getArchivePath(stableID)
+		archivePath, archiveLocation, err = dbs.getArchivePathAndLocation(stableID)
 		count++
 	}
 
 	return archivePath, archiveLocation, err
 }
-func (dbs *SDAdb) getArchivePath(stableID string) (string, string, error) {
+func (dbs *SDAdb) getArchivePathAndLocation(stableID string) (string, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 	const getFileID = "SELECT archive_file_path, archive_location from sda.files WHERE stable_id = $1;"
