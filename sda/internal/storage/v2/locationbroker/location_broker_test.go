@@ -29,6 +29,9 @@ func (m *mockDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Contex
 func (m *mockDatabase) GetArchiveLocation(_ string) (string, error) {
 	panic("function not expected to be called in unit tests")
 }
+func (m *mockDatabase) GetArchivePathAndLocation(_ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
 
 func TestLocationBrokerTestSuite(t *testing.T) {
 	suite.Run(t, new(LocationBrokerTestSuite))
