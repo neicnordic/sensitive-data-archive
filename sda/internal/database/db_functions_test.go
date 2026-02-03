@@ -645,8 +645,8 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	err = db.SetAccessionID("acession-0001", fileID)
 	assert.NoError(suite.T(), err, "got (%v) when getting file archive information", err)
 
-	path, location, err := db.getArchivePath("acession-0001")
-	assert.NoError(suite.T(), err, "getArchivePath failed")
+	path, location, err := db.getArchivePathAndLocation("acession-0001")
+	assert.NoError(suite.T(), err, "getArchivePathAndLocation failed")
 	assert.Equal(suite.T(), corrID, path)
 	assert.Equal(suite.T(), "/archive", location)
 
