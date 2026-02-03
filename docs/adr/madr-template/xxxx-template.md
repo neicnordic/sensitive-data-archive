@@ -70,3 +70,6 @@ Chosen option: "[option 1]", because [justification. e.g., only option, which me
 
 * [Link type] [Link to ADR] <!-- example: Refined by [ADR-0005](0005-example.md) -->
 * … <!-- numbers of links can vary -->
+
+---
+Template Source: https://github.com/joelparkerhenderson/architecture-decision-record/tree/main/locales/en/templates/decision-record-template-of-the-madr-project
