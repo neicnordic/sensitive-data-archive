@@ -65,9 +65,9 @@ func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, upload
 	return createdFileID, err
 }
 
-// GetSubmissionPathAndLocation checks if a file exists in the database for a given user and fileID
-// and that is not yet archived
-func (dbs *SDAdb) GetSubmissionPathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error) {
+// GetUploadedFilePathAndLocation returns the submission file path and location for a given user and fileID
+// for a file which last event was 'uploaded' or
+func (dbs *SDAdb) GetUploadedSubmissionFilePathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
 
@@ -85,7 +85,7 @@ WHERE
 	    WHERE file_id = $2 
 	    ORDER BY started_at DESC limit 1
 	  ) AS subquery 
-	  WHERE event = 'uploaded'
+	  WHERE event = 'uploaded' OR event = 'disabled'
     );`
 
 	var filePath, location string
