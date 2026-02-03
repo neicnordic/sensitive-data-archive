@@ -1508,14 +1508,14 @@ func (suite *DatabaseTests) TestGetSubmissionPathAndLocation() {
 	if err != nil {
 		suite.FailNow("Failed to update file event log")
 	}
-	path, location, err := db.GetSubmissionPathAndLocation(context.Background(), user, fileID)
+	path, location, err := db.GetUploadedSubmissionFilePathAndLocation(context.Background(), user, fileID)
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), path, filePath)
 	assert.Equal(suite.T(), "/inbox", location)
 
 	err = db.UpdateFileEventLog(fileID, "archived", user, "{}", "{}")
 	assert.NoError(suite.T(), err)
-	_, _, err = db.GetSubmissionPathAndLocation(context.Background(), user, fileID)
+	_, _, err = db.GetUploadedSubmissionFilePathAndLocation(context.Background(), user, fileID)
 	assert.Error(suite.T(), err)
 	db.Close()
 }
