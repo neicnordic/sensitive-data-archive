@@ -9,4 +9,5 @@ type Database interface {
 	GetUploadedSubmissionFilePathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error)
 	GetArchiveLocation(fileID string) (string, error)
 	GetArchivePathAndLocation(stableID string) (string, string, error)
+	GetMappingData(accessionID string) (*MappingData, error)
 }
