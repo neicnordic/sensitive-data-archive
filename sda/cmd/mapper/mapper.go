@@ -143,7 +143,15 @@ func startConsumer() error {
 				log.Debugf("Mapped file to dataset (correlation-id: %s, datasetid: %s, accessionid: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
 				fileMappingData, err := db.GetMappingData(aID)
 				if err != nil {
-					log.Errorf("failed to get file info for file with stable ID: %s", aID)
+					log.Errorf("failed to get file info for file with stable ID: %s, can not remove file from inbox", aID)
+
+					continue
+				}
+
+				if fileMappingData == nil || fileMappingData.SubmissionLocation == "" {
+					log.Errorf("failed to find submission location for file with stable ID: %s, can not remove file from inbox", aID)
+
+					continue
 				}
 
 				err = inboxWriter.RemoveFile(context.Background(), fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User))
