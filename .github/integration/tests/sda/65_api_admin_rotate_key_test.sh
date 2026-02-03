@@ -61,7 +61,7 @@ done
 
 # generate and upload two files for dataset
 for i in 1 2; do
-    file="testfile$i"
+    file="admin_rotate_testfile$i"
     if [ ! -f "$file" ]; then
         dd if=/dev/urandom of="$file" count=5 bs=1M
     fi
@@ -85,7 +85,7 @@ done
 
 ## ingest both files
 for i in 1 2; do
-    curl -s -k -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "{\"filepath\": \"dataset_admin_rotatekey/testfile$i.c4gh\", \"user\": \"test@dummy.org\"}" http://api:8080/file/ingest
+    curl -s -k -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "{\"filepath\": \"dataset_admin_rotatekey/admin_rotate_testfile$i.c4gh\", \"user\": \"test@dummy.org\"}" http://api:8080/file/ingest
 done
 
 # wait for files to become verified
@@ -106,7 +106,7 @@ for i in 1 2; do
         jq -c -n \
             --arg accession_id "EGAF100000000$i" \
             --arg user "test@dummy.org" \
-            --arg filepath "dataset_admin_rotatekey/testfile$i.c4gh" \
+            --arg filepath "dataset_admin_rotatekey/admin_rotate_testfile$i.c4gh" \
             '$ARGS.named'
     )
     resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$payload" "http://api:8080/file/accession")"
@@ -186,8 +186,8 @@ echo "Dataset created successfully with 2 files"
 errorStreamSize=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/error_stream/ | jq -r '.messages_ready')
 
 # get file IDs for verification later
-fileID1=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_admin_rotatekey/testfile1.c4gh';")
-fileID2=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_admin_rotatekey/testfile2.c4gh';")
+fileID1=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_admin_rotatekey/admin_rotate_testfile1.c4gh';")
+fileID2=$(psql -U postgres -h postgres -d sda -At -c "select id from sda.files where submission_file_path='dataset_admin_rotatekey/admin_rotate_testfile2.c4gh';")
 
 echo "File IDs: $fileID1, $fileID2"
 
@@ -253,27 +253,27 @@ for i in 1 2; do
     echo "Testing download and decryption of file $i (ID: $fileID)"
     
     # get rotated header
-    psql -U postgres -h postgres -d sda -At -c "select header from sda.files where id='$fileID';" | xxd -r -p > "testfile${i}_rotated.c4gh"
+    psql -U postgres -h postgres -d sda -At -c "select header from sda.files where id='$fileID';" | xxd -r -p > "admin_rotate_testfile${i}_rotated.c4gh"
     
     # get archive file
     archivePath=$(psql -U postgres -h postgres -d sda -At -c "select archive_file_path from sda.files where id='$fileID';")
     s3cmd --access_key=access --secret_key=secretKey --host=minio:9000 --no-ssl --host-bucket=minio:9000 get s3://archive/"$archivePath" --force
     
     # concatenate and decrypt
-    cat "testfile${i}_rotated.c4gh" "$archivePath" > tmp_file && mv tmp_file "testfile${i}_rotated.c4gh"
-    C4GH_PASSPHRASE=rotatekeyPass ./crypt4gh decrypt -f "testfile${i}_rotated.c4gh" -s rotatekey.sec.pem
+    cat "admin_rotate_testfile${i}_rotated.c4gh" "$archivePath" > tmp_file && mv tmp_file "admin_rotate_testfile${i}_rotated.c4gh"
+    C4GH_PASSPHRASE=rotatekeyPass ./crypt4gh decrypt -f "admin_rotate_testfile${i}_rotated.c4gh" -s rotatekey.sec.pem
     
     # check that decrypted file matches the original
-    if [ ! -f "testfile${i}_rotated" ]; then
-        echo "decrypted file testfile${i}_rotated not found"
+    if [ ! -f "admin_rotate_testfile${i}_rotated" ]; then
+        echo "decrypted file admin_rotate_testfile${i}_rotated not found"
         exit 1
     fi
-    if ! cmp -s "testfile${i}_rotated" "testfile$i" ; then
+    if ! cmp -s "admin_rotate_testfile${i}_rotated" "admin_rotate_testfile$i" ; then
        echo "downloaded file $i is different from the original one"
        exit 1
     fi
     # compare hashes as well
-    if [ "$(sha256sum testfile$i | cut -d ' ' -f 1)" != "$(sha256sum testfile${i}_rotated | cut -d ' ' -f 1)" ]; then
+    if [ "$(sha256sum admin_rotate_testfile$i | cut -d ' ' -f 1)" != "$(sha256sum admin_rotate_testfile${i}_rotated | cut -d ' ' -f 1)" ]; then
         echo "downloaded file $i has different sha256 hash from the original one"
         exit 1
     fi
