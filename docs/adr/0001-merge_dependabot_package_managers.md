@@ -57,7 +57,7 @@ for [sda-validator/orchestrator](../../sda-validator/orchestrator)
 * Option 4: All in one (per release (ie main and release_v1 branches))
   * directories: "/", "/sda", "/sda-download", "/sda-validator/orchestrator", "/sda-sftp-inbox", "/sda-doa", "/rabbitmq", "/postgresql"
     * package-ecosystem: docker, gomod, maven, github-actions
-
+* Option 5: Keep as is (separate package manager per directory & ecosystem)
 
 ## Decision Outcome
 
@@ -96,3 +96,8 @@ hinder the "/sda-doa".
 * Good, because 2 instead of 24 potential PRs being opened weekly
 * Bad, because a PR will affect multiple applications maintained by different teams
 * Bad, because a dependency update which has an issue for one directory would hinder the PR until a manual intervention to exclude the problematic dependency update to enable the rest
+
+### [option 5]
+* Good, because the dependabot PRs will be more confined per directory / ecosystem
+* Bad, because a lot(~24) of potential PRs each week
+* Bad, because a lot of similar PRs with the same updates in different directories
