@@ -114,21 +114,21 @@ func run() error {
 			}
 		}
 	}()
+	defer func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			log.Errorf("failed to close http/https server due to: %v", err)
+		}
+	}()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
 	case <-sigc:
+		return nil
 	case err := <-serverErr:
 		return err
 	}
-
-	if err := server.Shutdown(context.Background()); err != nil {
-		log.Errorf("failed to close http/https server due to: %v", err)
-	}
-
-	return nil
 }
 
 func checkS3Bucket(bucket string, s3Client *s3.Client) error {
