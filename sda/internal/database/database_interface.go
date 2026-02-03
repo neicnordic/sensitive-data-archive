@@ -7,4 +7,5 @@ import (
 type Database interface {
 	GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error)
 	GetUploadedSubmissionFilePathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error)
+	GetArchiveLocation(fileID string) (string, error)
 }
