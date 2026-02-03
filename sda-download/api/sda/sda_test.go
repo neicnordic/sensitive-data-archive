@@ -998,9 +998,10 @@ func TestDownload_InvalidRange_NoEnd(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "/mocks3/somepath",
-			ArchiveSize: 0,
-			Header:      []byte("mock header"),
+			ArchivePath:     "/mocks3/somepath",
+			ArchiveSize:     0,
+			ArchiveLocation: "/archive",
+			Header:          []byte("mock header"),
 		}
 
 		return fileDetails, nil
@@ -1047,9 +1048,10 @@ func TestDownload_InvalidRange_NoStart(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "/mocks3/somepath",
-			ArchiveSize: 0,
-			Header:      []byte("mock header"),
+			ArchivePath:     "/mocks3/somepath",
+			ArchiveSize:     0,
+			ArchiveLocation: "/archive",
+			Header:          []byte("mock header"),
 		}
 
 		return fileDetails, nil
@@ -1080,7 +1082,8 @@ func TestDownload_InvalidRange_NoStart(t *testing.T) {
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 }
-func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
+
+func TestDownload_ArchiveLocationUnset(t *testing.T) {
 	originalCheckFilePermission := database.CheckFilePermission
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
@@ -1099,6 +1102,55 @@ func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
 			ArchivePath: "/mocks3/somepath",
 			ArchiveSize: 0,
 			Header:      []byte("mock header"),
+		}
+
+		return fileDetails, nil
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response := w.Result()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		assert.FailNow(t, err.Error())
+	}
+	_ = response.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+	assert.Contains(t, string(body), "archive location not known")
+
+	// Return mock functions to originals
+	database.CheckFilePermission = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+}
+
+func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
+	originalCheckFilePermission := database.CheckFilePermission
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+
+	// Substitute mock functions
+	database.CheckFilePermission = func(_ string) (string, error) {
+		return "dataset1", nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath:     "/mocks3/somepath",
+			ArchiveSize:     0,
+			ArchiveLocation: "/archive",
+			Header:          []byte("mock header"),
 		}
 
 		return fileDetails, nil
@@ -1147,9 +1199,10 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "/mocks3/somepath",
-			ArchiveSize: 0,
-			Header:      []byte("mock header;"),
+			ArchivePath:     "/mocks3/somepath",
+			ArchiveSize:     0,
+			ArchiveLocation: "/archive",
+			Header:          []byte("mock header;"),
 		}
 
 		return fileDetails, nil
@@ -1256,9 +1309,10 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 	}
 	database.GetFile = func(_ string) (*database.FileDownload, error) {
 		fileDetails := &database.FileDownload{
-			ArchivePath: "/mocks3/somepath",
-			ArchiveSize: 0,
-			Header:      []byte("mock header;"),
+			ArchivePath:     "/mocks3/somepath",
+			ArchiveSize:     0,
+			ArchiveLocation: "/archive",
+			Header:          []byte("mock header;"),
 		}
 
 		return fileDetails, nil
