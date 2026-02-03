@@ -32,11 +32,8 @@ func init() {
 	if err != nil {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
-	defer db.Close()
 	if db.Version < 23 {
-		log.Error("database schema v23 is required")
-
-		return
+		log.Panicf("database schema v23 is required")
 	}
 	database.DB = db
 
@@ -72,6 +69,8 @@ func init() {
 // main starts the web server
 func main() {
 	srv := api.Setup()
+	// Db is setup by the init() func
+	defer database.DB.Close()
 
 	// Start the server
 	log.Info("(5/5) Starting web server")
