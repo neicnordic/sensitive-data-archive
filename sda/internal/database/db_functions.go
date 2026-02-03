@@ -783,9 +783,9 @@ func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 }
 
 // GetMappingData retrieves the file information needed for mapping
-func (dbs *SDAdb) GetMappingData(accessionID string) (MappingData, error) {
+func (dbs *SDAdb) GetMappingData(accessionID string) (*MappingData, error) {
 	var (
-		s   MappingData
+		s   *MappingData
 		err error
 	)
 
@@ -801,15 +801,23 @@ func (dbs *SDAdb) GetMappingData(accessionID string) (MappingData, error) {
 }
 
 // getMappingData is the actual function performing work for GetFileInfoFromAccessionID
-func (dbs *SDAdb) getMappingData(accessionID string) (MappingData, error) {
+func (dbs *SDAdb) getMappingData(accessionID string) (*MappingData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	const query = "SELECT id, submission_user, submission_file_path, submission_location FROM sda.files WHERE stable_id = $1;"
-	var data MappingData
-	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.FileID, &data.User, &data.SubmissionFilePath, &data.SubmissionLocation); err != nil {
+	data := &MappingData{}
+	var submissionLocation sql.NullString
+	if err := dbs.DB.QueryRow(query, accessionID).Scan(&data.FileID, &data.User, &data.SubmissionFilePath, &submissionLocation); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		log.Warnf("Error while searching for id %s: %v", accessionID, err)
 
-		return MappingData{}, err
+		return nil, err
+	}
+
+	if submissionLocation.Valid {
+		data.SubmissionLocation = submissionLocation.String
 	}
 
 	return data, nil
