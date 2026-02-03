@@ -6,8 +6,8 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.21.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.21.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/aws/smithy-go v1.24.0
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/casbin/casbin/v2 v2.135.0
@@ -19,7 +19,7 @@ require (
 	github.com/iris-contrib/middleware/cors v0.0.0-20250207234507-372f6828ef8c
 	github.com/kataras/iris/v12 v12.2.11
 	github.com/lestrrat-go/jwx/v2 v2.1.6
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/mocktools/go-smtp-mock v1.10.0
 	github.com/neicnordic/crypt4gh v1.14.1
