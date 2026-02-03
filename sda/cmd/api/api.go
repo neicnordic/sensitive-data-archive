@@ -459,7 +459,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, location, err := Conf.API.DB.GetSubmissionPathAndLocation(c, submissionUser, fileID)
+	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -550,7 +550,7 @@ func downloadFile(c *gin.Context) {
 
 	// Retrieve the actual file path for the user's file.
 	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, location, err := Conf.API.DB.GetSubmissionPathAndLocation(c,
+	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c,
 		strings.TrimPrefix(c.Param("username"), "/"),
 		fileID,
 	)
