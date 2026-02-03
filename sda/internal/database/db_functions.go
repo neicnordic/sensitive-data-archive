@@ -65,7 +65,7 @@ func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, upload
 	return createdFileID, err
 }
 
-// GetUploadedFilePathAndLocation returns the submission file path and location for a given user and fileID
+// GetUploadedSubmissionFilePathAndLocation returns the submission file path and location for a given user and fileID
 // for a file which last event was 'uploaded' or
 func (dbs *SDAdb) GetUploadedSubmissionFilePathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error) {
 	dbs.checkAndReconnectIfNeeded()
@@ -88,13 +88,14 @@ WHERE
 	  WHERE event = 'uploaded' OR event = 'disabled'
     );`
 
-	var filePath, location string
+	var filePath string
+	var location sql.NullString
 	err := db.QueryRowContext(ctx, getFilePath, submissionUser, fileID).Scan(&filePath, &location)
 	if err != nil {
 		return "", "", err
 	}
-
-	return filePath, location, nil
+	// dont really care if location is valid, we just want null -> ""
+	return filePath, location.String, nil
 }
 
 // GetFileIDByUserPathAndStatus checks if a file exists in the database for a given user and submission filepath
