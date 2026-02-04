@@ -43,18 +43,21 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
 	client, endpointConf, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
 	objectSize, err := reader.getFileSize(ctx, client, bucket, filePath)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
@@ -79,8 +82,8 @@ func (r *s3SeekableReader) Close() error {
 	if r.objectReader != nil {
 		_ = r.objectReader.Close()
 	}
-
 	r.cancel()
+
 	return nil
 }
 

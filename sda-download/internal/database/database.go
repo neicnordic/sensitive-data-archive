@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -138,7 +139,7 @@ func (dbs *SQLdb) getVersion() (int64, error) {
 		return 0, err
 	}
 	if !version.Valid {
-		return 0, fmt.Errorf("database schema version not initialized")
+		return 0, errors.New("database schema version not initialized")
 	}
 
 	return version.Int64, nil
