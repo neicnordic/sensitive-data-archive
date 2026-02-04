@@ -204,8 +204,8 @@ func handleMessage(delivered amqp.Delivery) {
 	if err != nil {
 		log.Errorf("failed to get archive location of file: %s, error: %v", message.FileID, err)
 
-		if err := delivered.Nack(false, false); err != nil {
-			log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 		}
 	}
 	if archiveLocation == "" {
