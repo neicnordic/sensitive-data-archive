@@ -46,7 +46,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 		return nil, err
 	}
 
-	client, err := reader.getS3ClientForEndpoint(ctx, endpoint)
+	client, endpointConf, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -56,15 +56,6 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	if err != nil {
 		cancel()
 		return nil, err
-	}
-
-	var chunkSizeBytes uint64
-	for _, e := range reader.endpoints {
-		if e.Endpoint == endpoint {
-			chunkSizeBytes = e.chunkSizeBytes
-
-			break
-		}
 	}
 
 	return &s3SeekableReader{
@@ -78,7 +69,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 		outstandingPrefetches: make([]int64, 0, 32),
 		seeked:                false,
 		objectReader:          nil,
-		chunkSize:             chunkSizeBytes,
+		chunkSize:             endpointConf.chunkSizeBytes,
 		ctx:                   ctx,
 		cancel:                cancel,
 	}, nil

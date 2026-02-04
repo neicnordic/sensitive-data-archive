@@ -18,7 +18,7 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 		return nil, err
 	}
 
-	client, err := reader.getS3ClientForEndpoint(ctx, endpoint)
+	client, _, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
