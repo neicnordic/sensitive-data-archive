@@ -37,7 +37,7 @@ func sanitizeString(str string) string {
 	return pattern.ReplaceAllString(str, "[identifier]: $1")
 }
 
-func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+func reencryptHeader(ctx context.Context, oldHeader []byte, reencKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
@@ -92,7 +92,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	defer conn.Close()
 
 	timeoutDuration := time.Duration(config.Config.Reencrypt.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	ctx, cancel := context.WithTimeout(ctx, timeoutDuration)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
@@ -320,9 +320,9 @@ func Download(c *gin.Context) {
 	// Get archive file handle
 	var file io.Reader
 	if wholeFile {
-		file, err = ArchiveReader.NewFileReader(context.Background(), fileDetails.ArchiveLocation, fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	} else {
-		file, err = ArchiveReader.NewFileReadSeeker(context.Background(), fileDetails.ArchiveLocation, fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReadSeeker(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	}
 
 	if err != nil {
@@ -358,7 +358,7 @@ func Download(c *gin.Context) {
 		// Size of the header in the archive
 		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
 		if reencKey != "" {
-			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
+			newHeader, _ := reencryptHeader(c, fileDetails.Header, reencKey)
 			headerSize = bytes.NewReader(newHeader).Size()
 			// Size of the header if the file is re-encrypted before downloading
 			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
@@ -386,7 +386,7 @@ func Download(c *gin.Context) {
 		}
 
 		log.Debugf("Public key from the request header = %v", reencKey)
-		newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+		newHeader, err := reencryptHeader(c, fileDetails.Header, reencKey)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
@@ -418,7 +418,7 @@ func Download(c *gin.Context) {
 		}
 	default:
 		// Reencrypt header for use with the loaded internal key
-		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.C4GH.PublicKeyB64)
+		newHeader, err := reencryptHeader(c, fileDetails.Header, config.Config.C4GH.PublicKeyB64)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
