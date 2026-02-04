@@ -61,7 +61,7 @@ func init() {
 
 	archiveReader, err := storage.NewReader(context.Background(), "archive")
 	if err != nil {
-		log.Panicf("Error initiating storage backend, reason: %v", err)
+		log.Panicf("Error initiating archive storage reader, reason: %v", err)
 	}
 	sda.ArchiveReader = archiveReader
 }
