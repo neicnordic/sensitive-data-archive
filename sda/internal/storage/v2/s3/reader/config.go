@@ -77,6 +77,7 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				if s > 1*datasize.GB {
 					return nil, errors.New("chunk_size can not be bigger than 1gb")
 				}
+				e.chunkSizeBytes = s.Bytes()
 			}
 			if e.Region == "" {
 				e.Region = "us-east-1"
