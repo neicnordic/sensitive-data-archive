@@ -43,20 +43,20 @@ func NewReader(ctx context.Context, backendName string) (*Reader, error) {
 	return backend, nil
 }
 
-func (reader *Reader) getS3ClientForEndpoint(ctx context.Context, endpoint string) (*s3.Client, error) {
+func (reader *Reader) getS3ClientForEndpoint(ctx context.Context, endpoint string) (*s3.Client, *endpointConfig, error) {
 	for _, e := range reader.endpoints {
 		if e.Endpoint != endpoint {
 			continue
 		}
 		client, err := e.getS3Client(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpoint, err)
+			return nil, nil, fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpoint, err)
 		}
 
-		return client, nil
+		return client, e, nil
 	}
 
-	return nil, storageerrors.ErrorNoEndpointConfiguredForLocation
+	return nil, nil, storageerrors.ErrorNoEndpointConfiguredForLocation
 }
 
 // parseLocation attempts to parse a location to a s3 endpoint, and a bucket
