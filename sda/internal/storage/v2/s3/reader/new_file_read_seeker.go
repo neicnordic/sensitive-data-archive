@@ -31,7 +31,7 @@ type s3SeekableReader struct {
 	lock                  sync.Mutex
 	outstandingPrefetches []int64
 	seeked                bool
-	objectReader          io.Reader
+	objectReader          io.ReadCloser
 	chunkSize             uint64
 }
 
@@ -75,7 +75,11 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	}, nil
 }
 
-func (r *s3SeekableReader) Close() (err error) {
+func (r *s3SeekableReader) Close() error {
+	if r.objectReader != nil {
+		_ = r.objectReader.Close()
+	}
+
 	return nil
 }
 
@@ -131,6 +135,11 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 		Key:    aws.String(r.filePath),
 		Range:  wantedRange,
 	})
+	defer func() {
+		if object != nil && object.Body != nil {
+			_ = object.Body.Close()
+		}
+	}()
 
 	r.lock.Lock()
 
@@ -269,6 +278,7 @@ func (r *s3SeekableReader) wholeReader(dst []byte) (int, error) {
 		}
 
 		// Store for future use
+		// object.Body will be closed by r.Close()
 		r.objectReader = object.Body
 	}
 
@@ -338,6 +348,11 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		Key:    key,
 		Range:  wantedRange,
 	})
+	defer func() {
+		if object != nil && object.Body != nil {
+			_ = object.Body.Close()
+		}
+	}()
 
 	r.lock.Lock()
 
