@@ -285,7 +285,9 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	if err != nil {
 		return fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	contentReader, contentWriter := io.Pipe()
 	go func() {
