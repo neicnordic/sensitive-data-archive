@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -45,10 +46,8 @@ func (ts *ReaderTestSuite) SetupSuite() {
 	if _, err = bigFile.WriteString("This is a big file for testing seekable s3 reader"); err != nil {
 		ts.FailNow("failed to write big test file", err)
 	}
-	for range 6 * 1000 * 1000 {
-		if _, err = bigFile.WriteString("a"); err != nil {
-			ts.FailNow("failed to write big test file", err)
-		}
+	if _, err := bigFile.Write(bytes.Repeat([]byte{'a'}, 6*1000*1000)); err != nil {
+		ts.FailNow("failed to write big test file", err)
 	}
 	if _, err = bigFile.WriteString("file is ending now"); err != nil {
 		ts.FailNow("failed to write big test file", err)

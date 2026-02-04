@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	log "github.com/sirupsen/logrus"
 )
 
 // s3CacheBlock is used to keep track of cached data
@@ -43,18 +45,21 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
 	client, endpointConf, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
 	objectSize, err := reader.getFileSize(ctx, client, bucket, filePath)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
@@ -79,8 +84,8 @@ func (r *s3SeekableReader) Close() error {
 	if r.objectReader != nil {
 		_ = r.objectReader.Close()
 	}
-
 	r.cancel()
+
 	return nil
 }
 
@@ -150,10 +155,18 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 		return
 	}
 
-	responseRange := fmt.Sprintf("bytes %d-", r.currentOffset)
+	if object.ContentRange == nil {
+		return
+	}
 
-	if object.ContentRange == nil || !strings.HasPrefix(*object.ContentRange, responseRange) {
-		// Unexpected content range - ignore
+	contentRange, err := parseContentRange(*object.ContentRange)
+	if err != nil {
+		log.Errorf("failed to parse content range: %v", err)
+
+		return
+	}
+
+	if r.currentOffset < contentRange.start || r.currentOffset > contentRange.end {
 		return
 	}
 
@@ -363,10 +376,17 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 		return 0, err
 	}
 
-	responseRange := fmt.Sprintf("bytes %d-", r.currentOffset)
+	if object.ContentRange == nil {
+		return 0, errors.New("unexpected nil content range")
+	}
 
-	if object.ContentRange == nil || !strings.HasPrefix(*object.ContentRange, responseRange) {
-		return 0, fmt.Errorf("unexpected content range %v - expected prefix %v", object.ContentRange, responseRange)
+	contentRange, err := parseContentRange(*object.ContentRange)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse content range: %v", err)
+	}
+
+	if r.currentOffset < contentRange.start || r.currentOffset > contentRange.end {
+		return 0, fmt.Errorf("unexpected content range %v - expected %v to be witin the content range", *object.ContentRange, r.currentOffset)
 	}
 
 	b := bytes.Buffer{}
@@ -382,4 +402,55 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	go r.prefetchAt(r.currentOffset)
 
 	return n, err
+}
+
+type contentRange struct {
+	start int64
+	end   int64
+	size  int64 // -1 if unknown (*)
+}
+
+// parseContentRange parses a content range header, with the format bytes $start-$end/$size
+func parseContentRange(v string) (*contentRange, error) {
+	if !strings.HasPrefix(v, "bytes ") {
+		return nil, errors.New("invalid Content-Range header")
+	}
+
+	v = strings.TrimPrefix(v, "bytes ")
+	parts := strings.Split(v, "/")
+	if len(parts) != 2 {
+		return nil, errors.New("invalid Content-Range")
+	}
+
+	rangePart := parts[0]
+	sizePart := parts[1]
+
+	re := strings.Split(rangePart, "-")
+	if len(re) != 2 {
+		return nil, errors.New("invalid Content-Range header")
+	}
+
+	start, err := strconv.ParseInt(re[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse start in content range header: %v", err)
+	}
+
+	end, err := strconv.ParseInt(re[1], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse end in content range header: %v", err)
+	}
+
+	size := int64(-1)
+	if sizePart != "*" {
+		size, err = strconv.ParseInt(sizePart, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse size in content range header: %v", err)
+		}
+	}
+
+	return &contentRange{
+		start: start,
+		end:   end,
+		size:  size,
+	}, nil
 }
