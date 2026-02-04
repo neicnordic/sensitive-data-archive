@@ -362,4 +362,4 @@ storage:
   inbox:
     ${STORAGE_IMPLEMENTATION}:
 ```
-For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/READMD.md)
+For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
