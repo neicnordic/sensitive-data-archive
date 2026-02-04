@@ -33,21 +33,28 @@ type s3SeekableReader struct {
 	seeked                bool
 	objectReader          io.ReadCloser
 	chunkSize             uint64
+	ctx                   context.Context
+	cancel                context.CancelFunc
 }
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	client, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	objectSize, err := reader.getFileSize(ctx, client, bucket, filePath)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -72,6 +79,8 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 		seeked:                false,
 		objectReader:          nil,
 		chunkSize:             chunkSizeBytes,
+		ctx:                   ctx,
+		cancel:                cancel,
 	}, nil
 }
 
@@ -80,6 +89,7 @@ func (r *s3SeekableReader) Close() error {
 		_ = r.objectReader.Close()
 	}
 
+	r.cancel()
 	return nil
 }
 
@@ -130,7 +140,7 @@ func (r *s3SeekableReader) prefetchAt(offset int64) {
 
 	wantedRange := aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+prefetchSize-1))
 
-	object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
+	object, err := r.client.GetObject(r.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
 		Key:    aws.String(r.filePath),
 		Range:  wantedRange,
@@ -268,7 +278,7 @@ func (r *s3SeekableReader) isPrefetching(offset int64) bool {
 func (r *s3SeekableReader) wholeReader(dst []byte) (int, error) {
 	if r.objectReader == nil {
 		// First call, setup a reader for the object
-		object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
+		object, err := r.client.GetObject(r.ctx, &s3.GetObjectInput{
 			Bucket: aws.String(r.bucket),
 			Key:    aws.String(r.filePath),
 		})
@@ -343,7 +353,7 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 
 	r.lock.Unlock()
 
-	object, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
+	object, err := r.client.GetObject(r.ctx, &s3.GetObjectInput{
 		Bucket: bucket,
 		Key:    key,
 		Range:  wantedRange,
