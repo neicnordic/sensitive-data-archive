@@ -19,7 +19,7 @@ func (reader *Reader) GetFileSize(ctx context.Context, location, filePath string
 		return 0, err
 	}
 
-	client, err := reader.getS3ClientForEndpoint(ctx, endpoint)
+	client, _, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		return 0, err
 	}
