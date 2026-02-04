@@ -580,6 +580,9 @@ func downloadFile(c *gin.Context) {
 
 		return
 	}
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// get the header of the crypt4gh file
 	header, err := headers.ReadHeader(file)
