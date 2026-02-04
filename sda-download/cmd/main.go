@@ -33,7 +33,7 @@ func init() {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
 	if db.Version < 23 {
-		log.Panicf("database schema v23 is required")
+		log.Panic("database schema v23 is required")
 	}
 	database.DB = db
 
@@ -81,9 +81,13 @@ func main() {
 
 	if config.Config.App.ServerCert != "" && config.Config.App.ServerKey != "" {
 		log.Infof("Web server is ready to receive connections at https://%s:%d", config.Config.App.Host, config.Config.App.Port)
-		log.Fatal(srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey))
+		if err := srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey); err != nil {
+			log.Panic(err)
+		}
 	}
 
 	log.Infof("Web server is ready to receive connections at http://%s:%d", config.Config.App.Host, config.Config.App.Port)
-	log.Fatal(srv.ListenAndServe())
+	if err := srv.ListenAndServe(); err != nil {
+		log.Panic(err)
+	}
 }
