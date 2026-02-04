@@ -21,7 +21,7 @@ var DB *SQLdb
 // SQLdb struct that acts as a receiver for the DB update methods
 type SQLdb struct {
 	DB       *sql.DB
-	Version  int
+	Version  int64
 	ConnInfo string
 }
 
@@ -126,17 +126,22 @@ func (dbs *SQLdb) checkAndReconnectIfNeeded() {
 	}
 }
 
-func (dbs *SQLdb) getVersion() (int, error) {
+func (dbs *SQLdb) getVersion() (int64, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	log.Debug("Fetching database schema version")
 
 	query := "SELECT MAX(version) FROM sda.dbschema_version;"
 
-	var dbVersion = -1
-	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
+	var version sql.NullInt64
+	if err := dbs.DB.QueryRow(query).Scan(&version); err != nil {
+		return 0, err
+	}
+	if !version.Valid {
+		return 0, fmt.Errorf("database schema version not initialized")
+	}
 
-	return dbVersion, err
+	return version.Int64, nil
 }
 
 // GetFiles retrieves the file details
