@@ -916,11 +916,11 @@ func (dbs *SDAdb) getArchivePath(stableID string) (string, error) {
 func (dbs *SDAdb) GetArchiveLocation(fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
-	const getFileID = "SELECT archive_location from sda.files WHERE id = $1;"
+	const getArchiveLocation = "SELECT archive_location from sda.files WHERE id = $1;"
 
 	var archiveLocation sql.NullString
 
-	if err := db.QueryRow(getFileID, fileID).Scan(&archiveLocation); err != nil {
+	if err := db.QueryRow(getArchiveLocation, fileID).Scan(&archiveLocation); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
