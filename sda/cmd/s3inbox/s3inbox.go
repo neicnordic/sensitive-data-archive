@@ -52,7 +52,6 @@ func run() error {
 	}
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
-	log.Println(conf.S3Inbox.Endpoint + "/BUCKET == " + conf.S3Inbox.Bucket)
 	s3Client, err := newS3Client(conf.S3Inbox)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
