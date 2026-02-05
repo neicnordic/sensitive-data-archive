@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
 
@@ -135,20 +134,18 @@ func run() error {
 }
 
 func checkS3Bucket(ctx context.Context, bucket string, s3Client *s3.Client) error {
-	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
+	_, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &bucket})
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
-			var bae *types.BucketAlreadyExists
-			var baoby *types.BucketAlreadyOwnedByYou
-			if errors.As(err, &bae) || errors.As(err, &baoby) {
-				return nil
+			if apiErr.ErrorCode() == "NotFound" {
+				return fmt.Errorf("bucket: %s does not exists at the configured s3 endpoint", bucket)
 			}
 
-			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
+			return fmt.Errorf("unexpected issue while checking bucket: %s exists, due to %v", bucket, err)
 		}
 
-		return fmt.Errorf("verifying bucket failed, check S3 configuration: %s", err.Error())
+		return fmt.Errorf("verifying bucket failed, check S3 configuration: %v", err)
 	}
 
 	return nil
@@ -166,12 +163,12 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 
 	cfg.RootCAs = systemCAs
 
-	if c.CAcert != "" {
-		cacert, e := os.ReadFile(c.CAcert)
+	if c.CaCert != "" {
+		caCert, e := os.ReadFile(c.CaCert)
 		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
+			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", caCert, e)
 		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
+		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
 		}
 	}
