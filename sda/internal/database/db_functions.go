@@ -882,7 +882,7 @@ func (dbs *SDAdb) checkIfDatasetExists(datasetID string) (bool, error) {
 	return yesNo, nil
 }
 
-// GetArchivePathAndLocation retrieves the submission_fie_path for a file with a given accessionID
+// GetArchivePathAndLocation retrieves the archive_file_path and archive_location for a file with a given stableID(accessionID)
 func (dbs *SDAdb) GetArchivePathAndLocation(stableID string) (string, string, error) {
 	var (
 		err             error
