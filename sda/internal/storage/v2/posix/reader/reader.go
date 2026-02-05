@@ -28,7 +28,7 @@ func NewReader(backendName string) (*Reader, error) {
 		}
 
 		if !fileInfo.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory", loc)
+			return nil, fmt.Errorf("%s is not a directory", loc.Path)
 		}
 	}
 	if len(backend.configuredEndpoints) == 0 {
