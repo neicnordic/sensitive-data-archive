@@ -294,17 +294,20 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 
 	contentReader, contentWriter := io.Pipe()
 	go func() {
-		// Copy the file and check is sizes match
-		copiedSize, err := io.Copy(contentWriter, file)
-		if err != nil || copiedSize != int64(archiveData.FileSize) {
-			log.Errorf("failed to copy file, reason: %v)", err)
+		defer func() {
+			_ = contentWriter.Close()
+		}()
+
+		if copiedSize, err := io.Copy(contentWriter, file); err != nil {
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to copy file, reason: %v)", err))
+		} else if copiedSize != int64(archiveData.FileSize) {
+			_ = contentWriter.CloseWithError(errors.New("copied size does not match file size"))
 		}
-		_ = contentWriter.Close()
 	}()
 
 	_, err = backupWriter.WriteFile(ctx, archiveData.FilePath, contentReader)
 	if err != nil {
-		return fmt.Errorf("failed to open backup file for writing, reason: %v", err)
+		return fmt.Errorf("failed to write file to backup storage, reason: %v", err)
 	}
 	_ = contentReader.Close()
 
