@@ -84,7 +84,7 @@ func run() error {
 	consumerErr := make(chan error, 1)
 	log.Info("starting verify service")
 	go func() {
-		consumerErr <- startConsumer()
+		consumerErr <- startConsumer(ctx)
 	}()
 
 	sigc := make(chan os.Signal, 5)
@@ -102,20 +102,21 @@ func run() error {
 
 	return nil
 }
-func startConsumer() error {
+func startConsumer(ctx context.Context) error {
 	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
 	if err != nil {
 		return fmt.Errorf("failed to get messages (error: %v) ", err)
 	}
 	for delivered := range messages {
-		handleMessage(delivered)
+		handleMessage(ctx, delivered)
 	}
 
 	return nil
 }
 
-func handleMessage(delivered amqp.Delivery) {
-	ctx := context.Background()
+func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", mqBroker.Conf.SchemasPath), delivered.Body)
 	if err != nil {
