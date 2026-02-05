@@ -153,20 +153,17 @@ func checkS3Bucket(bucket string, s3Client *s3.Client) error {
 func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	cfg := new(tls.Config)
 
-	log.Debug("setting up TLS for S3 connection")
-
 	// Read system CAs
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
-		log.Errorf("failed to read system CAs: %v", err)
-
-		return nil, err
+		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
+		systemCAs = x509.NewCertPool()
 	}
 
 	cfg.RootCAs = systemCAs
 
 	if c.CAcert != "" {
-		cacert, e := os.ReadFile(c.CAcert) // #nosec this file comes from our configuration
+		cacert, e := os.ReadFile(c.CAcert)
 		if e != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
 		}
