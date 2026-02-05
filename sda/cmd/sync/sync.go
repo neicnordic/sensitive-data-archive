@@ -236,26 +236,22 @@ func syncFiles(ctx context.Context, stableID string) error {
 	}
 
 	contentReader, contentWriter := io.Pipe()
-	// Ensure contentReader, contentWriter are closed in case error
-	defer func() {
-		_ = contentWriter.Close()
-		_ = contentReader.Close()
+
+	go func() {
+		defer func() {
+			_ = contentWriter.Close()
+		}()
+		if _, err := contentWriter.Write(newHeader); err != nil {
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to write header, reason: %v", err))
+
+			return
+		}
+		if copiedSize, err := io.Copy(contentWriter, file); err != nil {
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to write file content, reason: %v", err))
+		} else if copiedSize != fileSize {
+			_ = contentWriter.CloseWithError(errors.New("copied size does not match file size"))
+		}
 	}()
-
-	if _, err := contentWriter.Write(newHeader); err != nil {
-		return fmt.Errorf("failed to write header, reason: %v", err)
-	}
-
-	// Copy the file and check is sizes match
-	copiedSize, err := io.Copy(contentWriter, file)
-	switch {
-	case err != nil:
-		return fmt.Errorf("failed to write file content, reason: %v", err)
-	case copiedSize != fileSize:
-		return errors.New("copied size does not match file size")
-	default:
-	}
-	_ = contentWriter.Close()
 
 	_, err = syncWriter.WriteFile(ctx, inboxPath, contentReader)
 	if err != nil {
