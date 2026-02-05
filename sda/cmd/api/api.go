@@ -116,12 +116,12 @@ func run() error {
 	go func() {
 		if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
 			log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
-			if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
+			if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
 			}
 		} else {
 			log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
-			if err := srv.ListenAndServe(); err != nil {
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
 			}
 		}
