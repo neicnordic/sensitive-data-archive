@@ -117,7 +117,7 @@ func run() error {
 
 	consumeErr := make(chan error, 1)
 	go func() {
-		consumeErr <- app.startConsumer()
+		consumeErr <- app.startConsumer(ctx)
 	}()
 
 	sigc := make(chan os.Signal, 5)
@@ -136,72 +136,77 @@ func run() error {
 	return nil
 }
 
-func (app *Ingest) startConsumer() error {
+func (app *Ingest) startConsumer(ctx context.Context) error {
 	messages, err := app.MQ.GetMessages(app.MQ.Conf.Queue)
 	if err != nil {
 		return err
 	}
 
 	for delivered := range messages {
-		ctx := context.Background()
-		log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
-		message := schema.IngestionTrigger{}
-		err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.MQ.Conf.SchemasPath), delivered.Body)
-		if err != nil {
-			log.Errorf("validation of incoming message (ingestion-trigger) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
-			// Send the message to an error queue so it can be analyzed.
-			infoErrorMessage := broker.InfoError{
-				Error:           "Message validation failed",
-				Reason:          err.Error(),
-				OriginalMessage: message,
-			}
-
-			body, _ := json.Marshal(infoErrorMessage)
-			if err := app.MQ.SendMessage(delivered.CorrelationId, app.MQ.Conf.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, reason: %v", err)
-			}
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("Failed acking canceled work, reason: %v", err)
-			}
-
-			continue
-		}
-
-		// we unmarshal the message in the validation step so this is safe to do
-		_ = json.Unmarshal(delivered.Body, &message)
-		log.Infof("Received work (correlation-id: %s, filepath: %s, user: %s)", delivered.CorrelationId, message.FilePath, message.User)
-
-		ackNack := ""
-		switch message.Type {
-		case "cancel":
-			ackNack = app.cancelFile(ctx, delivered.CorrelationId, message)
-		case "ingest":
-			ackNack = app.ingestFile(ctx, delivered.CorrelationId, message)
-		default:
-			log.Errorln("unexpected ingest message type")
-			if err := delivered.Reject(false); err != nil {
-				log.Errorf("failed to reject message, reason: %v", err)
-			}
-		}
-
-		switch ackNack {
-		case "ack":
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to ack message, reason: %v", err)
-			}
-		case "nack":
-			if err = delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to Nack message, reason: %v", err)
-			}
-		default:
-			// will catch `reject`s, failures that should not be requeued.
-			if err := delivered.Reject(false); err != nil {
-				log.Errorf("failed to reject message, reason: %v", err)
-			}
-		}
+		app.handleMessage(ctx, delivered)
 	}
 
 	return nil
+}
+
+func (app *Ingest) handleMessage(ctx context.Context, delivered amqp.Delivery) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
+	message := schema.IngestionTrigger{}
+	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.MQ.Conf.SchemasPath), delivered.Body)
+	if err != nil {
+		log.Errorf("validation of incoming message (ingestion-trigger) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+		// Send the message to an error queue so it can be analyzed.
+		infoErrorMessage := broker.InfoError{
+			Error:           "Message validation failed",
+			Reason:          err.Error(),
+			OriginalMessage: message,
+		}
+
+		body, _ := json.Marshal(infoErrorMessage)
+		if err := app.MQ.SendMessage(delivered.CorrelationId, app.MQ.Conf.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: %v", err)
+		}
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("Failed acking canceled work, reason: %v", err)
+		}
+
+		return
+	}
+
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &message)
+	log.Infof("Received work (correlation-id: %s, filepath: %s, user: %s)", delivered.CorrelationId, message.FilePath, message.User)
+
+	ackNack := ""
+	switch message.Type {
+	case "cancel":
+		ackNack = app.cancelFile(ctx, delivered.CorrelationId, message)
+	case "ingest":
+		ackNack = app.ingestFile(ctx, delivered.CorrelationId, message)
+	default:
+		log.Errorln("unexpected ingest message type")
+		if err := delivered.Reject(false); err != nil {
+			log.Errorf("failed to reject message, reason: %v", err)
+		}
+	}
+
+	switch ackNack {
+	case "ack":
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to ack message, reason: %v", err)
+		}
+	case "nack":
+		if err = delivered.Nack(false, false); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+	default:
+		// will catch `reject`s, failures that should not be requeued.
+		if err := delivered.Reject(false); err != nil {
+			log.Errorf("failed to reject message, reason: %v", err)
+		}
+	}
 }
 
 func (app *Ingest) registerC4GHKey() error {
