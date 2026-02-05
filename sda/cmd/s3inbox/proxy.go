@@ -239,7 +239,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[fileIdentifier])
 		}
 
-		if err := p.storeObjectSizeInDB(rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
+		if err := p.storeObjectSizeInDB(r.Context(), rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
@@ -508,7 +508,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anon
 	checksum := Checksum{}
 	var err error
 
-	checksum.Value, event.Filesize, err = p.requestInfo(r.URL.Path)
+	checksum.Value, event.Filesize, err = p.requestInfo(r.Context(), r.URL.Path)
 	if err != nil {
 		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
@@ -528,9 +528,9 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anon
 
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
-func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
+func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
-	client, err := newS3Client(p.s3Conf)
+	client, err := newS3Client(ctx, p.s3Conf)
 	if err != nil {
 		return "", 0, err
 	}
@@ -540,7 +540,7 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 		Key:    aws.String(filePath),
 	}
 
-	result, err := client.HeadObject(context.TODO(), input)
+	result, err := client.HeadObject(ctx, input)
 	if err != nil {
 		log.Debug(err.Error())
 
@@ -554,14 +554,14 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.ETag, "\"", "")))), *result.ContentLength, nil
 }
 
-func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
+func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, error) {
 	tlsConfig, err := configTLS(conf)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	s3cfg, err := s3config.LoadDefaultConfig(
-		context.TODO(),
+		ctx,
 		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
 		s3config.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true}}),
 	)
@@ -586,14 +586,14 @@ func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
 
 // checkFileExists makes a request to the S3 to check whether the file already
 // is uploaded. Returns a bool indicating whether the file was found.
-func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
+func (p *Proxy) checkFileExists(ctx context.Context, fullPath string) (bool, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
-	client, err := newS3Client(p.s3Conf)
+	client, err := newS3Client(ctx, p.s3Conf)
 	if err != nil {
 		return false, fmt.Errorf("could not connect to s3: %v", err)
 	}
 
-	result, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+	result, err := client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
 		Key:    aws.String(filePath),
 	})
@@ -608,7 +608,7 @@ func (p *Proxy) checkFileExists(fullPath string) (bool, error) {
 }
 
 func (p *Proxy) sendMessageOnOverwrite(fileID string, r *http.Request, rawFilepath string, token jwt.Token) error {
-	exist, err := p.checkFileExists(r.URL.Path)
+	exist, err := p.checkFileExists(r.Context(), r.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -683,13 +683,13 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 	}
 }
 
-func (p *Proxy) storeObjectSizeInDB(path, fileID string) error {
-	client, err := newS3Client(p.s3Conf)
+func (p *Proxy) storeObjectSizeInDB(ctx context.Context, path, fileID string) error {
+	client, err := newS3Client(ctx, p.s3Conf)
 	if err != nil {
 		return err
 	}
 
-	o, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+	o, err := client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
 		Key:    aws.String(path),
 	})
