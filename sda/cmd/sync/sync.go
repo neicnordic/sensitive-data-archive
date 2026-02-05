@@ -62,7 +62,7 @@ func run() error {
 		return errors.New("database schema v23 is required")
 	}
 
-	mqBroker, err = broker.NewMQ(mqBroker.Conf)
+	mqBroker, err = broker.NewMQ(conf.Broker)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
