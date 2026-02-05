@@ -33,6 +33,9 @@ func main() {
 	}
 }
 func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var err error
 	conf, err := config.NewConfig("mapper")
 	if err != nil {
@@ -65,7 +68,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize location broker, due to: %v", err)
 	}
-	inboxWriter, err = storage.NewWriter(context.Background(), "inbox", lb)
+	inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
 	if err != nil {
 		return fmt.Errorf("failed to initialize inbox writer, due to: %v", err)
 	}
@@ -73,7 +76,7 @@ func run() error {
 	log.Info("Starting mapper service")
 	consumeErr := make(chan error, 1)
 	go func() {
-		consumeErr <- startConsumer()
+		consumeErr <- startConsumer(ctx)
 	}()
 
 	sigc := make(chan os.Signal, 5)
@@ -91,113 +94,119 @@ func run() error {
 
 	return nil
 }
-func startConsumer() error {
+func startConsumer(ctx context.Context) error {
 	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
 	if err != nil {
 		return fmt.Errorf("failed to get message from mq (error: %v)", err)
 	}
 
 	for delivered := range messages {
-		log.Debugf("received a message: %s", delivered.Body)
-		schemaType, err := schemaFromDatasetOperation(delivered.Body)
-		if err != nil {
-			log.Errorf("%s", err.Error())
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to ack message: %v", err)
-			}
-			if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", delivered.Body); err != nil {
-				log.Errorf("failed to send error message: %v", err)
-			}
-
-			continue
-		}
-
-		err = schema.ValidateJSON(fmt.Sprintf("%s/%s.json", mqBroker.Conf.SchemasPath, schemaType), delivered.Body)
-		if err != nil {
-			log.Errorf("validation of incoming message (%s) failed, reason: %v ", schemaType, err)
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed acking canceled work, reason: %v", err)
-			}
-
-			continue
-		}
-
-		// we unmarshal the message in the validation step so this is safe to do
-		_ = json.Unmarshal(delivered.Body, &mappings)
-
-		switch mappings.Type {
-		case "mapping":
-			log.Debug("mapping type operation, mapping files to dataset")
-			if err := db.MapFilesToDataset(mappings.DatasetID, mappings.AccessionIDs); err != nil {
-				log.Errorf("failed to map files to dataset, dataset-id: %s, reason: %v", mappings.DatasetID, err)
-
-				// Nack message so the server gets notified that something is wrong and requeue the message
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				continue
-			}
-
-			for _, aID := range mappings.AccessionIDs {
-				log.Debugf("Mapped file to dataset (correlation-id: %s, datasetid: %s, accessionid: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
-				fileMappingData, err := db.GetMappingData(aID)
-				if err != nil {
-					log.Errorf("failed to get file info for file with stable ID: %s, can not remove file from inbox", aID)
-
-					continue
-				}
-
-				if fileMappingData == nil || fileMappingData.SubmissionLocation == "" {
-					log.Errorf("failed to find submission location for file with stable ID: %s, can not remove file from inbox", aID)
-
-					continue
-				}
-
-				err = inboxWriter.RemoveFile(context.Background(), fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User))
-				if err != nil {
-					log.Errorf("remove file: %s failed, reason: %v", fileMappingData.FileID, err)
-				}
-			}
-
-			if err := db.UpdateDatasetEvent(mappings.DatasetID, "registered", string(delivered.Body)); err != nil {
-				log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-				if err = delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-		case "release":
-			log.Debug("release type operation, marking dataset as released")
-			if err := db.UpdateDatasetEvent(mappings.DatasetID, "released", string(delivered.Body)); err != nil {
-				log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-				if err = delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-		case "deprecate":
-			log.Debug("deprecate type operation, marking dataset as deprecated")
-			if err := db.UpdateDatasetEvent(mappings.DatasetID, "deprecated", string(delivered.Body)); err != nil {
-				log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-				if err = delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-		default:
-			log.Errorf("unknown mapping type, %s", mappings.Type)
-		}
-
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to Ack message, reason: (%v)", err)
-		}
+		handleMessage(ctx, delivered)
 	}
 
 	return nil
+}
+
+func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	log.Debugf("received a message: %s", delivered.Body)
+	schemaType, err := schemaFromDatasetOperation(delivered.Body)
+	if err != nil {
+		log.Errorf("%s", err.Error())
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to ack message: %v", err)
+		}
+		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", delivered.Body); err != nil {
+			log.Errorf("failed to send error message: %v", err)
+		}
+
+		return
+	}
+
+	err = schema.ValidateJSON(fmt.Sprintf("%s/%s.json", mqBroker.Conf.SchemasPath, schemaType), delivered.Body)
+	if err != nil {
+		log.Errorf("validation of incoming message (%s) failed, reason: %v ", schemaType, err)
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed acking canceled work, reason: %v", err)
+		}
+
+		return
+	}
+
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &mappings)
+
+	switch mappings.Type {
+	case "mapping":
+		log.Debug("mapping type operation, mapping files to dataset")
+		if err := db.MapFilesToDataset(mappings.DatasetID, mappings.AccessionIDs); err != nil {
+			log.Errorf("failed to map files to dataset, dataset-id: %s, reason: %v", mappings.DatasetID, err)
+
+			// Nack message so the server gets notified that something is wrong and requeue the message
+			if err := delivered.Nack(false, true); err != nil {
+				log.Errorf("failed to Nack message, reason: (%v)", err)
+			}
+
+			return
+		}
+
+		for _, aID := range mappings.AccessionIDs {
+			log.Debugf("Mapped file to dataset (correlation-id: %s, datasetid: %s, accessionid: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
+			fileMappingData, err := db.GetMappingData(aID)
+			if err != nil {
+				log.Errorf("failed to get file info for file with stable ID: %s, can not remove file from inbox", aID)
+
+				continue
+			}
+
+			if fileMappingData == nil || fileMappingData.SubmissionLocation == "" {
+				log.Errorf("failed to find submission location for file with stable ID: %s, can not remove file from inbox", aID)
+
+				continue
+			}
+
+			err = inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User))
+			if err != nil {
+				log.Errorf("remove file: %s failed, reason: %v", fileMappingData.FileID, err)
+			}
+		}
+
+		if err := db.UpdateDatasetEvent(mappings.DatasetID, "registered", string(delivered.Body)); err != nil {
+			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
+			if err = delivered.Nack(false, false); err != nil {
+				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+			}
+
+			return
+		}
+	case "release":
+		log.Debug("release type operation, marking dataset as released")
+		if err := db.UpdateDatasetEvent(mappings.DatasetID, "released", string(delivered.Body)); err != nil {
+			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
+			if err = delivered.Nack(false, false); err != nil {
+				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+			}
+
+			return
+		}
+	case "deprecate":
+		log.Debug("deprecate type operation, marking dataset as deprecated")
+		if err := db.UpdateDatasetEvent(mappings.DatasetID, "deprecated", string(delivered.Body)); err != nil {
+			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
+			if err = delivered.Nack(false, false); err != nil {
+				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+			}
+
+			return
+		}
+	default:
+		log.Errorf("unknown mapping type, %s", mappings.Type)
+	}
+
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to Ack message, reason: (%v)", err)
+	}
 }
 
 // schemaFromDatasetOperation returns the operation done with dataset supplied in body of the message
