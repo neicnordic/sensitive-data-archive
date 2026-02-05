@@ -581,7 +581,7 @@ func (s *ProxyTests) TestCheckFileExists() {
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
 
-	res, err := proxy.checkFileExists("/dummy/file")
+	res, err := proxy.checkFileExists(context.TODO(), "/dummy/file")
 	assert.True(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -597,7 +597,7 @@ func (s *ProxyTests) TestCheckFileExists_nonExistingFile() {
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 
-	res, err := proxy.checkFileExists("nonexistingfilepath")
+	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -616,7 +616,7 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	proxy.s3Conf.Endpoint = "http://127.0.0.1:1111"
 
-	res, err := proxy.checkFileExists("nonexistingfilepath")
+	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "S3: HeadObject")
@@ -624,7 +624,7 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Bad access key gives 403
 	proxy.s3Conf.Endpoint = s.S3conf.Endpoint
 	proxy.s3Conf.AccessKey = "invaild"
-	res, err = proxy.checkFileExists("nonexistingfilepath")
+	res, err = proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "StatusCode: 403")
@@ -646,7 +646,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
 	assert.NotNil(s.T(), fileID)
 
 	db.Close()
-	assert.NoError(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
 }
 
 func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
@@ -666,11 +666,11 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 
 	// Detect autentication failure
 	p.s3Conf.AccessKey = "badKey"
-	assert.Error(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+	assert.Error(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
 
 	// Detect unresponsive backend service
 	p.s3Conf.Endpoint = "http://127.0.0.1:1234"
-	assert.Error(s.T(), p.storeObjectSizeInDB("/dummy/file", fileID))
+	assert.Error(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
 }
 
 // This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
@@ -714,7 +714,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), output, output)
 
-	assert.NoError(s.T(), p.storeObjectSizeInDB("/test/new_file", fileID))
+	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/test/new_file", fileID))
 
 	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
 	var objectSize int64
