@@ -44,7 +44,7 @@ func run() error {
 
 	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		return fmt.Errorf("failed to initalize sda db, due to: %v", err)
+		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer db.Close()
 	if db.Version < 23 {
@@ -53,7 +53,7 @@ func run() error {
 
 	mqBroker, err = broker.NewMQ(conf.Broker)
 	if err != nil {
-		return fmt.Errorf("failed to initalize mq broker, due to: %v", err)
+		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
 	defer func() {
 		if err := mqBroker.Channel.Close(); err != nil {
