@@ -127,9 +127,11 @@ func run() error {
 		}
 	}()
 	defer func() {
-		if err := srv.Shutdown(context.Background()); err != nil {
+		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := srv.Shutdown(serverShutdownCtx); err != nil {
 			log.Errorf("failed to close http/https server due to: %v", err)
 		}
+		serverShutdownCancel()
 	}()
 
 	sigc := make(chan os.Signal, 5)
