@@ -100,7 +100,7 @@ func run() error {
 		consumeErr <- startConsumer(ctx)
 	}()
 
-	sigc := make(chan os.Signal, 5)
+	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
