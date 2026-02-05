@@ -32,6 +32,8 @@ func main() {
 	}
 }
 func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	conf, err := config.NewConfig("s3inbox")
 	if err != nil {
 		return fmt.Errorf("failed to load config due to: %v", err)
@@ -52,12 +54,12 @@ func run() error {
 	}
 
 	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
-	s3Client, err := newS3Client(conf.S3Inbox)
+	s3Client, err := newS3Client(ctx, conf.S3Inbox)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
 	}
 
-	if err = checkS3Bucket(conf.S3Inbox.Bucket, s3Client); err != nil {
+	if err = checkS3Bucket(ctx, conf.S3Inbox.Bucket, s3Client); err != nil {
 		return fmt.Errorf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
@@ -114,9 +116,11 @@ func run() error {
 		}
 	}()
 	defer func() {
-		if err := server.Shutdown(context.Background()); err != nil {
+		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := server.Shutdown(serverShutdownCtx); err != nil {
 			log.Errorf("failed to close http/https server due to: %v", err)
 		}
+		serverShutdownCancel()
 	}()
 
 	sigc := make(chan os.Signal, 5)
@@ -130,8 +134,8 @@ func run() error {
 	}
 }
 
-func checkS3Bucket(bucket string, s3Client *s3.Client) error {
-	_, err := s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: &bucket})
+func checkS3Bucket(ctx context.Context, bucket string, s3Client *s3.Client) error {
+	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
