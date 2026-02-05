@@ -105,11 +105,11 @@ func run() error {
 	serverErr := make(chan error, 1)
 	go func() {
 		if conf.Server.Cert != "" && conf.Server.Key != "" {
-			if err := server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key); err != nil {
+			if err := server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
 			}
 		} else {
-			if err := server.ListenAndServe(); err != nil {
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
 			}
 		}
