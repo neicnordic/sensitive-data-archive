@@ -166,8 +166,9 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 				continue
 			}
 
-			if err = inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)); err != nil {
-				log.Errorf("remove file: %s failed, reason: %v", fileMappingData.FileID, err)
+			unanonymizedSubmissionFilePath := helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)
+			if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath); err != nil {
+				log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath, err)
 			}
 		}
 
