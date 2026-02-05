@@ -97,7 +97,7 @@ func run() error {
 
 	consumeErr := make(chan error, 1)
 	go func() {
-		consumeErr <- startConsumer()
+		consumeErr <- startConsumer(ctx)
 	}()
 
 	sigc := make(chan os.Signal, 5)
@@ -115,87 +115,92 @@ func run() error {
 
 	return nil
 }
-func startConsumer() error {
+func startConsumer(ctx context.Context) error {
 	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
 	if err != nil {
 		return err
 	}
 	for delivered := range messages {
-		ctx := context.Background()
-		log.Debugf("Received a message (correlation-id: %s, message: %s)",
-			delivered.CorrelationId,
-			delivered.Body)
-
-		err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", mqBroker.Conf.SchemasPath), delivered.Body)
-		if err != nil {
-			log.Errorf("validation of incoming message (dataset-mapping) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
-			// Send the message to an error queue so it can be analyzed.
-			infoErrorMessage := broker.InfoError{
-				Error:           "Message validation failed in sync service",
-				Reason:          err.Error(),
-				OriginalMessage: string(delivered.Body),
-			}
-
-			body, _ := json.Marshal(infoErrorMessage)
-			if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, reason: (%v)", err)
-			}
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-			}
-
-			continue
-		}
-
-		// we unmarshal the message in the validation step so this is safe to do
-		_ = json.Unmarshal(delivered.Body, &message)
-
-		if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
-			log.Infoln("external dataset")
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-			}
-
-			continue
-		}
-
-		var syncFilesErr error
-		for _, aID := range message.AccessionIDs {
-			if err := syncFiles(ctx, aID); err != nil {
-				log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
-				syncFilesErr = err
-
-				break
-			}
-		}
-		if syncFilesErr != nil {
-			if err := delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to nack following GetFileSize error message")
-			}
-
-			continue
-		}
-
-		log.Infoln("buildSyncDatasetJSON")
-		blob, err := buildSyncDatasetJSON(delivered.Body)
-		if err != nil {
-			log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
-		}
-		if err := sendPOST(blob); err != nil {
-			log.Errorf("failed to send POST, Reason: %v", err)
-			if err := delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to nack following sendPOST error message")
-			}
-
-			continue
-		}
-
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-		}
+		handleMessage(ctx, delivered)
 	}
 
 	return nil
+}
+
+func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	log.Debugf("Received a message (correlation-id: %s, message: %s)",
+		delivered.CorrelationId,
+		delivered.Body)
+
+	err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", mqBroker.Conf.SchemasPath), delivered.Body)
+	if err != nil {
+		log.Errorf("validation of incoming message (dataset-mapping) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+		// Send the message to an error queue so it can be analyzed.
+		infoErrorMessage := broker.InfoError{
+			Error:           "Message validation failed in sync service",
+			Reason:          err.Error(),
+			OriginalMessage: string(delivered.Body),
+		}
+
+		body, _ := json.Marshal(infoErrorMessage)
+		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: (%v)", err)
+		}
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+
+		return
+	}
+
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &message)
+
+	if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
+		log.Infoln("external dataset")
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+
+		return
+	}
+
+	var syncFilesErr error
+	for _, aID := range message.AccessionIDs {
+		if err := syncFiles(ctx, aID); err != nil {
+			log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
+			syncFilesErr = err
+
+			break
+		}
+	}
+	if syncFilesErr != nil {
+		if err := delivered.Nack(false, false); err != nil {
+			log.Errorf("failed to nack following GetFileSize error message")
+		}
+
+		return
+	}
+
+	log.Infoln("buildSyncDatasetJSON")
+	blob, err := buildSyncDatasetJSON(delivered.Body)
+	if err != nil {
+		log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
+	}
+	if err := sendPOST(blob); err != nil {
+		log.Errorf("failed to send POST, Reason: %v", err)
+		if err := delivered.Nack(false, false); err != nil {
+			log.Errorf("failed to nack following sendPOST error message")
+		}
+
+		return
+	}
+
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+	}
 }
 
 func syncFiles(ctx context.Context, stableID string) error {
