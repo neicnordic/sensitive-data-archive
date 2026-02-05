@@ -96,13 +96,13 @@ type SyncAPIConf struct {
 }
 
 type S3InboxConf struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	Region    string
-	CAcert    string
-	ReadyPath string
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	Region    string `mapstructure:"region"`
+	CaCert    string `mapstructure:"ca_cert"`
+	ReadyPath string `mapstructure:"ready_path"`
 }
 type APIConf struct {
 	RBACpolicy  []byte
@@ -714,13 +714,9 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.S3Inbox.Endpoint = viper.GetString("s3inbox.endpoint")
-		c.S3Inbox.AccessKey = viper.GetString("s3inbox.access_key")
-		c.S3Inbox.SecretKey = viper.GetString("s3inbox.secret_key")
-		c.S3Inbox.Bucket = viper.GetString("s3inbox.bucket")
-		c.S3Inbox.Region = viper.GetString("s3inbox.region")
-		c.S3Inbox.CAcert = viper.GetString("s3inbox.ca_cert")
-		c.S3Inbox.ReadyPath = viper.GetString("s3inbox.ready_path")
+		if err := viper.UnmarshalKey("s3inbox", &c.S3Inbox); err != nil {
+			return nil, fmt.Errorf("failed to parse key configurations: %v", err)
+		}
 
 		err = c.configServer()
 		if err != nil {
