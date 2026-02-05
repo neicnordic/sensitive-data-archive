@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -12,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -557,10 +555,15 @@ func (p *Proxy) requestInfo(fullPath string) (string, int64, error) {
 }
 
 func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
+	tlsConfig, err := configTLS(conf)
+	if err != nil {
+		return nil, err
+	}
+	
 	s3cfg, err := s3config.LoadDefaultConfig(
 		context.TODO(),
 		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
-		s3config.WithHTTPClient(&http.Client{Transport: transportConfigS3(conf)}),
+		s3config.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true}}),
 	)
 	if err != nil {
 		return nil, err
@@ -579,30 +582,6 @@ func newS3Client(conf config.S3InboxConf) (*s3.Client, error) {
 	)
 
 	return s3Client, nil
-}
-func transportConfigS3(conf config.S3InboxConf) http.RoundTripper {
-	cfg := new(tls.Config)
-
-	// Read system CAs
-	systemCAs, err := x509.SystemCertPool()
-	if err != nil {
-		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)
-		systemCAs = x509.NewCertPool()
-	}
-
-	cfg.RootCAs = systemCAs
-
-	if conf.CAcert != "" {
-		cacert, e := os.ReadFile(conf.CAcert) // #nosec this file comes from our config
-		if e != nil {
-			log.Fatalf("failed to append %q to RootCAs: %v", cacert, e) // nolint # FIXME Fatal should only be called from main
-		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
-			log.Debug("no certs appended, using system certs only")
-		}
-	}
-
-	return &http.Transport{TLSClientConfig: cfg, ForceAttemptHTTP2: true}
 }
 
 // checkFileExists makes a request to the S3 to check whether the file already
