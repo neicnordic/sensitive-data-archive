@@ -76,7 +76,7 @@ A s3 reader has the following configuration:
 
 A posix reader has the following configuration:
 
-| Name: | Type:  | Default Value: | Description:                                            |         
-|-------|--------|----------------|---------------------------------------------------------|                               
-| path  | string |                | The path of the directory/volume where to store objects |
+| Name: | Type:  | Default Value: | Description:                                                 |         
+|-------|--------|----------------|--------------------------------------------------------------|                               
+| path  | string |                | The path of the directory/volume from which objects are read |
 
