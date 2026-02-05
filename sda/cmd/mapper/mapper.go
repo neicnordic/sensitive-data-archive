@@ -166,8 +166,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 				continue
 			}
 
-			err = inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User))
-			if err != nil {
+			if err = inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)); err != nil {
 				log.Errorf("remove file: %s failed, reason: %v", fileMappingData.FileID, err)
 			}
 		}
@@ -202,6 +201,14 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		}
 	default:
 		log.Errorf("unknown mapping type, %s", mappings.Type)
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to ack message: %v", err)
+		}
+		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", delivered.Body); err != nil {
+			log.Errorf("failed to send error message: %v", err)
+		}
+
+		return
 	}
 
 	if err := delivered.Ack(false); err != nil {
