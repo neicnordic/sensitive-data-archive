@@ -48,14 +48,14 @@ services:
       - "/bin/sh"
       - "-c"
       - |
-        pg_isready 
+        pg_isready -h db -U postgres 
         psql -U postgres -h db -d sda -c "ALTER ROLE download LOGIN PASSWORD 'download';"
     depends_on:
       db:
         condition: service_healthy
     restart: on-failure
     environment:
-      - PGHOST=postgres
+      - PGHOST=db
       - PGPORT=5432
       - PGUSER=postgres
       - PGPASSWORD=rootpassword
