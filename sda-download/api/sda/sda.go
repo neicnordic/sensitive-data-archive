@@ -579,13 +579,13 @@ func getPublicKeyFromRequest(c *gin.Context) (string, error) {
 		return "", errors.New("both Htsget-Context-Public-Key, and Client-Public-Key headers are set")
 	case htsgetRsPublicKeyHeader != "":
 		if _, err := base64.StdEncoding.DecodeString(htsgetRsPublicKeyHeader); err != nil {
-			return "", fmt.Errorf("invalid base64 encoding for Htsget-Context-Public-Key header")
+			return "", errors.New("invalid base64 encoding for Htsget-Context-Public-Key header")
 		}
 
 		return htsgetRsPublicKeyHeader, nil
 	case clientPublicKeyHeader != "":
 		if _, err := base64.StdEncoding.DecodeString(clientPublicKeyHeader); err != nil {
-			return "", fmt.Errorf("invalid base64 encoding for Client-Public-Key header")
+			return "", errors.New("invalid base64 encoding for Client-Public-Key header")
 		}
 
 		return clientPublicKeyHeader, nil
