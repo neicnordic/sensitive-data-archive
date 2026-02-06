@@ -9,14 +9,21 @@ log:
 storage:
   archive:
     s3:
-      endpoint: "http://s3:9000"
+    - endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      disable_https: true
+    - endpoint: "http://s3-2nd:9000"
       access_key: "access"
       secret_key: "secretkey"
       bucket_prefix: "archive"
       region: "us-east-1"
       disable_https: true
     posix:
-      path: "/tmp"
+    - path: "/tmp/dir1"
+    - path: "/tmp/dir2"
 
 grpc:
   host: reencrypt
