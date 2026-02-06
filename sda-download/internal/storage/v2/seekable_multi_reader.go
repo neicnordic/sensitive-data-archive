@@ -53,6 +53,10 @@ func (r *seekableMultiReader) Seek(offset int64, whence int) (int64, error) {
 		return 0, errors.New("unsupported whence")
 	}
 
+	if r.currentOffset < 0 {
+		return 0, errors.New("negative seek offset")
+	}
+
 	return r.currentOffset, nil
 }
 
@@ -61,10 +65,8 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 
 	for i, reader := range r.readers {
 		if r.currentOffset < readerStartAt {
-			// We want data from a previous reader (? HELP ?)
-			readerStartAt += r.sizes[i]
-
-			continue
+			// We want data from a previous reader
+			return 0, errors.New("unexpected error: could not find correct reader to read from")
 		}
 
 		if readerStartAt+r.sizes[i] < r.currentOffset {
@@ -81,7 +83,7 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 			return 0, errors.New("expected seekable reader but changed")
 		}
 
-		_, err := seekable.Seek(r.currentOffset-int64(readerStartAt), 0)
+		_, err := seekable.Seek(r.currentOffset-readerStartAt, 0)
 		if err != nil {
 			return 0, fmt.Errorf("unexpected error while seeking: %v", err)
 		}
