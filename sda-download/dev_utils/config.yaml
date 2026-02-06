@@ -13,14 +13,21 @@ log:
 storage:
   archive:
     s3:
-      endpoint: "https://s3:9000"
+    - endpoint: "https://s3:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      ca_cert: "./dev_utils/certs/ca.pem"
+    - endpoint: "https://s3-2nd:9000"
       access_key: "access"
       secret_key: "secretkey"
       bucket_prefix: "archive"
       region: "us-east-1"
       ca_cert: "./dev_utils/certs/ca.pem"
     posix:
-      path: "/tmp"
+    - path: "/tmp/dir1"
+    - path: "/tmp/dir2"
 
 session:
   # session key expiration time in seconds
