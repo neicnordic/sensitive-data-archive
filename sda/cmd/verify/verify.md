@@ -106,7 +106,7 @@ These settings control how `verify` connects to the RabbitMQ message broker.
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
 
 ### Storage settings
-The verify service requires access to the "archive" storage, to configure such the following config is needed:
+The verify service requires access to the "archive" storage. To configure that, the following configuration is required:
 ```yaml
 storage:
   archive:
