@@ -388,7 +388,7 @@ The `roles` section defines the available roles
 
 
 ## Storage settings
-The api service requires access to the "inbox" storage, to configure such the following config is needed:
+The API service requires access to the "inbox" storage. To configure that, the following configuration is required:
 ```yaml
 storage:
   inbox:
