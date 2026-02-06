@@ -80,8 +80,7 @@ These settings control how `mapper` connects to the RabbitMQ message broker.
 - `DB_CACERT`: Certificate Authority (CA) certificate for the database to use
 
 ### Storage settings
-The mapper service requires access to the "inbox" storage, to configure such the following config is needed:
-Such as
+The mapper service requires access to the "inbox" storage. To configure that, the following configuration is required:
 ```yaml
 storage:
   inbox:
