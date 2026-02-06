@@ -72,7 +72,7 @@ services:
     environment:
       - MINIO_ROOT_USER=access
       - MINIO_ROOT_PASSWORD=secretkey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
     healthcheck:
       test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
       interval: 5s
@@ -81,6 +81,26 @@ services:
     image: minio/minio
     ports:
       - "9000:9000"
+    volumes:
+      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
+      - ./certs/s3.pem:/root/.minio/certs/public.crt
+      - ./certs/s3-key.pem:/root/.minio/certs/private.key
+
+  s3-2nd:
+    command: server /data  --console-address ":9001"
+    container_name: s3-2nd
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio
+    ports:
+      - "9001:9000"
     volumes:
       - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
       - ./certs/s3.pem:/root/.minio/certs/public.crt
@@ -123,7 +143,10 @@ services:
       - ./:/dev_utils/
       - ./iss.json:/iss.json
       - certs:/dev_utils/certs
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "8443:8443"
@@ -153,7 +176,10 @@ services:
       - ./:/dev_utils/
       - ./iss.json:/iss.json
       - certs:/dev_utils/certs
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "9443:8443"

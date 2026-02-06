@@ -7,7 +7,7 @@ docker run --rm --name client --network dev_utils_default \
     -e PGSSLROOTCERT=/certs/ca.pem \
     neicnordic/pg-client:latest \
     postgresql://postgres:rootpassword@db:5432/sda \
-    -t -q -c "UPDATE sda.files SET archive_location = '/tmp/dir1' WHERE id = '00000000-0000-0000-0000-000000000001';"
+    -t -q -c "UPDATE sda.files SET archive_location = 'https://s3:9000/archive-1'  WHERE id = '00000000-0000-0000-0000-000000000001';"
 
 docker run --rm --name client --network dev_utils_default \
     -v "dev_utils_certs:/certs" \
@@ -16,7 +16,7 @@ docker run --rm --name client --network dev_utils_default \
     -e PGSSLROOTCERT=/certs/ca.pem \
     neicnordic/pg-client:latest \
     postgresql://postgres:rootpassword@db:5432/sda \
-    -t -q -c "UPDATE sda.files SET archive_location = '/tmp/dir1' WHERE id = '00000000-0000-0000-0000-000000000002';"
+    -t -q -c "UPDATE sda.files SET archive_location = 'https://s3:9000/archive-2'  WHERE id = '00000000-0000-0000-0000-000000000002';"
 
 docker run --rm --name client --network dev_utils_default \
     -v "dev_utils_certs:/certs" \
@@ -25,7 +25,7 @@ docker run --rm --name client --network dev_utils_default \
     -e PGSSLROOTCERT=/certs/ca.pem \
     neicnordic/pg-client:latest \
     postgresql://postgres:rootpassword@db:5432/sda \
-    -t -q -c "UPDATE sda.files SET archive_location = '/tmp/dir2' WHERE id = '00000000-0000-0000-0000-000000000003';"
+    -t -q -c "UPDATE sda.files SET archive_location = 'https://s3-2nd:9000/archive-1'  WHERE id = '00000000-0000-0000-0000-000000000003';"
 
 docker run --rm --name client --network dev_utils_default \
     -v "dev_utils_certs:/certs" \
@@ -34,4 +34,4 @@ docker run --rm --name client --network dev_utils_default \
     -e PGSSLROOTCERT=/certs/ca.pem \
     neicnordic/pg-client:latest \
     postgresql://postgres:rootpassword@db:5432/sda \
-    -t -q -c "UPDATE sda.files SET archive_location = '/tmp/dir2' WHERE id = '00000000-0000-0000-0000-000000000004';"
+    -t -q -c "UPDATE sda.files SET archive_location = 'https://s3-2nd:9000/archive-2'  WHERE id = '00000000-0000-0000-0000-000000000004';"
