@@ -23,8 +23,7 @@ storage:
 
 Where ${STORAGE_NAME} is the name of the storage, and this is decided when initializing the reader, eg:
 `NewReader(..., "Inbox", ...).`
-${STORAGE_IMPLEMENTATION} is which storage implementation is to be loaded, there can be multiple storage $
-{STORAGE_IMPLEMENTATION},
+${STORAGE_IMPLEMENTATION} is which storage implementation is to be loaded, there can be multiple storage implementations,
 supported values are "s3", and "posix", eg if an application is to be able to read from both s3 and posix the config
 would be:
 
