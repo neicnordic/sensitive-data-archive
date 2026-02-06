@@ -22,26 +22,26 @@ bad_token=BADeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZXF1ZXN0ZXJAZGVtby
 # Test error codes and error messages returned to the user
 
 # try to download encrypted file without sending a public key
-resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file")
+resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file")
 if ! echo "$resp" | grep -q "c4gh public key is missing from the header"; then
     echo "Incorrect response, expected 'c4gh public key is missing from the header' got $resp"
     exit 1
 fi
 
-resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
 if [ "$resp" -ne 400 ]; then
     echo "Incorrect response with missing public key, expected 400 got $resp"
     exit 1
 fi
 
 # try to download encrypted file with a bad public key
-resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file")
+resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file")
 if ! echo "$resp" | grep -q "file re-encryption error"; then
     echo "Incorrect response, expected 'file re-encryption error' got $resp"
     exit 1
 fi
 
-resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: YmFkIGtleQ==" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
 if [ "$resp" -ne 500 ]; then
     echo "Incorrect response with missing public key, expected 500 got $resp"
 fi
@@ -63,13 +63,13 @@ fi
 
 # try to download a file the user doesn't have access to
 
-resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $bad_token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file")
+resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $bad_token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file")
 if ! echo "$resp" | grep -q "get visas failed"; then
     echo "Incorrect response, expected 'get visas failed' got $resp"
     exit 1
 fi
 
-resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $bad_token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:8443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $bad_token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/$dataset/$file" -s -o /dev/null -w "%{http_code}")
 if [ "$resp" -ne 401 ]; then
     echo "Incorrect response, expected 401 got $resp"
     exit 1
