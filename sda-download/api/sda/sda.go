@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -216,7 +217,13 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	requestPublicKey := getPublicKeyFromRequest(c)
+	requestPublicKey, err := getPublicKeyFromRequest(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
 	if c.Param("type") != "encrypted" && requestPublicKey != "" {
 		c.String(http.StatusBadRequest, "downloading encrypted data is not supported")
 
@@ -563,20 +570,26 @@ var calculateCoords = func(start, end int64, htsget_range string, fileDetails *d
 	return start, headlength.Size() + bodyEnd, nil
 }
 
-func getPublicKeyFromRequest(c *gin.Context) string {
+func getPublicKeyFromRequest(c *gin.Context) (string, error) {
 	htsgetRsPublicKeyHeader := c.GetHeader("Htsget-Context-Public-Key")
 	clientPublicKeyHeader := c.GetHeader("Client-Public-Key")
 
 	switch {
+	case htsgetRsPublicKeyHeader != "" && clientPublicKeyHeader != "":
+		return "", errors.New("both Htsget-Context-Public-Key, and Client-Public-Key headers are set")
 	case htsgetRsPublicKeyHeader != "":
-		if clientPublicKeyHeader != "" && htsgetRsPublicKeyHeader != clientPublicKeyHeader {
-			log.Warnf("both Htsget-Context-Public-Key, and Client-Public-Key are set and differnt, defaulting to Htsget-Context-Public-Key")
+		if _, err := base64.StdEncoding.DecodeString(htsgetRsPublicKeyHeader); err != nil {
+			return "", fmt.Errorf("invalid base64 encoding for Htsget-Context-Public-Key header")
 		}
 
-		return htsgetRsPublicKeyHeader
+		return htsgetRsPublicKeyHeader, nil
 	case clientPublicKeyHeader != "":
-		return clientPublicKeyHeader
+		if _, err := base64.StdEncoding.DecodeString(clientPublicKeyHeader); err != nil {
+			return "", fmt.Errorf("invalid base64 encoding for Client-Public-Key header")
+		}
+
+		return clientPublicKeyHeader, nil
 	default:
-		return ""
+		return "", nil
 	}
 }
