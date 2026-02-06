@@ -46,7 +46,7 @@ There is an README file in the [dev_utils](/dev_utils) folder with sections for 
 | request       | This pkg Stores a HTTP client, so that it doesn't need to be initialised on every request. |
 
 ## Storage settings
-The download service requires access to the "archive" storage, to configure such the following config is needed:
+The download service requires access to the "archive" storage. To configure it the following configuration is required:
 ```yaml
 storage:
   archive:
