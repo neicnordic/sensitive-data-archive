@@ -9,8 +9,10 @@ import io.minio.PutObjectArgs;
 import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.localega.doa.dto.DestinationFormat;
 import no.uio.ifi.localega.doa.dto.ExportRequest;
+import no.uio.ifi.localega.doa.exception.JsonSchemaValidationException;
 import no.uio.ifi.localega.doa.model.DatasetEventLog;
 import no.uio.ifi.localega.doa.services.AAIService;
+import no.uio.ifi.localega.doa.services.JsonSchemaValidationService;
 import no.uio.ifi.localega.doa.services.MetadataService;
 import no.uio.ifi.localega.doa.services.StreamingService;
 import org.apache.commons.io.FileUtils;
@@ -50,6 +52,9 @@ public class ExportRequestsListener {
     @Autowired
     private StreamingService streamingService;
 
+    @Autowired
+    private JsonSchemaValidationService jsonSchemaValidationService;
+
     @Value("${outbox.type}")
     private String outboxType;
 
@@ -64,6 +69,7 @@ public class ExportRequestsListener {
     )
     public void listen(String message) {
         try {
+            jsonSchemaValidationService.validate(message);
             ExportRequest exportRequest = gson.fromJson(message, ExportRequest.class);
             var tokenArray = exportRequest.getJwtToken().split("[.]");
             byte[] decodedHeader = Base64.getUrlDecoder().decode(tokenArray[1]);
@@ -102,6 +108,8 @@ public class ExportRequestsListener {
             }
         } catch (JsonSyntaxException e) {
             log.error("Can't parse incoming message: " + e.getMessage());
+        } catch (JsonSchemaValidationException e) {
+            log.error("Incoming message doesn't match JSON Schema: " + e.getMessage());
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
