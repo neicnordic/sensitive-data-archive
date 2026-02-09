@@ -139,10 +139,10 @@ func checkS3Bucket(ctx context.Context, bucket string, s3Client *s3.Client) erro
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
 			if apiErr.ErrorCode() == "NotFound" {
-				return fmt.Errorf("bucket: %s does not exists at the configured s3 endpoint", bucket)
+				return fmt.Errorf("bucket: %s does not exist at the configured s3 endpoint", bucket)
 			}
 
-			return fmt.Errorf("unexpected issue while checking bucket: %s exists, due to %v", bucket, err)
+			return fmt.Errorf("unexpected issue while checking that bucket: %s exists, due to %v", bucket, err)
 		}
 
 		return fmt.Errorf("verifying bucket failed, check S3 configuration: %v", err)
