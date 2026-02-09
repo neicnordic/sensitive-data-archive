@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sda-download/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -738,4 +739,53 @@ func (ts *ReaderTestSuite) TestFileReadSeeker_Internal_Cache() {
 func (ts *ReaderTestSuite) TestNewFileReaderSeeker_InvalidLocation() {
 	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
 	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
+}
+
+func TestParseLocation(t *testing.T) {
+	for _, test := range []struct {
+		testName         string
+		location         string
+		expectedEndpoint string
+		expectedBucket   string
+		expectedError    error
+	}{
+		{
+			testName:         "WithScheme",
+			location:         "https://s3:9000/archive-1",
+			expectedEndpoint: "https://s3:9000",
+			expectedBucket:   "archive-1",
+		},
+		{
+			testName:         "WithoutScheme",
+			location:         "s3:9000/archive-1",
+			expectedEndpoint: "s3:9000",
+			expectedBucket:   "archive-1",
+		},
+	} {
+		t.Run(test.testName, func(t *testing.T) {
+			endpoint, bucket, err := parseLocation(test.location)
+			assert.Equal(t, test.expectedError, err)
+			assert.Equal(t, test.expectedEndpoint, endpoint)
+			assert.Equal(t, test.expectedBucket, bucket)
+		})
+	}
+}
+
+func TestNewFileReader_NoSchemeLocation_WithConfiguredNoSchemeEndpoint(t *testing.T) {
+	reader := &Reader{
+		endpoints: []*endpointConfig{
+			{
+				Endpoint: "s3:9000",
+				s3Client: &s3.Client{},
+			},
+		},
+	}
+
+	endpoint, bucket, err := parseLocation("s3:9000/archive-1")
+	assert.NoError(t, err)
+	assert.Equal(t, "s3:9000", endpoint)
+	assert.Equal(t, "archive-1", bucket)
+
+	_, _, err = reader.getS3ClientForEndpoint(context.TODO(), endpoint)
+	assert.NoError(t, err)
 }
