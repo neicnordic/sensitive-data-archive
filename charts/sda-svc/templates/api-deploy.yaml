@@ -134,11 +134,11 @@ spec:
         - name: tls
         {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
           secret:
-            defaultMode: 0440
+            defaultMode: 0640
             secretName: {{ template "sda.fullname" . }}-api-certs
         {{- else }}
           secret:
-            defaultMode: 0440
+            defaultMode: 0640
             secretName: {{ required "An certificate issuer or a TLS secret name is required for api" .Values.api.tls.secretName }}
         {{- end }}
     {{- end }}
