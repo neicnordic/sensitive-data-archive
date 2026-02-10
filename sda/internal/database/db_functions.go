@@ -371,21 +371,12 @@ func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (bool, err
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const isFileInDataset = `
-SELECT true 
-FROM sda.file_dataset
-WHERE file_id = $1;`
+	const query = `SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE file_id = $1);`
 
 	var inDataset bool
-	if err := db.QueryRowContext(ctx, isFileInDataset, fileID).Scan(&inDataset); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
+	err := db.QueryRowContext(ctx, query, fileID).Scan(&inDataset)
 
-		return false, err
-	}
-
-	return inDataset, nil
+	return inDataset, err
 }
 
 func (dbs *SDAdb) GetFileStatus(fileID string) (string, error) {
