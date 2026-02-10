@@ -7,8 +7,7 @@ import (
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
@@ -50,14 +49,13 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", err
 	}
 
-	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
+	uploader := transfermanager.New(client, func(u *transfermanager.Options) {
 		// Type conversation safe as chunkSizeBytes checked to be between 5mb and 1gb (in bytes)
 		//nolint:gosec // disable G115
-		u.PartSize = int64(writer.activeEndpoint.chunkSizeBytes)
-		u.LeavePartsOnError = false
+		u.PartSizeBytes = int64(writer.activeEndpoint.chunkSizeBytes)
 	})
 
-	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+	_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
 		Body:            fileContent,
 		Bucket:          aws.String(activeBucket),
 		Key:             aws.String(filePath),
