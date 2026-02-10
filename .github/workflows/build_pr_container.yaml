@@ -8,7 +8,6 @@ on:
       - ".gitignore"
       - "**/*.md"
       - ".github/dependabot.yaml"
-      - "charts/**"
       - "Makefile"
       - "sda-admin/**"
 
