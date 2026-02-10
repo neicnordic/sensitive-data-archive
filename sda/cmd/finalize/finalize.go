@@ -28,7 +28,6 @@ var db *database.SDAdb
 var mqBroker *broker.AMQPBroker
 var archiveReader storage.Reader
 var backupWriter storage.Writer
-var message schema.IngestionAccession
 
 var backupInStorage bool
 
@@ -123,6 +122,7 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	log.Debugf("Received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", mqBroker.Conf.SchemasPath), delivered.Body); err != nil {
 		log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", delivered.CorrelationId, err)
@@ -134,6 +134,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	fileID := delivered.CorrelationId
+	var message schema.IngestionAccession
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &message)
 	// If the file has been canceled by the uploader, don't spend time working on it.
