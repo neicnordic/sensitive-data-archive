@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SDA Data Out API
-  version: "1.1.0"
+  version: "2.0.0"
   description: |
     External download API for the Sensitive Data Archive (SDA).
 
@@ -65,12 +65,12 @@ paths:
                 type:
                   group: org.neic
                   artifact: sda-download
-                  version: 1.1.0
+                  version: 2.0.0
                 description: Sensitive Data Archive file download service
                 organization:
                   name: NeIC
                   url: https://neic.no
-                version: 1.1.0
+                version: 2.0.0
                 environment: production
 
   /datasets:
@@ -450,7 +450,7 @@ components:
               example: sda-download
             version:
               type: string
-              example: 1.1.0
+              example: 2.0.0
           required: [group, artifact, version]
         description:
           type: string
@@ -468,7 +468,7 @@ components:
         version:
           type: string
           description: Service version
-          example: 1.1.0
+          example: 2.0.0
         environment:
           type: string
           description: Deployment environment (e.g. production, staging)
@@ -542,11 +542,17 @@ components:
     C4ghPublicKey:
       name: X-C4GH-Public-Key
       in: header
-      required: true
+      required: false
       schema:
         type: string
       description: |
-        Crypt4GH recipient public key.
+        Crypt4GH recipient public key. At least one of X-C4GH-Public-Key or
+        Htsget-Context-Public-Key MUST be provided; the server returns 400 if
+        neither is present. Sending both is also an error (400).
+
+        Note: OpenAPI 3.x cannot express cross-parameter constraints like
+        "at least one of" (see https://github.com/OAI/OpenAPI-Specification/discussions/4174).
+        Both headers are marked required: false; the constraint is enforced server-side.
 
         Accepted formats (auto-detected by the server):
 
@@ -561,9 +567,6 @@ components:
 
         The server distinguishes the two formats by decoded length: 32 bytes = raw key,
         longer = PEM text passed to the standard Crypt4GH key parser.
-
-        This header is required. Alternatively, HTSGET clients MAY send
-        Htsget-Context-Public-Key instead (the server accepts either, but not both).
       example: "mF4kGxQy5c7a3oO2l2Cq2rY9qJk2o0rJ5m0n6m1o2pQ="
 
     HtsgetContextPublicKey:
@@ -575,8 +578,7 @@ components:
       description: |
         HTSGET compatibility alternative to X-C4GH-Public-Key.
         Same format and semantics. The server accepts either header but not both.
-
-        If this header is present, X-C4GH-Public-Key is not required.
+        See X-C4GH-Public-Key description for the cross-parameter constraint.
       example: "mF4kGxQy5c7a3oO2l2Cq2rY9qJk2o0rJ5m0n6m1o2pQ="
 
     Range:
