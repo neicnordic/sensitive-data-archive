@@ -45,7 +45,7 @@ func (m *mockDatabase) IsFileInDataset(_ context.Context, _ string) (bool, error
 	panic("function not expected to be called in unit tests")
 }
 
-func (m *mockDatabase) CancelFile(_ context.Context, _ string) error {
+func (m *mockDatabase) CancelFile(_ context.Context, _, _ string) error {
 	panic("function not expected to be called in unit tests")
 }
 

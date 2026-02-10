@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/neicnordic/crypt4gh/keys"
@@ -277,17 +276,8 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		}
 	}
 
-	if err := app.DB.CancelFile(ctx, fileID); err != nil {
-		log.Errorf("failed to unset file with id: %s as archived due to %v", fileID, err)
-
-		return "nack"
-	}
-
-	if err := app.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", string(m)); err != nil {
-		log.Errorf("failed to update event log for file with id: %s, due to %v", fileID, err)
-		if strings.Contains(err.Error(), "sql: no rows in result set") {
-			return "reject"
-		}
+	if err := app.DB.CancelFile(ctx, fileID, string(m)); err != nil {
+		log.Errorf("failed to cancel file with id: %s, due to %v", fileID, err)
 
 		return "nack"
 	}
