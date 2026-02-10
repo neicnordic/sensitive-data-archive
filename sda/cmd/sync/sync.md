@@ -117,6 +117,8 @@ storage:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
 
+Sync will read from the "archive", and backup files that have been added to a dataset in the "sync" storage.
+
 ### Logging settings
 
 - `LOG_FORMAT` can be set to “json” to get logs in json format. All other values result in text logging
