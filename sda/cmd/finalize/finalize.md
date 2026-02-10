@@ -101,7 +101,10 @@ These settings control how `finalize` connects to the RabbitMQ message broker.
     - `panic`
 
 ### Storage settings
-If a storage backup is desired then the following storage configuration are needed: "archive", "backup".
+If a storage backup is desired then the following storage configurations are needed: "archive", "backup".
+
+[!IMPORTANT] Both `archive` and `backup` are required to be configured for backup to take place. If you omit one, storage backup will not take place.
+
 ```yaml
 storage:
   backup:
@@ -110,6 +113,4 @@ storage:
     ${STORAGE_IMPLEMENTATION}:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
-
-if either "archive", or "backup" storage configuration, then storage backup will not take place.
 
