@@ -338,32 +338,43 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 // CancelFile cancels the file and all actions that have been taken (eg, setting checksums, archiving, etc)
-func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string) error {
+func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string, message string) error {
 	dbs.checkAndReconnectIfNeeded()
 
-	db := dbs.DB
+	tx, err := dbs.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			log.Errorf("failed to rollback CancelFile transaction, due to: %v", err)
+		}
+	}()
+
 	const unsetArchived = `
-UPDATE sda.files 
-SET archive_location = NULL, 
-    archive_file_path = '', 
-    archive_file_size = NULL, 
-    decrypted_file_size = NULL, 
-	stable_id = NULL
-WHERE id = $1;`
+		UPDATE sda.files SET archive_location = NULL, archive_file_path = '', 
+		archive_file_size = NULL, decrypted_file_size = NULL, stable_id = NULL
+		WHERE id = $1;`
 
-	if _, err := db.ExecContext(ctx, unsetArchived, fileID); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, unsetArchived, fileID); err != nil {
+		return fmt.Errorf("failed to unset file data (file-id: %s): %v", fileID, err)
 	}
 
-	const deleteChecksums = `
-DELETE FROM sda.checksums
-WHERE file_id = $1`
+	const deleteChecksums = `DELETE FROM sda.checksums WHERE file_id = $1`
 
-	if _, err := db.ExecContext(ctx, deleteChecksums, fileID); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, deleteChecksums, fileID); err != nil {
+		return fmt.Errorf("failed to delete checksums (file-id: %s): %v", fileID, err)
 	}
 
-	return nil
+	const logEvent = `
+		INSERT INTO sda.file_event_log (file_id, event, user_id, details, message) 
+		VALUES ($1, 'disabled', 'system', '{"reason": "file cancelled"}', $2);`
+
+	if _, err := tx.ExecContext(ctx, logEvent, fileID, message); err != nil {
+		return fmt.Errorf("failed to log cancel file event (file-id: %s): %v", fileID, err)
+	}
+
+	return tx.Commit()
 }
 
 // IsFileInDataset checks if a file has been added to a dataset
