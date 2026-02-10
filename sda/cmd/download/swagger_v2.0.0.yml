@@ -16,10 +16,17 @@ info:
       - GA4GH service-info endpoint for service discovery.
 
     Crypt4GH and Range semantics:
-      The byte stream delivered to the client is the Crypt4GH re-encrypted representation:
-      [re-encrypted header | encrypted data segments]. All byte offsets in Range requests,
-      Content-Length, and Content-Range refer to this re-encrypted stream, NOT the original
-      plaintext file. The re-encrypted header size varies per recipient public key.
+      Files are served through three endpoint tiers:
+      - Combined (GET /files/{fileId}): delivers [re-encrypted header | data segments]
+        as a single stream. Range byte offsets refer to this combined representation.
+        ETag stability depends on the server's re-encryption implementation.
+      - Header (GET /files/{fileId}/header): re-encrypted header only. No Range support.
+        Header bytes may vary between requests (implementation-dependent).
+      - Content (GET /files/{fileId}/content): encrypted data segments only. Range byte
+        offsets refer to data segments (no header). ETag is stable for a given file
+        and independent of the recipient key.
+      In all cases, byte offsets refer to the encrypted wire format, NOT the original
+      plaintext file.
 
     DRS readiness (non-normative):
       Designed for compatibility with GA4GH DRS 1.5+
@@ -128,7 +135,8 @@ paths:
       summary: List files in a dataset
       description: |
         Returns metadata for all files in the dataset. When the optional filePath query
-        parameter is provided, the response is filtered to files matching that path.
+        parameter is provided, the response is filtered by exact path equality (returning
+        0 or 1 results).
       parameters:
         - $ref: "#/components/parameters/DatasetIdPath"
         - name: filePath
@@ -137,9 +145,9 @@ paths:
           schema:
             type: string
           description: |
-            Optional dataset-relative file path filter. When provided, only files
-            whose path matches are returned. Useful for clients that identify files
-            by submitted path rather than by fileId.
+            Exact dataset-relative file path. When provided, only the file with this
+            exact path is returned (at most one result). Useful for clients that
+            identify files by submitted path rather than by fileId.
           example: samples/controls/sample1.cram.c4gh
       responses:
         "200":
@@ -171,11 +179,18 @@ paths:
         of the requested file, including Content-Length and ETag.
 
         The public key is required because Content-Length includes the recipient-specific
-        Crypt4GH header, which varies in size per recipient. The ETag also represents
+        Crypt4GH header, which varies in size per recipient. The ETag represents
         the specific representation for the given (fileId, recipient public key) pair;
         different keys produce different ETags.
 
-        This endpoint is essential for implementing resumable downloads (HEAD → Range + If-Range).
+        Note: ETag stability on this endpoint depends on whether the server produces
+        deterministic re-encrypted headers for a given (fileId, recipientKey) pair. If
+        the implementation uses random ephemeral keys, the ETag may change between
+        requests and If-Range will fall back to a full 200 (correct per RFC 9110 but
+        not a true resume). For guaranteed stable ETag, use HEAD /files/{fileId}/content.
+
+        For robust resume and CDN caching, prefer the split sub-resources:
+        HEAD /files/{fileId}/header and HEAD /files/{fileId}/content.
       parameters:
         - $ref: "#/components/parameters/FileIdPath"
         - $ref: "#/components/parameters/C4ghPublicKey"
@@ -211,17 +226,28 @@ paths:
       summary: Download a file (supports Range for partial downloads)
       description: |
         Downloads the requested file, re-encrypted as Crypt4GH for the recipient.
+        This is the convenience endpoint that delivers the complete Crypt4GH stream.
 
         The delivered byte stream is: [re-encrypted Crypt4GH header | encrypted data segments].
-        All byte offsets in Range, Content-Length, and Content-Range refer to this re-encrypted
-        stream, NOT the original plaintext file.
+        All byte offsets in Range, Content-Length, and Content-Range refer to this combined
+        re-encrypted stream, NOT the original plaintext file.
 
         Partial downloads use the standard HTTP Range header. For simplicity and broad client
         compatibility, this API supports a single byte range per request.
 
         The ETag represents the specific Crypt4GH representation for the given file and
-        recipient public key. Different keys yield different ETags. Use If-Range with the
-        ETag to safely resume interrupted downloads.
+        recipient public key. Different keys yield different ETags.
+
+        Resume caveat: ETag stability on this endpoint depends on whether the server
+        produces deterministic re-encrypted headers for a given (fileId, recipientKey)
+        pair. If the implementation generates new ephemeral keys per request, the ETag
+        changes and If-Range falls back to a full 200 response (correct per RFC 9110 but
+        not a true resume). For guaranteed robust resume, use GET /files/{fileId}/content
+        which has a stable ETag independent of the recipient key.
+
+        For CDN caching and htsget-rs integration, prefer the split sub-resources:
+        GET /files/{fileId}/header (per-recipient header) and
+        GET /files/{fileId}/content (static data segments with stable ETag and Range).
       parameters:
         - $ref: "#/components/parameters/FileIdPath"
         - $ref: "#/components/parameters/C4ghPublicKey"
@@ -317,6 +343,219 @@ paths:
               -o file.rest \
               "https://api.example.org/files/aa-file-123456-asdfgh"
 
+  /files/{fileId}/header:
+    head:
+      tags: [Files]
+      operationId: headFileHeader
+      summary: Get re-encrypted header metadata (no body)
+      description: |
+        Returns size metadata for the re-encrypted Crypt4GH header of the requested file.
+
+        The header is recipient-specific. Whether header bytes are stable across requests
+        for the same (fileId, recipientKey) pair depends on the server's re-encryption
+        implementation. A standard Crypt4GH re-encryption generates a new ephemeral
+        X25519 keypair each time, producing different bytes. Implementations MAY use
+        a stable representation strategy (e.g. caching) to produce consistent headers.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+      responses:
+        "200":
+          description: Header metadata returned successfully
+          headers:
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+    get:
+      tags: [Files]
+      operationId: getFileHeader
+      summary: Download the re-encrypted Crypt4GH header
+      description: |
+        Returns only the re-encrypted Crypt4GH header for the specified file and recipient.
+        The header contains the data encryption key(s) re-encrypted to the recipient's
+        public key. It is typically small (around 120–140 bytes for a single DEK).
+
+        Whether header bytes are stable across requests for the same (fileId, recipientKey)
+        pair is implementation-dependent. A standard Crypt4GH re-encryption generates a
+        new ephemeral X25519 keypair each time. Implementations MAY use a stable
+        representation strategy (e.g. caching) to produce consistent headers.
+
+        Clients reconstructing a complete Crypt4GH file should concatenate header bytes
+        (from this endpoint) with data bytes (from GET /files/{fileId}/content).
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+      responses:
+        "200":
+          description: Re-encrypted header
+          headers:
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+  /files/{fileId}/content:
+    head:
+      tags: [Files]
+      operationId: headFileContent
+      summary: Get encrypted content metadata (no body)
+      description: |
+        Returns metadata for the encrypted data segments of the file (everything after
+        the Crypt4GH header). Unlike the combined /files/{fileId} endpoint, Content-Length
+        and ETag are stable and independent of the recipient public key.
+
+        No public key header is required — the data segments are encrypted with the file's
+        data encryption key, which is the same regardless of recipient.
+
+        The stable ETag makes this endpoint ideal for CDN caching and htsget-rs integration.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+      responses:
+        "200":
+          description: Content metadata returned successfully
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+    get:
+      tags: [Files]
+      operationId: getFileContent
+      summary: Download encrypted data segments (supports Range)
+      description: |
+        Downloads the encrypted data segments of the file — everything after the
+        Crypt4GH header. These bytes are identical regardless of the recipient public
+        key (encrypted with the file's data encryption key, not the recipient key).
+
+        No public key header is required.
+
+        This endpoint supports Range + If-Range for partial downloads with robust
+        resume behavior. The ETag is stable (scoped to fileId only), making it safe
+        for If-Range and CDN caching.
+
+        **htsget-rs integration:** ticket data URLs should point to this endpoint
+        with byte ranges, since the encrypted block structure is static and
+        recipient-independent.
+
+        Clients reconstructing a complete Crypt4GH file should concatenate header bytes
+        (from GET /files/{fileId}/header) with data bytes (from this endpoint).
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/IfRange"
+      responses:
+        "200":
+          description: Successful operation (full content)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Successful operation (partial content)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            Content-Range:
+              $ref: "#/components/headers/ContentRange"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "416":
+          $ref: "#/components/responses/RangeNotSatisfiable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+      x-codeSamples:
+        - lang: curl
+          label: Fetch header + content separately
+          source: |
+            # 1) Get the re-encrypted header
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              -o header.bin \
+              "https://api.example.org/files/aa-file-123456-asdfgh/header"
+
+            # 2) Get the encrypted content (supports Range resume)
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -o content.bin \
+              "https://api.example.org/files/aa-file-123456-asdfgh/content"
+
+            # 3) Concatenate into a valid Crypt4GH file
+            cat header.bin content.bin > file.c4gh
+
   /health/ready:
     get:
       tags: [Health]
@@ -352,7 +591,7 @@ components:
   schemas:
     DatasetId:
       type: string
-      description: Stable dataset identifier
+      description: Dataset identifier
       example: aa-dataset-123456-asdfgh
 
     DatasetInfo:
@@ -381,7 +620,7 @@ components:
       properties:
         fileId:
           type: string
-          description: Stable file identifier (maps to DRS object_id in a future DRS facade)
+          description: File identifier (maps to DRS object_id in a future DRS facade)
           example: aa-file-123456-asdfgh
         filePath:
           type: string
@@ -537,7 +776,7 @@ components:
       required: true
       schema:
         type: string
-      description: Stable file identifier
+      description: File identifier
 
     C4ghPublicKey:
       name: X-C4GH-Public-Key
@@ -588,10 +827,12 @@ components:
       schema:
         type: string
       description: |
-        Byte range of the re-encrypted Crypt4GH stream to deliver, per RFC 9110.
+        Standard HTTP byte range per RFC 9110. The exact bytes the range applies to
+        depend on the endpoint:
+        - /files/{fileId}: the combined re-encrypted Crypt4GH stream (header + data segments)
+        - /files/{fileId}/content: the encrypted data segments only (no header)
 
-        Byte offsets refer to the re-encrypted output stream (header + data segments),
-        not the original plaintext file.
+        In both cases, byte offsets refer to the encrypted wire format, NOT plaintext.
 
         This API supports a single range of the form: bytes=<start>-<end> or bytes=<start>-.
         Multiple ranges (comma-separated) are not supported and will return 400.
@@ -637,6 +878,17 @@ components:
       schema:
         type: string
       example: "\"686897696a7c876b7e\""
+
+    ContentETag:
+      description: |
+        Entity tag representing the encrypted data segments of the file.
+        Unlike the combined-endpoint ETag, this is scoped to fileId only (not the
+        recipient public key), because data segments are encrypted with the file's
+        data encryption key and are identical for all recipients. This ETag is
+        stable across requests and safe for If-Range and CDN caching.
+      schema:
+        type: string
+      example: "\"a1b2c3d4e5f6g7h8\""
 
     LastModified:
       description: Last modification time of the resource (HTTP-date format per RFC 9110).
