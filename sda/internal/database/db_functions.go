@@ -1430,7 +1430,7 @@ func (dbs *SDAdb) GetDatasetFileIDs(dataset string) ([]string, error) {
 	db := dbs.DB
 
 	var fileIDs []string
-	rows, err := db.Query("SELECT file_id FROM sda.file_dataset WHERE dataset_id = (SELECT id FROM sda.datasets WHERE stable_id = $1);", dataset)
+	rows, err := db.Query("SELECT fd.file_id FROM sda.datasets AS d INNER JOIN sda.file_dataset AS fd ON d.id = fd.dataset_id WHERE d.stable_id = $1;", dataset)
 	if err != nil {
 		return nil, err
 	}
