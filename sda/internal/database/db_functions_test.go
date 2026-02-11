@@ -1440,7 +1440,7 @@ func (suite *DatabaseTests) TestGetDecryptedChecksum() {
 	db.Close()
 }
 
-func (suite *DatabaseTests) TestGetDsatasetFiles() {
+func (suite *DatabaseTests) TestGetDatasetFiles() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 	testCases := 3
@@ -1487,9 +1487,73 @@ func (suite *DatabaseTests) TestGetDsatasetFiles() {
 		suite.FailNow("failed to map files to dataset")
 	}
 
-	accessions, err := db.GetDatasetFiles(dID)
-	assert.NoError(suite.T(), err, "failed to get accessions for a dataset")
-	assert.Equal(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, accessions)
+	files, err := db.GetDatasetFiles(dID)
+	assert.NoError(suite.T(), err, "failed to get files for a dataset")
+	assert.Equal(suite.T(), 3, len(files))
+
+	assert.ElementsMatch(suite.T(), []string{"accession_User-Q_00", "accession_User-Q_01", "accession_User-Q_02"}, files)
+
+	db.Close()
+}
+
+func (suite *DatabaseTests) TestGetDatasetFileIDs() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
+	testCases := 3
+	var createdFileIDs []string
+
+	for i := 0; i < testCases; i++ {
+		filePath := fmt.Sprintf("/%v/TestGetDatasetFileIDs-00%d.c4gh", "User-Q", i)
+		fileID, err := db.RegisterFile(nil, filePath, "User-Q")
+		if err != nil {
+			suite.FailNow("Failed to register file")
+		}
+		createdFileIDs = append(createdFileIDs, fileID)
+		err = db.UpdateFileEventLog(fileID, "uploaded", "User-Q", "{}", "{}")
+		if err != nil {
+			suite.FailNow("Failed to update file event log")
+		}
+
+		checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
+		fileInfo := FileInfo{
+			fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			1234,
+			filePath,
+			checksum,
+			999,
+			fmt.Sprintf("%x", sha256.New()),
+		}
+		err = db.SetArchived(fileInfo, fileID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Archived")
+		}
+
+		err = db.SetVerified(fileInfo, fileID)
+		if err != nil {
+			suite.FailNow("failed to mark file as Verified")
+		}
+
+		stableID := fmt.Sprintf("accession_ids_%s_0%d", "User-Q", i)
+		err = db.SetAccessionID(stableID, fileID)
+		if err != nil {
+			suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), stableID, fileID)
+		}
+	}
+
+	dID := "test-get-dataset-fileids-01"
+	if err := db.MapFilesToDataset(dID, []string{
+		fmt.Sprintf("accession_ids_%s_0%d", "User-Q", 0),
+		fmt.Sprintf("accession_ids_%s_0%d", "User-Q", 1),
+		fmt.Sprintf("accession_ids_%s_0%d", "User-Q", 2),
+	}); err != nil {
+		suite.FailNow("failed to map files to dataset")
+	}
+
+	files, err := db.GetDatasetFileIDs(dID)
+	assert.NoError(suite.T(), err, "failed to get files for a dataset")
+	assert.Equal(suite.T(), 3, len(files))
+
+	assert.ElementsMatch(suite.T(), createdFileIDs, files)
 
 	db.Close()
 }
