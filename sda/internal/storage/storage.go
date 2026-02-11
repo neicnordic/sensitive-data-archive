@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -147,7 +147,7 @@ func (pb *posixBackend) RemoveFile(filePath string) error {
 
 type s3Backend struct {
 	Client   *s3.Client
-	Uploader *manager.Uploader
+	Uploader *transfermanager.Client
 	Bucket   string
 	Conf     *S3Conf
 }
@@ -177,10 +177,9 @@ func newS3Backend(conf S3Conf) (*s3Backend, error) {
 		Bucket: conf.Bucket,
 		Client: s3Client,
 		Conf:   &conf,
-		Uploader: manager.NewUploader(s3Client, func(u *manager.Uploader) {
-			u.PartSize = int64(conf.Chunksize)
+		Uploader: transfermanager.New(s3Client, func(u *transfermanager.Options) {
+			u.PartSizeBytes = int64(conf.Chunksize)
 			u.Concurrency = conf.UploadConcurrency
-			u.LeavePartsOnError = false
 		}),
 	}
 
@@ -275,7 +274,7 @@ func (sb *s3Backend) NewFileReader(filePath string) (io.ReadCloser, error) {
 func (sb *s3Backend) NewFileWriter(filePath string) (io.WriteCloser, error) {
 	reader, writer := io.Pipe()
 	go func() {
-		_, err := sb.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
+		_, err := sb.Uploader.UploadObject(context.TODO(), &transfermanager.UploadObjectInput{
 			Body:            reader,
 			Bucket:          &sb.Bucket,
 			Key:             &filePath,
