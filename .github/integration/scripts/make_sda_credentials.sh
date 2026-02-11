@@ -97,8 +97,22 @@ EOD
 ## create crypt4gh key
 if [ ! -f "/shared/crypt4gh" ]; then
     echo "downloading crypt4gh"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64)
+            CRYPT4GH_ARCH="linux_x86_64"
+            ;;
+        aarch64)
+            CRYPT4GH_ARCH="linux_arm64"
+            ;;
+        *)
+            echo "Unknown architecture: $ARCH. Defaulting to linux_x86_64."
+            CRYPT4GH_ARCH="linux_x86_64"
+            ;;
+    esac
+    echo "Detected architecture: $ARCH, downloading crypt4gh for: $CRYPT4GH_ARCH"
     latest_c4gh=$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
-    curl --retry 100 -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    curl --retry 100 -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_${CRYPT4GH_ARCH}.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
 fi
 
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
