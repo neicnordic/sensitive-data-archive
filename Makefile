@@ -208,18 +208,26 @@ k3d-deploy-dependencies-federated:
 	@bash .github/integration/scripts/charts/dependencies.sh local federated
 k3d-deploy-dependencies-isolated:
 	@bash .github/integration/scripts/charts/dependencies.sh local isolated
+k3d-deploy-dependencies-s3:
+	@bash .github/integration/scripts/charts/dependencies.sh local s3
 k3d-import-images: build-all
 	@bash .github/integration/scripts/charts/import_local_images.sh k3s-default
 k3d-deploy-postgres:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$$(date +%F)" false
+k3d-deploy-postgres-tls:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-db "$$(date +%F)" true
 k3d-deploy-rabbitmq-federated:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false federated
 k3d-deploy-rabbitmq-isolated:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" false isolated
+k3d-deploy-rabbitmq-isolated-tls:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-mq "$$(date +%F)" true isolated
 k3d-deploy-sda-s3-federated:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3 federated
 k3d-deploy-sda-s3-isolated:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false s3 isolated
+k3d-deploy-sda-s3-isolated-tls:
+	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" true s3 isolated
 k3d-deploy-sda-posix:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
 k3d-cleanup-all-deployments:
