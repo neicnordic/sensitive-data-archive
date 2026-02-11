@@ -9,9 +9,7 @@
     "jwtToken",
     "datasetId",
     "fileId",
-    "publicKey",
-    "startCoordinate",
-    "endCoordinate"
+    "publicKey"
   ],
   "properties": {
     "jwtToken": {
