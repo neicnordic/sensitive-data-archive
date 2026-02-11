@@ -85,17 +85,24 @@ paths:
       tags: [Datasets]
       operationId: listDatasets
       summary: List datasets the caller can access
-      description: Returns a list of dataset identifiers the caller has access to.
+      description: |
+        Returns dataset identifiers the caller has access to.
+        Supports cursor-based pagination for large result sets.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
       responses:
         "200":
-          description: Successful operation (an empty list is valid).
+          description: Successful operation (an empty datasets array is valid).
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/DatasetId"
-              example: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
+                $ref: "#/components/schemas/DatasetListResponse"
+              example:
+                datasets: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
+                nextPageToken: "eyJpZCI6Mn0"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -134,9 +141,10 @@ paths:
       operationId: listDatasetFiles
       summary: List files in a dataset
       description: |
-        Returns metadata for all files in the dataset. When the optional filePath query
-        parameter is provided, the response is filtered by exact path equality (returning
-        0 or 1 results).
+        Returns metadata for files in the dataset. Supports cursor-based pagination
+        and two optional filters (mutually exclusive — providing both returns 400):
+        - filePath: exact path equality (returns 0 or 1 results)
+        - pathPrefix: recursive prefix match (returns all files under the prefix)
       parameters:
         - $ref: "#/components/parameters/DatasetIdPath"
         - name: filePath
@@ -148,16 +156,30 @@ paths:
             Exact dataset-relative file path. When provided, only the file with this
             exact path is returned (at most one result). Useful for clients that
             identify files by submitted path rather than by fileId.
+            Mutually exclusive with pathPrefix.
           example: samples/controls/sample1.cram.c4gh
+        - name: pathPrefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Dataset-relative path prefix filter. Returns all files whose path starts
+            with this value (recursive). Use a trailing / to match a directory boundary
+            (e.g. "samples/controls/" matches all files in that directory and below).
+            Mutually exclusive with filePath.
+          example: samples/controls/
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
       responses:
         "200":
           description: Successful operation
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FileInfo"
+                $ref: "#/components/schemas/FileListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -614,6 +636,38 @@ components:
           example: 6597069766656
       required: [datasetId, date, files, size]
 
+    DatasetListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetId"
+        nextPageToken:
+          type: string
+          nullable: true
+          description: |
+            Opaque token for retrieving the next page of results.
+            Null or absent if this is the last page.
+      required: [datasets]
+
+    FileListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileInfo"
+        nextPageToken:
+          type: string
+          nullable: true
+          description: |
+            Opaque token for retrieving the next page of results.
+            Null or absent if this is the last page.
+      required: [files]
+
     FileInfo:
       type: object
       additionalProperties: false
@@ -849,6 +903,39 @@ components:
         Commonly used to resume downloads safely.
       example: "\"686897696a7c876b7e\""
 
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 1000
+        default: 100
+      description: |
+        Maximum number of items to return per page. The server may enforce
+        a lower maximum. If not provided, the server uses a default page size.
+
+    PageToken:
+      name: pageToken
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque cursor token from a previous response's nextPageToken field.
+        When provided, returns the next page of results. Do not construct
+        these tokens — they are only valid as received from the server.
+
+        **Pagination contract:**
+        - Results are returned in a stable, server-defined order that is consistent
+          across pages within the same query.
+        - A pageToken is scoped to the original query parameters (filters, pageSize).
+          Changing filters or pageSize while reusing a pageToken returns 400.
+        - An invalid or expired pageToken returns 400 (the server does not silently
+          restart from the beginning).
+
   headers:
     AcceptRanges:
       description: Indicates that the resource supports byte range requests.
@@ -949,11 +1036,35 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/ProblemDetails"
-          example:
-            title: Bad Request
-            status: 400
-            detail: The Range header is invalid. Only a single byte range is supported.
-            errorCode: RANGE_INVALID
+          examples:
+            rangeInvalid:
+              summary: Invalid Range header
+              value:
+                title: Bad Request
+                status: 400
+                detail: The Range header is invalid. Only a single byte range is supported.
+                errorCode: RANGE_INVALID
+            filterConflict:
+              summary: Mutually exclusive filters
+              value:
+                title: Bad Request
+                status: 400
+                detail: "filePath and pathPrefix are mutually exclusive; provide at most one."
+                errorCode: FILTER_CONFLICT
+            invalidPageToken:
+              summary: Invalid or expired page token
+              value:
+                title: Bad Request
+                status: 400
+                detail: "The pageToken is invalid, expired, or does not match the current query parameters."
+                errorCode: INVALID_PAGE_TOKEN
+            invalidPageSize:
+              summary: Invalid page size
+              value:
+                title: Bad Request
+                status: 400
+                detail: "pageSize must be between 1 and 1000."
+                errorCode: INVALID_PAGE_SIZE
 
     Unauthorized:
       description: Authentication failure
