@@ -276,22 +276,7 @@ func NewConfig(app string) (*Config, error) {
 		if viper.GetBool("auth.resignJwt") {
 			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
-	case "ingest":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
-	case "finalize":
+	case "ingest", "finalize":
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -534,18 +519,7 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-	case "finalize":
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
-		c.configSchemas()
-	case "ingest":
+	case "finalize", "ingest":
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
