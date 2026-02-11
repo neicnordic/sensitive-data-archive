@@ -1396,6 +1396,7 @@ func (dbs *SDAdb) GetDecryptedChecksum(id string) (string, error) {
 	return unencryptedChecksum, nil
 }
 
+// GetDatasetFiles returns all files in a dataset
 func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	dbs.checkAndReconnectIfNeeded()
 	db := dbs.DB
@@ -1421,6 +1422,34 @@ func (dbs *SDAdb) GetDatasetFiles(dataset string) ([]string, error) {
 	}
 
 	return accessions, nil
+}
+
+// GetDatasetFileIDs returns all file IDs in a dataset
+func (dbs *SDAdb) GetDatasetFileIDs(dataset string) ([]string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	var fileIDs []string
+	rows, err := db.Query("SELECT fd.file_id FROM sda.datasets AS d INNER JOIN sda.file_dataset AS fd ON d.id = fd.dataset_id WHERE d.stable_id = $1;", dataset)
+	if err != nil {
+		return nil, err
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var fileID string
+		err := rows.Scan(&fileID)
+		if err != nil {
+			return nil, err
+		}
+
+		fileIDs = append(fileIDs, fileID)
+	}
+
+	return fileIDs, nil
 }
 
 // GetFileDetailsFromUUID() retrieves user, path and correlation id by giving the file UUID
