@@ -153,9 +153,19 @@ paths:
           schema:
             type: string
           description: |
-            Exact dataset-relative file path. When provided, only the file with this
-            exact path is returned (at most one result). Useful for clients that
-            identify files by submitted path rather than by fileId.
+            Exact dataset-relative file path. When provided, only the file
+            with this exact path is returned (at most one result). The response
+            includes `downloadUrl` so clients can resolve path → download in two
+            calls without extra logic.
+
+            **Normalization rules:**
+            - Case-sensitive (POSIX path semantics).
+            - No leading slash — paths are relative to the dataset root.
+            - Must match exactly as stored in the archive metadata (including any
+              file extension such as `.c4gh`).
+            - The server URL-decodes the query parameter value per standard HTTP.
+            - Empty string or whitespace-only values return 400.
+
             Mutually exclusive with pathPrefix.
           example: samples/controls/sample1.cram.c4gh
         - name: pathPrefix
@@ -173,11 +183,45 @@ paths:
         - $ref: "#/components/parameters/PageToken"
       responses:
         "200":
-          description: Successful operation
+          description: |
+            Successful operation. When filePath is provided, the files array contains
+            0 or 1 elements (200 with empty array when no file matches, not 404).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FileListResponse"
+              examples:
+                filePathLookup:
+                  summary: Single file resolved by exact filePath match
+                  value:
+                    files:
+                      - fileId: aa-file-123456-asdfgh
+                        filePath: samples/controls/sample1.cram.c4gh
+                        size: 56623104
+                        decryptedSize: 56600000
+                        checksums:
+                          - type: sha256
+                            checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                        downloadUrl: /files/aa-file-123456-asdfgh
+                    nextPageToken: null
+                filePathNoMatch:
+                  summary: No file at the given path (empty result, not 404)
+                  value:
+                    files: []
+                    nextPageToken: null
+                paginatedList:
+                  summary: Paginated file list (no filter)
+                  value:
+                    files:
+                      - fileId: aa-file-123456-asdfgh
+                        filePath: samples/controls/sample1.cram.c4gh
+                        size: 56623104
+                        decryptedSize: 56600000
+                        checksums:
+                          - type: sha256
+                            checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                        downloadUrl: /files/aa-file-123456-asdfgh
+                    nextPageToken: "eyJpZCI6Mn0"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1065,6 +1109,13 @@ components:
                 status: 400
                 detail: "pageSize must be between 1 and 1000."
                 errorCode: INVALID_PAGE_SIZE
+            invalidFilePath:
+              summary: Invalid file path format
+              value:
+                title: Bad Request
+                status: 400
+                detail: "filePath must be a non-empty dataset-relative path without leading slash."
+                errorCode: INVALID_FILE_PATH
 
     Unauthorized:
       description: Authentication failure
