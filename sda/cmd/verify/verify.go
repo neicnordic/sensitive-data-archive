@@ -317,6 +317,11 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		return
 	}
+	defer func() {
+		if err := c4ghr.Close(); err != nil {
+			log.Errorf("failed to close crypt4gh reader, file-id %s, reason: %v", message.FileID, err)
+		}
+	}()
 
 	md5hash := md5.New()
 	sha256hash := sha256.New()
@@ -343,12 +348,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		return
 	}
-	defer func() {
-		_ = c4ghr.Close()
-	}()
 
 	// At this point we should do checksum comparison
-
 	file.ArchiveChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 	file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
