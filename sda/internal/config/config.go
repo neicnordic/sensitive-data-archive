@@ -276,7 +276,7 @@ func NewConfig(app string) (*Config, error) {
 		if viper.GetBool("auth.resignJwt") {
 			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
-	case "ingest", "finalize":
+	case "ingest", "finalize", "mapper", "verify":
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -299,21 +299,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"broker.queue",
 		}
-	case "mapper":
-		// Mapper does not require broker.routingkey thus we remove it
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
 	case "notify":
 		requiredConfVars = []string{
 			"broker.host",
@@ -399,21 +384,6 @@ func NewConfig(app string) (*Config, error) {
 			"sync.api.user",
 			"sync.api.password",
 		}
-	case "verify":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
 	default:
 		return nil, fmt.Errorf("application '%s' doesn't exist", app)
 	}
@@ -519,7 +489,7 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-	case "finalize", "ingest":
+	case "finalize", "ingest", "mapper", "verify":
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
@@ -532,18 +502,6 @@ func NewConfig(app string) (*Config, error) {
 		c.configSchemas()
 	case "intercept":
 		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		c.configSchemas()
-	case "mapper":
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
 		if err != nil {
 			return nil, err
 		}
@@ -631,19 +589,6 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSyncAPI()
-		c.configSchemas()
-	case "verify":
-
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
 		c.configSchemas()
 	default:
 		return nil, errors.New("unknown app name")
