@@ -784,24 +784,6 @@ func (dbs *SDAdb) GetHeaderForStableID(stableID string) ([]byte, error) {
 
 // GetMappingData retrieves the file information needed for mapping
 func (dbs *SDAdb) GetMappingData(accessionID string) (*MappingData, error) {
-	var (
-		s   *MappingData
-		err error
-	)
-
-	for count := 1; count <= RetryTimes; count++ {
-		s, err = dbs.getMappingData(accessionID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(3, float64(count))) * time.Second)
-	}
-
-	return s, err
-}
-
-// getMappingData is the actual function performing work for GetFileInfoFromAccessionID
-func (dbs *SDAdb) getMappingData(accessionID string) (*MappingData, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	const query = "SELECT id, submission_user, submission_file_path, submission_location FROM sda.files WHERE stable_id = $1;"
