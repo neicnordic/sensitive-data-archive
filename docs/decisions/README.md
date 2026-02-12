@@ -39,9 +39,11 @@ includes a checkbox as a reminder.
 ## How to create a decision record
 
 1. Copy the template:
+
    ```sh
    cp docs/decisions/template.md docs/decisions/NNNN-title-with-dashes.md
    ```
+
    Use the next available number, zero-padded to four digits.
 
 2. Fill in the sections. Remove any optional sections (marked by HTML comments)
@@ -68,7 +70,7 @@ includes a checkbox as a reminder.
 ## Status lifecycle
 
 | Status | Meaning |
-|---|---|
+| --- | --- |
 | `proposed` | Under discussion in a PR |
 | `accepted` | Merged and in effect |
 | `rejected` | Considered but not adopted |
@@ -89,7 +91,7 @@ superseded-by: "0005-use-new-approach.md"
 ## Index
 
 | # | Decision | Status |
-|---|----------|--------|
+| --- | --- | --- |
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
 
 ## More information
