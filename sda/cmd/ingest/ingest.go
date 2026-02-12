@@ -321,21 +321,23 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 	switch status {
 	case "":
-		fileID, err = app.DB.RegisterFile(&fileID, message.FilePath, message.User)
-		if err != nil {
+		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
+		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
+		var findFileErr, registerErr error
+		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.FilePath)
+		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
+		fileID, registerErr = app.DB.RegisterFile(&fileID, submissionLocation, message.FilePath, message.User)
+		if registerErr != nil {
 			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
 
 			return "nack"
 		}
 
-		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
-		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
-		submissionLocation, err = app.InboxReader.FindFile(ctx, message.FilePath)
-		if err != nil {
+		if findFileErr != nil {
 			log.Errorf("failed to find submission location for file in all configured storage locations, file-id: %s", fileID)
 			if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
 				Error:           "Failed to open file to ingest, file not found in any of the configured storage locations",
-				Reason:          err.Error(),
+				Reason:          findFileErr.Error(),
 				OriginalMessage: message,
 			}); err != nil {
 				return "reject"
@@ -343,7 +345,6 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 			return "ack"
 		}
-		log.Infof("registering file, file-id: %s", fileID)
 
 	case "uploaded", "disabled":
 
@@ -587,7 +588,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		return "ack"
 	}
 
-	if err := app.DB.SetArchivedWithLocation(location, fileInfo, fileID); err != nil {
+	if err := app.DB.SetArchived(location, fileInfo, fileID); err != nil {
 		log.Errorf("SetArchived failed, file-id: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
