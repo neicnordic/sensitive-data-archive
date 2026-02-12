@@ -29,11 +29,9 @@ import (
 )
 
 var (
-	message       schema.IngestionVerification
-	db            *database.SDAdb
-	mqBroker      *broker.AMQPBroker
-	archiveReader storage.Reader
-
+	db             *database.SDAdb
+	mqBroker       *broker.AMQPBroker
+	archiveReader  storage.Reader
 	archiveKeyList []*[32]byte
 )
 
@@ -132,7 +130,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		infoErrorMessage := broker.InfoError{
 			Error:           "Message validation failed",
 			Reason:          err.Error(),
-			OriginalMessage: message,
+			OriginalMessage: delivered,
 		}
 
 		body, _ := json.Marshal(infoErrorMessage)
@@ -146,6 +144,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		// Restart on new message
 		return
 	}
+
+	var message schema.IngestionVerification
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &message)
 
