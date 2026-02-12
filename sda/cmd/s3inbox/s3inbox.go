@@ -58,7 +58,7 @@ func run() error {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
 	}
 
-	if err = checkS3Bucket(ctx, conf.S3Inbox.Bucket, s3Client); err != nil {
+	if err = checkS3Bucket(ctx, s3Client, conf.S3Inbox.Bucket); err != nil {
 		return fmt.Errorf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
@@ -140,7 +140,7 @@ func run() error {
 	}
 }
 
-func checkS3Bucket(ctx context.Context, bucket string, s3Client *s3.Client) error {
+func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) error {
 	_, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &bucket})
 	if err != nil {
 		var apiErr smithy.APIError
