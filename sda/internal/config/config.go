@@ -40,8 +40,6 @@ type Config struct {
 	Archive      storage.Conf
 	Broker       broker.MQConf
 	Database     database.DBConf
-	Inbox        storage.Conf
-	Backup       storage.Conf
 	Server       ServerConfig
 	S3Inbox      S3InboxConf
 	API          APIConf
@@ -647,21 +645,6 @@ func (c *Config) configArchive() {
 	}
 }
 
-// configBackup provides configuration for the backup storage
-func (c *Config) configBackup() {
-	switch viper.GetString("backup.type") {
-	case S3:
-		c.Backup.Type = S3
-		c.Backup.S3 = configS3Storage("backup")
-	case SFTP:
-		c.Backup.Type = SFTP
-		c.Backup.SFTP = configSFTP("backup")
-	default:
-		c.Backup.Type = POSIX
-		c.Backup.Posix.Location = viper.GetString("backup.location")
-	}
-}
-
 // configBroker provides configuration for the message broker
 func (c *Config) configBroker() error {
 	// Setup broker
@@ -757,17 +740,6 @@ func (c *Config) configDatabase() error {
 	c.Database = db
 
 	return nil
-}
-
-// configInbox provides configuration for the inbox storage
-func (c *Config) configInbox() {
-	if viper.GetString("inbox.type") == S3 {
-		c.Inbox.Type = S3
-		c.Inbox.S3 = configS3Storage("inbox")
-	} else {
-		c.Inbox.Type = POSIX
-		c.Inbox.Posix.Location = viper.GetString("inbox.location")
-	}
 }
 
 // configOrchestrator provides the configuration for the standalone orchestator.

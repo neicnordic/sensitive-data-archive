@@ -157,7 +157,6 @@ func (ts *ConfigTestSuite) TestConfigS3Storage() {
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
-	assert.NotNil(ts.T(), config.Inbox.S3)
 	assert.Equal(ts.T(), "testurl", config.S3Inbox.Endpoint)
 	assert.Equal(ts.T(), "testaccess", config.S3Inbox.AccessKey)
 	assert.Equal(ts.T(), "testsecret", config.S3Inbox.SecretKey)
@@ -174,7 +173,6 @@ func (ts *ConfigTestSuite) TestConfigBroker() {
 	config, err := NewConfig("s3inbox")
 	assert.NotNil(ts.T(), config)
 	assert.NoError(ts.T(), err)
-	assert.NotNil(ts.T(), config.Inbox.S3)
 	assert.Equal(ts.T(), "/testvhost", config.Broker.Vhost)
 	assert.Equal(ts.T(), false, config.Broker.Ssl)
 
