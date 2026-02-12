@@ -1,4 +1,4 @@
-FROM debian:trixie-slim AS apptainer_builder
+FROM --platform=linux/amd64 debian:trixie-slim AS apptainer_builder
 
 RUN apt update \
       && apt install -y wget \
@@ -16,7 +16,7 @@ COPY . .
 
 RUN go build -buildvcs=false -o ./sda-validator-orchestrator
 
-FROM gcr.io/distroless/static-debian12
+FROM --platform=linux/amd64 gcr.io/distroless/static-debian12
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
