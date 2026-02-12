@@ -668,15 +668,13 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	proxy.database = db
-	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
-	assert.NoError(s.T(), err)
 	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
 	// Detect autentication failure
 	proxy.s3Conf.AccessKey = "badKey"
-	s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
 	assert.NoError(s.T(), err)
 	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.TODO(), s3Client, "/dummy/file", fileID))
 
