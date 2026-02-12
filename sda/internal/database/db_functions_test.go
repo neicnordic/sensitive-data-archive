@@ -1822,7 +1822,7 @@ func (suite *DatabaseTests) TestCancelFile() {
 		UploadedChecksum:  "abc",
 	}, fileID))
 
-	assert.NoError(suite.T(), db.CancelFile(context.TODO(), fileID, ""))
+	assert.NoError(suite.T(), db.CancelFile(context.TODO(), fileID, "{}"))
 
 	// Check that data has been unset
 	archiveData, err := db.getArchived(fileID)
