@@ -182,7 +182,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database with location: %s", r.URL.Path, location)
-		p.fileIDs[fileIdentifier], err = p.database.RegisterFileWithLocation(nil, location, filePath, username)
+		p.fileIDs[fileIdentifier], err = p.database.RegisterFile(nil, location, filePath, username)
 		log.Debugf("fileId: %v", p.fileIDs[fileIdentifier])
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))

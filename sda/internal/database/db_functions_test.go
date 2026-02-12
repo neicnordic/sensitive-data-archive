@@ -41,7 +41,7 @@ func (suite *DatabaseTests) TestRegisterFile() {
 		},
 	} {
 		suite.T().Run(step.name, func(t *testing.T) {
-			fileID, err := db.RegisterFile(&step.id, step.filePath, step.userName)
+			fileID, err := db.RegisterFile(&step.id, "/inbox", step.filePath, step.userName)
 			assert.NoError(suite.T(), err, "RegisterFile encountered an unexpected error: ", err)
 			assert.NoError(suite.T(), uuid.Validate(fileID), "RegisterFile did not return a UUID")
 		})
@@ -54,7 +54,7 @@ func (suite *DatabaseTests) TestRegisterFileWithID() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	insertedFileID := uuid.New().String()
-	fileID, err := db.RegisterFile(&insertedFileID, "/testuser/file3.c4gh", "testuser")
+	fileID, err := db.RegisterFile(&insertedFileID, "/inbox", "/testuser/file3.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	err = db.UpdateFileEventLog(fileID, "uploaded", "testuser", "{}", "{}")
@@ -73,7 +73,7 @@ func (suite *DatabaseTests) TestUpdateFileEventLog() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/file4.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file4.c4gh", "testuser")
 	assert.Nil(suite.T(), err, "failed to register file in database")
 
 	// Attempt to mark a file that doesn't exist as uploaded
@@ -98,7 +98,7 @@ func (suite *DatabaseTests) TestStoreHeader() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestStoreHeader.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestStoreHeader.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, fileID)
@@ -116,7 +116,7 @@ func (suite *DatabaseTests) TestRotateHeaderKey() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// Register a new key and a new file
-	fileID, err := db.RegisterFile(nil, "/testuser/file1.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.addKeyHash("someKeyHash", "this is a test key")
 	assert.NoError(suite.T(), err, "failed to register key in database")
@@ -164,7 +164,7 @@ func (suite *DatabaseTests) TestSetArchived() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestSetArchived.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/Test/SetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), -1, fmt.Sprintf("%x", sha256.New())}
@@ -192,7 +192,7 @@ func (suite *DatabaseTests) TestSetArchived() {
 		},
 	} {
 		suite.T().Run(step.name, func(t *testing.T) {
-			err := db.setArchived(step.location, step.fileInfo, step.fileID)
+			err := db.SetArchived(step.location, step.fileInfo, step.fileID)
 			if step.expectedError != "" {
 				assert.ErrorContains(suite.T(), err, step.expectedError)
 			} else {
@@ -208,7 +208,7 @@ func (suite *DatabaseTests) TestGetFileStatus() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetFileStatus.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetFileStatus.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	err = db.UpdateFileEventLog(fileID, "downloaded", "testuser", "{}", "{}")
@@ -226,7 +226,7 @@ func (suite *DatabaseTests) TestGetHeader() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetHeader.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetHeader.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	err = db.StoreHeader([]byte{15, 45, 20, 40, 48}, fileID)
@@ -244,7 +244,7 @@ func (suite *DatabaseTests) TestBackupHeader() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 	defer db.Close()
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestBackupHeader.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestBackupHeader.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	testKeyHash := "test-key-hash-123"
@@ -271,7 +271,7 @@ func (suite *DatabaseTests) TestSetVerified() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestSetVerified.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetVerified.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/testuser/TestSetVerified.c4gh", fmt.Sprintf("%x", sha256.New()), 948, fmt.Sprintf("%x", sha256.New())}
@@ -289,12 +289,12 @@ func (suite *DatabaseTests) TestGetArchived() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/testuser/TestGetArchived.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetArchived.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestGetArchived.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchivedWithLocation("/archive", fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -313,11 +313,11 @@ func (suite *DatabaseTests) TestSetAccessionID() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestSetAccessionID.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetAccessionID.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -333,11 +333,11 @@ func (suite *DatabaseTests) TestCheckAccessionIDExists() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestCheckAccessionIDExists.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestCheckAccessionIDExists.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestCheckAccessionIDExists.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -361,11 +361,11 @@ func (suite *DatabaseTests) TestGetAccessionID() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestSetAccessionID.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetAccessionID.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -385,11 +385,11 @@ func (suite *DatabaseTests) TestGetAccessionID_wrongFileID() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestSetAccessionID.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetAccessionID.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, "/tmp/TestSetAccessionID.c4gh", fmt.Sprintf("%x", sha256.New()), 987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -416,7 +416,7 @@ func (suite *DatabaseTests) TestGetFileInfo() {
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetFileInfo.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetFileInfo.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	encSha := sha256.New()
@@ -429,7 +429,7 @@ func (suite *DatabaseTests) TestGetFileInfo() {
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/tmp/TestGetFileInfo.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(suite.T(), err, "got (%v) when marking file as verified", err)
@@ -450,7 +450,7 @@ func (suite *DatabaseTests) TestMapFilesToDataset() {
 
 	accessions := []string{}
 	for i := 1; i < 12; i++ {
-		fileID, err := db.RegisterFile(nil, fmt.Sprintf("/testuser/TestMapFilesToDataset-%d.c4gh", i), "testuser")
+		fileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("/testuser/TestMapFilesToDataset-%d.c4gh", i), "testuser")
 		assert.NoError(suite.T(), err, "failed to register file in database")
 
 		err = db.SetAccessionID(fmt.Sprintf("acession-%d", i), fileID)
@@ -489,7 +489,7 @@ func (suite *DatabaseTests) TestGetInboxPath() {
 
 	accessions := []string{}
 	for i := 0; i < 5; i++ {
-		fileID, err := db.RegisterFile(nil, fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
+		fileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
 		assert.NoError(suite.T(), err, "failed to register file in database")
 
 		err = db.SetAccessionID(fmt.Sprintf("acession-00%d", i), fileID)
@@ -513,7 +513,7 @@ func (suite *DatabaseTests) TestUpdateDatasetEvent() {
 
 	accessions := []string{}
 	for i := 0; i < 5; i++ {
-		fileID, err := db.RegisterFile(nil, fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
+		fileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("/testuser/TestGetInboxPath-00%d.c4gh", i), "testuser")
 		assert.NoError(suite.T(), err, "failed to register file in database")
 
 		err = db.SetAccessionID(fmt.Sprintf("acession-00%d", i), fileID)
@@ -547,7 +547,7 @@ func (suite *DatabaseTests) TestGetHeaderForStableID() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetHeaderForStableID.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetHeaderForStableID.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	err = db.StoreHeader([]byte("HEADER"), fileID)
@@ -569,13 +569,13 @@ func (suite *DatabaseTests) TestGetSyncData() {
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
 
 	// register a file in the database
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetGetSyncData.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetGetSyncData.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, "/tmp/TestGetGetSyncData.c4gh", checksum, 999, fmt.Sprintf("%x", sha256.New())}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = db.SetVerified(fileInfo, fileID)
@@ -600,7 +600,7 @@ func (suite *DatabaseTests) TestCheckIfDatasetExists() {
 
 	accessions := []string{}
 	for i := 0; i <= 3; i++ {
-		fileID, err := db.RegisterFile(nil, fmt.Sprintf("/testuser/TestCheckIfDatasetExists-%d.c4gh", i), "testuser")
+		fileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("/testuser/TestCheckIfDatasetExists-%d.c4gh", i), "testuser")
 		assert.NoError(suite.T(), err, "failed to register file in database")
 
 		err = db.SetAccessionID(fmt.Sprintf("accession-%d", i), fileID)
@@ -633,13 +633,13 @@ func (suite *DatabaseTests) TestGetArchivePath() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/testuser/TestGetArchivePath-001.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetArchivePath-001.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	checksum := fmt.Sprintf("%x", sha256.New())
 	corrID := uuid.New().String()
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New()), 1234, corrID, checksum, 999, fmt.Sprintf("%x", sha256.New())}
-	err = db.SetArchivedWithLocation("/archive", fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(suite.T(), err, "failed to mark file as Archived")
 
 	err = db.SetAccessionID("acession-0001", fileID)
@@ -665,7 +665,7 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 			sub = "submission_b"
 		}
 
-		fileID, err := db.RegisterFile(nil, fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", testUser, sub, i), testUser)
+		fileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("%v/%s/TestGetUserFiles-00%d.c4gh", testUser, sub, i), testUser)
 		assert.NoError(suite.T(), err, "failed to register file in database")
 		err = db.UpdateFileEventLog(fileID, "uploaded", testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
@@ -701,7 +701,7 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 	filePath := "/testuser/file10.c4gh"
 	user := "testuser"
 
-	fileID, err := db.RegisterFile(nil, filePath, user)
+	fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -711,7 +711,7 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, fileID, checksum, 999, fmt.Sprintf("%x", sha256.New())}
-	if err := db.SetArchived(fileInfo, fileID); err != nil {
+	if err := db.SetArchived("/archive", fileInfo, fileID); err != nil {
 		suite.FailNow("failed to mark file as archived")
 	}
 	if err := db.UpdateFileEventLog(fileID, "archived", user, "{}", "{}"); err != nil {
@@ -721,7 +721,7 @@ func (suite *DatabaseTests) TestGetCorrID_sameFilePath() {
 		suite.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "stableID", fileID)
 	}
 
-	fileID2, err := db.RegisterFile(nil, filePath, user)
+	fileID2, err := db.RegisterFile(nil, "/inbox", filePath, user)
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	if err := db.UpdateFileEventLog(fileID2, "uploaded", user, "{}", "{}"); err != nil {
 		suite.FailNow("failed to update satus of file in database")
@@ -739,7 +739,7 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 	for _, user := range testUsers {
 		for i := 0; i < testCases; i++ {
 			filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i)
-			fileID, err := db.RegisterFile(nil, filePath, user)
+			fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 			if err != nil {
 				suite.FailNow("Failed to register file")
 			}
@@ -750,7 +750,7 @@ func (suite *DatabaseTests) TestListActiveUsers() {
 
 			checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 			fileInfo := FileInfo{fmt.Sprintf("%x", sha256.New().Sum(nil)), 1234, filePath, checksum, 999, fmt.Sprintf("%x", sha256.New())}
-			err = db.SetArchived(fileInfo, fileID)
+			err = db.SetArchived("/archive", fileInfo, fileID)
 			if err != nil {
 				suite.FailNow("failed to mark file as Archived")
 			}
@@ -794,7 +794,7 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 
 	for i := 0; i < testCases; i++ {
 		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", "User-Q", i)
-		fileID, err := db.RegisterFile(nil, filePath, "User-Q")
+		fileID, err := db.RegisterFile(nil, "/inbox", filePath, "User-Q")
 		if err != nil {
 			suite.FailNow("Failed to register file")
 		}
@@ -812,7 +812,7 @@ func (suite *DatabaseTests) TestGetDatasetStatus() {
 			999,
 			fmt.Sprintf("%x", sha256.New()),
 		}
-		err = db.SetArchived(fileInfo, fileID)
+		err = db.SetArchived("/archive", fileInfo, fileID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
@@ -949,7 +949,7 @@ func (suite *DatabaseTests) TestSetKeyHash() {
 	keyDescription := "this is a test key"
 	err = db.addKeyHash(keyHex, keyDescription)
 	assert.NoError(suite.T(), err, "failed to register key in database")
-	fileID, err := db.RegisterFile(nil, "/testuser/file1.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	// Test that the key hash can be set in the files table
@@ -973,7 +973,7 @@ func (suite *DatabaseTests) TestSetKeyHash_wrongHash() {
 	keyDescription := "this is a test hash"
 	err = db.addKeyHash(keyHex, keyDescription)
 	assert.NoError(suite.T(), err, "failed to register key in database")
-	fileID, err := db.RegisterFile(nil, "/testuser/file2.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file2.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
 	// Ensure failure if a non existing hash is used
@@ -992,7 +992,7 @@ func (suite *DatabaseTests) TestGetKeyHash() {
 	keyDescription := "this is a test key"
 	err = db.addKeyHash(keyHex, keyDescription)
 	assert.NoError(suite.T(), err, "failed to register key in database")
-	fileID, err := db.RegisterFile(nil, "/testuser/file1.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.SetKeyHash(keyHex, fileID)
 	assert.NoError(suite.T(), err, "failed to set key hash in database")
@@ -1013,7 +1013,7 @@ func (suite *DatabaseTests) TestGetKeyHash_wrongFileID() {
 	keyDescription := "this is a test key"
 	err = db.addKeyHash(keyHex, keyDescription)
 	assert.NoError(suite.T(), err, "failed to register key in database")
-	fileID, err := db.RegisterFile(nil, "/testuser/file1.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file1.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 	err = db.SetKeyHash(keyHex, fileID)
 	assert.NoError(suite.T(), err, "failed to set key hash in database")
@@ -1073,7 +1073,7 @@ func (suite *DatabaseTests) TestListDatasets() {
 
 	for i := 0; i < testCases; i++ {
 		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", "User-Q", i)
-		fileID, err := db.RegisterFile(nil, filePath, "User-Q")
+		fileID, err := db.RegisterFile(nil, "/inbox", filePath, "User-Q")
 		if err != nil {
 			suite.FailNow("Failed to register file")
 		}
@@ -1091,7 +1091,7 @@ func (suite *DatabaseTests) TestListDatasets() {
 			999,
 			fmt.Sprintf("%x", sha256.New()),
 		}
-		err = db.SetArchived(fileInfo, fileID)
+		err = db.SetArchived("/archive", fileInfo, fileID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
@@ -1153,7 +1153,7 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 	user := "User-Q"
 	for i := 0; i < 6; i++ {
 		filePath := fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i)
-		fileID, err := db.RegisterFile(nil, filePath, user)
+		fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 		if err != nil {
 			suite.FailNow("Failed to register file")
 		}
@@ -1171,7 +1171,7 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 			999,
 			fmt.Sprintf("%x", sha256.New()),
 		}
-		err = db.SetArchived(fileInfo, fileID)
+		err = db.SetArchived("/archive", fileInfo, fileID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
@@ -1204,7 +1204,7 @@ func (suite *DatabaseTests) TestListUserDatasets() {
 		suite.FailNow("failed to update dataset event")
 	}
 
-	fileID, err := db.RegisterFile(nil, "filePath", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "filePath", "user")
 	if err != nil {
 		suite.FailNow("Failed to register file")
 	}
@@ -1292,7 +1292,7 @@ func (suite *DatabaseTests) TestGetReVerificationData() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetReVerificationData.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetReVerificationData.c4gh", "testuser")
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -1310,7 +1310,7 @@ func (suite *DatabaseTests) TestGetReVerificationData() {
 	}
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
-	if err = db.SetArchived(fileInfo, fileID); err != nil {
+	if err = db.SetArchived("/archive", fileInfo, fileID); err != nil {
 		suite.FailNow("failed to archive file")
 	}
 	if err = db.SetVerified(fileInfo, fileID); err != nil {
@@ -1332,7 +1332,7 @@ func (suite *DatabaseTests) TestGetReVerificationDataFromFileID() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetReVerificationData.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetReVerificationData.c4gh", "testuser")
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -1350,7 +1350,7 @@ func (suite *DatabaseTests) TestGetReVerificationDataFromFileID() {
 	}
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
-	if err = db.SetArchived(fileInfo, fileID); err != nil {
+	if err = db.SetArchived("/archive", fileInfo, fileID); err != nil {
 		suite.FailNow("failed to archive file")
 	}
 	if err = db.SetVerified(fileInfo, fileID); err != nil {
@@ -1368,7 +1368,7 @@ func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetReVerificationData.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetReVerificationData.c4gh", "testuser")
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -1387,7 +1387,7 @@ func (suite *DatabaseTests) TestGetReVerificationData_wrongAccessionID() {
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetReVerificationData.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
 
-	if err = db.SetArchived(fileInfo, fileID); err != nil {
+	if err = db.SetArchived("/archive", fileInfo, fileID); err != nil {
 		suite.FailNow("failed to archive file")
 	}
 	if err = db.SetVerified(fileInfo, fileID); err != nil {
@@ -1409,7 +1409,7 @@ func (suite *DatabaseTests) TestGetDecryptedChecksum() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got (%v) when creating new connection", err)
 
-	fileID, err := db.RegisterFile(nil, "/testuser/TestGetDecryptedChecksum.c4gh", "testuser")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestGetDecryptedChecksum.c4gh", "testuser")
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -1428,7 +1428,7 @@ func (suite *DatabaseTests) TestGetDecryptedChecksum() {
 
 	fileInfo := FileInfo{fmt.Sprintf("%x", encSha.Sum(nil)), 2000, "/archive/TestGetDecryptedChecksum.c4gh", fmt.Sprintf("%x", decSha.Sum(nil)), 1987, fmt.Sprintf("%x", sha256.New())}
 
-	if err = db.SetArchived(fileInfo, fileID); err != nil {
+	if err = db.SetArchived("/archive", fileInfo, fileID); err != nil {
 		suite.FailNow("failed to archive file")
 	}
 	if err = db.SetVerified(fileInfo, fileID); err != nil {
@@ -1449,7 +1449,7 @@ func (suite *DatabaseTests) TestGetDatasetFiles() {
 
 	for i := 0; i < testCases; i++ {
 		filePath := fmt.Sprintf("/%v/TestGetDsatasetFiles-00%d.c4gh", "User-Q", i)
-		fileID, err := db.RegisterFile(nil, filePath, "User-Q")
+		fileID, err := db.RegisterFile(nil, "/inbox", filePath, "User-Q")
 		if err != nil {
 			suite.FailNow("Failed to register file")
 		}
@@ -1467,7 +1467,7 @@ func (suite *DatabaseTests) TestGetDatasetFiles() {
 			999,
 			fmt.Sprintf("%x", sha256.New()),
 		}
-		err = db.SetArchived(fileInfo, fileID)
+		err = db.SetArchived("/archive", fileInfo, fileID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
@@ -1506,7 +1506,7 @@ func (suite *DatabaseTests) TestGetDatasetFileIDs() {
 
 	for i := 0; i < testCases; i++ {
 		filePath := fmt.Sprintf("/%v/TestGetDatasetFileIDs-00%d.c4gh", "User-Q", i)
-		fileID, err := db.RegisterFile(nil, filePath, "User-Q")
+		fileID, err := db.RegisterFile(nil, "/inbox", filePath, "User-Q")
 		if err != nil {
 			suite.FailNow("Failed to register file")
 		}
@@ -1525,7 +1525,7 @@ func (suite *DatabaseTests) TestGetDatasetFileIDs() {
 			999,
 			fmt.Sprintf("%x", sha256.New()),
 		}
-		err = db.SetArchived(fileInfo, fileID)
+		err = db.SetArchived("/archive", fileInfo, fileID)
 		if err != nil {
 			suite.FailNow("failed to mark file as Archived")
 		}
@@ -1566,7 +1566,7 @@ func (suite *DatabaseTests) TestGetSubmissionPathAndLocation() {
 
 	user := "UserX"
 	filePath := fmt.Sprintf("/%v/Deletefile1.c4gh", user)
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", filePath, user)
+	fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 	if err != nil {
 		suite.FailNow("Failed to register file")
 	}
@@ -1592,7 +1592,7 @@ func (suite *DatabaseTests) TestGetFileIDByUserPathAndStatus() {
 
 	user := "UserX"
 	filePath := fmt.Sprintf("/%v/Deletefile1.c4gh", user)
-	fileID, err := db.RegisterFile(nil, filePath, user)
+	fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 	if err != nil {
 		suite.FailNow("Failed to register file")
 	}
@@ -1631,7 +1631,7 @@ func (suite *DatabaseTests) TestGetFileDetailsFromUUI_Found() {
 	// Register a file to get a valid UUID
 	filePath := "/dummy_user.org/Dummy_folder/dummyfile.c4gh"
 	user := "dummy@user.org"
-	fileID, err := db.RegisterFile(nil, filePath, user)
+	fileID, err := db.RegisterFile(nil, "/inbox", filePath, user)
 	if err != nil {
 		suite.FailNow("failed to register file in database")
 	}
@@ -1667,7 +1667,7 @@ func (suite *DatabaseTests) TestSetSubmissionFileSize() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
-	fileID, err := db.RegisterFile(nil, "/test.file", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/test.file", "user")
 	if err != nil {
 		suite.FailNow("failed to register file", err)
 	}
@@ -1773,12 +1773,12 @@ func (suite *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 			assert.NoError(t, err)
 
 			for fileID, size := range test.filesToRegister {
-				_, err := db.RegisterFileWithLocation(&fileID, "/inbox", "/"+fileID, "user")
+				_, err := db.RegisterFile(&fileID, "/inbox", "/"+fileID, "user")
 				assert.NoError(t, err)
 				assert.NoError(t, db.setSubmissionFileSize(fileID, size))
 			}
 			for fileID, size := range test.filesToArchive {
-				assert.NoError(t, db.SetArchivedWithLocation("/archive", FileInfo{
+				assert.NoError(t, db.SetArchived("/archive", FileInfo{
 					ArchiveChecksum:   "123",
 					Size:              size,
 					Path:              "/test.file3",
@@ -1808,12 +1808,12 @@ func (suite *DatabaseTests) TestCancelFile() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/test.file", "user")
 	if err != nil {
 		suite.FailNow("failed to register file", err)
 	}
 
-	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+	assert.NoError(suite.T(), db.SetArchived("/archive", FileInfo{
 		ArchiveChecksum:   "123",
 		Size:              500,
 		Path:              "/test.file3",
@@ -1834,7 +1834,7 @@ func (suite *DatabaseTests) TestIsFileInDataset_No() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/test.file", "user")
 	if err != nil {
 		suite.FailNow("failed to register file", err)
 	}
@@ -1848,11 +1848,11 @@ func (suite *DatabaseTests) TestIsFileInDataset_Yes() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "failed to create new connection")
 
-	fileID, err := db.RegisterFileWithLocation(nil, "/inbox", "/test.file", "user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "/test.file", "user")
 	if err != nil {
 		suite.FailNow("failed to register file", err)
 	}
-	assert.NoError(suite.T(), db.SetArchivedWithLocation("/archive", FileInfo{
+	assert.NoError(suite.T(), db.SetArchived("/archive", FileInfo{
 		ArchiveChecksum:   "123",
 		Size:              500,
 		Path:              "/test.file3",

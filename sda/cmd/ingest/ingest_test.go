@@ -397,7 +397,7 @@ func (ts *TestSuite) TestCancelFile_NotYetArchived() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, file1, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
@@ -418,14 +418,14 @@ func (ts *TestSuite) TestCancelFile() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, file1, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.NoError(ts.T(), ts.ingest.DB.SetArchivedWithLocation(ts.archiveDir, database.FileInfo{
+	assert.NoError(ts.T(), ts.ingest.DB.SetArchived(ts.archiveDir, database.FileInfo{
 		ArchiveChecksum:   "123",
 		Size:              500,
 		Path:              fileID,
@@ -449,7 +449,7 @@ func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, file1, userName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
@@ -468,7 +468,7 @@ func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 // messages of type `ingest`
 func (ts *TestSuite) TestIngestFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -486,7 +486,7 @@ func (ts *TestSuite) TestIngestFile() {
 
 func (ts *TestSuite) TestNoSubmissionLocation() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -504,7 +504,7 @@ func (ts *TestSuite) TestNoSubmissionLocation() {
 
 func (ts *TestSuite) TestIngestFile_secondTime() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -533,7 +533,7 @@ func (ts *TestSuite) TestIngestFile_unknownInboxType() {
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -556,7 +556,7 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -626,7 +626,7 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -656,7 +656,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
@@ -690,7 +690,7 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFileWithLocation(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
