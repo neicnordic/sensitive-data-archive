@@ -302,7 +302,7 @@ type TestSuite struct {
 }
 
 func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, hash.Hash) {
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update status of file in database")
@@ -322,7 +322,7 @@ func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, 
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	err = Conf.API.DB.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 	err = Conf.API.DB.SetVerified(fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
@@ -657,7 +657,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 	// Insert a file and make sure it is listed
 	file1 := fmt.Sprintf("/%v/TestAPIGetFiles.c4gh", s.User)
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, file1, s.User)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, file1, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 
 	latestStatus := "uploaded"
@@ -701,7 +701,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 	// Insert a second file and make sure it is listed
 	file2 := fmt.Sprintf("/%v/TestAPIGetFiles2.c4gh", s.User)
-	_, err = Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, file2, s.User)
+	_, err = Conf.API.DB.RegisterFile(nil, s.inboxDir, file2, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 
 	resp, err = client.Do(req)
@@ -727,7 +727,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {
 	for i := 1; i <= 2; i++ {
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -795,7 +795,7 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -1133,7 +1133,7 @@ func (s *TestSuite) TestIngestFile_WithPayload() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1192,7 +1192,7 @@ func (s *TestSuite) TestIngestFile_WithPayload_NoUser() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1226,7 +1226,7 @@ func (s *TestSuite) TestIngestFile_WithPayload_WrongUser() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1259,7 +1259,7 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1293,7 +1293,7 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 func (s *TestSuite) TestIngestFile_WithFileID() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file11.c4gh"
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
@@ -1338,7 +1338,7 @@ func (s *TestSuite) TestIngestFile_WithFileID() {
 func (s *TestSuite) TestIngestFile_WithFileID_WrongID() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file11.c4gh"
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
@@ -1364,7 +1364,7 @@ func (s *TestSuite) TestIngestFile_WithFileID_WrongID() {
 func (s *TestSuite) TestIngestFile_BothFileIDAndPayloadProvided() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
@@ -1701,7 +1701,7 @@ func (s *TestSuite) TestCreateDataset() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update status of file in database")
@@ -1721,7 +1721,7 @@ func (s *TestSuite) TestCreateDataset() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	err = Conf.API.DB.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID)
@@ -1783,7 +1783,7 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1803,7 +1803,7 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	err = Conf.API.DB.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID)
@@ -1905,7 +1905,7 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -1925,7 +1925,7 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = Conf.API.DB.SetArchived(fileInfo, fileID)
+	err = Conf.API.DB.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
 	err = Conf.API.DB.SetVerified(fileInfo, fileID)
@@ -1963,7 +1963,7 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 func (s *TestSuite) TestReleaseDataset() {
 	user := "TestReleaseDataset"
 	for i := 0; i < 3; i++ {
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2096,7 +2096,7 @@ func (s *TestSuite) TestReleaseDataset_DeprecatedDataset() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -2155,7 +2155,7 @@ func (s *TestSuite) TestListActiveUsers() {
 	testUsers := []string{"User-A", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 3; i++ {
-			fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -2214,7 +2214,7 @@ func (s *TestSuite) TestListUserFiles() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -2280,7 +2280,7 @@ func (s *TestSuite) TestListUserFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
@@ -2541,7 +2541,7 @@ func (s *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 
 func (s *TestSuite) TestListDatasets() {
 	for i := 0; i < 5; i++ {
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2599,7 +2599,7 @@ func (s *TestSuite) TestListDatasets() {
 
 func (s *TestSuite) TestListUserDatasets() {
 	for i := 0; i < 5; i++ {
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2656,7 +2656,7 @@ func (s *TestSuite) TestListUserDatasets() {
 
 func (s *TestSuite) TestListDatasetsAsUser() {
 	for i := 0; i < 5; i++ {
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), s.User)
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), s.User)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2715,7 +2715,7 @@ func (s *TestSuite) TestReVerifyFile() {
 	user := "TestReVerify"
 	for i := 0; i < 3; i++ {
 		filePath := fmt.Sprintf("/%v/TestReVerify-00%d.c4gh", user, i)
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2743,7 +2743,7 @@ func (s *TestSuite) TestReVerifyFile() {
 			Size:              1000,
 			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived("/archive", fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Archived")
 		}
 
@@ -2817,7 +2817,7 @@ func (s *TestSuite) TestReVerifyDataset() {
 	user := "TestReVerifyDataset"
 	for i := 0; i < 3; i++ {
 		filePath := fmt.Sprintf("/%v/TestReVerifyDataset-00%d.c4gh", user, i)
-		fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, user)
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, user)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
@@ -2845,7 +2845,7 @@ func (s *TestSuite) TestReVerifyDataset() {
 			Size:              1000,
 			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := Conf.API.DB.SetArchived(fileInfo, fileID); err != nil {
+		if err := Conf.API.DB.SetArchived("/archive", fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Archived")
 		}
 
@@ -2937,7 +2937,7 @@ func (s *TestSuite) TestDownloadFile() {
 	defer ts.Close()
 
 	// Register the file in the database
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filepath.Base(s.GoodC4ghFile), s.User)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filepath.Base(s.GoodC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -3024,7 +3024,7 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 
 	// Register a file in the database (but don't create the actual file)
 	filePath := fmt.Sprintf("/%v/nonexistent.c4gh", s.User)
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filePath, s.User)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filePath, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
@@ -3056,7 +3056,7 @@ func (s *TestSuite) TestDownloadFile_badC4ghFile() {
 	defer ts.Close()
 
 	// Register a file in the database (but don't create the actual file)
-	fileID, err := Conf.API.DB.RegisterFileWithLocation(nil, s.inboxDir, filepath.Base(s.BadC4ghFile), s.User)
+	fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, filepath.Base(s.BadC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
