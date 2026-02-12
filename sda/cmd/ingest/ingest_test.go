@@ -217,8 +217,6 @@ func (ts *TestSuite) SetupSuite() {
 	viper.Set("db.password", "rootpasswd")
 	viper.Set("db.database", "sda")
 	viper.Set("db.sslMode", "disable")
-	viper.Set("inbox.type", "posix")
-	viper.Set("inbox.location", "/tmp/")
 	viper.Set("schema.path", "../../schemas/isolated/")
 
 	ingestConf, err := config.NewConfig("ingest")
@@ -395,6 +393,27 @@ func (ts *TestSuite) TestTryDecrypt() {
 }
 
 // messages of type `cancel`
+func (ts *TestSuite) TestCancelFile_NotYetArchived() {
+	// prepare the DB entries
+	userName := "test-cancel"
+	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
+	fileID, err := ts.ingest.DB.RegisterFile(nil, file1, userName)
+	assert.NoError(ts.T(), err, "failed to register file in database")
+
+	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
+		ts.Fail("failed to update file event log")
+	}
+
+	message := schema.IngestionTrigger{
+		Type:     "cancel",
+		FilePath: file1,
+		User:     userName,
+	}
+
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.TODO(), fileID, message))
+}
+
+// messages of type `cancel`
 func (ts *TestSuite) TestCancelFile() {
 	// prepare the DB entries
 	userName := "test-cancel"
@@ -405,6 +424,17 @@ func (ts *TestSuite) TestCancelFile() {
 	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
+
+	assert.NoError(ts.T(), ts.ingest.DB.SetArchivedWithLocation(ts.archiveDir, database.FileInfo{
+		ArchiveChecksum:   "123",
+		Size:              500,
+		Path:              fileID,
+		DecryptedChecksum: "321",
+		DecryptedSize:     550,
+		UploadedChecksum:  "abc",
+	}, fileID))
+
+	ts.NoError(os.WriteFile(filepath.Join(ts.archiveDir, fileID), []byte("unit testing file"), 0600))
 
 	message := schema.IngestionTrigger{
 		Type:     "cancel",
