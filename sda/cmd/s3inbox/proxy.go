@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
@@ -551,7 +550,7 @@ func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64
 		return "", 0, errors.New("unexpected response from s3, HeadObject response contains nil information")
 	}
 
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(*result.ETag, "\"", "")))), *result.ContentLength, nil
+	return strings.Trim(*result.ETag, "\""), *result.ContentLength, nil
 }
 
 func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, error) {
