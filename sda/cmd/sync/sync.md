@@ -107,7 +107,7 @@ These settings control how sync connects to the RabbitMQ message broker.
 
 
 ### Storage settings
-The sync service requires access to the "archive", and "sync" storage. To configure that, the following configuration is required:
+The sync service requires access to the "archive" and "sync" storage backends. To configure these, the following configuration is required:
 ```yaml
 storage:
   archive:
@@ -117,7 +117,7 @@ storage:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
 
-Sync will read from the "archive", and backup files that have been added to a dataset in the "sync" storage.
+Sync operates by reading file data from the "archive" backend and replicating it to the "sync" backend for all files associated with a dataset.
 
 ### Logging settings
 
