@@ -260,7 +260,13 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		return "nack"
 	}
 
-	if archiveData != nil && archiveData.Location != "" {
+	if archiveData == nil {
+		log.Warnf("file with id: %s, could not be cancelled, as it has not yet been archived", fileID)
+
+		return "reject"
+	}
+
+	if archiveData.Location != "" {
 		if err := app.ArchiveWriter.RemoveFile(ctx, archiveData.Location, archiveData.FilePath); err != nil {
 			log.Errorf("failed to remove file with id %s from archive due to %v", fileID, err)
 
@@ -268,7 +274,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		}
 	}
 
-	if app.BackupWriter != nil && archiveData != nil && archiveData.BackupFilePath != "" && archiveData.BackupLocation != "" {
+	if app.BackupWriter != nil && archiveData.BackupFilePath != "" && archiveData.BackupLocation != "" {
 		if err := app.BackupWriter.RemoveFile(ctx, archiveData.BackupLocation, archiveData.BackupFilePath); err != nil {
 			log.Errorf("failed to remove file with id %s from backup due to %v", fileID, err)
 
