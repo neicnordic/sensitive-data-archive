@@ -166,7 +166,7 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	if c.CaCert != "" {
 		caCert, e := os.ReadFile(c.CaCert)
 		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", caCert, e)
+			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", c.CaCert, e)
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
