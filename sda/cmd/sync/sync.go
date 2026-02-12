@@ -36,7 +36,6 @@ var (
 	mqBroker      *broker.AMQPBroker
 	archiveReader storage.Reader
 	syncWriter    storage.Writer
-	message       schema.DatasetMapping
 )
 
 func main() {
@@ -162,6 +161,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
+	var message schema.DatasetMapping
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &message)
 
