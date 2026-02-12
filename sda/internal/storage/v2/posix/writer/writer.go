@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
@@ -13,6 +16,7 @@ import (
 )
 
 type Writer struct {
+	backendName         string
 	configuredEndpoints []*endpointConfig
 	activeEndpoints     []*endpointConfig
 	locationBroker      locationbroker.LocationBroker
@@ -31,8 +35,12 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 	}
 
 	writer := &Writer{
+		backendName:    backendName,
 		locationBroker: locationBroker,
 	}
+	writer.locationBroker.RegisterSizeAndCountFinderFunc(backendName, func(location string) bool {
+		return !strings.HasPrefix(location, "/")
+	}, findSizeAndObjectCountInDir)
 
 	// Verify locations
 	for _, endpointConf := range endPoints {
@@ -48,7 +56,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 
 		writer.configuredEndpoints = append(writer.configuredEndpoints, endpointConf)
 
-		usable, err := endpointConf.isUsable(ctx, writer.locationBroker)
+		usable, err := endpointConf.isUsable(ctx, backendName, writer.locationBroker)
 		if err != nil {
 			return nil, err
 		}
@@ -66,4 +74,33 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 	}
 
 	return writer, nil
+}
+
+// findSizeAndObjectCountInDir find the total size and total amount of objects in an directory if we do not store
+// this information in the database
+func findSizeAndObjectCountInDir(_ context.Context, dir string) (uint64, uint64, error) {
+	totalObjects := uint64(0)
+	totalSize := uint64(0)
+
+	if err := filepath.Walk(dir, func(_ string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		fileSize := info.Size()
+		if fileSize < 0 {
+			return fmt.Errorf("file: %s has negative size", info.Name())
+		}
+		totalSize += uint64(fileSize)
+		totalObjects++
+
+		return nil
+	}); err != nil {
+		return 0, 0, err
+	}
+
+	return totalSize, totalObjects, nil
 }
