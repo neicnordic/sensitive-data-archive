@@ -24,7 +24,6 @@ import (
 
 var db *database.SDAdb
 var inboxWriter storage.Writer
-var mappings schema.DatasetMapping
 var mqBroker *broker.AMQPBroker
 
 func main() {
@@ -141,6 +140,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
+	var mappings schema.DatasetMapping
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &mappings)
 
