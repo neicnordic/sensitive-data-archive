@@ -17,37 +17,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// RegisterFile inserts a file in the database, along with a "registered" log
+// RegisterFile inserts a file in the database with its inbox location, along with a "registered" log
 // event. If the file already exists in the database, the entry is updated, but
 // a new file event is always inserted.
 // If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
 // If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
 // and a different fileId is provided, the fileId in the database will NOT be updated.
-func (dbs *SDAdb) RegisterFile(fileID *string, uploadPath, uploadUser string) (string, error) {
-	dbs.checkAndReconnectIfNeeded()
-
-	query := "SELECT sda.register_file($1, $2, $3, $4);"
-
-	var createdFileID string
-
-	fileIDArg := sql.NullString{}
-	if fileID != nil {
-		fileIDArg.Valid = true
-		fileIDArg.String = *fileID
-	}
-
-	err := dbs.DB.QueryRow(query, fileIDArg, "", uploadPath, uploadUser).Scan(&createdFileID)
-
-	return createdFileID, err
-}
-
-// RegisterFileWithLocation inserts a file in the database with its inbox location, along with a "registered" log
-// event. If the file already exists in the database, the entry is updated, but
-// a new file event is always inserted.
-// If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
-// If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
-// and a different fileId is provided, the fileId in the database will NOT be updated.
-func (dbs *SDAdb) RegisterFileWithLocation(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
+func (dbs *SDAdb) RegisterFile(fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	query := "SELECT sda.register_file($1, $2, $3, $4);"
@@ -287,36 +263,8 @@ func (dbs *SDAdb) rotateHeaderKey(header []byte, keyHash, fileID string) error {
 	return nil
 }
 
-// SetArchived marks the file as 'ARCHIVED'
-func (dbs *SDAdb) SetArchived(file FileInfo, fileID string) error {
-	var err error
-
-	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.setArchived("", file, fileID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return err
-}
-
-// SetArchivedWithLocation marks the file as 'ARCHIVED' with its archive location
-func (dbs *SDAdb) SetArchivedWithLocation(location string, file FileInfo, fileID string) error {
-	var err error
-
-	for count := 1; count <= RetryTimes; count++ {
-		err = dbs.setArchived(location, file, fileID)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	return err
-}
-func (dbs *SDAdb) setArchived(location string, file FileInfo, fileID string) error {
+// SetArchived marks the file as 'ARCHIVED' with its archive location
+func (dbs *SDAdb) SetArchived(location string, file FileInfo, fileID string) error {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
