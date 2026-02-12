@@ -484,7 +484,9 @@ func (s *ProxyTests) TestMessageFormatting() {
 	proxy := NewProxy(s.S3Fakeconf, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "1234"}
-	msg, err := proxy.CreateMessageFromRequest(r, claims, "new_file.txt")
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	msg, err := proxy.CreateMessageFromRequest(r, claims, s3Client, "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 
@@ -500,7 +502,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), "new_file.txt")
+	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), s3Client, "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 	assert.Equal(s.T(), "upload", msg.Operation)
@@ -580,8 +582,9 @@ func (s *ProxyTests) TestCheckFileExists() {
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
-
-	res, err := proxy.checkFileExists(context.TODO(), "/dummy/file")
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	res, err := proxy.checkFileExists(context.TODO(), s3Client, "/dummy/file")
 	assert.True(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -596,8 +599,9 @@ func (s *ProxyTests) TestCheckFileExists_nonExistingFile() {
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-
-	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	res, err := proxy.checkFileExists(context.TODO(), s3Client, "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -615,8 +619,9 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Unaccessible S3 (wrong port)
 	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	proxy.s3Conf.Endpoint = "http://127.0.0.1:1111"
-
-	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	res, err := proxy.checkFileExists(context.TODO(), s3Client, "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "S3: HeadObject")
@@ -624,7 +629,9 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Bad access key gives 403
 	proxy.s3Conf.Endpoint = s.S3conf.Endpoint
 	proxy.s3Conf.AccessKey = "invaild"
-	res, err = proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	res, err = proxy.checkFileExists(context.TODO(), s3Client, "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "StatusCode: 403")
@@ -638,15 +645,17 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
 	assert.NoError(s.T(), err)
 	defer mq.Connection.Close()
 
-	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	p.database = db
+	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
+	proxy.database = db
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
 
 	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
 	db.Close()
-	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
+	assert.NoError(s.T(), proxy.storeObjectSizeInDB(context.TODO(), s3Client, "/dummy/file", fileID))
 }
 
 func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
@@ -657,20 +666,25 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 	assert.NoError(s.T(), err)
 	defer mq.Connection.Close()
 
-	p := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	p.database = db
-
+	proxy := NewProxy(s.S3conf, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
+	proxy.database = db
+	s3Client, err := newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
 	fileID, err := db.RegisterFile(nil, "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
 	// Detect autentication failure
-	p.s3Conf.AccessKey = "badKey"
-	assert.Error(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
+	proxy.s3Conf.AccessKey = "badKey"
+	s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.TODO(), s3Client, "/dummy/file", fileID))
 
 	// Detect unresponsive backend service
-	p.s3Conf.Endpoint = "http://127.0.0.1:1234"
-	assert.Error(s.T(), p.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
+	proxy.s3Conf.Endpoint = "http://127.0.0.1:1234"
+	s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	assert.NoError(s.T(), err)
+	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.TODO(), s3Client, "/dummy/file", fileID))
 }
 
 // This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
@@ -714,7 +728,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), output, output)
 
-	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/test/new_file", fileID))
+	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), s3Client, "/test/new_file", fileID))
 
 	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
 	var objectSize int64
