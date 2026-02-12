@@ -346,7 +346,7 @@ func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string, message string)
 		return err
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			log.Errorf("failed to rollback CancelFile transaction, due to: %v", err)
 		}
 	}()
