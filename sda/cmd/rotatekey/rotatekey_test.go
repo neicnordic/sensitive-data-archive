@@ -212,7 +212,7 @@ func (ts *TestSuite) SetupSuite() {
 
 	ts.app.Conf.RotateKey.PublicKey = &publicKey
 
-	ts.fileID, err = ts.app.DB.RegisterFile(nil, "rotate-key-test/data.c4gh", "tester_example.org")
+	ts.fileID, err = ts.app.DB.RegisterFile(nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
 	if err != nil {
 		ts.FailNow("Failed to register file in DB")
 	}
