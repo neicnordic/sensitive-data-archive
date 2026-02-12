@@ -14,7 +14,7 @@ import (
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
 	// Find endpoint / bucket that is to be used for writing
 	writer.Lock()
-	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.locationBroker)
+	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.backendName, writer.locationBroker)
 	if err != nil && !errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 		writer.Unlock()
 
@@ -28,7 +28,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 				continue
 			}
 
-			activeBucket, err = endpointConf.findActiveBucket(ctx, writer.locationBroker)
+			activeBucket, err = endpointConf.findActiveBucket(ctx, writer.backendName, writer.locationBroker)
 			if err != nil {
 				if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 					continue

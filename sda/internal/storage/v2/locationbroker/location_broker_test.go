@@ -62,7 +62,7 @@ func (ts *LocationBrokerTestSuite) TestGetSize() {
 		ts.FailNow(err.Error())
 	}
 
-	size, err := lb.GetSize(context.TODO(), "mock_location")
+	size, err := lb.GetSize(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(uint64(123), size)
 }
@@ -76,7 +76,7 @@ func (ts *LocationBrokerTestSuite) TestGetObjectCount() {
 		ts.FailNow(err.Error())
 	}
 
-	count, err := lb.GetObjectCount(context.TODO(), "mock_location")
+	count, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(uint64(321), count)
 }
@@ -90,11 +90,11 @@ func (ts *LocationBrokerTestSuite) TestGetObjectCount_WithCache() {
 		ts.FailNow(err.Error())
 	}
 
-	countFromDB, err := lb.GetObjectCount(context.TODO(), "mock_location")
+	countFromDB, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(uint64(321), countFromDB)
 
-	countFromCache, err := lb.GetObjectCount(context.TODO(), "mock_location")
+	countFromCache, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(countFromDB, countFromCache)
 	mockDb.AssertNumberOfCalls(ts.T(), "GetSizeAndObjectCountOfLocation", 1)
@@ -109,12 +109,48 @@ func (ts *LocationBrokerTestSuite) TestGetSize_WithCache() {
 		ts.FailNow(err.Error())
 	}
 
-	sizeFromDB, err := lb.GetObjectCount(context.TODO(), "mock_location")
+	sizeFromDB, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(uint64(321), sizeFromDB)
 
-	sizeFromCache, err := lb.GetObjectCount(context.TODO(), "mock_location")
+	sizeFromCache, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(sizeFromDB, sizeFromCache)
 	mockDb.AssertNumberOfCalls(ts.T(), "GetSizeAndObjectCountOfLocation", 1)
+}
+
+func (ts *LocationBrokerTestSuite) TestGetSize_WithDefaultFinderFunc() {
+	mockDb := &mockDatabase{}
+
+	lb, err := NewLocationBroker(mockDb)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	lb.RegisterSizeAndCountFinderFunc("sync", func(_ string) bool {
+		return true
+	}, func(_ context.Context, _ string) (uint64, uint64, error) {
+		return uint64(789), uint64(987), nil
+	})
+
+	size, err := lb.GetSize(context.TODO(), "sync", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(789), size)
+}
+
+func (ts *LocationBrokerTestSuite) TestGetObjectCount_WithDefaultFinderFunc() {
+	mockDb := &mockDatabase{}
+
+	lb, err := NewLocationBroker(mockDb)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+	lb.RegisterSizeAndCountFinderFunc("sync", func(_ string) bool {
+		return true
+	}, func(_ context.Context, _ string) (uint64, uint64, error) {
+		return uint64(789), uint64(987), nil
+	})
+
+	size, err := lb.GetObjectCount(context.TODO(), "sync", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(987), size)
 }

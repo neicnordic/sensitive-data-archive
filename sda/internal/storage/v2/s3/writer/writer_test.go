@@ -31,6 +31,30 @@ type WriterTestSuite struct {
 type mockLocationBroker struct {
 	mock.Mock
 }
+
+func (m *mockLocationBroker) GetObjectCount(_ context.Context, _, location string) (uint64, error) {
+	args := m.Called(location)
+	count := args.Int(0)
+	if count < 0 {
+		count = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(count), args.Error(1)
+}
+
+func (m *mockLocationBroker) GetSize(_ context.Context, _, location string) (uint64, error) {
+	args := m.Called(location)
+	size := args.Int(0)
+	if size < 0 {
+		size = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(size), args.Error(1)
+}
+func (m *mockLocationBroker) RegisterSizeAndCountFinderFunc(_ string, _ func(string) bool, _ func(context.Context, string) (uint64, uint64, error)) {
+	_ = m.Called()
+}
+
 type mockS3 struct {
 	server  *httptest.Server
 	buckets map[string]map[string]string // "bucket name" -> "file name" -> "content"
@@ -118,26 +142,6 @@ func (m *mockS3) CreateBucket(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (m *mockLocationBroker) GetObjectCount(_ context.Context, location string) (uint64, error) {
-	args := m.Called(location)
-	count := args.Int(0)
-	if count < 0 {
-		count = 0
-	}
-	//nolint:gosec // disable G115
-	return uint64(count), args.Error(1)
-}
-
-func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64, error) {
-	args := m.Called(location)
-	size := args.Int(0)
-	if size < 0 {
-		size = 0
-	}
-	//nolint:gosec // disable G115
-	return uint64(size), args.Error(1)
-}
-
 func TestReaderTestSuite(t *testing.T) {
 	suite.Run(t, new(WriterTestSuite))
 }
@@ -193,6 +197,7 @@ func (ts *WriterTestSuite) SetupTest() {
 	ts.locationBrokerMock = &mockLocationBroker{}
 
 	var err error
+	ts.locationBrokerMock.On("RegisterSizeAndCountFinderFunc").Return().Once()
 	ts.writer, err = NewWriter(context.TODO(), "test", ts.locationBrokerMock)
 	if err != nil {
 		ts.FailNow(err.Error())
