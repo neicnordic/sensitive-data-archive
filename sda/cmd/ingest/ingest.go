@@ -61,11 +61,18 @@ func run() error {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
 	defer func() {
-		if err := app.MQ.Channel.Close(); err != nil {
-			log.Errorf("failed to close mq broker channel due to: %v", err)
+		if app.MQ == nil {
+			return
 		}
-		if err := app.MQ.Connection.Close(); err != nil {
-			log.Errorf("failed to close mq broker connection due to: %v", err)
+		if app.MQ.Channel != nil {
+			if err := app.MQ.Channel.Close(); err != nil {
+				log.Errorf("failed to close mq broker channel due to: %v", err)
+			}
+		}
+		if app.MQ.Connection != nil {
+			if err := app.MQ.Connection.Close(); err != nil {
+				log.Errorf("failed to close mq broker connection due to: %v", err)
+			}
 		}
 	}()
 	app.DB, err = database.NewSDAdb(ingestConf.Database)
