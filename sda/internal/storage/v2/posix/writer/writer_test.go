@@ -32,7 +32,7 @@ type mockLocationBroker struct {
 	mock.Mock
 }
 
-func (m *mockLocationBroker) GetObjectCount(_ context.Context, location string) (uint64, error) {
+func (m *mockLocationBroker) GetObjectCount(_ context.Context, _, location string) (uint64, error) {
 	args := m.Called(location)
 	count := args.Int(0)
 	if count < 0 {
@@ -42,7 +42,7 @@ func (m *mockLocationBroker) GetObjectCount(_ context.Context, location string) 
 	return uint64(count), args.Error(1)
 }
 
-func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64, error) {
+func (m *mockLocationBroker) GetSize(_ context.Context, _, location string) (uint64, error) {
 	args := m.Called(location)
 	size := args.Int(0)
 	if size < 0 {
@@ -50,6 +50,9 @@ func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64
 	}
 	//nolint:gosec // disable G115
 	return uint64(size), args.Error(1)
+}
+func (m *mockLocationBroker) RegisterSizeAndCountFinderFunc(_ string, _ func(string) bool, _ func(context.Context, string) (uint64, uint64, error)) {
+	_ = m.Called()
 }
 
 func TestWriterTestSuite(t *testing.T) {
@@ -88,6 +91,7 @@ storage:
 	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir2).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir2).Return(0, nil).Once()
+	ts.locationBrokerMock.On("RegisterSizeAndCountFinderFunc").Return().Once()
 	ts.writer, err = NewWriter(context.TODO(), "test", ts.locationBrokerMock)
 	if err != nil {
 		ts.FailNow(err.Error())
