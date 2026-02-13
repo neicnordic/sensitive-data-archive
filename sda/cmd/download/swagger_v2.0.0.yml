@@ -77,6 +77,9 @@ paths:
       responses:
         "200":
           description: Service information
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPublic"
           content:
             application/json:
               schema:
@@ -111,6 +114,9 @@ paths:
       responses:
         "200":
           description: Successful operation (an empty datasets array is valid).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
           content:
             application/json:
               schema:
@@ -137,6 +143,9 @@ paths:
       responses:
         "200":
           description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
           content:
             application/json:
               schema:
@@ -201,6 +210,9 @@ paths:
           description: |
             Successful operation. When filePath is provided, the files array contains
             0 or 1 elements (200 with empty array when no file matches, not 404).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
           content:
             application/json:
               schema:
@@ -995,6 +1007,18 @@ components:
         type: string
       example: bytes
 
+    CacheControlPrivate:
+      description: Cache directive for authenticated metadata responses.
+      schema:
+        type: string
+      example: "private, max-age=60, must-revalidate"
+
+    CacheControlPublic:
+      description: Cache directive for public (unauthenticated) responses.
+      schema:
+        type: string
+      example: "public, max-age=300"
+
     ContentLength:
       description: Size of the response body in bytes.
       schema:
@@ -1141,3 +1165,6 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: >-
+        If an access token expires during transfer, server SHOULD return
+        401 Unauthorized; clients SHOULD re-authenticate and retry/resume.
