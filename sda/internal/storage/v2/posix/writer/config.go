@@ -52,8 +52,8 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 	return endpointConf, nil
 }
 
-func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker locationbroker.LocationBroker) (bool, error) {
-	count, err := locationBroker.GetObjectCount(ctx, endpointConf.Path)
+func (endpointConf *endpointConfig) isUsable(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (bool, error) {
+	count, err := locationBroker.GetObjectCount(ctx, backendName, endpointConf.Path)
 	if err != nil {
 		return false, err
 	}
@@ -61,7 +61,7 @@ func (endpointConf *endpointConfig) isUsable(ctx context.Context, locationBroker
 		return false, nil
 	}
 
-	size, err := locationBroker.GetSize(ctx, endpointConf.Path)
+	size, err := locationBroker.GetSize(ctx, backendName, endpointConf.Path)
 	if err != nil {
 		return false, err
 	}

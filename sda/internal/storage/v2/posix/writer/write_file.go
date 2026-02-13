@@ -23,7 +23,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 			return "", storageerrors.ErrorNoValidLocations
 		}
 
-		usable, err := writer.activeEndpoints[0].isUsable(ctx, writer.locationBroker)
+		usable, err := writer.activeEndpoints[0].isUsable(ctx, writer.backendName, writer.locationBroker)
 		if err != nil {
 			return "", fmt.Errorf("failed to check if location: %s is usable: %v", writer.activeEndpoints[0].Path, err)
 		}

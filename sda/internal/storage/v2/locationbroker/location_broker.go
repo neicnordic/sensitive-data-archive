@@ -3,6 +3,7 @@ package locationbroker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,16 +13,27 @@ import (
 // LocationBroker is responsible for being able to serve the count of objects and the current accumulated size of all objects in a location
 type LocationBroker interface {
 	// GetObjectCount returns the current amount of objects in a location
-	GetObjectCount(ctx context.Context, location string) (uint64, error)
+	GetObjectCount(ctx context.Context, backendName, location string) (uint64, error)
 	// GetSize returns the accumulated size(in bytes) of all objects in a location
-	GetSize(ctx context.Context, location string) (uint64, error)
+	GetSize(ctx context.Context, backendName, location string) (uint64, error)
+	// RegisterSizeAndCountFinderFunc registers a function that returns the size and object count for a backend and location which matches
+	// the locationMatcher,
+	// for which we can not be supported by the database, i.e any other backends than "inbox", "archive", and "backup"
+	RegisterSizeAndCountFinderFunc(backend string, locationMatcher func(location string) bool, sizeAndCountFunc func(ctx context.Context, location string) (uint64, uint64, error))
 }
 
 type locationBroker struct {
-	checkedLocations map[string]*locationEntry
-	config           *config
-	db               database.Database
+	checkedLocations    map[string]*locationEntry
+	config              *config
+	db                  database.Database
+	sizeAndCountFinders []*sizeAndCountFinder
 	sync.Mutex
+}
+
+type sizeAndCountFinder struct {
+	backend                string
+	locationMatcher        func(location string) bool
+	sizeAndCountFinderFunc func(ctx context.Context, location string) (uint64, uint64, error)
 }
 
 type locationEntry struct {
@@ -48,7 +60,14 @@ func NewLocationBroker(db database.Database, options ...func(*config)) (Location
 	}, nil
 }
 
-func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (uint64, error) {
+func (l *locationBroker) RegisterSizeAndCountFinderFunc(backend string, locationMatcher func(location string) bool, sizeAndCountFunc func(ctx context.Context, location string) (uint64, uint64, error)) {
+	l.sizeAndCountFinders = append(l.sizeAndCountFinders, &sizeAndCountFinder{
+		backend:                backend,
+		locationMatcher:        locationMatcher,
+		sizeAndCountFinderFunc: sizeAndCountFunc,
+	})
+}
+func (l *locationBroker) GetObjectCount(ctx context.Context, backendName, location string) (uint64, error) {
 	l.Lock()
 	defer l.Unlock()
 
@@ -57,7 +76,27 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (u
 		return loc.objectCount, nil
 	}
 
-	size, objectCount, err := l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	var size, objectCount uint64
+	var err error
+	switch backendName {
+	case "inbox", "archive", "backup":
+		size, objectCount, err = l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	default:
+		var sizeAndCountFinderFunc func(ctx context.Context, location string) (uint64, uint64, error)
+		for _, scf := range l.sizeAndCountFinders {
+			if scf.backend != backendName || !scf.locationMatcher(location) {
+				continue
+			}
+			if sizeAndCountFinderFunc != nil {
+				return 0, fmt.Errorf("multiple size and count finder func matching location: %s, backend: %s", location, backendName)
+			}
+			sizeAndCountFinderFunc = scf.sizeAndCountFinderFunc
+		}
+		if sizeAndCountFinderFunc == nil {
+			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backed %s", location, backendName)
+		}
+		size, objectCount, err = sizeAndCountFinderFunc(ctx, location)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -71,7 +110,7 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, location string) (u
 	return objectCount, nil
 }
 
-func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, error) {
+func (l *locationBroker) GetSize(ctx context.Context, backendName, location string) (uint64, error) {
 	l.Lock()
 	defer l.Unlock()
 
@@ -80,7 +119,27 @@ func (l *locationBroker) GetSize(ctx context.Context, location string) (uint64, 
 		return loc.size, nil
 	}
 
-	size, objectCount, err := l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	var size, objectCount uint64
+	var err error
+	switch backendName {
+	case "inbox", "archive", "backup":
+		size, objectCount, err = l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+	default:
+		var sizeAndCountFinderFunc func(ctx context.Context, location string) (uint64, uint64, error)
+		for _, scf := range l.sizeAndCountFinders {
+			if scf.backend != backendName || !scf.locationMatcher(location) {
+				continue
+			}
+			if sizeAndCountFinderFunc != nil {
+				return 0, fmt.Errorf("multiple size and count finder func matching location: %s, backend: %s", location, backendName)
+			}
+			sizeAndCountFinderFunc = scf.sizeAndCountFinderFunc
+		}
+		if sizeAndCountFinderFunc == nil {
+			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backed %s", location, backendName)
+		}
+		size, objectCount, err = sizeAndCountFinderFunc(ctx, location)
+	}
 	if err != nil {
 		return 0, err
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
@@ -16,6 +17,7 @@ import (
 )
 
 type Writer struct {
+	backendName         string
 	configuredEndpoints []*endpointConfig
 	activeEndpoint      *endpointConfig
 
@@ -36,12 +38,16 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 	}
 
 	writer := &Writer{
+		backendName:    backendName,
 		locationBroker: locationBroker,
 	}
+	writer.locationBroker.RegisterSizeAndCountFinderFunc(backendName, func(location string) bool {
+		return !strings.HasPrefix(location, "/")
+	}, findSizeAndObjectCountOfLocation(endPointConf))
 
 	// Verify endpointConfig connections
 	for _, e := range endPointConf {
-		_, err := e.findActiveBucket(ctx, writer.locationBroker)
+		_, err := e.findActiveBucket(ctx, backendName, writer.locationBroker)
 		if err != nil {
 			if errors.Is(err, storageerrors.ErrorNoFreeBucket) {
 				log.Warningf("s3: %s has no available bucket", e.Endpoint)
@@ -65,8 +71,8 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 
 	return writer, nil
 }
-func (writer *Writer) getS3ClientForEndpoint(ctx context.Context, endpoint string) (*s3.Client, error) {
-	for _, e := range writer.configuredEndpoints {
+func getS3ClientForEndpoint(ctx context.Context, configuredEndpoints []*endpointConfig, endpoint string) (*s3.Client, error) {
+	for _, e := range configuredEndpoints {
 		if e.Endpoint != endpoint {
 			continue
 		}
@@ -99,4 +105,45 @@ func parseLocation(location string) (string, string, error) {
 	}
 
 	return endpoint, bucketName, nil
+}
+
+// findSizeAndObjectCountOfLocation find the total size and total amount of objects in a s3 bucket if we do not store
+// this information in the database
+func findSizeAndObjectCountOfLocation(configuredEndpoints []*endpointConfig) func(ctx context.Context, location string) (uint64, uint64, error) {
+	return func(ctx context.Context, location string) (uint64, uint64, error) {
+		endpoint, bucket, err := parseLocation(location)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		s3Client, err := getS3ClientForEndpoint(ctx, configuredEndpoints, endpoint)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		var totalSize uint64
+		var totalObjects uint64
+
+		// Create paginator
+		paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
+			Bucket: aws.String(bucket),
+		})
+
+		// Iterate through all pages
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(ctx)
+			if err != nil {
+				return 0, 0, err
+			}
+
+			for _, obj := range page.Contents {
+				totalObjects++
+				if obj.Size != nil && *obj.Size > 0 {
+					totalSize += uint64(*obj.Size)
+				}
+			}
+		}
+
+		return totalSize, totalObjects, nil
+	}
 }
