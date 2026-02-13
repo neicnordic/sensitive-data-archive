@@ -159,7 +159,7 @@ func (app *Ingest) handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
-	message := schema.IngestionTrigger{}
+
 	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", app.MQ.Conf.SchemasPath), delivered.Body)
 	if err != nil {
 		log.Errorf("validation of incoming message (ingestion-trigger) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
@@ -167,7 +167,7 @@ func (app *Ingest) handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		infoErrorMessage := broker.InfoError{
 			Error:           "Message validation failed",
 			Reason:          err.Error(),
-			OriginalMessage: message,
+			OriginalMessage: delivered,
 		}
 
 		body, _ := json.Marshal(infoErrorMessage)
@@ -180,7 +180,7 @@ func (app *Ingest) handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		return
 	}
-
+	message := schema.IngestionTrigger{}
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &message)
 	log.Infof("Received work (correlation-id: %s, filepath: %s, user: %s)", delivered.CorrelationId, message.FilePath, message.User)
