@@ -109,7 +109,7 @@ paths:
                 $ref: "#/components/schemas/DatasetListResponse"
               example:
                 datasets: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
-                nextPageToken: "eyJpZCI6Mn0"
+                nextPageToken: "ptk_7f9K2mQxVb3N"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -228,7 +228,7 @@ paths:
                           - type: sha256
                             checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
                         downloadUrl: /files/aa-file-123456-asdfgh
-                    nextPageToken: "eyJpZCI6Mn0"
+                    nextPageToken: "ptk_7f9K2mQxVb3N"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
