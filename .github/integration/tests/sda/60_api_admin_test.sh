@@ -159,7 +159,7 @@ jq -c -n \
 
 resp_accession_payload="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$accession_payload" "http://api:8080/file/accession")"
 if [ "$resp_accession_payload" != "200" ]; then
-    echo "Error when requesting to ingesting file, expected 200 got: $resp_accession_payload"
+    echo "Error when requesting to set accession id to file, expected 200 got: $resp_accession_payload"
     exit 1
 fi
 
