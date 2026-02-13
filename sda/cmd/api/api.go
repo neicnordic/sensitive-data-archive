@@ -83,11 +83,18 @@ func run() error {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
 	defer func() {
-		if err := Conf.API.MQ.Channel.Close(); err != nil {
-			log.Errorf("failed to close mq broker channel due to: %v", err)
+		if Conf.API.MQ == nil {
+			return
 		}
-		if err := Conf.API.MQ.Connection.Close(); err != nil {
-			log.Errorf("failed to close mq broker connection due to: %v", err)
+		if Conf.API.MQ.Channel != nil {
+			if err := Conf.API.MQ.Channel.Close(); err != nil {
+				log.Errorf("failed to close mq broker channel due to: %v", err)
+			}
+		}
+		if Conf.API.MQ.Connection != nil {
+			if err := Conf.API.MQ.Connection.Close(); err != nil {
+				log.Errorf("failed to close mq broker connection due to: %v", err)
+			}
 		}
 	}()
 
