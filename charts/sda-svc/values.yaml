@@ -119,7 +119,6 @@ global:
     s3ChunkSize: ""
     s3AccessKey: null
     s3SecretKey: null
-    s3CaFile: null
     s3Port: 443
     maxBuckets: 1
   # The lines below is only used with POSIX backend
@@ -227,7 +226,6 @@ global:
       s3Port: 443
       s3Region: ""
       s3Bucket: ""
-      s3CaFile: null
       s3AccessKey: null
       s3SecretKey: null
     servicePort: 443
@@ -264,7 +262,6 @@ global:
     bucket: "inbox"
     accessKey: null
     secretKey: null
-    caFile: null
     region: "us-east-1"
     readyPath: ""
 
@@ -281,7 +278,6 @@ global:
     s3AccessKey: null
     s3SecretKey: null
     s3Port: 443
-    s3CaFile: null
     s3Region: ""
 
   reencrypt:

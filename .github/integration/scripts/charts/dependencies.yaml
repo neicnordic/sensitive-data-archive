@@ -50,6 +50,7 @@ spec:
   dnsNames:
     - localhost
     - minio
+    - minio.minio
     - minio.minio.svc
     - minio.minio.svc.cluster.local
   ipAddresses:
