@@ -110,7 +110,7 @@ func run() error {
 	}
 
 	backupWriter, err := storage.NewWriter(ctx, "backup", storageLocationBroker)
-	if err != nil && errors.Is(err, storageerrors.ErrorNoValidWriter) {
+	if err != nil && !errors.Is(err, storageerrors.ErrorNoValidWriter) {
 		return fmt.Errorf("failed to initialize backup writer due to: %v", err)
 	}
 	if backupWriter != nil {
