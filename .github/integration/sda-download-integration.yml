@@ -1,0 +1,244 @@
+# Docker Compose for download service integration tests
+# Based on validator-orchestrator pattern - Go-based tests running in container
+
+services:
+  # PostgreSQL with SDA schema
+  postgres:
+    build:
+      context: ../../postgresql
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # MinIO for archive storage
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    container_name: s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  # Mock AAI for JWT validation
+  mock-aai:
+    container_name: ls-aai-mock
+    depends_on:
+      aai-db:
+        condition: service_healthy
+    environment:
+      - DOCKERHOST=localhost
+    healthcheck:
+      test: ["CMD", "/bin/true"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: registry.gitlab.ics.muni.cz:443/perun/deployment/proxyidp/proxyidp-public-docker-images/ls_aai_mock:2.5.3-broker2.1.13-tomcat9.0-jdk21
+    ports:
+      - "8800:8080"
+    volumes:
+      - "./sda/aai-mock:/etc/lsaai-mock"
+
+  aai-db:
+    container_name: ls-aai-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "aaiPass"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "aai"
+      MYSQL_USER: "aai"
+      MYSQL_PASSWORD: "aaiPass"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    image: mysql/mysql-server:latest
+    volumes:
+      - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+
+  # Credentials generator - creates JWT keys and test tokens
+  credentials:
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        sh /scripts/make_download_credentials.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.11-slim-bookworm
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
+
+  # Initialize MinIO with archive bucket and test data
+  minio_init:
+    container_name: minio_init
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+      credentials:
+        condition: service_completed_successfully
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://s3:9000 access secretKey;
+      mc mb myminio/archive || true;
+      echo 'MinIO initialized with archive bucket';
+      "
+
+  # Seed database with test data (files and datasets)
+  database_seed:
+    container_name: database_seed
+    image: postgres:15.4-alpine
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio_init:
+        condition: service_completed_successfully
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=rootpasswd
+      - PGDATABASE=sda
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        # Wait for postgres to be ready
+        pg_isready -h postgres -p 5432 -U postgres
+
+        # Insert test file
+        psql -c "INSERT INTO sda.files (
+          id, stable_id, submission_user, submission_file_path, 
+          archive_file_path, archive_location, archive_file_size, decrypted_file_size,
+          header, encryption_method
+        ) VALUES (
+          'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          'EGAF00000000001',
+          'integration_test@example.org',
+          'test-file.c4gh',
+          'test-file.c4gh',
+          's3:9000/archive',
+          1000,
+          500,
+          'Y3J5cHQ0Z2g=',
+          'CRYPT4GH'
+        ) ON CONFLICT DO NOTHING;"
+
+        # Insert test dataset (id is SERIAL, so let postgres generate it)
+        psql -c "INSERT INTO sda.datasets (stable_id, title) 
+          VALUES ('EGAD00000000001', 'Test Dataset')
+          ON CONFLICT DO NOTHING;"
+
+        # Get the dataset id and link file to dataset
+        psql -c "INSERT INTO sda.file_dataset (file_id, dataset_id)
+          SELECT 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'::uuid, d.id 
+          FROM sda.datasets d 
+          WHERE d.stable_id = 'EGAD00000000001'
+          ON CONFLICT DO NOTHING;"
+
+        echo 'Database seeded with test data';
+
+  # Re-encrypt gRPC service
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-reencrypt]
+    container_name: reencrypt
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  # Download service under test
+  download:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    container_name: download
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      database_seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mock-aai:
+        condition: service_healthy
+    environment:
+      - CONFIG_FILE=/config.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "8085:8080"
+      - "8086:8081"
+    restart: always
+    volumes:
+      - ./sda/download-config.yaml:/config.yaml
+      - shared:/shared
+
+  # Go-based integration test runner
+  integration_test:
+    container_name: download_tester
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        cd /tests
+        go mod download
+        go test -v ./...
+    depends_on:
+      download:
+        condition: service_started
+    environment:
+      - DOWNLOAD_URL=http://download:8080
+      - JWT_KEY_FILE=/shared/keys/jwt.key
+      - C4GH_PUBKEY_FILE=/shared/c4gh.pub.pem
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: golang:1.25-alpine
+    profiles:
+      - tests
+    volumes:
+      - shared:/shared
+      - ./tests/download:/tests
+
+volumes:
+  minio_data:
+  postgres_data:
+  shared:
