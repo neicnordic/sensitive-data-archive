@@ -274,7 +274,7 @@ func NewConfig(app string) (*Config, error) {
 		if viper.GetBool("auth.resignJwt") {
 			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
-	case "ingest", "finalize", "mapper", "verify":
+	case "ingest", "finalize", "verify":
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -288,7 +288,20 @@ func NewConfig(app string) (*Config, error) {
 			"db.password",
 			"db.database",
 		}
-
+	case "mapper":
+		// Mapper does not require broker.routingkey thus we remove it
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
+			"db.host",
+			"db.port",
+			"db.user",
+			"db.password",
+			"db.database",
+		}
 	case "intercept":
 		requiredConfVars = []string{
 			"broker.host",
