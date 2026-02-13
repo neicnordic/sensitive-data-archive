@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -216,7 +217,14 @@ func Download(c *gin.Context) {
 		return
 	}
 
-	if c.Param("type") != "encrypted" && c.GetHeader("Client-Public-Key") != "" {
+	requestPublicKey, err := getPublicKeyFromRequest(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	if c.Param("type") != "encrypted" && requestPublicKey != "" {
 		c.String(http.StatusBadRequest, "downloading encrypted data is not supported")
 
 		return
@@ -339,20 +347,15 @@ func Download(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf("filename: %v", fileID))
 		c.Header("ETag", fileDetails.DecryptedChecksum)
 		c.Header("Last-Modified", lastModified.Format(http.TimeFormat))
-
-		// set the user and server public keys that is send from htsget
-		log.Debugf("Got to setting the headers: %s", c.GetHeader("client-public-key"))
-		c.Header("Client-Public-Key", c.GetHeader("Client-Public-Key"))
 	}
 
 	if c.Request.Method == http.MethodHead {
 		// Create headers for htsget, containing size of the crypt4gh header
-		reencKey := c.GetHeader("Client-Public-Key")
 		headerSize := bytes.NewReader(fileDetails.Header).Size()
 		// Size of the header in the archive
 		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
-		if reencKey != "" {
-			newHeader, _ := reencryptHeader(fileDetails.Header, reencKey)
+		if requestPublicKey != "" {
+			newHeader, _ := reencryptHeader(fileDetails.Header, requestPublicKey)
 			headerSize = bytes.NewReader(newHeader).Size()
 			// Size of the header if the file is re-encrypted before downloading
 			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
@@ -372,15 +375,14 @@ func Download(c *gin.Context) {
 	switch c.Param("type") {
 	case "encrypted":
 		// The key provided in the header should be base64 encoded
-		reencKey := c.GetHeader("Client-Public-Key")
-		if reencKey == "" {
+		if requestPublicKey == "" {
 			c.String(http.StatusBadRequest, "c4gh public key is missing from the header")
 
 			return
 		}
 
-		log.Debugf("Public key from the request header = %v", reencKey)
-		newHeader, err := reencryptHeader(fileDetails.Header, reencKey)
+		log.Debugf("Public key from the request header = %v", requestPublicKey)
+		newHeader, err := reencryptHeader(fileDetails.Header, requestPublicKey)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
@@ -566,4 +568,28 @@ var calculateCoords = func(start, end int64, htsget_range string, fileDetails *d
 	}
 
 	return start, headlength.Size() + bodyEnd, nil
+}
+
+func getPublicKeyFromRequest(c *gin.Context) (string, error) {
+	htsgetRsPublicKeyHeader := c.GetHeader("Htsget-Context-Public-Key")
+	clientPublicKeyHeader := c.GetHeader("Client-Public-Key")
+
+	switch {
+	case htsgetRsPublicKeyHeader != "" && clientPublicKeyHeader != "":
+		return "", errors.New("both Htsget-Context-Public-Key, and Client-Public-Key headers are set")
+	case htsgetRsPublicKeyHeader != "":
+		if _, err := base64.StdEncoding.DecodeString(htsgetRsPublicKeyHeader); err != nil {
+			return "", errors.New("invalid base64 encoding for Htsget-Context-Public-Key header")
+		}
+
+		return htsgetRsPublicKeyHeader, nil
+	case clientPublicKeyHeader != "":
+		if _, err := base64.StdEncoding.DecodeString(clientPublicKeyHeader); err != nil {
+			return "", errors.New("invalid base64 encoding for Client-Public-Key header")
+		}
+
+		return clientPublicKeyHeader, nil
+	default:
+		return "", nil
+	}
 }

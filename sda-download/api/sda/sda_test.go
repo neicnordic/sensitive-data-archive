@@ -364,7 +364,7 @@ func TestDownload_Fail_UnencryptedDownloadNotAllowed(t *testing.T) {
 	defer response.Body.Close()
 	body, _ = io.ReadAll(response.Body)
 	expectedStatusCode = 400
-	expectedBody = []byte("downloading encrypted data is not supported")
+	expectedBody = []byte("invalid base64 encoding for Client-Public-Key header")
 
 	assert.Equal(t, expectedStatusCode, response.StatusCode, "Unexpected status code from download")
 	assert.Equal(t, expectedBody, body, "Unexpected body from download")
