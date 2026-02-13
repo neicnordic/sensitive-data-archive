@@ -37,6 +37,12 @@ info:
       or expired token). 400 indicates a malformed request (conflicting parameters,
       invalid headers, bad page token).
 
+    File immutability assumption:
+      The split download endpoints (/header + /content) assume archive content is
+      immutable for a given fileId once the file is available for download. The content
+      endpoint returns the same encrypted data segments across requests. If the archive
+      were to be mutated after ingestion, header and content could become inconsistent.
+
     DRS readiness (non-normative):
       Designed for compatibility with GA4GH DRS 1.5+
       (see https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.5.0/docs/).
