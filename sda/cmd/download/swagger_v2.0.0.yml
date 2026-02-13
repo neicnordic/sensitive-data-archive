@@ -216,7 +216,7 @@ paths:
                         decryptedSize: 56600000
                         checksums:
                           - type: sha256
-                            checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                            checksum: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
                         downloadUrl: /files/aa-file-123456-asdfgh
                     nextPageToken: null
                 filePathNoMatch:
@@ -234,7 +234,7 @@ paths:
                         decryptedSize: 56600000
                         checksums:
                           - type: sha256
-                            checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                            checksum: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
                         downloadUrl: /files/aa-file-123456-asdfgh
                     nextPageToken: "ptk_7f9K2mQxVb3N"
         "400":
@@ -663,6 +663,7 @@ components:
   schemas:
     DatasetId:
       type: string
+      minLength: 1
       description: Dataset identifier
       example: aa-dataset-123456-asdfgh
 
@@ -748,7 +749,9 @@ components:
             $ref: "#/components/schemas/Checksum"
         downloadUrl:
           type: string
-          description: Relative download URL for this file
+          description: >-
+            Relative download URL for this file (relative to the API base URL
+            defined in the servers block).
           example: /files/aa-file-123456-asdfgh
       required: [fileId, filePath, size, decryptedSize, checksums, downloadUrl]
 
@@ -763,7 +766,7 @@ components:
         checksum:
           type: string
           description: Hex-encoded digest value
-          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          example: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
       required: [type, checksum]
 
     ServiceInfo:
@@ -824,6 +827,7 @@ components:
         type:
           type: string
           format: uri-reference
+          default: "about:blank"
           description: A URI reference that identifies the problem type.
         title:
           type: string
@@ -877,6 +881,7 @@ components:
       required: true
       schema:
         type: string
+        minLength: 1
       description: File identifier
 
     C4ghPublicKey:
