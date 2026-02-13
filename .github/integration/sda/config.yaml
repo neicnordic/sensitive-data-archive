@@ -7,7 +7,7 @@ api:
 storage:
   archive:
     s3:
-      endpoint: "http://s3:9000"
+    - endpoint: "http://s3:9000"
       access_key: "access"
       secret_key: "secretKey"
       bucket_prefix: "archive"
@@ -17,7 +17,7 @@ storage:
       max_objects: 3
   backup:
     s3:
-      endpoint: "http://s3:9000"
+    - endpoint: "http://s3:9000"
       access_key: "access"
       secret_key: "secretKey"
       bucket_prefix: "backup"
@@ -25,10 +25,18 @@ storage:
       disable_https: true
   inbox:
     s3:
-      endpoint: "http://s3:9000"
+    - endpoint: "http://s3:9000"
       access_key: "access"
       secret_key: "secretKey"
       bucket_prefix: "inbox"
+      region: "us-east-1"
+      disable_https: true
+  sync:
+    s3:
+    - endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretKey"
+      bucket_prefix: "sync"
       region: "us-east-1"
       disable_https: true
 
