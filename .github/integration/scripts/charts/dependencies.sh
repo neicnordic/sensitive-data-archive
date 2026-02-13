@@ -77,15 +77,58 @@ helm install --namespace default nfs-ganesha nfs-ganesha-server-and-external-pro
 kubectl create namespace minio
 kubectl apply -f .github/integration/scripts/charts/dependencies.yaml
 
+
+values_file=".github/integration/scripts/charts/values.yaml"
+if [ "$1" == "local" ]; then
+  values_file=/tmp/values.yaml
+  cp .github/integration/scripts/charts/values.yaml /tmp/values.yaml
+fi
+
 if [ "$2" == "s3" ]; then
-        ## S3 storage backend
-        MINIO_ACCESS="$(random-string)"
-        export MINIO_ACCESS
-        MINIO_SECRET="$(random-string)"
-        export MINIO_SECRET
-        helm install minio minio/minio \
-                --namespace minio \
-                --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+  if [ "$3" = true ] ; then
+    # Sleep to give cert issuer time to issue certs so we can create an secret with format minio expects
+    sleep 5
+
+    kubectl -n minio create secret generic minio-tls \
+      --from-file=public.crt=<(kubectl -n minio get secret minio-cert -o jsonpath='{.data.tls\.crt}' | base64 -d) \
+      --from-file=private.key=<(kubectl -n minio get secret minio-cert -o jsonpath='{.data.tls\.key}' | base64 -d)
+
+    ## S3 storage backend
+    MINIO_ACCESS="$(random-string)"
+    export MINIO_ACCESS
+    MINIO_SECRET="$(random-string)"
+    export MINIO_SECRET
+    helm install minio minio/minio \
+            --namespace minio \
+            --set tls.enabled=true,tls.certSecret=minio-tls,rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+
+    yq -i '
+.global.archive.s3Url = "https://minio.minio" |
+.global.backupArchive.s3Url = "https://minio.minio" |
+.global.inbox.s3Url = "https://minio.minio" |
+.global.s3Inbox.url = "https://minio.minio" |
+.global.sync.destination.s3Url = "https://minio.minio"
+' "$values_file"
+
+  else
+    ## S3 storage backend
+    MINIO_ACCESS="$(random-string)"
+    export MINIO_ACCESS
+    MINIO_SECRET="$(random-string)"
+    export MINIO_SECRET
+    helm install minio minio/minio \
+            --namespace minio \
+            --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+
+    yq -i '
+.global.archive.s3Url = "http://minio.minio" |
+.global.backupArchive.s3Url = "http://minio.minio" |
+.global.inbox.s3Url = "http://minio.minio" |
+.global.s3Inbox.url = "http://minio.minio" |
+.global.sync.destination.s3Url = "http://minio.minio"
+' "$values_file"
+
+  fi
 fi
 
 PGPASSWORD="$(random-string)"
@@ -96,12 +139,6 @@ export MQPASSWORD
 
 TEST_TOKEN="$(bash .github/integration/scripts/sign_jwt.sh ES256 "$dir/jwt.key")"
 export TEST_TOKEN
-
-values_file=".github/integration/scripts/charts/values.yaml"
-if [ "$1" == "local" ]; then
-        values_file=/tmp/values.yaml
-        cp .github/integration/scripts/charts/values.yaml /tmp/values.yaml
-fi
 
 ## update values file with all credentials
 if [ "$2" == "federated" ]; then
@@ -118,8 +155,10 @@ yq -i '
 .global.db.password = strenv(PGPASSWORD) |
 .global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.inbox.s3SecretKey = strenv(MINIO_SECRET) |
-.global.sync.destination.accessKey = strenv(MINIO_ACCESS) |
-.global.sync.destination.secretKey = strenv(MINIO_SECRET) |
+.global.s3Inbox.accessKey = strenv(MINIO_ACCESS) |
+.global.s3Inbox.secretKey = strenv(MINIO_SECRET) |
+.global.sync.destination.s3AccessKey = strenv(MINIO_ACCESS) |
+.global.sync.destination.s3SecretKey = strenv(MINIO_SECRET) |
 .releasetest.secrets.accessToken = strenv(TEST_TOKEN)
 ' "$values_file"
 

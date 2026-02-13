@@ -350,7 +350,7 @@ jobs:
         shell: bash
 
       - name: Deploy external services
-        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}} ${{matrix.storage}}
+        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}} ${{matrix.storage}} ${{matrix.tls}}
         shell: bash
 
       - name: Deploy DB
