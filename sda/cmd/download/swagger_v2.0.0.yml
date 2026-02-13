@@ -94,6 +94,8 @@ paths:
                   url: https://neic.no
                 version: 2.0.0
                 environment: production
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /datasets:
     get:
