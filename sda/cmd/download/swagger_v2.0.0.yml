@@ -266,8 +266,10 @@ paths:
         requests and If-Range will fall back to a full 200 (correct per RFC 9110 but
         not a true resume). For guaranteed stable ETag, use HEAD /files/{fileId}/content.
 
-        For robust resume and CDN caching, prefer the split sub-resources:
-        HEAD /files/{fileId}/header and HEAD /files/{fileId}/content.
+        For production clients, prefer the split endpoints
+        (HEAD /files/{fileId}/header + HEAD /files/{fileId}/content) for stable ETags,
+        robust If-Range resume, and better caching behavior. This combined endpoint
+        is a convenience path for simple clients.
       parameters:
         - $ref: "#/components/parameters/FileIdPath"
         - $ref: "#/components/parameters/C4ghPublicKey"
@@ -322,9 +324,10 @@ paths:
         not a true resume). For guaranteed robust resume, use GET /files/{fileId}/content
         which has a stable ETag independent of the recipient key.
 
-        For CDN caching and htsget-rs integration, prefer the split sub-resources:
-        GET /files/{fileId}/header (per-recipient header) and
-        GET /files/{fileId}/content (static data segments with stable ETag and Range).
+        For production clients, prefer the split endpoints
+        (GET /files/{fileId}/header + GET /files/{fileId}/content) for stable ETags,
+        robust If-Range resume, and better caching behavior. This combined endpoint
+        is a convenience path for simple clients.
       parameters:
         - $ref: "#/components/parameters/FileIdPath"
         - $ref: "#/components/parameters/C4ghPublicKey"
