@@ -28,6 +28,15 @@ info:
       In all cases, byte offsets refer to the encrypted wire format, NOT the original
       plaintext file.
 
+    Error semantics on resource-by-ID endpoints:
+      Endpoints that accept a resource identifier in the path (e.g. /datasets/{datasetId},
+      /files/{fileId}) return 403 Forbidden both when the caller lacks access and when
+      the resource does not exist, to prevent existence leakage. List endpoints
+      (e.g. GET /datasets) return 200 with an empty array when the caller has no
+      accessible resources. 401 indicates an authentication failure (missing, invalid,
+      or expired token). 400 indicates a malformed request (conflicting parameters,
+      invalid headers, bad page token).
+
     DRS readiness (non-normative):
       Designed for compatibility with GA4GH DRS 1.5+
       (see https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.5.0/docs/).
@@ -128,8 +137,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -228,8 +235,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -275,12 +280,12 @@ paths:
               $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -365,8 +370,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "416":
           $ref: "#/components/responses/RangeNotSatisfiable"
         "500":
@@ -438,8 +441,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -482,8 +483,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -521,8 +520,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
       security:
@@ -594,8 +591,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "416":
           $ref: "#/components/responses/RangeNotSatisfiable"
         "500":
@@ -1126,7 +1121,7 @@ components:
           example:
             title: Unauthorized
             status: 401
-            detail: Missing or invalid bearer token.
+            detail: Missing, invalid, or expired bearer token.
 
     Forbidden:
       description: The caller does not have access to the requested resource
@@ -1138,17 +1133,6 @@ components:
             title: Forbidden
             status: 403
             detail: You do not have access to this dataset or file.
-
-    NotFound:
-      description: Requested dataset or file does not exist (or is not visible to the caller)
-      content:
-        application/problem+json:
-          schema:
-            $ref: "#/components/schemas/ProblemDetails"
-          example:
-            title: Not Found
-            status: 404
-            detail: The requested resource was not found.
 
     RangeNotSatisfiable:
       description: Unsatisfiable range
