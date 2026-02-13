@@ -1,30 +1,48 @@
 services:
 
   db:
-    command: server /data
+    user: postgres
     container_name: db
     environment:
-      - DB_LEGA_IN_PASSWORD=lega_in
-      - DB_LEGA_OUT_PASSWORD=lega_out
       - NOTLS=true
       - POSTGRES_PASSWORD=rootpassword
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.4
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "5432:5432"
     volumes:
       - /tmp/data:/data
 
+  database_user_creation:
+    container_name: database_user_creation
+    image: postgres:15.4-alpine
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        pg_isready -h db -U postgres 
+        psql -U postgres -h db -d sda -c "ALTER ROLE download LOGIN PASSWORD 'download';"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=rootpassword
+
   s3:
     command: server /data
     container_name: s3
     environment:
-      - MINIO_ACCESS_KEY=access
-      - MINIO_SECRET_KEY=secretkey
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
     healthcheck:
       test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
       interval: 5s
@@ -33,6 +51,22 @@ services:
     image: minio/minio
     ports:
       - "9000:9000"
+
+  s3-2nd:
+    command: server /data
+    container_name: s3-2nd
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio
+    ports:
+      - "9001:9000"
 
   createbucket:
     container_name: buckets
@@ -52,23 +86,26 @@ services:
     command: sda-download
     container_name: download
     depends_on:
-      db:
-        condition: service_healthy
+      database_user_creation:
+        condition: service_completed_successfully
       s3:
         condition: service_healthy
       mockauth:
-        condition: service_started
+        condition: service_healthy
     environment:
       - ARCHIVE_URL=http://s3
       - ARCHIVE_TYPE=s3
       - DB_HOST=db
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
     build:
       context: ..
     volumes:
       - ./config-notls.yaml:/config.yaml
       - ./:/dev_utils/
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "8080:8080"
@@ -83,20 +120,23 @@ services:
       s3:
         condition: service_healthy
       mockauth:
-        condition: service_started
+        condition: service_healthy
     environment:
       - ARCHIVE_URL=http://s3
       - ARCHIVE_TYPE=s3
       - DB_HOST=db
       - C4GH_TRANSIENTKEYPATH=/dev_utils/c4gh.sec.pem
       - C4GH_TRANSIENTPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
     build:
       context: ..
     volumes:
       - ./config-notls.yaml:/config.yaml
       - ./:/dev_utils/
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "9080:8080"
@@ -107,11 +147,18 @@ services:
       - /bin/sh
       - -c
       - |
+        apt update
+        apt install curl -y
         pip install --upgrade pip
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
     image: python:3.10-slim
+    healthcheck:
+      test: [ "CMD", "curl", "-fkq", "http://localhost:8000/.well-known/openid-configuration" ]
+      interval: 10s
+      timeout: 30s
+      retries: 10
     volumes:
       - ./mockoidc/mockoidc.py:/mockoidc.py
     mem_limit: 256m
@@ -120,7 +167,7 @@ services:
     restart: always
 
   reencrypt:
-    image: ghcr.io/neicnordic/sensitive-data-archive:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     build: ../../sda/
     command: [ sda-reencrypt ]
     container_name: reencrypt

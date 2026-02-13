@@ -23,14 +23,14 @@ import (
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/internal/reencrypt"
-	"github.com/neicnordic/sda-download/internal/storage"
+	"github.com/neicnordic/sda-download/internal/storage/v2"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var Backend storage.Backend
+var ArchiveReader storage.Reader
 
 func sanitizeString(str string) string {
 	var pattern = regexp.MustCompile(`(https?://[^\s/$.?#].[^\s]+|[A-Za-z0-9-_:.]+)`)
@@ -38,7 +38,7 @@ func sanitizeString(str string) string {
 	return pattern.ReplaceAllString(str, "[identifier]: $1")
 }
 
-func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
+func reencryptHeader(ctx context.Context, oldHeader []byte, reencKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case config.Config.Reencrypt.ClientKey != "" && config.Config.Reencrypt.ClientCert != "":
@@ -93,7 +93,7 @@ func reencryptHeader(oldHeader []byte, reencKey string) ([]byte, error) {
 	defer conn.Close()
 
 	timeoutDuration := time.Duration(config.Config.Reencrypt.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	ctx, cancel := context.WithTimeout(ctx, timeoutDuration)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
@@ -268,6 +268,13 @@ func Download(c *gin.Context) {
 		return
 	}
 
+	if fileDetails.ArchiveLocation == "" {
+		log.Errorf("archive location for file: %s not known", fileID)
+		c.String(http.StatusInternalServerError, "archive location not known")
+
+		return
+	}
+
 	// Get query params
 	qStart := c.DefaultQuery("startCoordinate", "0")
 	qEnd := c.DefaultQuery("endCoordinate", "0")
@@ -320,11 +327,10 @@ func Download(c *gin.Context) {
 
 	// Get archive file handle
 	var file io.Reader
-
 	if wholeFile {
-		file, err = Backend.NewFileReader(fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	} else {
-		file, err = Backend.NewFileReadSeeker(fileDetails.ArchivePath)
+		file, err = ArchiveReader.NewFileReadSeeker(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	}
 
 	if err != nil {
@@ -355,7 +361,7 @@ func Download(c *gin.Context) {
 		// Size of the header in the archive
 		c.Header("Server-Additional-Bytes", fmt.Sprint(headerSize))
 		if requestPublicKey != "" {
-			newHeader, _ := reencryptHeader(fileDetails.Header, requestPublicKey)
+			newHeader, _ := reencryptHeader(c, fileDetails.Header, requestPublicKey)
 			headerSize = bytes.NewReader(newHeader).Size()
 			// Size of the header if the file is re-encrypted before downloading
 			c.Header("Client-Additional-Bytes", fmt.Sprint(headerSize))
@@ -382,7 +388,7 @@ func Download(c *gin.Context) {
 		}
 
 		log.Debugf("Public key from the request header = %v", requestPublicKey)
-		newHeader, err := reencryptHeader(fileDetails.Header, requestPublicKey)
+		newHeader, err := reencryptHeader(c, fileDetails.Header, requestPublicKey)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
@@ -414,7 +420,7 @@ func Download(c *gin.Context) {
 		}
 	default:
 		// Reencrypt header for use with the loaded internal key
-		newHeader, err := reencryptHeader(fileDetails.Header, config.Config.C4GH.PublicKeyB64)
+		newHeader, err := reencryptHeader(c, fileDetails.Header, config.Config.C4GH.PublicKeyB64)
 		if err != nil {
 			log.Errorf("Failed to reencrypt the file header, reason: %v", err)
 			c.String(http.StatusInternalServerError, "file re-encryption error")
@@ -529,7 +535,6 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 // it will be used as is. If not, the functions parameters will be used.
 // If in encrypted mode, the parameters will be adjusted to match the data block boundaries.
 var calculateCoords = func(start, end int64, htsget_range string, fileDetails *database.FileDownload, encryptedType string) (int64, int64, error) {
-	log.Warnf("calculate")
 	if htsget_range != "" {
 		startEnd := strings.Split(strings.TrimPrefix(htsget_range, "bytes="), "-")
 		if len(startEnd) > 1 {

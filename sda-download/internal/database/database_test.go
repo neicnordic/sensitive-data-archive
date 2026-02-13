@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -67,7 +68,7 @@ func TestCheckAndReconnect(t *testing.T) {
 
 	mock.ExpectPing().WillReturnError(errors.New("ping fail for testing bad conn"))
 
-	err := CatchPanicCheckAndReconnect(SQLdb{db, ""})
+	err := CatchPanicCheckAndReconnect(SQLdb{DB: db, ConnInfo: "", Version: 0})
 	assert.Error(t, err, "Should have received error from checkAndReconnectOnNeeded fataling")
 }
 
@@ -149,8 +150,9 @@ func TestNewDB(t *testing.T) {
 	if err = mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
-
-	mock.ExpectPing()
+	db, mock, _ = sqlmock.New(sqlmock.MonitorPingsOption(true))
+	mock.ExpectPing().WillReturnError(nil)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MAX(version) FROM sda.dbschema_version`)).WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow(1))
 	_, err = NewDB(testPgconf)
 
 	assert.Nilf(t, err, "NewDB failed unexpectedly: %s", err)
@@ -167,6 +169,7 @@ func sqlTesterHelper(t *testing.T, f func(sqlmock.Sqlmock, *SQLdb) error) error 
 		return db, err
 	}
 
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MAX(version) FROM sda.dbschema_version`)).WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow(1))
 	testDb, err := NewDB(testPgconf)
 
 	assert.Nil(t, err, "NewDB failed unexpectedly")
@@ -278,6 +281,7 @@ func TestGetFile(t *testing.T) {
 		expected := &FileDownload{
 			ArchivePath:       "file.txt",
 			ArchiveSize:       32,
+			ArchiveLocation:   "/archive",
 			DecryptedSize:     1024,
 			DecryptedChecksum: "sha256checksum",
 			LastModified:      "now",
@@ -286,6 +290,7 @@ func TestGetFile(t *testing.T) {
 		query := `
 		SELECT f.archive_file_path,
 			   f.archive_file_size,
+			   f.archive_location,
 			   f.decrypted_file_size,
 			   dc.checksum AS decrypted_checksum,
 			   f.last_modified,
@@ -299,9 +304,9 @@ func TestGetFile(t *testing.T) {
 
 		mock.ExpectQuery(query).
 			WithArgs("file1").
-			WillReturnRows(sqlmock.NewRows([]string{"file_path", "archive_file_size",
+			WillReturnRows(sqlmock.NewRows([]string{"file_path", "archive_file_size", "archive_location",
 				"decrypted_file_size", "decrypted_checksum", "last_modified", "header"}).AddRow(
-				expected.ArchivePath, expected.ArchiveSize, expected.DecryptedSize,
+				expected.ArchivePath, expected.ArchiveSize, expected.ArchiveLocation, expected.DecryptedSize,
 				expected.DecryptedChecksum, expected.LastModified, "abc123"))
 
 		x, err := testDb.getFile("file1")

@@ -22,8 +22,7 @@ storage:
 
 Where `${STORAGE_NAME}` is the name of the storage, and this is decided when initializing the writer / reader, eg:
 `NewWriter(..., "Inbox", ...).`
-`${STORAGE_IMPLEMENTATION}` is which storage implementation is to be loaded, there can be multiple storage 
-`${STORAGE_IMPLEMENTATION}`,
+`${STORAGE_IMPLEMENTATION}` is which storage implementation is to be loaded, there can be multiple storage implementations,
 supported values are "s3", and "posix", eg if an application is to be able to read from both s3 and posix, but writer to
 s3 the config would be:
 
@@ -61,35 +60,35 @@ The s3 storage implementation uses the [AWS s3](https://docs.aws.amazon.com/s3/)
 
 A s3 reader has the following configuration:
 
-| Name:         | Type:  | Default Value: | Description:                                                                                                                                  |         
-|---------------|--------|----------------|-----------------------------------------------------------------------------------------------------------------------------------------------|                               
-| access_key    | string |                | The access key used to authenticate when connecting to the s3                                                                                 |        
-| secret_key    | string |                | The secret key used to authenticate when connecting to the s3                                                                                 |
-| ca_cert       | string |                | The ca certificate of the s3 to be appended to the certs of the system                                                                        |        
-| chunk_size    | string | 50MB           | The chunk size (in bytes) when writing data S3, also when reading chunks with the Seekable Reader. The minimum allowed is 5MB, and max is 1gb |
-| region        | string | us-east-1      | The region of the s3 bucket                                                                                                                   |        
-| endpoint      | string |                | The address of the s3 buckets                                                                                                                 |        
-| disable_https | bool   | false          | If to disable https when connecting to the s3 bucket                                                                                          |        
-| bucket_prefix | string |                | How the reader will identify which buckets to look through when looking for a file for which the location is not known by the caller          |
+| Name:         | Type:  | Default Value: | Description:                                                                                                                                                                                |         
+|---------------|--------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|                               
+| access_key    | string |                | The access key used to authenticate when connecting to the s3                                                                                                                               |        
+| secret_key    | string |                | The secret key used to authenticate when connecting to the s3                                                                                                                               |
+| ca_cert       | string |                | The ca certificate of the s3 to be appended to the certs of the system                                                                                                                      |        
+| chunk_size    | string | 50MB           | The chunk size used when writing data to `S3` and when reading data with the `Seekable Reader`. Supports values like 50MB, 100MB. The minimum allowed value is 5MB, and the maximum is 1GB. |
+| region        | string | us-east-1      | The region of the s3 bucket                                                                                                                                                                 |        
+| endpoint      | string |                | The address of the s3 buckets                                                                                                                                                               |        
+| disable_https | bool   | false          | If to disable https when connecting to the s3 bucket                                                                                                                                        |        
+| bucket_prefix | string |                | How the reader will identify which buckets to look through when looking for a file for which the location is not known by the caller                                                        |
 
 ### S3 Writer Config
 
 A s3 writer has the following configuration:
 
-| Name:           | Type:        | Default Value: | Description:                                                                                                                                                  |         
-|-----------------|--------------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|                               
-| access_key      | string       |                | The access key used to authenticate when connecting to the s3                                                                                                 |        
-| secret_key      | string       |                | The secret key used to authenticate when connecting to the s3                                                                                                 |
-| ca_cert         | string       |                | The ca certificate of the s3 to be appended to the certs of the system                                                                                        |        
-| chunk_size      | string       | 50MB           | The chunk size (in bytes) when writing data S3, also when reading chunks with the Seekable Reader. The minimum allowed is 5MB, and max is 1gb                 |
-| region          | string       | us-east-1      | The region of the s3 bucket                                                                                                                                   |        
-| endpoint        | string       |                | The address of the s3 buckets                                                                                                                                 |        
-| disable_https   | bool         | false          | If to disable https when connecting to the s3 bucket                                                                                                          |        
-| bucket_prefix   | string       |                | How the writer will identify which buckets to be used or named if created, the buckets will be named by the bucket_prefix with a following incremental number |        
-| max_buckets     | unsigned int | 1              | How many buckets the writer will automatically create in the endpoint when previous ones have reached their quota                                             |        
-| max_objects     | unsigned int | 0              | How many objects the writer will write to a bucket before switching to the next one                                                                           |        
-| max_size        | string       | 0              | How many bytes the writer will write to a bucket before switching to the next one                                                                             |        
-| writer_disabled | bool         | false          | If the writer for this config should be disabled, i.e if this is just the config for a reader                                                                 |        
+| Name:           | Type:        | Default Value: | Description:                                                                                                                                                                                |         
+|-----------------|--------------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|                               
+| access_key      | string       |                | The access key used to authenticate when connecting to the s3                                                                                                                               |        
+| secret_key      | string       |                | The secret key used to authenticate when connecting to the s3                                                                                                                               |
+| ca_cert         | string       |                | The ca certificate of the s3 to be appended to the certs of the system                                                                                                                      |        
+| chunk_size      | string       | 50MB           | The chunk size used when writing data to `S3` and when reading data with the `Seekable Reader`. Supports values like 50MB, 100MB. The minimum allowed value is 5MB, and the maximum is 1GB. |
+| region          | string       | us-east-1      | The region of the s3 bucket                                                                                                                                                                 |        
+| endpoint        | string       |                | The address of the s3 buckets                                                                                                                                                               |        
+| disable_https   | bool         | false          | If to disable https when connecting to the s3 bucket                                                                                                                                        |        
+| bucket_prefix   | string       |                | How the writer will identify which buckets to be used or named if created, the buckets will be named by the bucket_prefix with a following incremental number                               |        
+| max_buckets     | unsigned int | 1              | How many buckets the writer will automatically create in the endpoint when previous ones have reached their quota                                                                           |        
+| max_objects     | unsigned int | 0              | How many objects the writer will write to a bucket before switching to the next one                                                                                                         |        
+| max_size        | string       | 0              | How many bytes the writer will write to a bucket before switching to the next one                                                                                                           |        
+| writer_disabled | bool         | false          | If the writer for this config should be disabled, i.e if this is just the config for a reader                                                                                               |        
 
 ## Posix
 
@@ -97,9 +96,9 @@ A s3 writer has the following configuration:
 
 A posix reader has the following configuration:
 
-| Name: | Type:  | Default Value: | Description:                                            |         
-|-------|--------|----------------|---------------------------------------------------------|                               
-| path  | string |                | The path of the directory/volume where to store objects |
+| Name: | Type:  | Default Value: | Description:                                                 |         
+|-------|--------|----------------|--------------------------------------------------------------|                               
+| path  | string |                | The path of the directory/volume from which objects are read |
 
 ### Posix Writer Config
 

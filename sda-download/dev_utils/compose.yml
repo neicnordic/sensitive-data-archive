@@ -18,37 +18,61 @@ services:
       - certs:/certs
 
   db:
-    command: server /data
+    user: postgres
     container_name: db
     depends_on:
       certfixer:
         condition: service_completed_successfully
     environment:
-      - DB_LEGA_IN_PASSWORD=lega_in
-      - DB_LEGA_OUT_PASSWORD=lega_out
       - PKI_VOLUME_PATH=/certs/
-      - PG_CA=/var/lib/postgresql/tls/ca.pem
-      - PG_SERVER_CERT=/var/lib/postgresql/tls/db.pem
-      - PG_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
+      - POSTGRES_SERVER_CACERT=/var/lib/postgresql/tls/ca.pem
+      - POSTGRES_SERVER_CERT=/var/lib/postgresql/tls/db.pem
+      - POSTGRES_SERVER_KEY=/var/lib/postgresql/tls/db-key.pem
       - POSTGRES_PASSWORD=rootpassword
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "lega_out"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 20s
       retries: 3
-    image: ghcr.io/neicnordic/sda-db:v2.1.4
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     ports:
       - "5432:5432"
     volumes:
       - /tmp/data:/data
       - certs:/var/lib/postgresql/tls/
 
+  database_user_creation:
+    container_name: database_user_creation
+    image: postgres:15.4-alpine
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        pg_isready -h db -U postgres 
+        psql -U postgres -h db -d sda -c "ALTER ROLE download LOGIN PASSWORD 'download';"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=rootpassword
+      - PGSSLMODE=verify-full
+      - PGSSLKEY=/var/lib/postgresql/tls/client-key.pem
+      - PGSSLCERT=/var/lib/postgresql/tls/client.pem
+      - PGSSLROOTCERT=/var/lib/postgresql/tls/ca.pem
+    volumes:
+      - certs:/var/lib/postgresql/tls/
+
   s3:
-    command: server /data
+    command: server /data  --console-address ":9001"
     container_name: s3
     environment:
-      - MINIO_ACCESS_KEY=access
-      - MINIO_SECRET_KEY=secretkey
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
     healthcheck:
       test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
       interval: 5s
@@ -57,6 +81,26 @@ services:
     image: minio/minio
     ports:
       - "9000:9000"
+    volumes:
+      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
+      - ./certs/s3.pem:/root/.minio/certs/public.crt
+      - ./certs/s3-key.pem:/root/.minio/certs/private.key
+
+  s3-2nd:
+    command: server /data  --console-address ":9001"
+    container_name: s3-2nd
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretkey
+      - MINIO_SERVER_URL=https://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 3
+    image: minio/minio
+    ports:
+      - "9001:9000"
     volumes:
       - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
       - ./certs/s3.pem:/root/.minio/certs/public.crt
@@ -84,14 +128,14 @@ services:
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
+      database_user_creation:
+        condition: service_completed_successfully
       s3:
         condition: service_healthy
       mockauth:
-        condition: service_started
+        condition: service_healthy
     env_file: ./env.download
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
     build:
       context: ..
     volumes:
@@ -99,7 +143,10 @@ services:
       - ./:/dev_utils/
       - ./iss.json:/iss.json
       - certs:/dev_utils/certs
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "8443:8443"
@@ -111,32 +158,35 @@ services:
     depends_on:
       certfixer:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
+      database_user_creation:
+        condition: service_completed_successfully
       s3:
         condition: service_healthy
       mockauth:
-        condition: service_started
+        condition: service_healthy
       download:
         condition: service_started
     env_file: ./env.download
     environment:
       - C4GH_TRANSIENTKEYPATH=/dev_utils/c4gh.sec.pem
       - C4GH_TRANSIENTPASSPHRASE=oaagCP1YgAZeEyl2eJAkHv9lkcWXWFgm
-    image: neicnordic/sda-download:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
     volumes:
       - ./config.yaml:/config.yaml
       - ./:/dev_utils/
       - ./iss.json:/iss.json
       - certs:/dev_utils/certs
-      - ./archive_data/4293c9a7-dc50-46db-b79a-27ddc0dad1c6:/tmp/4293c9a7-dc50-46db-b79a-27ddc0dad1c6
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000001
+      - ./archive_data/test_file:/tmp/dir1/00000000-0000-0000-0000-000000000002
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000003
+      - ./archive_data/test_file:/tmp/dir2/00000000-0000-0000-0000-000000000004
     mem_limit: 256m
     ports:
       - "9443:8443"
     restart: always
 
   reencrypt:
-    image: ghcr.io/neicnordic/sensitive-data-archive:latest
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     build: ../../sda
     command: [ sda-reencrypt ]
     container_name: reencrypt
@@ -158,11 +208,18 @@ services:
       - /bin/sh
       - -c
       - |
+        apt update
+        apt install curl -y
         pip install --upgrade pip
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
     image: python:3.8-slim
+    healthcheck:
+      test: [ "CMD", "curl", "-fkq", "https://localhost:8000/.well-known/openid-configuration" ]
+      interval: 10s
+      timeout: 30s
+      retries: 10
     volumes:
       - ./mockoidc/mockoidc.py:/mockoidc.py
       - certs:/certs

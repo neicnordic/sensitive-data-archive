@@ -83,17 +83,15 @@ These settings control how verify connects to the RabbitMQ message broker.
 
 ### Storage settings
 
-- `INBOX_TYPE`: Valid value is `S3`
-- `INBOX_URL`: URL to the S3 system
-- `INBOX_ACCESSKEY`: The S3 access and secret key are used to authenticate to S3,
+- `S3INBOX_ENDPOINT`: Endpoint to the S3 service including the port (e.g., https://s3.example.com:9000)
+- `S3INBOX_ACCESS_KEY`: The S3 access key (username equivalent), used to authenticate to S3
  [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `INBOX_SECRETKEY`: The S3 access and secret key are used to authenticate to S3,
+- `S3INBOX_SECRET_KEY`: The S3 access key (username equivalent), used to authenticate to S3
  [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `INBOX_BUCKET`: The S3 bucket to use as the storage root
-- `INBOX_PORT`: S3 connection port (default: `443`)
-- `INBOX_REGION`: S3 region (default: `us-east-1`)
-- `INBOX_CHUNKSIZE`: S3 chunk size for multipart uploads.
-- `INBOX_CACERT`: Certificate Authority (CA) certificate for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
+- `S3INBOX_BUCKET`: The S3 bucket to be used for storage of uploaded files when forwarding upload requests
+- `S3INBOX_REGION`: S3 region
+- `S3INBOX_CACERT`: Path to the Certificate Authority (CA) certificate file for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
+- `S3INBOX_READY_PATH`: Path to use when pinging to check if the s3 bucket is healthy and ready for requests, final URL will be S3INBOX_ENDPOINT + S3INBOX_READY_PATH when calling 
 
 ### Logging settings
 

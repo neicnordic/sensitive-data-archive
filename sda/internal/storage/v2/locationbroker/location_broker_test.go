@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
@@ -21,6 +22,31 @@ func (m *mockDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, locati
 	args := m.Called(location)
 
 	return args.Get(0).(uint64), args.Get(1).(uint64), args.Error(2)
+}
+
+func (m *mockDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Context, _, _ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *mockDatabase) GetArchiveLocation(_ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *mockDatabase) GetArchivePathAndLocation(_ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *mockDatabase) GetMappingData(_ string) (*database.MappingData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *mockDatabase) GetSubmissionLocation(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *mockDatabase) IsFileInDataset(_ context.Context, _ string) (bool, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *mockDatabase) CancelFile(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
 }
 
 func TestLocationBrokerTestSuite(t *testing.T) {

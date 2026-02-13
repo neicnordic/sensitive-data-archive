@@ -75,7 +75,7 @@ auth_token() {
 #
 # Create s3cmd configs
 #
-# ports 9443/9080 refer to the download instance serving unencrypted files
+# ports 9443/8080 refer to the download instance serving unencrypted files
 port="9443"
 [[ "$TLS" == "False" ]] && port="9080"
 

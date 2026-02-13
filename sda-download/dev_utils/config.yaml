@@ -10,18 +10,24 @@ log:
   level: "debug"
   format: "json"
 
-archive:
-  type: ""
-  # S3 backend
-  url: "https://localhost"
-  port: 9000
-  accesskey: "access"
-  secretkey: "secretkey"
-  bucket: "archive"
-  chunksize: 32
-  cacert: "./dev_utils/certs/ca.pem"
-  # posix backend
-  location: "/tmp"
+storage:
+  archive:
+    s3:
+    - endpoint: "https://s3:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      ca_cert: "./dev_utils/certs/ca.pem"
+    - endpoint: "https://s3-2nd:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      ca_cert: "./dev_utils/certs/ca.pem"
+    posix:
+    - path: "/tmp/dir1"
+    - path: "/tmp/dir2"
 
 session:
   # session key expiration time in seconds
@@ -62,13 +68,13 @@ grpc:
 db:
   host: "localhost"
   port: 5432
-  user: "lega_out"
-  password: "lega_out"
-  database: "lega"
+  user: "download"
+  password: "download"
+  database: "sda"
   cacert: "./dev_utils/certs/ca.pem"
   clientCert: "./dev_utils/certs/client.pem"
   clientKey: "./dev_utils/certs/client-key.pem"
-  sslmode: "verify-ca"
+  sslmode: "verify-full"
 
 oidc:
   cacert: "./dev_utils/certs/ca.pem"

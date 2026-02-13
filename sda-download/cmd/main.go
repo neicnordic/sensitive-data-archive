@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
+
 	"github.com/neicnordic/sda-download/api"
 	"github.com/neicnordic/sda-download/api/sda"
 	"github.com/neicnordic/sda-download/internal/config"
 	"github.com/neicnordic/sda-download/internal/database"
 	"github.com/neicnordic/sda-download/internal/session"
-	"github.com/neicnordic/sda-download/internal/storage"
+	"github.com/neicnordic/sda-download/internal/storage/v2"
 	"github.com/neicnordic/sda-download/pkg/auth"
 	"github.com/neicnordic/sda-download/pkg/request"
 	log "github.com/sirupsen/logrus"
@@ -30,7 +32,9 @@ func init() {
 	if err != nil {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
-	defer db.Close()
+	if db.Version < 23 {
+		log.Panic("database schema v23 is required")
+	}
 	database.DB = db
 
 	// Initialise HTTP client for making requests
@@ -55,16 +59,18 @@ func init() {
 	}
 	session.SessionCache = sessionCache
 
-	backend, err := storage.NewBackend(conf.Archive)
+	archiveReader, err := storage.NewReader(context.Background(), "archive")
 	if err != nil {
-		log.Panicf("Error initiating storage backend, reason: %v", err)
+		log.Panicf("Error initiating archive storage reader, reason: %v", err)
 	}
-	sda.Backend = backend
+	sda.ArchiveReader = archiveReader
 }
 
 // main starts the web server
 func main() {
 	srv := api.Setup()
+	// Db is setup by the init() func
+	defer database.DB.Close()
 
 	// Start the server
 	log.Info("(5/5) Starting web server")
@@ -75,9 +81,13 @@ func main() {
 
 	if config.Config.App.ServerCert != "" && config.Config.App.ServerKey != "" {
 		log.Infof("Web server is ready to receive connections at https://%s:%d", config.Config.App.Host, config.Config.App.Port)
-		log.Fatal(srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey))
+		if err := srv.ListenAndServeTLS(config.Config.App.ServerCert, config.Config.App.ServerKey); err != nil {
+			log.Panic(err)
+		}
 	}
 
 	log.Infof("Web server is ready to receive connections at http://%s:%d", config.Config.App.Host, config.Config.App.Port)
-	log.Fatal(srv.ListenAndServe())
+	if err := srv.ListenAndServe(); err != nil {
+		log.Panic(err)
+	}
 }

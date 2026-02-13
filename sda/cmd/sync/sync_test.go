@@ -159,7 +159,7 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	db, err = database.NewSDAdb(conf.Database)
 	assert.NoError(s.T(), err)
 
-	fileID, err := db.RegisterFile(nil, "dummy.user/test/file1.c4gh", "dummy.user")
+	fileID, err := db.RegisterFile(nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
 	assert.NoError(s.T(), err, "failed to register file in database")
 	err = db.SetAccessionID("ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(s.T(), err)
@@ -167,7 +167,7 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := database.FileInfo{ArchiveChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 
-	err = db.SetArchived(fileInfo, fileID)
+	err = db.SetArchived("/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 	err = db.SetVerified(fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
