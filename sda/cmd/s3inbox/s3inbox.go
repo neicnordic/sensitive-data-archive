@@ -141,7 +141,7 @@ func run() error {
 }
 
 func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) error {
-	_, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &bucket})
+	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
