@@ -458,6 +458,8 @@ paths:
           headers:
             Content-Length:
               $ref: "#/components/headers/ContentLength"
+            SDA-Content-ETag:
+              $ref: "#/components/headers/SDA-Content-ETag"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -495,6 +497,8 @@ paths:
           headers:
             Content-Length:
               $ref: "#/components/headers/ContentLength"
+            SDA-Content-ETag:
+              $ref: "#/components/headers/SDA-Content-ETag"
           content:
             application/octet-stream:
               schema:
@@ -1049,6 +1053,16 @@ components:
         recipient public key), because data segments are encrypted with the file's
         data encryption key and are identical for all recipients. This ETag is
         stable across requests and safe for If-Range and CDN caching.
+      schema:
+        type: string
+      example: "\"a1b2c3d4e5f6g7h8\""
+
+    SDA-Content-ETag:
+      description: |
+        Entity tag of the content endpoint (GET /files/{fileId}/content) at the
+        time the header was generated. Returned on header sub-resource responses
+        so clients can verify header/content consistency without an extra HEAD
+        request. Use the value with If-Range when fetching content.
       schema:
         type: string
       example: "\"a1b2c3d4e5f6g7h8\""
