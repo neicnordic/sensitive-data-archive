@@ -137,11 +137,11 @@ fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/te
 # wait for the fail to get the correct status
 RETRY_TIMES=0
 
-until [ "$(psql -U postgres -h postgres -d sda -At -c "select id from sda.file_events e where e.title in (select event from sda.file_event_log where file_id = '$fileid' order by started_at desc limit 1);")"  -gt 30 ]; do
-   echo "waiting for ingest to complete"
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$fileid' order by started_at desc limit 1;")" = "verified" ]; do
+   echo "waiting for ingest and verification to complete for file: $fileid"
    RETRY_TIMES=$((RETRY_TIMES + 1))
    if [ "$RETRY_TIMES" -eq 30 ]; then
-      echo "::error::Time out while waiting for ingest to complete"
+      echo "::error::Time out while waiting for file: $fileid ingest and verification to complete"
       exit 1
    fi
    sleep 2
