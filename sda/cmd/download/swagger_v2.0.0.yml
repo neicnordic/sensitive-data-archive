@@ -1030,46 +1030,6 @@ components:
       example: attachment; filename="sample1.cram.c4gh"
 
   responses:
-    BinaryFile200:
-      description: Successful operation (full file)
-      headers:
-        Accept-Ranges:
-          $ref: "#/components/headers/AcceptRanges"
-        Content-Length:
-          $ref: "#/components/headers/ContentLength"
-        ETag:
-          $ref: "#/components/headers/ETag"
-        Last-Modified:
-          $ref: "#/components/headers/LastModified"
-        Content-Disposition:
-          $ref: "#/components/headers/ContentDisposition"
-      content:
-        application/octet-stream:
-          schema:
-            type: string
-            format: binary
-
-    BinaryFile206:
-      description: Successful operation (partial content)
-      headers:
-        Accept-Ranges:
-          $ref: "#/components/headers/AcceptRanges"
-        Content-Length:
-          $ref: "#/components/headers/ContentLength"
-        Content-Range:
-          $ref: "#/components/headers/ContentRange"
-        ETag:
-          $ref: "#/components/headers/ETag"
-        Last-Modified:
-          $ref: "#/components/headers/LastModified"
-        Content-Disposition:
-          $ref: "#/components/headers/ContentDisposition"
-      content:
-        application/octet-stream:
-          schema:
-            type: string
-            format: binary
-
     BadRequest:
       description: Bad request
       content:
