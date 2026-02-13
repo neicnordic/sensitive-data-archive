@@ -797,6 +797,7 @@ components:
               type: string
               format: uri
               example: https://neic.no
+          required: [name, url]
         version:
           type: string
           description: Service version
@@ -805,7 +806,7 @@ components:
           type: string
           description: Deployment environment (e.g. production, staging)
           example: production
-      required: [id, name, type, version]
+      required: [id, name, type, organization, version]
 
     ProblemDetails:
       type: object
