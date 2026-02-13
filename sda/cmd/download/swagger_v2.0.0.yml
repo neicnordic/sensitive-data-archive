@@ -663,7 +663,6 @@ components:
 
     DatasetInfo:
       type: object
-      additionalProperties: false
       properties:
         datasetId:
           $ref: "#/components/schemas/DatasetId"
@@ -683,7 +682,6 @@ components:
 
     DatasetListResponse:
       type: object
-      additionalProperties: false
       properties:
         datasets:
           type: array
@@ -699,7 +697,6 @@ components:
 
     FileListResponse:
       type: object
-      additionalProperties: false
       properties:
         files:
           type: array
@@ -715,7 +712,6 @@ components:
 
     FileInfo:
       type: object
-      additionalProperties: false
       properties:
         fileId:
           type: string
