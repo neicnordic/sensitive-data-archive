@@ -95,7 +95,7 @@ been implemented.
 ### Conventions Established by This ADR
 
 | Convention | Detail |
-|---|---|
+| --- | --- |
 | Directory | `docs/decisions/` |
 | File naming | `NNNN-title-with-dashes.md` — zero-padded, lowercase, dashes between words |
 | Numbering | Starts at 0000; numbers are never reused, even for rejected or superseded decisions |

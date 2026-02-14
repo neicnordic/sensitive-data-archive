@@ -1,0 +1,29 @@
+name: Lint Markdown
+
+on:
+  merge_group:
+  pull_request:
+    paths:
+      - "docs/decisions/**"
+      - ".github/workflows/lint-markdown.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/decisions/**"
+      - ".github/workflows/lint-markdown.yml"
+  workflow_dispatch:
+
+jobs:
+  markdownlint:
+    name: Decision records
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Lint decision records
+        uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          globs: |
+            docs/decisions/**/*.md
