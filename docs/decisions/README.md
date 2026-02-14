@@ -49,8 +49,11 @@ includes a checkbox as a reminder.
 
 3. Set `status: proposed` in the front matter.
 
-4. Open a pull request. The decision record is accepted when the PR is merged
-   (update the status to `accepted`).
+4. Open a pull request and label it `adr`.
+
+5. The PR is brought up at the next **NeIC SDA-Devs bi-weekly meet-up** for
+   discussion. The decision record is accepted when the team agrees and the PR
+   is merged (update the status to `accepted`).
 
 ## Tips for good decision records
 
