@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
@@ -24,7 +25,24 @@ func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) 
 		return 0, storageerrors.ErrorNoEndpointConfiguredForLocation
 	}
 
-	stat, err := os.Stat(filepath.Join(location, filePath))
+	basePath, err := filepath.Abs(location)
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve base path for location %s: %w", location, err)
+	}
+
+	fullFilePath, err := filepath.Abs(filepath.Join(basePath, filePath))
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve file path for %s at location %s: %w", filePath, location, err)
+	}
+
+	// Ensure the resolved path is within the configured base path to prevent path traversal.
+	baseWithSep := basePath + string(os.PathSeparator)
+	fullWithSep := fullFilePath + string(os.PathSeparator)
+	if !strings.HasPrefix(fullWithSep, baseWithSep) {
+		return 0, storageerrors.ErrorFileNotFoundInLocation
+	}
+
+	stat, err := os.Stat(fullFilePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, storageerrors.ErrorFileNotFoundInLocation
