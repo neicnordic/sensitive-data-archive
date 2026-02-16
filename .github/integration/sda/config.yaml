@@ -39,6 +39,8 @@ storage:
       bucket_prefix: "sync"
       region: "us-east-1"
       disable_https: true
+      max_buckets: 10
+      max_objects: 10
 
 s3inbox:
   endpoint: "http://s3:9000"
