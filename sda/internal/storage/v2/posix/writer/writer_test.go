@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
@@ -314,4 +316,68 @@ func (ts *WriterTestSuite) TestRemoveFile_InSubDirectory() {
 func (ts *WriterTestSuite) TestRemoveFile_LocationNotConfigured() {
 	err := ts.writer.RemoveFile(context.TODO(), "/tmp/no_access_here", "test_file_1.txt")
 	ts.EqualError(err, storageerrors.ErrorNoEndpointConfiguredForLocation.Error())
+}
+
+func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstDirFull() {
+	content := "test file 2"
+	lb, err := locationbroker.NewLocationBroker(&notImplementedDatabase{}, locationbroker.CacheTTL(0))
+	ts.NoError(err)
+
+	writer, err := NewWriter(context.TODO(), "test", lb)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	for i := 0; i < 10; i++ {
+		if err := os.WriteFile(filepath.Join(ts.dir1, fmt.Sprintf("file-%d.txt", i)), []byte(fmt.Sprintf("file content %d", i)), 0600); err != nil {
+			ts.FailNow(err.Error())
+		}
+	}
+
+	contentReader := bytes.NewReader([]byte(content))
+	location, err := writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	readContent, err := os.ReadFile(filepath.Join(ts.dir2, "test_file_1.txt"))
+	ts.NoError(err)
+	ts.Equal(content, string(readContent))
+	ts.Equal(ts.dir2, location)
+	// Ensure location/tmp folder empty
+	tmpFiles, err := os.ReadDir(filepath.Join(ts.dir2, "tmp"))
+	ts.NoError(err)
+	ts.Len(tmpFiles, 0)
+}
+
+type notImplementedDatabase struct {
+}
+
+func (m *notImplementedDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, _ string) (uint64, uint64, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Context, _, _ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetArchiveLocation(_ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetArchivePathAndLocation(_ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetMappingData(_ string) (*database.MappingData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetSubmissionLocation(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) IsFileInDataset(_ context.Context, _ string) (bool, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) CancelFile(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
 }
