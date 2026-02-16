@@ -39,7 +39,7 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 		locationBroker: locationBroker,
 	}
 	writer.locationBroker.RegisterSizeAndCountFinderFunc(backendName, func(location string) bool {
-		return !strings.HasPrefix(location, "/")
+		return strings.HasPrefix(location, "/")
 	}, findSizeAndObjectCountInDir)
 
 	// Verify locations
