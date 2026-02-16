@@ -11,17 +11,10 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/credentials"
-)
-
-const (
-	POSIX = "posix"
-	S3    = "s3"
-	SFTP  = "sftp"
 )
 
 var requiredConfVars []string
@@ -37,7 +30,6 @@ type ServerConfig struct {
 
 // Config is a parent object for all the different configuration parts
 type Config struct {
-	Archive      storage.Conf
 	Broker       broker.MQConf
 	Database     database.DBConf
 	Server       ServerConfig
@@ -111,7 +103,6 @@ type APIConf struct {
 	Session     SessionConfig
 	DB          *database.SDAdb
 	MQ          *broker.AMQPBroker
-	INBOX       storage.Backend
 	Grpc        Grpc
 	AuditLogger *log.Logger
 }
@@ -647,17 +638,6 @@ func (c *Config) apiDefaults() {
 	viper.SetDefault("api.audit", true)
 }
 
-// configArchive provides configuration for the archive storage
-func (c *Config) configArchive() {
-	if viper.GetString("archive.type") == S3 {
-		c.Archive.Type = S3
-		c.Archive.S3 = configS3Storage("archive")
-	} else {
-		c.Archive.Type = POSIX
-		c.Archive.Posix.Location = viper.GetString("archive.location")
-	}
-}
-
 // configBroker provides configuration for the message broker
 func (c *Config) configBroker() error {
 	// Setup broker
@@ -906,62 +886,6 @@ func (c *Config) configSchemas() {
 	if viper.IsSet("schema.path") {
 		c.Broker.SchemasPath = viper.GetString("schema.path")
 	}
-}
-
-// configS3Storage populates and returns a S3Conf from the
-// configuration
-func configS3Storage(prefix string) storage.S3Conf {
-	s3 := storage.S3Conf{}
-	// All these are required
-	s3.URL = viper.GetString(prefix + ".url")
-	s3.AccessKey = viper.GetString(prefix + ".accesskey")
-	s3.SecretKey = viper.GetString(prefix + ".secretkey")
-	s3.Bucket = viper.GetString(prefix + ".bucket")
-
-	// Defaults (move to viper?)
-
-	s3.Region = "us-east-1"
-	s3.NonExistRetryTime = 2 * time.Minute
-
-	if viper.IsSet(prefix + ".port") {
-		s3.Port = viper.GetInt(prefix + ".port")
-	}
-
-	if viper.IsSet(prefix + ".region") {
-		s3.Region = viper.GetString(prefix + ".region")
-	}
-
-	if viper.IsSet(prefix + ".readypath") {
-		s3.Readypath = viper.GetString(prefix + ".readypath")
-	}
-
-	if viper.IsSet(prefix + ".chunksize") {
-		s3.Chunksize = viper.GetInt(prefix+".chunksize") * 1024 * 1024
-	}
-
-	if viper.IsSet(prefix + ".cacert") {
-		s3.CAcert = viper.GetString(prefix + ".cacert")
-	}
-
-	return s3
-}
-
-// configSFTP populates and returns a sftpConf with sftp backend configuration
-func configSFTP(prefix string) storage.SftpConf {
-	sftpConf := storage.SftpConf{}
-	if viper.IsSet(prefix + ".sftp.hostKey") {
-		sftpConf.HostKey = viper.GetString(prefix + ".sftp.hostKey")
-	} else {
-		sftpConf.HostKey = ""
-	}
-	// All these are required
-	sftpConf.Host = viper.GetString(prefix + ".sftp.host")
-	sftpConf.Port = viper.GetString(prefix + ".sftp.port")
-	sftpConf.UserName = viper.GetString(prefix + ".sftp.userName")
-	sftpConf.PemKeyPath = viper.GetString(prefix + ".sftp.pemKeyPath")
-	sftpConf.PemKeyPass = viper.GetString(prefix + ".sftp.pemKeyPass")
-
-	return sftpConf
 }
 
 // configNotify provides configuration for the backup storage
