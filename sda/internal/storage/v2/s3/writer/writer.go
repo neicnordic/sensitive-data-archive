@@ -124,12 +124,10 @@ func findSizeAndObjectCountOfLocation(configuredEndpoints []*endpointConfig) fun
 		var totalSize uint64
 		var totalObjects uint64
 
-		// Create paginator
 		paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
 			Bucket: aws.String(bucket),
 		})
 
-		// Iterate through all pages
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(ctx)
 			if err != nil {
