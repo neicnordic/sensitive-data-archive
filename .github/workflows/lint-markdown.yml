@@ -6,12 +6,14 @@ on:
     paths:
       - "docs/decisions/**"
       - ".github/workflows/lint-markdown.yml"
+      - ".markdownlint.yml"
   push:
     branches:
       - main
     paths:
       - "docs/decisions/**"
       - ".github/workflows/lint-markdown.yml"
+      - ".markdownlint.yml"
   workflow_dispatch:
 
 jobs:

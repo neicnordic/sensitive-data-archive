@@ -2,10 +2,10 @@
 # These are optional metadata elements. Feel free to remove any of them.
 status: proposed # proposed | accepted | rejected | deprecated | superseded
 superseded-by: # e.g. "0005-new-approach.md" (only when status is superseded)
-date: {YYYY-MM-DD when the decision was last updated}
-decision-makers: {list everyone involved in the decision}
-consulted: {list everyone whose opinions are sought (typically subject-matter experts); and with whom there is a two-way communication}
-informed: {list everyone who is kept up-to-date on progress; and with whom there is a one-way communication}
+date: "YYYY-MM-DD" # when the decision was last updated
+decision-makers: [] # list everyone involved in the decision
+consulted: [] # list everyone whose opinions are sought (typically subject-matter experts); and with whom there is a two-way communication
+informed: [] # list everyone who is kept up-to-date on progress; and with whom there is a one-way communication
 ---
 
 # {short title, representative of solved problem and found solution}
@@ -72,4 +72,4 @@ Chosen option: "{title of option 1}", because {justification. e.g., only option,
 <!-- This is an optional element. Feel free to remove. -->
 ## More Information
 
-{You might want to provide additional evidence/confidence for the decision outcome here and/or document the team agreement on the decision and/or define when/how this decision the decision should be realized and if/when it should be re-visited. Links to other decisions and resources might appear here as well.}
+{You might want to provide additional evidence/confidence for the decision outcome here and/or document the team agreement on the decision and/or define when/how the decision should be realized and if/when it should be re-visited. Links to other decisions and resources might appear here as well.}
