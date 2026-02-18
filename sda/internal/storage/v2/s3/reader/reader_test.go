@@ -94,7 +94,7 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 
 		case strings.HasPrefix(req.RequestURI, "/mock_s3_1_bucket_2"):
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file2.txt") {
@@ -141,10 +141,10 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = fmt.Fprintf(w, "unexpected path called: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "unexpected path called: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 		}
 	}))
 
@@ -214,7 +214,7 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 		case strings.HasPrefix(req.RequestURI, "/mock_s3_2_bucket_2"):
 			if req.Method == "GET" && strings.HasSuffix(req.RequestURI, "GetObject") && strings.Contains(req.RequestURI, "file4.txt") {
 				w.WriteHeader(http.StatusOK)
@@ -231,10 +231,10 @@ func (ts *ReaderTestSuite) SetupSuite() {
 			}
 
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "no file found at: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = fmt.Fprintf(w, "unexpected path called: %s", req.RequestURI)
+			_, _ = fmt.Fprintf(w, "unexpected path called: %s", req.RequestURI) // #nosec G705 -- request controlled by unit test
 		}
 	}))
 

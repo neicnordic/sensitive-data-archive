@@ -131,7 +131,7 @@ type s3Backend struct {
 type S3Conf struct {
 	URL               string
 	Port              int
-	AccessKey         string
+	AccessKey         string // #nosec G117 -- Export needed to access configuration atm
 	SecretKey         string
 	Bucket            string
 	Region            string

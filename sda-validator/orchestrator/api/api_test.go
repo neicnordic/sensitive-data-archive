@@ -83,7 +83,7 @@ func (ts *ValidatorAPITestSuite) SetupSuite() {
 		openapi.ApiHandleFunctions{
 			ValidatorOrchestratorAPI: &validatorAPIImpl{
 				sdaAPIURL:                     ts.httpTestServer.URL,
-				sdaAPIToken:                   "mock-sdaAPIToken",
+				sdaAPIToken:                   "mock-sdaAPIToken", // #nosec G101 -- hardcoded credentials for unit test
 				validationFileSizeLimit:       1024 * 4,
 				validationJobPreparationQueue: "job-preparation-queue",
 				broker:                        ts.mockBroker,
@@ -324,7 +324,7 @@ func (ts *ValidatorAPITestSuite) TestAdminValidatePost_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
 			sdaAPIURL:                     ts.httpTestServer.URL,
-			sdaAPIToken:                   "mock-sdaAPIToken",
+			sdaAPIToken:                   "mock-sdaAPIToken", // #nosec G101 -- hardcoded credentials for unit test
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,
@@ -345,7 +345,7 @@ func (ts *ValidatorAPITestSuite) TestValidatePost_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
 			sdaAPIURL:                     ts.httpTestServer.URL,
-			sdaAPIToken:                   "mock-sdaAPIToken",
+			sdaAPIToken:                   "mock-sdaAPIToken", // #nosec G101 -- hardcoded credentials for unit test
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,
@@ -510,7 +510,7 @@ func (ts *ValidatorAPITestSuite) TestResultGet_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
 			sdaAPIURL:                     ts.httpTestServer.URL,
-			sdaAPIToken:                   "mock-sdaAPIToken",
+			sdaAPIToken:                   "mock-sdaAPIToken", // #nosec G101 -- hardcoded credentials for unit test
 			validationFileSizeLimit:       1024 * 4,
 			validationJobPreparationQueue: "job-preparation-queue",
 			broker:                        ts.mockBroker,

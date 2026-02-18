@@ -25,7 +25,7 @@ type MQConf struct {
 	Host          string
 	Port          int
 	User          string
-	Password      string
+	Password      string // #nosec G117 -- Export needed to access configuration atm
 	Vhost         string
 	Queue         string
 	Exchange      string
@@ -34,7 +34,7 @@ type MQConf struct {
 	VerifyPeer    bool
 	CACert        string
 	ClientCert    string
-	ClientKey     string
+	ClientKey     string // #nosec G117 -- Export needed to access configuration atm
 	ServerName    string
 	SchemasPath   string
 	PrefetchCount int

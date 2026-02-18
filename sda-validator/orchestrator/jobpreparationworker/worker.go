@@ -261,7 +261,7 @@ func (w *worker) downloadFiles(ctx context.Context, validationFilesDir string, v
 }
 
 func (w *worker) downloadFile(_ context.Context, userID, fileID string, file *os.File, pubKeyBase64 string, privateKeyData [32]byte) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", w.conf.sdaAPIURL, userID, fileID), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/file/%s", w.conf.sdaAPIURL, userID, fileID), nil) // #nosec G704 -- host controlled by configuration, TODO verify if to sanitize userID and fileID
 	if err != nil {
 		return fmt.Errorf("failed to create the request, reason: %v", err)
 	}
@@ -273,7 +273,7 @@ func (w *worker) downloadFile(_ context.Context, userID, fileID string, file *os
 
 	// Send the request
 	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- host controlled by configuration, TODO verify if to sanitize userID and fileID
 	if err != nil {
 		return fmt.Errorf("failed to get response, reason: %v", err)
 	}

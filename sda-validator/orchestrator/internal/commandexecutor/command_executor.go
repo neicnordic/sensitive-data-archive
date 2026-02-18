@@ -11,5 +11,5 @@ type OsCommandExecutor struct {
 }
 
 func (OsCommandExecutor) Execute(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	return exec.Command(name, args...).Output() // #nosec G204 launched subprocess hardcoded to be apptainer at callers
 }

@@ -71,7 +71,7 @@ type AppConfig struct {
 
 // Stores the Crypt4GH private key used internally
 type transientKeyConf struct {
-	PrivateKey   [32]byte
+	PrivateKey   [32]byte // #nosec G117 -- Export needed to access configuration atm
 	PublicKeyB64 string
 }
 
@@ -128,7 +128,7 @@ type DatabaseConfig struct {
 
 	// Database password for username
 	// Optional. Default value lega_out
-	Password string
+	Password string // #nosec G117 -- Export needed to access configuration atm
 
 	// Database name
 	// Optional. Default value lega
@@ -148,7 +148,7 @@ type DatabaseConfig struct {
 
 	// TLS Key for database connection
 	// Optional.
-	ClientKey string
+	ClientKey string // #nosec G117 -- Export needed to access configuration atm
 }
 
 type ReencryptConfig struct {
@@ -156,7 +156,7 @@ type ReencryptConfig struct {
 	Port       int
 	CACert     string
 	ClientCert string
-	ClientKey  string
+	ClientKey  string // #nosec G117 -- Export needed to access configuration atm
 	Timeout    int
 }
 

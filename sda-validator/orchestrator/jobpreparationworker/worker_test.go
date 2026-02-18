@@ -68,7 +68,7 @@ func (ts *JobPreparationWorkerTestSuite) SetupSuite() {
 			}
 
 			file := bytes.Buffer{}
-			_, _ = file.Write([]byte(fmt.Sprintf("this is file: %s", filepath.Base(req.URL.Path))))
+			_, _ = file.Write([]byte("this is file: " + filepath.Base(req.URL.Path)))
 			_, _ = io.Copy(encryptedFileWriter, &file)
 
 			_ = encryptedFileWriter.Close()

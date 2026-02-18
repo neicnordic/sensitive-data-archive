@@ -54,6 +54,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		if noEmptyParentsErr := writer.ensureNoEmptyParentDirectories(location, filePath); noEmptyParentsErr != nil {
 			log.Errorf("failed to ensure no empty parent directories exist due to: %v", noEmptyParentsErr)
 		}
+		// #nosec G703 -- TODO file path to be validated in upcoming PR
 		if osRemoveErr := os.Remove(tempFile.Name()); err != nil && !errors.Is(osRemoveErr, os.ErrNotExist) {
 			log.Errorf("failed to remove temp file due to: %v after write failed", osRemoveErr)
 		}
@@ -75,6 +76,7 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", fmt.Errorf("failed to ensure parent directories: %s parentDirectories exists at location: %s, due to: %v", parentDirectories, location, err)
 	}
 
+	// #nosec G703 -- TODO file path to be validated in upcoming PR
 	if err = os.Rename(tempFile.Name(), filepath.Join(location, filePath)); err != nil {
 		return "", fmt.Errorf("failed to rename temporary file: %s to %s at location: %s, due to: %v", tempFile.Name(), filePath, location, err)
 	}

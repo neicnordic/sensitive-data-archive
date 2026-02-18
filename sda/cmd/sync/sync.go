@@ -262,7 +262,7 @@ func sendPOST(payload []byte) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(conf.Sync.RemoteUser, conf.Sync.RemotePassword)
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 host originates from configuration
 	if err != nil {
 		return err
 	}

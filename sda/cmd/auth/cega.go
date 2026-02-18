@@ -49,7 +49,7 @@ func authenticateWithCEGA(conf config.CegaConfig, username string) (*http.Respon
 	req.Header.Add("Authorization", "Basic "+getb64Credentials(conf.ID, conf.Secret))
 	req.Header.Add("Content-Type", "application/json")
 
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- auth url controlled by configuration, username originates from login form TODO, verify if username needs sanitizing
 
 	return res, err
 }

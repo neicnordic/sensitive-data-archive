@@ -164,7 +164,7 @@ func TestMain(m *testing.M) {
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
 	if err := pool.Retry(func() error {
-		res, err := client.Do(req)
+		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
 		}
@@ -225,7 +225,7 @@ func TestMain(m *testing.M) {
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
 	if err := pool.Retry(func() error {
-		res, err := client.Do(req)
+		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
 		}
@@ -267,7 +267,7 @@ func TestMain(m *testing.M) {
 
 type UserKey struct {
 	PublicKey      [32]byte
-	PrivateKey     [32]byte
+	privateKey     [32]byte
 	PrivateKeyPath string
 	PubKeyBase64   string
 }
@@ -489,7 +489,7 @@ func (s *TestSuite) SetupSuite() {
 		s.FailNow("failed to create temp folder")
 	}
 
-	s.UserKey.PublicKey, s.UserKey.PrivateKey, err = keys.GenerateKeyPair()
+	s.UserKey.PublicKey, s.UserKey.privateKey, err = keys.GenerateKeyPair()
 	if err != nil {
 		s.T().FailNow()
 	}
@@ -499,7 +499,7 @@ func (s *TestSuite) SetupSuite() {
 	if err != nil {
 		s.T().FailNow()
 	}
-	if err := keys.WriteCrypt4GHX25519PrivateKey(key, s.UserKey.PrivateKey, []byte("password")); err != nil {
+	if err := keys.WriteCrypt4GHX25519PrivateKey(key, s.UserKey.privateKey, []byte("password")); err != nil {
 		s.T().FailNow()
 	}
 
@@ -612,7 +612,7 @@ func (s *TestSuite) SetupTest() {
 		req, err := http.NewRequest(http.MethodDelete, "http://"+BrokerAPI+"/api/queues/sda/"+queue+"/contents", http.NoBody)
 		assert.NoError(s.T(), err, "failed to generate query")
 		req.SetBasicAuth("guest", "guest")
-		res, err := client.Do(req)
+		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		assert.NoError(s.T(), err, "failed to query broker")
 		_ = res.Body.Close()
 	}
@@ -656,7 +656,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 
 	// Test query when no files is in db
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
@@ -676,7 +676,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 	err = Conf.API.DB.UpdateFileEventLog(fileID, latestStatus, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when trying to update file status")
 
-	resp, err = client.Do(req)
+	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
@@ -696,7 +696,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 	err = Conf.API.DB.UpdateFileEventLog(fileID, latestStatus, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when trying to update file status")
 
-	resp, err = client.Do(req)
+	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
@@ -716,7 +716,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 	_, err = Conf.API.DB.RegisterFile(nil, file2, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 
-	resp, err = client.Do(req)
+	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
@@ -891,10 +891,13 @@ func (s *TestSuite) TestGinLogLevel_Debug() {
 	}
 
 	r.Header.Add("Authorization", "Bearer "+s.Token)
-	_, err = client.Do(r) // nolint: bodyclose
+	rsp, err := client.Do(r) // #nosec G704 -- request controlled by unit test
 	if err != nil {
 		s.T().Logf("failure: %v", err)
 		s.FailNow("failed to execute HTTP request")
+	}
+	if rsp != nil && rsp.Body != nil {
+		_ = rsp.Body.Close()
 	}
 
 	// Allow logs to flush
@@ -916,10 +919,13 @@ func (s *TestSuite) TestGinLogLevel_Debug() {
 		s.FailNow("failed to create new request instance for /ready")
 	}
 
-	_, err = client.Do(r) // nolint: bodyclose
+	rsp, err = client.Do(r) // #nosec G704 -- request controlled by unit test
 	if err != nil {
 		s.T().Logf("failure: %v", err)
 		s.FailNow("failed to execute HTTP request to /ready")
+	}
+	if rsp != nil && rsp.Body != nil {
+		_ = rsp.Body.Close()
 	}
 
 	// Allow logs to flush
@@ -968,10 +974,13 @@ func (s *TestSuite) TestGinLogLevel_Info() {
 	}
 
 	r.Header.Add("Authorization", "Bearer "+s.Token)
-	_, err = client.Do(r) // nolint: bodyclose
+	rsp, err := client.Do(r) // #nosec G704 -- request controlled by unit test
 	if err != nil {
 		s.T().Logf("failure: %v", err)
 		s.FailNow("failed to execute HTTP request")
+	}
+	if rsp != nil && rsp.Body != nil {
+		_ = rsp.Body.Close()
 	}
 
 	// Allow logs to flush
@@ -993,10 +1002,13 @@ func (s *TestSuite) TestGinLogLevel_Info() {
 		s.FailNow("failed to create new request instance for /ready")
 	}
 
-	_, err = client.Do(r) // nolint: bodyclose
+	rsp, err = client.Do(r) // #nosec G704 -- request controlled by unit test
 	if err != nil {
 		s.T().Logf("failure: %v", err)
 		s.FailNow("failed to execute HTTP request to /ready")
+	}
+	if rsp != nil && rsp.Body != nil {
+		_ = rsp.Body.Close()
 	}
 
 	// Allow logs to flush
@@ -1175,7 +1187,7 @@ func (s *TestSuite) TestIngestFile_WithPayload() {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/ingest", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -1332,7 +1344,7 @@ func (s *TestSuite) TestIngestFile_WithFileID() {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/ingest", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -1457,7 +1469,7 @@ func (s *TestSuite) TestSetAccession_WithPayload() {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -1570,7 +1582,7 @@ func (s *TestSuite) TestSetAccession_WithParams() {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/accession", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -1777,7 +1789,7 @@ func (s *TestSuite) TestCreateDataset() {
 	client := http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/mappings", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -2029,7 +2041,7 @@ func (s *TestSuite) TestReleaseDataset() {
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/mappings", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
 	client := http.Client{Timeout: 30 * time.Second}
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -2370,13 +2382,13 @@ func (s *TestSuite) TestAddC4ghHash() {
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 	req.Header.Add("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()
 
 	// Isert pubkey again and expect error
-	resp2, err := client.Do(req)
+	resp2, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusConflict, resp2.StatusCode)
 	defer resp2.Body.Close()
@@ -2412,7 +2424,7 @@ func (s *TestSuite) TestAddC4ghHash_emptyJson() {
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 	req.Header.Add("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
 	defer resp.Body.Close()
@@ -2447,7 +2459,7 @@ func (s *TestSuite) TestAddC4ghHash_notBase64() {
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 	req.Header.Add("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
 	defer resp.Body.Close()
@@ -2478,7 +2490,7 @@ func (s *TestSuite) TestListC4ghHashes() {
 	assert.NoError(s.T(), err)
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()
@@ -2513,13 +2525,13 @@ func (s *TestSuite) TestDeprecateC4ghHash() {
 	assert.NoError(s.T(), err)
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()
 
 	// a second time gives an error since the key is alreadu deprecated
-	resp2, err := client.Do(req)
+	resp2, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusBadRequest, resp2.StatusCode)
 	defer resp2.Body.Close()
@@ -2543,7 +2555,7 @@ func (s *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 	assert.NoError(s.T(), err)
 	req.Header.Add("Authorization", "Bearer "+s.Token)
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusBadRequest, resp.StatusCode)
 	defer resp.Body.Close()
@@ -2791,7 +2803,7 @@ func (s *TestSuite) TestReVerifyFile() {
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/archived", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
 	client := http.Client{Timeout: 30 * time.Second}
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -2898,7 +2910,7 @@ func (s *TestSuite) TestReVerifyDataset() {
 	req, _ := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/archived", http.NoBody)
 	req.SetBasicAuth("guest", "guest")
 	client := http.Client{Timeout: 30 * time.Second}
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err, "failed to query broker")
 	var data struct {
 		MessagesReady int `json:"messages_ready"`
@@ -2959,7 +2971,7 @@ func (s *TestSuite) TestDownloadFile() {
 	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 
@@ -2987,7 +2999,7 @@ func (s *TestSuite) TestDownloadFile_badPublicKey() {
 	req.Header.Set("C4GH-Public-Key", "invalid_key")
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 
@@ -3013,7 +3025,7 @@ func (s *TestSuite) TestDownloadFile_fileIDNotExist() {
 	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 
@@ -3046,7 +3058,7 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 
@@ -3078,7 +3090,7 @@ func (s *TestSuite) TestDownloadFile_badC4ghFile() {
 	req.Header.Set("C4GH-Public-Key", s.UserKey.PubKeyBase64)
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	defer resp.Body.Close()
 

@@ -1,4 +1,4 @@
-package api
+package api // nolint:revive
 
 import (
 	"encoding/json"
@@ -297,7 +297,7 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 
 	// Send the request
 	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := client.Do(req) // #nosec G704 -- host originates from configuration, TODO verify if to sanitize userID
 	if err != nil {
 		return nil, fmt.Errorf("failed to get response, reason: %v", err)
 	}

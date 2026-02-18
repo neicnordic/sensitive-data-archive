@@ -74,7 +74,7 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
 func (p *Proxy) httpsGetCheck(uri string) error {
-	resp, e := p.client.Get(uri)
+	resp, e := p.client.Get(uri) // #nosec G704 uri originates from configuration
 	if e != nil {
 		return e
 	}
