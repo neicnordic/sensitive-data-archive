@@ -1,4 +1,4 @@
-package api
+package api // nolint:revive
 
 import "github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/internal/broker"
 
