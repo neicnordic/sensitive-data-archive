@@ -65,6 +65,10 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			default:
 			}
 
+			if !strings.HasPrefix(e.Endpoint, "https:") && !strings.HasPrefix(e.Endpoint, "http:") {
+				return nil, errors.New("unsupported or no scheme in endpoint")
+			}
+
 			e.chunkSizeBytes = 50 * 1024 * 1024
 			if e.ChunkSize != "" {
 				s, err := datasize.ParseString(e.ChunkSize)

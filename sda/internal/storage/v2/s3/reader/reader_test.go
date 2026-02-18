@@ -289,12 +289,26 @@ storage:
 `,
 			expectedErrorMsg: "missing required parameter: endpoint",
 		}, {
-			testName: "MissingAccessKey",
+			testName: "MissingEndpointScheme",
 			config: `
 storage:
   config_test:
     s3:
     - endpoint: 123
+      access_key: access_key1
+      secret_key: secret_key1
+      disable_https: true
+      region: us-east-1
+      chunk_size: 1mb
+`,
+			expectedErrorMsg: "unsupported or no scheme in endpoint",
+		}, {
+			testName: "MissingAccessKey",
+			config: `
+storage:
+  config_test:
+    s3:
+    - endpoint: http://123
       secret_key: secret_key1
       disable_https: true
       region: us-east-1
@@ -307,7 +321,7 @@ storage:
 storage:
   config_test:
     s3:
-    - endpoint: 123
+    - endpoint: http://123
       access_key: access_key1
       disable_https: true
       region: us-east-1
@@ -320,7 +334,7 @@ storage:
 storage:
   config_test:
     s3:
-    - endpoint: 123
+    - endpoint: http://123
       access_key: access_key1
       secret_key: secret_key1
       disable_https: true
