@@ -1,0 +1,1184 @@
+openapi: 3.0.3
+info:
+  title: SDA Data Out API
+  version: "2.0.0"
+  description: |
+    External download API for the Sensitive Data Archive (SDA).
+
+    Files are delivered as Crypt4GH. The server re-encrypts the Crypt4GH header to a
+    recipient-supplied public key.
+
+    Design goals:
+      - Easy for data recipients: discover datasets, discover files, download.
+      - Partial downloads via standard HTTP Range requests (byte ranges).
+      - Consistent, machine-readable error payloads (Problem Details).
+      - Simple key handling: use X-C4GH-Public-Key (HTSGET compatibility via Htsget-Context-Public-Key).
+      - GA4GH service-info endpoint for service discovery.
+
+    Crypt4GH and Range semantics:
+      Files are served through three endpoint tiers:
+      - Combined (GET /files/{fileId}): delivers [re-encrypted header | data segments]
+        as a single stream. Range byte offsets refer to this combined representation.
+        ETag stability depends on the server's re-encryption implementation.
+      - Header (GET /files/{fileId}/header): re-encrypted header only. No Range support.
+        Header bytes may vary between requests (implementation-dependent).
+      - Content (GET /files/{fileId}/content): encrypted data segments only. Range byte
+        offsets refer to data segments (no header). ETag is stable for a given file
+        and independent of the recipient key.
+      In all cases, byte offsets refer to the encrypted wire format, NOT the original
+      plaintext file.
+
+    Error semantics on resource-by-ID endpoints:
+      Endpoints that accept a resource identifier in the path (e.g. /datasets/{datasetId},
+      /files/{fileId}) return 403 Forbidden both when the caller lacks access and when
+      the resource does not exist, to prevent existence leakage. List endpoints
+      (e.g. GET /datasets) return 200 with an empty array when the caller has no
+      accessible resources. 401 indicates an authentication failure (missing, invalid,
+      or expired token). 400 indicates a malformed request (conflicting parameters,
+      invalid headers, bad page token).
+
+    File immutability assumption:
+      The split download endpoints (/header + /content) assume archive content is
+      immutable for a given fileId once the file is available for download. The content
+      endpoint returns the same encrypted data segments across requests. If the archive
+      were to be mutated after ingestion, header and content could become inconsistent.
+
+    DRS readiness (non-normative):
+      Designed for compatibility with GA4GH DRS 1.5+
+      (see https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.5.0/docs/).
+      - A future DRS facade can map fileId to DRS object_id and expose access URLs
+        that point to GET /files/{fileId}, keeping download semantics unchanged.
+      - The FileInfo schema includes checksums and is extensible to accommodate
+        DRS 1.5+ fields (e.g. cold storage indication, cloud location) without breaking changes.
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: api.example.org
+tags:
+  - name: Service
+    description: Service discovery (GA4GH service-info).
+  - name: Datasets
+    description: Dataset discovery & metadata.
+  - name: Files
+    description: File metadata and download operations.
+  - name: Health
+    description: Service health endpoints.
+
+paths:
+  /service-info:
+    get:
+      tags: [Service]
+      operationId: getServiceInfo
+      summary: GA4GH service-info
+      description: |
+        Returns information about this service following the GA4GH service-info specification.
+        This endpoint does not require authentication.
+      responses:
+        "200":
+          description: Service information
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPublic"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+              example:
+                id: org.neic.sda.download
+                name: SDA Data Out API
+                type:
+                  group: org.neic
+                  artifact: sda-download
+                  version: 2.0.0
+                description: Sensitive Data Archive file download service
+                organization:
+                  name: NeIC
+                  url: https://neic.no
+                version: 2.0.0
+                environment: production
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /datasets:
+    get:
+      tags: [Datasets]
+      operationId: listDatasets
+      summary: List datasets the caller can access
+      description: |
+        Returns dataset identifiers the caller has access to.
+        Supports cursor-based pagination for large result sets.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Successful operation (an empty datasets array is valid).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetListResponse"
+              example:
+                datasets: ["aa-dataset-123456-asdfgh", "bb-dataset-123456-asdfgh"]
+                nextPageToken: "ptk_7f9K2mQxVb3N"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+  /datasets/{datasetId}:
+    get:
+      tags: [Datasets]
+      operationId: getDataset
+      summary: Get dataset metadata
+      parameters:
+        - $ref: "#/components/parameters/DatasetIdPath"
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+  /datasets/{datasetId}/files:
+    get:
+      tags: [Datasets]
+      operationId: listDatasetFiles
+      summary: List files in a dataset
+      description: |
+        Returns metadata for files in the dataset. Supports cursor-based pagination
+        and two optional filters (mutually exclusive — providing both returns 400):
+        - filePath: exact path equality (returns 0 or 1 results)
+        - pathPrefix: recursive prefix match (returns all files under the prefix)
+      parameters:
+        - $ref: "#/components/parameters/DatasetIdPath"
+        - name: filePath
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Exact dataset-relative file path. When provided, only the file
+            with this exact path is returned (at most one result). The response
+            includes `downloadUrl` so clients can resolve path → download in two
+            calls without extra logic.
+
+            **Normalization rules:**
+            - Case-sensitive (POSIX path semantics).
+            - No leading slash — paths are relative to the dataset root.
+            - Must match exactly as stored in the archive metadata (including any
+              file extension such as `.c4gh`).
+            - The server URL-decodes the query parameter value per standard HTTP.
+            - Empty string or whitespace-only values return 400.
+
+            Mutually exclusive with pathPrefix.
+          example: samples/controls/sample1.cram.c4gh
+        - name: pathPrefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Dataset-relative path prefix filter. Returns all files whose path starts
+            with this value (recursive). Use a trailing / to match a directory boundary
+            (e.g. "samples/controls/" matches all files in that directory and below).
+            Mutually exclusive with filePath.
+          example: samples/controls/
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: |
+            Successful operation. When filePath is provided, the files array contains
+            0 or 1 elements (200 with empty array when no file matches, not 404).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileListResponse"
+              examples:
+                filePathLookup:
+                  summary: Single file resolved by exact filePath match
+                  value:
+                    files:
+                      - fileId: aa-file-123456-asdfgh
+                        filePath: samples/controls/sample1.cram.c4gh
+                        size: 56623104
+                        decryptedSize: 56600000
+                        checksums:
+                          - type: sha256
+                            checksum: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
+                        downloadUrl: /files/aa-file-123456-asdfgh
+                    nextPageToken: null
+                filePathNoMatch:
+                  summary: No file at the given path (empty result, not 404)
+                  value:
+                    files: []
+                    nextPageToken: null
+                paginatedList:
+                  summary: Paginated file list (no filter)
+                  value:
+                    files:
+                      - fileId: aa-file-123456-asdfgh
+                        filePath: samples/controls/sample1.cram.c4gh
+                        size: 56623104
+                        decryptedSize: 56600000
+                        checksums:
+                          - type: sha256
+                            checksum: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
+                        downloadUrl: /files/aa-file-123456-asdfgh
+                    nextPageToken: "ptk_7f9K2mQxVb3N"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+  /files/{fileId}:
+    head:
+      tags: [Files]
+      operationId: headFile
+      summary: Get file download metadata (no body)
+      description: |
+        Returns download-related metadata for the Crypt4GH re-encrypted representation
+        of the requested file, including Content-Length and ETag.
+
+        The public key is required because Content-Length includes the recipient-specific
+        Crypt4GH header, which varies in size per recipient. The ETag represents
+        the specific representation for the given (fileId, recipient public key) pair;
+        different keys produce different ETags.
+
+        Note: ETag stability on this endpoint depends on whether the server produces
+        deterministic re-encrypted headers for a given (fileId, recipientKey) pair. If
+        the implementation uses random ephemeral keys, the ETag may change between
+        requests and If-Range will fall back to a full 200 (correct per RFC 9110 but
+        not a true resume). For guaranteed stable ETag, use HEAD /files/{fileId}/content.
+
+        For production clients, prefer the split endpoints
+        (HEAD /files/{fileId}/header + HEAD /files/{fileId}/content) for stable ETags,
+        robust If-Range resume, and better caching behavior. This combined endpoint
+        is a convenience path for simple clients.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+      responses:
+        "200":
+          description: Metadata returned successfully
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+    get:
+      tags: [Files]
+      operationId: downloadFile
+      summary: Download a file (supports Range for partial downloads)
+      description: |
+        Downloads the requested file, re-encrypted as Crypt4GH for the recipient.
+        This is the convenience endpoint that delivers the complete Crypt4GH stream.
+
+        The delivered byte stream is: [re-encrypted Crypt4GH header | encrypted data segments].
+        All byte offsets in Range, Content-Length, and Content-Range refer to this combined
+        re-encrypted stream, NOT the original plaintext file.
+
+        Partial downloads use the standard HTTP Range header. For simplicity and broad client
+        compatibility, this API supports a single byte range per request.
+
+        The ETag represents the specific Crypt4GH representation for the given file and
+        recipient public key. Different keys yield different ETags.
+
+        Resume caveat: ETag stability on this endpoint depends on whether the server
+        produces deterministic re-encrypted headers for a given (fileId, recipientKey)
+        pair. If the implementation generates new ephemeral keys per request, the ETag
+        changes and If-Range falls back to a full 200 response (correct per RFC 9110 but
+        not a true resume). For guaranteed robust resume, use GET /files/{fileId}/content
+        which has a stable ETag independent of the recipient key.
+
+        For production clients, prefer the split endpoints
+        (GET /files/{fileId}/header + GET /files/{fileId}/content) for stable ETags,
+        robust If-Range resume, and better caching behavior. This combined endpoint
+        is a convenience path for simple clients.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/IfRange"
+      responses:
+        "200":
+          description: Successful operation (full file)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Successful operation (partial content)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            Content-Range:
+              $ref: "#/components/headers/ContentRange"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+            Content-Disposition:
+              $ref: "#/components/headers/ContentDisposition"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "416":
+          $ref: "#/components/responses/RangeNotSatisfiable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+      x-codeSamples:
+        - lang: curl
+          label: Full download
+          source: |
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              -o file.c4gh \
+              "https://api.example.org/files/aa-file-123456-asdfgh"
+        - lang: curl
+          label: Partial download (first 1 MiB)
+          source: |
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              -H "Range: bytes=0-1048575" \
+              -o file.part \
+              "https://api.example.org/files/aa-file-123456-asdfgh"
+        - lang: curl
+          label: Resume download safely using ETag + If-Range
+          source: |
+            # 1) Get validators
+            ETAG=$(curl -sI \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              "https://api.example.org/files/aa-file-123456-asdfgh" | awk '/^ETag:/ {print $2}' | tr -d '\r')
+
+            # 2) Resume (example range)
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              -H "Range: bytes=1048576-" \
+              -H "If-Range: $ETAG" \
+              -o file.rest \
+              "https://api.example.org/files/aa-file-123456-asdfgh"
+
+  /files/{fileId}/header:
+    head:
+      tags: [Files]
+      operationId: headFileHeader
+      summary: Get re-encrypted header metadata (no body)
+      description: |
+        Returns size metadata for the re-encrypted Crypt4GH header of the requested file.
+
+        The header is recipient-specific. Whether header bytes are stable across requests
+        for the same (fileId, recipientKey) pair depends on the server's re-encryption
+        implementation. A standard Crypt4GH re-encryption generates a new ephemeral
+        X25519 keypair each time, producing different bytes. Implementations MAY use
+        a stable representation strategy (e.g. caching) to produce consistent headers.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+      responses:
+        "200":
+          description: Header metadata returned successfully
+          headers:
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            SDA-Content-ETag:
+              $ref: "#/components/headers/SDA-Content-ETag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+    get:
+      tags: [Files]
+      operationId: getFileHeader
+      summary: Download the re-encrypted Crypt4GH header
+      description: |
+        Returns only the re-encrypted Crypt4GH header for the specified file and recipient.
+        The header contains the data encryption key(s) re-encrypted to the recipient's
+        public key. It is typically small (around 120–140 bytes for a single DEK).
+
+        Whether header bytes are stable across requests for the same (fileId, recipientKey)
+        pair is implementation-dependent. A standard Crypt4GH re-encryption generates a
+        new ephemeral X25519 keypair each time. Implementations MAY use a stable
+        representation strategy (e.g. caching) to produce consistent headers.
+
+        Clients reconstructing a complete Crypt4GH file should concatenate header bytes
+        (from this endpoint) with data bytes (from GET /files/{fileId}/content).
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/C4ghPublicKey"
+        - $ref: "#/components/parameters/HtsgetContextPublicKey"
+      responses:
+        "200":
+          description: Re-encrypted header
+          headers:
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            SDA-Content-ETag:
+              $ref: "#/components/headers/SDA-Content-ETag"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+  /files/{fileId}/content:
+    head:
+      tags: [Files]
+      operationId: headFileContent
+      summary: Get encrypted content metadata (no body)
+      description: |
+        Returns metadata for the encrypted data segments of the file (everything after
+        the Crypt4GH header). Unlike the combined /files/{fileId} endpoint, Content-Length
+        and ETag are stable and independent of the recipient public key.
+
+        No public key header is required — the data segments are encrypted with the file's
+        data encryption key, which is the same regardless of recipient.
+
+        The stable ETag makes this endpoint ideal for CDN caching and htsget-rs integration.
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+      responses:
+        "200":
+          description: Content metadata returned successfully
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+
+    get:
+      tags: [Files]
+      operationId: getFileContent
+      summary: Download encrypted data segments (supports Range)
+      description: |
+        Downloads the encrypted data segments of the file — everything after the
+        Crypt4GH header. These bytes are identical regardless of the recipient public
+        key (encrypted with the file's data encryption key, not the recipient key).
+
+        No public key header is required.
+
+        This endpoint supports Range + If-Range for partial downloads with robust
+        resume behavior. The ETag is stable (scoped to fileId only), making it safe
+        for If-Range and CDN caching.
+
+        **htsget-rs integration:** ticket data URLs should point to this endpoint
+        with byte ranges, since the encrypted block structure is static and
+        recipient-independent.
+
+        Clients reconstructing a complete Crypt4GH file should concatenate header bytes
+        (from GET /files/{fileId}/header) with data bytes (from this endpoint).
+      parameters:
+        - $ref: "#/components/parameters/FileIdPath"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/IfRange"
+      responses:
+        "200":
+          description: Successful operation (full content)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Successful operation (partial content)
+          headers:
+            Accept-Ranges:
+              $ref: "#/components/headers/AcceptRanges"
+            Content-Length:
+              $ref: "#/components/headers/ContentLength"
+            Content-Range:
+              $ref: "#/components/headers/ContentRange"
+            ETag:
+              $ref: "#/components/headers/ContentETag"
+            Last-Modified:
+              $ref: "#/components/headers/LastModified"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "416":
+          $ref: "#/components/responses/RangeNotSatisfiable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      security:
+        - bearerAuth: []
+      x-codeSamples:
+        - lang: curl
+          label: Fetch header + content separately
+          source: |
+            # 1) Get the re-encrypted header
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-C4GH-Public-Key: $C4GH_PK_B64" \
+              -o header.bin \
+              "https://api.example.org/files/aa-file-123456-asdfgh/header"
+
+            # 2) Get the encrypted content (supports Range resume)
+            curl -L \
+              -H "Authorization: Bearer $TOKEN" \
+              -o content.bin \
+              "https://api.example.org/files/aa-file-123456-asdfgh/content"
+
+            # 3) Concatenate into a valid Crypt4GH file
+            cat header.bin content.bin > file.c4gh
+
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: readiness
+      summary: Readiness probe
+      description: Returns the status of the application.
+      responses:
+        "200":
+          description: The service is operational
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+              example:
+                c4ghService: responding
+                database: responding
+                oidcServer: responding
+                storageBackend: responding
+        "503":
+          description: Unhealthy service
+
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: liveness
+      summary: Liveness probe
+      description: Returns 200 as long as the main thread is running
+      responses:
+        "200":
+          description: The service is operational
+
+components:
+  schemas:
+    DatasetId:
+      type: string
+      minLength: 1
+      description: Dataset identifier
+      example: aa-dataset-123456-asdfgh
+
+    DatasetInfo:
+      type: object
+      properties:
+        datasetId:
+          $ref: "#/components/schemas/DatasetId"
+        date:
+          type: string
+          format: date-time
+          example: "2025-02-14T14:51:26.639Z"
+        files:
+          type: integer
+          format: int32
+          example: 1234
+        size:
+          type: integer
+          format: int64
+          example: 6597069766656
+      required: [datasetId, date, files, size]
+
+    DatasetListResponse:
+      type: object
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetId"
+        nextPageToken:
+          type: string
+          nullable: true
+          description: |
+            Opaque token for retrieving the next page of results.
+            Null or absent if this is the last page.
+      required: [datasets]
+
+    FileListResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileInfo"
+        nextPageToken:
+          type: string
+          nullable: true
+          description: |
+            Opaque token for retrieving the next page of results.
+            Null or absent if this is the last page.
+      required: [files]
+
+    FileInfo:
+      type: object
+      properties:
+        fileId:
+          type: string
+          description: File identifier (maps to DRS object_id in a future DRS facade)
+          example: aa-file-123456-asdfgh
+        filePath:
+          type: string
+          description: Dataset-relative file path
+          example: samples/controls/sample1.cram.c4gh
+        size:
+          type: integer
+          format: int64
+          description: |
+            Encrypted file size in bytes (Crypt4GH bytes as stored in the archive,
+            excluding the re-encrypted header). The actual download size will be
+            slightly larger due to the recipient-specific Crypt4GH header.
+          example: 56623104
+        decryptedSize:
+          type: integer
+          format: int64
+          description: Decrypted (plaintext) file size in bytes
+          example: 56600000
+        checksums:
+          type: array
+          description: |
+            Checksums of the decrypted file content. Matches the GA4GH DRS checksums
+            field format for future DRS facade compatibility.
+          items:
+            $ref: "#/components/schemas/Checksum"
+        downloadUrl:
+          type: string
+          description: >-
+            Relative download URL for this file (relative to the API base URL
+            defined in the servers block).
+          example: /files/aa-file-123456-asdfgh
+      required: [fileId, filePath, size, decryptedSize, checksums, downloadUrl]
+
+    Checksum:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          description: Hash algorithm (e.g. sha256, md5)
+          example: sha256
+        checksum:
+          type: string
+          description: Hex-encoded digest value
+          example: 7d2c8b4a9f3e1d6b5c0a8f7e2d4b6a9c3f1e5d8b7a0c4f2e6d9b3a7c1f5e8d0a
+      required: [type, checksum]
+
+    ServiceInfo:
+      type: object
+      description: GA4GH service-info response (https://github.com/ga4gh-discovery/ga4gh-service-info)
+      properties:
+        id:
+          type: string
+          description: Unique service identifier in reverse domain name format
+          example: org.neic.sda.download
+        name:
+          type: string
+          description: Human-readable service name
+          example: SDA Data Out API
+        type:
+          type: object
+          properties:
+            group:
+              type: string
+              example: org.neic
+            artifact:
+              type: string
+              example: sda-download
+            version:
+              type: string
+              example: 2.0.0
+          required: [group, artifact, version]
+        description:
+          type: string
+          example: Sensitive Data Archive file download service
+        organization:
+          type: object
+          properties:
+            name:
+              type: string
+              example: NeIC
+            url:
+              type: string
+              format: uri
+              example: https://neic.no
+          required: [name, url]
+        version:
+          type: string
+          description: Service version
+          example: 2.0.0
+        environment:
+          type: string
+          description: Deployment environment (e.g. production, staging)
+          example: production
+      required: [id, name, type, organization, version]
+
+    ProblemDetails:
+      type: object
+      description: |
+        Problem Details error payload (RFC 9457).
+        Additional fields MAY be included for debugging/correlation.
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          default: "about:blank"
+          description: A URI reference that identifies the problem type.
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type.
+        status:
+          type: integer
+          format: int32
+          description: The HTTP status code.
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence of the problem.
+        instance:
+          type: string
+          format: uri-reference
+          description: A URI reference that identifies the specific occurrence of the problem.
+        errorCode:
+          type: string
+          description: Application-specific error code.
+          example: RANGE_INVALID
+        correlationId:
+          type: string
+          description: Correlation ID for support/debugging.
+          example: 1f3a2a60-1e25-4d4f-8f3b-5a0bdc7c2b1a
+      required: [title, status]
+
+    ReadinessStatus:
+      type: object
+      additionalProperties: true
+      properties:
+        c4ghService:
+          type: string
+        database:
+          type: string
+        oidcServer:
+          type: string
+        storageBackend:
+          type: string
+
+  parameters:
+    DatasetIdPath:
+      name: datasetId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/DatasetId"
+      description: Dataset identifier
+
+    FileIdPath:
+      name: fileId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: File identifier
+
+    C4ghPublicKey:
+      name: X-C4GH-Public-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        Crypt4GH recipient public key. At least one of X-C4GH-Public-Key or
+        Htsget-Context-Public-Key MUST be provided; the server returns 400 if
+        neither is present. Sending both is also an error (400).
+
+        Note: OpenAPI 3.x cannot express cross-parameter constraints like
+        "at least one of" (see https://github.com/OAI/OpenAPI-Specification/discussions/4174).
+        Both headers are marked required: false; the constraint is enforced server-side.
+
+        Accepted formats (auto-detected by the server):
+
+        1. **Preferred (simple):** The BASE64-ENCODED DATA from a Crypt4GH PEM file,
+           i.e. the content between the `-----BEGIN CRYPT4GH PUBLIC KEY-----` and
+           `-----END CRYPT4GH PUBLIC KEY-----` lines. This decodes to the raw 32-byte
+           X25519 public key.
+
+        2. **Legacy (backward-compatible):** Base64 encoding of the entire PEM file text
+           (including the BEGIN/END lines). This is accepted for backward compatibility
+           but is effectively double-encoding and not recommended for new clients.
+
+        The server distinguishes the two formats by decoded length: 32 bytes = raw key,
+        longer = PEM text passed to the standard Crypt4GH key parser.
+      example: "mF4kGxQy5c7a3oO2l2Cq2rY9qJk2o0rJ5m0n6m1o2pQ="
+
+    HtsgetContextPublicKey:
+      name: Htsget-Context-Public-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        HTSGET compatibility alternative to X-C4GH-Public-Key.
+        Same format and semantics. The server accepts either header but not both.
+        See X-C4GH-Public-Key description for the cross-parameter constraint.
+      example: "mF4kGxQy5c7a3oO2l2Cq2rY9qJk2o0rJ5m0n6m1o2pQ="
+
+    Range:
+      name: Range
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        Standard HTTP byte range per RFC 9110. The exact bytes the range applies to
+        depend on the endpoint:
+        - /files/{fileId}: the combined re-encrypted Crypt4GH stream (header + data segments)
+        - /files/{fileId}/content: the encrypted data segments only (no header)
+
+        In both cases, byte offsets refer to the encrypted wire format, NOT plaintext.
+
+        This API supports a single range of the form: bytes=<start>-<end> or bytes=<start>-.
+        Multiple ranges (comma-separated) are not supported and will return 400.
+      example: "bytes=0-1048575"
+
+    IfRange:
+      name: If-Range
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        Makes the Range request conditional on the entity tag (ETag) or Last-Modified value.
+        Commonly used to resume downloads safely.
+      example: "\"686897696a7c876b7e\""
+
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 1000
+        default: 100
+      description: |
+        Maximum number of items to return per page. The server may enforce
+        a lower maximum. If not provided, the server uses a default page size.
+
+    PageToken:
+      name: pageToken
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque cursor token from a previous response's nextPageToken field.
+        When provided, returns the next page of results. Do not construct
+        these tokens — they are only valid as received from the server.
+
+        **Pagination contract:**
+        - Results are returned in a stable, server-defined order that is consistent
+          across pages within the same query.
+        - A pageToken is scoped to the original query parameters (filters, pageSize).
+          Changing filters or pageSize while reusing a pageToken returns 400.
+        - An invalid or expired pageToken returns 400 (the server does not silently
+          restart from the beginning).
+
+  headers:
+    AcceptRanges:
+      description: Indicates that the resource supports byte range requests.
+      schema:
+        type: string
+      example: bytes
+
+    CacheControlPrivate:
+      description: Cache directive for authenticated metadata responses.
+      schema:
+        type: string
+      example: "private, max-age=60, must-revalidate"
+
+    CacheControlPublic:
+      description: Cache directive for public (unauthenticated) responses.
+      schema:
+        type: string
+      example: "public, max-age=300"
+
+    ContentLength:
+      description: Size of the response body in bytes.
+      schema:
+        type: integer
+        format: int64
+
+    ContentRange:
+      description: Indicates where in the full resource this partial body belongs.
+      schema:
+        type: string
+      example: "bytes 0-1048575/56623104"
+
+    ETag:
+      description: |
+        Entity tag representing the current Crypt4GH representation of the file.
+        The ETag is scoped to the (fileId, recipient public key) pair. The same file
+        re-encrypted for different recipients produces different ETags. Clients MUST
+        use If-Range with this ETag when resuming partial downloads to ensure the
+        representation has not changed.
+      schema:
+        type: string
+      example: "\"686897696a7c876b7e\""
+
+    ContentETag:
+      description: |
+        Entity tag representing the encrypted data segments of the file.
+        Unlike the combined-endpoint ETag, this is scoped to fileId only (not the
+        recipient public key), because data segments are encrypted with the file's
+        data encryption key and are identical for all recipients. This ETag is
+        stable across requests and safe for If-Range and CDN caching.
+      schema:
+        type: string
+      example: "\"a1b2c3d4e5f6g7h8\""
+
+    SDA-Content-ETag:
+      description: |
+        Entity tag of the content endpoint (GET /files/{fileId}/content) at the
+        time the header was generated. Returned on header sub-resource responses
+        so clients can verify header/content consistency without an extra HEAD
+        request. Use the value with If-Range when fetching content.
+      schema:
+        type: string
+      example: "\"a1b2c3d4e5f6g7h8\""
+
+    LastModified:
+      description: Last modification time of the resource (HTTP-date format per RFC 9110).
+      schema:
+        type: string
+      example: "Fri, 14 Feb 2025 14:51:26 GMT"
+
+    ContentDisposition:
+      description: Suggested filename for saving the download.
+      schema:
+        type: string
+      example: attachment; filename="sample1.cram.c4gh"
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          examples:
+            rangeInvalid:
+              summary: Invalid Range header
+              value:
+                title: Bad Request
+                status: 400
+                detail: The Range header is invalid. Only a single byte range is supported.
+                errorCode: RANGE_INVALID
+            filterConflict:
+              summary: Mutually exclusive filters
+              value:
+                title: Bad Request
+                status: 400
+                detail: "filePath and pathPrefix are mutually exclusive; provide at most one."
+                errorCode: FILTER_CONFLICT
+            invalidPageToken:
+              summary: Invalid or expired page token
+              value:
+                title: Bad Request
+                status: 400
+                detail: "The pageToken is invalid, expired, or does not match the current query parameters."
+                errorCode: INVALID_PAGE_TOKEN
+            invalidPageSize:
+              summary: Invalid page size
+              value:
+                title: Bad Request
+                status: 400
+                detail: "pageSize must be between 1 and 1000."
+                errorCode: INVALID_PAGE_SIZE
+            invalidFilePath:
+              summary: Invalid file path format
+              value:
+                title: Bad Request
+                status: 400
+                detail: "filePath must be a non-empty dataset-relative path without leading slash."
+                errorCode: INVALID_FILE_PATH
+
+    Unauthorized:
+      description: Authentication failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            title: Unauthorized
+            status: 401
+            detail: Missing, invalid, or expired bearer token.
+
+    Forbidden:
+      description: The caller does not have access to the requested resource
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            title: Forbidden
+            status: 403
+            detail: You do not have access to this dataset or file.
+
+    RangeNotSatisfiable:
+      description: Unsatisfiable range
+      headers:
+        Content-Range:
+          description: Indicates the current total length of the resource.
+          schema:
+            type: string
+          example: "bytes */56623104"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            title: Range Not Satisfiable
+            status: 416
+            detail: The requested range is outside the file bounds.
+            errorCode: RANGE_NOT_SATISFIABLE
+
+    InternalServerError:
+      description: Internal application error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            title: Internal Server Error
+            status: 500
+            detail: Unexpected error.
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        If an access token expires during transfer, server SHOULD return
+        401 Unauthorized; clients SHOULD re-authenticate and retry/resume.
