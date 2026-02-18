@@ -78,6 +78,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				return nil, errors.New("https scheme in endpoint when HTTPS is disabled")
 			default:
 			}
+
+			if !strings.HasPrefix(e.Endpoint, "https:") && !strings.HasPrefix(e.Endpoint, "http:") {
+				return nil, errors.New("unsupported or no scheme in endpoint")
+			}
+
 			if e.ChunkSize != "" {
 				byteSize, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
