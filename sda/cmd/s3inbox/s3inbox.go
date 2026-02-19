@@ -171,7 +171,7 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	cfg.RootCAs = systemCAs
 
 	if c.CaCert != "" {
-		caCert, e := os.ReadFile(c.CaCert)
+		caCert, e := os.ReadFile(c.CaCert) // #nosec G703 -- file path controlled by configuration
 		if e != nil {
 			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", c.CaCert, e)
 		}

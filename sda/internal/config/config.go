@@ -86,7 +86,7 @@ type SyncAPIConf struct {
 
 type S3InboxConf struct {
 	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"access_key"`
+	AccessKey string `mapstructure:"access_key"` // #nosec G117 -- Export needed for configuration access
 	SecretKey string `mapstructure:"secret_key"`
 	Bucket    string `mapstructure:"bucket"`
 	Region    string `mapstructure:"region"`
