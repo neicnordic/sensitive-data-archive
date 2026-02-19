@@ -137,7 +137,7 @@ func findSizeAndObjectCountOfLocation(configuredEndpoints []*endpointConfig) fun
 			for _, obj := range page.Contents {
 				totalObjects++
 				if obj.Size != nil && *obj.Size > 0 {
-					totalSize += uint64(*obj.Size)
+					totalSize += uint64(*obj.Size) // #nosec G115 -- *obj.Size has been checked to be bigger than 0
 				}
 			}
 		}

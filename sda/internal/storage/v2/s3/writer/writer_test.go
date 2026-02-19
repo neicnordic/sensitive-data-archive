@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -93,11 +94,11 @@ func (m *mockS3) ListFiles(w http.ResponseWriter, req *http.Request) {
 		}
 
 		for fileName, fileContent := range files {
-			_, _ = b.WriteString(fmt.Sprintf(`
+			_, _ = b.WriteString(`
       <Contents>
-         <Size>%d</Size>
-         <Key>%s</Key>
-      </Contents>`, len(fileContent), fileName))
+         <Size>` + strconv.Itoa(len(fileContent)) + `</Size>
+         <Key>` + fileName + `</Key>
+      </Contents>`)
 		}
 	}
 
