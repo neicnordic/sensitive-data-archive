@@ -56,7 +56,7 @@ type Config struct {
 type Grpc struct {
 	CACert      string
 	ClientCert  string
-	ClientKey   string
+	ClientKey   string // #nosec G117 -- Export needed to access configuration atm
 	ClientCreds credentials.TransportCredentials
 	ServerCert  string
 	ServerKey   string
@@ -118,7 +118,7 @@ type SessionConfig struct {
 }
 
 type SMTPConf struct {
-	Password string
+	Password string // #nosec G117 -- Export needed to access configuration atm
 	FromAddr string
 	Host     string
 	Port     int
@@ -157,14 +157,14 @@ type OIDCConfig struct {
 	Provider      string
 	RedirectURL   string
 	RevocationURL string
-	Secret        string
+	Secret        string // #nosec G117 -- Export needed to access configuration atm
 	JwkURL        string
 }
 
 type CegaConfig struct {
 	AuthURL string
 	ID      string
-	Secret  string
+	Secret  string // #nosec G117 -- Export needed to access configuration atm
 }
 
 type CORSConfig struct {

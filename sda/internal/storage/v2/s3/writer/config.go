@@ -25,7 +25,7 @@ import (
 )
 
 type endpointConfig struct {
-	AccessKey      string `mapstructure:"access_key"`
+	AccessKey      string `mapstructure:"access_key"` // #nosec G117 -- needs to be exported for unmarshalling
 	BucketPrefix   string `mapstructure:"bucket_prefix"`
 	CACert         string `mapstructure:"ca_cert"`
 	ChunkSize      string `mapstructure:"chunk_size"`

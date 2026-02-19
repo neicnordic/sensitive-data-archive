@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
 	if err := pool.Retry(func() error {
-		res, err := client.Do(req)
+		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
 		}
@@ -267,13 +267,13 @@ func (s *SyncAPITest) TestBasicAuth() {
 	req, err := http.NewRequest("POST", ts.URL+"/metadata", bytes.NewBuffer(goodJSON))
 	assert.NoError(s.T(), err)
 	req.SetBasicAuth(Conf.SyncAPI.APIUser, Conf.SyncAPI.APIPassword)
-	good, err := ts.Client().Do(req)
+	good, err := ts.Client().Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusOK, good.StatusCode)
 	defer good.Body.Close()
 
 	req.SetBasicAuth(Conf.SyncAPI.APIUser, "wrongpass")
-	bad, err := ts.Client().Do(req)
+	bad, err := ts.Client().Do(req) // #nosec G704 -- request controlled by unit test
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), http.StatusUnauthorized, bad.StatusCode)
 	defer bad.Body.Close()

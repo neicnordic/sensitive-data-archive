@@ -1,5 +1,4 @@
-// nolint:revive
-package api
+package api // nolint:revive
 
 import (
 	"testing"

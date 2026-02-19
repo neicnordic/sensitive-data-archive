@@ -60,12 +60,12 @@ func (m *mockS3) ListBuckets(w http.ResponseWriter) {
    <Buckets>`)
 
 	for bucket := range m.buckets {
-		_, _ = b.WriteString(fmt.Sprintf(`
+		_, _ = b.WriteString(`
       <Bucket>
-         <BucketArn>%s</BucketArn>
+         <BucketArn>` + bucket + `</BucketArn>
          <BucketRegion>us-east-1</BucketRegion>
-         <Name>%s</Name>
-      </Bucket>`, bucket, bucket))
+         <Name>` + bucket + `</Name>
+      </Bucket>`)
 	}
 	_, _ = b.WriteString(`
    </Buckets>

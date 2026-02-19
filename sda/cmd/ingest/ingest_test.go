@@ -129,7 +129,7 @@ func TestMain(m *testing.M) {
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
 	if err := pool.Retry(func() error {
-		res, err := client.Do(req)
+		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil || res.StatusCode != 200 {
 			return err
 		}
@@ -278,7 +278,7 @@ func (ts *TestSuite) SetupTest() {
 	}
 
 	outFileName := f.Name() + ".c4gh"
-	outFile, err := os.Create(outFileName)
+	outFile, err := os.Create(outFileName) // #nosec G703 -- file controlled by unit test
 	if err != nil {
 		ts.FailNow("failed to create encrypted test file")
 	}
@@ -344,7 +344,7 @@ func (ts *TestSuite) TestTryDecrypt() {
 	unencryptedFile, err := os.CreateTemp(tempDir, "unencryptedFile-")
 	assert.NoError(ts.T(), err)
 
-	err = os.WriteFile(unencryptedFile.Name(), []byte("content"), 0600)
+	err = os.WriteFile(unencryptedFile.Name(), []byte("content"), 0600) // #nosec G703 -- file controlled by unit test
 	assert.NoError(ts.T(), err)
 
 	encryptedFile, err := os.CreateTemp(tempDir, "encryptedFile-")
@@ -357,7 +357,7 @@ func (ts *TestSuite) TestTryDecrypt() {
 	assert.NoError(ts.T(), err)
 	crypt4GHWriter.Close()
 
-	file, err := os.Open(encryptedFile.Name())
+	file, err := os.Open(encryptedFile.Name()) // #nosec G703 -- file controlled by unit test
 	assert.NoError(ts.T(), err)
 	defer file.Close()
 	buf, err := io.ReadAll(file)

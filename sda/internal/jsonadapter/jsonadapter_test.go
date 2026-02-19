@@ -52,7 +52,7 @@ func (ts *AdapterTestSuite) SetupSuite() {
 }
 
 func (ts *AdapterTestSuite) TearDownSuite() {
-	_ = os.RemoveAll(ts.File.Name())
+	_ = os.RemoveAll(ts.File.Name()) // #nosec G703 -- file controlled by unit test
 }
 
 func (ts *AdapterTestSuite) TestAdapter_empty() {
@@ -79,7 +79,7 @@ func (ts *AdapterTestSuite) TestAdapter() {
 }
 
 func (ts *AdapterTestSuite) TestAdapter_fromFile() {
-	b, err := os.ReadFile(ts.File.Name())
+	b, err := os.ReadFile(ts.File.Name()) // #nosec G703 -- file controlled by unit test
 	assert.NoError(ts.T(), err, "failed to read json file")
 	e, err := casbin.NewEnforcer(ts.Model, NewAdapter(&b))
 	assert.NoError(ts.T(), err, "New enforcer failed with policy from file: %s", ts.File.Name())

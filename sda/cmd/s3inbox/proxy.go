@@ -342,7 +342,7 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 	p.resignHeader(r, p.s3.AccessKey, p.s3.SecretKey, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port))
 
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)+r.URL.String(), r.Body)
+	nr, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", p.s3.URL, p.s3.Port)+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
 	if err != nil {
 		log.Debug("error when redirecting the request")
 		log.Debug(err)
@@ -353,7 +353,7 @@ func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
 	contentLength, _ := strconv.ParseInt(r.Header.Get("content-length"), 10, 64)
 	nr.ContentLength = contentLength
 
-	return p.client.Do(nr)
+	return p.client.Do(nr) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
 }
 
 // Add bucket to host path

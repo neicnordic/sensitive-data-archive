@@ -16,12 +16,12 @@ type DBConf struct {
 	Host       string
 	Port       int
 	User       string
-	Password   string
+	Password   string // #nosec G117 -- Export needed to access configuration atm
 	Database   string
 	CACert     string
 	SslMode    string
 	ClientCert string
-	ClientKey  string
+	ClientKey  string // #nosec G117 -- Export needed to access configuration atm
 }
 
 // SDAdb struct that acts as a receiver for the DB update methods
