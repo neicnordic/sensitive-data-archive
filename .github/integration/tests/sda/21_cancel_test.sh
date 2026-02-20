@@ -60,6 +60,47 @@ if [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_e
     exit 1
 fi
 
+
+# check database to verify file archive location and path has been unset
+if [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT 1 FROM sda.files WHERE id = '$CORRID' AND archive_file_path = '' AND archive_location IS NULL")" != "1" ]; then
+    echo "canceling file failed"
+    exit 1
+fi
+
+cat >/shared/direct <<EOD
+[default]
+access_key=access
+secret_key=secretKey
+check_ssl_certificate = False
+check_ssl_hostname = False
+encoding = UTF-8
+encrypt = False
+guess_mime_type = True
+host_base = s3:9000
+host_bucket = s3:9000
+human_readable_sizes = false
+multipart_chunk_size_mb = 50
+use_https = False
+socket_timeout = 30
+EOD
+
+# Verify that archived file is removed
+result=$(s3cmd -c direct ls s3://archive1/test_dummy.org/"$CORRID")
+if [ "$result" != "" ]; then
+    echo "file with id $CORRID was not removed from archive"
+    exit 1
+fi
+result=$(s3cmd -c direct ls s3://archive2/test_dummy.org/"$CORRID")
+if [ "$result" != "" ]; then
+    echo "file with id $CORRID was not removed from archive"
+    exit 1
+fi
+result=$(s3cmd -c direct ls s3://backup1/test_dummy.org/"$CORRID")
+if [ "$result" != "" ]; then
+    echo "file with id $CORRID was not removed from backup"
+    exit 1
+fi
+
 # re-ingest cancelled file
 ingest_payload=$(
     jq -r -c -n \

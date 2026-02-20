@@ -4,13 +4,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -18,200 +22,254 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
 var (
-	err                      error
-	key                      *[32]byte
-	db                       *database.SDAdb
-	conf                     *config.Config
-	archive, syncDestination storage.Backend
+	key           *[32]byte
+	db            *database.SDAdb
+	conf          *config.Config
+	mqBroker      *broker.AMQPBroker
+	archiveReader storage.Reader
+	syncWriter    storage.Writer
 )
 
 func main() {
-	forever := make(chan bool)
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var err error
 	conf, err = config.NewConfig("sync")
 	if err != nil {
-		log.Fatal(err)
-	}
-	mq, err := broker.NewMQ(conf.Broker)
-	if err != nil {
-		log.Fatal(err)
-	}
-	db, err = database.NewSDAdb(conf.Database)
-	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
 
-	syncDestination, err = storage.NewBackend(conf.Sync.Destination)
+	db, err = database.NewSDAdb(conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	archive, err = storage.NewBackend(conf.Archive)
+	defer db.Close()
+	if db.Version < 23 {
+		return errors.New("database schema v23 is required")
+	}
+
+	mqBroker, err = broker.NewMQ(conf.Broker)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
+	}
+	defer func() {
+		if mqBroker == nil {
+			return
+		}
+		if mqBroker.Channel != nil {
+			if err := mqBroker.Channel.Close(); err != nil {
+				log.Errorf("failed to close mq broker channel due to: %v", err)
+			}
+		}
+		if mqBroker.Connection != nil {
+			if err := mqBroker.Connection.Close(); err != nil {
+				log.Errorf("failed to close mq broker connection due to: %v", err)
+			}
+		}
+	}()
+
+	lb, err := locationbroker.NewLocationBroker(db)
+	if err != nil {
+		return fmt.Errorf("failed to initialize location broker, due to: %v", err)
+	}
+	syncWriter, err = storage.NewWriter(ctx, "sync", lb)
+	if err != nil {
+		return fmt.Errorf("failed to initialize sync writer, due to: %v", err)
+	}
+	archiveReader, err = storage.NewReader(ctx, "archive")
+	if err != nil {
+		return fmt.Errorf("failed to initialize archive reader, due to: %v", err)
 	}
 
 	key, err = config.GetC4GHKey()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to get c4gh key from config, due to: %v", err)
 	}
 
-	defer mq.Channel.Close()
-	defer mq.Connection.Close()
-	defer db.Close()
-
-	go func() {
-		connError := mq.ConnectionWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
-
-	go func() {
-		connError := mq.ChannelWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
-
 	log.Info("Starting sync service")
-	var message schema.DatasetMapping
 
+	consumeErr := make(chan error, 1)
 	go func() {
-		messages, err := mq.GetMessages(conf.Broker.Queue)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for delivered := range messages {
-			log.Debugf("Received a message (correlation-id: %s, message: %s)",
-				delivered.CorrelationId,
-				delivered.Body)
-
-			err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", conf.Broker.SchemasPath), delivered.Body)
-			if err != nil {
-				log.Errorf("validation of incoming message (dataset-mapping) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
-				// Send the message to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           "Message validation failed in sync service",
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%v)", err)
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-
-			// we unmarshal the message in the validation step so this is safe to do
-			_ = json.Unmarshal(delivered.Body, &message)
-
-			if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
-				log.Infoln("external dataset")
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-
-			for _, aID := range message.AccessionIDs {
-				if err := syncFiles(aID); err != nil {
-					log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
-					if err := delivered.Nack(false, false); err != nil {
-						log.Errorf("failed to nack following GetFileSize error message")
-					}
-
-					continue
-				}
-			}
-
-			log.Infoln("buildSyncDatasetJSON")
-			blob, err := buildSyncDatasetJSON(delivered.Body)
-			if err != nil {
-				log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
-			}
-			if err := sendPOST(blob); err != nil {
-				log.Errorf("failed to send POST, Reason: %v", err)
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to nack following sendPOST error message")
-				}
-
-				continue
-			}
-
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-			}
-		}
+		consumeErr <- startConsumer(ctx)
 	}()
 
-	<-forever
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	select {
+	case <-sigc:
+	case err := <-mqBroker.Connection.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-mqBroker.Channel.NotifyClose(make(chan *amqp.Error)):
+		return err
+	case err := <-consumeErr:
+		return err
+	}
+
+	return nil
+}
+func startConsumer(ctx context.Context) error {
+	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
+	if err != nil {
+		return err
+	}
+	for delivered := range messages {
+		handleMessage(ctx, delivered)
+	}
+
+	return nil
 }
 
-func syncFiles(stableID string) error {
+func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	log.Debugf("Received a message (correlation-id: %s, message: %s)",
+		delivered.CorrelationId,
+		delivered.Body)
+
+	err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", mqBroker.Conf.SchemasPath), delivered.Body)
+	if err != nil {
+		log.Errorf("validation of incoming message (dataset-mapping) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
+		// Send the message to an error queue so it can be analyzed.
+		infoErrorMessage := broker.InfoError{
+			Error:           "Message validation failed in sync service",
+			Reason:          err.Error(),
+			OriginalMessage: string(delivered.Body),
+		}
+
+		body, _ := json.Marshal(infoErrorMessage)
+		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: (%v)", err)
+		}
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+
+		return
+	}
+
+	var message schema.DatasetMapping
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &message)
+
+	if !strings.HasPrefix(message.DatasetID, conf.Sync.CenterPrefix) {
+		log.Infoln("external dataset")
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+
+		return
+	}
+
+	var syncFilesErr error
+	for _, aID := range message.AccessionIDs {
+		if err := syncFiles(ctx, aID); err != nil {
+			log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
+			syncFilesErr = err
+
+			break
+		}
+	}
+	if syncFilesErr != nil {
+		if err := delivered.Nack(false, false); err != nil {
+			log.Errorf("failed to nack following GetFileSize error message")
+		}
+
+		return
+	}
+
+	log.Infoln("buildSyncDatasetJSON")
+	blob, err := buildSyncDatasetJSON(delivered.Body)
+	if err != nil {
+		log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
+	}
+	if err := sendPOST(blob); err != nil {
+		log.Errorf("failed to send POST, Reason: %v", err)
+		if err := delivered.Nack(false, false); err != nil {
+			log.Errorf("failed to nack following sendPOST error message")
+		}
+
+		return
+	}
+
+	if err := delivered.Ack(false); err != nil {
+		log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+	}
+}
+
+func syncFiles(ctx context.Context, stableID string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	log.Debugf("syncing file %s", stableID)
 	inboxPath, err := db.GetInboxPath(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get inbox path for file with stable ID: %s, reason: %v", stableID, err)
+		return fmt.Errorf("failed to get inbox path, reason: %v", err)
 	}
 
-	archivePath, err := db.GetArchivePath(stableID)
+	archivePath, archiveLocation, err := db.GetArchivePathAndLocation(stableID)
 	if err != nil {
-		return fmt.Errorf("failed to get archive path for file with stable ID: %s, reason: %v", stableID, err)
+		return fmt.Errorf("failed to get archive path and location, reason: %v", err)
 	}
 
-	fileSize, err := archive.GetFileSize(archivePath, false)
+	fileSize, err := archiveReader.GetFileSize(ctx, archiveLocation, archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to get filesize for file with archivepath: %s, reason: %v", archivePath, err)
+		return fmt.Errorf("failed to get file size from archive storage, location: %s, path: %s, reason: %v", archiveLocation, archivePath, err)
 	}
 
-	file, err := archive.NewFileReader(archivePath)
+	file, err := archiveReader.NewFileReader(ctx, archiveLocation, archivePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read file from archive storage, location: %s, path: %s, reason: %v", archiveLocation, archivePath, err)
 	}
-	defer file.Close()
-
-	dest, err := syncDestination.NewFileWriter(inboxPath)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	header, err := db.GetHeaderForStableID(stableID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get header from db, reason: %v", err)
 	}
 
-	pubkeyList := [][chacha20poly1305.KeySize]byte{}
-	pubkeyList = append(pubkeyList, *conf.Sync.PublicKey)
-	newHeader, err := headers.ReEncryptHeader(header, *key, pubkeyList)
+	newHeader, err := headers.ReEncryptHeader(header, *key, [][chacha20poly1305.KeySize]byte{*conf.Sync.PublicKey})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to reencrypt header, reason: %v", err)
 	}
 
-	_, err = dest.Write(newHeader)
-	if err != nil {
-		return err
-	}
+	contentReader, contentWriter := io.Pipe()
 
-	// Copy the file and check is sizes match
-	copiedSize, err := io.Copy(dest, file)
-	if err != nil || copiedSize != int64(fileSize) {
-		switch {
-		case copiedSize != int64(fileSize):
-			return errors.New("copied size does not match file size")
-		default:
-			return err
+	go func() {
+		defer func() {
+			_ = contentWriter.Close()
+		}()
+		if _, err := contentWriter.Write(newHeader); err != nil {
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to write header, reason: %v", err))
+
+			return
 		}
+		if copiedSize, err := io.Copy(contentWriter, file); err != nil {
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to write file content, reason: %v", err))
+		} else if copiedSize != fileSize {
+			_ = contentWriter.CloseWithError(errors.New("copied size does not match file size"))
+		}
+	}()
+
+	_, err = syncWriter.WriteFile(ctx, inboxPath, contentReader)
+	if err != nil {
+		return fmt.Errorf("failed to upload file to storage, reason: %v", err)
 	}
+	_ = contentReader.Close()
 
 	return nil
 }

@@ -6,17 +6,24 @@ log:
   level: "debug"
   format: "json"
 
-archive:
-  type: ""
-  # S3 backend
-  url: "http://localhost"
-  port: 9000
-  accesskey: "access"
-  secretkey: "secretkey"
-  bucket: "archive"
-  chunksize: 32
-  # posix backend
-  location: "/tmp"
+storage:
+  archive:
+    s3:
+    - endpoint: "http://s3:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      disable_https: true
+    - endpoint: "http://s3-2nd:9000"
+      access_key: "access"
+      secret_key: "secretkey"
+      bucket_prefix: "archive"
+      region: "us-east-1"
+      disable_https: true
+    posix:
+    - path: "/tmp/dir1"
+    - path: "/tmp/dir2"
 
 grpc:
   host: reencrypt
@@ -32,9 +39,9 @@ c4gh:
 db:
   host: "localhost"
   port: 5432
-  user: "lega_out"
-  password: "lega_out"
-  database: "lega"
+  user: "download"
+  password: "download"
+  database: "sda"
   sslmode: "disable"
 
 oidc:

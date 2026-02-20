@@ -16,6 +16,9 @@ func NewReader(backendName string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(endPointsConfigurations) == 0 {
+		return nil, storageerrors.ErrorNoValidLocations
+	}
 
 	backend := &Reader{
 		configuredEndpoints: endPointsConfigurations,
@@ -28,11 +31,8 @@ func NewReader(backendName string) (*Reader, error) {
 		}
 
 		if !fileInfo.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory", loc)
+			return nil, fmt.Errorf("%s is not a directory", loc.Path)
 		}
-	}
-	if len(backend.configuredEndpoints) == 0 {
-		return nil, storageerrors.ErrorNoValidLocations
 	}
 
 	return backend, nil

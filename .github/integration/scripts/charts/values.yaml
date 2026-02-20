@@ -22,20 +22,33 @@ global:
     storageType: s3
     s3AccessKey: PLACEHOLDER_VALUE
     s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: "http://minio.minio"
+    s3Url: PLACEHOLDER_VALUE
     s3Bucket: "archive"
     s3Port: 9000
-    s3ReadyPath: "/minio/health/ready"
     existingClaim: archive-pvc
   backupArchive:
     storageType: "s3"
     s3AccessKey: PLACEHOLDER_VALUE
     s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: "http://minio.minio"
+    s3Url: PLACEHOLDER_VALUE
     s3Bucket: "backup"
     s3Port: 9000
-    s3ReadyPath: "/minio/health/ready"
     existingClaim: backup-pvc
+  inbox:
+    storageType: s3
+    s3AccessKey: PLACEHOLDER_VALUE
+    s3SecretKey: PLACEHOLDER_VALUE
+    s3Url: PLACEHOLDER_VALUE
+    s3Port: 9000
+    s3Bucket: "inbox"
+    existingClaim: inbox-pvc
+  s3Inbox:
+    accessKey: PLACEHOLDER_VALUE
+    secretKey: PLACEHOLDER_VALUE
+    url: PLACEHOLDER_VALUE
+    port: 9000
+    bucket: "inbox"
+    readyPath: "/minio/health/ready"
   auth:
     jwtSecret: jwk
     jwtAlg: ES256
@@ -80,15 +93,6 @@ global:
     jwkPath: "/jwks"
     id: DfCieZLuBU
     secret: DfCieZLuBU
-  inbox:
-    storageType: s3
-    s3AccessKey: PLACEHOLDER_VALUE
-    s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: http://minio.minio
-    s3Port: 9000
-    s3Bucket: "inbox"
-    s3ReadyPath: "/minio/health/ready"
-    existingClaim: inbox-pvc
   reencrypt:
     host: pipeline-sda-svc-reencrypt
     port: 50051
@@ -99,14 +103,12 @@ global:
     brokerQueue: "mapping_stream"
     centerPrefix: "SYNC"
     destination:
-      storageType: "s3"
-      url: "http://minio.minio"
-      port: 9000
-      readypath: "/minio/health/ready"
-      accessKey: PLACEHOLDER_VALUE
-      secretKey: PLACEHOLDER_VALUE
-      bucket: "sync"
-      region: "us-east-1"
+      s3Url: PLACEHOLDER_VALUE
+      s3Port: 9000
+      s3AccessKey: PLACEHOLDER_VALUE
+      s3SecretKey: PLACEHOLDER_VALUE
+      s3BucketPrefix: "sync"
+      s3Region: "us-east-1"
     remote:
       host: "http://remote-sync"
       port: "8080"

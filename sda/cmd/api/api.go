@@ -22,6 +22,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -32,7 +33,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -49,57 +51,112 @@ var (
 	Conf        *config.Config
 	err         error
 	auth        *userauth.ValidateFromToken
-	auditLogger *log.Logger
+	inboxReader storage.Reader
+	inboxWriter storage.Writer
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	Conf, err = config.NewConfig("api")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	if err != nil {
-		log.Fatal(err)
-	}
+
 	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
+	}
+	defer Conf.API.DB.Close()
+	if Conf.API.DB.Version < 23 {
+		return errors.New("database schema v23 is required")
+	}
+
+	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	if err != nil {
+		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
+	}
+	defer func() {
+		if Conf.API.MQ == nil {
+			return
+		}
+		if Conf.API.MQ.Channel != nil {
+			if err := Conf.API.MQ.Channel.Close(); err != nil {
+				log.Errorf("failed to close mq broker channel due to: %v", err)
+			}
+		}
+		if Conf.API.MQ.Connection != nil {
+			if err := Conf.API.MQ.Connection.Close(); err != nil {
+				log.Errorf("failed to close mq broker connection due to: %v", err)
+			}
+		}
+	}()
+
+	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
+	if err != nil {
+		return fmt.Errorf("failed to initialize new location broker, due to: %v", err)
+	}
+	inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
+	if err != nil {
+		return fmt.Errorf("failed to initialize inbox writer, due to: %v", err)
+	}
+	inboxReader, err = storage.NewReader(ctx, "inbox")
+	if err != nil {
+		return fmt.Errorf("failed to initialize inbox reader, reason: %v", err)
 	}
 
 	if err := setupJwtAuth(); err != nil {
-		log.Fatalf("error when setting up JWT auth, reason %s", err.Error())
+		return fmt.Errorf("error when setting up JWT auth, reason %s", err.Error())
 	}
 
-	sigc := make(chan os.Signal, 5)
-	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	serverErr := make(chan error, 1)
+	srv, err := setup(Conf)
+	if err != nil {
+		return fmt.Errorf("failed to setup http/https server, due to: %v", err)
+	}
 	go func() {
-		<-sigc
-		shutdown()
-		os.Exit(0)
+		if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
+			log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
+			if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
+			}
+		} else {
+			log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
+			}
+		}
+	}()
+	defer func() {
+		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := srv.Shutdown(serverShutdownCtx); err != nil {
+			log.Errorf("failed to close http/https server due to: %v", err)
+		}
+		serverShutdownCancel()
 	}()
 
-	srv := setup(Conf)
-	if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
-		log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
-		if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil {
-			shutdown()
-			log.Fatalln(err)
-		}
-	} else {
-		log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
-		if err := srv.ListenAndServe(); err != nil {
-			shutdown()
-			log.Fatalln(err)
-		}
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	select {
+	case <-sigc:
+		return nil
+	case err := <-serverErr:
+		return err
 	}
 }
 
-func setup(conf *config.Config) *http.Server {
+func setup(conf *config.Config) (*http.Server, error) {
 	m, _ := model.NewModelFromString(jsonadapter.Model)
 	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
 	if err != nil {
-		shutdown()
-		log.Fatalf("error when setting up RBAC enforcer, reason %s", err.Error()) // nolint # FIXME Fatal should only be called from main
+		return nil, err
 	}
 
 	r := gin.New()
@@ -170,7 +227,7 @@ func setup(conf *config.Config) *http.Server {
 		WriteTimeout:      2 * time.Minute,
 	}
 
-	return srv
+	return srv, nil
 }
 
 func setupJwtAuth() error {
@@ -187,12 +244,6 @@ func setupJwtAuth() error {
 	}
 
 	return nil
-}
-
-func shutdown() {
-	defer Conf.API.MQ.Channel.Close()
-	defer Conf.API.MQ.Connection.Close()
-	defer Conf.API.DB.Close()
 }
 
 func readinessResponse(c *gin.Context) {
@@ -219,7 +270,7 @@ func readinessResponse(c *gin.Context) {
 		}
 	}
 
-	if dbRes := checkDB(Conf.API.DB, 5*time.Millisecond); dbRes != nil {
+	if dbRes := checkDB(c, Conf.API.DB, 5*time.Millisecond); dbRes != nil {
 		log.Debugf("DB connection error :%v", dbRes)
 		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
@@ -228,8 +279,8 @@ func readinessResponse(c *gin.Context) {
 	c.JSON(statusCode, "")
 }
 
-func checkDB(db *database.SDAdb, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func checkDB(ctx context.Context, db *database.SDAdb, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if db.DB == nil {
 		return errors.New("database is nil")
@@ -338,6 +389,11 @@ func ingestFile(c *gin.Context) {
 
 		return
 	case c.Query("fileid") != "":
+		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
+
+			return
+		}
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "uploaded")
 		if err != nil {
@@ -401,14 +457,6 @@ func ingestFile(c *gin.Context) {
 // The deleteFile function deletes files from the inbox and marks them as
 // discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
-	inbox, err := storage.NewBackend(Conf.Inbox)
-	if err != nil {
-		log.Error(err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
 	submissionUser := c.Param("username")
 	log.Debug("submission user:", submissionUser)
 
@@ -422,7 +470,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(submissionUser, fileID)
+	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -430,9 +478,16 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
+	if location == "" {
+		log.Errorf("fileID: %s has no known submission location", fileID)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+
+		return
+	}
+
 	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
 	for count := 1; count <= 5; count++ {
-		err = inbox.RemoveFile(filePath)
+		err = inboxWriter.RemoveFile(c, location, filePath)
 		if err == nil {
 			break
 		}
@@ -460,7 +515,7 @@ func deleteFile(c *gin.Context) {
 // gRPC to communicate with the re-encrypt service and handles TLS configuration
 // if needed. The function also handles the case where the CA certificate is
 // provided for secure communication.
-func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
+func reencryptHeader(ctx context.Context, oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	var opts []grpc.DialOption
 	switch {
 	case Conf.API.Grpc.ClientCreds != nil:
@@ -477,7 +532,7 @@ func reencryptHeader(oldHeader []byte, c4ghPubKey string) ([]byte, error) {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(Conf.API.Grpc.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(Conf.API.Grpc.Timeout)*time.Second)
 	defer cancel()
 
 	c := reencrypt.NewReencryptClient(conn)
@@ -504,17 +559,9 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	inbox, err := storage.NewBackend(Conf.Inbox)
-	if err != nil {
-		log.Errorf("failed to initialize inbox backend, reason: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "storage backend error")
-
-		return
-	}
-
 	// Retrieve the actual file path for the user's file.
 	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, err := Conf.API.DB.GetInboxFilePathFromID(
+	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c,
 		strings.TrimPrefix(c.Param("username"), "/"),
 		fileID,
 	)
@@ -524,9 +571,15 @@ func downloadFile(c *gin.Context) {
 
 		return
 	}
+	if location == "" {
+		log.Errorf("fileID: %s has no known submission location", fileID)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+
+		return
+	}
 
 	// Get inbox file handle #noqa
-	file, err := inbox.NewFileReader(
+	file, err := inboxReader.NewFileReader(c, location,
 		helper.UnanonymizeFilepath(
 			filePath,
 			strings.TrimPrefix(c.Param("username"), "/"),
@@ -538,6 +591,9 @@ func downloadFile(c *gin.Context) {
 
 		return
 	}
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// get the header of the crypt4gh file
 	header, err := headers.ReadHeader(file)
@@ -548,7 +604,7 @@ func downloadFile(c *gin.Context) {
 		return
 	}
 
-	newHeader, err := reencryptHeader(header, c4ghPubKey)
+	newHeader, err := reencryptHeader(c, header, c4ghPubKey)
 	if err != nil {
 		log.Errorf("failed to reencrypt header, reason: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to reencrypt header")
@@ -598,6 +654,11 @@ func setAccession(c *gin.Context) {
 
 		return
 	case c.Query("fileid") != "" && c.Query("accessionid") != "":
+		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
+
+			return
+		}
 		// Get the user and the inbox filepath
 		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "verified")
 		if err != nil {
