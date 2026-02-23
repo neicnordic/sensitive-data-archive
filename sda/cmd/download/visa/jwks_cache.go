@@ -106,13 +106,13 @@ func (jc *JWKSCache) fetchJWKS(jkuURL string) (jwk.Set, error) {
 
 	log.Debugf("fetching JWKS from %s", jkuURL)
 
-	req, err := http.NewRequestWithContext(context.Background(), "GET", jkuURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", jkuURL, nil) //nolint:gosec // jkuURL is validated against trusted issuers allowlist before fetch
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JWKS request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := jc.httpClient.Do(req)
+	resp, err := jc.httpClient.Do(req) //nolint:gosec // jkuURL validated against trusted issuers allowlist
 	if err != nil {
 		return nil, fmt.Errorf("JWKS fetch failed for %s: %w", jkuURL, err)
 	}

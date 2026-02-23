@@ -558,15 +558,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 
 		// Create session and token cache entries
 		if !skipCache {
-			// Extract JWT token expiry for cache TTL bounding
-			var tokenExp *time.Time
-			if authCtx.Token != nil {
-				exp := authCtx.Token.Expiration()
-				if !exp.IsZero() {
-					tokenExp = &exp
-				}
-			}
-
+			tokenExp := tokenExpiry(authCtx)
 			cacheTTL := computeCacheTTL(tokenExp, visaMinExpiry)
 
 			// Guard against zero or negative TTL (expired token/visa)
@@ -726,6 +718,21 @@ func sha256Hex(s string) string {
 //	JWT + no accepted visas: min(configTTL, token.exp - now)
 //	Opaque + accepted visas: min(configTTL, min(visa.exp) - now)
 //	Opaque + no accepted visas: configTTL
+
+// tokenExpiry extracts the JWT expiry from the auth context, or nil for opaque tokens.
+func tokenExpiry(authCtx AuthContext) *time.Time {
+	if authCtx.Token == nil {
+		return nil
+	}
+
+	exp := authCtx.Token.Expiration()
+	if exp.IsZero() {
+		return nil
+	}
+
+	return &exp
+}
+
 func computeCacheTTL(tokenExp *time.Time, visaMinExpiry *time.Time) time.Duration {
 	configTTL := time.Duration(config.VisaCacheTokenTTL()) * time.Second
 	if configTTL == 0 {
