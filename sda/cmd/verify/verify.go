@@ -215,6 +215,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		if err := delivered.Nack(false, true); err != nil {
 			log.Errorf("failed to Nack message, reason: (%s)", err.Error())
 		}
+
+		return
 	}
 	if archiveLocation == "" {
 		log.Errorf("archive location for file: %s, not known in database", message.FileID)
