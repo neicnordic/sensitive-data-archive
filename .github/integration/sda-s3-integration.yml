@@ -392,6 +392,7 @@ services:
       - "8800:8080"
     volumes:
       - "./sda/aai-mock:/etc/lsaai-mock"
+
   aai-db:
     container_name: ls-aai-db
     environment:
@@ -408,6 +409,7 @@ services:
     image: mysql/mysql-server:latest
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+
   integration_test:
     container_name: tester
     command:
@@ -438,6 +440,8 @@ services:
       reencrypt:
         condition: service_started
       rotatekey:
+        condition: service_started
+      download:
         condition: service_started
     extra_hosts:
       - "localhost:host-gateway"

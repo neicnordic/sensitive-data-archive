@@ -1,0 +1,51 @@
+# Configuration for old sda-download service (from sda-download module)
+# This uses the old config format expected by the standalone sda-download service
+
+app:
+  host: "0.0.0.0"
+  port: 8080
+  middleware: "token-clientversion"
+  minimalcliversion: "v0.2.0"
+
+log:
+  level: "info"
+  format: "json"
+
+archive:
+  type: "s3"
+  url: "http://s3"
+  port: 9000
+  accesskey: "access"
+  secretkey: "secretKey"
+  bucket: "archive"
+  chunksize: 32
+
+grpc:
+  host: "reencrypt"
+  port: 50051
+
+c4gh:
+  filepath: "/shared/c4gh.sec.pem"
+  passphrase: "c4ghpass"
+  privateKeys:
+    - filepath: "/shared/c4gh.sec.pem"
+      passphrase: "c4ghpass"
+
+db:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+oidc:
+  configuration:
+    url: "http://mockauth:8000/.well-known/openid-configuration"
+
+session:
+  expiration: 3600
+  domain: "localhost"
+  secure: false
+  httponly: true
+  name: "sda_session_key"
