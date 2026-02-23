@@ -93,7 +93,7 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, backendName, locati
 			sizeAndCountFinderFunc = scf.sizeAndCountFinderFunc
 		}
 		if sizeAndCountFinderFunc == nil {
-			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backed %s", location, backendName)
+			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backend %s", location, backendName)
 		}
 		size, objectCount, err = sizeAndCountFinderFunc(ctx, location)
 	}
@@ -136,7 +136,7 @@ func (l *locationBroker) GetSize(ctx context.Context, backendName, location stri
 			sizeAndCountFinderFunc = scf.sizeAndCountFinderFunc
 		}
 		if sizeAndCountFinderFunc == nil {
-			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backed %s", location, backendName)
+			return 0, fmt.Errorf("no size and count finder function defined for location: %s, backend %s", location, backendName)
 		}
 		size, objectCount, err = sizeAndCountFinderFunc(ctx, location)
 	}
