@@ -321,14 +321,14 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 	switch status {
 	case "":
-		// Catch all for implementations that don't update the DB, e.g. for those not using S3inbox or sftpInbox
+		// Catch all for implementations inbox uploading that does not register the file in the DB, e.g. for those not using S3inbox or sftpInbox
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
 		var findFileErr, registerErr error
 		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.FilePath)
 		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
 		fileID, registerErr = app.DB.RegisterFile(&fileID, submissionLocation, message.FilePath, message.User)
 		if registerErr != nil {
-			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
+			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, registerErr.Error())
 
 			return "nack"
 		}
