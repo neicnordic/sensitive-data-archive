@@ -91,13 +91,6 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 		return nil, false
 	}
 
-	if file.ArchivePath == "" {
-		log.Errorf("file %s has no archive path", file.ID)
-		problemJSON(c, http.StatusInternalServerError, "file not in archive")
-
-		return nil, false
-	}
-
 	// Determine storage location
 	var location string
 	if file.ArchiveLocation != "" {

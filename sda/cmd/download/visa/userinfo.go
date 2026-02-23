@@ -87,14 +87,14 @@ func (uc *UserinfoClient) FetchUserinfo(accessToken string) (*UserinfoResponse, 
 		return nil, errors.New("userinfo endpoint URL not configured")
 	}
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, nil) //nolint:gosec // endpoint is from OIDC discovery or config, not user input
 	if err != nil {
 		return nil, fmt.Errorf("failed to create userinfo request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := uc.httpClient.Do(req)
+	resp, err := uc.httpClient.Do(req) //nolint:gosec // endpoint from OIDC discovery or config
 	if err != nil {
 		return nil, fmt.Errorf("userinfo request failed: %w", err)
 	}
