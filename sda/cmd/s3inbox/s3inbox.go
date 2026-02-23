@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
 
@@ -145,11 +146,13 @@ func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) erro
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) {
-			if apiErr.ErrorCode() == "NotFound" {
-				return fmt.Errorf("bucket: %s does not exist at the configured s3 endpoint", bucket)
+			var bae *types.BucketAlreadyExists
+			var baoby *types.BucketAlreadyOwnedByYou
+			if errors.As(err, &bae) || errors.As(err, &baoby) {
+				return nil
 			}
 
-			return fmt.Errorf("unexpected issue while checking that bucket: %s exists, due to %v", bucket, err)
+			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
 		}
 
 		return fmt.Errorf("verifying bucket failed, check S3 configuration: %v", err)
