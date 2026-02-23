@@ -9,9 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	s3config "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -96,7 +100,7 @@ func run() error {
 		}
 	}
 	router := mux.NewRouter()
-	proxy := NewProxy(conf.S3Inbox, auth, mqBroker, sdaDB, tlsProxy)
+	proxy := NewProxy(conf.S3Inbox, s3Client, auth, mqBroker, sdaDB, tlsProxy)
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
@@ -184,4 +188,34 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, error) {
+	tlsConfig, err := configTLS(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	s3cfg, err := s3config.LoadDefaultConfig(
+		ctx,
+		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
+		s3config.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s3Client := s3.NewFromConfig(
+		s3cfg,
+		func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(conf.Endpoint)
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.Endpoint, "http:")
+			o.Region = conf.Region
+			o.UsePathStyle = true
+			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+		},
+	)
+
+	return s3Client, nil
 }

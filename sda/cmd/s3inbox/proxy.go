@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	s3config "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/minio/minio-go/v6/pkg/signer"
@@ -37,6 +35,7 @@ type uniqueFileID struct {
 // Proxy represents the toplevel object in this application
 type Proxy struct {
 	s3Conf    config.S3InboxConf
+	s3Client  *s3.Client
 	auth      userauth.Authenticator
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
@@ -83,11 +82,19 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf config.S3InboxConf, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-	return &Proxy{s3conf, auth, messenger, db, client, make(map[uniqueFileID]string)}
+	return &Proxy{
+		s3Conf:    s3conf,
+		s3Client:  s3Client,
+		auth:      auth,
+		messenger: messenger,
+		database:  db,
+		client:    client,
+		fileIDs:   make(map[uniqueFileID]string),
+	}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -170,13 +177,6 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 		filePath: filePath,
 	}
 
-	s3Client, err := newS3Client(r.Context(), p.s3Conf)
-	if err != nil {
-		reportError(http.StatusInternalServerError, fmt.Sprintf("failed to connect to s3, reason: %v", err), w)
-
-		return
-	}
-
 	location := p.s3Conf.Endpoint + "/" + p.s3Conf.Bucket
 	// if this is an upload request
 	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
@@ -192,7 +192,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// check if the file already exists, in that case send an overwrite message,
 		// so that the FEGA portal is informed that a new version of the file exists.
-		err = p.sendMessageOnOverwrite(r, s3Client, p.fileIDs[fileIdentifier], rawFilepath, token)
+		err = p.sendMessageOnOverwrite(r, p.fileIDs[fileIdentifier], rawFilepath, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
@@ -212,7 +212,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
 	if p.uploadFinishedSuccessfully(r, s3response) {
 		log.Debug("create message")
-		message, err := p.CreateMessageFromRequest(r, token, s3Client, anonymizedFilepath)
+		message, err := p.CreateMessageFromRequest(r, token, anonymizedFilepath)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
@@ -245,7 +245,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[fileIdentifier])
 		}
 
-		if err := p.storeObjectSizeInDB(r.Context(), s3Client, rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
+		if err := p.storeObjectSizeInDB(r.Context(), rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
@@ -509,12 +509,12 @@ func (p *Proxy) detectRequestType(r *http.Request) S3RequestType {
 
 // CreateMessageFromRequest is a function that can take a http request and
 // figure out the correct rabbitmq message to send from it.
-func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, s3Client *s3.Client, anonymizedFilepath string) (Event, error) {
+func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anonymizedFilepath string) (Event, error) {
 	event := Event{}
 	checksum := Checksum{}
 	var err error
 
-	checksum.Value, event.Filesize, err = p.requestInfo(r.Context(), s3Client, r.URL.Path)
+	checksum.Value, event.Filesize, err = p.requestInfo(r.Context(), r.URL.Path)
 	if err != nil {
 		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
@@ -534,7 +534,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, s3Cl
 
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
-func (p *Proxy) requestInfo(ctx context.Context, s3Client *s3.Client, fullPath string) (string, int64, error) {
+func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
 
 	input := &s3.HeadObjectInput{
@@ -542,7 +542,7 @@ func (p *Proxy) requestInfo(ctx context.Context, s3Client *s3.Client, fullPath s
 		Key:    aws.String(filePath),
 	}
 
-	result, err := s3Client.HeadObject(ctx, input)
+	result, err := p.s3Client.HeadObject(ctx, input)
 	if err != nil {
 		log.Debug(err.Error())
 
@@ -556,42 +556,12 @@ func (p *Proxy) requestInfo(ctx context.Context, s3Client *s3.Client, fullPath s
 	return strings.Trim(*result.ETag, "\""), *result.ContentLength, nil
 }
 
-func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, error) {
-	tlsConfig, err := configTLS(conf)
-	if err != nil {
-		return nil, err
-	}
-
-	s3cfg, err := s3config.LoadDefaultConfig(
-		ctx,
-		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
-		s3config.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true}}),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	s3Client := s3.NewFromConfig(
-		s3cfg,
-		func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(conf.Endpoint)
-			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.Endpoint, "http:")
-			o.Region = conf.Region
-			o.UsePathStyle = true
-			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
-			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
-		},
-	)
-
-	return s3Client, nil
-}
-
 // checkFileExists makes a request to the S3 to check whether the file already
 // is uploaded. Returns a bool indicating whether the file was found.
-func (p *Proxy) checkFileExists(ctx context.Context, s3Client *s3.Client, fullPath string) (bool, error) {
+func (p *Proxy) checkFileExists(ctx context.Context, fullPath string) (bool, error) {
 	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
 
-	result, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+	result, err := p.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
 		Key:    aws.String(filePath),
 	})
@@ -605,8 +575,8 @@ func (p *Proxy) checkFileExists(ctx context.Context, s3Client *s3.Client, fullPa
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(r *http.Request, s3Client *s3.Client, fileID, rawFilepath string, token jwt.Token) error {
-	exist, err := p.checkFileExists(r.Context(), s3Client, r.URL.Path)
+func (p *Proxy) sendMessageOnOverwrite(r *http.Request, fileID, rawFilepath string, token jwt.Token) error {
+	exist, err := p.checkFileExists(r.Context(), r.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -681,8 +651,8 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 	}
 }
 
-func (p *Proxy) storeObjectSizeInDB(ctx context.Context, s3Client *s3.Client, path, fileID string) error {
-	o, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+func (p *Proxy) storeObjectSizeInDB(ctx context.Context, path, fileID string) error {
+	o, err := p.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
 		Key:    aws.String(path),
 	})
