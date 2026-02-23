@@ -299,6 +299,16 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
 
+  sda-download:
+    needs:
+      - build_go_images
+      - build_server_images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test sda-download
+        run: docker compose -f .github/integration/sda-download-integration.yml run integration_test
+
   sda-doa:
     needs:
       - build_java_images
