@@ -1,264 +1,423 @@
 # Download
 
-The Download service provides secure file download functionality for archived data.
-Users are authenticated with a JWT token, and files are re-encrypted with the user's
-public key before download.
+The download service provides the Data Out API for the NeIC Sensitive Data Archive.
+It replaces both the standalone [sda-download](https://github.com/neicnordic/sda-download)
+Go service and the Java-based [sda-doa](https://github.com/neicnordic/sda-doa), unifying
+data retrieval into a single service within the `sda` binary.
+
+Key improvements over the previous implementations:
+
+- **GA4GH Passport/Visa support** with trusted issuer allowlists and JWKS validation
+- **Three permission models**: ownership-only, visa-only, or combined
+- **Split file endpoints** — separate header and content downloads for efficient Crypt4GH operations
+- **Keyset pagination** with HMAC-signed page tokens
+- **Multi-layer caching** — database queries, sessions, tokens, JWK sets, and visa validation results
+- **Audit logging** for compliance tracking
+- **Production safety guards** that prevent dangerous configurations in production
 
 ## Service Description
 
-This service implements the Data Out API for the NeIC Sensitive Data Archive. It allows
-authenticated users to browse datasets and download files that have been archived and
-verified.
+The service is a standalone HTTP server built with Gin. It connects to:
 
-### Authentication
+- **PostgreSQL** — file/dataset metadata and permissions
+- **S3/POSIX storage** — archived file data
+- **gRPC reencrypt service** — Crypt4GH re-encryption for downloads
+- **OIDC provider** (optional) — userinfo endpoint for opaque tokens and GA4GH passports
 
-All endpoints except health checks require JWT authentication. The token must be:
+On startup the service validates configuration, initializes caches, and runs
+production safety guards when `app.environment` is set to `production`.
 
-- Provided in the `Authorization: Bearer <token>` header
-- Signed with a key matching the configured JWKS (via `jwt.pubkey-path` or `jwt.pubkey-url`)
+## Authentication
 
-### Permission Model
+All endpoints except `/health/*` and `/service-info` require authentication.
+Tokens are extracted from the `Authorization: Bearer <token>` header or the
+`X-Amz-Security-Token` header.
 
-The service supports two permission modes (configured via `jwt.allow-all-data`):
+The service uses structure-based detection to classify tokens:
 
-| Mode                    | Description                                               |
-| ----------------------- | --------------------------------------------------------- |
-| `allow-all-data: true`  | All authenticated users can access all datasets (testing) |
-| `allow-all-data: false` | Users can only access datasets they submitted             |
+### JWT Tokens
 
-In production, the data ownership model is used: users have access to datasets
-containing files where they are the `submission_user`.
+Tokens with three dot-separated base64url segments (valid JSON header and payload)
+are treated as JWTs. They are validated locally against public keys loaded from
+`jwt.pubkey-path` or fetched from `jwt.pubkey-url`. If `oidc.issuer` is configured,
+the JWT `iss` claim must match. JWT validation failures are final — there is no
+userinfo fallback.
+
+### Opaque Tokens
+
+When `auth.allow-opaque` is enabled (default: `true`), tokens that do not look like
+JWTs are sent to the OIDC userinfo endpoint. The `sub` claim from the userinfo
+response is used as the user identity. The issuer is taken from `oidc.issuer`.
+
+### Session Caching
+
+Authenticated sessions are cached in-memory keyed by `sha256(token)`. The cache TTL
+is bounded by `min(token.exp, min(visa.exp), configured TTL)`. A session cookie
+(configurable via `session.name`, default `sda_session`) provides fast lookups for
+repeat requests. The legacy cookie name `sda_session_key` is also checked for
+backwards compatibility.
+
+## Permission Model
+
+The permission model is configured via `permission.model` (default: `combined`).
+
+| Model       | Description                                                         |
+|-------------|---------------------------------------------------------------------|
+| `ownership` | Users access datasets containing files where they are the `submission_user` |
+| `visa`      | Access determined solely by GA4GH ControlledAccessGrants visas      |
+| `combined`  | Union of ownership and visa datasets. Visa failures are non-fatal — ownership results are still served |
+
+When `jwt.allow-all-data` is `true`, all authenticated users can access all
+datasets regardless of the permission model. **This flag is blocked by production
+safety guards.**
+
+## GA4GH Visa Support
+
+When `visa.enabled` is `true`, the service validates
+[GA4GH Passport v1](https://github.com/ga4gh/data-security/blob/master/AAI/AAIConnectProfile.md)
+visas to determine dataset access.
+
+### Visa Validation Flow
+
+1. After authentication, the userinfo endpoint is called to retrieve the `ga4gh_passport_v1` claim
+2. Each visa JWT in the passport is validated:
+   - The `(iss, jku)` pair must appear in the trusted issuers allowlist
+   - The JWKS at the `jku` URL is fetched (cached) and the visa signature is verified
+   - The visa must not be expired
+3. Only `ControlledAccessGrants` type visas are processed:
+   - `by` must be non-empty
+   - `value` and `source` must be ≤ 255 characters
+   - `conditions` must be empty
+   - `asserted` must not be in the future (when `visa.validate-asserted` is `true`)
+4. The `value` field determines dataset access. Unknown visa types are silently ignored per the GA4GH spec.
+
+### Trusted Issuers
+
+A JSON file at `visa.trusted-issuers-path` defines the allowed `(iss, jku)` pairs:
+
+```json
+[
+  {"iss": "https://login.example.org", "jku": "https://login.example.org/jwks"}
+]
+```
+
+Only visas from issuers in this allowlist are accepted. JKU URLs must use HTTPS
+unless `visa.allow-insecure-jku` is enabled (testing only).
+
+### Dataset ID Matching
+
+Configured via `visa.dataset-id-mode`:
+
+| Mode     | Description                                              |
+|----------|----------------------------------------------------------|
+| `raw`    | The visa `value` is used as-is as the dataset identifier |
+| `suffix` | The last segment of the URL or URN path is extracted     |
+
+### Identity Binding
+
+Configured via `visa.identity.mode`:
+
+| Mode              | Description                                                           |
+|-------------------|-----------------------------------------------------------------------|
+| `broker-bound`    | Default. Visa identity is not checked against the authenticated user  |
+| `strict-sub`      | Visa `sub` must match the authenticated user's `sub`                  |
+| `strict-iss-sub`  | Visa `iss`+`sub` must match the authenticated user's `iss`+`sub`      |
+
+### Safety Limits
+
+| Config                            | Default | Description                             |
+|-----------------------------------|---------|-----------------------------------------|
+| `visa.limits.max-visas`           | 200     | Maximum visas to process per passport   |
+| `visa.limits.max-visa-size`       | 16384   | Maximum size per visa JWT (bytes)       |
+| `visa.limits.max-jwks-per-request`| 10      | Maximum distinct JWKS fetches per request |
 
 ## Endpoints
 
 ### Health Endpoints
 
-#### `/health/ready`
+#### `GET /health/ready`
 
-- accepts `GET` requests
-- Returns readiness status with dependency checks
+Returns readiness status with dependency checks for database, storage, gRPC, and OIDC.
 
-  Example:
+Example:
 
-  ```bash
-  curl https://HOSTNAME/health/ready
-  {"status":"ok","services":{"database":"ok","storage":"ok","grpc":"ok","oidc":"ok"}}
-  ```
+```bash
+curl https://HOSTNAME/health/ready
+{"status":"ok","services":{"database":"ok","storage":"ok","grpc":"ok","oidc":"ok"}}
+```
 
-#### `/health/live`
+#### `GET /health/live`
 
-- accepts `GET` requests
-- Returns simple liveness status
+Returns simple liveness status.
 
-  Example:
+Example:
 
-  ```bash
-  curl https://HOSTNAME/health/live
-  {"status":"ok"}
-  ```
+```bash
+curl https://HOSTNAME/health/live
+{"status":"ok"}
+```
 
-### Info Endpoints
+### Service Info
 
-#### `/info/datasets`
+#### `GET /service-info`
 
-- accepts `GET` requests
-- Returns all datasets the authenticated user has access to
+Returns service metadata following the
+[GA4GH service-info specification](https://github.com/ga4gh-discovery/ga4gh-service-info).
+No authentication required.
+
+Example:
+
+```bash
+curl https://HOSTNAME/service-info
+```
+
+### Dataset Endpoints
+
+All dataset endpoints require authentication.
+
+#### `GET /datasets`
+
+Returns a paginated list of datasets accessible to the authenticated user.
+
+- Query Parameters
+  - `page_size` (optional): Number of results per page
+  - `page_token` (optional): Opaque token for the next page
+
+- Response: JSON array of dataset objects
+- Error codes
+  - `200` Success
+  - `401` Invalid or missing token
+
+Example:
+
+```bash
+curl -H "Authorization: Bearer $token" https://HOSTNAME/datasets
+```
+
+#### `GET /datasets/:datasetId`
+
+Returns metadata for a specific dataset.
 
 - Error codes
-  - `200` Query executed successfully
+  - `200` Success
   - `401` Invalid or missing token
-  - `500` Internal error due to DB failures
+  - `403` Access denied or dataset does not exist
 
-  Example:
+Example:
 
-  ```bash
-  curl -H "Authorization: Bearer $token" https://HOSTNAME/info/datasets
-  [{"id":"EGAD74900000101","title":"Example Dataset"}]
-  ```
+```bash
+curl -H "Authorization: Bearer $token" https://HOSTNAME/datasets/EGAD00000000001
+```
 
-#### `/info/dataset`
+#### `GET /datasets/:datasetId/files`
 
-- accepts `GET` requests with query parameter `dataset`
-- Returns metadata for a specific dataset
+Returns a paginated list of files in the specified dataset.
+
+- Query Parameters
+  - `page_size` (optional): Number of results per page
+  - `page_token` (optional): Opaque token for the next page
 
 - Error codes
-  - `200` Query executed successfully
-  - `400` Missing dataset parameter
+  - `200` Success
   - `401` Invalid or missing token
-  - `403` Access denied to dataset
-  - `404` Dataset not found
-  - `500` Internal error due to DB failures
+  - `403` Access denied or dataset does not exist
 
-  Example:
+Example:
 
-  ```bash
-  curl -H "Authorization: Bearer $token" "https://HOSTNAME/info/dataset?dataset=EGAD74900000101"
-  {"id":"EGAD74900000101","title":"Example Dataset","fileCount":2,"totalSize":15242998}
-  ```
+```bash
+curl -H "Authorization: Bearer $token" https://HOSTNAME/datasets/EGAD00000000001/files
+```
 
-#### `/info/dataset/files`
+### File Endpoints
 
-- accepts `GET` requests with query parameter `dataset`
-- Returns list of files in the specified dataset
+All file endpoints require authentication. Download endpoints also require a Crypt4GH
+public key in the `X-C4GH-Public-Key` header (base64-encoded).
 
-- Error codes
-  - `200` Query executed successfully
-  - `400` Missing dataset parameter
-  - `401` Invalid or missing token
-  - `403` Access denied to dataset
-  - `500` Internal error due to DB failures
+Files are served through three tiers:
 
-  Example:
+| Tier        | Endpoint                     | Content                         | Range Support |
+|-------------|------------------------------|---------------------------------|---------------|
+| Combined    | `GET /files/:fileId`         | Re-encrypted header + data      | Yes           |
+| Header only | `GET /files/:fileId/header`  | Re-encrypted Crypt4GH header    | No            |
+| Content only| `GET /files/:fileId/content` | Encrypted data segments         | Yes           |
 
-  ```bash
-  curl -H "Authorization: Bearer $token" "https://HOSTNAME/info/dataset/files?dataset=EGAD74900000101"
-  [{"id":"EGAF74900000001","path":"data/file1.c4gh","size":1024000,"checksum":"abc123...","checksumType":"SHA256"}]
-  ```
+All three tiers support `HEAD` requests for metadata without a response body.
 
-### File Download Endpoints
+#### `HEAD /files/:fileId`
 
-File downloads require a `public_key` header containing the user's Crypt4GH public key
-(base64-encoded). The archived file is re-encrypted with this key before streaming to
-the client.
+Returns file metadata headers without downloading the file.
 
-#### `/file/:fileId`
+- Response Headers
+  - `Content-Length`: total size (header + content)
+  - `Accept-Ranges: bytes`
+  - `ETag`: entity tag for caching
 
-- accepts `GET` requests with file stable ID in path
-- Downloads a file by its stable ID (e.g., `EGAF74900000001`)
-- Supports HTTP Range requests for partial downloads
+#### `GET /files/:fileId`
+
+Downloads the complete re-encrypted file (header + data segments).
 
 - Request Headers
   - `Authorization: Bearer <token>` (required)
-  - `public_key: <base64-encoded-c4gh-public-key>` (required)
-  - `Range: bytes=START-END` (optional, for partial downloads)
+  - `X-C4GH-Public-Key: <base64-encoded-key>` (required)
+  - `Range: bytes=START-END` (optional)
 
 - Response Headers
   - `Content-Type: application/octet-stream`
   - `Content-Disposition: attachment; filename="<fileId>.c4gh"`
   - `Accept-Ranges: bytes`
-  - `X-File-Id: <fileId>`
-  - `X-Decrypted-Size: <size>`
-  - `X-Decrypted-Checksum: <checksum>` (if available)
-  - `X-Decrypted-Checksum-Type: <type>` (if available)
 
 - Error codes
   - `200` Download successful
   - `206` Partial content (Range request)
-  - `400` Missing fileId or public_key header
+  - `400` Missing public key header
   - `401` Invalid or missing token
-  - `403` Access denied to file
-  - `404` File not found
-  - `500` Internal error (storage, reencrypt, or streaming failures)
+  - `403` Access denied or file does not exist
+  - `500` Internal error (storage, reencrypt, or streaming failure)
 
-  Example:
+Example:
 
-  ```bash
-  curl -H "Authorization: Bearer $token" \
-       -H "public_key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
-       https://HOSTNAME/file/EGAF74900000001 \
-       -o downloaded_file.c4gh
-  ```
+```bash
+curl -H "Authorization: Bearer $token" \
+     -H "X-C4GH-Public-Key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
+     https://HOSTNAME/files/EGAF00000000001 \
+     -o downloaded_file.c4gh
+```
 
-  Example with Range header:
+#### `HEAD /files/:fileId/header` and `GET /files/:fileId/header`
 
-  ```bash
-  curl -H "Authorization: Bearer $token" \
-       -H "public_key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
-       -H "Range: bytes=0-1023" \
-       https://HOSTNAME/file/EGAF74900000001
-  ```
+Returns only the Crypt4GH header re-encrypted to the recipient's public key.
+Useful when the client needs to process the header separately. Does not support
+Range requests.
 
-#### `/file`
+#### `HEAD /files/:fileId/content` and `GET /files/:fileId/content`
 
-- accepts `GET` requests with query parameters
-- Downloads a file by dataset and either fileId or filePath
-- Supports HTTP Range requests for partial downloads
+Returns only the encrypted data segments (without the Crypt4GH header).
+Range byte offsets refer to the data segments only. The ETag is stable for a
+given file and independent of the recipient key.
 
-- Query Parameters
-  - `dataset` (required): Dataset stable ID
-  - `fileId` (optional): File stable ID within the dataset
-  - `filePath` (optional): File path within the dataset
-  - Note: Either `fileId` or `filePath` must be provided, but not both
+Example with Range:
 
-- Request Headers: Same as `/file/:fileId`
-- Response Headers: Same as `/file/:fileId`
+```bash
+curl -H "Authorization: Bearer $token" \
+     -H "X-C4GH-Public-Key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
+     -H "Range: bytes=0-65535" \
+     https://HOSTNAME/files/EGAF00000000001/content
+```
 
-- Error codes
-  - `200` Download successful
-  - `206` Partial content (Range request)
-  - `400` Missing required parameters or invalid combination
-  - `401` Invalid or missing token
-  - `403` Access denied to file
-  - `404` File not found
-  - `500` Internal error
+### Error Format
 
-  Example by fileId:
+All error responses use [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457):
 
-  ```bash
-  curl -H "Authorization: Bearer $token" \
-       -H "public_key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
-       "https://HOSTNAME/file?dataset=EGAD74900000101&fileId=EGAF74900000001" \
-       -o downloaded_file.c4gh
-  ```
+```json
+{
+  "type": "about:blank",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "access denied"
+}
+```
 
-  Example by filePath:
-
-  ```bash
-  curl -H "Authorization: Bearer $token" \
-       -H "public_key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
-       "https://HOSTNAME/file?dataset=EGAD74900000101&filePath=data/sample.c4gh" \
-       -o downloaded_file.c4gh
-  ```
+Resource-by-ID endpoints (`/datasets/:datasetId`, `/files/:fileId`) return `403`
+for both "access denied" and "does not exist" to prevent existence leakage.
 
 ## Configuration
 
 The service is configured via YAML config file or environment variables.
+Environment variables use uppercase with underscores replacing dots
+(e.g., `api.host` → `API_HOST`).
 
-### API Server Settings
+Example:
 
-| Variable   | Config Key | Description       | Default   |
-| ---------- | ---------- | ----------------- | --------- |
-| `API_HOST` | `api.host` | Host to bind to   | `0.0.0.0` |
-| `API_PORT` | `api.port` | Port to listen on | `8080`    |
+```yaml
+api:
+  host: "0.0.0.0"
+  port: 8080
+db:
+  host: "postgres"
+  port: 5432
+```
 
-### gRPC Health Check Settings
+### API Server
 
-| Variable      | Config Key    | Description            | Default |
-| ------------- | ------------- | ---------------------- | ------- |
-| `HEALTH_PORT` | `health.port` | gRPC health check port | `8081`  |
+| Variable         | Config Key       | Description                    | Default   |
+|------------------|------------------|--------------------------------|-----------|
+| `API_HOST`       | `api.host`       | Host address to bind to        | `0.0.0.0` |
+| `API_PORT`       | `api.port`       | Port to listen on              | `8080`    |
+| `API_SERVER_CERT`| `api.server-cert`| Path to TLS certificate        |           |
+| `API_SERVER_KEY` | `api.server-key` | Path to TLS private key        |           |
+| `HEALTH_PORT`    | `health.port`    | gRPC health check port         | `8081`    |
 
-### Database Settings
+### Database
 
-| Variable      | Config Key    | Description                    |
-| ------------- | ------------- | ------------------------------ |
-| `DB_HOST`     | `db.host`     | PostgreSQL hostname            |
-| `DB_PORT`     | `db.port`     | PostgreSQL port                |
-| `DB_USER`     | `db.user`     | Database username              |
-| `DB_PASSWORD` | `db.password` | Database password              |
-| `DB_DATABASE` | `db.database` | Database name                  |
-| `DB_SSLMODE`  | `db.sslmode`  | SSL mode (disable/require/etc) |
+| Variable      | Config Key    | Description                                         | Default     |
+|---------------|---------------|-----------------------------------------------------|-------------|
+| `DB_HOST`     | `db.host`     | PostgreSQL hostname                                 | `localhost` |
+| `DB_PORT`     | `db.port`     | PostgreSQL port                                     | `5432`      |
+| `DB_USER`     | `db.user`     | Database username                                   | *required*  |
+| `DB_PASSWORD` | `db.password` | Database password                                   | *required*  |
+| `DB_DATABASE` | `db.database` | Database name                                       | `sda`       |
+| `DB_SSLMODE`  | `db.sslmode`  | SSL mode (disable, allow, prefer, require, verify-ca, verify-full) | `prefer` |
+| `DB_CACERT`   | `db.cacert`   | Path to CA certificate for database TLS             |             |
 
-### JWT/Authentication Settings
+### JWT / Authentication
 
-| Variable             | Config Key           | Description                          |
-| -------------------- | -------------------- | ------------------------------------ |
-| `JWT_PUBKEY_PATH`    | `jwt.pubkey-path`    | Path to directory with public keys   |
-| `JWT_PUBKEY_URL`     | `jwt.pubkey-url`     | JWKS URL for key fetching            |
-| `JWT_ALLOW_ALL_DATA` | `jwt.allow-all-data` | Allow all authenticated users access |
+| Variable             | Config Key           | Description                                      | Default |
+|----------------------|----------------------|--------------------------------------------------|---------|
+| `JWT_PUBKEY_PATH`    | `jwt.pubkey-path`    | Path to directory with PEM public keys           |         |
+| `JWT_PUBKEY_URL`     | `jwt.pubkey-url`     | JWKS URL for key fetching                        |         |
+| `JWT_ALLOW_ALL_DATA` | `jwt.allow-all-data` | Allow all authenticated users access (testing only) | `false` |
+| `AUTH_ALLOW_OPAQUE`  | `auth.allow-opaque`  | Allow opaque tokens via userinfo                 | `true`  |
 
 At least one of `jwt.pubkey-path` or `jwt.pubkey-url` must be configured.
 
-### gRPC Reencrypt Service Settings
+### OIDC
 
-| Variable       | Config Key     | Description                |
-| -------------- | -------------- | -------------------------- |
-| `GRPC_HOST`    | `grpc.host`    | Reencrypt service hostname |
-| `GRPC_PORT`    | `grpc.port`    | Reencrypt service port     |
-| `GRPC_TIMEOUT` | `grpc.timeout` | Request timeout in seconds |
+| Variable        | Config Key      | Description                       | Default |
+|-----------------|-----------------|-----------------------------------|---------|
+| `OIDC_ISSUER`   | `oidc.issuer`   | Expected JWT issuer (optional)    |         |
+| `OIDC_AUDIENCE` | `oidc.audience` | Expected JWT audience (optional)  |         |
 
-### Storage Settings
+### Permission
 
-Storage is configured using the `storage/v2` package. See [storage/v2 README](../../internal/storage/v2/README.md) for details.
+| Variable           | Config Key         | Description                              | Default    |
+|--------------------|--------------------|------------------------------------------|------------|
+| `PERMISSION_MODEL` | `permission.model` | Permission model: ownership, visa, or combined | `combined` |
+
+### GA4GH Visa
+
+| Variable                          | Config Key                       | Description                                    | Default        |
+|-----------------------------------|----------------------------------|------------------------------------------------|----------------|
+| `VISA_ENABLED`                    | `visa.enabled`                   | Enable GA4GH visa support                      | `false`        |
+| `VISA_SOURCE`                     | `visa.source`                    | Visa source: `userinfo` or `token`             | `userinfo`     |
+| `VISA_USERINFO_URL`               | `visa.userinfo-url`              | Userinfo endpoint (discovered from OIDC if not set) |            |
+| `VISA_TRUSTED_ISSUERS_PATH`       | `visa.trusted-issuers-path`      | Path to JSON trusted issuers file              |                |
+| `VISA_ALLOW_INSECURE_JKU`         | `visa.allow-insecure-jku`        | Allow HTTP JKU URLs (testing only)             | `false`        |
+| `VISA_DATASET_ID_MODE`            | `visa.dataset-id-mode`           | Dataset ID mode: `raw` or `suffix`             | `raw`          |
+| `VISA_IDENTITY_MODE`              | `visa.identity.mode`             | Identity binding: `broker-bound`, `strict-sub`, `strict-iss-sub` | `broker-bound` |
+| `VISA_VALIDATE_ASSERTED`          | `visa.validate-asserted`         | Reject visas with future asserted timestamps   | `true`         |
+| `VISA_LIMITS_MAX_VISAS`           | `visa.limits.max-visas`          | Max visas per passport                         | `200`          |
+| `VISA_LIMITS_MAX_JWKS_PER_REQUEST`| `visa.limits.max-jwks-per-request`| Max distinct JWKS fetches per request          | `10`           |
+| `VISA_LIMITS_MAX_VISA_SIZE`       | `visa.limits.max-visa-size`      | Max visa JWT size (bytes)                      | `16384`        |
+| `VISA_CACHE_TOKEN_TTL`            | `visa.cache.token-ttl`           | Token cache TTL (seconds)                      | `3600`         |
+| `VISA_CACHE_JWK_TTL`              | `visa.cache.jwk-ttl`             | JWK cache TTL (seconds)                        | `300`          |
+| `VISA_CACHE_VALIDATION_TTL`       | `visa.cache.validation-ttl`      | Visa validation cache TTL (seconds)            | `120`          |
+| `VISA_CACHE_USERINFO_TTL`         | `visa.cache.userinfo-ttl`        | Userinfo cache TTL (seconds)                   | `60`           |
+
+### gRPC Reencrypt Service
+
+| Variable          | Config Key        | Description                        | Default |
+|-------------------|-------------------|------------------------------------|---------|
+| `GRPC_HOST`       | `grpc.host`       | Reencrypt service hostname         | *required* |
+| `GRPC_PORT`       | `grpc.port`       | Reencrypt service port             | `50051` |
+| `GRPC_TIMEOUT`    | `grpc.timeout`    | Request timeout (seconds)          | `10`    |
+| `GRPC_CACERT`     | `grpc.cacert`     | Path to CA certificate for gRPC TLS |        |
+| `GRPC_CLIENT_CERT`| `grpc.client-cert` | Path to client certificate for mTLS |       |
+| `GRPC_CLIENT_KEY` | `grpc.client-key`  | Path to client key for mTLS        |        |
+
+### Storage
+
+Storage is configured using the `storage/v2` package. The `storage.backend` flag
+(default: `archive`) selects the named storage backend.
 
 Example S3 configuration:
 
@@ -274,80 +433,74 @@ storage:
         bucket_prefix: "archive"
 ```
 
-### Session Settings
+### Session
 
-| Variable             | Config Key           | Description                   |
-| -------------------- | -------------------- | ----------------------------- |
-| `SESSION_EXPIRATION` | `session.expiration` | Session expiration in seconds |
-| `SESSION_SECURE`     | `session.secure`     | Use secure cookies            |
-| `SESSION_HTTP_ONLY`  | `session.http-only`  | HTTP-only cookies             |
-| `SESSION_NAME`       | `session.name`       | Session cookie name           |
+| Variable             | Config Key           | Description                      | Default       |
+|----------------------|----------------------|----------------------------------|---------------|
+| `SESSION_EXPIRATION` | `session.expiration` | Session expiration (seconds)     | `3600`        |
+| `SESSION_DOMAIN`     | `session.domain`     | Cookie domain                    |               |
+| `SESSION_SECURE`     | `session.secure`     | Use secure cookies (HTTPS only)  | `true`        |
+| `SESSION_HTTP_ONLY`  | `session.http-only`  | HTTP-only cookies                | `true`        |
+| `SESSION_NAME`       | `session.name`       | Session cookie name              | `sda_session` |
 
-### Cache Settings
-
-Database query results are cached in-memory to reduce database roundtrips, which is
-particularly beneficial for streaming use cases where the same file metadata may be
-requested multiple times (e.g., HTTP Range requests).
+### Database Cache
 
 | Variable               | Config Key             | Description                         | Default |
-| ---------------------- | ---------------------- | ----------------------------------- | ------- |
+|------------------------|------------------------|-------------------------------------|---------|
 | `CACHE_ENABLED`        | `cache.enabled`        | Enable database query caching       | `true`  |
 | `CACHE_FILE_TTL`       | `cache.file-ttl`       | TTL for file queries (seconds)      | `300`   |
 | `CACHE_PERMISSION_TTL` | `cache.permission-ttl` | TTL for permission checks (seconds) | `120`   |
 | `CACHE_DATASET_TTL`    | `cache.dataset-ttl`    | TTL for dataset queries (seconds)   | `300`   |
 
-The cache uses [ristretto](https://github.com/dgraph-io/ristretto), a high-performance
-concurrent cache. Cached queries include:
+### Pagination
 
-- File lookups by ID and path
-- Permission checks (user-scoped via dataset IDs)
-- Dataset listings and metadata
-- Dataset file listings
+| Variable                  | Config Key              | Description                                      | Default |
+|---------------------------|-------------------------|--------------------------------------------------|---------|
+| `PAGINATION_HMAC_SECRET`  | `pagination.hmac-secret`| HMAC secret for page tokens (must match across replicas) |   |
 
-Cache keys for permission checks are scoped by the user's accessible datasets, ensuring
-that users with different permissions get appropriately cached results.
+If not configured, a random secret is generated at startup. Page tokens will not
+survive restarts or work across replicas without a configured secret.
 
-#### Cache Behavior and Considerations
+### Audit
 
-**Cache Invalidation:** The cache uses time-based expiration (TTL) but does not support
-explicit invalidation. This means:
+| Variable         | Config Key       | Description                               | Default |
+|------------------|------------------|-------------------------------------------|---------|
+| `AUDIT_REQUIRED` | `audit.required` | Require a real audit logger (fail if noop) | `false` |
 
-- If a file's permissions change, the cached permission check will be stale until the
-  TTL expires (default: 2 minutes for permissions, 5 minutes for file/dataset metadata)
-- For most use cases this is acceptable, as permission changes are infrequent
-- If immediate permission revocation is required, the cache can be disabled or the
-  service restarted
+### Application Environment
 
-**Memory Usage:** The ristretto cache is configured with:
+| Variable          | Config Key        | Description                                          | Default |
+|-------------------|-------------------|------------------------------------------------------|---------|
+| `APP_ENVIRONMENT` | `app.environment` | Set to `production` to enable production safety guards |        |
 
-- `MaxCost: 100,000` - Maximum number of items to cache
-- `NumCounters: 1,000,000` - Counters for admission policy
-
-Estimated memory usage:
-
-- Base overhead: ~8 MB for counters
-- Per-item overhead: varies by cached data size
-- Typical total: 50-200 MB depending on active dataset/file counts
-
-For production deployments, monitor memory usage and adjust `MaxCost` if needed. The
-cache automatically evicts least-recently-used items when capacity is reached.
+Production safety guards enforce:
+- `jwt.allow-all-data` must be `false`
+- `pagination.hmac-secret` must be configured
+- `grpc.client-cert` and `grpc.client-key` must be configured
 
 ## Testing
 
-### Integration Tests
-
-Run the standalone Go-based integration tests:
+### Unit Tests
 
 ```bash
-docker compose -f .github/integration/sda-download-integration.yml run integration_test
+cd sda && go test ./cmd/download/...
 ```
 
-Or run as part of the full SDA pipeline:
+Visa-related tests use a build tag:
 
 ```bash
-make integrationtest-sda-s3-run
+cd sda && go test -tags visas -count=1 ./cmd/download/...
+```
+
+### Integration Tests
+
+```bash
+make integrationtest-sda-download-up    # Start test environment
+make integrationtest-sda-download-run   # Run tests
+make integrationtest-sda-download-down  # Tear down
 ```
 
 ### Local Development
 
-See [TESTING.md](TESTING.md) for detailed local testing instructions.
+See [TESTING.md](TESTING.md) for detailed local testing instructions including
+Docker Compose setup, database seeding, and example curl commands.
