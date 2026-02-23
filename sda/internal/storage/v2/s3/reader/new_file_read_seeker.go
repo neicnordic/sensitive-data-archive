@@ -386,7 +386,7 @@ func (r *s3SeekableReader) Read(dst []byte) (n int, err error) {
 	}
 
 	if r.currentOffset < contentRange.start || r.currentOffset > contentRange.end {
-		return 0, fmt.Errorf("unexpected content range %v - expected %v to be witin the content range", *object.ContentRange, r.currentOffset)
+		return 0, fmt.Errorf("unexpected content range %v - expected %v to be within the content range", *object.ContentRange, r.currentOffset)
 	}
 
 	b := bytes.Buffer{}
