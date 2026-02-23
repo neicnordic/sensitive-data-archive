@@ -82,10 +82,18 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 		extraHeaderPackets = append(extraHeaderPackets, dataEditListPacket)
 	}
 
-	reader := bytes.NewReader(publicKey)
-	newReaderPublicKey, err := keys.ReadPublicKey(reader)
-	if err != nil {
-		return nil, status.Error(400, err.Error())
+	var newReaderPublicKey [chacha20poly1305.KeySize]byte
+	if len(publicKey) == chacha20poly1305.KeySize {
+		// Raw 32-byte X25519 key — use directly
+		copy(newReaderPublicKey[:], publicKey)
+	} else {
+		// Legacy: PEM text — pass to crypt4gh key parser
+		reader := bytes.NewReader(publicKey)
+		parsedKey, err := keys.ReadPublicKey(reader)
+		if err != nil {
+			return nil, status.Error(400, err.Error())
+		}
+		newReaderPublicKey = parsedKey
 	}
 	newReaderPublicKeyList := [][chacha20poly1305.KeySize]byte{}
 	newReaderPublicKeyList = append(newReaderPublicKeyList, newReaderPublicKey)

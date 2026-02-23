@@ -1,0 +1,24 @@
+# Codecov configuration
+# Documentation: https://docs.codecov.io/docs/codecovyml-reference
+
+# Files to exclude from coverage reporting
+ignore:
+  # Main entry points - tested via integration tests
+  - "sda/cmd/download/main.go"
+  - "sda/cmd/*/main.go"
+
+  # Configuration files - tested via integration tests
+  - "sda/cmd/download/config/config.go"
+  - "sda/internal/config/v2/config.go"
+
+  # Generated files
+  - "**/*_gen.go"
+  - "**/mocks/**"
+
+  # Test files (already excluded by default, but explicit)
+  - "**/*_test.go"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
