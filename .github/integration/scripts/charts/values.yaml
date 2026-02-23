@@ -78,6 +78,9 @@ global:
     host: "postgres-sda-db"
     user: "postgres"
     password: PLACEHOLDER_VALUE
+    admin:
+      username: "postgres"
+      password: PLACEHOLDER_VALUE
   doa:
     enabled: false
   download:

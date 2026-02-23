@@ -153,6 +153,7 @@ yq -i '
 .global.broker.password = strenv(MQPASSWORD) |
 .global.c4gh.privateKeys[0].passphrase = strenv(C4GHPASSPHRASE) |
 .global.db.password = strenv(PGPASSWORD) |
+.global.db.admin.password = strenv(PGPASSWORD) |
 .global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
 .global.inbox.s3SecretKey = strenv(MINIO_SECRET) |
 .global.s3Inbox.accessKey = strenv(MINIO_ACCESS) |

@@ -202,9 +202,11 @@ global:
     admin:
   # These credentials need at least dbOwner permissions
   # in order to perform schema migrations.
-      secretName: ""
-      passKey: ""
-      userKey: ""
+      secretName: "" # Name of k8s secret which contains the username and password
+      passKey: "" # Name of field in k8s secret which contains the postgres password
+      userKey: "" # Name of field in k8s secret which contains the postgres username
+      username: "postgres" # If secretName is not set will default to this to populate PGUSER used in migration jobs
+      password: "" # If secretName is not set will default to this to populate PGPASSWORD used in migration jobs
     host: ""
     name: "sda"
     user: ""
