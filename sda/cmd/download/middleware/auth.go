@@ -666,7 +666,7 @@ func (sc *SessionCache) Set(key string, value AuthContext, ttl time.Duration) {
 
 // mergeDatasets returns a deduplicated union of two string slices.
 func mergeDatasets(a, b []string) []string {
-	seen := make(map[string]bool, len(a)+len(b))
+	seen := make(map[string]bool, len(a))
 	var result []string
 
 	for _, s := range a {
