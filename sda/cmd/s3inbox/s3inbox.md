@@ -86,7 +86,7 @@ These settings control how verify connects to the RabbitMQ message broker.
 - `S3INBOX_ENDPOINT`: Endpoint to the S3 service including the port (e.g., https://s3.example.com:9000)
 - `S3INBOX_ACCESS_KEY`: The S3 access key (username equivalent), used to authenticate to S3
  [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `S3INBOX_SECRET_KEY`: The S3 access key (username equivalent), used to authenticate to S3
+- `S3INBOX_SECRET_KEY`: The S3 secret key (password equivalent), used to authenticate to S3
  [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
 - `S3INBOX_BUCKET`: The S3 bucket to be used for storage of uploaded files when forwarding upload requests
 - `S3INBOX_REGION`: S3 region
