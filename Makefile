@@ -157,6 +157,52 @@ integrationtest-sda-validator-orchestrator-run:
 integrationtest-sda-validator-orchestrator-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-validator-orchestrator-integration.yml down -v --remove-orphans
 
+# Download v2 integration tests (sda/cmd/download, Go-based)
+integrationtest-sda-cmd-download:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+	@sleep 10
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+
+integrationtest-sda-cmd-download-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
+
+integrationtest-sda-cmd-download-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+
+integrationtest-sda-cmd-download-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+
+# Download benchmark (compares old vs new implementations)
+# Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
+# The benchmark runs in a container with auto-configuration from the environment
+benchmark-download-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml up -d
+
+benchmark-download-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
+
+benchmark-download-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down -v --remove-orphans
+
+# Force cleanup of benchmark resources.
+# NOTE: intentionally scoped to the benchmark compose file; avoid broad name-based container deletes.
+benchmark-download-clean:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down -v --remove-orphans
+
+# Seed only the minimal data needed for benchmarking (uses simpler benchmark-specific script)
+benchmark-download-seed:
+	@echo "Seeding minimal test data for benchmark..."
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml run --rm integration_test /scripts/seed_benchmark_data.sh
+
+benchmark-download: benchmark-download-up
+	@echo "Waiting for services to become healthy (60s)..."
+	@sleep 60
+	@$(MAKE) benchmark-download-seed
+	@echo "Running benchmark..."
+	@$(MAKE) benchmark-download-run
+	@$(MAKE) benchmark-download-down
+
 # lint go code
 lint-all: lint-sda lint-sda-download lint-sda-admin
 lint-sda:
