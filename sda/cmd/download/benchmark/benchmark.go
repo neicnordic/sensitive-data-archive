@@ -29,6 +29,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -150,10 +151,11 @@ func main() {
 		PublicKeyHeader: "Client-Public-Key",
 		BuildURL: func(cfg Config) (string, error) {
 			if cfg.DatasetID == "" || cfg.S3Path == "" {
-				return "", fmt.Errorf("dataset and path are required for old implementation")
+				return "", errors.New("dataset and path are required for old implementation")
 			}
 			ds := url.PathEscape(cfg.DatasetID)
 			p := url.PathEscape(cfg.S3Path)
+
 			return strings.TrimRight(cfg.OldURL, "/") + "/s3/" + ds + "/" + p, nil
 		},
 	}
@@ -163,9 +165,10 @@ func main() {
 		PublicKeyHeader: "X-C4GH-Public-Key",
 		BuildURL: func(cfg Config) (string, error) {
 			if cfg.FileID == "" {
-				return "", fmt.Errorf("file ID is required for new implementation")
+				return "", errors.New("file ID is required for new implementation")
 			}
 			id := url.PathEscape(cfg.FileID)
+
 			return strings.TrimRight(cfg.NewURL, "/") + "/files/" + id, nil
 		},
 	}
@@ -173,7 +176,7 @@ func main() {
 	fmt.Println("=" + strings.Repeat("=", 70))
 	fmt.Println(" Download Service Benchmark")
 	fmt.Println("=" + strings.Repeat("=", 70))
-	fmt.Printf("\nConfiguration:\n")
+	fmt.Println("\nConfiguration:")
 	fmt.Printf("  Iterations:    %d\n", cfg.Iterations)
 	fmt.Printf("  Requests:      %d per iteration\n", cfg.Requests)
 	fmt.Printf("  Concurrency:   %d\n", cfg.Concurrency)
@@ -192,7 +195,7 @@ func main() {
 		Timeout: cfg.Timeout,
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: cfg.Concurrency,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // benchmark tool, not production
 			DisableCompression:  true,
 		},
 	}
@@ -288,7 +291,7 @@ func parseFlags() Config {
 	flag.BoolVar(&cfg.SkipNew, "skip-new", defaults.SkipNew, "Skip benchmarking new implementation")
 	flag.BoolVar(&cfg.OutputJSON, "json", false, "Output results as JSON")
 
-	flag.Parse()
+	flag.Parse() //nolint:revive // deep-exit: called only from main()
 
 	return cfg
 }
@@ -370,7 +373,7 @@ type discoveredFile struct {
 
 func autoDiscoverIfNeeded(cfg *Config) error {
 	if cfg == nil {
-		return fmt.Errorf("nil config")
+		return errors.New("nil config")
 	}
 
 	needNew := !cfg.SkipNew && cfg.FileID == ""
@@ -381,10 +384,10 @@ func autoDiscoverIfNeeded(cfg *Config) error {
 	}
 
 	if cfg.NewURL == "" {
-		return fmt.Errorf("cannot auto-discover without NEW_URL (or -new)")
+		return errors.New("cannot auto-discover without NEW_URL (or -new)")
 	}
 	if cfg.Token == "" {
-		return fmt.Errorf("cannot auto-discover without token")
+		return errors.New("cannot auto-discover without token")
 	}
 
 	caseInfo, err := discoverBenchmarkCase(*cfg)
@@ -417,17 +420,17 @@ type benchmarkCase struct {
 
 func discoverBenchmarkCase(cfg Config) (*benchmarkCase, error) {
 	if cfg.NewURL == "" {
-		return nil, fmt.Errorf("cannot auto-discover without NEW_URL (or -new)")
+		return nil, errors.New("cannot auto-discover without NEW_URL (or -new)")
 	}
 	if cfg.Token == "" {
-		return nil, fmt.Errorf("cannot auto-discover without token")
+		return nil, errors.New("cannot auto-discover without token")
 	}
 	if !cfg.SkipOld {
 		if cfg.OldURL == "" {
-			return nil, fmt.Errorf("cannot auto-discover a comparable file without OLD_URL (or -old)")
+			return nil, errors.New("cannot auto-discover a comparable file without OLD_URL (or -old)")
 		}
 		if cfg.PublicKey == "" {
-			return nil, fmt.Errorf("cannot auto-discover a comparable file without public key")
+			return nil, errors.New("cannot auto-discover a comparable file without public key")
 		}
 	}
 
@@ -435,7 +438,7 @@ func discoverBenchmarkCase(cfg Config) (*benchmarkCase, error) {
 		Timeout: cfg.Timeout,
 		Transport: &http.Transport{
 			DisableCompression: true,
-			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // benchmark tool, not production
 		},
 	}
 
@@ -454,7 +457,7 @@ func discoverBenchmarkCase(cfg Config) (*benchmarkCase, error) {
 		return nil, fmt.Errorf("discover datasets: invalid JSON: %w", err)
 	}
 	if len(datasetsResp.Datasets) == 0 {
-		return nil, fmt.Errorf("discover datasets: no datasets returned (DB likely not seeded yet; run the integration tests to create/map datasets before benchmarking)")
+		return nil, errors.New("discover datasets: no datasets returned (DB likely not seeded yet; run the integration tests to create/map datasets before benchmarking)")
 	}
 
 	// 2) try datasets until we find one that also works against OLD
@@ -507,8 +510,9 @@ func discoverBenchmarkCase(cfg Config) (*benchmarkCase, error) {
 	}
 
 	if cfg.SkipOld {
-		return nil, fmt.Errorf("failed to discover any file from NEW datasets")
+		return nil, errors.New("failed to discover any file from NEW datasets")
 	}
+
 	return nil, fmt.Errorf("no discovered NEW dataset/file was accessible via OLD (last status=%d). This usually means the OLD service authorisation (visas) does not grant access to the datasets returned by the NEW service", lastOldStatus)
 }
 
@@ -531,6 +535,7 @@ func tryOldPreflight(client *http.Client, cfg Config, c *benchmarkCase) (int, er
 	if res.StatusCode >= 400 {
 		return res.StatusCode, fmt.Errorf("old returned %d", res.StatusCode)
 	}
+
 	return res.StatusCode, nil
 }
 
@@ -541,7 +546,7 @@ func doJSONRequest(client *http.Client, urlStr, token string) ([]byte, error) {
 	}
 	req.Header.Set("Authorization", token)
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // benchmark tool, URLs from CLI flags
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +564,7 @@ func deriveOldS3Path(submittedPath string) (string, error) {
 	p := strings.TrimPrefix(submittedPath, "/")
 	p = strings.TrimSpace(p)
 	if p == "" {
-		return "", fmt.Errorf("empty submission path")
+		return "", errors.New("empty submission path")
 	}
 	parts := strings.SplitN(p, "/", 2)
 	if len(parts) == 2 {
@@ -575,45 +580,47 @@ func deriveOldS3Path(submittedPath string) (string, error) {
 	if !strings.HasSuffix(p, ".c4gh") {
 		p += ".c4gh"
 	}
+
 	return p, nil
 }
 
 func validateConfig(cfg Config) error {
 	if cfg.SkipOld && cfg.SkipNew {
-		return fmt.Errorf("cannot skip both old and new implementations")
+		return errors.New("cannot skip both old and new implementations")
 	}
 	if cfg.Token == "" {
-		return fmt.Errorf("-token is required (or set TOKEN or mount /shared/token)")
+		return errors.New("-token is required (or set TOKEN or mount /shared/token)")
 	}
 	if cfg.PublicKey == "" {
-		return fmt.Errorf("-pubkey is required (or set PUBKEY or mount /shared/c4gh.pub.pem)")
+		return errors.New("-pubkey is required (or set PUBKEY or mount /shared/c4gh.pub.pem)")
 	}
 	if !cfg.SkipOld && cfg.OldURL == "" {
-		return fmt.Errorf("-old URL is required (or use -skip-old)")
+		return errors.New("-old URL is required (or use -skip-old)")
 	}
 	if !cfg.SkipNew && cfg.NewURL == "" {
-		return fmt.Errorf("-new URL is required (or use -skip-new)")
+		return errors.New("-new URL is required (or use -skip-new)")
 	}
 	if !cfg.SkipNew && cfg.FileID == "" {
-		return fmt.Errorf("file ID is required for new implementation (use -file or set FILE_ID)")
+		return errors.New("file ID is required for new implementation (use -file or set FILE_ID)")
 	}
 	if !cfg.SkipOld {
 		if cfg.DatasetID == "" {
-			return fmt.Errorf("dataset ID is required for old implementation (use -dataset or set FILE_DATASET)")
+			return errors.New("dataset ID is required for old implementation (use -dataset or set FILE_DATASET)")
 		}
 		if cfg.S3Path == "" {
-			return fmt.Errorf("path is required for old implementation (use -path or set FILE_PATH)")
+			return errors.New("path is required for old implementation (use -path or set FILE_PATH)")
 		}
 	}
 	if cfg.Iterations < 1 {
-		return fmt.Errorf("-iterations must be at least 1")
+		return errors.New("-iterations must be at least 1")
 	}
 	if cfg.Requests < 1 {
-		return fmt.Errorf("-requests must be at least 1")
+		return errors.New("-requests must be at least 1")
 	}
 	if cfg.Concurrency < 1 {
-		return fmt.Errorf("-concurrency must be at least 1")
+		return errors.New("-concurrency must be at least 1")
 	}
+
 	return nil
 }
 
@@ -640,6 +647,7 @@ func preflight(client *http.Client, target Target, cfg Config) error {
 		fmt.Fprintf(os.Stderr, "[warn] %s preflight read %d bytes\n", target.Name, res.Bytes)
 	}
 	fmt.Fprintf(os.Stderr, "[preflight] %s OK (status=%d, bytes=%d)\n", strings.ToUpper(target.Name), res.StatusCode, res.Bytes)
+
 	return nil
 }
 
@@ -692,7 +700,7 @@ func makeRequestWithExtras(client *http.Client, urlStr, token, publicKey, public
 	}
 
 	start := time.Now()
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // benchmark tool, URLs from CLI flags
 	if err != nil {
 		return RequestResult{Duration: time.Since(start), Error: err}
 	}
@@ -725,6 +733,7 @@ func aggregateResults(name string, results []RequestResult, totalTime time.Durat
 
 		if r.Error != nil || r.StatusCode >= 400 {
 			br.Failed++
+
 			continue
 		}
 
@@ -856,6 +865,7 @@ func formatStatusCounts(m map[int]int) string {
 		}
 		parts = append(parts, fmt.Sprintf("%s=%d", label, p.Count))
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -895,11 +905,12 @@ func printSummary(result *ComparisonResult, cfg Config) {
 
 		// Verdict
 		fmt.Println("\n  Verdict:")
-		if rpsChange > 5 {
+		switch {
+		case rpsChange > 5:
 			fmt.Println("    NEW implementation is FASTER")
-		} else if rpsChange < -5 {
+		case rpsChange < -5:
 			fmt.Println("    OLD implementation is FASTER")
-		} else {
+		default:
 			fmt.Println("    Performance is SIMILAR (within 5%)")
 		}
 	}
@@ -925,11 +936,13 @@ func printSummaryStats(s SummaryStats) {
 
 func printChangeIndicator(change float64, higherIsBetter bool) {
 	good := (change > 0) == higherIsBetter
-	if math.Abs(change) < 5 {
+
+	switch {
+	case math.Abs(change) < 5:
 		fmt.Println("(~)")
-	} else if good {
+	case good:
 		fmt.Println("(better)")
-	} else {
+	default:
 		fmt.Println("(worse)")
 	}
 }
