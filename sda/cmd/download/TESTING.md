@@ -12,7 +12,7 @@ The download service has its own Docker Compose-based Go integration tests:
 
 ```bash
 # From repository root
-docker compose -f .github/integration/sda-download-integration.yml run integration_test
+docker compose -f .github/integration/sda-cmd-download-integration.yml run integration_test
 ```
 
 This runs a minimal environment with:
@@ -152,21 +152,21 @@ curl http://localhost:8080/health/ready
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-     http://localhost:8080/info/datasets
+     http://localhost:8080/datasets
 ```
 
 #### Get Dataset Info
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-     "http://localhost:8080/info/dataset?dataset=EGAD74900000101"
+     http://localhost:8080/datasets/EGAD74900000101
 ```
 
 #### List Files in Dataset
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-     "http://localhost:8080/info/dataset/files?dataset=EGAD74900000101"
+     http://localhost:8080/datasets/EGAD74900000101/files
 ```
 
 #### Download a File
@@ -177,15 +177,15 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 # Full file download
 curl -H "Authorization: Bearer $TOKEN" \
-     -H "public_key: $(base64 -w0 mykey.pub.pem)" \
-     http://localhost:8080/file/EGAF74900000001 \
+     -H "X-C4GH-Public-Key: $(base64 -w0 mykey.pub.pem)" \
+     http://localhost:8080/files/EGAF74900000001 \
      -o downloaded_file.c4gh
 
 # Partial download (Range header)
 curl -H "Authorization: Bearer $TOKEN" \
-     -H "public_key: $(base64 -w0 mykey.pub.pem)" \
+     -H "X-C4GH-Public-Key: $(base64 -w0 mykey.pub.pem)" \
      -H "Range: bytes=0-1023" \
-     http://localhost:8080/file/EGAF74900000001
+     http://localhost:8080/files/EGAF74900000001
 ```
 
 ## Database Queries for Debugging
@@ -259,11 +259,11 @@ Check that storage configuration in `dev_config.yaml` matches the running Docker
 
 1. Ensure ls-aai-mock is running: `docker logs ls-aai-mock`
 2. Check JWKS endpoint: `curl http://localhost:8800/oidc/jwk`
-3. Verify token is valid: `curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/info/datasets`
+3. Verify token is valid: `curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/datasets`
 
 ### No Datasets Returned
 
-If `/info/datasets` returns empty:
+If `/datasets` returns empty:
 
 1. Check integration tests completed successfully
 2. Verify files have stable IDs: `SELECT stable_id FROM sda.files WHERE stable_id IS NOT NULL;`
