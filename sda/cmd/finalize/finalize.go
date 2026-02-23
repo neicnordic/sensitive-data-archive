@@ -216,7 +216,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		body, _ := json.Marshal(fileError)
 
 		// Send the message to an error queue so it can be analyzed.
-		if e := mqBroker.SendMessage(fileID, mqBroker.Conf.Exchange, "error", body); e != nil {
+		if err := mqBroker.SendMessage(fileID, mqBroker.Conf.Exchange, "error", body); err != nil {
 			log.Errorf("failed to publish message, reason: %v", err)
 		}
 
@@ -311,7 +311,7 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 		}()
 
 		if copiedSize, err := io.Copy(contentWriter, file); err != nil {
-			_ = contentWriter.CloseWithError(fmt.Errorf("failed to copy file, reason: %v)", err))
+			_ = contentWriter.CloseWithError(fmt.Errorf("failed to copy file, reason: %v", err))
 		} else if copiedSize != archiveData.FileSize {
 			_ = contentWriter.CloseWithError(errors.New("copied size does not match file size"))
 		}
