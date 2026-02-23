@@ -253,6 +253,36 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  # New download service (sda/cmd/download) - feature of this branch
+  download:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    container_name: download
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mock-aai:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - CONFIG_FILE=/config.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "8085:8080"
+      - "8086:8081"
+    restart: always
+    volumes:
+      - ./sda/cmd-download-config.yaml:/config.yaml
+      - shared:/shared
+
   rotatekey:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-rotatekey]
