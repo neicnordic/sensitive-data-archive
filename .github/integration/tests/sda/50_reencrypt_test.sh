@@ -6,6 +6,9 @@ if [ "$STORAGETYPE" = "posix" ]; then
     exit 0
 fi
 
+# Clean up any files from previous test runs
+rm -f reencrypted_file reencrypted_file.c4gh private.key
+
 publickey="LS0tLS1CRUdJTiBDUllQVDRHSCBQVUJMSUMgS0VZLS0tLS0Kejd2K1Iya3BPcXVCT2JpWDVOcWVyU1ByZ1ROM0xaME10NDhKaDgzVWprcz0KLS0tLS1FTkQgQ1JZUFQ0R0ggUFVCTElDIEtFWS0tLS0tCg=="
 privatekey="LS0tLS1CRUdJTiBDUllQVDRHSCBFTkNSWVBURUQgUFJJVkFURSBLRVktLS0tLQpZelJuYUMxMk1RQUdjMk55ZVhCMEFCUUFBQUFBU2hMeXR5YzEyTU14Ky9ETExsTEpCd0FSWTJoaFkyaGhNakJmCmNHOXNlVEV6TURVQVBOZkNkdHBFb01SVldnVm43cGFGbUJSdzBYUGkyMWtpWVRXa0thZnVaaXJYenhVOEJ1VWwKQzRNYlZvNUZxU1lyd3pxd3NDVUpqWUxObHBtMUhBPT0KLS0tLS1FTkQgQ1JZUFQ0R0ggRU5DUllQVEVEIFBSSVZBVEUgS0VZLS0tLS0K"
 
@@ -92,5 +95,8 @@ if [[ ! "$hash" =  223da2f47ada1105def2c5da57dde11bb0bb03a15b43a43370336db38e3c4
 fi
 
 
+
+# Clean up test files
+rm -f reencrypted_file reencrypted_file.c4gh private.key
 
 echo "reencryption test completed successfully"
