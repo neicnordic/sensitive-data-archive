@@ -6,6 +6,10 @@ ignore:
   # Main entry points - tested via integration tests
   - "sda/cmd/*/main.go"
 
+  # Configuration files - tested via integration tests
+  - "sda/cmd/download/config/config.go"
+  - "sda/internal/config/v2/config.go"
+
   # Benchmark CLI tool - tested via integration tests
   - "sda/cmd/download/benchmark/benchmark.go"
 
