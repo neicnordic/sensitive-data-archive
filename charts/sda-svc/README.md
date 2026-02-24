@@ -359,8 +359,11 @@ of the values file.
 
 ### Jobs
 
-`jobs.image` | Container image used for running the DB migration jobs | `postgres:15.4-alpine`
-`jobs.setKeyHash` | Populate the key_hash table after migration from V1 | `false`
-`jobs.upgradeFromV1` | Upgrade database schema from a version 1 release. | `false`
-`jobs.removeUserName` | remove username from file path. | `false`
-`jobs.removeCorrID` | remove correlation ID column from file event log table. | `false`
+| Parameter             | Description                                                                                                                                                  | Default                |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|
+| `jobs.image`          | Container image used for running the DB migration jobs                                                                                                       | `postgres:15.4-alpine` |
+| `jobs.setKeyHash`     | Populate the key_hash table after migration from V1                                                                                                          | `false`                |
+| `jobs.upgradeFromV1`  | Upgrade database schema from a version 1 release.                                                                                                            | `false`                |
+| `jobs.removeUserName` | remove username from file path.                                                                                                                              | `false`                |
+| `jobs.removeCorrID`   | remove correlation ID column from file event log table.                                                                                                      | `false`                |
+| `jobs.tls.secretName` | Secret holding the application TLS certificates, required if `global.tls.enabled` is true, and `global.tls.clusterIssuer` or `global.tls.issuer` are not set | ``                     |

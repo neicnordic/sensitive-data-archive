@@ -51,6 +51,18 @@ spec:
             secretKeyRef:
               name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
               key:  {{ default "username" .Values.global.db.admin.userKey }}
+        {{- if .Values.global.tls.enabled }}
+        - name: PGSSLROOTCERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if eq "verify-full" .Values.global.db.sslMode }}
+        - name: PGSSLKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        - name: PGSSLCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        {{- end }}
+        {{- end }}
+        - name: PGSSLMODE
+          value: {{ ternary .Values.global.db.sslMode "disable" .Values.global.tls.enabled }}
         image: {{ .Values.jobs.image }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
@@ -60,9 +72,27 @@ spec:
           runAsNonRoot: true
           seccompProfile:
             type: "RuntimeDefault"
+        {{- if .Values.global.tls.enabled }}
+        volumeMounts:
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
       restartPolicy: Never
       securityContext:
         runAsUser: 72
         runAsGroup: 72
         fsGroup: 72
+      {{- if .Values.global.tls.enabled }}
+      volumes:
+      - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ template "sda.fullname" . }}-job-certs
+        {{- else }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ required "An certificate issuer or a TLS secret name is required for the jobs" .Values.jobs.tls.secretName }}
+        {{- end }}
+      {{- end }}
 {{- end }}
