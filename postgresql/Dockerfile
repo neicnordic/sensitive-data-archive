@@ -1,13 +1,7 @@
-FROM postgres:15.4-alpine3.17
+FROM postgres:15.16-alpine3.23
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
-
-LABEL org.opencontainers.image.authors="NeIC System Developers"
-LABEL org.label-schema.schema-version="1.0"
-LABEL org.label-schema.build-date=$BUILD_DATE
-LABEL org.label-schema.vcs-url="https://github.com/neicnordic/sensitive-data-archive"
-LABEL org.label-schema.vcs-ref=$SOURCE_COMMIT
 
 COPY initdb.d      /docker-entrypoint-initdb.d
 COPY migratedb.d   /migratedb.d
