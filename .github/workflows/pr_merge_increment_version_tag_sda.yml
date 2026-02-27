@@ -1,0 +1,36 @@
+name: version tag main
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "sda/**"
+      - "sda-download/**"
+      - "sda-validator/orchestrator/**"
+      - "sda-doa/**"
+      - "postgresql/**"
+      - "rabbitmq/**"
+    types: [ closed ]
+
+jobs:
+  tag_release:
+    if: github.event.pull_request.merged == true
+    name: tag version
+    outputs:
+      part: ${{ steps.bump_tag.outputs.part }}
+      tag: ${{ steps.bump_tag.outputs.tag }}
+      new_tag: ${{ steps.bump_tag.outputs.new_tag }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: '0'
+    - name: Bump version and push tag
+      id: bump_tag
+      uses: anothrNick/github-tag-action@1.75.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG_PREFIX: v
+        DEFAULT_BUMP: patch
+        TAG_CONTEXT: branch

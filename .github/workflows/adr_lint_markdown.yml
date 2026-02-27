@@ -5,16 +5,8 @@ on:
   pull_request:
     paths:
       - "docs/decisions/**"
-      - ".github/workflows/lint-markdown.yml"
+      - "adr_lint_markdown.yml"
       - ".markdownlint.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "docs/decisions/**"
-      - ".github/workflows/lint-markdown.yml"
-      - ".markdownlint.yml"
-  workflow_dispatch:
 
 jobs:
   markdownlint:
