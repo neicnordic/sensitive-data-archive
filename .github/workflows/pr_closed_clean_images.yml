@@ -1,0 +1,16 @@
+name: clean image registry
+on:
+  merge_group:
+  pull_request: # We run this in all PRs even if PR didnt build images just to be safe
+    types: [ closed ]
+
+jobs:
+  clean_pr_images_from_registry:
+    name: Cleanup PR docker images from Github Container registry
+    runs-on: ubuntu-latest
+    steps:
+    - name: Delete pull request docker images
+      uses: jenskeiner/ghcr-container-repository-cleanup-action@v1
+      with:
+        include-tags: ^PR${{ github.event.number }}($|[-.].*)
+        token: ${{ secrets.GITHUB_TOKEN }}
