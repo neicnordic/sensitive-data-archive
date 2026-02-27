@@ -229,7 +229,7 @@ rm -rf api/openapi_interface/go/
 ## Build and deploy
 
 The [Dockerfile](Dockerfile) will produce an image containing the sda-validator-orchestrator and only its dependant
-binaries by utilising the [distroless image](gcr.io/distroless/static-debian12.
+binaries by utilising the [distroless image](gcr.io/distroless/static-debian12).
 
 The main dependant binary is [Apptainer](#apptainer) which is described in its section.
 
