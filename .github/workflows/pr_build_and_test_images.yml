@@ -1,0 +1,379 @@
+name: "PR "
+on:
+  pull_request:
+    paths:
+      - "charts/**" # We want to run integration tests if charts are changed, given the chart integration tests
+      - "sda/**"
+      - "sda-download/**"
+      - "sda-validator/orchestrator/**"
+      - "sda-doa/**"
+      - "postgresql/**"
+      - "rabbitmq/**"
+env:
+  PR_NUMBER: ${{ github.event.number }} # Needed by the triggered integration tests to pull image for this PR
+
+jobs:
+  build_images:
+    name: Build ${{ matrix.name }} Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+      security-events: write
+    strategy:
+      matrix:
+        include:
+          - name: "SDA Services"
+            path: "sda"
+            image-tag-suffix: ""
+
+          - name: "Validator Orchestrator"
+            path: "sda-validator/orchestrator"
+            image-tag-suffix: "-validator-orchestrator"
+
+          - name: "Download"
+            path: "sda-download"
+            image-tag-suffix: "-download"
+
+          - name: "Doa"
+            path: "sda-doa"
+            image-tag-suffix: "-doa"
+
+          - name: "PostgresSQL"
+            path: "postgresql"
+            image-tag-suffix: "-postgres"
+
+          - name: "Rabbitmq"
+            path: "rabbitmq"
+            image-tag-suffix: "-rabbitmq"
+
+          - name: "STFP inbox"
+            path: "sda-sftp-inbox"
+            image-tag-suffix: "-sftp-inbox"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Log in to the Github Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.name }} container
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.path }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          labels: |
+            org.opencontainers.image.title=${{ github.repository }}
+            org.opencontainers.image.description=Sensitive Data Archive - ${{ matrix.name }}
+            org.opencontainers.image.authors=NeIC System Developers
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }}$/{{ matrix.path }}
+            org.opencontainers.image.created=${{ github.event.pull_request.updated_at }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner on ${{ matrix.name }} sarif
+        uses: aquasecurity/trivy-action@0.34.2
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: results.sarif
+          severity: "CRITICAL,HIGH"
+
+      # We do this step such that the report in the Github code scanning is more clear for which image a vulnerability originates from
+      - name: Append image info to sarif file
+        run: |
+          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}/" + .' \
+            results.sarif > annotated_results.sarif 
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: annotated_results.sarif
+          category: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+
+      # Only run trivy scan with markdown output and add PR comment if PR changes the relevant file
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            changed:
+              - '${{ matrix.path }}/**'
+
+      - name: Run Trivy vulnerability scanner on ${{ matrix.name }} markdown output
+        if: steps.changes.outputs.changed == 'true'
+        uses: aquasecurity/trivy-action@0.34.2
+        env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          format: template
+          template: '@.github/trivy_report_template_markdown.tpl'
+          output: trivy-results.md
+
+      - name: Generate PR comment
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          echo "## 🔍 Trivy Scan - ${{ matrix.name }} 🔍" > trivy-comment.md
+          cat trivy-results.md >> trivy-comment.md
+
+      - name: Comment PR
+        if: steps.changes.outputs.changed == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ${{ matrix.name }} Trivy results
+          path: trivy-comment.md
+
+  rabbitmq_test_federated:
+    needs:
+      - build_images
+    name: Rabbitmq federated tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Test rabbitmq federation
+        run: docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
+
+  postgres_test:
+    needs:
+      - build_images
+    name: Postgres tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Test postgres
+        run: docker compose -f .github/integration/postgres.yml run tests
+
+  sda_integration_test:
+    name: sda ${{ matrix.storage }} integration tests
+    needs:
+      - build_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        storage: ["posix", "s3"]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Test sensitive-data-archive ${{ matrix.storage }} storage
+        run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
+
+  sda-sync_integration_test:
+    name: sda-sync integration tests
+    needs:
+      - build_images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Test sda-sync
+        run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
+
+  sda-validator-orchestrator_integration_test:
+    name: sda-validator-orchestrator integration tests
+    needs:
+      - build_images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test sda-validator-orchestrator
+        # Given sda-validator-orchestrator needs to run apptainer we need to modify some apparmor restrictions to allow it
+        run: |
+          echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-donotrestrict.conf
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
+
+
+  sda-download_integration_test: # TODO this tests is rebuilding all images, shouldnt be needed
+    needs:
+      - build_images
+    name: sda-download-integration ${{ matrix.storagetype }} integration tests
+    runs-on: ubuntu-latest
+    env:
+      STORAGETYPE: ${{ matrix.storagetype }}
+
+    strategy:
+      matrix:
+        storagetype: [s3, posix, s3notls]
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+
+      - name: Run setup scripts
+        run: |
+          cd sda-download
+          ls -1 .github/integration/setup/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing setup script $runscript";
+            bash -x "$runscript";
+          done
+
+      - name: Run tests
+        run: |
+          cd sda-download
+          ls -1 .github/integration/tests/{common,${{ matrix.storagetype }}}/*.sh 2>/dev/null | sort -t/ -k5 -n | while read -r runscript; do
+            echo "Executing test script $runscript";
+            bash -x "$runscript";
+          done
+
+  sda-doa_integration_test:
+    name: sda-doa ${{ matrix.storage }} integration tests
+    needs:
+      - build_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        storage: [s3, posix]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Test sda-doa ${{ matrix.storage }} storage
+        run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
+
+  sftp-inbox_integration_test: # TODO this tests is rebuilding stfp-inbox image, shouldnt be needed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build image
+        run: |
+          cd sda-sftp-inbox
+          docker build -t neicnordic/sda-inbox-sftp:latest .
+
+      - name: Start Services
+        run: |
+          cd sda-sftp-inbox/dev_utils
+          bash ./make_certs.sh
+          docker compose up certfixer
+          docker compose up -d
+          sleep 20
+
+      - name: Run test for sftp ssh connection
+        run: |
+          cd sda-sftp-inbox
+          chmod 700 src/test/resources/id_ed25519
+          sh ./dev_utils/sftp-testing-ssh.sh
+
+      - name: Run test for sftp with password
+        run: |
+          cd sda-sftp-inbox
+          sudo apt-get install expect -y
+          sh ./dev_utils/sftp-testing-pass.sh
+
+  chart_tests:
+    needs:
+      - build_images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        deployment: ["federated", "isolated"]
+        version: ["1.32", "1.33"]
+        tls: ["true", "false"]
+        storage: ["posix", "s3"]
+        exclude:
+          - version: "1.32"
+            tls: "false"
+            storage: "posix"
+          - version: "1.33"
+            tls: "false"
+            storage: "posix"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Initialise k3d
+        id: initK3D
+        run: bash .github/integration/scripts/charts/k3d.sh ${{matrix.version}}
+        shell: bash
+      - name: debug
+        if: steps.initK3D.outcome == 'failure'
+        run: k3d version list k3s | grep ${{matrix.version}}
+        shell: bash
+
+      - name: Deploy external services
+        run: bash .github/integration/scripts/charts/dependencies.sh ${{matrix.deployment}} ${{matrix.storage}}
+        shell: bash
+
+      - name: Deploy DB
+        id: deployDB
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }} ${{matrix.tls}}
+      - name: debug
+        if: failure() && steps.deployDB.outcome == 'failure'
+        run: |
+          kubectl describe pod postgres-sda-db-0
+          sleep 1
+          kubectl logs postgres-sda-db-0
+
+      - name: Deploy MQ
+        id: deployMQ
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}} ${{matrix.deployment}}
+        shell: bash
+      - name: debug
+        if: failure() && steps.deployMQ.outcome == 'failure'
+        run: |
+          kubectl describe pod broker-sda-mq-0
+          sleep 1
+          kubectl logs broker-sda-mq-0
+
+      - name: Deploy pipeline
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}} ${{matrix.deployment}}
+        shell: bash
+
+      - name: Check deployment
+        run: |
+          sleep 30
+          for n in api auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
+            if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
+              continue
+            fi
+            if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
+              echo "$n is not ready after 30s, exiting"
+              exit 1
+            fi
+          done
+
+      - name: test
+        if: always()
+        run: |
+          kubectl get pods
+          sleep 1
+          for svc in api auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
+            echo "## describe $svc" && kubectl describe pod -l role="$svc"
+            sleep 1
+            echo "## logs $svc" && kubectl logs -l role="$svc"
+            sleep 1
+          done
+          if [ ${{matrix.deployment}} == "federated" ]; then
+            echo "## describe intercept" && kubectl describe pod -l role=intercept
+            sleep 1
+            echo "## logs intercept" && kubectl logs -l role=intercept
+            sleep 1
+          fi
+        shell: bash
