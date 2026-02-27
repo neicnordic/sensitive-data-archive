@@ -32,6 +32,12 @@ updates:
     open-pull-requests-limit: 10
 
   - package-ecosystem: docker
+    directory: "/sda-validator-orchestrator"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: docker
     directory: "/sda-sftp-inbox"
     schedule:
       interval: weekly
@@ -52,6 +58,17 @@ updates:
 
   - package-ecosystem: gomod
     directory: "/sda-download"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: "/sda-validator/orchestrator"
     groups:
       all-modules:
         patterns:
