@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.0.3</version>
         <relativePath/>
     </parent>
     <groupId>no.uio.ifi</groupId>
@@ -109,7 +109,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>crypt4gh</artifactId>
-            <version>3.0.42</version>
+            <version>3.0.47</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -120,7 +120,7 @@
         <dependency>
             <groupId>no.elixir</groupId>
             <artifactId>clearinghouse</artifactId>
-            <version>3.0.16</version>
+            <version>3.0.19</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -131,7 +131,7 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>2.5</version>
+            <version>2.6</version>
         </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
