@@ -1,6 +1,7 @@
 name: clean image registry
 on:
-  merge_group:
+  schedule:
+    - cron: '0 8 * * *'  # Run daily at 08:00 UTC
   pull_request: # We run this in all PRs even if PR didnt build images just to be safe
     types: [ closed ]
 
@@ -8,9 +9,70 @@ jobs:
   clean_pr_images_from_registry:
     name: Cleanup PR docker images from Github Container registry
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-    - name: Delete pull request docker images
-      uses: jenskeiner/ghcr-container-repository-cleanup-action@v1
-      with:
-        include-tags: ^PR${{ github.event.number }}($|[-.].*)
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get all container versions
+        run: |
+          gh api -H "Accept: application/vnd.github+json" /orgs/neicnordic/packages/container/sensitive-data-archive/versions --paginate > all_container_versions
+
+      # Get containers built tagged by the PR number if the container does not have a semantic version tag(which should not be possible by the workflow but check is there for safety)
+      - name: Filter container versions from PR
+        if: ${{ github.event.number != '' }}
+        run: |
+          # (use jq to find the container versions which have do not have semantic version tag)
+          PR_TAG_REGEX="^PR${{ github.event.number }}(-[A-Za-z0-9_-]+)?$"
+          cat all_container_versions | jq -r --arg tag "$PR_TAG_REGEX" --arg sem_ver '^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' '
+            .[] |
+            select(.metadata.container.tags != null) |
+            select([.metadata.container.tags[] | test($tag)] | any) |
+            select(
+            [ .metadata.container.tags[] | test($sem_ver) ] | any | not
+            ) |
+            "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"
+          ' > filtered_containers_versions
+
+      # Get containers which has tags but no semantic version tag, which was last updated 30 days ago
+      - name: Filter container versions from cronjob, which has tags but no semantic version tags and is older than 30 days
+        if: ${{ github.event.number == '' }}
+        run: |
+          cat all_container_versions | jq -r --argjson now "$(date +%s)" --arg sem_ver '^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' '
+            .[] |
+            # parse updated_at timestamp
+            (.updated_at | sub("Z$"; "") | sub("\\s+$"; "") | strptime("%Y-%m-%dT%H:%M:%S") | mktime) as $updated_ts |
+            select(
+            # Has no semver tags
+            ([ .metadata.container.tags[] | test($sem_ver)] | any | not)
+            and
+            ((.metadata.container.tags // []) | length > 0)
+            and
+            # older than threshold
+            ((($now - $updated_ts) / 86400) > 30)
+            ) |
+            "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"
+          ' > filtered_containers_versions
+
+      # Always delete all untagged container versions, as no point to keep them since no tags
+      - name: Filter all untagged container versions
+        run: |
+          cat all_container_versions | jq -r '    
+            .[] |
+            select((.metadata.container.tags // []) | length == 0) |
+            "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"
+          ' >> filtered_containers_versions
+
+      - name: Delete container versions
+        run: |
+          while read -r id date tags; do
+            echo "Deleting id: $id, last updated at: $date (tags: $tags)"
+
+            gh api \
+             -X DELETE \
+             -H "Accept: application/vnd.github+json" \
+             /orgs/${{ github.repository_owner }}/packages/container/$(echo ${{ github.repository }} | cut -d "/" -f 2)/versions/$id
+
+          done < filtered_containers_versions
+
+
