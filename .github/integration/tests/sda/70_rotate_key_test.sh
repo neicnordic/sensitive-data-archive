@@ -22,7 +22,7 @@ checkErrors() {
 
 checkConsumers() {
     RETRY_TIMES=0
-    until [ "$(curl -su guest:guest http://localhost:15672/api/consumers | jq '.[].queue.name' | grep -c "$1")" -eq "$2" ]; do
+    until [ "$(curl -su guest:guest http://rabbitmq:15672/api/consumers | jq '.[].queue.name' | grep -c "$1")" -eq "$2" ]; do
         echo "waiting for $1 consumer status"
         RETRY_TIMES=$((RETRY_TIMES + 1))
         if [ "$RETRY_TIMES" -eq 30 ]; then
