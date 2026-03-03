@@ -1409,10 +1409,17 @@ func (m *mockBackend) NewFileReader(_ context.Context, _, _ string) (io.ReadClos
 	return io.NopCloser(bytes.NewReader(m.file)), nil
 }
 
-func (m *mockBackend) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
+func (m *mockBackend) NewFileReadSeeker(_ context.Context, _, _ string) (io.ReadSeekCloser, error) {
 	return mockReedSeekCloser{
 		ReadSeeker: io.ReadSeeker(bytes.NewReader(m.file)),
+		Closer:     &mockCloser{},
 	}, nil
+}
+
+type mockCloser struct{}
+
+func (mc *mockCloser) Close() error {
+	return nil
 }
 
 func (m *mockBackend) FindFile(ctx context.Context, filePath string) (string, error) {

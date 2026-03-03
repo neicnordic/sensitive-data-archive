@@ -326,19 +326,23 @@ func Download(c *gin.Context) {
 	}
 
 	// Get archive file handle
-	var file io.Reader
+	var file io.ReadCloser
 	if wholeFile {
 		file, err = ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	} else {
 		file, err = ArchiveReader.NewFileReadSeeker(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	}
-
 	if err != nil {
 		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
 		c.String(http.StatusInternalServerError, "archive error")
 
 		return
 	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Warnf("failed to close file reader to: %s, location: %s, error: %v", fileDetails.ArchivePath, fileDetails.ArchiveLocation, err)
+		}
+	}()
 
 	c.Header("Content-Type", "application/octet-stream")
 	if c.GetBool("S3") {
