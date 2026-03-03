@@ -109,4 +109,11 @@ func (h *Handlers) RegisterRoutes(r *gin.Engine) {
 		files.HEAD("/:fileId/content", h.HeadFileContent)
 		files.GET("/:fileId/content", h.GetFileContent)
 	}
+
+	// DRS objects (auth required)
+	objects := r.Group("/objects")
+	objects.Use(middleware.TokenMiddleware(h.db, h.visaValidator, h.auditLogger))
+	{
+		objects.GET("/*path", h.GetDrsObject)
+	}
 }

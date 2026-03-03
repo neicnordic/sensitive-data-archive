@@ -156,6 +156,7 @@ func TestRoutes_AuthRequired(t *testing.T) {
 		{http.MethodHead, "/files/test-file-id/header"},
 		{http.MethodGet, "/files/test-file-id/content"},
 		{http.MethodHead, "/files/test-file-id/content"},
+		{http.MethodGet, "/objects/test-dataset/test-file.c4gh"},
 	}
 
 	for _, p := range paths {
