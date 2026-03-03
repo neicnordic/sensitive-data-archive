@@ -1,14 +1,11 @@
-FROM "golang:${GOLANG_VERSION:-1.24}-bullseye" AS Build
-ENV GO111MODULE=on
-ENV GOPATH=$PWD
+FROM "golang:${GOLANG_VERSION:-1.25}-trixie" AS Build
 ENV CGO_ENABLED=0
-ENV GOOS=linux
 
 COPY . .
 SHELL ["bash", "-c"]
 RUN set -ex; for p in cmd/*; do go build -buildvcs=false -o "${p/cmd\//sda-}" "./$p"; done
 
-FROM debian:bullseye-slim AS Debug
+FROM debian:trixie-slim AS Debug
 
 ARG SOURCE_COMMIT
 
@@ -24,7 +21,7 @@ COPY --from=Build /go/schemas /schemas
 
 USER 65534
 
-FROM gcr.io/distroless/static-debian11
+FROM gcr.io/distroless/static-debian13
 
 ARG SOURCE_COMMIT
 

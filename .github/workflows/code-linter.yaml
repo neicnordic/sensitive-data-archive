@@ -8,7 +8,7 @@ on:
       - '**/go.*'
 
 env:
-  go-version: '1.24'
+  go-version: '1.25'
   go-version-validator-orchestrator: '1.25'
 
 jobs:

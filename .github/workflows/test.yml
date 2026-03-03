@@ -5,7 +5,7 @@ on:
     branches-ignore: [main]
 
 env:
-  go-version: '1.24'
+  go-version: '1.25'
   go-version-validator-orchestrator: '1.25'
 
 jobs:
@@ -50,11 +50,7 @@ jobs:
       - name: Get dependencies
         run: |
           cd sda-download
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
+          go get -v -t ./...
       - name: Test
         run: |
           cd sda-download
@@ -85,11 +81,7 @@ jobs:
       - name: Get dependencies
         run: |
           cd sda
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
+          go get -v -t ./...
       - name: Test
         run: |
           cd sda
@@ -108,10 +100,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
@@ -120,11 +112,7 @@ jobs:
       - name: Get dependencies
         run: |
           cd sda-admin
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
+          go get -v -t ./...
       - name: Test
         run: |
           cd sda-admin
@@ -155,11 +143,7 @@ jobs:
       - name: Get dependencies
         run: |
           cd ./sda-validator/orchestrator
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
+          go get -v -t ./...
       - name: Test
         run: |
           cd ./sda-validator/orchestrator

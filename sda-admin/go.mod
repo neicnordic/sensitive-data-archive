@@ -1,6 +1,6 @@
 module github.com/neicnordic/sensitive-data-archive/sda-admin
 
-go 1.24.0
+go 1.25.7
 
 require (
 	github.com/neicnordic/crypt4gh v1.12.0
