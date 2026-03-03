@@ -30,8 +30,9 @@ spec:
           - "/bin/sh"
           - "-c"
           - |
+            set -e
             pg_isready
-            psql -At -c "SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '')" | grep -q 0 && exit 0 || (echo "There exists rows with unset submission or archive location, can not proceed with deployment" && exit 1)
+            psql -At -c "SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '')" | grep -qx '0' && exit 0 || (echo "There exists rows with unset submission or archive location, can not proceed with deployment" && exit 1)
         env:
         - name: PGDATABASE
           value: {{ .Values.global.db.name }}
