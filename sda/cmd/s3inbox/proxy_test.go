@@ -507,7 +507,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 	c, _ := json.Marshal(msg.Checksum[0])
 	checksum := Checksum{}
 	_ = json.Unmarshal(c, &checksum)
-	assert.Equal(s.T(), "sha256", checksum.Type)
+	assert.Equal(s.T(), "md5", checksum.Type)
 	assert.Equal(s.T(), "0a44282bd39178db9680f24813c41aec-1", checksum.Value)
 
 	// Test single shot upload

@@ -524,7 +524,7 @@ func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anon
 	event.Filepath = anonymizedFilepath
 
 	event.Username = claims.Subject()
-	checksum.Type = "sha256"
+	checksum.Type = "md5"
 	event.Checksum = []any{checksum}
 	privateClaims := claims.PrivateClaims()
 	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
