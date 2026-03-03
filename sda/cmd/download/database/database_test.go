@@ -247,10 +247,10 @@ func TestGetFileByID(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("file-1").
@@ -274,7 +274,7 @@ func TestGetFileByID_NotFound(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	})
 
 	mock.ExpectQuery(queries[getFileByIDQuery]).
@@ -297,10 +297,10 @@ func TestGetFileByID_HeaderTooSmall(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("file-1").
@@ -323,10 +323,10 @@ func TestGetFileByID_InvalidHexHeader(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByIDQuery]).
 		WithArgs("file-1").
@@ -350,10 +350,10 @@ func TestGetFileByPath(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByPathQuery]).
 		WithArgs("dataset-1", "/path/to/file.txt").
@@ -378,10 +378,10 @@ func TestGetFileByPath_HeaderTooSmall(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByPathQuery]).
 		WithArgs("dataset-1", "/path/to/file.txt").
@@ -404,10 +404,10 @@ func TestGetFileByPath_InvalidHexHeader(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
 		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"decrypted_file_checksum_type", "header", "created_at",
 	}).
 		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive",
-			int64(1024), int64(900), "abc123", "SHA256", headerHex)
+			int64(1024), int64(900), "abc123", "SHA256", headerHex, time.Now())
 
 	mock.ExpectQuery(queries[getFileByPathQuery]).
 		WithArgs("dataset-1", "/path/to/file.txt").
@@ -558,8 +558,8 @@ func TestGetFileByPath_NotFound(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
-		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
-		"decrypted_file_checksum_type", "header",
+		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum",
+		"decrypted_file_checksum_type", "header", "created_at",
 	})
 
 	mock.ExpectQuery(queries[getFileByPathQuery]).
