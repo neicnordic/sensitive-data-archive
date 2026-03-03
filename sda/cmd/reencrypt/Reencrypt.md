@@ -54,6 +54,11 @@ These settings control which crypt4gh keyfile is loaded.
   - `fatal`
   - `panic`
 
+### GRPC server settings
+
+- `GRPC_HOST`: hostname or IP the gRPC server will listen on (default: `0.0.0.0`)
+- `GRPC_PORT`: port the gRPC server will listen on (default: `50051`, changes to `50443` when TLS is enabled)
+
 ### TLS settings
 
 - `GRPC_CACERT`: Certificate Authority (CA) certificate for validating incoming request

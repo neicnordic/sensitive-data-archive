@@ -55,7 +55,7 @@ This setting controls which crypt4gh keyfile is loaded.
 
 ### RabbitMQ broker settings
 
-These settings control how sync connects to the RabbitMQ message broker.
+These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
 - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
@@ -63,6 +63,7 @@ These settings control how sync connects to the RabbitMQ message broker.
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
 - `BROKER_ROUTINGKEY`: routing from a rabbitmq exchange to the rotatekey queue
+- `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to `2`)
 
 ### PostgreSQL Database settings
 

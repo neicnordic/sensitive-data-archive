@@ -23,3 +23,4 @@ There are also additional support services:
 4. [s3inbox](cmd/s3inbox/s3inbox.md) proxies uploads to the an S3 compatible storage backend.
 5. [sync](cmd/sync/sync.md) mirrors ingested data between sites in the [Bigpicture](https://bigpicture.eu/) project.
 6. [syncapi](cmd/syncapi/syncapi.md) is used in the [Bigpicture](https://bigpicture.eu/) project for mirroring data between two installations of SDA.
+7. [RotateKey](cmd/rotatekey/rotatekey.md) re-encrypts file headers with a configured target key.
