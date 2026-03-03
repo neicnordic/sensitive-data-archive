@@ -90,19 +90,27 @@ spec:
         - name: PGHOST
           value: {{ .Values.global.db.host }}
         - name: PGPASSWORD
+          {{- if .Values.global.db.admin.secretName }}
           valueFrom:
             secretKeyRef:
               name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
               key:  {{ default "password" .Values.global.db.admin.passKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.password }}
+          {{- end }}
         {{- if .Values.global.db.port }}
         - name: PGPORT
           value: {{ .Values.global.db.port | quote }}
         {{- end }}
         - name: PGUSER
+          {{- if .Values.global.db.admin.secretName }}
           valueFrom:
             secretKeyRef:
-              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              name: {{ .Values.global.db.admin.secretName }}
               key:  {{ default "username" .Values.global.db.admin.userKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.username }}
+          {{- end }}
         {{- if .Values.global.tls.enabled }}
         - name: PGSSLROOTCERT
           value: {{ template "tlsPath" . }}/ca.crt
