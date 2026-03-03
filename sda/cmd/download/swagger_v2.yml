@@ -64,6 +64,8 @@ tags:
     description: File metadata and download operations.
   - name: Health
     description: Service health endpoints.
+  - name: DRS
+    description: GA4GH Data Repository Service (DRS) 1.5 compatible endpoints.
 
 paths:
   /service-info:
@@ -632,6 +634,71 @@ paths:
             # 3) Concatenate into a valid Crypt4GH file
             cat header.bin content.bin > file.c4gh
 
+  /objects/{path}:
+    get:
+      operationId: getDrsObject
+      summary: Resolve a dataset file to a DRS 1.5 object
+      description: |
+        Resolves a `{datasetId}/{filePath}` to a minimal GA4GH DRS 1.5 `DrsObject`
+        with a pre-resolved `access_url` pointing to the file content endpoint.
+
+        This endpoint enables htsget-rs and other DRS-aware clients to discover
+        download URLs without knowing the internal file ID.
+
+        The `{path}` parameter is composite: `{datasetId}/{filePath}`,
+        e.g. `EGAD00001000001/samples/sample1.bam.c4gh`. Everything before the
+        first `/` is the dataset ID; everything after is the file path.
+
+        **Note:** Some OpenAPI code generators may not handle slash-containing
+        path parameters. Clients should URL-encode slashes in filePath segments
+        if their HTTP library requires it. The server accepts both encoded and
+        unencoded paths (`UseRawPath` is enabled).
+      tags:
+        - DRS
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: |
+            Composite path: `{datasetId}/{filePath}`. Everything before the first `/`
+            is the dataset ID; everything after is the file path within the dataset.
+          schema:
+            type: string
+          example: "EGAD00001000001/samples/controls/sample1.bam.c4gh"
+      responses:
+        '200':
+          description: DRS object with resolved access URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrsObject'
+        '400':
+          description: Malformed path (missing dataset or file component)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Access denied (also returned when the resource does not exist)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /health/ready:
     get:
       tags: [Health]
@@ -875,6 +942,76 @@ components:
             grpc: ok
             storage: ok
       required: [status]
+
+    DrsObject:
+      type: object
+      description: Minimal GA4GH DRS 1.5 object response.
+      required:
+        - id
+        - self_uri
+        - size
+        - created_time
+        - checksums
+        - access_methods
+      properties:
+        id:
+          type: string
+          description: DRS object identifier (file stable ID).
+          example: "urn:neic:001-002-003"
+        self_uri:
+          type: string
+          description: Self-referential DRS URI.
+          example: "drs://download.example.org/urn:neic:001-002-003"
+        size:
+          type: integer
+          format: int64
+          description: Decrypted file size in bytes.
+        created_time:
+          type: string
+          format: date-time
+          description: File creation timestamp (RFC 3339).
+          example: "2026-01-15T10:30:00Z"
+        checksums:
+          type: array
+          items:
+            $ref: '#/components/schemas/DrsChecksum'
+        access_methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/DrsAccessMethod'
+    DrsChecksum:
+      type: object
+      required:
+        - checksum
+        - type
+      properties:
+        checksum:
+          type: string
+          description: Checksum value.
+        type:
+          type: string
+          description: Checksum algorithm (e.g. "sha-256", "md5").
+    DrsAccessMethod:
+      type: object
+      required:
+        - type
+        - access_url
+      properties:
+        type:
+          type: string
+          description: Access type (always "https").
+          example: "https"
+        access_url:
+          $ref: '#/components/schemas/DrsAccessURL'
+    DrsAccessURL:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          description: Pre-resolved download URL for the file content.
+          example: "https://download.example.org/files/urn:neic:001-002-003/content"
 
   parameters:
     DatasetIdPath:
