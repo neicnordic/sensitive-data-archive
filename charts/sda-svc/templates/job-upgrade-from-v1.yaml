@@ -3,6 +3,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: upgrade-from-v1
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-6" # Hook weight is just one lower than job using config map to ensure it's applied before job
+    helm.sh/hook-delete-policy: hook-succeeded
 data:
   upgrade-from-v1.sql: |
     DO
