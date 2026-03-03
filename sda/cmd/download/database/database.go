@@ -117,7 +117,8 @@ var queries = map[string]string{
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
 			c.type as decrypted_checksum_type,
-			f.header
+			f.header,
+			f.created_at
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
@@ -135,7 +136,8 @@ var queries = map[string]string{
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
 			c.type as decrypted_checksum_type,
-			f.header
+			f.header,
+			f.created_at
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
@@ -270,6 +272,7 @@ type File struct {
 	DecryptedChecksum     string     `json:"decryptedChecksum"`
 	DecryptedChecksumType string     `json:"decryptedChecksumType"`
 	Header                []byte     `json:"-"`
+	CreatedAt             time.Time  `json:"-"`
 	Checksums             []Checksum `json:"checksums,omitempty"` // Aggregated checksums (from paginated queries)
 }
 
@@ -546,6 +549,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 		&decryptedChecksum,
 		&decryptedChecksumType,
 		&headerHex,
+		&f.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -604,6 +608,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 		&decryptedChecksum,
 		&decryptedChecksumType,
 		&headerHex,
+		&f.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
