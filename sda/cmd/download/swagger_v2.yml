@@ -965,7 +965,7 @@ components:
         size:
           type: integer
           format: int64
-          description: Decrypted file size in bytes.
+          description: Encrypted blob size in bytes (size of the data served by access_url).
         created_time:
           type: string
           format: date-time
@@ -973,10 +973,13 @@ components:
           example: "2026-01-15T10:30:00Z"
         checksums:
           type: array
+          minItems: 1
+          description: Checksums computed over the encrypted blob bytes.
           items:
             $ref: '#/components/schemas/DrsChecksum'
         access_methods:
           type: array
+          minItems: 1
           items:
             $ref: '#/components/schemas/DrsAccessMethod'
     DrsChecksum:

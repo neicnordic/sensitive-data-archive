@@ -673,6 +673,10 @@ func (m *mockTestDatabase) CheckDatasetExists(_ context.Context, _ string) (bool
 	return false, nil
 }
 
+func (m *mockTestDatabase) GetFileChecksums(_ context.Context, _ string, _ string) ([]Checksum, error) {
+	return nil, nil
+}
+
 func (m *mockTestDatabase) GetDatasetFilesPaginated(_ context.Context, _ string, _ FileListOptions) ([]File, error) {
 	return nil, nil
 }

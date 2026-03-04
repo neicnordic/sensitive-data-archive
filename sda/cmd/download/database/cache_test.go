@@ -103,6 +103,15 @@ func (m *MockDatabase) CheckDatasetExists(ctx context.Context, datasetID string)
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockDatabase) GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
+	args := m.Called(ctx, fileID, source)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]Checksum), args.Error(1)
+}
+
 func (m *MockDatabase) GetDatasetFilesPaginated(ctx context.Context, datasetID string, opts FileListOptions) ([]File, error) {
 	args := m.Called(ctx, datasetID, opts)
 	if args.Get(0) == nil {

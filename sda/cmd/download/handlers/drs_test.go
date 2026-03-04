@@ -40,14 +40,14 @@ func TestGetDrsObject_Success(t *testing.T) {
 	router := setupTestRouterWithAuth([]string{"EGAD00001000001"})
 	mockDB := &mockDatabase{
 		fileByPath: &database.File{
-			ID:                    "urn:neic:001-002-003",
-			DatasetID:             "EGAD00001000001",
-			SubmittedPath:         "samples/controls/sample1.bam.c4gh",
-			DecryptedSize:         1048576,
-			DecryptedChecksum:     "a1b2c3d4",
-			DecryptedChecksumType: "SHA256",
-			CreatedAt:             time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
+			ID:            "urn:neic:001-002-003",
+			DatasetID:     "EGAD00001000001",
+			SubmittedPath: "samples/controls/sample1.bam.c4gh",
+			ArchiveSize:   2097152,
+			DecryptedSize: 1048576,
+			CreatedAt:     time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
 		},
+		fileChecksums: []database.Checksum{{Type: "SHA256", Checksum: "a1b2c3d4"}},
 	}
 	h, err := New(WithDatabase(mockDB))
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestGetDrsObject_Success(t *testing.T) {
 
 	assert.Equal(t, "urn:neic:001-002-003", resp.ID)
 	assert.Equal(t, "drs://download.example.org/urn:neic:001-002-003", resp.SelfURI)
-	assert.Equal(t, int64(1048576), resp.Size)
+	assert.Equal(t, int64(2097152), resp.Size)
 	assert.Equal(t, "2026-01-15T10:30:00Z", resp.CreatedTime)
 
 	require.Len(t, resp.Checksums, 1)
@@ -192,13 +192,13 @@ func TestGetDrsObject_NoChecksum_EmptyArray(t *testing.T) {
 	router := setupTestRouterWithAuth([]string{"EGAD00001000001"})
 	mockDB := &mockDatabase{
 		fileByPath: &database.File{
-			ID:                "urn:neic:001-002-003",
-			DatasetID:         "EGAD00001000001",
-			SubmittedPath:     "file.bam",
-			DecryptedSize:     512,
-			DecryptedChecksum: "",
-			CreatedAt:         time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
+			ID:            "urn:neic:001-002-003",
+			DatasetID:     "EGAD00001000001",
+			SubmittedPath: "file.bam",
+			DecryptedSize: 512,
+			CreatedAt:     time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
 		},
+		fileChecksums: []database.Checksum{},
 	}
 	h, err := New(WithDatabase(mockDB))
 	require.NoError(t, err)
@@ -220,6 +220,46 @@ func TestGetDrsObject_NoChecksum_EmptyArray(t *testing.T) {
 	assert.Equal(t, "[]", string(raw["checksums"]))
 }
 
+func TestGetDrsObject_MultipleChecksums(t *testing.T) {
+	router := setupTestRouterWithAuth([]string{"EGAD00001000001"})
+	mockDB := &mockDatabase{
+		fileByPath: &database.File{
+			ID:            "urn:neic:001-002-003",
+			DatasetID:     "EGAD00001000001",
+			SubmittedPath: "file.bam",
+			ArchiveSize:   4096,
+			DecryptedSize: 2048,
+			CreatedAt:     time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
+		},
+		fileChecksums: []database.Checksum{
+			{Type: "SHA256", Checksum: "abc"},
+			{Type: "MD5", Checksum: "def"},
+		},
+	}
+	h, err := New(WithDatabase(mockDB))
+	require.NoError(t, err)
+
+	router.GET("/objects/*path", h.GetDrsObject)
+
+	req, _ := http.NewRequest(http.MethodGet, "/objects/EGAD00001000001/file.bam", nil)
+	req.Host = "download.example.org"
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp drsObjectResponse
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	require.Len(t, resp.Checksums, 2)
+	assert.Equal(t, "sha-256", resp.Checksums[0].Type)
+	assert.Equal(t, "abc", resp.Checksums[0].Checksum)
+	assert.Equal(t, "md5", resp.Checksums[1].Type)
+	assert.Equal(t, "def", resp.Checksums[1].Checksum)
+}
+
 func TestDrsChecksumType(t *testing.T) {
 	testCases := []struct {
 		input    string
@@ -228,6 +268,7 @@ func TestDrsChecksumType(t *testing.T) {
 		{"SHA256", "sha-256"},
 		{"sha256", "sha-256"},
 		{"SHA-256", "sha-256"},
+		{"SHA384", "sha-384"},
 		{"SHA512", "sha-512"},
 		{"MD5", "md5"},
 		{"crc32c", "crc32c"},
