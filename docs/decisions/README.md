@@ -93,7 +93,7 @@ superseded-by: "0005-use-new-approach.md"
 | # | Decision | Status |
 | --- | --- | --- |
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
-| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` over `stableId` in Go codebase | proposed |
+| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere — Go code and database | proposed |
 | [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
 
 ## More information
