@@ -18,7 +18,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var DBport, MQport, OIDCport, s3Port int
+var DBport, MQport, s3Port int
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -203,7 +203,6 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	OIDCport, _ = strconv.Atoi(oidc.GetPort("8080/tcp"))
 	oidcHostAndPort := oidc.GetHostPort("8080/tcp")
 
 	client = http.Client{Timeout: 5 * time.Second}

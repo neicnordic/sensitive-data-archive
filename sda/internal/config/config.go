@@ -11,17 +11,10 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/credentials"
-)
-
-const (
-	POSIX = "posix"
-	S3    = "s3"
-	SFTP  = "sftp"
 )
 
 var requiredConfVars []string
@@ -37,12 +30,10 @@ type ServerConfig struct {
 
 // Config is a parent object for all the different configuration parts
 type Config struct {
-	Archive      storage.Conf
 	Broker       broker.MQConf
 	Database     database.DBConf
-	Inbox        storage.Conf
-	Backup       storage.Conf
 	Server       ServerConfig
+	S3Inbox      S3InboxConf
 	API          APIConf
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
@@ -78,7 +69,6 @@ type RotateKeyConf struct {
 
 type Sync struct {
 	CenterPrefix   string
-	Destination    storage.Conf
 	RemoteHost     string
 	RemotePassword string
 	RemotePort     int
@@ -94,6 +84,15 @@ type SyncAPIConf struct {
 	MappingRouting   string `default:"mappings"`
 }
 
+type S3InboxConf struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"` // #nosec G117 -- Export needed for configuration access
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	Region    string `mapstructure:"region"`
+	CaCert    string `mapstructure:"ca_cert"`
+	ReadyPath string `mapstructure:"ready_path"`
+}
 type APIConf struct {
 	RBACpolicy  []byte
 	CACert      string
@@ -104,7 +103,6 @@ type APIConf struct {
 	Session     SessionConfig
 	DB          *database.SDAdb
 	MQ          *broker.AMQPBroker
-	INBOX       storage.Backend
 	Grpc        Grpc
 	AuditLogger *log.Logger
 }
@@ -244,14 +242,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.database",
 			"grpc.host",
 		}
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
-		}
 	case "auth":
 		requiredConfVars = []string{
 			"auth.s3Inbox",
@@ -275,7 +265,7 @@ func NewConfig(app string) (*Config, error) {
 		if viper.GetBool("auth.resignJwt") {
 			requiredConfVars = append(requiredConfVars, []string{"auth.jwt.issuer", "auth.jwt.privateKey", "auth.jwt.signatureAlg", "auth.jwt.tokenTTL"}...)
 		}
-	case "ingest":
+	case "ingest", "finalize", "verify":
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -288,64 +278,6 @@ func NewConfig(app string) (*Config, error) {
 			"db.user",
 			"db.password",
 			"db.database",
-		}
-
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
-		}
-	case "finalize":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			log.Warnln(" archive not configured, backup will not be performed.")
-		}
-
-		switch viper.GetString("backup.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"backup.url", "backup.accesskey", "backup.secretkey", "backup.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"backup.location"}...)
-		default:
-			log.Warnln(" backup destination not configured, backup will not be performed.")
-		}
-	case "intercept":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
 		}
 	case "mapper":
 		// Mapper does not require broker.routingkey thus we remove it
@@ -361,14 +293,13 @@ func NewConfig(app string) (*Config, error) {
 			"db.password",
 			"db.database",
 		}
-
-		switch viper.GetString("inbox.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.url", "inbox.accesskey", "inbox.secretkey", "inbox.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"inbox.location"}...)
-		default:
-			return nil, errors.New("inbox.type not set")
+	case "intercept":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.queue",
 		}
 	case "notify":
 		requiredConfVars = []string{
@@ -418,12 +349,12 @@ func NewConfig(app string) (*Config, error) {
 			"broker.user",
 			"broker.password",
 			"broker.routingkey",
-			"inbox.url",
-			"inbox.accesskey",
-			"inbox.secretkey",
-			"inbox.bucket",
+			"s3inbox.endpoint",
+			"s3inbox.access_key",
+			"s3inbox.secret_key",
+			"s3inbox.bucket",
+			"s3inbox.region",
 		}
-		viper.Set("inbox.type", S3)
 	case "sync":
 		requiredConfVars = []string{
 			"broker.host",
@@ -445,25 +376,6 @@ func NewConfig(app string) (*Config, error) {
 			"sync.remote.password",
 		}
 
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
-		switch viper.GetString("sync.destination.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.url", "sync.destination.accesskey", "sync.destination.secretkey", "sync.destination.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.location"}...)
-		case SFTP:
-			requiredConfVars = append(requiredConfVars, []string{"sync.destination.sftp.host", "sync.destination.sftp.port", "sync.destination.sftp.userName", "sync.destination.sftp.pemKeyPath", "sync.destination.sftp.pemKeyPass"}...)
-		default:
-			return nil, errors.New("sync.destination.type not set")
-		}
 	case "sync-api":
 		requiredConfVars = []string{
 			"broker.exchange",
@@ -474,30 +386,6 @@ func NewConfig(app string) (*Config, error) {
 			"sync.api.user",
 			"sync.api.password",
 		}
-	case "verify":
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-
-		switch viper.GetString("archive.type") {
-		case S3:
-			requiredConfVars = append(requiredConfVars, []string{"archive.url", "archive.accesskey", "archive.secretkey", "archive.bucket"}...)
-		case POSIX:
-			requiredConfVars = append(requiredConfVars, []string{"archive.location"}...)
-		default:
-			return nil, errors.New("archive.type not set")
-		}
-
 	default:
 		return nil, fmt.Errorf("application '%s' doesn't exist", app)
 	}
@@ -520,8 +408,6 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		c.configInbox()
 
 		err = c.configAPI()
 		if err != nil {
@@ -605,12 +491,7 @@ func NewConfig(app string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-	case "finalize":
-		if viper.GetString("archive.type") != "" && viper.GetString("backup.type") != "" {
-			c.configArchive()
-			c.configBackup()
-		}
-
+	case "finalize", "ingest", "mapper", "verify":
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
@@ -620,19 +501,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configSchemas()
-	case "ingest":
-		c.configArchive()
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
-		c.configInbox()
 		c.configSchemas()
 	case "intercept":
 		err := c.configBroker()
@@ -640,19 +508,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configSchemas()
-	case "mapper":
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
-		c.configInbox()
 		c.configSchemas()
 	case "notify":
 		c.configSMTP()
@@ -704,7 +559,9 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configInbox()
+		if err := viper.UnmarshalKey("s3inbox", &c.S3Inbox); err != nil {
+			return nil, fmt.Errorf("failed to parse key configurations: %v", err)
+		}
 
 		err = c.configServer()
 		if err != nil {
@@ -720,7 +577,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.configArchive()
 		if err := c.configSync(); err != nil {
 			return nil, err
 		}
@@ -735,20 +591,6 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSyncAPI()
-		c.configSchemas()
-	case "verify":
-		c.configArchive()
-
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
 		c.configSchemas()
 	default:
 		return nil, errors.New("unknown app name")
@@ -794,32 +636,6 @@ func (c *Config) apiDefaults() {
 	viper.SetDefault("api.session.httponly", true)
 	viper.SetDefault("api.session.name", "api_session_key")
 	viper.SetDefault("api.audit", true)
-}
-
-// configArchive provides configuration for the archive storage
-func (c *Config) configArchive() {
-	if viper.GetString("archive.type") == S3 {
-		c.Archive.Type = S3
-		c.Archive.S3 = configS3Storage("archive")
-	} else {
-		c.Archive.Type = POSIX
-		c.Archive.Posix.Location = viper.GetString("archive.location")
-	}
-}
-
-// configBackup provides configuration for the backup storage
-func (c *Config) configBackup() {
-	switch viper.GetString("backup.type") {
-	case S3:
-		c.Backup.Type = S3
-		c.Backup.S3 = configS3Storage("backup")
-	case SFTP:
-		c.Backup.Type = SFTP
-		c.Backup.SFTP = configSFTP("backup")
-	default:
-		c.Backup.Type = POSIX
-		c.Backup.Posix.Location = viper.GetString("backup.location")
-	}
 }
 
 // configBroker provides configuration for the message broker
@@ -917,17 +733,6 @@ func (c *Config) configDatabase() error {
 	c.Database = db
 
 	return nil
-}
-
-// configInbox provides configuration for the inbox storage
-func (c *Config) configInbox() {
-	if viper.GetString("inbox.type") == S3 {
-		c.Inbox.Type = S3
-		c.Inbox.S3 = configS3Storage("inbox")
-	} else {
-		c.Inbox.Type = POSIX
-		c.Inbox.Posix.Location = viper.GetString("inbox.location")
-	}
 }
 
 // configOrchestrator provides the configuration for the standalone orchestator.
@@ -1083,62 +888,6 @@ func (c *Config) configSchemas() {
 	}
 }
 
-// configS3Storage populates and returns a S3Conf from the
-// configuration
-func configS3Storage(prefix string) storage.S3Conf {
-	s3 := storage.S3Conf{}
-	// All these are required
-	s3.URL = viper.GetString(prefix + ".url")
-	s3.AccessKey = viper.GetString(prefix + ".accesskey")
-	s3.SecretKey = viper.GetString(prefix + ".secretkey")
-	s3.Bucket = viper.GetString(prefix + ".bucket")
-
-	// Defaults (move to viper?)
-
-	s3.Region = "us-east-1"
-	s3.NonExistRetryTime = 2 * time.Minute
-
-	if viper.IsSet(prefix + ".port") {
-		s3.Port = viper.GetInt(prefix + ".port")
-	}
-
-	if viper.IsSet(prefix + ".region") {
-		s3.Region = viper.GetString(prefix + ".region")
-	}
-
-	if viper.IsSet(prefix + ".readypath") {
-		s3.Readypath = viper.GetString(prefix + ".readypath")
-	}
-
-	if viper.IsSet(prefix + ".chunksize") {
-		s3.Chunksize = viper.GetInt(prefix+".chunksize") * 1024 * 1024
-	}
-
-	if viper.IsSet(prefix + ".cacert") {
-		s3.CAcert = viper.GetString(prefix + ".cacert")
-	}
-
-	return s3
-}
-
-// configSFTP populates and returns a sftpConf with sftp backend configuration
-func configSFTP(prefix string) storage.SftpConf {
-	sftpConf := storage.SftpConf{}
-	if viper.IsSet(prefix + ".sftp.hostKey") {
-		sftpConf.HostKey = viper.GetString(prefix + ".sftp.hostKey")
-	} else {
-		sftpConf.HostKey = ""
-	}
-	// All these are required
-	sftpConf.Host = viper.GetString(prefix + ".sftp.host")
-	sftpConf.Port = viper.GetString(prefix + ".sftp.port")
-	sftpConf.UserName = viper.GetString(prefix + ".sftp.userName")
-	sftpConf.PemKeyPath = viper.GetString(prefix + ".sftp.pemKeyPath")
-	sftpConf.PemKeyPass = viper.GetString(prefix + ".sftp.pemKeyPass")
-
-	return sftpConf
-}
-
 // configNotify provides configuration for the backup storage
 func (c *Config) configSMTP() {
 	c.Notify = SMTPConf{}
@@ -1150,20 +899,6 @@ func (c *Config) configSMTP() {
 
 // configSync provides configuration for the sync destination storage
 func (c *Config) configSync() error {
-	switch viper.GetString("sync.destination.type") {
-	case S3:
-		c.Sync.Destination.Type = S3
-		c.Sync.Destination.S3 = configS3Storage("sync.destination")
-	case SFTP:
-		c.Sync.Destination.Type = SFTP
-		c.Sync.Destination.SFTP = configSFTP("sync.destination")
-	case POSIX:
-		c.Sync.Destination.Type = POSIX
-		c.Sync.Destination.Posix.Location = viper.GetString("sync.destination.location")
-	default:
-		return errors.New("sync.destination.type not set")
-	}
-
 	c.Sync.RemoteHost = viper.GetString("sync.remote.host")
 	if viper.IsSet("sync.remote.port") {
 		c.Sync.RemotePort = viper.GetInt("sync.remote.port")
@@ -1335,35 +1070,6 @@ func TLSConfigBroker(c *Config) (*tls.Config, error) {
 		}
 		if certs, e := tls.X509KeyPair(cert, key); e == nil {
 			cfg.Certificates = append(cfg.Certificates, certs)
-		}
-	}
-
-	return cfg, nil
-}
-
-// TLSConfigProxy is a helper method to setup TLS for the S3 backend.
-func TLSConfigProxy(c *Config) (*tls.Config, error) {
-	cfg := new(tls.Config)
-
-	log.Debug("setting up TLS for S3 connection")
-
-	// Read system CAs
-	systemCAs, err := x509.SystemCertPool()
-	if err != nil {
-		log.Errorf("failed to read system CAs: %v", err)
-
-		return nil, err
-	}
-
-	cfg.RootCAs = systemCAs
-
-	if c.Inbox.S3.CAcert != "" {
-		cacert, e := os.ReadFile(c.Inbox.S3.CAcert) // #nosec this file comes from our configuration
-		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", cacert, e)
-		}
-		if ok := cfg.RootCAs.AppendCertsFromPEM(cacert); !ok {
-			log.Debug("no certs appended, using system certs only")
 		}
 	}
 

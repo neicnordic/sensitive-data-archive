@@ -209,7 +209,9 @@ k3d-deploy-dependencies-federated:
 k3d-deploy-dependencies-isolated:
 	@bash .github/integration/scripts/charts/dependencies.sh local isolated
 k3d-deploy-dependencies-s3:
-	@bash .github/integration/scripts/charts/dependencies.sh local s3
+	@bash .github/integration/scripts/charts/dependencies.sh local s3 false
+k3d-deploy-dependencies-s3-tls:
+	@bash .github/integration/scripts/charts/dependencies.sh local s3 true
 k3d-import-images: build-all
 	@bash .github/integration/scripts/charts/import_local_images.sh k3s-default
 k3d-deploy-postgres:

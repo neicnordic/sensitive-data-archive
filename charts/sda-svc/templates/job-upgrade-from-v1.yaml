@@ -3,6 +3,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: upgrade-from-v1
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-6" # Hook weight is just one lower than job using config map to ensure it's applied before job
+    helm.sh/hook-delete-policy: hook-succeeded
 data:
   upgrade-from-v1.sql: |
     DO
@@ -78,19 +84,39 @@ spec:
         - name: PGHOST
           value: {{ .Values.global.db.host }}
         - name: PGPASSWORD
+          {{- if .Values.global.db.admin.secretName }}
           valueFrom:
             secretKeyRef:
               name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
-              key:  {{ default "password" .Values.global.db.admin.passKey }}
+              key: {{ default "password" .Values.global.db.admin.passKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.password }}
+          {{- end }}
         {{- if .Values.global.db.port }}
         - name: PGPORT
           value: {{ .Values.global.db.port | quote }}
         {{- end }}
         - name: PGUSER
+          {{- if .Values.global.db.admin.secretName }}
           valueFrom:
             secretKeyRef:
-              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              name: {{ .Values.global.db.admin.secretName }}
               key:  {{ default "username" .Values.global.db.admin.userKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.username }}
+          {{- end }}
+        {{- if .Values.global.tls.enabled }}
+        - name: PGSSLROOTCERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if eq "verify-full" .Values.global.db.sslMode }}
+        - name: PGSSLKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        - name: PGSSLCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        {{- end }}
+        {{- end }}
+        - name: PGSSLMODE
+          value: {{ ternary .Values.global.db.sslMode "disable" .Values.global.tls.enabled }}
         image: {{ .Values.jobs.image }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
@@ -103,6 +129,10 @@ spec:
         volumeMounts:
         - name: sql
           mountPath: /migratedb
+        {{- if .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
       restartPolicy: Never
       securityContext:
         runAsUser: 72
@@ -112,4 +142,16 @@ spec:
       - name: sql
         configMap:
           name: upgrade-from-v1
+      {{- if .Values.global.tls.enabled }}
+      - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ template "sda.fullname" . }}-job-certs
+        {{- else }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ required "An certificate issuer or a TLS secret name is required for the jobs" .Values.jobs.tls.secretName }}
+        {{- end }}
+      {{- end }}
 {{- end }}

@@ -1,0 +1,107 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sda.fullname" . }}-ensure-file-locations-populated
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+  annotations:
+    # This is what defines this resource as a hook.
+    # Without this line, the job is considered part of the release.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "2"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded,hook-failed
+spec:
+  template:
+    metadata:
+      name: {{ template "sda.fullname" . }}-ensure-file-locations-populated
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ template "sda.fullname" . }}-ensure-file-locations-populated
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            set -e
+            pg_isready
+            psql -At -c "SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '')" | grep -qx '0' && exit 0 || (echo "There exists rows with unset submission or archive location, can not proceed with deployment" && exit 1)
+        env:
+        - name: PGDATABASE
+          value: {{ .Values.global.db.name }}
+        - name: PGHOST
+          value: {{ .Values.global.db.host }}
+        - name: PGPASSWORD
+          {{- if .Values.global.db.admin.secretName }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "a secret holding the DB admin credentials are needed" .Values.global.db.admin.secretName }}
+              key:  {{ default "password" .Values.global.db.admin.passKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.password }}
+          {{- end }}
+        {{- if .Values.global.db.port }}
+        - name: PGPORT
+          value: {{ .Values.global.db.port | quote }}
+        {{- end }}
+        - name: PGUSER
+          {{- if .Values.global.db.admin.secretName }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.db.admin.secretName }}
+              key:  {{ default "username" .Values.global.db.admin.userKey }}
+          {{- else }}
+          value: {{ .Values.global.db.admin.username }}
+          {{- end }}
+        {{- if .Values.global.tls.enabled }}
+        - name: PGSSLROOTCERT
+          value: {{ template "tlsPath" . }}/ca.crt
+        {{- if eq "verify-full" .Values.global.db.sslMode }}
+        - name: PGSSLKEY
+          value: {{ template "tlsPath" . }}/tls.key
+        - name: PGSSLCERT
+          value: {{ template "tlsPath" . }}/tls.crt
+        {{- end }}
+        {{- end }}
+        - name: PGSSLMODE
+          value: {{ ternary .Values.global.db.sslMode "disable" .Values.global.tls.enabled }}
+        image: {{ .Values.jobs.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        {{- if .Values.global.tls.enabled }}
+        volumeMounts:
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 72
+        runAsGroup: 72
+        fsGroup: 72
+      {{- if .Values.global.tls.enabled }}
+      volumes:
+      - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ template "sda.fullname" . }}-job-certs
+        {{- else }}
+        secret:
+          defaultMode: 0640
+          secretName: {{ required "An certificate issuer or a TLS secret name is required for the jobs" .Values.jobs.tls.secretName }}
+        {{- end }}
+      {{- end }}
+  backoffLimit: 0

@@ -9,9 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
@@ -31,6 +34,30 @@ type WriterTestSuite struct {
 type mockLocationBroker struct {
 	mock.Mock
 }
+
+func (m *mockLocationBroker) GetObjectCount(_ context.Context, _, location string) (uint64, error) {
+	args := m.Called(location)
+	count := args.Int(0)
+	if count < 0 {
+		count = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(count), args.Error(1)
+}
+
+func (m *mockLocationBroker) GetSize(_ context.Context, _, location string) (uint64, error) {
+	args := m.Called(location)
+	size := args.Int(0)
+	if size < 0 {
+		size = 0
+	}
+	//nolint:gosec // disable G115
+	return uint64(size), args.Error(1)
+}
+func (m *mockLocationBroker) RegisterSizeAndCountFinderFunc(_ string, _ func(string) bool, _ func(context.Context, string) (uint64, uint64, error)) {
+	_ = m.Called()
+}
+
 type mockS3 struct {
 	server  *httptest.Server
 	buckets map[string]map[string]string // "bucket name" -> "file name" -> "content"
@@ -46,9 +73,39 @@ func (m *mockS3) handler(w http.ResponseWriter, req *http.Request) {
 		m.CreateBucket(w, req)
 	case req.Method == "DELETE":
 		m.Delete(w, req)
+	case strings.HasSuffix(req.RequestURI, "list-type=2"):
+		m.ListFiles(w, req)
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
+}
+func (m *mockS3) ListFiles(w http.ResponseWriter, req *http.Request) {
+	bucket := strings.Split(strings.Split(req.RequestURI, "/")[1], "?")[0]
+
+	var b strings.Builder
+	_, _ = b.WriteString(`
+<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult>
+   <IsTruncated>false</IsTruncated>`)
+
+	for buk, files := range m.buckets {
+		if buk != bucket {
+			continue
+		}
+
+		for fileName, fileContent := range files {
+			_, _ = b.WriteString(`
+      <Contents>
+         <Size>` + strconv.Itoa(len(fileContent)) + `</Size>
+         <Key>` + fileName + `</Key>
+      </Contents>`)
+		}
+	}
+
+	_, _ = b.WriteString(`
+   </ListBucketResult>
+`)
+	_, _ = w.Write([]byte(b.String()))
 }
 func (m *mockS3) ListBuckets(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
@@ -118,26 +175,6 @@ func (m *mockS3) CreateBucket(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (m *mockLocationBroker) GetObjectCount(_ context.Context, location string) (uint64, error) {
-	args := m.Called(location)
-	count := args.Int(0)
-	if count < 0 {
-		count = 0
-	}
-	//nolint:gosec // disable G115
-	return uint64(count), args.Error(1)
-}
-
-func (m *mockLocationBroker) GetSize(_ context.Context, location string) (uint64, error) {
-	args := m.Called(location)
-	size := args.Int(0)
-	if size < 0 {
-		size = 0
-	}
-	//nolint:gosec // disable G115
-	return uint64(size), args.Error(1)
-}
-
 func TestReaderTestSuite(t *testing.T) {
 	suite.Run(t, new(WriterTestSuite))
 }
@@ -193,6 +230,7 @@ func (ts *WriterTestSuite) SetupTest() {
 	ts.locationBrokerMock = &mockLocationBroker{}
 
 	var err error
+	ts.locationBrokerMock.On("RegisterSizeAndCountFinderFunc").Return().Once()
 	ts.writer, err = NewWriter(context.TODO(), "test", ts.locationBrokerMock)
 	if err != nil {
 		ts.FailNow(err.Error())
@@ -292,4 +330,69 @@ func (ts *WriterTestSuite) TestRemoveFile() {
 func (ts *WriterTestSuite) TestRemoveFile_InvalidLocation() {
 	err := ts.writer.RemoveFile(context.TODO(), "http://different_s3_url/bucket", "file_to_be_removed")
 	ts.EqualError(err, storageerrors.ErrorNoEndpointConfiguredForLocation.Error())
+}
+
+func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstBucketFull() {
+	content := "test file 2"
+	lb, err := locationbroker.NewLocationBroker(&notImplementedDatabase{}, locationbroker.CacheTTL(0))
+	ts.NoError(err)
+
+	ts.s3Mock1.buckets["bucket_in_1-1"] = map[string]string{
+		"test_file_1.txt":  content,
+		"test_file_2.txt":  content,
+		"test_file_3.txt":  content,
+		"test_file_4.txt":  content,
+		"test_file_5.txt":  content,
+		"test_file_6.txt":  content,
+		"test_file_7.txt":  content,
+		"test_file_8.txt":  content,
+		"test_file_9.txt":  content,
+		"test_file_10.txt": content,
+	}
+
+	writer, err := NewWriter(context.TODO(), "test", lb)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	contentReader := bytes.NewReader([]byte(content))
+	location, err := writer.WriteFile(context.TODO(), "test_file_1.txt", contentReader)
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	ts.Equal(ts.s3Mock1.buckets["bucket_in_1-2"]["test_file_1.txt"], content)
+	ts.Equal(fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL), location)
+}
+
+type notImplementedDatabase struct {
+}
+
+func (m *notImplementedDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, _ string) (uint64, uint64, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Context, _, _ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetArchiveLocation(_ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetArchivePathAndLocation(_ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+func (m *notImplementedDatabase) GetMappingData(_ string) (*database.MappingData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetSubmissionLocation(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) IsFileInDataset(_ context.Context, _ string) (bool, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) CancelFile(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
 }

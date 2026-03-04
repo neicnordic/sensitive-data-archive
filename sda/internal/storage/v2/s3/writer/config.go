@@ -78,6 +78,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 				return nil, errors.New("https scheme in endpoint when HTTPS is disabled")
 			default:
 			}
+
+			if !strings.HasPrefix(e.Endpoint, "https:") && !strings.HasPrefix(e.Endpoint, "http:") {
+				return nil, errors.New("unsupported or no scheme in endpoint")
+			}
+
 			if e.ChunkSize != "" {
 				byteSize, err := datasize.ParseString(e.ChunkSize)
 				if err != nil {
@@ -180,7 +185,7 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 	}, nil
 }
 
-func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locationBroker locationbroker.LocationBroker) (string, error) {
+func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (string, error) {
 	client, err := endpointConf.getS3Client(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpointConf.Endpoint, err)
@@ -213,7 +218,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 	// find first bucket with available object count and size
 	for _, bucket := range bucketsWithPrefix {
 		loc := endpointConf.Endpoint + "/" + bucket
-		count, err := locationBroker.GetObjectCount(ctx, loc)
+		count, err := locationBroker.GetObjectCount(ctx, backendName, loc)
 		if err != nil {
 			return "", fmt.Errorf("failed to get object count of location %s, due to %v", loc, err)
 		}
@@ -221,7 +226,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, locati
 			continue
 		}
 
-		size, err := locationBroker.GetSize(ctx, loc)
+		size, err := locationBroker.GetSize(ctx, backendName, loc)
 		if err != nil {
 			return "", fmt.Errorf("failed to get size of location %s, due to %v", loc, err)
 		}

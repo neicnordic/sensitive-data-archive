@@ -69,7 +69,7 @@ spec:
       {{- end }}
       {{- if eq "posix" .Values.global.inbox.storageType }}
         - name: inbox
-          mountPath: {{ .Values.global.inbox.path | quote }}
+          mountPath: {{ .Values.global.inbox.volumePath | quote }}
       {{- end }}
       enableServiceLinks: false
       volumes:

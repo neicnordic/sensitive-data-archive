@@ -7,13 +7,31 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
 func (reader *Reader) FindFile(_ context.Context, filePath string) (string, error) {
 	for _, endpointConf := range reader.configuredEndpoints {
-		_, err := os.Stat(filepath.Join(endpointConf.Path, filePath))
+		basePath, err := filepath.Abs(endpointConf.Path)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve base path for location %s: %w", endpointConf.Path, err)
+		}
+
+		fullFilePath, err := filepath.Abs(filepath.Join(basePath, filePath))
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve file path for %s at location %s: %w", filePath, endpointConf.Path, err)
+		}
+
+		// Ensure the resolved path is within the configured base path to prevent path traversal.
+		baseWithSep := basePath + string(os.PathSeparator)
+		fullWithSep := fullFilePath + string(os.PathSeparator)
+		if !strings.HasPrefix(fullWithSep, baseWithSep) {
+			return "", storageerrors.ErrorFileNotFoundInLocation
+		}
+
+		_, err = os.Stat(fullFilePath)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
