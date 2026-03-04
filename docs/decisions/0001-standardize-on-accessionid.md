@@ -161,10 +161,10 @@ functions/triggers (`main_insert`, `main_update`, `finalize_file`, `filedataset_
    the transition window. Alternatively, deploy with a brief maintenance window where DB
    rename and all services are updated together.
 2. **Application PRs** (can be split per service for reviewable diffs):
-   - `sda` (Go) — `sda/internal/database/`, `sda/cmd/`
-   - `sda-download` (Go) — `sda-download/internal/database/`, `sda-download/api/`
-   - `sda-admin` (Go)
-   - `sda-doa` (Java) — `Dataset.java` column mapping
+   * `sda` (Go) — `sda/internal/database/`, `sda/cmd/`
+   * `sda-download` (Go) — `sda-download/internal/database/`, `sda-download/api/`
+   * `sda-admin` (Go)
+   * `sda-doa` (Java) — `Dataset.java` column mapping
 3. **Update `initdb.d` scripts** so fresh installs use `accession_id` from the start.
 4. **Add a new migration script in `migratedb.d`** for existing deployments:
    `ALTER TABLE sda.files RENAME COLUMN stable_id TO accession_id;` (and likewise for
