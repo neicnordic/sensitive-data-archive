@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-02-23
+date: 2026-03-04
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 ---
@@ -38,7 +38,7 @@ Raised by @KarlG-nbis in PR #2232.
 ## Decision Outcome
 
 Chosen option: **`accessionID` everywhere**, because it is the established domain term,
-already dominant in the codebase (~232 occurrences vs ~187 for `stableID`), communicates
+already dominant in the codebase (~230 occurrences vs ~187 for `stableID`), communicates
 meaning more clearly ("accession" is well understood in bioinformatics, "stable" is vague),
 and using the same name across all layers eliminates confusion during discussions.
 
@@ -47,8 +47,10 @@ and using the same name across all layers eliminates confusion during discussion
 | Layer | Before | After |
 | --- | --- | --- |
 | Go application code | mixed `stableID` / `accessionID` | `accessionID` |
+| Java application code (`sda-doa`) | `stableId` | `accessionId` |
 | API responses | `accessionID` | `accessionID` (unchanged) |
 | DB column names | `stable_id` | `accession_id` |
+| DB views and functions (legacy layer) | `stable_id` | `accession_id` |
 | DB query strings / scan targets | `stable_id` | `accession_id` |
 
 ### Consequences
@@ -56,16 +58,25 @@ and using the same name across all layers eliminates confusion during discussion
 * Good, because one term across the entire stack — no translation between layers.
 * Good, because discussions, code, and schema all use the same language.
 * Good, because domain-aligned naming helps onboarding and external communication.
-* Neutral, because requires focused rename PRs across the Go services.
-* Bad, because a DB migration is needed to rename `stable_id` → `accession_id` in
-  `sda.files` and `sda.datasets` (plus the FK in `sda.dataset_event_log`).
+* Neutral, because requires focused rename PRs across Go services and `sda-doa` (Java).
+* Bad, because a DB migration is needed: `stable_id` appears 47 times across 8 SQL files —
+  columns in `sda.files` and `sda.datasets`, FK in `sda.dataset_event_log`, plus legacy
+  views (`local_ega.main`, `local_ega.files`, `local_ega.archive_files`,
+  `local_ega_ebi.file`, `local_ega_ebi.filedataset`, `local_ega_ebi.file_dataset`,
+  `local_ega_ebi.file_index_file`) and functions/triggers (`main_insert`, `main_update`,
+  `finalize_file`, `filedataset_insert`).
+* Bad, because the rename requires a coordinated rollout — running services issue
+  `stable_id` queries, so a naive DB-first rename breaks them until the application
+  code is also deployed (see implementation guidance below).
 * Bad, because churn in diffs; mitigated by splitting into per-service PRs.
 
 ### Confirmation
 
-* A grep for `stableID` / `stableId` / `stable_id` across Go code and SQL returns
-  zero matches.
-* DB migration runs cleanly and all integration tests pass.
+* A grep for `stableID` / `stableId` / `stable_id` across Go code, Java code, and SQL
+  (excluding historical migration scripts) returns zero matches.
+* DB migration runs cleanly against both fresh installs (`initdb.d`) and upgrades
+  (`migratedb.d`).
+* All integration tests pass with the renamed columns and no service uses the old name.
 
 ## Pros and Cons of the Options
 
@@ -74,11 +85,13 @@ and using the same name across all layers eliminates confusion during discussion
 Rename Go code, DB columns, and SQL queries to use `accessionID` / `accession_id` consistently.
 
 * Good, because "accession" is the standard bioinformatics term (EGA, ENA, dbGaP all use it)
-* Good, because it is already the dominant name in the codebase (~232 occurrences)
+* Good, because it is already the dominant name in the codebase (~230 occurrences)
 * Good, because it matches the v2.0.0 API spec — no API/client changes needed
 * Good, because one name across all layers eliminates translation and discussion confusion
-* Bad, because ~187 Go `stableID` occurrences and ~53 SQL `stable_id` occurrences must be renamed
-* Bad, because a DB migration is required (`files.stable_id`, `datasets.stable_id`, FK in `dataset_event_log`)
+* Bad, because ~187 Go `stableID` occurrences, ~47 SQL `stable_id` occurrences (across 8 files),
+  and `sda-doa` (Java) must be renamed
+* Bad, because DB migration touches columns, views, functions, and triggers — requires
+  coordinated rollout with application deployments
 
 ### `stableID` everywhere
 
@@ -87,7 +100,7 @@ Rename Go code and API to use `stableID` / `stable_id` everywhere, matching the 
 * Good, because it directly mirrors the current DB schema — zero DB migration
 * Bad, because "stable" is vague and not a recognized bioinformatics term
 * Bad, because the v2.0.0 API already uses `accessionID` — would be a breaking API change
-* Bad, because it is the minority name in the codebase (~187 vs ~232)
+* Bad, because it is the minority name in the codebase (~187 vs ~230)
 
 ### `accessionID` in Go only
 
@@ -110,24 +123,58 @@ Both `stableID` and `accessionID` coexist with the loose layering convention.
 
 ## More Information
 
-### Codebase survey (2026-02-23)
+### Codebase survey (2026-03-04)
 
-| Variant | Approx. count | Typical context |
+**Go code (`*.go`):**
+
+| Variant | Count | Typical context |
 | --- | --- | --- |
-| `accessionID` (camelCase) | 91 | Variable names, function parameters |
-| `AccessionID` (PascalCase) | 139 | Struct fields, function names |
-| `stableID` (camelCase) | 100 | Variable names, function parameters |
-| `StableID` (PascalCase) | 34 | Function names, comments |
-| `stable_id` (snake_case) | 53 | SQL queries, DB column references |
+| `accessionID` (camelCase) | ~92 | Variable names, function parameters |
+| `AccessionID` (PascalCase) | ~134 | Struct fields, function names |
+| `stableID` (camelCase) | ~100 | Variable names, function parameters |
+| `StableID` (PascalCase) | ~34 | Function names, comments |
+
+**SQL (`postgresql/`):**
+
+| Scope | Files | Occurrences |
+| --- | --- | --- |
+| Schema (`initdb.d`) | 4 | 21 |
+| Migrations (`migratedb.d`) | 4 | 26 |
+| **Total** | **8** | **47** |
+
+Affected SQL objects: `sda.files.stable_id`, `sda.datasets.stable_id`,
+`sda.dataset_event_log` FK, views in `local_ega` and `local_ega_ebi` schemas,
+functions/triggers (`main_insert`, `main_update`, `finalize_file`, `filedataset_insert`).
+
+**Java (`sda-doa`):** `Dataset.java` maps `@Column(name = "stable_id")`.
 
 ### Implementation guidance
 
-* No behavior change, no API change — purely a naming rename.
-* **DB migration**: rename `stable_id` → `accession_id` in `sda.files`, `sda.datasets`,
-  and update the FK in `sda.dataset_event_log`. Use `ALTER TABLE ... RENAME COLUMN`.
-* **Go code**: split the rename into per-service PRs (sda, sda-download, sda-admin) to
-  keep diffs reviewable. Update SQL query strings to use `accession_id` in the same PRs.
-* The DB migration should land first so that Go code changes can target the new column name.
+* No API change — the public API already uses `accessionID`.
+* The rename is a **coordinated rollout** — the DB column rename and application code
+  changes must be deployed together to avoid breaking running services.
+
+**Recommended rollout strategy:**
+
+1. **DB migration with dual-name support**: add the new `accession_id` column (or rename
+   and create an alias/view) so that both old and new application code can coexist during
+   the transition window. Alternatively, deploy with a brief maintenance window where DB
+   rename and all services are updated together.
+2. **Application PRs** (can be split per service for reviewable diffs):
+   - `sda` (Go) — `sda/internal/database/`, `sda/cmd/`
+   - `sda-download` (Go) — `sda-download/internal/database/`, `sda-download/api/`
+   - `sda-admin` (Go)
+   - `sda-doa` (Java) — `Dataset.java` column mapping
+3. **Update `initdb.d` scripts** so fresh installs use `accession_id` from the start.
+4. **Add a new migration script in `migratedb.d`** for existing deployments:
+   `ALTER TABLE sda.files RENAME COLUMN stable_id TO accession_id;` (and likewise for
+   `sda.datasets`, plus update the FK, views, and functions).
+5. **Remove dual-name support** once all services are confirmed deployed on the new name.
+6. Historical migration scripts (`02.sql`–`04.sql`, `09.sql`) reference `stable_id` and
+   should be left as-is — they represent the schema at the time they were written.
+
+**Rollback**: if issues arise, reverse the column rename and redeploy the previous
+application versions. The `ALTER TABLE ... RENAME COLUMN` is reversible.
 
 ### Origin
 
