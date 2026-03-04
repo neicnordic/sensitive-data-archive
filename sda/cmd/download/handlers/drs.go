@@ -42,6 +42,8 @@ func drsChecksumType(sdaType string) string {
 	switch strings.ToLower(sdaType) {
 	case "sha256", "sha-256":
 		return "sha-256"
+	case "sha384", "sha-384":
+		return "sha-384"
 	case "sha512", "sha-512":
 		return "sha-512"
 	default:
@@ -95,18 +97,27 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 
 	host := c.Request.Host
 
-	checksums := []DrsChecksum{}
-	if file.DecryptedChecksum != "" {
-		checksums = append(checksums, DrsChecksum{
-			Checksum: file.DecryptedChecksum,
-			Type:     drsChecksumType(file.DecryptedChecksumType),
-		})
+	// Fetch ARCHIVED checksums (over the encrypted blob, per DRS 1.5 spec)
+	archivedChecksums, err := h.db.GetFileChecksums(c.Request.Context(), file.ID, "ARCHIVED")
+	if err != nil {
+		log.Errorf("failed to get file checksums: %v", err)
+		problemJSON(c, http.StatusInternalServerError, "failed to retrieve checksums")
+
+		return
+	}
+
+	checksums := make([]DrsChecksum, len(archivedChecksums))
+	for i, ac := range archivedChecksums {
+		checksums[i] = DrsChecksum{
+			Checksum: ac.Checksum,
+			Type:     drsChecksumType(ac.Type),
+		}
 	}
 
 	obj := DrsObject{
 		ID:          file.ID,
 		SelfURI:     fmt.Sprintf("drs://%s/%s", host, file.ID),
-		Size:        file.DecryptedSize,
+		Size:        file.ArchiveSize,
 		CreatedTime: file.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		Checksums:   checksums,
 		AccessMethods: []DrsAccessMethod{

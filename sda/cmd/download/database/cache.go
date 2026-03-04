@@ -306,6 +306,11 @@ func (c *CachedDB) CheckDatasetExists(ctx context.Context, datasetID string) (bo
 	return exists, nil
 }
 
+// GetFileChecksums delegates to the underlying database without caching.
+func (c *CachedDB) GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
+	return c.db.GetFileChecksums(ctx, fileID, source)
+}
+
 // GetDatasetFilesPaginated delegates to the underlying database without caching.
 // Paginated queries use ephemeral cursors, making caching impractical.
 func (c *CachedDB) GetDatasetFilesPaginated(ctx context.Context, datasetID string, opts FileListOptions) ([]File, error) {
