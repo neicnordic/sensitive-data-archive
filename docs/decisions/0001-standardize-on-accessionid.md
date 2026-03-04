@@ -5,82 +5,99 @@ decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 ---
 
-# Standardize on `accessionID` over `stableId` in Go codebase
+# Standardize on `accessionID` everywhere — Go code and database
 
 ## Context and Problem Statement
 
-The Go codebase uses multiple names for archive identifiers: `stableId`, `accessionId`,
-`accessionID`, `stable_id`, and variations. While there is a loose convention where
-`stableID` appears in database-layer functions and `AccessionID` in API/message-facing
-code, this layering is inconsistent and undocumented — many call sites mix the terms
-freely. The result is code that is harder to read, grep, and reason about.
+The SDA project uses multiple names for the same concept — archive identifiers: `stableId`,
+`accessionId`, `accessionID`, `stable_id`, and variations. In Go code there is a loose
+convention where `stableID` appears in database-layer functions and `AccessionID` in
+API/message-facing code, while the database columns use `stable_id`. This split is
+inconsistent, undocumented, and causes confusion during discussions because the same
+information is referred to by different names depending on the layer.
 
-Which single term should we use in application-level Go code?
+Which single term should we adopt across the entire stack — Go application code, API
+responses, and database schema?
 
 Raised by @KarlG-nbis in PR #2232.
 
 ## Decision Drivers
 
-* **Consistency** — one name for one concept across the codebase
+* **Consistency** — one name for one concept across the entire stack
 * **Domain alignment** — use the term the bioinformatics community recognizes
-* **Minimal disruption** — avoid DB migrations or API breaking changes
+* **Clarity in discussion** — avoid confusion when team members refer to the same data by different names
 * **Grepability** — a single term makes it easy to find all usages
 
 ## Considered Options
 
-1. **`accessionID`** — bioinformatics domain term (EGA accession IDs: `EGAD*`, `EGAF*`)
-2. **`stableID`** — matches the existing DB column name `stable_id`
-3. **Leave as-is** — both terms coexist
+1. **`accessionID` everywhere** — rename Go code *and* DB columns to use the bioinformatics domain term
+2. **`stableID` everywhere** — rename Go code *and* DB columns to match the current DB naming
+3. **`accessionID` in Go only** — rename Go code but leave DB columns as `stable_id`
+4. **Leave as-is** — both terms coexist
 
 ## Decision Outcome
 
-Chosen option: **`accessionID`**, because it is the established domain term, already
-dominant in the codebase (~232 occurrences vs ~187 for `stableID`), and communicates
-meaning more clearly ("accession" is well understood in bioinformatics, "stable" is vague).
+Chosen option: **`accessionID` everywhere**, because it is the established domain term,
+already dominant in the codebase (~232 occurrences vs ~187 for `stableID`), communicates
+meaning more clearly ("accession" is well understood in bioinformatics, "stable" is vague),
+and using the same name across all layers eliminates confusion during discussions.
 
-### Boundary rules
+### Naming convention
 
-| Layer | Name | Rationale |
+| Layer | Before | After |
 | --- | --- | --- |
-| Go application code | `accessionID` | Single consistent term |
-| API responses | `accessionID` | Already the case in v2.0.0 spec |
-| DB column names | `stable_id` (unchanged) | Renaming columns is painful and a different naming context |
-| DB query strings / scan targets | `stable_id` | Matches the DB schema at the Go↔DB boundary |
+| Go application code | mixed `stableID` / `accessionID` | `accessionID` |
+| API responses | `accessionID` | `accessionID` (unchanged) |
+| DB column names | `stable_id` | `accession_id` |
+| DB query strings / scan targets | `stable_id` | `accession_id` |
 
 ### Consequences
 
-* Good, because one term to grep for; easier onboarding; matches domain language.
-* Good, because no DB migration, no API change — purely internal rename.
+* Good, because one term across the entire stack — no translation between layers.
+* Good, because discussions, code, and schema all use the same language.
+* Good, because domain-aligned naming helps onboarding and external communication.
 * Neutral, because requires focused rename PRs across the Go services.
+* Bad, because a DB migration is needed to rename `stable_id` → `accession_id` in
+  `sda.files` and `sda.datasets` (plus the FK in `sda.dataset_event_log`).
 * Bad, because churn in diffs; mitigated by splitting into per-service PRs.
 
 ### Confirmation
 
-All Go code (excluding DB query strings) uses `accessionID` and tests pass.
-A grep for `stableID` / `stableId` in `*.go` files returns zero matches outside of
-SQL string literals.
+* A grep for `stableID` / `stableId` / `stable_id` across Go code and SQL returns
+  zero matches.
+* DB migration runs cleanly and all integration tests pass.
 
 ## Pros and Cons of the Options
 
-### `accessionID`
+### `accessionID` everywhere
 
-Use `accessionID` everywhere in Go application code; keep `stable_id` only in DB query strings.
+Rename Go code, DB columns, and SQL queries to use `accessionID` / `accession_id` consistently.
 
 * Good, because "accession" is the standard bioinformatics term (EGA, ENA, dbGaP all use it)
 * Good, because it is already the dominant name in the codebase (~232 occurrences)
 * Good, because it matches the v2.0.0 API spec — no API/client changes needed
-* Good, because callers no longer need to know the DB column name
-* Neutral, because the DB-layer functions that currently use `stableID` will be renamed, breaking local conventions
-* Bad, because ~187 `stableID` occurrences must be renamed across multiple services
+* Good, because one name across all layers eliminates translation and discussion confusion
+* Bad, because ~187 Go `stableID` occurrences and ~53 SQL `stable_id` occurrences must be renamed
+* Bad, because a DB migration is required (`files.stable_id`, `datasets.stable_id`, FK in `dataset_event_log`)
 
-### `stableID`
+### `stableID` everywhere
 
-Use `stableID` everywhere in Go code to match the DB column `stable_id`.
+Rename Go code and API to use `stableID` / `stable_id` everywhere, matching the current DB schema.
 
-* Good, because it directly mirrors the DB schema — no mental translation at the DB boundary
+* Good, because it directly mirrors the current DB schema — zero DB migration
 * Bad, because "stable" is vague and not a recognized bioinformatics term
-* Bad, because the v2.0.0 API already uses `accessionID` — would require an API change or perpetuate the split
+* Bad, because the v2.0.0 API already uses `accessionID` — would be a breaking API change
 * Bad, because it is the minority name in the codebase (~187 vs ~232)
+
+### `accessionID` in Go only
+
+Rename Go application code but leave the DB columns as `stable_id`.
+
+* Good, because no DB migration needed
+* Neutral, because Go code becomes consistent within itself
+* Bad, because the name mismatch between Go code and DB persists — the same information
+  is still called different things in different layers
+* Bad, because discussions still require context ("do you mean the column name or the Go name?")
 
 ### Leave as-is
 
@@ -105,10 +122,12 @@ Both `stableID` and `accessionID` coexist with the loose layering convention.
 
 ### Implementation guidance
 
-* This is a naming-only change — no behavior change, no API change, no DB migration.
-* Split the rename into per-service PRs (sda, sda-download, sda-admin) to keep diffs reviewable.
-* The `stable_id` DB column may be renamed in a future migration if the team decides
-  to align the DB layer as well, but that is out of scope for this decision.
+* No behavior change, no API change — purely a naming rename.
+* **DB migration**: rename `stable_id` → `accession_id` in `sda.files`, `sda.datasets`,
+  and update the FK in `sda.dataset_event_log`. Use `ALTER TABLE ... RENAME COLUMN`.
+* **Go code**: split the rename into per-service PRs (sda, sda-download, sda-admin) to
+  keep diffs reviewable. Update SQL query strings to use `accession_id` in the same PRs.
+* The DB migration should land first so that Go code changes can target the new column name.
 
 ### Origin
 
