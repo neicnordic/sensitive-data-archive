@@ -25,7 +25,7 @@ jobs:
         with:
           filters: |
             sda-download:
-              - 'sda-download/**'
+            - 'sda-download/**'
             sda-admin:
             - 'sda-admin/**'
             sda:
