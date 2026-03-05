@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,7 +41,30 @@ type Proxy struct {
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
-	fileIDs   map[uniqueFileID]string
+	fileIDs   fileIdsCache
+}
+
+type fileIdsCache struct {
+	cache map[uniqueFileID]string
+	sync.RWMutex
+}
+
+func (fic *fileIdsCache) write(key uniqueFileID, value string) {
+	fic.Lock()
+	defer fic.Unlock()
+	fic.cache[key] = value
+}
+
+func (fic *fileIdsCache) read(key uniqueFileID) string {
+	fic.RLock()
+	defer fic.RUnlock()
+	return fic.cache[key]
+}
+
+func (fic *fileIdsCache) delete(key uniqueFileID) {
+	fic.Lock()
+	defer fic.Unlock()
+	delete(fic.cache, key)
 }
 
 // The Event struct
@@ -93,7 +117,10 @@ func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Auth
 		messenger: messenger,
 		database:  db,
 		client:    client,
-		fileIDs:   make(map[uniqueFileID]string),
+		fileIDs: fileIdsCache{
+			cache:   make(map[uniqueFileID]string),
+			RWMutex: sync.RWMutex{},
+		},
 	}
 }
 
@@ -179,20 +206,22 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 	location := p.s3Conf.Endpoint + "/" + p.s3Conf.Bucket
 	// if this is an upload request
-	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
+	if p.detectRequestType(r) == Put && p.fileIDs.read(fileIdentifier) == "" {
 		// register file in database
 		log.Debugf("registering file %v in the database with location: %s", r.URL.Path, location)
-		p.fileIDs[fileIdentifier], err = p.database.RegisterFile(nil, location, filePath, username)
-		log.Debugf("fileId: %v", p.fileIDs[fileIdentifier])
+		fileID, err := p.database.RegisterFile(nil, location, filePath, username)
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
 
 			return
 		}
 
+		log.Debugf("fileId: %v", fileID)
+		p.fileIDs.write(fileIdentifier, fileID)
+
 		// check if the file already exists, in that case send an overwrite message,
 		// so that the FEGA portal is informed that a new version of the file exists.
-		err = p.sendMessageOnOverwrite(r, p.fileIDs[fileIdentifier], rawFilepath, token)
+		err = p.sendMessageOnOverwrite(r, p.fileIDs.read(fileIdentifier), rawFilepath, token)
 		if err != nil {
 			p.internalServerError(w, r, err.Error())
 
@@ -225,7 +254,7 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 			return
 		}
 
-		err = p.checkAndSendMessage(p.fileIDs[fileIdentifier], jsonMessage, r)
+		err = p.checkAndSendMessage(p.fileIDs.read(fileIdentifier), jsonMessage, r)
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
 
@@ -234,33 +263,34 @@ func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jw
 
 		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
 		// different instance of s3inbox. For more details see #1358.
-		if p.fileIDs[fileIdentifier] == "" {
-			p.fileIDs[fileIdentifier], err = p.database.GetFileIDByUserPathAndStatus(username, filePath, "registered")
+		if p.fileIDs.read(fileIdentifier) == "" {
+			fileId, err := p.database.GetFileIDByUserPathAndStatus(username, filePath, "registered")
 			if err != nil {
 				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
 
 				return
 			}
+			p.fileIDs.write(fileIdentifier, fileId)
 
-			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[fileIdentifier])
+			log.Debugf("resuming work on file with fileId: %v", p.fileIDs.read(fileIdentifier))
 		}
 
-		if err := p.storeObjectSizeInDB(r.Context(), rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
+		if err := p.storeObjectSizeInDB(r.Context(), rawFilepath, p.fileIDs.read(fileIdentifier)); err != nil {
 			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
 			p.internalServerError(w, r, "storeObjectSizeInDB failed")
 
 			return
 		}
 
-		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[fileIdentifier])
-		err = p.database.UpdateFileEventLog(p.fileIDs[fileIdentifier], "uploaded", "inbox", "{}", string(jsonMessage))
+		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs.read(fileIdentifier))
+		err = p.database.UpdateFileEventLog(p.fileIDs.read(fileIdentifier), "uploaded", "inbox", "{}", string(jsonMessage))
 		if err != nil {
 			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
 
-		delete(p.fileIDs, fileIdentifier)
+		p.fileIDs.delete(fileIdentifier)
 	}
 
 	// Writing non-200 to the response before the headers propagate the error
