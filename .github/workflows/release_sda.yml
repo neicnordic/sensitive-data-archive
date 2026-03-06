@@ -1,0 +1,173 @@
+name: Build versioned images
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  VERSION_TAG: ${{ github.ref_name }}
+
+jobs:
+
+  build_images:
+    name: Build ${{ matrix.name }} Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      matrix:
+        include:
+          - name: "SDA Services"
+            path: "sda"
+            image-tag-suffix: ""
+
+          - name: "Validator Orchestrator"
+            path: "sda-validator/orchestrator"
+            image-tag-suffix: "-validator-orchestrator"
+
+          - name: "Download"
+            path: "sda-download"
+            image-tag-suffix: "-download"
+
+          - name: "Doa"
+            path: "sda-doa"
+            image-tag-suffix: "-doa"
+
+          - name: "PostgresSQL"
+            path: "postgresql"
+            image-tag-suffix: "-postgres"
+
+          - name: "Rabbitmq"
+            path: "rabbitmq"
+            image-tag-suffix: "-rabbitmq"
+
+          - name: "STFP inbox"
+            path: "sda-sftp-inbox"
+            image-tag-suffix: "-sftp-inbox"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Log in to the Github Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.name }} container
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.path }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+          labels: |
+            org.opencontainers.image.title=${{ github.repository }}
+            org.opencontainers.image.description=Sensitive Data Archive - ${{ matrix.name }}
+            org.opencontainers.image.authors=NeIC System Developers
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}/tree/${{ env.VERSION_TAG }}/${{ matrix.path }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION_TAG }}
+
+
+      - name: Run Trivy vulnerability scanner on ${{ matrix.name }}
+        uses: aquasecurity/trivy-action@0.34.2
+        env:
+          TRIVY_SKIP_DB_UPDATE: true
+          TRIVY_SKIP_JAVA_DB_UPDATE: true
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+          format: "sarif"
+          hide-progress: true
+          ignore-unfixed: true
+          output: results.sarif
+          severity: "CRITICAL,HIGH"
+
+      # We do this step such that the report in the Github code scanning is more clear for which image a vulnerability originates from
+      - name: Append image info to sarif file
+        run: |
+          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}/" + .' \
+            results.sarif > annotated_results.sarif 
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: annotated_results.sarif
+          category: ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+
+  code_ql:
+    name: Run CodeQL
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'java', 'go' ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Initializes the CodeQL tools for scanning.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Build sda-doa
+        if: ${{ matrix.language == 'java' }}
+        working-directory: ./sda-doa
+        run: mvn clean install -DskipTests
+
+      - name: Set up JDK 19
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: 19
+
+      - name: Build sda-sftp-inbox
+        if: ${{ matrix.language == 'java' }}
+        working-directory: ./sda-sftp-inbox
+        run: mvn clean install -DskipTests
+
+      - name: Autobuild
+        if: ${{ matrix.language == 'go' }}
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{matrix.language}}"
+
+
+  create_release:
+    needs:
+      - build_images
+    name: Create SDA release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: "true"
+          tag_name: "${{ env.VERSION_TAG }}"
+          body: |
+            # Docker images:
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-download
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-doa
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-validator-orchestrator
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-stfp-inbox
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-postgres
+            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-rabbitmq

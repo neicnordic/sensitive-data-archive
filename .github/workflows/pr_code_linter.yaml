@@ -1,7 +1,6 @@
-name: Multilinters
+name: Linter
 
 on:
-  merge_group:
   pull_request:
     paths:
       - '**.go'
@@ -26,7 +25,7 @@ jobs:
         with:
           filters: |
             sda-download:
-              - 'sda-download/**'
+            - 'sda-download/**'
             sda-admin:
             - 'sda-admin/**'
             sda:
