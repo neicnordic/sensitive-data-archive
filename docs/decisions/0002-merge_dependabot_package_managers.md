@@ -73,6 +73,8 @@ could need to take place for it to be successful. The "/sda-sftp-inbox", and "/s
 "/sda-sftp-inbox" is quite unmaintained, and often require manual intervention during dependency updates, which shouldnt
 hinder the "/sda-doa".
 
+To achieve this we can utilise [dependabot groups](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#groups--)
+
 ### Consequences
 
 * Good, because 10 instead of 24 potential PRs being opened weekly
