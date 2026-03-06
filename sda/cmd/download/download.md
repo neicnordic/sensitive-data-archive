@@ -304,6 +304,56 @@ curl -H "Authorization: Bearer $token" \
      https://HOSTNAME/files/EGAF00000000001/content
 ```
 
+### DRS Object Endpoint
+
+#### `GET /objects/{datasetId}/{filePath}`
+
+Returns a minimal [GA4GH DRS 1.5](https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.5.0/docs/)
+`DrsObject` with a pre-resolved `access_url` pointing to the file content endpoint.
+This enables DRS-aware clients (e.g. htsget-rs) to resolve a dataset + file path
+to a download URL without knowing the internal file ID.
+
+The path is composite: everything before the first `/` is the dataset ID, everything
+after is the file path within the dataset.
+
+- Error codes
+  - `200` DRS object returned
+  - `400` Malformed path (missing dataset or file component)
+  - `401` Invalid or missing token
+  - `403` Access denied or file does not exist
+
+Example:
+
+```bash
+curl -H "Authorization: Bearer $token" \
+     https://HOSTNAME/objects/EGAD00000000001/samples/sample1.bam.c4gh
+```
+
+Response:
+
+```json
+{
+  "id": "EGAF00000000001",
+  "self_uri": "drs://HOSTNAME/EGAF00000000001",
+  "size": 1048576,
+  "created_time": "2026-01-15T10:30:00Z",
+  "checksums": [
+    {"checksum": "a1b2c3d4...", "type": "sha-256"}
+  ],
+  "access_methods": [
+    {
+      "type": "https",
+      "access_url": {
+        "url": "https://HOSTNAME/files/EGAF00000000001/content"
+      }
+    }
+  ]
+}
+```
+
+The `size` and `checksums` describe the encrypted blob served by `access_url`,
+per the DRS 1.5 specification.
+
 ### Error Format
 
 All error responses use [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457):
