@@ -30,6 +30,7 @@ This runs a minimal environment with:
 - File download with re-encryption
 - Range requests
 - Access control
+- DRS object resolution
 
 ### Option 2: Full Pipeline Tests
 
@@ -186,6 +187,30 @@ curl -H "Authorization: Bearer $TOKEN" \
      -H "X-C4GH-Public-Key: $(base64 -w0 mykey.pub.pem)" \
      -H "Range: bytes=0-1023" \
      http://localhost:8080/files/EGAF74900000001
+```
+
+#### Resolve a File via DRS
+
+```bash
+# Resolve a dataset + file path to a DRS object with a download URL
+curl -H "Authorization: Bearer $TOKEN" \
+     http://localhost:8080/objects/EGAD74900000101/dummy_data.c4gh
+```
+
+The response is a GA4GH DRS 1.5 object with a pre-resolved `access_url`:
+
+```json
+{
+  "id": "EGAF74900000001",
+  "self_uri": "drs://localhost:8080/EGAF74900000001",
+  "size": 1048576,
+  "created_time": "2026-01-15T10:30:00Z",
+  "checksums": [{"checksum": "abc...", "type": "sha-256"}],
+  "access_methods": [{
+    "type": "https",
+    "access_url": {"url": "https://localhost:8080/files/EGAF74900000001/content"}
+  }]
+}
 ```
 
 ## Database Queries for Debugging
