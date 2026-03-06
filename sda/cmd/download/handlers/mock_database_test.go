@@ -33,6 +33,7 @@ type mockDatabase struct {
 	fileByPath        *database.File
 	hasPermission     bool
 	datasetNotFound   bool
+	fileChecksums     []database.Checksum
 	err               error
 	pingErr           error
 }
@@ -115,6 +116,14 @@ func (m *mockDatabase) CheckDatasetExists(_ context.Context, _ string) (bool, er
 	}
 
 	return !m.datasetNotFound, nil
+}
+
+func (m *mockDatabase) GetFileChecksums(_ context.Context, _ string, _ string) ([]database.Checksum, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return m.fileChecksums, nil
 }
 
 func (m *mockDatabase) GetDatasetFilesPaginated(_ context.Context, _ string, _ database.FileListOptions) ([]database.File, error) {
