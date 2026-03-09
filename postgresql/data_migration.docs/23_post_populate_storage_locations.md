@@ -25,7 +25,7 @@ aws s3api list-objects-v2 --endpoint ${ENDPOINT} --bucket ${BUCKET} > ${BUCKET}_
 
 Transform raw response to just list of ids
 ```bash
-cat ${BUCKET}_raw | jq -r '.Contents.[] | .Key' > ${BUCKET}_ids
+jq -r '.Contents[].Key' ${BUCKET}_raw > ${BUCKET}_ids
 ```
 
 #### If Posix storage
