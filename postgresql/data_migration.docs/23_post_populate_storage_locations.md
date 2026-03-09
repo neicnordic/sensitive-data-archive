@@ -36,7 +36,7 @@ find . -type f -exec basename {} \; > ${POSIX_VOLUME}_ids
 ### 2.2. Create new temporary tables to support DB migration
 
 ```sql
-CREATE TABLE temp_file_in_${BUCKET || POSIX_VOLUME} ( 
+CREATE TABLE sda.temp_file_in_${BUCKET || POSIX_VOLUME} ( 
 file_id UUID PRIMARY KEY
 );
 ``` 
