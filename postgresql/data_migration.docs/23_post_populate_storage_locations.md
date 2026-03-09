@@ -95,7 +95,8 @@ If you only have multiple archive storages, repeat following UPDATE statement pe
 UPDATE sda.files AS f
 SET archive_location = '${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}'
 FROM temp_file_in_${ARCHIVE_BUCKET} AS in_buk 
-WHERE f.id = in_buk.file_id;
+WHERE f.id = in_buk.file_id
+AND archive_file_path != '';
 ```
 
 ### 3.4 Backup location
@@ -114,7 +115,8 @@ If you only have multiple backup storages, repeat following UPDATE statement per
 UPDATE sda.files AS f
 SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
 FROM temp_file_in_${BACKUP_BUCKET} AS in_buk 
-WHERE f.id = in_buk.file_id;
+WHERE f.id = in_buk.file_id
+AND stable_id IS NOT NULL;
 ```
 
 ### 3.5 Commit
