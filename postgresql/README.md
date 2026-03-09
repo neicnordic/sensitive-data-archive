@@ -29,7 +29,7 @@ Client verification is enforced if `POSTGRES_VERIFY_PEER` is set to `verify-ca` 
 
 # Data migration instructions docs
 
-In [migratedb.docs](data_migration.docs) directory there are instructions on how to execute the data migration 
+In [data_migration.docs](data_migration.docs) directory there are instructions on how to execute the data migration 
 if upgrading a system with existing data related to specific versions of the schema.
 
 The file naming convention is as follows: `${SCHEMA_VERSION}_${PRE/POST}_${SHORT_DESCRIPTION}.md`.
