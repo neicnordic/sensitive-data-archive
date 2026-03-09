@@ -7,7 +7,7 @@ Ensure current schema version is at: 23
 ```sql
 SELECT version from sda.dbschema_version ORDER BY version LIMIT 1 DESC;
 ```
-if result of query is not 23, do not proceed to with instructions.
+if result of query is not 23, do not proceed with instructions.
 
 ## Rollback instructions
 The schema rollback can be ran is recommended to be ran in a transaction, as if somethings goes wrong during schema rollback
