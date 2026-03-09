@@ -1,4 +1,4 @@
-FROM "golang:${GOLANG_VERSION:-1.25}-trixie" AS Build
+FROM golang:1.25.7-trixie AS Build
 ENV CGO_ENABLED=0
 
 COPY . .

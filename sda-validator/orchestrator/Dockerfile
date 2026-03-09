@@ -8,7 +8,7 @@ RUN apt update \
 
 COPY ./apptainer.conf /etc/apptainer/apptainer.conf
 
-FROM golang:1.25-alpine AS app_builder
+FROM golang:1.25.7-alpine AS app_builder
 
 ENV CGO_ENABLED=0
 
