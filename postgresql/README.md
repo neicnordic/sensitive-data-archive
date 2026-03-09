@@ -32,7 +32,15 @@ Client verification is enforced if `POSTGRES_VERIFY_PEER` is set to `verify-ca` 
 In [data_migration.docs](data_migration.docs) directory there are instructions on how to execute the data migration 
 if upgrading a system with existing data related to specific versions of the schema.
 
-The file naming convention is as follows: `${SCHEMA_VERSION}_${PRE/POST}_${SHORT_DESCRIPTION}.md`.
+The file naming convention is as follows:`${SCHEMA_VERSION}_${PRE/POST}_${SHORT_DESCRIPTION}.md`.
 * `${SCHEMA_VERSION}` - describes the schema version the data migration instructions relates to. 
 * `${PRE/POST}` describes if these instructions should be executed before or after the schema migration has taken place.
 * `${SHORT_DESCRIPTION}` - short description describing the data migration
+
+# Schema migration rollback
+
+In [rollback.docs](rollback.docs) directory there are instructions on how to rollback schema migrations.
+
+The file naming convention is as follows: `${SCHEMA_VERSION}_${SHORT_DESCRIPTION}.rollback.md`.
+* `${SCHEMA_VERSION}` - describes the schema version the rollback instructions relates to.
+* `${SHORT_DESCRIPTION}` - short description describing the schema migration - should be the same as the schema migration in [migratedb.d](migratedb.d) 
