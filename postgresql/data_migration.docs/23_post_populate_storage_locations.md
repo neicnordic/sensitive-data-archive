@@ -106,7 +106,7 @@ WHERE f.id = in_buk.file_id;
 ```
 
 ## 4. Clean up
-Only needed if you did the [1. Prep step](#1-prep) and created temporary tables
+Only needed if you did the [2. Prep step](#2-prep) and created temporary tables
 
 Repeat DROP table statement per temporary table created
 ```sql
