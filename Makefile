@@ -183,7 +183,7 @@ benchmark-download-run:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
 
 benchmark-download-down:
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down -v --remove-orphans
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down --remove-orphans
 
 # Force cleanup of benchmark resources.
 # NOTE: intentionally scoped to the benchmark compose file; avoid broad name-based container deletes.
@@ -196,8 +196,13 @@ benchmark-download-seed:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml run --rm integration_test /scripts/seed_benchmark_data.sh
 
 benchmark-download: benchmark-download-up
-	@echo "Waiting for services to become healthy (60s)..."
-	@sleep 60
+	@echo "Waiting for services to become healthy..."
+	@printf "  waiting for download..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download 8080 | head -1 | cut -d: -f2)/health/ready > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@printf "  waiting for download-old..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download-old 8080 | head -1 | cut -d: -f2)/health > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
 	@$(MAKE) benchmark-download-seed
 	@echo "Running benchmark..."
 	@$(MAKE) benchmark-download-run
