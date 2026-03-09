@@ -10,7 +10,7 @@ SELECT version from sda.dbschema_version ORDER BY version LIMIT 1 DESC;
 if result of query is not 23, do not proceed with instructions.
 
 ## Rollback instructions
-The schema rollback can be ran is recommended to be ran in a transaction, as if somethings goes wrong during schema rollback
+The schema rollback is recommended to be executed in a transaction, as if something goes wrong during the rollback
 it can be aborted by rolling back transaction with the following statement
 ```sql
 ROLLBACK;
