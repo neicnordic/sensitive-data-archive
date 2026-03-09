@@ -47,8 +47,21 @@ psql -U $user -d sda -At -h $host -p $port -c "\copy sda.temp_file_in_${BUCKET |
 ```
 
 ## 3. Run data migration queries
+Run the following data migrations in a transaction such that transaction can be aborted incase something goes wrong and rollback is desired.
 
-### 3.1. Inbox Location
+So if something goes wrong after [3.1 Start transaction](#31-start-transaction) and before 
+[3.5 Commit transaction](#35-commit) you can run
+```sql
+ROLLBACK;
+```
+to rollback the transaction.
+
+### 3.1. Start transaction
+```sql
+BEGIN;
+```
+
+### 3.2. Inbox Location
 
 If posix inbox replace `${INBOX_ENDPOINT}/${INBOX_BUCKET}` with `${INBOX_POSIX_VOLUME}`
 
@@ -66,8 +79,7 @@ FROM temp_file_in_${INBOX_BUCKET} AS in_buk
 WHERE f.id = in_buk.file_id;
 ```
 
-
-### 3.2. Archive Location
+### 3.3. Archive Location
 
 If posix archive replace `${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}` with `/${ARCHIVE_POSIX_VOLUME}`
 
@@ -86,7 +98,7 @@ FROM temp_file_in_${ARCHIVE_BUCKET} AS in_buk
 WHERE f.id = in_buk.file_id;
 ```
 
-### 3.3 Backup location
+### 3.4 Backup location
 Skip this if you do not have a backup storage
 
 If posix archive replace '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}' with '/${BACKUP_POSIX_VOLUME}'
@@ -103,6 +115,12 @@ UPDATE sda.files AS f
 SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
 FROM temp_file_in_${BACKUP_BUCKET} AS in_buk 
 WHERE f.id = in_buk.file_id;
+```
+
+### 3.5 Commit
+Commit the transaction
+```sql
+COMMIT;
 ```
 
 ## 4. Clean up
