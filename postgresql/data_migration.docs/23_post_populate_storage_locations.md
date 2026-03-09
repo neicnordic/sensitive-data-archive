@@ -144,7 +144,7 @@ To resolve you could either manually delete those sda.files entries or ensure th
 Skip this step if you do not have a backup storage
 
 ```sql
-SELECT count(id) FROM sda.files WHERE archive_location IS NULL AND stable_id IS NOT NULL)
+SELECT count(id) FROM sda.files WHERE backup_location IS NULL AND stable_id IS NOT NULL
 ```
 If there exists rows, then there are issues and the backup locations of the files are not known.
 To resolve you could either manually delete those sda.files entries or ensure the files are uploaded to the expected locations.
