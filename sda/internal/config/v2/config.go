@@ -122,7 +122,13 @@ func Load() error {
 		viper.SetConfigFile(viper.GetString("config-file"))
 	}
 
-	_ = viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		// If a config file was explicitly specified, any error is fatal.
+		// If not, a "not found" error is expected and can be ignored.
+		if viper.IsSet("config-file") {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+	}
 
 	var missingFlags error
 	for _, flag := range registeredFlags {

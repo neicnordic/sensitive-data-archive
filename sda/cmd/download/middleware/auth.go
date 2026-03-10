@@ -408,10 +408,29 @@ func authenticateStructureBased(rawToken string, userinfoClient *visa.UserinfoCl
 // If visaValidator is provided, GA4GH visa-based access is also computed based on permission.model.
 func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogger audit.Logger) gin.HandlerFunc {
 	// Determine userinfo client for opaque token support.
-	// The visa validator's userinfo client can be reused for opaque token auth.
 	var userinfoClient *visa.UserinfoClient
-	if visaValidator != nil && config.AuthAllowOpaque() {
-		userinfoClient = visaValidator.UserinfoClient()
+	if config.AuthAllowOpaque() {
+		if visaValidator != nil {
+			userinfoClient = visaValidator.UserinfoClient()
+		} else {
+			// No visa validator — create a standalone userinfo client.
+			userinfoURL := config.VisaUserinfoURL()
+			if userinfoURL == "" && config.OIDCIssuer() != "" {
+				discovered, err := visa.DiscoverUserinfoURL(config.OIDCIssuer())
+				if err == nil {
+					userinfoURL = discovered
+				}
+			}
+			if userinfoURL != "" {
+				uc, err := visa.NewUserinfoClient(userinfoURL, time.Duration(config.VisaCacheUserinfoTTL())*time.Second)
+				if err == nil {
+					userinfoClient = uc
+				}
+			}
+			if userinfoClient == nil {
+				log.Warn("auth.allow-opaque is enabled but no userinfo client could be created (configure visa.userinfo-url or oidc.issuer)")
+			}
+		}
 	}
 
 	auditDenied := func(c *gin.Context, status int) {
