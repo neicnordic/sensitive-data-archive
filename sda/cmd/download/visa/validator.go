@@ -18,6 +18,12 @@ import (
 
 const maxURLClaimLength = 255
 
+// cachedVisaResult stores validated visa datasets alongside expiry for cache TTL bounding.
+type cachedVisaResult struct {
+	Datasets []string
+	Expiry   time.Time
+}
+
 // DatasetChecker checks whether a dataset exists in the local database.
 type DatasetChecker interface {
 	CheckDatasetExists(ctx context.Context, datasetID string) (bool, error)
@@ -178,12 +184,15 @@ func (v *Validator) processVisas(ctx context.Context, identity Identity, passpor
 		// Check validation cache
 		visaHash := hashToken(visaJWT)
 		if cached, found := v.validCache.Get(visaHash); found {
-			if datasets, ok := cached.([]string); ok {
-				for _, ds := range datasets {
+			if cr, ok := cached.(cachedVisaResult); ok {
+				for _, ds := range cr.Datasets {
 					if !seen[ds] {
 						seen[ds] = true
 						result.Datasets = append(result.Datasets, ds)
 					}
+				}
+				if !cr.Expiry.IsZero() && (result.MinExpiry.IsZero() || cr.Expiry.Before(result.MinExpiry)) {
+					result.MinExpiry = cr.Expiry
 				}
 
 				continue
@@ -211,7 +220,7 @@ func (v *Validator) processVisas(ctx context.Context, identity Identity, passpor
 			}
 		}
 		if cacheTTL > 0 {
-			v.validCache.SetWithTTL(visaHash, datasets, 1, cacheTTL)
+			v.validCache.SetWithTTL(visaHash, cachedVisaResult{Datasets: datasets, Expiry: expiry}, 1, cacheTTL)
 		}
 
 		for _, ds := range datasets {
