@@ -11,11 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNoopLogger_IsNoop(t *testing.T) {
-	var logger Logger = NoopLogger{}
-	assert.True(t, logger.IsNoop())
-}
-
 func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 	var logger Logger = NoopLogger{}
 	assert.NotPanics(t, func() {
@@ -26,12 +21,6 @@ func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 			HTTPStatus:    200,
 		})
 	})
-}
-
-func TestStdoutLogger_IsNoop(t *testing.T) {
-	var buf bytes.Buffer
-	var logger Logger = newStdoutLoggerWithWriter(&buf)
-	assert.False(t, logger.IsNoop())
 }
 
 func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
