@@ -100,9 +100,11 @@ func run() error {
 	}
 
 	// Initialize audit logger
-	auditLogger := audit.NewStdoutLogger()
-	if config.AuditRequired() && auditLogger.IsNoop() {
-		return errors.New("audit.required is true but audit logger is noop")
+	var auditLogger audit.Logger
+	if config.AuditRequired() {
+		auditLogger = audit.NewStdoutLogger()
+	} else {
+		auditLogger = audit.NoopLogger{}
 	}
 
 	// Initialize pagination HMAC secret
