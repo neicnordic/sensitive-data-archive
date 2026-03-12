@@ -9,7 +9,7 @@ Checked by
 ```sql
 SELECT max(version) AS current_version FROM sda.dbschema_version;
 ```
-Proceed only if current_version = 23
+If result of query is not 23, do not proceed with instructions.
 
 ## 2. Prep
 Note: Prep is only needed if you have multiple s3 buckets / posix volumes for a storage
@@ -19,7 +19,7 @@ Repeat steps for each s3 bucket / posix volume
 ### 2.1. Get file ids file for a storage 
  
 #### If S3 storage
-Get all files in form each s3 bucket
+Get all files from each s3 bucket
 ```bash
 aws s3api list-objects-v2 --endpoint ${ENDPOINT} --bucket ${BUCKET} > ${STORAGE_NAME}_raw
 ```
@@ -49,7 +49,7 @@ psql -U $user -d sda -At -h $host -p $port -c "\copy sda.temp_file_in_${STORAGE_
 ```
 
 ## 3. Run data migration queries
-Run the following data migrations in a transaction such that transaction can be aborted incase something goes wrong and rollback is desired.
+Run the following data migrations in a transaction such that transaction can be aborted in case something goes wrong and rollback is desired.
 
 So if something goes wrong after [3.1 Start transaction](#31-start-transaction) and before 
 [3.5 Commit transaction](#35-commit) you can run
