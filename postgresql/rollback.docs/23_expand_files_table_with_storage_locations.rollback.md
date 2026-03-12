@@ -1,11 +1,11 @@
 # Schema migration rollback version 23
-The following instructions describes the procedure to rollback schema version 23.
+The following instructions describe the procedure to rollback schema version 23.
 
 ## Ensure current schema version
 Ensure current schema version is at: 23
 
 ```sql
-SELECT version from sda.dbschema_version ORDER BY version LIMIT 1 DESC;
+SELECT max(version) AS current_version FROM sda.dbschema_version;
 ```
 if result of query is not 23, do not proceed with instructions.
 
