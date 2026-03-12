@@ -27,11 +27,9 @@ type Event struct {
 // Logger defines the interface for audit logging.
 type Logger interface {
 	Log(ctx context.Context, event Event)
-	IsNoop() bool
 }
 
-// NoopLogger is a no-op implementation of Logger for testing and development.
+// NoopLogger discards all audit events. Used when audit logging is not required.
 type NoopLogger struct{}
 
 func (NoopLogger) Log(context.Context, Event) {}
-func (NoopLogger) IsNoop() bool               { return true }

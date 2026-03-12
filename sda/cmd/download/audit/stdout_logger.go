@@ -42,5 +42,3 @@ func (l *StdoutLogger) Log(_ context.Context, event Event) {
 	defer l.mu.Unlock()
 	_ = l.encoder.Encode(event) // best-effort, don't block HTTP response
 }
-
-func (l *StdoutLogger) IsNoop() bool { return false }

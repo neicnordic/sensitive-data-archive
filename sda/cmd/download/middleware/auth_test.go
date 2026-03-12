@@ -202,8 +202,6 @@ func (l *capturingLogger) Log(_ context.Context, event audit.Event) {
 	l.events = append(l.events, event)
 }
 
-func (l *capturingLogger) IsNoop() bool { return false }
-
 func TestTokenMiddleware_NoToken_EmitsAuditDenied(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

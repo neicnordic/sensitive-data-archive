@@ -20,8 +20,6 @@ func (l *capturingLogger) Log(_ context.Context, event audit.Event) {
 	l.events = append(l.events, event)
 }
 
-func (l *capturingLogger) IsNoop() bool { return false }
-
 // mockDatabase is a mock implementation of the database.Database interface for testing.
 type mockDatabase struct {
 	datasets          []database.Dataset
