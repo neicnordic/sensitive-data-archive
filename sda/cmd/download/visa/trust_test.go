@@ -29,6 +29,12 @@ func TestLoadTrustedIssuers_AllowsHTTPJKUWhenEnabled(t *testing.T) {
 	assert.Equal(t, "http://example.org/jwks", issuers[0].JKU)
 }
 
+func TestNormalizeURL_TrailingSlash(t *testing.T) {
+	assert.Equal(t, "https://issuer.example", NormalizeURL("https://issuer.example/"))
+	assert.Equal(t, "https://issuer.example", NormalizeURL("https://issuer.example"))
+	assert.Equal(t, "https://issuer.example/path", NormalizeURL("https://issuer.example/path/"))
+}
+
 func writeTrustedIssuersFile(t *testing.T, issuers []TrustedIssuer) string {
 	t.Helper()
 
