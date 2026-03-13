@@ -158,6 +158,7 @@ integrationtest-sda-validator-orchestrator-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-validator-orchestrator-integration.yml down -v --remove-orphans
 
 # Download v2 integration tests (sda/cmd/download, Go-based)
+# Prerequisite: run `make build-all` first if container images are not already built.
 integrationtest-sda-cmd-download:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
 	@sleep 10
