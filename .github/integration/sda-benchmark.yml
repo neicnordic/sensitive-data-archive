@@ -87,7 +87,7 @@ services:
       - "8000:8000"
     restart: always
 
-  # Benchmark runner - compares performance between old and new
+  # Benchmark runner - compares public endpoint performance between old and new
   benchmark:
     container_name: benchmark
     command:
@@ -95,8 +95,8 @@ services:
       - "-c"
       - |
         apk add --no-cache git &&
-        cd /benchmark &&
-        go run benchmark.go
+        cd /sda &&
+        go run ./cmd/download/benchmark
     depends_on:
       download:
         condition: service_started
@@ -114,12 +114,15 @@ services:
       - ITERATIONS=${BENCHMARK_ITERATIONS:-5}
       - REQUESTS=${BENCHMARK_REQUESTS:-100}
       - CONCURRENCY=${BENCHMARK_CONCURRENCY:-10}
-    image: golang:1.24-alpine
+      - BENCHMARK_MODE=${BENCHMARK_MODE:-endpoint-e2e}
+      - VERIFY_PRIVATE_KEY_PATH=${VERIFY_PRIVATE_KEY_PATH:-/shared/c4gh.sec.pem}
+      - VERIFY_PRIVATE_KEY_PASSPHRASE=${VERIFY_PRIVATE_KEY_PASSPHRASE:-c4ghpass}
+    image: golang:1.25-alpine
     profiles:
       - benchmark
     volumes:
       - shared:/shared
-      - ../../sda/cmd/download/benchmark:/benchmark
+      - ../../sda:/sda
 
   # Override integration_test to also depend on benchmark services and access scripts
   integration_test:
