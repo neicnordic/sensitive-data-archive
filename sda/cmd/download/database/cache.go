@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/dgraph-io/ristretto"
@@ -323,7 +323,7 @@ func hashStrings(strs []string) string {
 	// Sort a copy to avoid modifying the input
 	sorted := make([]string, len(strs))
 	copy(sorted, strs)
-	sort.Strings(sorted)
+	slices.Sort(sorted)
 
 	h := sha256.New()
 	for _, s := range sorted {

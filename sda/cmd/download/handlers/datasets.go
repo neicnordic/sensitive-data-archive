@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
@@ -68,7 +68,7 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 	for i, d := range datasets {
 		ids[i] = d.ID
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 
 	// Parse pagination parameters
 	pageSize, err := parsePageSize(c)
