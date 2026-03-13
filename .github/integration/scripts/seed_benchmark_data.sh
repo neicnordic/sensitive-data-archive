@@ -74,17 +74,29 @@ for file in NA12878.bam.c4gh NA12878_20k_b37.bam.c4gh; do
     s3cmd -c /shared/s3cfg put "/shared/$file" "s3://test_dummy.org/$file" --no-check-certificate 2>/dev/null || true
 done
 
-# Wait for uploads to appear in inbox queue
-# Also consumption of these messages is needed to get correlation_id for ingest trigger
-RETRY=0
-until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox | jq -r '.messages_ready')" -ge 2 ]; do
-    echo "  Waiting for uploads to complete..."
-    RETRY=$((RETRY + 1))
-    if [ "$RETRY" -ge 60 ]; then
-        echo "ERROR: Upload timeout"
-        exit 1
-    fi
-    sleep 2
+# Resolve the latest uploaded file rows directly from Postgres.
+# The inbox queue is not safe to use for this because s3inbox emits multiple
+# messages per upload, so FIFO consumption can pair the wrong file with the
+# wrong correlation ID on repeated runs.
+declare -A FILE_IDS
+echo "  Resolving uploaded file IDs..."
+for file in NA12878.bam.c4gh NA12878_20k_b37.bam.c4gh; do
+    RETRY=0
+    FILE_ID=""
+    until [ -n "$FILE_ID" ]; do
+        FILE_ID=$(psql -U postgres -h postgres -d sda -At -c "SELECT id FROM sda.files WHERE submission_user='test@dummy.org' AND submission_file_path='$file' ORDER BY created_at DESC LIMIT 1")
+        if [ -n "$FILE_ID" ]; then
+            FILE_IDS["$file"]="$FILE_ID"
+            break
+        fi
+        echo "  Waiting for database registration for $file..."
+        RETRY=$((RETRY + 1))
+        if [ "$RETRY" -ge 60 ]; then
+            echo "ERROR: Database registration timeout for $file"
+            exit 1
+        fi
+        sleep 2
+    done
 done
 
 # Manually trigger ingestion (bridge inbox -> ingest)
@@ -96,16 +108,10 @@ for file in NA12878.bam.c4gh NA12878_20k_b37.bam.c4gh; do
     ENC_SHA=$(sha256sum "/shared/$file" | cut -d' ' -f 1)
     ENC_MD5=$(md5sum "/shared/$file" | cut -d' ' -f 1)
 
-    # Get correlation ID from inbox queue (consume message)
-    # We accept any message from queue assuming FIFO order matches upload? 
-    # Or just take one. integration test assumes specific order or matching? 
-    # integration test does loop and consume 1 message.
-    CORRID=$(curl -s -X POST -H "content-type:application/json" \
-        -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox/get \
-        -d '{"count":1,"encoding":"auto","ackmode":"ack_requeue_false"}' | jq -r .[0].properties.correlation_id)
-    
-    if [ "$CORRID" == "null" ] || [ -z "$CORRID" ]; then
-        echo "ERROR: Failed to get correlation ID for $file"
+    CORRID="${FILE_IDS[$file]}"
+
+    if [ -z "$CORRID" ]; then
+        echo "ERROR: Failed to resolve file ID for $file"
         exit 1
     fi
 
@@ -177,6 +183,22 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) FROM sda.
     RETRY=$((RETRY + 1))
     if [ "$RETRY" -ge 120 ]; then
         echo "ERROR: Verification timeout"
+        exit 1
+    fi
+    sleep 2
+done
+
+# Wait for verified messages to be published before consuming them.
+# The DB checksums can appear slightly before the verify worker has pushed
+# messages into RabbitMQ, which caused a race in the benchmark seeding flow.
+echo "  Waiting for verified queue..."
+RETRY=0
+until [ "$(curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/verified | jq -r '.messages_ready')" -ge 2 ]; do
+    echo "  Waiting for verified queue..."
+    RETRY=$((RETRY + 1))
+    if [ "$RETRY" -ge 120 ]; then
+        echo "ERROR: Verified queue timeout"
+        curl -s -u guest:guest http://rabbitmq:15672/api/queues/sda/verified | jq .
         exit 1
     fi
     sleep 2
