@@ -1,4 +1,4 @@
-// Package main provides a benchmark tool for comparing download service implementations.
+// Package main provides benchmark modes for comparing download service endpoints.
 //
 // When running in a container (via docker compose), the tool auto-configures by:
 // - Reading token from /shared/token
@@ -6,9 +6,12 @@
 // - Discovering an accessible dataset+file via the NEW service (/datasets/*)
 // - Using container hostnames (download, download-new) for service URLs
 //
-// Comparison goal:
-// - NEW: GET /files/{stable_id} with header X-C4GH-Public-Key
-// - OLD: GET /s3/{dataset}/{path} with header Client-Public-Key
+// Supported modes:
+//   - endpoint-e2e: compare the public download endpoints as exposed today
+//     NEW: GET /files/{stable_id} with header X-C4GH-Public-Key
+//     OLD: GET /s3/{dataset}/{path} with header Client-Public-Key
+//   - validated-payload: run the same endpoint comparison, but first verify that
+//     both responses decrypt to the same plaintext using the benchmark private key
 //
 // Usage (containerized - recommended):
 //
@@ -23,11 +26,14 @@
 //
 //	OLD_URL, NEW_URL, ITERATIONS, REQUESTS, CONCURRENCY
 //	FILE_ID, FILE_DATASET, FILE_PATH, TOKEN, PUBKEY
+//	BENCHMARK_MODE, VERIFY_PRIVATE_KEY_PATH, VERIFY_PRIVATE_KEY_PASSPHRASE
 package main
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -35,6 +41,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"slices"
@@ -42,6 +49,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/neicnordic/crypt4gh/keys"
+	crypt4ghstreaming "github.com/neicnordic/crypt4gh/streaming"
+)
+
+type BenchmarkMode string
+
+const (
+	ModeEndpointE2E      BenchmarkMode = "endpoint-e2e"
+	ModeValidatedPayload BenchmarkMode = "validated-payload"
 )
 
 // Config holds benchmark configuration.
@@ -69,6 +86,10 @@ type Config struct {
 	SkipOld     bool
 	SkipNew     bool
 	OutputJSON  bool
+	Mode        BenchmarkMode
+
+	VerifyPrivateKeyPath       string
+	VerifyPrivateKeyPassphrase string
 }
 
 // RequestResult holds the result of a single request.
@@ -109,10 +130,26 @@ type Stats struct {
 
 // ComparisonResult holds results from multiple iterations.
 type ComparisonResult struct {
+	Mode       BenchmarkMode
 	Old        []BenchmarkResult
 	New        []BenchmarkResult
 	OldSummary SummaryStats
 	NewSummary SummaryStats
+}
+
+type payloadDigest struct {
+	EncryptedBytes  int64
+	PlaintextBytes  int64
+	PlaintextSHA256 string
+}
+
+type payloadValidationResult struct {
+	Old payloadDigest
+	New payloadDigest
+}
+
+type payloadValidator struct {
+	privateKey [32]byte
 }
 
 // SummaryStats holds summary statistics across iterations.
@@ -174,9 +211,10 @@ func main() {
 	}
 
 	fmt.Println("=" + strings.Repeat("=", 70))
-	fmt.Println(" Download Service Benchmark")
+	fmt.Printf(" Download Service Benchmark (%s)\n", cfg.Mode)
 	fmt.Println("=" + strings.Repeat("=", 70))
 	fmt.Println("\nConfiguration:")
+	fmt.Printf("  Mode:          %s\n", cfg.Mode)
 	fmt.Printf("  Iterations:    %d\n", cfg.Iterations)
 	fmt.Printf("  Requests:      %d per iteration\n", cfg.Requests)
 	fmt.Printf("  Concurrency:   %d\n", cfg.Concurrency)
@@ -191,13 +229,10 @@ func main() {
 	}
 	fmt.Println()
 
-	client := &http.Client{
-		Timeout: cfg.Timeout,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: cfg.Concurrency,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // benchmark tool, not production
-			DisableCompression:  true,
-		},
+	client, err := newHTTPClient(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Client setup error: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Preflight (fail fast)
@@ -214,43 +249,22 @@ func main() {
 		}
 	}
 
-	result := &ComparisonResult{}
-
-	// Benchmark old implementation
-	if !cfg.SkipOld {
-		fmt.Println("-" + strings.Repeat("-", 70))
-		fmt.Println(" Benchmarking OLD implementation")
-		fmt.Println("-" + strings.Repeat("-", 70))
-
-		for i := 1; i <= cfg.Iterations; i++ {
-			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
-			res := runBenchmark(client, oldTarget, cfg)
-			result.Old = append(result.Old, res)
-			printIterationResult(res)
-
-			if i < cfg.Iterations {
-				time.Sleep(2 * time.Second) // Cool-down between iterations
-			}
+	if cfg.Mode == ModeValidatedPayload {
+		validation, err := validatePayloadEquivalence(client, cfg, oldTarget, newTarget)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Payload validation failed: %v\n", err)
+			os.Exit(1)
 		}
+		fmt.Fprintf(os.Stderr,
+			"[validation] plaintext match OK (bytes=%d, sha256=%s, encrypted-bytes old=%d new=%d)\n",
+			validation.Old.PlaintextBytes,
+			validation.Old.PlaintextSHA256,
+			validation.Old.EncryptedBytes,
+			validation.New.EncryptedBytes,
+		)
 	}
 
-	// Benchmark new implementation
-	if !cfg.SkipNew {
-		fmt.Println("\n" + "-" + strings.Repeat("-", 70))
-		fmt.Println(" Benchmarking NEW implementation")
-		fmt.Println("-" + strings.Repeat("-", 70))
-
-		for i := 1; i <= cfg.Iterations; i++ {
-			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
-			res := runBenchmark(client, newTarget, cfg)
-			result.New = append(result.New, res)
-			printIterationResult(res)
-
-			if i < cfg.Iterations {
-				time.Sleep(2 * time.Second)
-			}
-		}
-	}
+	result := runBenchmarks(client, cfg, oldTarget, newTarget)
 
 	// Calculate and print summary
 	if !cfg.SkipOld {
@@ -290,8 +304,22 @@ func parseFlags() Config {
 	flag.BoolVar(&cfg.SkipOld, "skip-old", defaults.SkipOld, "Skip benchmarking old implementation")
 	flag.BoolVar(&cfg.SkipNew, "skip-new", defaults.SkipNew, "Skip benchmarking new implementation")
 	flag.BoolVar(&cfg.OutputJSON, "json", false, "Output results as JSON")
+	flag.Func("mode", "Benchmark mode: endpoint-e2e or validated-payload", func(val string) error {
+		mode, err := parseBenchmarkMode(val)
+		if err != nil {
+			return err
+		}
+		cfg.Mode = mode
+		return nil
+	})
+	flag.StringVar(&cfg.VerifyPrivateKeyPath, "verify-private-key", defaults.VerifyPrivateKeyPath, "Private key path used to decrypt responses in validated-payload mode")
+	flag.StringVar(&cfg.VerifyPrivateKeyPassphrase, "verify-private-key-passphrase", defaults.VerifyPrivateKeyPassphrase, "Private key passphrase used in validated-payload mode")
 
 	flag.Parse() //nolint:revive // deep-exit: called only from main()
+
+	if cfg.Mode == "" {
+		cfg.Mode = defaults.Mode
+	}
 
 	return cfg
 }
@@ -300,18 +328,21 @@ func parseFlags() Config {
 // This enables auto-configuration when running in a Docker container.
 func loadEnvironmentDefaults() Config {
 	cfg := Config{
-		OldURL:           getEnv("OLD_URL", ""),
-		NewURL:           getEnv("NEW_URL", ""),
-		FileID:           getEnv("FILE_ID", ""),
-		DatasetID:        getEnv("FILE_DATASET", ""),
-		S3Path:           getEnv("FILE_PATH", ""),
-		OldClientVersion: getEnv("OLD_CLIENT_VERSION", "v0.2.0"),
-		Iterations:       getEnvInt("ITERATIONS", 5),
-		Requests:         getEnvInt("REQUESTS", 100),
-		Concurrency:      getEnvInt("CONCURRENCY", 10),
-		Timeout:          30 * time.Second,
-		SkipOld:          getEnvBool("SKIP_OLD", false),
-		SkipNew:          getEnvBool("SKIP_NEW", false),
+		OldURL:                     getEnv("OLD_URL", ""),
+		NewURL:                     getEnv("NEW_URL", ""),
+		FileID:                     getEnv("FILE_ID", ""),
+		DatasetID:                  getEnv("FILE_DATASET", ""),
+		S3Path:                     getEnv("FILE_PATH", ""),
+		OldClientVersion:           getEnv("OLD_CLIENT_VERSION", "v0.2.0"),
+		Iterations:                 getEnvInt("ITERATIONS", 5),
+		Requests:                   getEnvInt("REQUESTS", 100),
+		Concurrency:                getEnvInt("CONCURRENCY", 10),
+		Timeout:                    30 * time.Second,
+		SkipOld:                    getEnvBool("SKIP_OLD", false),
+		SkipNew:                    getEnvBool("SKIP_NEW", false),
+		Mode:                       mustParseBenchmarkMode(getEnv("BENCHMARK_MODE", string(ModeEndpointE2E))),
+		VerifyPrivateKeyPath:       getEnv("VERIFY_PRIVATE_KEY_PATH", "/shared/c4gh.sec.pem"),
+		VerifyPrivateKeyPassphrase: getEnv("VERIFY_PRIVATE_KEY_PASSPHRASE", "c4ghpass"),
 	}
 
 	// Try to read token from /shared/token (container mode)
@@ -331,6 +362,26 @@ func loadEnvironmentDefaults() Config {
 	}
 
 	return cfg
+}
+
+func parseBenchmarkMode(val string) (BenchmarkMode, error) {
+	switch BenchmarkMode(strings.TrimSpace(val)) {
+	case ModeEndpointE2E:
+		return ModeEndpointE2E, nil
+	case ModeValidatedPayload:
+		return ModeValidatedPayload, nil
+	default:
+		return "", fmt.Errorf("unsupported benchmark mode %q", val)
+	}
+}
+
+func mustParseBenchmarkMode(val string) BenchmarkMode {
+	mode, err := parseBenchmarkMode(val)
+	if err != nil {
+		return ModeEndpointE2E
+	}
+
+	return mode
 }
 
 func getEnv(key, defaultVal string) string {
@@ -620,8 +671,36 @@ func validateConfig(cfg Config) error {
 	if cfg.Concurrency < 1 {
 		return errors.New("-concurrency must be at least 1")
 	}
+	if _, err := parseBenchmarkMode(string(cfg.Mode)); err != nil {
+		return err
+	}
+	if cfg.Mode == ModeValidatedPayload {
+		if cfg.SkipOld || cfg.SkipNew {
+			return errors.New("validated-payload mode requires both old and new implementations")
+		}
+		if cfg.VerifyPrivateKeyPath == "" {
+			return errors.New("-verify-private-key is required in validated-payload mode")
+		}
+	}
 
 	return nil
+}
+
+func newHTTPClient(cfg Config) (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("create cookie jar: %w", err)
+	}
+
+	return &http.Client{
+		Timeout: cfg.Timeout,
+		Jar:     jar,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: cfg.Concurrency,
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // benchmark tool, not production
+			DisableCompression:  true,
+		},
+	}, nil
 }
 
 func preflight(client *http.Client, target Target, cfg Config) error {
@@ -664,6 +743,7 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 	startTime := time.Now()
 
 	for i := 0; i < cfg.Requests; i++ {
+		idx := i
 		wg.Go(func() {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
@@ -672,7 +752,7 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 			if target.Name == "old" && cfg.OldClientVersion != "" {
 				extra = map[string]string{"SDA-Client-Version": cfg.OldClientVersion}
 			}
-			results[i] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
+			results[idx] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
 		})
 	}
 
@@ -686,15 +766,24 @@ func makeRequest(client *http.Client, urlStr, token, publicKey, publicKeyHeader 
 	return makeRequestWithExtras(client, urlStr, token, publicKey, publicKeyHeader, nil)
 }
 
-func makeRequestWithExtras(client *http.Client, urlStr, token, publicKey, publicKeyHeader string, extraHeaders map[string]string) RequestResult {
+func buildRequest(urlStr, token, publicKey, publicKeyHeader string, extraHeaders map[string]string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", urlStr, nil)
 	if err != nil {
-		return RequestResult{Error: err}
+		return nil, err
 	}
 	req.Header.Set("Authorization", token)
 	req.Header.Set(publicKeyHeader, publicKey)
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
+	}
+
+	return req, nil
+}
+
+func makeRequestWithExtras(client *http.Client, urlStr, token, publicKey, publicKeyHeader string, extraHeaders map[string]string) RequestResult {
+	req, err := buildRequest(urlStr, token, publicKey, publicKeyHeader, extraHeaders)
+	if err != nil {
+		return RequestResult{Error: err}
 	}
 
 	start := time.Now()
@@ -867,9 +956,209 @@ func formatStatusCounts(m map[int]int) string {
 	return strings.Join(parts, ", ")
 }
 
+func runBenchmarks(client *http.Client, cfg Config, oldTarget, newTarget Target) *ComparisonResult {
+	result := &ComparisonResult{Mode: cfg.Mode}
+
+	switch {
+	case !cfg.SkipOld && !cfg.SkipNew:
+		fmt.Println("-" + strings.Repeat("-", 70))
+		fmt.Printf(" Benchmarking paired endpoint runs (%s)\n", cfg.Mode)
+		fmt.Println("-" + strings.Repeat("-", 70))
+
+		for i := 1; i <= cfg.Iterations; i++ {
+			order := pairedIterationTargets(i, oldTarget, newTarget)
+			fmt.Printf("\n  Paired iteration %d/%d (%s -> %s)\n",
+				i, cfg.Iterations, strings.ToUpper(order[0].Name), strings.ToUpper(order[1].Name))
+			for _, target := range order {
+				res := runBenchmark(client, target, cfg)
+				appendBenchmarkResult(result, target.Name, res)
+				fmt.Printf("  %s:\n", strings.ToUpper(target.Name))
+				printIterationResult(res)
+			}
+
+			if i < cfg.Iterations {
+				time.Sleep(2 * time.Second)
+			}
+		}
+	case !cfg.SkipOld:
+		fmt.Println("-" + strings.Repeat("-", 70))
+		fmt.Println(" Benchmarking OLD endpoint")
+		fmt.Println("-" + strings.Repeat("-", 70))
+		for i := 1; i <= cfg.Iterations; i++ {
+			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
+			res := runBenchmark(client, oldTarget, cfg)
+			result.Old = append(result.Old, res)
+			printIterationResult(res)
+			if i < cfg.Iterations {
+				time.Sleep(2 * time.Second)
+			}
+		}
+	case !cfg.SkipNew:
+		fmt.Println("-" + strings.Repeat("-", 70))
+		fmt.Println(" Benchmarking NEW endpoint")
+		fmt.Println("-" + strings.Repeat("-", 70))
+		for i := 1; i <= cfg.Iterations; i++ {
+			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
+			res := runBenchmark(client, newTarget, cfg)
+			result.New = append(result.New, res)
+			printIterationResult(res)
+			if i < cfg.Iterations {
+				time.Sleep(2 * time.Second)
+			}
+		}
+	}
+
+	return result
+}
+
+func pairedIterationTargets(iteration int, oldTarget, newTarget Target) []Target {
+	if iteration%2 == 1 {
+		return []Target{oldTarget, newTarget}
+	}
+
+	return []Target{newTarget, oldTarget}
+}
+
+func appendBenchmarkResult(result *ComparisonResult, targetName string, res BenchmarkResult) {
+	switch targetName {
+	case "old":
+		result.Old = append(result.Old, res)
+	case "new":
+		result.New = append(result.New, res)
+	}
+}
+
+func validatePayloadEquivalence(client *http.Client, cfg Config, oldTarget, newTarget Target) (*payloadValidationResult, error) {
+	validator, err := newPayloadValidator(cfg.VerifyPrivateKeyPath, cfg.VerifyPrivateKeyPassphrase)
+	if err != nil {
+		return nil, err
+	}
+
+	oldDigest, err := fetchPayloadDigest(client, oldTarget, cfg, validator)
+	if err != nil {
+		return nil, fmt.Errorf("old: %w", err)
+	}
+	newDigest, err := fetchPayloadDigest(client, newTarget, cfg, validator)
+	if err != nil {
+		return nil, fmt.Errorf("new: %w", err)
+	}
+	if err := comparePayloadDigests(oldDigest, newDigest); err != nil {
+		return nil, err
+	}
+
+	return &payloadValidationResult{Old: oldDigest, New: newDigest}, nil
+}
+
+func newPayloadValidator(path, passphrase string) (*payloadValidator, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open verification private key %q: %w", path, err)
+	}
+	defer file.Close()
+
+	var password []byte
+	if passphrase != "" {
+		password = []byte(passphrase)
+	}
+
+	privateKey, err := keys.ReadPrivateKey(file, password)
+	if err != nil {
+		return nil, fmt.Errorf("read verification private key %q: %w", path, err)
+	}
+
+	return &payloadValidator{privateKey: privateKey}, nil
+}
+
+func fetchPayloadDigest(client *http.Client, target Target, cfg Config, validator *payloadValidator) (payloadDigest, error) {
+	u, err := target.BuildURL(cfg)
+	if err != nil {
+		return payloadDigest{}, err
+	}
+
+	var extraHeaders map[string]string
+	if target.Name == "old" && cfg.OldClientVersion != "" {
+		extraHeaders = map[string]string{"SDA-Client-Version": cfg.OldClientVersion}
+	}
+
+	req, err := buildRequest(u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extraHeaders)
+	if err != nil {
+		return payloadDigest{}, err
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // benchmark tool, URLs from CLI flags
+	if err != nil {
+		return payloadDigest{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+		return payloadDigest{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	return validator.digest(resp.Body)
+}
+
+func (v *payloadValidator) digest(body io.Reader) (payloadDigest, error) {
+	counted := &countingReader{reader: body}
+	reader, err := crypt4ghstreaming.NewCrypt4GHReader(counted, v.privateKey, nil)
+	if err != nil {
+		return payloadDigest{}, err
+	}
+	defer reader.Close()
+
+	hash := sha256.New()
+	plaintextBytes, err := io.Copy(hash, reader)
+	if err != nil {
+		return payloadDigest{}, err
+	}
+
+	return payloadDigest{
+		EncryptedBytes:  counted.bytesRead,
+		PlaintextBytes:  plaintextBytes,
+		PlaintextSHA256: hex.EncodeToString(hash.Sum(nil)),
+	}, nil
+}
+
+func comparePayloadDigests(oldDigest, newDigest payloadDigest) error {
+	if oldDigest.PlaintextBytes != newDigest.PlaintextBytes {
+		return fmt.Errorf("plaintext byte length mismatch: old=%d new=%d", oldDigest.PlaintextBytes, newDigest.PlaintextBytes)
+	}
+	if oldDigest.PlaintextSHA256 != newDigest.PlaintextSHA256 {
+		return fmt.Errorf("plaintext sha256 mismatch: old=%s new=%s", oldDigest.PlaintextSHA256, newDigest.PlaintextSHA256)
+	}
+
+	return nil
+}
+
+func percentChange(newValue, oldValue float64) float64 {
+	switch {
+	case oldValue == 0 && newValue == 0:
+		return 0
+	case oldValue == 0 && newValue > 0:
+		return math.Inf(1)
+	case oldValue == 0:
+		return math.Inf(-1)
+	default:
+		return (newValue - oldValue) / oldValue * 100
+	}
+}
+
+type countingReader struct {
+	reader    io.Reader
+	bytesRead int64
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.bytesRead += int64(n)
+
+	return n, err
+}
+
 func printSummary(result *ComparisonResult, cfg Config) {
 	fmt.Println("\n" + "=" + strings.Repeat("=", 70))
-	fmt.Println(" SUMMARY")
+	fmt.Printf(" SUMMARY (%s)\n", cfg.Mode)
 	fmt.Println("=" + strings.Repeat("=", 70))
 
 	if !cfg.SkipOld {
@@ -886,9 +1175,9 @@ func printSummary(result *ComparisonResult, cfg Config) {
 		fmt.Println(" COMPARISON (NEW vs OLD)")
 		fmt.Println("-" + strings.Repeat("-", 70))
 
-		rpsChange := (result.NewSummary.AvgRequestsPerS - result.OldSummary.AvgRequestsPerS) / result.OldSummary.AvgRequestsPerS * 100
-		latencyChange := float64(result.NewSummary.AvgLatency.Mean-result.OldSummary.AvgLatency.Mean) / float64(result.OldSummary.AvgLatency.Mean) * 100
-		throughputChange := (result.NewSummary.AvgThroughput - result.OldSummary.AvgThroughput) / result.OldSummary.AvgThroughput * 100
+		rpsChange := percentChange(result.NewSummary.AvgRequestsPerS, result.OldSummary.AvgRequestsPerS)
+		latencyChange := percentChange(float64(result.NewSummary.AvgLatency.Mean), float64(result.OldSummary.AvgLatency.Mean))
+		throughputChange := percentChange(result.NewSummary.AvgThroughput, result.OldSummary.AvgThroughput)
 
 		fmt.Printf("\n  Requests/sec:  %+.1f%% ", rpsChange)
 		printChangeIndicator(rpsChange, true)
@@ -905,9 +1194,9 @@ func printSummary(result *ComparisonResult, cfg Config) {
 		fmt.Println("\n  Verdict:")
 		switch {
 		case rpsChange > 5:
-			fmt.Println("    NEW implementation is FASTER")
+			fmt.Println("    NEW endpoint is FASTER")
 		case rpsChange < -5:
-			fmt.Println("    OLD implementation is FASTER")
+			fmt.Println("    OLD endpoint is FASTER")
 		default:
 			fmt.Println("    Performance is SIMILAR (within 5%)")
 		}
@@ -917,7 +1206,7 @@ func printSummary(result *ComparisonResult, cfg Config) {
 }
 
 func printSummaryStats(s SummaryStats) {
-	fmt.Printf("\n  %s Implementation (%d iterations):\n", s.Name, s.Iterations)
+	fmt.Printf("\n  %s Endpoint (%d iterations):\n", s.Name, s.Iterations)
 	fmt.Printf("    Requests/sec:   %.2f (+/- %.2f)\n", s.AvgRequestsPerS, s.StdDevRequestsPerS)
 	fmt.Printf("    Success rate:   %.1f%%\n", s.SuccessRate)
 	fmt.Printf("    Throughput:     %.2f MB/s\n", s.AvgThroughput)
