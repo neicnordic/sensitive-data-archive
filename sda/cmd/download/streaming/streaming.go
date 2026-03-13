@@ -30,6 +30,9 @@ var ErrRangeNotSatisfiable = errors.New("range not satisfiable")
 // The handler should return HTTP 400 or reject the range.
 var ErrRangeInvalid = errors.New("range invalid")
 
+// rangeRe matches a single byte range: bytes=START-END, bytes=START-, or bytes=-SUFFIX.
+var rangeRe = regexp.MustCompile(`^bytes=(\d*)-(\d*)$`)
+
 // ParseRangeHeader parses an RFC 7233 Range header.
 // Returns:
 //   - (nil, nil) if no range is specified - serve full file with 200
@@ -50,9 +53,7 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) (*RangeSpec, error) {
 		}
 	}
 
-	// Match: bytes=START-END or bytes=START- or bytes=-SUFFIX
-	re := regexp.MustCompile(`^bytes=(\d*)-(\d*)$`)
-	matches := re.FindStringSubmatch(rangeHeader)
+	matches := rangeRe.FindStringSubmatch(rangeHeader)
 	if matches == nil {
 		log.Warnf("invalid range header format: %s", rangeHeader)
 
