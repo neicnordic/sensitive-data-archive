@@ -47,7 +47,7 @@ This tests the download service with real data that has been processed through t
 ### Prerequisites
 
 - Docker and Docker Compose v2+
-- Go 1.20+
+- Go 1.25+
 - `make` utility
 - `curl` and `jq` for testing
 
@@ -102,7 +102,7 @@ After tests complete, you'll have:
 
 ```bash
 cd sda
-CONFIGFILE=cmd/download/dev_config.yaml go run cmd/download/main.go
+CONFIG_FILE=cmd/download/dev_config.yaml go run cmd/download/main.go
 ```
 
 The service starts on:
@@ -241,7 +241,8 @@ make sda-s3-down
 
 ### "Config File Not Found"
 
-This is a viper warning, not an error. The service loads config from `CONFIGFILE` environment variable.
+If `CONFIG_FILE` is set and the file is missing, the service exits with an error.
+If no `CONFIG_FILE` is set, the service searches default paths and ignores missing files.
 
 ### Database Connection Issues
 
