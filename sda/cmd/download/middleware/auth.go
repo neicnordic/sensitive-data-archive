@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -695,7 +696,12 @@ func (sc *SessionCache) Set(key string, value AuthContext, ttl time.Duration) {
 
 // mergeDatasets returns a deduplicated union of two string slices.
 func mergeDatasets(a, b []string) []string {
-	seen := make(map[string]bool, len(a))
+	hint := 0
+	if len(a) <= math.MaxInt-len(b) {
+		hint = len(a) + len(b)
+	}
+
+	seen := make(map[string]bool, hint)
 	var result []string
 
 	for _, s := range a {
