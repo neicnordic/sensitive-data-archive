@@ -81,7 +81,7 @@ jobs:
             org.opencontainers.image.version=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }} sarif
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }} markdown output
         if: steps.changes.outputs.changed == 'true'
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
