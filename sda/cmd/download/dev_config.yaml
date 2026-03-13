@@ -1,5 +1,5 @@
 # Development configuration for sda/cmd/download
-# Use with: CONFIGFILE=cmd/download/dev_config.yaml go run cmd/download/main.go
+# Use with: CONFIG_FILE=cmd/download/dev_config.yaml go run cmd/download/main.go
 
 # API Server configuration
 api:
