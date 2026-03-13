@@ -46,7 +46,9 @@ oidc:
 
 session:
   expiration: 3600
-  domain: "localhost"
+  # The benchmark runner reaches this service via the Docker hostname
+  # "download-old", so the session cookie must be scoped to that host.
+  domain: "download-old"
   secure: false
   httponly: true
   name: "sda_session_key"
