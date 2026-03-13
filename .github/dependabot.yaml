@@ -6,107 +6,46 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
 
-# Each subfolder needs to be checked separately
+  # Docker images across services
   - package-ecosystem: docker
-    directory: "/postgresql"
-    schedule:
-      interval: weekly
+    directories:
+      - "/postgresql"
+      - "/rabbitmq"
+      - "/sda-validator/orchestrator"
+      - "/sda"
+      - "/sda-download"
+      - "/sda-sftp-inbox"
+      - "/sda-doa"
     open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: "/sda-download"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: "/rabbitmq"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: "/sda"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: "/sda-validator-orchestrator"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: "/sda-sftp-inbox"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-
-# Each subfolder needs to be checked separately
-  - package-ecosystem: gomod
-    directory: "/sda"
     groups:
-      all-modules:
+      docker:
         patterns:
           - "*"
-    open-pull-requests-limit: 10
-
-    schedule:
-      interval: weekly
 
   - package-ecosystem: gomod
-    directory: "/sda-download"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
+    directories:
+      - "/sda-validator/orchestrator"
+      - "/sda"
+      - "/sda-download"
     open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
-
-  - package-ecosystem: gomod
-    directory: "/sda-validator/orchestrator"
     groups:
-      all-modules:
+      go:
         patterns:
           - "*"
-    open-pull-requests-limit: 10
 
-    schedule:
-      interval: weekly
-
-# Each subfolder needs to be checked separately
   - package-ecosystem: maven
     directory: "/sda-sftp-inbox"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
     open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
 
   - package-ecosystem: maven
     directory: "/sda-doa"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
     open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
-
-  - package-ecosystem: docker
-    directory: "/sda-doa"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
 
 ## release v1 branch
   - package-ecosystem: "github-actions"
@@ -115,80 +54,30 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-
-    commit-message:
-      prefix: "[release_v1]"
-### Docker
-  - package-ecosystem: docker
-    target-branch: release_v1
-    directory: "/postgresql"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
     commit-message:
       prefix: "[release_v1]"
 
   - package-ecosystem: docker
     target-branch: release_v1
-    directory: "/rabbitmq"
-    schedule:
-      interval: weekly
+    directories:
+      - "/postgresql"
+      - "/rabbitmq"
+      - "/sda"
+      - "/sda-download"
+      - "/sda-sftp-inbox"
+      - "/sda-doa"
     open-pull-requests-limit: 10
-
+    groups:
+      docker:
+        patterns:
+          - "*"
     commit-message:
       prefix: "[release_v1]"
 
-  - package-ecosystem: docker
-    target-branch: release_v1
-    directory: "/sda"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-    commit-message:
-      prefix: "[release_v1]"
-
-  - package-ecosystem: docker
-    target-branch: release_v1
-    directory: "/sda-doa"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-    commit-message:
-      prefix: "[release_v1]"
-
-  - package-ecosystem: docker
-    target-branch: release_v1
-    directory: "/sda-download"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-    commit-message:
-      prefix: "[release_v1]"
-
-  - package-ecosystem: docker
-    target-branch: release_v1
-    directory: "/sda-sftp-inbox"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-
-    commit-message:
-      prefix: "[release_v1]"
-
-### JAVA
   - package-ecosystem: maven
     target-branch: release_v1
     directory: "/sda-doa"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
     open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
     commit-message:
@@ -197,26 +86,7 @@ updates:
   - package-ecosystem: maven
     target-branch: release_v1
     directory: "/sda-sftp-inbox"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
     open-pull-requests-limit: 10
-
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: "[release_v1]"
-### GO
-  - package-ecosystem: gomod
-    target-branch: release_v1
-    directory: "/sda-download"
-    groups:
-      all-modules:
-        patterns:
-          - "*"
-    open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
     commit-message:
@@ -224,13 +94,14 @@ updates:
 
   - package-ecosystem: gomod
     target-branch: release_v1
-    directory: "/sda"
+    directories:
+      - "/sda"
+      - "/sda-download"
     groups:
-      all-modules:
+      go:
         patterns:
           - "*"
     open-pull-requests-limit: 10
-
     schedule:
       interval: weekly
     commit-message:
