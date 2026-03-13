@@ -2,7 +2,7 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -20,7 +20,7 @@ updates:
       - "/sda-download"
       - "/sda-sftp-inbox"
       - "/sda-doa"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -33,7 +33,7 @@ updates:
       - "/sda-validator/orchestrator"
       - "/sda"
       - "/sda-download"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -43,7 +43,7 @@ updates:
 
   - package-ecosystem: maven
     directory: "/sda-sftp-inbox"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -53,7 +53,7 @@ updates:
 
   - package-ecosystem: maven
     directory: "/sda-doa"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -65,7 +65,7 @@ updates:
   - package-ecosystem: "github-actions"
     target-branch: release_v1
     directory: "/"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -84,7 +84,7 @@ updates:
       - "/sda-download"
       - "/sda-sftp-inbox"
       - "/sda-doa"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -97,7 +97,7 @@ updates:
   - package-ecosystem: maven
     target-branch: release_v1
     directory: "/sda-doa"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -110,7 +110,7 @@ updates:
   - package-ecosystem: maven
     target-branch: release_v1
     directory: "/sda-sftp-inbox"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
@@ -125,7 +125,7 @@ updates:
     directories:
       - "/sda"
       - "/sda-download"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
     groups:
