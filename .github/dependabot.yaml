@@ -2,9 +2,13 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    open-pull-requests-limit: 10
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # Docker images across services
   - package-ecosystem: docker
@@ -17,6 +21,8 @@ updates:
       - "/sda-sftp-inbox"
       - "/sda-doa"
     open-pull-requests-limit: 10
+    schedule:
+      interval: weekly
     groups:
       docker:
         patterns:
@@ -40,20 +46,32 @@ updates:
     open-pull-requests-limit: 10
     schedule:
       interval: weekly
+    groups:
+      maven:
+        patterns:
+          - "*"
 
   - package-ecosystem: maven
     directory: "/sda-doa"
     open-pull-requests-limit: 10
     schedule:
       interval: weekly
+    groups:
+      maven:
+        patterns:
+          - "*"
 
 ## release v1 branch
   - package-ecosystem: "github-actions"
     target-branch: release_v1
     directory: "/"
+    open-pull-requests-limit: 10
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     commit-message:
       prefix: "[release_v1]"
 
@@ -67,6 +85,8 @@ updates:
       - "/sda-sftp-inbox"
       - "/sda-doa"
     open-pull-requests-limit: 10
+    schedule:
+      interval: weekly
     groups:
       docker:
         patterns:
@@ -80,6 +100,10 @@ updates:
     open-pull-requests-limit: 10
     schedule:
       interval: weekly
+    groups:
+      maven:
+        patterns:
+          - "*"
     commit-message:
       prefix: "[release_v1]"
 
@@ -89,6 +113,10 @@ updates:
     open-pull-requests-limit: 10
     schedule:
       interval: weekly
+    groups:
+      maven:
+        patterns:
+          - "*"
     commit-message:
       prefix: "[release_v1]"
 
@@ -97,12 +125,12 @@ updates:
     directories:
       - "/sda"
       - "/sda-download"
+    open-pull-requests-limit: 10
+    schedule:
+      interval: weekly
     groups:
       go:
         patterns:
           - "*"
-    open-pull-requests-limit: 10
-    schedule:
-      interval: weekly
     commit-message:
       prefix: "[release_v1]"
