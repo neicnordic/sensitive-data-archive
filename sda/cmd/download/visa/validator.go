@@ -183,20 +183,18 @@ func (v *Validator) processVisas(ctx context.Context, identity Identity, passpor
 
 		// Check validation cache
 		visaHash := hashToken(visaJWT)
-		if cached, found := v.validCache.Get(visaHash); found {
-			if cr, ok := cached.(cachedVisaResult); ok {
-				for _, ds := range cr.Datasets {
-					if !seen[ds] {
-						seen[ds] = true
-						result.Datasets = append(result.Datasets, ds)
-					}
+		if cr, ok := v.getCachedVisa(visaHash); ok {
+			for _, ds := range cr.Datasets {
+				if !seen[ds] {
+					seen[ds] = true
+					result.Datasets = append(result.Datasets, ds)
 				}
-				if !cr.Expiry.IsZero() && (result.MinExpiry.IsZero() || cr.Expiry.Before(result.MinExpiry)) {
-					result.MinExpiry = cr.Expiry
-				}
-
-				continue
 			}
+			if !cr.Expiry.IsZero() && (result.MinExpiry.IsZero() || cr.Expiry.Before(result.MinExpiry)) {
+				result.MinExpiry = cr.Expiry
+			}
+
+			continue
 		}
 
 		datasets, expiry, err := v.validateSingleVisa(ctx, identity, visaJWT, jkuTracker, identities)
@@ -239,6 +237,18 @@ func (v *Validator) processVisas(ctx context.Context, identity Identity, passpor
 	}
 
 	return result, nil
+}
+
+// getCachedVisa retrieves a cached visa validation result by hash.
+func (v *Validator) getCachedVisa(visaHash string) (cachedVisaResult, bool) {
+	cached, found := v.validCache.Get(visaHash)
+	if !found {
+		return cachedVisaResult{}, false
+	}
+
+	cr, ok := cached.(cachedVisaResult)
+
+	return cr, ok
 }
 
 // validateSingleVisa validates one visa JWT and returns granted datasets and expiry.
