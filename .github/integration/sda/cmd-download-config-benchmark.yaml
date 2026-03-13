@@ -1,5 +1,5 @@
 # Configuration for sda/cmd/download service in BENCHMARK mode
-# Uses visa-based authorization to match old sda-download behavior for fair comparison
+# This benchmark compares public endpoints, not just internal implementation details.
 # The endpoint uses http:// prefix for storage/v2 URL parsing
 
 # API Server
@@ -9,7 +9,7 @@ api:
 
 # Logging
 log:
-  level: "debug"
+  level: "info"
 
 # gRPC Health check
 health:
@@ -36,7 +36,7 @@ jwt:
   allow-all-data: false
 
 # Permission model: combined (ownership + visa) for benchmark
-# This allows graceful fallback if visa processing has issues
+# This keeps the benchmark environment resilient if visa processing has issues.
 permission:
   model: "combined"
 
@@ -73,8 +73,10 @@ session:
   name: "sda_session"
 
 # Database query cache
+# Disabled here so the benchmark does not compare a cached new endpoint
+# against an uncached old endpoint.
 cache:
-  enabled: true
+  enabled: false
   file-ttl: 300      # 5 minutes
   permission-ttl: 120  # 2 minutes
   dataset-ttl: 300   # 5 minutes
