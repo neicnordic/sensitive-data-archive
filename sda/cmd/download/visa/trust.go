@@ -68,7 +68,7 @@ func NormalizeURL(rawURL string) string {
 		return rawURL
 	}
 	u.Path = path.Clean(u.Path)
-	if u.Path == "." {
+	if u.Path == "." || u.Path == "/" {
 		u.Path = ""
 	}
 
