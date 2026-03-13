@@ -184,36 +184,49 @@ func (a *Authenticator) loadKeysFromPath(keyPath string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	return filepath.Walk(keyPath, func(path string, info os.FileInfo, err error) error {
+	root, err := os.OpenRoot(keyPath)
+	if err != nil {
+		return fmt.Errorf("failed to open key directory %s: %w", keyPath, err)
+	}
+	defer root.Close()
+
+	return filepath.Walk(keyPath, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(keyPath, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to compute relative path for %s: %w", path, err)
 		}
 
-		if info.Mode().IsRegular() {
-			log.Debugf("Loading key from file: %s", path)
+		log.Debugf("Loading key from file: %s", path)
 
-			keyData, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("failed to read key file %s: %w", path, err)
-			}
-
-			key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
-			if err != nil {
-				log.Warnf("failed to parse key from %s: %v (skipping)", path, err)
-
-				return nil
-			}
-
-			if err := jwk.AssignKeyID(key); err != nil {
-				return fmt.Errorf("failed to assign key ID: %w", err)
-			}
-
-			if err := a.Keyset.AddKey(key); err != nil {
-				return fmt.Errorf("failed to add key to set: %w", err)
-			}
-
-			log.Debugf("Loaded key with ID: %s", key.KeyID())
+		keyData, err := root.ReadFile(relPath)
+		if err != nil {
+			return fmt.Errorf("failed to read key file %s: %w", path, err)
 		}
+
+		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+		if err != nil {
+			log.Warnf("failed to parse key from %s: %v (skipping)", path, err)
+
+			return nil
+		}
+
+		if err := jwk.AssignKeyID(key); err != nil {
+			return fmt.Errorf("failed to assign key ID: %w", err)
+		}
+
+		if err := a.Keyset.AddKey(key); err != nil {
+			return fmt.Errorf("failed to add key to set: %w", err)
+		}
+
+		log.Debugf("Loaded key with ID: %s", key.KeyID())
 
 		return nil
 	})
@@ -402,6 +415,31 @@ func authenticateStructureBased(rawToken string, userinfoClient *visa.UserinfoCl
 	}, nil
 }
 
+// resolveUserinfoClient returns a UserinfoClient for opaque token exchange.
+// It prefers the visa validator's client, falling back to standalone discovery.
+func resolveUserinfoClient(visaValidator *visa.Validator) *visa.UserinfoClient {
+	if visaValidator != nil {
+		return visaValidator.UserinfoClient()
+	}
+
+	userinfoURL := config.VisaUserinfoURL()
+	if userinfoURL == "" && config.OIDCIssuer() != "" {
+		if discovered, err := visa.DiscoverUserinfoURL(config.OIDCIssuer()); err == nil {
+			userinfoURL = discovered
+		}
+	}
+
+	if userinfoURL != "" {
+		if uc, err := visa.NewUserinfoClient(userinfoURL, time.Duration(config.VisaCacheUserinfoTTL())*time.Second); err == nil {
+			return uc
+		}
+	}
+
+	log.Warn("auth.allow-opaque is enabled but no userinfo client could be created (configure visa.userinfo-url or oidc.issuer)")
+
+	return nil
+}
+
 // TokenMiddleware performs access token verification and validation.
 // The authenticated user's subject is stored in the request context.
 // If db is provided and allow-all-data is disabled, the user's datasets are populated from the database.
@@ -410,27 +448,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 	// Determine userinfo client for opaque token support.
 	var userinfoClient *visa.UserinfoClient
 	if config.AuthAllowOpaque() {
-		if visaValidator != nil {
-			userinfoClient = visaValidator.UserinfoClient()
-		} else {
-			// No visa validator — create a standalone userinfo client.
-			userinfoURL := config.VisaUserinfoURL()
-			if userinfoURL == "" && config.OIDCIssuer() != "" {
-				discovered, err := visa.DiscoverUserinfoURL(config.OIDCIssuer())
-				if err == nil {
-					userinfoURL = discovered
-				}
-			}
-			if userinfoURL != "" {
-				uc, err := visa.NewUserinfoClient(userinfoURL, time.Duration(config.VisaCacheUserinfoTTL())*time.Second)
-				if err == nil {
-					userinfoClient = uc
-				}
-			}
-			if userinfoClient == nil {
-				log.Warn("auth.allow-opaque is enabled but no userinfo client could be created (configure visa.userinfo-url or oidc.issuer)")
-			}
-		}
+		userinfoClient = resolveUserinfoClient(visaValidator)
 	}
 
 	auditDenied := func(c *gin.Context, status int) {

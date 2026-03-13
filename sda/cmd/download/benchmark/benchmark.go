@@ -37,7 +37,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -664,9 +664,7 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 	startTime := time.Now()
 
 	for i := 0; i < cfg.Requests; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
@@ -674,8 +672,8 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 			if target.Name == "old" && cfg.OldClientVersion != "" {
 				extra = map[string]string{"SDA-Client-Version": cfg.OldClientVersion}
 			}
-			results[idx] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
-		}(i)
+			results[i] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
+		})
 	}
 
 	wg.Wait()
@@ -757,7 +755,7 @@ func calculateStats(latencies []time.Duration) Stats {
 
 	sorted := make([]time.Duration, len(latencies))
 	copy(sorted, latencies)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.SortFunc(sorted, func(a, b time.Duration) int { return int(a - b) })
 
 	var sum time.Duration
 	for _, l := range sorted {
@@ -855,7 +853,7 @@ func formatStatusCounts(m map[int]int) string {
 	for k, v := range m {
 		pairs = append(pairs, kv{Code: k, Count: v})
 	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Count > pairs[j].Count })
+	slices.SortFunc(pairs, func(a, b kv) int { return b.Count - a.Count })
 
 	parts := make([]string, 0, len(pairs))
 	for _, p := range pairs {
