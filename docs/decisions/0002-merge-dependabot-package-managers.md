@@ -5,7 +5,7 @@ decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 ---
 
-# Merge Dependapot package managers
+# Merge Dependabot package managers
 
 ## Context and Problem Statement
 
