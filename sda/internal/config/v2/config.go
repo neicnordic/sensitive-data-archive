@@ -29,7 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -105,7 +105,7 @@ func Load() error {
 	}
 
 	if err := viper.BindPFlags(command.Flags()); err != nil {
-		panic(err)
+		return fmt.Errorf("failed to bind flags: %w", err)
 	}
 
 	if err := command.Execute(); err != nil {
@@ -113,9 +113,7 @@ func Load() error {
 	}
 
 	if viper.IsSet("config-path") {
-		configPath := viper.GetString("config-path")
-		splitPath := strings.Split(strings.TrimLeft(configPath, "/"), "/")
-		viper.AddConfigPath(path.Join(splitPath...))
+		viper.AddConfigPath(filepath.Clean(viper.GetString("config-path")))
 	}
 
 	if viper.IsSet("config-file") {
@@ -123,9 +121,7 @@ func Load() error {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		// If a config file was explicitly specified, any error is fatal.
-		// If not, a "not found" error is expected and can be ignored.
-		if viper.IsSet("config-file") {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}
