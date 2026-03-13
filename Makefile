@@ -174,7 +174,7 @@ integrationtest-sda-cmd-download-up: build-all
 integrationtest-sda-cmd-download-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
 
-# Download benchmark (compares old vs new implementations)
+# Download benchmark (compares old vs new public endpoints)
 # Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
 # The benchmark runs in a container with auto-configuration from the environment
 benchmark-download-up: build-all
@@ -182,6 +182,9 @@ benchmark-download-up: build-all
 
 benchmark-download-run:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
+
+benchmark-download-run-validated:
+	@PR_NUMBER=$$(date +%F) BENCHMARK_MODE=validated-payload docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
 
 benchmark-download-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down --remove-orphans
@@ -196,7 +199,9 @@ benchmark-download-seed:
 	@echo "Seeding minimal test data for benchmark..."
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml run --rm integration_test /scripts/seed_benchmark_data.sh
 
-benchmark-download: benchmark-download-up
+benchmark-download:
+	@$(MAKE) benchmark-download-clean
+	@$(MAKE) benchmark-download-up
 	@echo "Waiting for services to become healthy..."
 	@printf "  waiting for download..."; retries=0; \
 		until curl -sf http://localhost:$$(docker port download 8080 | head -1 | cut -d: -f2)/health/ready > /dev/null 2>&1; do \
@@ -207,6 +212,21 @@ benchmark-download: benchmark-download-up
 	@$(MAKE) benchmark-download-seed
 	@echo "Running benchmark..."
 	@$(MAKE) benchmark-download-run
+	@$(MAKE) benchmark-download-down
+
+benchmark-download-validated:
+	@$(MAKE) benchmark-download-clean
+	@$(MAKE) benchmark-download-up
+	@echo "Waiting for services to become healthy..."
+	@printf "  waiting for download..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download 8080 | head -1 | cut -d: -f2)/health/ready > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@printf "  waiting for download-old..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download-old 8080 | head -1 | cut -d: -f2)/health > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@$(MAKE) benchmark-download-seed
+	@echo "Running validated benchmark..."
+	@$(MAKE) benchmark-download-run-validated
 	@$(MAKE) benchmark-download-down
 
 # lint go code
