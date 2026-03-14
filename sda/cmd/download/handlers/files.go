@@ -265,7 +265,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 
 	// Audit event on completion
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.complete",
+		Event:         "download.completed",
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
