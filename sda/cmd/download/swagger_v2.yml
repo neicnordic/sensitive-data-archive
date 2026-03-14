@@ -85,16 +85,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceInfo"
               example:
-                id: org.neic.sda.download
-                name: SDA Data Out API
+                id: se.nbis.sda.download
+                name: SDA Download
                 type:
-                  group: org.neic
-                  artifact: sda-download
-                  version: 2.0.0
+                  group: org.ga4gh
+                  artifact: drs
+                  version: 1.0.0
                 description: Sensitive Data Archive file download service
                 organization:
-                  name: NeIC
-                  url: https://neic.no
+                  name: NBIS
+                  url: https://nbis.se
                 version: 2.0.0
                 environment: production
         "500":
@@ -298,8 +298,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
         "400":
@@ -358,8 +356,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
           content:
@@ -378,8 +374,6 @@ paths:
               $ref: "#/components/headers/ContentRange"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
           content:
@@ -541,8 +535,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -587,8 +579,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
           content:
             application/octet-stream:
               schema:
@@ -605,8 +595,6 @@ paths:
               $ref: "#/components/headers/ContentRange"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
           content:
             application/octet-stream:
               schema:
@@ -658,10 +646,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReadinessStatus"
               example:
-                c4ghService: responding
-                database: responding
-                oidcServer: responding
-                storageBackend: responding
+                status: ok
+                services:
+                  database: ok
+                  grpc: ok
+                  storage: ok
         "503":
           description: Unhealthy service
 
@@ -792,7 +781,7 @@ components:
         id:
           type: string
           description: Unique service identifier in reverse domain name format
-          example: org.neic.sda.download
+          example: se.nbis.sda.download
         name:
           type: string
           description: Human-readable service name
@@ -802,13 +791,13 @@ components:
           properties:
             group:
               type: string
-              example: org.neic
+              example: org.ga4gh
             artifact:
               type: string
-              example: sda-download
+              example: drs
             version:
               type: string
-              example: 2.0.0
+              example: 1.0.0
           required: [group, artifact, version]
         description:
           type: string
@@ -818,11 +807,11 @@ components:
           properties:
             name:
               type: string
-              example: NeIC
+              example: NBIS
             url:
               type: string
               format: uri
-              example: https://neic.no
+              example: https://nbis.se
           required: [name, url]
         version:
           type: string
@@ -871,16 +860,21 @@ components:
 
     ReadinessStatus:
       type: object
-      additionalProperties: true
       properties:
-        c4ghService:
+        status:
           type: string
-        database:
-          type: string
-        oidcServer:
-          type: string
-        storageBackend:
-          type: string
+          description: Overall status (ok or degraded)
+          example: ok
+        services:
+          type: object
+          additionalProperties:
+            type: string
+          description: Per-service health status
+          example:
+            database: ok
+            grpc: ok
+            storage: ok
+      required: [status]
 
   parameters:
     DatasetIdPath:
@@ -967,7 +961,7 @@ components:
       schema:
         type: string
       description: |
-        Makes the Range request conditional on the entity tag (ETag) or Last-Modified value.
+        Makes the Range request conditional on the entity tag (ETag).
         Commonly used to resume downloads safely.
       example: "\"686897696a7c876b7e\""
 
@@ -1066,12 +1060,6 @@ components:
       schema:
         type: string
       example: "\"a1b2c3d4e5f6g7h8\""
-
-    LastModified:
-      description: Last modification time of the resource (HTTP-date format per RFC 9110).
-      schema:
-        type: string
-      example: "Fri, 14 Feb 2025 14:51:26 GMT"
 
     ContentDisposition:
       description: Suggested filename for saving the download.
