@@ -30,6 +30,7 @@
 package main
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
@@ -310,6 +311,7 @@ func parseFlags() Config {
 			return err
 		}
 		cfg.Mode = mode
+
 		return nil
 	})
 	flag.StringVar(&cfg.VerifyPrivateKeyPath, "verify-private-key", defaults.VerifyPrivateKeyPath, "Private key path used to decrypt responses in validated-payload mode")
@@ -743,7 +745,6 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 	startTime := time.Now()
 
 	for i := 0; i < cfg.Requests; i++ {
-		idx := i
 		wg.Go(func() {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
@@ -752,7 +753,7 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 			if target.Name == "old" && cfg.OldClientVersion != "" {
 				extra = map[string]string{"SDA-Client-Version": cfg.OldClientVersion}
 			}
-			results[idx] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
+			results[i] = makeRequestWithExtras(client, u, cfg.Token, cfg.PublicKey, target.PublicKeyHeader, extra)
 		})
 	}
 
@@ -760,10 +761,6 @@ func runBenchmark(client *http.Client, target Target, cfg Config) BenchmarkResul
 	totalTime := time.Since(startTime)
 
 	return aggregateResults(target.Name, results, totalTime)
-}
-
-func makeRequest(client *http.Client, urlStr, token, publicKey, publicKeyHeader string) RequestResult {
-	return makeRequestWithExtras(client, urlStr, token, publicKey, publicKeyHeader, nil)
 }
 
 func buildRequest(urlStr, token, publicKey, publicKeyHeader string, extraHeaders map[string]string) (*http.Request, error) {
@@ -844,7 +841,7 @@ func calculateStats(latencies []time.Duration) Stats {
 
 	sorted := make([]time.Duration, len(latencies))
 	copy(sorted, latencies)
-	slices.SortFunc(sorted, func(a, b time.Duration) int { return int(a - b) })
+	slices.SortFunc(sorted, cmp.Compare)
 
 	var sum time.Duration
 	for _, l := range sorted {
@@ -1006,6 +1003,8 @@ func runBenchmarks(client *http.Client, cfg Config, oldTarget, newTarget Target)
 				time.Sleep(2 * time.Second)
 			}
 		}
+	default:
+		// Both benchmarks are being skipped; nothing to do
 	}
 
 	return result
@@ -1025,6 +1024,8 @@ func appendBenchmarkResult(result *ComparisonResult, targetName string, res Benc
 		result.Old = append(result.Old, res)
 	case "new":
 		result.New = append(result.New, res)
+	default:
+		// Unknown target name; skip appending
 	}
 }
 
@@ -1093,6 +1094,7 @@ func fetchPayloadDigest(client *http.Client, target Target, cfg Config, validato
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+
 		return payloadDigest{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
