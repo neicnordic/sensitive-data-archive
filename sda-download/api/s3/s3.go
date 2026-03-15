@@ -281,7 +281,12 @@ func parseParams(c *gin.Context) *gin.Context {
 		path = string(protocolPattern.ReplaceAll([]byte(path), []byte("$1/$2")))
 	}
 
+	if path == "" {
+		return c // This is a legitimate ListBuckets request (e.g., GET /s3/)
+	}
+
 	cache := middleware.GetCacheFromContext(c)
+	matched := false
 	for _, dataset := range cache.Datasets {
 		// check that the path starts with the dataset name, but also that the
 		// path is only the dataset, or that the following character is a slash.
@@ -300,8 +305,15 @@ func parseParams(c *gin.Context) *gin.Context {
 			}
 			c.Params = append(c.Params, gin.Param{Key: key, Value: remainder})
 
+			matched = true
+
 			break
 		}
+	}
+
+	if !matched && path != "" {
+		log.Warningf("No matching dataset found for path: %v", path)
+		c.Set("unauthorized_access", true)
 	}
 
 	return c
@@ -315,6 +327,15 @@ func Download(c *gin.Context) {
 
 	// Parses the request path into a dataset and a filename
 	c = parseParams(c)
+
+	if v, exists := c.Get("unauthorized_access"); exists {
+		if unauthorized, ok := v.(bool); ok && unauthorized {
+			// Return 403 to reduce information leakage about existing datasets.
+			c.AbortWithStatus(http.StatusForbidden)
+
+			return
+		}
+	}
 
 	// Try to figure out what kind of request we're getting.
 	// S3 request types are described here:
