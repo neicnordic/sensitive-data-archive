@@ -284,3 +284,36 @@ func (ts *S3TestSuite) TestParseParams() {
 		assert.Equal(ts.T(), http.StatusAccepted, response.StatusCode, "Request failed")
 	}
 }
+
+func (ts *S3TestSuite) TestUnauthorizedAccess() {
+	// Define paths that should trigger a 403 because they don't match
+	// the datasets defined in SetupTest (dataset1, dataset10, etc.)
+	unauthorizedPaths := []string{
+		"/not_dataset_exists/file_no.exists",
+		"/dataset2/somefile.txt",
+		"/secret-dataset",
+	}
+
+	for _, path := range unauthorizedPaths {
+		w := httptest.NewRecorder()
+		_, router := gin.CreateTestContext(w)
+
+		router.GET("/*path", middleware.TokenMiddleware(), Download)
+
+		req := httptest.NewRequest("GET", path, nil)
+		router.ServeHTTP(w, req)
+
+		response := w.Result()
+
+		// ASSERT: It should return 403 Forbidden, NOT the ListBuckets XML
+		assert.Equal(ts.T(), http.StatusForbidden, response.StatusCode,
+			"Path %s should have returned 403 Forbidden", path)
+
+		// Verify the body is not the XML bucket list
+		body, err := io.ReadAll(response.Body)
+		assert.Nil(ts.T(), err, "failed to parse body from location response")
+		_ = response.Body.Close()
+		assert.NotContains(ts.T(), string(body), "<ListAllMyBucketsResult>",
+			"Response for %s should not contain bucket list", path)
+	}
+}
