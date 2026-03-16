@@ -32,9 +32,10 @@ A hotfix ([822354f][hotfix-commit]) added `sync.RWMutex` to the v3.1.0
 production branch. However, the underlying design has several remaining
 problems:
 
-1. **Per-pod state** — when a client reconnects to a different s3inbox pod
-   (e.g., after a network interruption or load-balancer rotation), the file ID
-   is not available on the new pod. The code has a DB fallback for this case
+1. **Per-pod state** — when a request lands on a different s3inbox pod
+   (e.g., due to round-robin distribution of multipart upload chunks, or
+   client reconnection after a network interruption), the file ID is not
+   available on the new pod. The code has a DB fallback for this case
    ([proxy.go#L237][proxy-go-L237], added for [#1358][issue-1358]), but the
    fallback runs *after* `checkAndSendMessage` has already been called with an
    empty file ID ([proxy.go#L228][proxy-go-L228]), meaning a message with a
@@ -131,7 +132,7 @@ sequenceDiagram
     DB-->>PodA: fileID
     Note over PodA: fileID stored in local map
 
-    Note over Client,PodB: Client reconnects — routed to Pod B (no cached fileID)
+    Note over Client,PodB: Multipart chunks round-robin across pods —<br/>completion may land on Pod B (no cached fileID)
 
     Client->>PodB: POST (multipart complete)
     PodB->>MQ: checkAndSendMessage(fileID="") ❌ empty!
