@@ -181,8 +181,9 @@ func (v *Validator) processVisas(ctx context.Context, identity Identity, passpor
 			continue
 		}
 
-		// Check validation cache
-		visaHash := hashToken(visaJWT)
+		// Check validation cache — key includes identity so that strict
+		// binding modes cannot be bypassed via a cache hit from another user.
+		visaHash := hashToken(visaJWT + "\x00" + identity.Issuer + "\x00" + identity.Subject)
 		if cr, ok := v.getCachedVisa(visaHash); ok {
 			for _, ds := range cr.Datasets {
 				if !seen[ds] {
