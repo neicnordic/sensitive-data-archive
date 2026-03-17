@@ -281,10 +281,6 @@ func parseParams(c *gin.Context) *gin.Context {
 		path = string(protocolPattern.ReplaceAll([]byte(path), []byte("$1/$2")))
 	}
 
-	if path == "" {
-		return c // This is a legitimate ListBuckets request (e.g., GET /s3/)
-	}
-
 	cache := middleware.GetCacheFromContext(c)
 	for _, dataset := range cache.Datasets {
 		// check that the path starts with the dataset name, but also that the
