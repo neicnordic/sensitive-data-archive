@@ -20,19 +20,9 @@ type LocationConstraint struct {
 	Location string `xml:",innerxml"`
 }
 
-type Bucket struct {
-	CreationDate string `xml:"CreationDate,omitempty"`
-	Name         string `xml:"Name"`
-}
-
 type Owner struct {
 	DisplayName string `xml:"DisplayName,omitempty"`
 	ID          string `xml:"ID,omitempty"`
-}
-
-type ListAllMyBucketsResult struct {
-	Buckets []Bucket `xml:"Buckets>Bucket"`
-	Owner   Owner    `xml:"Owner"`
 }
 
 type Object struct {
@@ -74,44 +64,6 @@ func GetBucketLocation(c *gin.Context) {
 	c.XML(http.StatusAccepted, LocationConstraint{
 		XMLns:    "https://s3.amazonaws.com/doc/2006-03-01/",
 		Location: "us-west-2",
-	})
-}
-
-// ListBuckets respondes to an S3 ListBuckets request. This request returns the
-// available S3 buckets. We use this to list accessible datasets.
-// https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html
-func ListBuckets(c *gin.Context) {
-	log.Debug("S3 ListBuckets request")
-
-	// Gin doesn't write the xml header when using c.XML, so we add it manually
-	_, err := c.Writer.Write([]byte(xml.Header))
-	if err != nil {
-		log.Errorf("Failed writing XML header: %v", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-
-		return
-	}
-
-	buckets := []Bucket{}
-	cache := middleware.GetCacheFromContext(c)
-	for _, dataset := range cache.Datasets {
-		datasetInfo, err := database.GetDatasetInfo(dataset)
-		if err != nil {
-			log.Errorf("Failed to get dataset information: %v", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-
-			return
-		}
-		// TODO: Add real creation date
-		buckets = append(buckets, Bucket{
-			Name:         datasetInfo.DatasetID,
-			CreationDate: datasetInfo.CreatedAt,
-		})
-	}
-
-	c.XML(http.StatusAccepted, ListAllMyBucketsResult{
-		Buckets: buckets,
-		Owner:   Owner{DisplayName: "", ID: ""},
 	})
 }
 
@@ -306,7 +258,11 @@ func parseParams(c *gin.Context) *gin.Context {
 
 	if c.Param("dataset") == "" {
 		log.Warningf("No matching dataset found for path: %q", path)
-		c.AbortWithStatus(http.StatusForbidden)
+		// ALLOW the request if it's just asking for the bucket location (?location)
+		// otherwise, ABORT with 403.
+		if _, isLocation := c.GetQuery("location"); !isLocation {
+			c.AbortWithStatus(http.StatusForbidden)
+		}
 	}
 
 	return c
@@ -335,9 +291,6 @@ func Download(c *gin.Context) {
 	case c.Param("dataset") != "" && c.Param("filename") == "":
 		ListObjects(c)
 
-	case c.Param("dataset") == "":
-		ListBuckets(c)
-
 	case c.Param("filename") != "":
 		if config.Config.C4GH.PublicKeyB64 == "" {
 			GetEcnryptedObject(c)
@@ -346,7 +299,7 @@ func Download(c *gin.Context) {
 		}
 
 	default:
-		log.Warningf("Got unknown S3 request: %v", c.Request)
+		log.Warningf("Got unknown or unauthorized S3 request: %v", c.Request)
 		c.AbortWithStatus(http.StatusBadRequest)
 	}
 }
