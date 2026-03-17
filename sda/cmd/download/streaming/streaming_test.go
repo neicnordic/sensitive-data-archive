@@ -101,6 +101,13 @@ func TestParseRangeHeader_MultipleRanges(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestParseRangeHeader_BareHyphen(t *testing.T) {
+	// "bytes=-" (empty start and empty suffix) is syntactically invalid per RFC 9110
+	result, err := ParseRangeHeader("bytes=-", 1000)
+	assert.ErrorIs(t, err, ErrRangeInvalid)
+	assert.Nil(t, result)
+}
+
 func TestParseRangeHeader_SuffixZero(t *testing.T) {
 	// bytes=-0 requests 0 bytes, which is unsatisfiable
 	result, err := ParseRangeHeader("bytes=-0", 1000)

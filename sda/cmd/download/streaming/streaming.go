@@ -60,6 +60,11 @@ func ParseRangeHeader(rangeHeader string, fileSize int64) (*RangeSpec, error) {
 		return nil, ErrRangeInvalid
 	}
 
+	// Reject "bytes=-" (both groups empty) — syntactically invalid per RFC 9110
+	if matches[1] == "" && matches[2] == "" {
+		return nil, ErrRangeInvalid
+	}
+
 	var start, end int64
 
 	// bytes=-SUFFIX (last N bytes)
