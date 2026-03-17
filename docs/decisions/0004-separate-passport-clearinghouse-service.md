@@ -58,6 +58,7 @@ aligns with this model.
 [v2-validator-L393]: https://github.com/neicnordic/sensitive-data-archive/blob/4d54b229/sda/cmd/download/visa/validator.go#L393
 [v2-jwks]: https://github.com/neicnordic/sensitive-data-archive/blob/4d54b229/sda/cmd/download/visa/jwks_cache.go
 [v2-trust]: https://github.com/neicnordic/sensitive-data-archive/blob/4d54b229/sda/cmd/download/visa/trust.go
+[v2-auth-L327]: https://github.com/neicnordic/sensitive-data-archive/blob/4d54b229/sda/cmd/download/middleware/auth.go#L327
 
 ## Decision Drivers
 
@@ -188,9 +189,12 @@ The v2 download service already implements a three-tier caching strategy
 * **Eviction:** ristretto handles eviction automatically via TTL and cost-based
   admission.
 * **Revocation:** token revocation before expiry is not detected by local
-  caching. This is an accepted trade-off consistent with the current behavior
-  and typical OIDC deployments. If near-real-time revocation is required in the
-  future, Redis or a token introspection endpoint would be needed.
+  caching. A mitigation is to have the service periodically re-validate visas
+  (e.g., hourly) for all non-expired cached tokens by re-fetching from the
+  userinfo endpoint. This aligns with the GA4GH recommendation of polling no
+  more than once per hour. If near-real-time revocation is required beyond
+  periodic re-validation, Redis or a token introspection endpoint would be
+  needed.
 
 The separation works because the two workloads have different scaling profiles:
 
@@ -260,6 +264,7 @@ unless noted otherwise.
 | Verify visa JWT signature via `jku` | Done | Fetches JWKS and verifies; `jku` checked against trusted allowlist ([jwks_cache.go][v2-jwks]) |
 | Verify `jku` is trusted before calling | Done | Trusted issuer configuration is **required** when visa is enabled — startup fails if not set. HTTPS enforced for `jku` URLs unless explicitly overridden ([trust.go][v2-trust]) |
 | Validate standard JWT claims (`exp`, `iat`, `nbf`) | Done | Standard JWT validation |
+| Validate `aud` (audience) claim | Done | Verified against configured audience when `oidc.audience` is set ([auth.go#L327][v2-auth-L327]) |
 | `asserted` staleness check | Done | Optional: configurable via `visa.validate-asserted`, rejects visas asserted in the future (with clock skew tolerance) |
 | Trust relationship with Broker | Done | Configured via OIDC discovery URL |
 | Visa source modes (UserInfo / Token) | Done | Configurable: `userinfo` (default, GA4GH recommended) or `token` mode; opaque tokens always fall back to userinfo ([validator.go#L104][v2-validator-L104]) |
