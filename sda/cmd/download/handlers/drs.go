@@ -96,12 +96,23 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 	}
 
 	host := c.Request.Host
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
 
 	// Fetch ARCHIVED checksums (over the encrypted blob, per DRS 1.5 spec)
 	archivedChecksums, err := h.db.GetFileChecksums(c.Request.Context(), file.ID, "ARCHIVED")
 	if err != nil {
 		log.Errorf("failed to get file checksums: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve checksums")
+
+		return
+	}
+
+	if len(archivedChecksums) == 0 {
+		log.Errorf("file %s has no ARCHIVED checksums", file.ID)
+		problemJSON(c, http.StatusInternalServerError, "file has no checksums")
 
 		return
 	}
@@ -124,7 +135,7 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 			{
 				Type: "https",
 				AccessURL: DrsAccessURL{
-					URL: fmt.Sprintf("https://%s/files/%s/content", host, file.ID),
+					URL: fmt.Sprintf("%s://%s/files/%s/content", scheme, host, file.ID),
 				},
 			},
 		},
