@@ -73,15 +73,16 @@ aligns with this model.
 
 ## Considered Options
 
-1. **Separate Visa Authorization Service with local caching**
+1. **Separate Visa Authorization Service**
 2. **Redis-backed shared session cache in the download service**
 3. **Keep current architecture (status quo)**
 
 ## Decision Outcome
 
 Proposed: **Option 1** — extract visa validation into a separate service with
-local ristretto caching per pod. To be confirmed at the NeIC SDA-Devs
-bi-weekly meet-up.
+in-process ristretto caching in the authorization service pods (download pods
+have no authorization cache). To be confirmed at the NeIC SDA-Devs bi-weekly
+meet-up.
 
 ### Consequences
 
@@ -112,10 +113,12 @@ The separation is confirmed when:
 
 ## Pros and Cons of the Options
 
-### Option 1: Separate Visa Authorization Service with local caching
+### Option 1: Separate Visa Authorization Service
 
 Extract the visa validation logic from `sda/cmd/download/visa/` and
-`sda/cmd/download/middleware/auth.go` into a dedicated service.
+`sda/cmd/download/middleware/auth.go` into a dedicated service. The
+authorization service maintains an in-process ristretto cache; download pods
+become stateless for authorization and hold no cache.
 
 **Current architecture:**
 
@@ -148,7 +151,7 @@ graph LR
 ```mermaid
 graph TB
     subgraph "Visa Authorization Service (2-3 pods)"
-        CH["Local ristretto cache per pod<br/>JWT parsing, visa validation"]
+        CH["In-process ristretto cache<br/>JWT parsing, visa validation"]
     end
 
     subgraph "download service (N pods, stateless for auth)"
@@ -188,7 +191,7 @@ The v2 download service already implements a three-tier caching strategy
   lifetime.
 * **Eviction:** ristretto handles eviction automatically via TTL and cost-based
   admission.
-* **Revocation:** token revocation before expiry is not detected by local
+* **Revocation:** token revocation before expiry is not detected by in-process
   caching. A mitigation is to have the service periodically re-validate visas
   (e.g., hourly) for all non-expired cached tokens by re-fetching from the
   userinfo endpoint. This aligns with the GA4GH recommendation of polling no
@@ -203,8 +206,8 @@ The separation works because the two workloads have different scaling profiles:
   per-pod state loss is painful.
 * **Visa Authorization Service pods** are lightweight (JWT parsing, OIDC HTTP
   calls, visa claim inspection). Only 2-3 pods are needed for HA. With few
-  pods, a local ristretto cache with TTL is sufficient — the worst case on a
-  cache miss is one extra round of OIDC calls, which is acceptable for a
+  pods, an in-process ristretto cache with TTL is sufficient — the worst case
+  on a cache miss is one extra round of OIDC calls, which is acceptable for a
   service that does no file I/O.
 
 * Good, because download pods become **stateless for authorization**.
@@ -229,7 +232,7 @@ with a shared Redis-backed cache.
   service.
 
 Redis should be re-evaluated if the Visa Authorization Service scales beyond
-2-3 pods and local caching becomes insufficient, or if other SDA services
+2-3 pods and in-process caching becomes insufficient, or if other SDA services
 develop a measured need for shared caching.
 
 ### Option 3: Keep current architecture (status quo)
