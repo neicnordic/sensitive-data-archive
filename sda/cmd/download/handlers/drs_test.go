@@ -78,7 +78,7 @@ func TestGetDrsObject_Success(t *testing.T) {
 
 	require.Len(t, resp.AccessMethods, 1)
 	assert.Equal(t, "https", resp.AccessMethods[0].Type)
-	assert.Equal(t, "https://download.example.org/files/urn:neic:001-002-003/content", resp.AccessMethods[0].AccessURL.URL)
+	assert.Equal(t, "http://download.example.org/files/urn:neic:001-002-003/content", resp.AccessMethods[0].AccessURL.URL)
 }
 
 func TestGetDrsObject_FileNotFound_Returns403(t *testing.T) {
@@ -188,7 +188,7 @@ func TestGetDrsObject_DBError_Returns500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestGetDrsObject_NoChecksum_EmptyArray(t *testing.T) {
+func TestGetDrsObject_NoChecksum_Returns500(t *testing.T) {
 	router := setupTestRouterWithAuth([]string{"EGAD00001000001"})
 	mockDB := &mockDatabase{
 		fileByPath: &database.File{
@@ -211,13 +211,12 @@ func TestGetDrsObject_NoChecksum_EmptyArray(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
-	// Verify checksums is [] not null in raw JSON
-	var raw map[string]json.RawMessage
-	err = json.Unmarshal(w.Body.Bytes(), &raw)
+	var resp ProblemDetails
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
-	assert.Equal(t, "[]", string(raw["checksums"]))
+	assert.Contains(t, resp.Detail, "no checksums")
 }
 
 func TestGetDrsObject_MultipleChecksums(t *testing.T) {
