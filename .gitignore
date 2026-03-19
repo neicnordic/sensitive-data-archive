@@ -199,3 +199,6 @@ db/
 
 # sda-admin binary
 sda-admin/sda-admin
+
+# test coverage files
+sda/coverage.txt

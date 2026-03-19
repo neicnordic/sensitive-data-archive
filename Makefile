@@ -157,6 +157,78 @@ integrationtest-sda-validator-orchestrator-run:
 integrationtest-sda-validator-orchestrator-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-validator-orchestrator-integration.yml down -v --remove-orphans
 
+# Download v2 integration tests (sda/cmd/download, Go-based)
+# Prerequisite: run `make build-all` first if container images are not already built.
+integrationtest-sda-cmd-download:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+	@sleep 10
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+
+integrationtest-sda-cmd-download-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
+
+integrationtest-sda-cmd-download-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+
+integrationtest-sda-cmd-download-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+
+# Download benchmark (compares old vs new public endpoints)
+# Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
+# The benchmark runs in a container with auto-configuration from the environment
+benchmark-download-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml up -d
+
+benchmark-download-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
+
+benchmark-download-run-validated:
+	@PR_NUMBER=$$(date +%F) BENCHMARK_MODE=validated-payload docker compose -f .github/integration/sda-benchmark.yml --profile benchmark run --rm benchmark
+
+benchmark-download-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down --remove-orphans
+
+# Force cleanup of benchmark resources.
+# NOTE: intentionally scoped to the benchmark compose file; avoid broad name-based container deletes.
+benchmark-download-clean:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml down -v --remove-orphans
+
+# Seed only the minimal data needed for benchmarking (uses simpler benchmark-specific script)
+benchmark-download-seed:
+	@echo "Seeding minimal test data for benchmark..."
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-benchmark.yml run --rm integration_test /scripts/seed_benchmark_data.sh
+
+benchmark-download:
+	@$(MAKE) benchmark-download-clean
+	@$(MAKE) benchmark-download-up
+	@echo "Waiting for services to become healthy..."
+	@printf "  waiting for download..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download 8080 | head -1 | cut -d: -f2)/health/ready > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@printf "  waiting for download-old..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download-old 8080 | head -1 | cut -d: -f2)/health > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@$(MAKE) benchmark-download-seed
+	@echo "Running benchmark..."
+	@$(MAKE) benchmark-download-run
+	@$(MAKE) benchmark-download-down
+
+benchmark-download-validated:
+	@$(MAKE) benchmark-download-clean
+	@$(MAKE) benchmark-download-up
+	@echo "Waiting for services to become healthy..."
+	@printf "  waiting for download..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download 8080 | head -1 | cut -d: -f2)/health/ready > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@printf "  waiting for download-old..."; retries=0; \
+		until curl -sf http://localhost:$$(docker port download-old 8080 | head -1 | cut -d: -f2)/health > /dev/null 2>&1; do \
+			retries=$$((retries + 1)); if [ $$retries -ge 60 ]; then echo " TIMEOUT"; exit 1; fi; sleep 1; done; echo " ok"
+	@$(MAKE) benchmark-download-seed
+	@echo "Running validated benchmark..."
+	@$(MAKE) benchmark-download-run-validated
+	@$(MAKE) benchmark-download-down
+
 # lint go code
 lint-all: lint-sda lint-sda-download lint-sda-admin
 lint-sda:

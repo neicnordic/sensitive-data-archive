@@ -1,0 +1,6 @@
+[
+  {
+    "iss": "https://demo.example",
+    "jku": "http://mockauth:8000/jwks"
+  }
+]

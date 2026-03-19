@@ -1,0 +1,95 @@
+# Configuration for sda/cmd/download service in BENCHMARK mode
+# This benchmark compares public endpoints, not just internal implementation details.
+# The endpoint uses http:// prefix for storage/v2 URL parsing
+
+# API Server
+api:
+  host: "0.0.0.0"
+  port: 8080
+
+# Logging
+log:
+  level: "info"
+
+# gRPC Health check
+health:
+  port: 8081
+
+# Database
+db:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+# gRPC reencrypt service
+grpc:
+  host: "reencrypt"
+  port: 50051
+  timeout: 30
+
+# JWT configuration - uses keys created by credentials script
+jwt:
+  pubkey-path: "/shared/keys/pub/"
+  allow-all-data: false
+
+# Permission model: combined (ownership + visa) for benchmark
+# This keeps the benchmark environment resilient if visa processing has issues.
+permission:
+  model: "combined"
+
+# Auth: allow opaque tokens (old sda-download supported this)
+auth:
+  allow-opaque: true
+
+# GA4GH visa configuration - matches old sda-download's OIDC/visa flow
+visa:
+  enabled: true
+  source: "userinfo"
+  userinfo-url: "http://mockauth:8000/userinfo"
+  trusted-issuers-path: "/shared/trusted-issuers.json"
+  dataset-id-mode: "raw"
+  identity:
+    mode: "broker-bound"
+  validate-asserted: true
+  allow-insecure-jku: true  # mockauth uses HTTP (testing only)
+  limits:
+    max-visas: 200
+    max-jwks-per-request: 10
+    max-visa-size: 16384
+  cache:
+    token-ttl: 3600
+    jwk-ttl: 300
+    validation-ttl: 120
+    userinfo-ttl: 60
+
+# Session
+session:
+  expiration: 3600
+  secure: false
+  http-only: true
+  name: "sda_session"
+
+# Database query cache
+# Disabled here so the benchmark does not compare a cached new endpoint
+# against an uncached old endpoint.
+cache:
+  enabled: false
+  file-ttl: 300      # 5 minutes
+  permission-ttl: 120  # 2 minutes
+  dataset-ttl: 300   # 5 minutes
+
+# Storage configuration (S3 backend)
+# NOTE: endpoint includes http:// for proper URL parsing in storage/v2
+storage:
+  backend: "archive"
+  archive:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        region: "us-east-1"
+        bucket_prefix: "archive"
+        disable_https: true
