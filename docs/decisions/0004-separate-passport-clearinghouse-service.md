@@ -79,10 +79,10 @@ aligns with this model.
 
 ## Decision Outcome
 
-Proposed: **Option 1** — extract visa validation into a separate service with
-in-process ristretto caching in the authorization service pods (download pods
-have no authorization cache). To be confirmed at the NeIC SDA-Devs bi-weekly
-meet-up.
+Proposed: **Option 1** — extract visa validation into a separate service using
+[Olric][olric] for distributed in-process caching across replicas. Download
+pods become stateless for authorization and hold no cache. To be confirmed at
+the NeIC SDA-Devs bi-weekly meet-up.
 
 ### Consequences
 
@@ -93,9 +93,8 @@ meet-up.
 * Neutral, because it introduces a new service to deploy, but it replaces
   complexity (per-pod session caching in the download service) rather than
   adding to it.
-* Neutral, because authorization cache misses can still occur on Visa
-  Authorization Service pod switches. However, with only 2-3 pods, this is
-  far less frequent than with N download pods.
+* Good, because Olric's full replication eliminates cache misses on
+  authorization service pod switches — all replicas have all entries.
 * Bad, because it adds a network hop per download request that needs
   authorization. Mitigated by co-location in the same cluster.
 
@@ -123,25 +122,22 @@ become stateless for authorization and hold no cache.
 **Current architecture:**
 
 ```mermaid
-graph LR
-    subgraph "download service (N pods, each with per-pod state)"
-        D1["Pod 1<br/>visa validation + session cache + file streaming"]
-        D2["Pod 2<br/>visa validation + session cache + file streaming"]
+flowchart TB
+    subgraph pods["download service · N pods, each with per-pod state"]
+        D1["Pod 1\nvisa validation · session cache · file streaming"]
+        D2["Pod 2\nvisa validation · session cache · file streaming"]
     end
 
-    OIDC["OIDC Broker<br/>(userinfo)"]
-    JWKS["Visa Issuer(s)<br/>(JWKS via jku)"]
-    S3["S3 Storage"]
+    OIDC["OIDC Broker\n(userinfo)"]
+    JWKS["Visa Issuer(s)\n(JWKS via jku)"]
+    S3[("S3 Storage")]
 
-    D1 -->|"fetch visas"| OIDC
-    D2 -->|"fetch visas"| OIDC
-    D1 -->|"verify sigs"| JWKS
-    D2 -->|"verify sigs"| JWKS
-    D1 -->|"file streaming"| S3
-    D2 -->|"file streaming"| S3
+    pods -->|"fetch visas"| OIDC
+    pods -->|"verify sigs"| JWKS
+    pods -->|"stream files"| S3
 
-    style D1 fill:#fee,stroke:#c00
-    style D2 fill:#fee,stroke:#c00
+    style D1 fill:#fee,stroke:#c00,color:#4a1b0c
+    style D2 fill:#fee,stroke:#c00,color:#4a1b0c
 ```
 
 > Session lost on pod switch — full visa re-validation required.
@@ -149,55 +145,75 @@ graph LR
 **Proposed architecture:**
 
 ```mermaid
-graph TB
-    subgraph "Visa Authorization Service (2-3 pods)"
-        CH["In-process ristretto cache<br/>JWT parsing, visa validation"]
+flowchart TB
+    subgraph download["download service · N pods, stateless for auth"]
+        D1["Pod 1"] ~~~ D2["Pod 2"] ~~~ DN["Pod N"]
     end
 
-    subgraph "download service (N pods, stateless for auth)"
-        D1["Pod 1<br/>file streaming only"]
-        D2["Pod 2<br/>file streaming only"]
-        DN["Pod N<br/>file streaming only"]
+    subgraph auth["Visa Authorization Service · 2+ pods"]
+        direction LR
+        CH1["Replica 1\nOlric distributed cache"]
+        CH2["Replica 2\nOlric distributed cache"]
+        CH1 <-->|"cache replication\n(memberlist gossip)"| CH2
     end
 
-    OIDC["OIDC Broker<br/>(userinfo endpoint)"]
-    JWKS["Visa Issuer(s)<br/>(JWKS endpoints via jku)"]
-    S3["S3 Storage"]
+    OIDC["OIDC Broker\n(userinfo endpoint)"]
+    JWKS["Visa Issuer(s)\n(JWKS endpoints via jku)"]
+    S3[("S3 Storage")]
 
-    D1 -->|"authorize"| CH
-    D2 -->|"authorize"| CH
-    DN -->|"authorize"| CH
-    CH -->|"fetch visas"| OIDC
-    CH -->|"verify signatures"| JWKS
-    D1 -->|"file streaming"| S3
-    D2 -->|"file streaming"| S3
-    DN -->|"file streaming"| S3
+    download -->|"authorize"| auth
+    download -->|"stream files"| S3
+    auth -->|"fetch visas"| OIDC
+    auth -->|"verify sigs"| JWKS
 
-    style D1 fill:#efe,stroke:#0a0
-    style D2 fill:#efe,stroke:#0a0
-    style DN fill:#efe,stroke:#0a0
+    style D1 fill:#e1f5ee,stroke:#0f6e56,color:#04342c
+    style D2 fill:#e1f5ee,stroke:#0f6e56,color:#04342c
+    style DN fill:#e1f5ee,stroke:#0f6e56,color:#04342c
+    style CH1 fill:#eeedfe,stroke:#534ab7,color:#26215c
+    style CH2 fill:#eeedfe,stroke:#534ab7,color:#26215c
 ```
 
-**Cache semantics for the Visa Authorization Service:**
+**Distributed cache with [Olric](https://github.com/buraksezer/olric):**
 
-The v2 download service already implements a three-tier caching strategy
-([auth.go#L465][v2-auth-L465]) that should carry over to the extracted service:
+The v2 download service uses ristretto (in-process, per-pod) for caching
+([auth.go#L465][v2-auth-L465]). The Visa Authorization Service replaces
+ristretto with [Olric][olric] — an embedded distributed cache for Go that
+provides automatic peer discovery, replication, and TTL support without
+external infrastructure.
 
+[olric]: https://github.com/buraksezer/olric
+
+* **Replication mode:** full replication — every cache write is replicated to
+  all members. With 2 replicas this means every entry exists on both pods,
+  eliminating cache misses on pod switch.
+* **Peer discovery:** Olric uses [memberlist][memberlist] (HashiCorp's gossip
+  protocol) for automatic peer discovery. In Kubernetes, peers are discovered
+  via a headless service DNS record.
+* **Minimum replicas:** 2 (no quorum required, unlike Raft-based solutions).
 * **Cache key:** SHA-256 hash of the bearer token.
-* **Cached value:** authorized dataset list (`AuthContext`).
+* **Cached value:** authorized dataset list.
 * **TTL:** bounded by the minimum of: access token `exp`, earliest visa `exp`,
-  and configured maximums (`visa.cache.token-ttl`, `visa.cache.validation-ttl`,
-  `visa.cache.userinfo-ttl`). The TTL never exceeds the token's remaining
-  lifetime.
-* **Eviction:** ristretto handles eviction automatically via TTL and cost-based
-  admission.
-* **Revocation:** token revocation before expiry is not detected by in-process
-  caching. A mitigation is to have the service periodically re-validate visas
-  (e.g., hourly) for all non-expired cached tokens by re-fetching from the
-  userinfo endpoint. This aligns with the GA4GH recommendation of polling no
-  more than once per hour. If near-real-time revocation is required beyond
-  periodic re-validation, Redis or a token introspection endpoint would be
-  needed.
+  and configured maximums. Carried over from v2's existing `computeCacheTTL`
+  logic.
+* **Revocation:** a mitigation is to periodically re-validate visas (e.g.,
+  hourly) for all non-expired cached tokens by re-fetching from the userinfo
+  endpoint. This aligns with the GA4GH recommendation of polling no more than
+  once per hour. If near-real-time revocation is required beyond periodic
+  re-validation, a token introspection endpoint would be needed.
+
+[memberlist]: https://github.com/hashicorp/memberlist
+
+**Why Olric over alternatives:**
+
+* **vs. ristretto (current):** ristretto is per-pod only — cache misses on
+  every pod switch, generating unnecessary OIDC calls.
+* **vs. Redis:** requires new external infrastructure to deploy and maintain.
+* **vs. Raft-based KV (e.g., hashicorp/raft):** requires odd replica counts
+  for quorum, strong consistency is unnecessary for a TTL-bounded authorization
+  cache where eventual consistency is acceptable.
+* **vs. hand-rolled HTTP broadcast:** Olric provides peer discovery, failure
+  handling, and replication as a library — avoids reinventing distributed cache
+  primitives.
 
 The separation works because the two workloads have different scaling profiles:
 
@@ -205,10 +221,9 @@ The separation works because the two workloads have different scaling profiles:
   genomic files). They currently also carry the session cache, which is why
   per-pod state loss is painful.
 * **Visa Authorization Service pods** are lightweight (JWT parsing, OIDC HTTP
-  calls, visa claim inspection). Only 2-3 pods are needed for HA. With few
-  pods, an in-process ristretto cache with TTL is sufficient — the worst case
-  on a cache miss is one extra round of OIDC calls, which is acceptable for a
-  service that does no file I/O.
+  calls, visa claim inspection). 2+ pods are needed for HA. Olric's full
+  replication ensures every replica has every cache entry, so pod switches
+  do not cause cache misses or unnecessary OIDC calls.
 
 * Good, because download pods become **stateless for authorization**.
 * Good, because it requires **no new infrastructure** — no Redis, no new
@@ -231,9 +246,9 @@ with a shared Redis-backed cache.
 * Bad, because authorization and file streaming remain coupled in the same
   service.
 
-Redis should be re-evaluated if the Visa Authorization Service scales beyond
-2-3 pods and in-process caching becomes insufficient, or if other SDA services
-develop a measured need for shared caching.
+Redis is unnecessary given Olric's embedded distributed caching. It could be
+re-evaluated if other SDA services develop a measured need for a shared external
+cache beyond what Olric provides.
 
 ### Option 3: Keep current architecture (status quo)
 
@@ -285,14 +300,14 @@ retired in favor of v2.
 | --- | --- | --- | --- |
 | **`source` policy enforcement** — SHOULD verify source against policy per dataset | v2 validates that `source` is present and non-empty, but does not enforce policy rules like "only accept visas sourced from DAC X for dataset Y." `source` differs from `iss`: the issuer signs the JWT, the source made the access decision. | Medium | Add policy configuration mapping datasets to allowed sources. |
 | **Token Exchange** — SHOULD prefer over UserInfo ([AAI spec][ga4gh-aai]) | v2 supports UserInfo and direct token extraction but not RFC 8693 Token Exchange. | Medium | Implement Token Exchange flow as an additional visa source mode. |
-| **Linked Identities** — MUST verify when combining visas across different `sub` values | SDA uses a single OIDC broker (Life Science AAI); all visas share the same `sub`. Matters only for federated multi-IdP deployments. | Low | Defer until GDI federation requires multi-IdP support. |
+| **Linked Identities** — MUST verify when combining visas across different `sub` values | SDA uses a single OIDC broker (Life Science AAI); all visas share the same `sub`. Matters only for federated multi-IdP deployments. | Low | Defer until multi-IdP support is required. |
 | **Access Token Polling** — visa invalid if >1 hour old unless polling confirms validity | Only applies to Visa Access Tokens. v2 uses Visa Document Tokens (validated via `jku` signature). | Low | Defer — not applicable to current token flow. |
 | **Full `conditions` evaluation** — evaluate Disjunctive Normal Form conditions | v2 correctly rejects visas with conditions but cannot evaluate them. If a visa issuer requires conditions to be satisfied, those visas are denied. | Low | Implement DNF conditions evaluator when needed for specific visa issuers. |
 
 #### Path to full GA4GH compliance
 
-Full Clearinghouse compliance is a goal for federated GDI deployments, not a
-day-one requirement:
+Full Clearinghouse compliance can be pursued incrementally as requirements
+emerge:
 
 1. **Done (v2):** All required visa claims validated, `conditions` rejected,
    trusted issuer enforcement mandatory
