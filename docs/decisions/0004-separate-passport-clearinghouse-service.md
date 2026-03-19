@@ -128,16 +128,18 @@ flowchart TB
         D2["Pod 2\nvisa validation · session cache · file streaming"]
     end
 
-    OIDC["OIDC Broker\n(userinfo)"]
-    JWKS["Visa Issuer(s)\n(JWKS via jku)"]
-    S3[("S3 Storage")]
+    OIDC["🔑 OIDC Broker\n(userinfo)"]
+    JWKS["🛡️ Visa Issuer(s)\n(JWKS via jku)"]
+    S3[("💾 S3 Storage")]
 
     pods -->|"fetch visas"| OIDC
     pods -->|"verify sigs"| JWKS
     pods -->|"stream files"| S3
 
-    style D1 fill:#fee,stroke:#c00,color:#4a1b0c
-    style D2 fill:#fee,stroke:#c00,color:#4a1b0c
+    classDef stateful fill:#fee,stroke:#c00,color:#4a1b0c
+    classDef external fill:#f5f5f5,stroke:#999,color:#333
+    class D1,D2 stateful
+    class OIDC,JWKS,S3 external
 ```
 
 > Session lost on pod switch — full visa re-validation required.
@@ -157,20 +159,21 @@ flowchart TB
         CH1 <-->|"cache replication\n(memberlist gossip)"| CH2
     end
 
-    OIDC["OIDC Broker\n(userinfo endpoint)"]
-    JWKS["Visa Issuer(s)\n(JWKS endpoints via jku)"]
-    S3[("S3 Storage")]
+    OIDC["🔑 OIDC Broker\n(userinfo endpoint)"]
+    JWKS["🛡️ Visa Issuer(s)\n(JWKS endpoints via jku)"]
+    S3[("💾 S3 Storage")]
 
     download -->|"authorize"| auth
     download -->|"stream files"| S3
     auth -->|"fetch visas"| OIDC
     auth -->|"verify sigs"| JWKS
 
-    style D1 fill:#e1f5ee,stroke:#0f6e56,color:#04342c
-    style D2 fill:#e1f5ee,stroke:#0f6e56,color:#04342c
-    style DN fill:#e1f5ee,stroke:#0f6e56,color:#04342c
-    style CH1 fill:#eeedfe,stroke:#534ab7,color:#26215c
-    style CH2 fill:#eeedfe,stroke:#534ab7,color:#26215c
+    classDef stateless fill:#e1f5ee,stroke:#0f6e56,color:#04342c
+    classDef authsvc fill:#eeedfe,stroke:#534ab7,color:#26215c
+    classDef external fill:#f5f5f5,stroke:#999,color:#333
+    class D1,D2,DN stateless
+    class CH1,CH2 authsvc
+    class OIDC,JWKS,S3 external
 ```
 
 **Distributed cache with [Olric](https://github.com/buraksezer/olric):**
