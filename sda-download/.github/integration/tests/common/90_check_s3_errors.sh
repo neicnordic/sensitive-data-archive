@@ -89,4 +89,26 @@ if [ "$resp" -ne 404 ]; then
     exit 1
 fi
 
+# try to download a file from a non existent dataset
+
+resp=$(curl -s --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/nonexistentdataset/$file")
+if [ -n "$resp" ]; then
+    echo "Incorrect response, expected no error message, got $resp"
+    exit 1
+fi
+
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/nonexistentdataset/$file" -s -o /dev/null -w "%{http_code}")
+if [ "$resp" -ne 403 ]; then
+    echo "Incorrect response, expected 403 got $resp"
+    exit 1
+fi
+
+# empty request to the /s3 endpoint should also return 403
+
+resp=$(curl --cacert certs/ca.pem -H "Authorization: Bearer $token" -H "Client-Public-Key: $clientkey" -H "SDA-Client-Version: v0.3.0" "https://localhost:9443/s3/" -s -o /dev/null -w "%{http_code}")
+if [ "$resp" -ne 403 ]; then
+    echo "Incorrect response, expected 403 got $resp"
+    exit 1
+fi
+
 echo "OK"
