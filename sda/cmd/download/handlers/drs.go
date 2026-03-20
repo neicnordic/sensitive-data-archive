@@ -133,7 +133,7 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 		Checksums:   checksums,
 		AccessMethods: []DrsAccessMethod{
 			{
-				Type: "https",
+				Type: scheme,
 				AccessURL: DrsAccessURL{
 					URL: fmt.Sprintf("%s://%s/files/%s/content", scheme, host, file.ID),
 				},
