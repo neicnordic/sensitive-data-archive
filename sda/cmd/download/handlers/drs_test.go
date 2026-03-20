@@ -77,7 +77,7 @@ func TestGetDrsObject_Success(t *testing.T) {
 	assert.Equal(t, "a1b2c3d4", resp.Checksums[0].Checksum)
 
 	require.Len(t, resp.AccessMethods, 1)
-	assert.Equal(t, "https", resp.AccessMethods[0].Type)
+	assert.Equal(t, "http", resp.AccessMethods[0].Type)
 	assert.Equal(t, "http://download.example.org/files/urn:neic:001-002-003/content", resp.AccessMethods[0].AccessURL.URL)
 }
 
