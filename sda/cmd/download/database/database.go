@@ -30,6 +30,7 @@ const (
 	getDatasetFilesPageQuery         = "getDatasetFilesPage"
 	getDatasetFilesPageByPathQuery   = "getDatasetFilesPageByPath"
 	getDatasetFilesPageByPrefixQuery = "getDatasetFilesPageByPrefix"
+	getFileChecksumsQuery            = "getFileChecksums"
 )
 
 // paginatedFileBase is the shared SELECT+JOIN+LATERAL block for keyset-paginated
@@ -117,7 +118,8 @@ var queries = map[string]string{
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
 			c.type as decrypted_checksum_type,
-			f.header
+			f.header,
+			f.created_at
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
@@ -135,7 +137,8 @@ var queries = map[string]string{
 			f.decrypted_file_size,
 			c.checksum as decrypted_checksum,
 			c.type as decrypted_checksum_type,
-			f.header
+			f.header,
+			f.created_at
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
@@ -160,6 +163,13 @@ var queries = map[string]string{
 			FROM sda.datasets d
 			WHERE d.stable_id = $1
 		)`,
+
+	// getFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
+	getFileChecksumsQuery: `
+		SELECT c.checksum, c.type
+		FROM sda.checksums c
+		INNER JOIN sda.files f ON c.file_id = f.id
+		WHERE f.stable_id = $1 AND c.source = $2`,
 
 	// Keyset-paginated file queries compose from paginatedFileBase (defined below).
 
@@ -235,6 +245,9 @@ type Database interface {
 	// CheckDatasetExists checks if a dataset with the given stable_id exists.
 	CheckDatasetExists(ctx context.Context, datasetID string) (bool, error)
 
+	// GetFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
+	GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error)
+
 	// GetDatasetFilesPaginated returns files in a dataset with keyset cursor pagination.
 	// Files are returned with aggregated checksums. Use FileListOptions to filter and paginate.
 	GetDatasetFilesPaginated(ctx context.Context, datasetID string, opts FileListOptions) ([]File, error)
@@ -270,6 +283,7 @@ type File struct {
 	DecryptedChecksum     string     `json:"decryptedChecksum"`
 	DecryptedChecksumType string     `json:"decryptedChecksumType"`
 	Header                []byte     `json:"-"`
+	CreatedAt             time.Time  `json:"-"`
 	Checksums             []Checksum `json:"checksums,omitempty"` // Aggregated checksums (from paginated queries)
 }
 
@@ -546,6 +560,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 		&decryptedChecksum,
 		&decryptedChecksumType,
 		&headerHex,
+		&f.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -604,6 +619,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 		&decryptedChecksum,
 		&decryptedChecksumType,
 		&headerHex,
+		&f.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -660,6 +676,31 @@ func (p *PostgresDB) CheckDatasetExists(ctx context.Context, datasetID string) (
 	}
 
 	return exists, nil
+}
+
+// GetFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
+func (p *PostgresDB) GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
+	stmt := p.preparedStatements[getFileChecksumsQuery]
+	rows, err := stmt.QueryContext(ctx, fileID, source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query file checksums: %w", err)
+	}
+	defer rows.Close()
+
+	var checksums []Checksum
+	for rows.Next() {
+		var c Checksum
+		if err := rows.Scan(&c.Checksum, &c.Type); err != nil {
+			return nil, fmt.Errorf("failed to scan checksum row: %w", err)
+		}
+		checksums = append(checksums, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating checksum rows: %w", err)
+	}
+
+	return checksums, nil
 }
 
 // GetDatasetFilesPaginated returns files with keyset cursor pagination and aggregated checksums.
@@ -761,4 +802,9 @@ func CheckFilePermission(ctx context.Context, fileID string, visas []string) (bo
 // CheckDatasetExists checks if a dataset with the given stable_id exists.
 func CheckDatasetExists(ctx context.Context, datasetID string) (bool, error) {
 	return db.CheckDatasetExists(ctx, datasetID)
+}
+
+// GetFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
+func GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
+	return db.GetFileChecksums(ctx, fileID, source)
 }
