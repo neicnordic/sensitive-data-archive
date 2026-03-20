@@ -106,7 +106,7 @@ jobs:
           category: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
 
       # Only run trivy scan with markdown output and add PR comment if PR changes the relevant file
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
