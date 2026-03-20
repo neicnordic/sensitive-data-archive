@@ -133,7 +133,7 @@ jobs:
 
       - name: Comment PR
         if: steps.changes.outputs.changed == 'true'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: ${{ matrix.name }} Trivy results
           path: trivy-comment.md
