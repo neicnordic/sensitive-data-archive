@@ -94,6 +94,7 @@ superseded-by: "0005-use-new-approach.md"
 | --- | --- | --- |
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
 | [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
+| [0004](0004-separate-passport-clearinghouse-service.md) | Separate Visa Authorization Service | proposed |
 
 ## More information
 
