@@ -65,7 +65,7 @@ BEGIN;
 
 ### 3.2. Inbox Location
 
-If posix inbox replace `${INBOX_ENDPOINT}/${INBOX_BUCKET}` with `${INBOX_POSIX_VOLUME}`
+If posix inbox replace `${INBOX_ENDPOINT}/${INBOX_BUCKET}` with `/${INBOX_POSIX_VOLUME}`
 
 If you only have one inbox storage
 ```sql
@@ -77,7 +77,7 @@ If you only have multiple inbox storages, repeat following UPDATE statement per 
 ```sql
 UPDATE sda.files AS f
 SET submission_location = '${INBOX_ENDPOINT}/${INBOX_BUCKET}'
-FROM sda.temp_file_in_${INBOX_BUCKET} AS in_buk
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk
 WHERE f.id = in_buk.file_id;
 ```
 
@@ -96,7 +96,7 @@ If you only have multiple archive storages, repeat following UPDATE statement pe
 ```sql
 UPDATE sda.files AS f
 SET archive_location = '${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}'
-FROM sda.temp_file_in_${ARCHIVE_BUCKET} AS in_buk 
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
 WHERE f.id = in_buk.file_id
 AND archive_file_path != '';
 ```
@@ -116,7 +116,7 @@ If you only have multiple backup storages, repeat following UPDATE statement per
 ```sql
 UPDATE sda.files AS f
 SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
-FROM sda.temp_file_in_${BACKUP_BUCKET} AS in_buk 
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
 WHERE f.id = in_buk.file_id
 AND stable_id IS NOT NULL;
 ```
