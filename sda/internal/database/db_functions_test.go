@@ -1873,6 +1873,7 @@ func (suite *DatabaseTests) TestIsFileInDataset_Yes() {
 func (suite *DatabaseTests) TestSetBackedUp() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
 
 	// register a file in the database
 	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetArchived.c4gh", "testuser")
@@ -1894,15 +1895,12 @@ func (suite *DatabaseTests) TestSetBackedUp() {
 
 	suite.Equal("/backup", archiveData.BackupLocation)
 	suite.Equal(fileID, archiveData.BackupFilePath)
-
-	db.Close()
 }
 func (suite *DatabaseTests) TestSetBackedUp_FileID_Not_Exists() {
 	db, err := NewSDAdb(suite.dbConf)
 	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
 
 	notExistingFileID := uuid.NewString()
 	assert.EqualError(suite.T(), db.SetBackedUp("/backup", notExistingFileID, notExistingFileID), sql.ErrNoRows.Error())
-
-	db.Close()
 }
