@@ -39,7 +39,7 @@ find . -type f -exec basename {} \; > ${STORAGE_NAME}_ids
 
 ```sql
 CREATE TABLE sda.temp_file_in_${STORAGE_NAME} ( 
-file_id UUID PRIMARY KEY
+file_id TEXT PRIMARY KEY
 );
 ``` 
 
