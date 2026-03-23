@@ -88,7 +88,6 @@ func run() error {
 	}()
 
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
-	// Load keys for JWT verification
 	if conf.Server.Jwtpubkeyurl != "" {
 		if err := auth.FetchJwtPubKeyURL(conf.Server.Jwtpubkeyurl); err != nil {
 			return fmt.Errorf("failed to read jwt pub key from url: %s, due to %v", conf.Server.Jwtpubkeyurl, err)
@@ -101,8 +100,8 @@ func run() error {
 	}
 	router := mux.NewRouter()
 	proxy := NewProxy(conf.S3Inbox, s3Client, auth, mqBroker, sdaDB, tlsProxy)
-	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
-	router.HandleFunc("/health", proxy.CheckHealth)
+	router.HandleFunc("/live", proxy.LivenessHandler).Methods(http.MethodGet)
+	router.HandleFunc("/ready", proxy.ReadinessHandler).Methods(http.MethodGet)
 	router.PathPrefix("/").Handler(proxy)
 
 	server := &http.Server{
@@ -168,7 +167,6 @@ func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) erro
 func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	cfg := new(tls.Config)
 
-	// Read system CAs
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
 		log.Errorf("failed to read system CAs: %v, using an empty pool as base", err)

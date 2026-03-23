@@ -1,97 +1,37 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log/slog"
 	"net/http"
-	"net/url"
-	"path"
-
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	log "github.com/sirupsen/logrus"
+	"time"
 )
 
-// CheckHealth checks and tries to repair the connections to MQ, DB and S3
-func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
-	// try to connect to mq, check connection and channel
-	var err error
-	if p.messenger == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-
-		return
-	}
-	if p.messenger.IsConnClosed() {
-		log.Warning("connection is closed, reconnecting...")
-		p.messenger, err = broker.NewMQ(p.messenger.Conf)
-		if err != nil {
-			log.Warning(err)
-			w.WriteHeader(http.StatusServiceUnavailable)
-
-			return
-		}
-	}
-
-	if p.messenger.Channel.IsClosed() {
-		log.Warning("channel is closed, recreating...")
-		err := p.messenger.CreateNewChannel()
-		if err != nil {
-			log.Warning(err)
-			w.WriteHeader(http.StatusServiceUnavailable)
-
-			return
-		}
-	}
-	// Ping database, reconnect if there was a connection problem
-	err = p.database.DB.Ping()
-	if err != nil {
-		log.Errorf("Database connection problem: %v", err)
-		err = p.database.Connect()
-		if err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-
-			return
-		}
-	}
-
-	// Check that s3 backend responds
-	s3url, err := p.getS3ReadyPath()
-	if err != nil {
-		log.Errorf("Incorrect S3 health url: %v", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-
-		return
-	}
-	err = p.httpsGetCheck(s3url)
-	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-
-		return
-	}
+func (p *Proxy) LivenessHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
-// httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
-func (p *Proxy) httpsGetCheck(uri string) error {
-	resp, e := p.client.Get(uri) // #nosec G704 uri originates from configuration
-	if e != nil {
-		return e
-	}
-	_ = resp.Body.Close() // ignoring error
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("returned status %d", resp.StatusCode)
+func (p *Proxy) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := p.database.DB.PingContext(ctx); err != nil {
+		slog.Error("readiness failed", "reason", "database", "error", err)
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+
+		return
 	}
 
-	return nil
-}
+	if p.messenger == nil || p.messenger.IsConnClosed() {
+		slog.Warn("Readiness failed - Messenger disconnected")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		slog.Error("readiness failed", "reason", "messenger_dissconnected")
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 
-func (p *Proxy) getS3ReadyPath() (string, error) {
-	s3URL, err := url.Parse(p.s3Conf.Endpoint)
-	if err != nil {
-		return "", err
-	}
-	if p.s3Conf.ReadyPath != "" {
-		s3URL.Path = path.Join(s3URL.Path, p.s3Conf.ReadyPath)
+		return
 	}
 
-	return s3URL.String(), nil
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Ready"))
 }
