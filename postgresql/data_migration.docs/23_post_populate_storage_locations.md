@@ -24,14 +24,14 @@ Get all files from each s3 bucket
 aws s3api list-objects-v2 --endpoint ${ENDPOINT} --bucket ${BUCKET} > ${STORAGE_NAME}_raw
 ```
 
-Transform raw response to just list of ids
+Transform raw response to just list of keys
 ```bash
-jq -r '.Contents[].Key' ${STORAGE_NAME}_raw > ${STORAGE_NAME}_ids
+jq -r '.Contents[].Key' ${STORAGE_NAME}_raw > ${STORAGE_NAME}_keys
 ```
 
 #### If Posix storage
 ```bash
-find . -type f -print | sed 's|^\./||' > ${STORAGE_NAME}_ids
+find . -type f -print | sed 's|^\./||' > ${STORAGE_NAME}_keys
 ```
 
 ### 2.2. Create new staging tables to support DB migration
@@ -39,13 +39,13 @@ find . -type f -print | sed 's|^\./||' > ${STORAGE_NAME}_ids
 
 ```sql
 CREATE TABLE sda.temp_file_in_${STORAGE_NAME} ( 
-file_id TEXT PRIMARY KEY
+key TEXT PRIMARY KEY
 );
 ``` 
 
 ### 2.3. Populate tables
 ```bash
-psql -U $user -d sda -At -h $host -p $port -c "\copy sda.temp_file_in_${STORAGE_NAME} from '/path/to/${STORAGE_NAME}_ids' with delimiter as ','"
+psql -U $user -d sda -At -h $host -p $port -c "\copy sda.temp_file_in_${STORAGE_NAME} from '/path/to/${STORAGE_NAME}_keys' with delimiter as ','"
 ```
 
 ## 3. Run data migration queries
@@ -78,7 +78,7 @@ If you only have multiple inbox storages, repeat following UPDATE statement per 
 UPDATE sda.files AS f
 SET submission_location = '${INBOX_ENDPOINT}/${INBOX_BUCKET}'
 FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk
-WHERE CONCAT(REPLACE(submission_user, '@', '_'), '/', submission_file_path) = in_buk.file_id;
+WHERE CONCAT(REPLACE(submission_user, '@', '_'), '/', submission_file_path) = in_buk.key;
 ```
 
 ### 3.3. Archive Location
@@ -97,7 +97,7 @@ If you only have multiple archive storages, repeat following UPDATE statement pe
 UPDATE sda.files AS f
 SET archive_location = '${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}'
 FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
-WHERE f.id = in_buk.file_id
+WHERE f.id = in_buk.key
 AND archive_file_path != '';
 ```
 
@@ -128,7 +128,7 @@ If you only have multiple backup storages, repeat following UPDATE statement per
 UPDATE sda.files AS f
 SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
 FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
-WHERE f.id = in_buk.file_id
+WHERE f.id = in_buk.key
 AND backup_path != '';
 ```
 
