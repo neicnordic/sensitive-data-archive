@@ -319,6 +319,8 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 
 	backupLocation, err := backupWriter.WriteFile(ctx, archiveData.FilePath, contentReader)
 	if err != nil {
+		_ = contentReader.Close()
+
 		return fmt.Errorf("failed to write file to backup storage, reason: %v", err)
 	}
 	_ = contentReader.Close()
