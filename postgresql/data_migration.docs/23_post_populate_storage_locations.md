@@ -34,7 +34,7 @@ jq -r '.Contents[].Key' ${STORAGE_NAME}_raw > ${STORAGE_NAME}_ids
 find . -type f -exec basename {} \; > ${STORAGE_NAME}_ids
 ```
 
-### 2.2. Create new temporary tables to support DB migration
+### 2.2. Create new staging tables to support DB migration
 
 
 ```sql
@@ -128,9 +128,9 @@ COMMIT;
 ```
 
 ## 4. Clean up
-Only needed if you did the [2. Prep step](#2-prep) and created temporary tables
+Only needed if you did the [2. Prep step](#2-prep) and created staging tables
 
-Repeat DROP table statement per temporary table created
+Repeat DROP table statement per staging table created
 ```sql
 DROP TABLE sda.temp_file_in_${STORAGE_NAME}; 
 ```
