@@ -37,6 +37,19 @@ The file naming convention is as follows: `${SCHEMA_VERSION}_${pre/post}_${SHORT
 * `${pre/post}` describes if these instructions should be executed before or after the schema migration has taken place.
 * `${SHORT_DESCRIPTION}` - short description describing the data migration
 
+Before upgrading the schema ensure if there are any data migrations needed for any version to be applied.
+If the data migration is a **pre** it needs to be applied **before** that specific schema version migration, 
+and if it is a **post** it needs to be applied **after** that.
+
+Recommended sequence when deploying:
+
+1. Check the currently applied schema version and the target schema version after deployment.
+2. Check if there are any data migration instructions for any of the schema versions to be applied.
+3. For each schema version to be applied:
+   1. Run pre data migrations ***if present***.
+   2. Apply schema migration.
+   3. Run post data migrations ***if present***.
+
 ## Schema migration rollback
 
 In [rollback.docs](rollback.docs) directory there are instructions on how to rollback schema migrations.
