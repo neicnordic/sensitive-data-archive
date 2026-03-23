@@ -54,7 +54,7 @@ ALTER TABLE sda.files
     DROP COLUMN backup_location,
     DROP COLUMN submission_location;
 
-DELETE FROM sda.dbschema_version WHERE version = 23;         
+DELETE FROM sda.dbschema_version WHERE version = 23;
 ```
 
 ### Commit transaction

@@ -37,9 +37,8 @@ The file naming convention is as follows: `${SCHEMA_VERSION}_${pre/post}_${SHORT
 * `${pre/post}` describes if these instructions should be executed before or after the schema migration has taken place.
 * `${SHORT_DESCRIPTION}` - short description describing the data migration
 
-Before upgrading the schema ensure if there are any data migrations needed for any version to be applied.
-If the data migration is a **pre** it needs to be applied **before** that specific schema version migration, 
-and if it is a **post** it needs to be applied **after** that.
+Before upgrading the schema, check whether any data migrations are required for the schema versions you plan to apply.
+Apply any **pre** data migrations **before** running the corresponding schema migration, and any **post** data migrations **after** it.
 
 Recommended sequence when deploying:
 
