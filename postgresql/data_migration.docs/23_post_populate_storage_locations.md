@@ -78,7 +78,7 @@ If you only have multiple inbox storages, repeat following UPDATE statement per 
 UPDATE sda.files AS f
 SET submission_location = '${INBOX_ENDPOINT}/${INBOX_BUCKET}'
 FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk
-WHERE f.id = in_buk.file_id;
+WHERE CONCAT(REPLACE(submission_user, '@', '_'), '/', submission_file_path) = in_buk.file_id;
 ```
 
 ### 3.3. Archive Location
