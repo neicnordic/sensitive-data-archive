@@ -105,7 +105,7 @@ AND archive_file_path != '';
 Skip these steps if you do not have a backup storage
 
 #### 3.4.1 Populate backup_path
-Currently the `backup_path` was not being populated when a file was backed up, this is now needed. Currently the `backup_path`
+Currently, the `backup_path` was not being populated when a file was backed up, this is now needed. Currently the `backup_path`
 is always the same as `archive_file_path`.
 
 ```sql
@@ -148,7 +148,7 @@ DROP TABLE sda.temp_file_in_${STORAGE_NAME};
 
 ## 5. Ensure all files have been updated
 ```sql
-SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '')
+SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '');
 ```
 If there exists rows, then there are issues and the required locations of the files are not known.
 To resolve you could either manually delete those sda.files entries or ensure the files are uploaded to the expected locations.
@@ -157,7 +157,7 @@ To resolve you could either manually delete those sda.files entries or ensure th
 Skip this step if you do not have a backup storage
 
 ```sql
-SELECT count(id) FROM sda.files WHERE backup_location IS NULL AND stable_id IS NOT NULL
+SELECT count(id) FROM sda.files WHERE backup_location IS NULL AND stable_id IS NOT NULL;
 ```
 If there exists rows, then there are issues and the backup locations of the files are not known.
 To resolve you could either manually delete those sda.files entries or ensure the files are uploaded to the expected locations.
