@@ -102,15 +102,26 @@ AND archive_file_path != '';
 ```
 
 ### 3.4 Backup location
-Skip this if you do not have a backup storage
+Skip these steps if you do not have a backup storage
 
+#### 3.4.1 Populate backup_path
+Currently the `backup_path` was not being populated when a file was backed up, this is now needed. Currently the `backup_path`
+is always the same as `archive_file_path`.
+
+```sql
+UPDATE sda.files
+SET backup_path = archive_file_path
+WHERE archive_file_path != '';
+```
+
+#### 3.4.2 Populate backup_location
 If posix archive replace '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}' with '/${BACKUP_POSIX_VOLUME}'
 
 If you only have one backup storage
 ```sql
 UPDATE sda.files 
 SET backup_location ='${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
-WHERE stable_id IS NOT NULL;
+WHERE backup_path != '';
 ```
 If you only have multiple backup storages, repeat following UPDATE statement per bucket/volume you have
 ```sql
@@ -118,7 +129,7 @@ UPDATE sda.files AS f
 SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
 FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
 WHERE f.id = in_buk.file_id
-AND stable_id IS NOT NULL;
+AND backup_path != '';
 ```
 
 ### 3.5 Commit
