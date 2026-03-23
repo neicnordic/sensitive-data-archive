@@ -31,7 +31,7 @@ jq -r '.Contents[].Key' ${STORAGE_NAME}_raw > ${STORAGE_NAME}_ids
 
 #### If Posix storage
 ```bash
-find . -type f -exec basename {} \; > ${STORAGE_NAME}_ids
+find . -type f -print | sed 's|^\./||' > ${STORAGE_NAME}_ids
 ```
 
 ### 2.2. Create new staging tables to support DB migration
