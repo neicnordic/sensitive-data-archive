@@ -1572,8 +1572,18 @@ func (dbs *SDAdb) SetBackedUp(location, path, fileID string) error {
 
 	db := dbs.DB
 	const setBackedUp = "UPDATE sda.files SET backup_location = $1, backup_path = $2 WHERE id = $3;"
-	if _, err := db.Exec(setBackedUp, location, path, fileID); err != nil {
+	r, err := db.Exec(setBackedUp, location, path, fileID)
+	if err != nil {
 		return fmt.Errorf("setBackedUp error: %s", err.Error())
+	}
+
+	rowsAffected, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("setBackedUp error: %s", err.Error())
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
 	}
 
 	return nil

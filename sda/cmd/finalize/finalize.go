@@ -323,7 +323,7 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	}
 	_ = contentReader.Close()
 
-	// Mark file as "backed up" and populated backup path and location
+	// Mark file as "backed up" and populate backup path and location
 	if err := db.SetBackedUp(backupLocation, archiveData.FilePath, fileID); err != nil {
 		return fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
 	}
