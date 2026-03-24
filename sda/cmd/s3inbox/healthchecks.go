@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 )
 
 func (p *Proxy) LivenessHandler(w http.ResponseWriter, r *http.Request) {
@@ -13,7 +12,7 @@ func (p *Proxy) LivenessHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	if err := p.database.DB.PingContext(ctx); err != nil {
