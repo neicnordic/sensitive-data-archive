@@ -53,6 +53,11 @@ func run() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Validate permission model
+	if err := validatePermissionModel(config.PermissionModel(), config.VisaEnabled()); err != nil {
+		return err
+	}
+
 	// Start gRPC health server
 	go func() {
 		if err := health.Start(config.HealthPort()); err != nil {
@@ -321,6 +326,25 @@ type productionConfig struct {
 	HMACSecret     string
 	GRPCClientCert string
 	GRPCClientKey  string
+}
+
+// validatePermissionModel checks that the permission model is valid and
+// that its dependencies are satisfied.
+func validatePermissionModel(model string, visaEnabled bool) error {
+	switch model {
+	case "ownership":
+		return nil
+	case "visa":
+		if !visaEnabled {
+			return fmt.Errorf("permission.model is %q but visa.enabled is false — this combination would deny all requests", model)
+		}
+
+		return nil
+	case "combined":
+		return nil
+	default:
+		return fmt.Errorf("invalid permission.model %q: must be ownership, visa, or combined", model)
+	}
 }
 
 // validateProductionConfig checks that dangerous testing flags are disabled

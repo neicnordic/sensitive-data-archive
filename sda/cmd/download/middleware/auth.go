@@ -456,7 +456,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 		auditLogger.Log(c.Request.Context(), audit.Event{
 			Event:         "download.denied",
 			CorrelationID: c.GetString("correlationId"),
-			Endpoint:      c.Request.URL.Path,
+			Path:      c.Request.URL.Path,
 			HTTPStatus:    status,
 		})
 	}
@@ -635,7 +635,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 
 // GetToken extracts the access token from request headers.
 // Supports both Authorization: Bearer and X-Amz-Security-Token headers.
-var GetToken = func(headers http.Header) (string, int, error) {
+func GetToken(headers http.Header) (string, int, error) {
 	// Check X-Amz-Security-Token header first (for S3 compatibility)
 	if token := headers.Get("X-Amz-Security-Token"); token != "" {
 		return token, 0, nil

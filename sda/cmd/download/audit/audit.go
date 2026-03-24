@@ -17,7 +17,7 @@ type Event struct {
 	FileID           string    `json:"fileId,omitempty"`
 	DatasetID        string    `json:"datasetId,omitempty"`
 	CorrelationID    string    `json:"correlationId"`
-	Endpoint         string    `json:"endpoint"`
+	Path             string    `json:"path"`
 	HTTPStatus       int       `json:"httpStatus"`
 	BytesTransferred int64     `json:"bytesTransferred,omitempty"`
 	AuthType         string    `json:"authType,omitempty"`

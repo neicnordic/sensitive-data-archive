@@ -31,12 +31,8 @@ func newStdoutLoggerWithWriter(w io.Writer) *StdoutLogger {
 func (l *StdoutLogger) Log(_ context.Context, event Event) {
 	// Enforce Type is always "audit"
 	event.Type = "audit"
-	// Ensure timestamp is UTC
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	} else {
-		event.Timestamp = event.Timestamp.UTC()
-	}
+	// Always set timestamp at log time to prevent caller manipulation
+	event.Timestamp = time.Now().UTC()
 
 	l.mu.Lock()
 	defer l.mu.Unlock()

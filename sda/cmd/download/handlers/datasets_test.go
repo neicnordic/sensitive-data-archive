@@ -267,7 +267,7 @@ func TestGetDataset_NoAccess_EmitsAuditDenied(t *testing.T) {
 	evt := logger.events[0]
 	assert.Equal(t, "download.denied", evt.Event)
 	assert.Equal(t, http.StatusForbidden, evt.HTTPStatus)
-	assert.Equal(t, "/datasets/secret-dataset", evt.Endpoint)
+	assert.Equal(t, "/datasets/secret-dataset", evt.Path)
 	assert.Equal(t, "test-user", evt.UserID)
 	assert.NotEmpty(t, evt.CorrelationID)
 }
