@@ -270,7 +270,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
 		CorrelationID: c.GetString("correlationId"),
-		Endpoint:      c.Request.URL.Path,
+		Path:      c.Request.URL.Path,
 		HTTPStatus:    c.Writer.Status(),
 	})
 }
@@ -352,7 +352,7 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
 		CorrelationID: c.GetString("correlationId"),
-		Endpoint:      c.Request.URL.Path,
+		Path:      c.Request.URL.Path,
 		HTTPStatus:    c.Writer.Status(),
 	})
 }
@@ -453,7 +453,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
 		CorrelationID: c.GetString("correlationId"),
-		Endpoint:      c.Request.URL.Path,
+		Path:      c.Request.URL.Path,
 		HTTPStatus:    c.Writer.Status(),
 	})
 }

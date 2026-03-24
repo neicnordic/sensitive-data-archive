@@ -17,7 +17,7 @@ func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 		logger.Log(context.Background(), Event{
 			Event:         "download.completed",
 			CorrelationID: "abc-123",
-			Endpoint:      "/files/test",
+			Path:      "/files/test",
 			HTTPStatus:    200,
 		})
 	})
@@ -33,7 +33,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 		FileID:        "file-001",
 		DatasetID:     "EGAD00000000001",
 		CorrelationID: "corr-123",
-		Endpoint:      "/files/file-001",
+		Path:      "/files/file-001",
 		HTTPStatus:    200,
 	})
 
@@ -45,7 +45,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 	assert.Equal(t, "file-001", decoded.FileID)
 	assert.Equal(t, "EGAD00000000001", decoded.DatasetID)
 	assert.Equal(t, "corr-123", decoded.CorrelationID)
-	assert.Equal(t, "/files/file-001", decoded.Endpoint)
+	assert.Equal(t, "/files/file-001", decoded.Path)
 	assert.Equal(t, 200, decoded.HTTPStatus)
 }
 
@@ -57,7 +57,7 @@ func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 		Type:          "something-else",
 		Event:         "download.denied",
 		CorrelationID: "corr-456",
-		Endpoint:      "/files/file-002",
+		Path:      "/files/file-002",
 		HTTPStatus:    403,
 	})
 
@@ -67,27 +67,31 @@ func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 	assert.Equal(t, "audit", decoded.Type, "Type must always be 'audit' regardless of caller input")
 }
 
-func TestStdoutLogger_TimestampIsUTC(t *testing.T) {
+func TestStdoutLogger_TimestampAlwaysOverwritten(t *testing.T) {
 	var buf bytes.Buffer
 	logger := newStdoutLoggerWithWriter(&buf)
 
-	// Provide a non-UTC timestamp
+	// Provide a caller-supplied timestamp — logger must ignore it
 	eastern := time.FixedZone("EST", -5*60*60)
-	ts := time.Date(2025, 6, 15, 10, 30, 0, 0, eastern)
+	callerTS := time.Date(2025, 6, 15, 10, 30, 0, 0, eastern)
 
+	before := time.Now().UTC()
 	logger.Log(context.Background(), Event{
 		Event:         "download.completed",
-		Timestamp:     ts,
+		Timestamp:     callerTS,
 		CorrelationID: "corr-789",
-		Endpoint:      "/files/file-003",
+		Path:          "/files/file-003",
 		HTTPStatus:    200,
 	})
+	after := time.Now().UTC()
 
 	var decoded Event
 	err := json.Unmarshal(buf.Bytes(), &decoded)
 	require.NoError(t, err)
 	assert.Equal(t, time.UTC, decoded.Timestamp.Location(), "timestamp must be in UTC")
-	assert.Equal(t, ts.UTC(), decoded.Timestamp)
+	assert.NotEqual(t, callerTS.UTC(), decoded.Timestamp, "caller-supplied timestamp must be overwritten")
+	assert.True(t, !decoded.Timestamp.Before(before) && !decoded.Timestamp.After(after),
+		"timestamp must be set at log time, not caller time")
 }
 
 func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
@@ -98,7 +102,7 @@ func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         "download.failed",
 		CorrelationID: "corr-000",
-		Endpoint:      "/files/file-004",
+		Path:      "/files/file-004",
 		HTTPStatus:    500,
 	})
 	after := time.Now().UTC()
@@ -118,7 +122,7 @@ func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         "download.denied",
 		CorrelationID: "corr-omit",
-		Endpoint:      "/files/file-005",
+		Path:      "/files/file-005",
 		HTTPStatus:    401,
 	})
 
@@ -138,7 +142,7 @@ func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 	assert.Contains(t, raw, "event")
 	assert.Contains(t, raw, "timestamp")
 	assert.Contains(t, raw, "correlationId")
-	assert.Contains(t, raw, "endpoint")
+	assert.Contains(t, raw, "path")
 	assert.Contains(t, raw, "httpStatus")
 }
 
@@ -149,13 +153,13 @@ func TestStdoutLogger_MultipleEvents(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         "download.completed",
 		CorrelationID: "corr-a",
-		Endpoint:      "/files/a",
+		Path:      "/files/a",
 		HTTPStatus:    200,
 	})
 	logger.Log(context.Background(), Event{
 		Event:         "download.denied",
 		CorrelationID: "corr-b",
-		Endpoint:      "/files/b",
+		Path:      "/files/b",
 		HTTPStatus:    403,
 	})
 
@@ -178,7 +182,7 @@ func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 		Event:         "download.completed",
 		UserID:        "user@example.org",
 		CorrelationID: "corr-contract",
-		Endpoint:      "/files/file-006",
+		Path:      "/files/file-006",
 		HTTPStatus:    200,
 	})
 
@@ -190,6 +194,6 @@ func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 	assert.NotEmpty(t, decoded.Event, "Event must be populated")
 	assert.False(t, decoded.Timestamp.IsZero(), "Timestamp must be populated")
 	assert.NotEmpty(t, decoded.CorrelationID, "CorrelationID must be populated")
-	assert.NotEmpty(t, decoded.Endpoint, "Endpoint must be populated")
+	assert.NotEmpty(t, decoded.Path, "Endpoint must be populated")
 	assert.NotZero(t, decoded.HTTPStatus, "HTTPStatus must be populated")
 }

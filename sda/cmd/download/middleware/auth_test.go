@@ -220,7 +220,7 @@ func TestTokenMiddleware_NoToken_EmitsAuditDenied(t *testing.T) {
 	evt := logger.events[0]
 	assert.Equal(t, "download.denied", evt.Event)
 	assert.Equal(t, http.StatusUnauthorized, evt.HTTPStatus)
-	assert.Equal(t, "/datasets", evt.Endpoint)
+	assert.Equal(t, "/datasets", evt.Path)
 	assert.Equal(t, "test-corr-123", evt.CorrelationID)
 	assert.Empty(t, evt.UserID, "no user identity on 401")
 }

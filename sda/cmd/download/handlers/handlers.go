@@ -49,7 +49,7 @@ func (h *Handlers) auditDenied(c *gin.Context) {
 		Event:         "download.denied",
 		UserID:        authCtx.Subject,
 		CorrelationID: c.GetString("correlationId"),
-		Endpoint:      c.Request.URL.Path,
+		Path:      c.Request.URL.Path,
 		HTTPStatus:    c.Writer.Status(),
 	})
 }
@@ -68,7 +68,7 @@ func (h *Handlers) auditFailed(c *gin.Context, authCtx middleware.AuthContext, f
 		FileID:        fileID,
 		DatasetID:     datasetID,
 		CorrelationID: c.GetString("correlationId"),
-		Endpoint:      c.Request.URL.Path,
+		Path:      c.Request.URL.Path,
 		HTTPStatus:    c.Writer.Status(),
 		ErrorReason:   reason,
 	})
