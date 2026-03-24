@@ -545,9 +545,9 @@ cd sda && go test -tags visas -count=1 ./cmd/download/...
 ### Integration Tests
 
 ```bash
-make integrationtest-sda-cmd-download-up    # Start test environment
-make integrationtest-sda-cmd-download-run   # Run tests
-make integrationtest-sda-cmd-download-down  # Tear down
+make integrationtest-sda-download-v2-up    # Start test environment
+make integrationtest-sda-download-v2-run   # Run tests
+make integrationtest-sda-download-v2-down  # Tear down
 ```
 
 ### Local Development

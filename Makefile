@@ -159,20 +159,20 @@ integrationtest-sda-validator-orchestrator-down:
 
 # Download v2 integration tests (sda/cmd/download, Go-based)
 # Prerequisite: run `make build-all` first if container images are not already built.
-integrationtest-sda-cmd-download:
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+integrationtest-sda-download-v2:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml up -d
 	@sleep 10
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml run --rm integration_test
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml down -v --remove-orphans
 
-integrationtest-sda-cmd-download-run:
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml run --rm integration_test
+integrationtest-sda-download-v2-run:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml run --rm integration_test
 
-integrationtest-sda-cmd-download-up: build-all
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml up -d
+integrationtest-sda-download-v2-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml up -d
 
-integrationtest-sda-cmd-download-down:
-	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-cmd-download-integration.yml down -v --remove-orphans
+integrationtest-sda-download-v2-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml down -v --remove-orphans
 
 # Download benchmark (compares old vs new public endpoints)
 # Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
