@@ -317,13 +317,19 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 		}
 	}()
 
-	_, err = backupWriter.WriteFile(ctx, archiveData.FilePath, contentReader)
+	backupLocation, err := backupWriter.WriteFile(ctx, archiveData.FilePath, contentReader)
 	if err != nil {
+		_ = contentReader.Close()
+
 		return fmt.Errorf("failed to write file to backup storage, reason: %v", err)
 	}
 	_ = contentReader.Close()
 
-	// Mark file as "backed up"
+	// Mark file as "backed up" and populate backup path and location
+	if err := db.SetBackedUp(backupLocation, archiveData.FilePath, fileID); err != nil {
+		return fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
+	}
+
 	if err := db.UpdateFileEventLog(fileID, "backed up", "finalize", "{}", string(delivered.Body)); err != nil {
 		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
