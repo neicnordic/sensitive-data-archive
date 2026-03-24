@@ -229,7 +229,7 @@ services:
       - "8086:8081"
     restart: always
     volumes:
-      - ./sda/cmd-download-config.yaml:/config.yaml
+      - ./sda/download-config.yaml:/config.yaml
       - shared:/shared
 
   # Go-based integration test runner

@@ -29,7 +29,7 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - ./sda/cmd-download-config-benchmark.yaml:/config.yaml
+      - ./sda/download-config-benchmark.yaml:/config.yaml
       - shared:/shared
 
   # Add network alias for minio so storage URLs work correctly

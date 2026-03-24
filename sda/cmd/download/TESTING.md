@@ -12,7 +12,7 @@ The download service has its own Docker Compose-based Go integration tests:
 
 ```bash
 # From repository root
-docker compose -f .github/integration/sda-cmd-download-integration.yml run integration_test
+docker compose -f .github/integration/sda-download-v2-integration.yml run integration_test
 ```
 
 This runs a minimal environment with:
