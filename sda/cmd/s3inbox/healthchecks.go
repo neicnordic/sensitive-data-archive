@@ -24,9 +24,23 @@ func (p *Proxy) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.messenger == nil || p.messenger.IsConnClosed() {
-		slog.Warn("Readiness failed - Messenger disconnected")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		slog.Error("readiness failed", "reason", "messenger_dissconnected")
+		slog.Error("readiness failed", "reason", "messenger")
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+
+		return
+	}
+
+	resp, err := p.client.Get(p.s3Conf.ReadyPath)
+	if err != nil {
+		slog.Error("readiness failed", "reason", "s3")
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("readiness faield", "service", "s3", "reason", resp.Status)
 		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 
 		return
