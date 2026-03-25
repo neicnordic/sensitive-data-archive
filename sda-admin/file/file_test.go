@@ -2,6 +2,8 @@ package file
 
 import (
 	"errors"
+	"net/url"
+	"path"
 	"testing"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
@@ -244,5 +246,27 @@ func TestRotateKey_Failure(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "post request failed")
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestListWithCursor(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	// Replace the original GetResponseBody with the mock
+	originalFunc := helpers.GetResponseBody
+	defer func() { helpers.GetResponseBody = originalFunc }()
+	helpers.GetResponseBody = mockHelpers.GetResponseBody
+
+	// Build expected URL the same way List does
+	parsedURL, _ := url.Parse("http://example.com")
+	parsedURL.Path = path.Join(parsedURL.Path, "users", "testuser", "files")
+	q := parsedURL.Query()
+	q.Set("limit", "10")
+	q.Set("cursor", "abc123")
+	parsedURL.RawQuery = q.Encode()
+
+	mockHelpers.On("GetResponseBody", parsedURL.String(), "test-token").Return([]byte(`["file1"]`), nil)
+
+	err := List("http://example.com", "test-token", "testuser", 10, "abc123")
+	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
