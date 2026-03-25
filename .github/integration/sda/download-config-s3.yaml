@@ -1,0 +1,71 @@
+# Configuration for sda/cmd/download service in the S3 integration stack.
+# Uses ownership-only auth with allow-all-data — visa testing is handled
+# by the dedicated download-v2 integration tests, not here.
+
+# API Server
+api:
+  host: "0.0.0.0"
+  port: 8080
+
+# gRPC Health check
+health:
+  port: 8081
+
+# Database
+db:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+# gRPC reencrypt service
+grpc:
+  host: "reencrypt"
+  port: 50051
+  timeout: 30
+
+# JWT configuration
+jwt:
+  pubkey-path: "/shared/keys/pub/"
+  allow-all-data: true
+
+# Permission model: ownership only (no visa in this stack)
+permission:
+  model: "ownership"
+
+# Auth: allow opaque tokens
+auth:
+  allow-opaque: true
+
+# Visa disabled — the S3 stack uses mock-aai (LS AAI mock),
+# not the Python mockauth that serves visa endpoints.
+visa:
+  enabled: false
+
+# Session
+session:
+  expiration: 3600
+  secure: false
+  http-only: true
+  name: "sda_session"
+
+# Database query cache
+cache:
+  enabled: true
+  file-ttl: 300
+  permission-ttl: 120
+  dataset-ttl: 300
+
+# Storage configuration (S3 backend)
+storage:
+  backend: "archive"
+  archive:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        region: "us-east-1"
+        bucket_prefix: "archive"
+        disable_https: true
