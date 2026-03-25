@@ -15,7 +15,7 @@ func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 	var logger Logger = NoopLogger{}
 	assert.NotPanics(t, func() {
 		logger.Log(context.Background(), Event{
-			Event:         "download.completed",
+			Event:         EventCompleted,
 			CorrelationID: "abc-123",
 			Path:      "/files/test",
 			HTTPStatus:    200,
@@ -28,7 +28,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 	logger := newStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
-		Event:         "download.completed",
+		Event:         EventCompleted,
 		UserID:        "user@example.org",
 		FileID:        "file-001",
 		DatasetID:     "EGAD00000000001",
@@ -40,7 +40,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 	var decoded Event
 	err := json.Unmarshal(buf.Bytes(), &decoded)
 	require.NoError(t, err, "output must be valid JSON")
-	assert.Equal(t, "download.completed", decoded.Event)
+	assert.Equal(t, EventCompleted, decoded.Event)
 	assert.Equal(t, "user@example.org", decoded.UserID)
 	assert.Equal(t, "file-001", decoded.FileID)
 	assert.Equal(t, "EGAD00000000001", decoded.DatasetID)
@@ -55,7 +55,7 @@ func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 
 	logger.Log(context.Background(), Event{
 		Type:          "something-else",
-		Event:         "download.denied",
+		Event:         EventDenied,
 		CorrelationID: "corr-456",
 		Path:      "/files/file-002",
 		HTTPStatus:    403,
@@ -77,7 +77,7 @@ func TestStdoutLogger_TimestampAlwaysOverwritten(t *testing.T) {
 
 	before := time.Now().UTC()
 	logger.Log(context.Background(), Event{
-		Event:         "download.completed",
+		Event:         EventCompleted,
 		Timestamp:     callerTS,
 		CorrelationID: "corr-789",
 		Path:          "/files/file-003",
@@ -100,7 +100,7 @@ func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
 
 	before := time.Now().UTC()
 	logger.Log(context.Background(), Event{
-		Event:         "download.failed",
+		Event:         EventFailed,
 		CorrelationID: "corr-000",
 		Path:      "/files/file-004",
 		HTTPStatus:    500,
@@ -120,7 +120,7 @@ func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 	logger := newStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
-		Event:         "download.denied",
+		Event:         EventDenied,
 		CorrelationID: "corr-omit",
 		Path:      "/files/file-005",
 		HTTPStatus:    401,
@@ -151,13 +151,13 @@ func TestStdoutLogger_MultipleEvents(t *testing.T) {
 	logger := newStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
-		Event:         "download.completed",
+		Event:         EventCompleted,
 		CorrelationID: "corr-a",
 		Path:      "/files/a",
 		HTTPStatus:    200,
 	})
 	logger.Log(context.Background(), Event{
-		Event:         "download.denied",
+		Event:         EventDenied,
 		CorrelationID: "corr-b",
 		Path:      "/files/b",
 		HTTPStatus:    403,
@@ -179,7 +179,7 @@ func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 	logger := newStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
-		Event:         "download.completed",
+		Event:         EventCompleted,
 		UserID:        "user@example.org",
 		CorrelationID: "corr-contract",
 		Path:      "/files/file-006",

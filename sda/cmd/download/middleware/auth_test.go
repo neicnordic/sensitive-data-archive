@@ -176,12 +176,13 @@ func TestSessionCache_GetNotExists(t *testing.T) {
 }
 
 func TestTokenMiddleware_NoToken(t *testing.T) {
+	ensureTestConfig(t)
+
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("GET", "/test", nil)
 
-	// Initialize auth middleware for testing
-	err := InitAuthForTesting()
+	err := InitAuth()
 	assert.NoError(t, err)
 
 	handler := TokenMiddleware(nil, nil, audit.NoopLogger{}) // nil database, nil visa - not testing dataset lookup
@@ -203,12 +204,14 @@ func (l *capturingLogger) Log(_ context.Context, event audit.Event) {
 }
 
 func TestTokenMiddleware_NoToken_EmitsAuditDenied(t *testing.T) {
+	ensureTestConfig(t)
+
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("GET", "/datasets", nil)
 	c.Set("correlationId", "test-corr-123")
 
-	err := InitAuthForTesting()
+	err := InitAuth()
 	assert.NoError(t, err)
 
 	logger := &capturingLogger{}
@@ -218,7 +221,7 @@ func TestTokenMiddleware_NoToken_EmitsAuditDenied(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	require.Len(t, logger.events, 1)
 	evt := logger.events[0]
-	assert.Equal(t, "download.denied", evt.Event)
+	assert.Equal(t, audit.EventDenied, evt.Event)
 	assert.Equal(t, http.StatusUnauthorized, evt.HTTPStatus)
 	assert.Equal(t, "/datasets", evt.Path)
 	assert.Equal(t, "test-corr-123", evt.CorrelationID)

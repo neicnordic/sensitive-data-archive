@@ -265,7 +265,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 
 	// Audit event on completion
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.completed",
+		Event:         audit.EventCompleted,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
@@ -347,7 +347,7 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", resolved.newHeader)
 
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.header",
+		Event:         audit.EventHeader,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,
@@ -448,7 +448,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 
 	// Audit event on completion
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.content",
+		Event:         audit.EventContent,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
 		DatasetID:     file.DatasetID,

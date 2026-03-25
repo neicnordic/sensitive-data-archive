@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/stretchr/testify/assert"
@@ -265,7 +266,7 @@ func TestGetDataset_NoAccess_EmitsAuditDenied(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	require.Len(t, logger.events, 1)
 	evt := logger.events[0]
-	assert.Equal(t, "download.denied", evt.Event)
+	assert.Equal(t, audit.EventDenied, evt.Event)
 	assert.Equal(t, http.StatusForbidden, evt.HTTPStatus)
 	assert.Equal(t, "/datasets/secret-dataset", evt.Path)
 	assert.Equal(t, "test-user", evt.UserID)

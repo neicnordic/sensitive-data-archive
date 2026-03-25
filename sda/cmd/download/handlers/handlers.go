@@ -46,7 +46,7 @@ func New(options ...func(*Handlers)) (*Handlers, error) {
 func (h *Handlers) auditDenied(c *gin.Context) {
 	authCtx, _ := middleware.GetAuthContext(c)
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.denied",
+		Event:         audit.EventDenied,
 		UserID:        authCtx.Subject,
 		CorrelationID: c.GetString("correlationId"),
 		Path:      c.Request.URL.Path,
@@ -63,7 +63,7 @@ func (h *Handlers) auditFailed(c *gin.Context, authCtx middleware.AuthContext, f
 	}
 
 	h.auditLogger.Log(c.Request.Context(), audit.Event{
-		Event:         "download.failed",
+		Event:         audit.EventFailed,
 		UserID:        authCtx.Subject,
 		FileID:        fileID,
 		DatasetID:     datasetID,
