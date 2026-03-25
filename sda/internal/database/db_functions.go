@@ -5,10 +5,12 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -989,38 +991,42 @@ func (dbs *SDAdb) setSubmissionFileSize(fileID string, submissionFileSize int64)
 }
 
 // GetUserFiles retrieves all the files a user submitted
-func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool, limit int, cursor string) ([]*SubmissionFileInfo, string, error) {
 	var err error
 
 	files := []*SubmissionFileInfo{}
+	var nextCursor string
 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		files, err = dbs.getUserFiles(userID, pathPrefix, allData)
+		files, nextCursor, err = dbs.getUserFiles(userID, pathPrefix, allData, limit, cursor)
 		if err == nil {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	return files, err
+	return files, nextCursor, err
 }
 
 // getUserFiles is the actual function performing work for GetUserFiles
-func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit int, cursor string) ([]*SubmissionFileInfo, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
-
-	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = `
-SELECT DISTINCT ON (f.id) f.id, f.submission_file_path, f.stable_id, fel.event, f.created_at, f.submission_file_size FROM sda.files AS f
-    LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
-    LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
+	// Use lateral join to get latest event per file, then order by that timestamp desc
+	const baseQuery = `
+SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(fel.event, '') as event, f.created_at, f.submission_file_size,
+	   COALESCE(fel.started_at, f.created_at) as last_event_at
+FROM sda.files AS f
+	LEFT JOIN LATERAL (
+		SELECT event, started_at FROM sda.file_event_log WHERE file_id = f.id ORDER BY started_at DESC LIMIT 1
+	) fel ON TRUE
+	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
-    AND fd.file_id IS NULL
-ORDER BY f.id, fel.started_at DESC;`
+	AND fd.file_id IS NULL
+` // ORDER/LIMIT appended later
 
 	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}
@@ -1030,24 +1036,55 @@ ORDER BY f.id, fel.started_at DESC;`
 		pathPrefixArg.String = pathPrefix
 	}
 
-	// nolint:rowserrcheck
-	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen)
+	// default limit
+	lim := limit
+	if lim <= 0 {
+		lim = 1000
+	}
+
+	var rows *sql.Rows
+	var err error
+	if cursor == "" {
+		query := baseQuery + "ORDER BY last_event_at DESC, f.id DESC LIMIT $4;"
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, lim)
+	} else {
+		// decode cursor: base64("<unixnano>|<fileid>")
+		decoded, derr := base64.StdEncoding.DecodeString(cursor)
+		if derr != nil {
+			return nil, "", fmt.Errorf("invalid cursor: %w", derr)
+		}
+		parts := strings.SplitN(string(decoded), "|", 2)
+		if len(parts) != 2 {
+			return nil, "", fmt.Errorf("invalid cursor format")
+		}
+		unixnano, perr := strconv.ParseInt(parts[0], 10, 64)
+		if perr != nil {
+			return nil, "", fmt.Errorf("invalid cursor timestamp: %w", perr)
+		}
+		cursorTime := time.Unix(0, unixnano)
+		cursorID := parts[1]
+
+		query := baseQuery + "AND (COALESCE(fel.started_at, f.created_at) < $4 OR (COALESCE(fel.started_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, lim)
+	}
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
 
-		return nil, err
+		return nil, "", err
 	}
 	defer rows.Close()
 
 	// Iterate rows
+	var lastEventAt time.Time
+	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &lastEventAt)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		if submissionFileSize.Valid {
@@ -1061,10 +1098,19 @@ ORDER BY f.id, fel.started_at DESC;`
 		// Add instance of struct (file) to array if the status is not disabled
 		if fi.Status != "disabled" {
 			files = append(files, fi)
+			lastID = fi.FileID
 		}
 	}
 
-	return files, nil
+	// Determine next cursor
+	nextCursor := ""
+	if len(files) >= lim && lastID != "" {
+		// cursor is base64("<unixnano>|<fileid>")
+		raw := fmt.Sprintf("%d|%s", lastEventAt.UnixNano(), lastID)
+		nextCursor = base64.StdEncoding.EncodeToString([]byte(raw))
+	}
+
+	return files, nextCursor, nil
 }
 
 // list all users with files not yet assigned to a dataset
