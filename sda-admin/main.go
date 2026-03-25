@@ -326,7 +326,11 @@ func handleUserCommand() error {
 func handleFileListCommand() error {
 	listFilesCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	var username string
+	var limit int
+	var cursor string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
+	listFilesCmd.IntVar(&limit, "limit", 0, "Limit number of returned files")
+	listFilesCmd.StringVar(&cursor, "cursor", "", "Cursor for keyset pagination")
 
 	if err := listFilesCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
@@ -337,7 +341,7 @@ func handleFileListCommand() error {
 		return fmt.Errorf("error: the -user flag is required.\n%s", fileListUsage)
 	}
 
-	if err := file.List(apiURI, token, username); err != nil {
+	if err := file.List(apiURI, token, username, limit, cursor); err != nil {
 		return fmt.Errorf("error: failed to get files, reason: %v", err)
 	}
 

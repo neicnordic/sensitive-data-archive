@@ -22,12 +22,22 @@ type RequestBodyFileAccession struct {
 }
 
 // List returns all files
-func List(apiURI, token, username string) error {
+func List(apiURI, token, username string, limit int, cursor string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
 		return err
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
+
+	// Add pagination query params if provided
+	q := parsedURL.Query()
+	if limit > 0 {
+		q.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	if cursor != "" {
+		q.Set("cursor", cursor)
+	}
+	parsedURL.RawQuery = q.Encode()
 
 	response, err := helpers.GetResponseBody(parsedURL.String(), token)
 	if err != nil {
