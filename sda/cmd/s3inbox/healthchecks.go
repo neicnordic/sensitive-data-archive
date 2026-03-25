@@ -8,7 +8,6 @@ import (
 
 func (p *Proxy) LivenessHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
 }
 
 func (p *Proxy) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
@@ -46,5 +45,4 @@ func (p *Proxy) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready"))
 }
