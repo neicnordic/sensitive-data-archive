@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -1867,4 +1868,39 @@ func (suite *DatabaseTests) TestIsFileInDataset_Yes() {
 	inDataset, err := db.IsFileInDataset(context.TODO(), fileID)
 	assert.NoError(suite.T(), err)
 	assert.True(suite.T(), inDataset)
+}
+
+func (suite *DatabaseTests) TestSetBackedUp() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	// register a file in the database
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/TestSetArchived.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	assert.NoError(suite.T(), db.SetArchived("/archive", FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, fileID, fmt.Sprintf("%x", sha256.New()), -1, fmt.Sprintf("%x", sha256.New())}, fileID))
+
+	assert.NoError(suite.T(), db.SetBackedUp("/backup", fileID, fileID))
+
+	// Ensure backup_location and backup_path are set
+	archiveData, err := db.getArchived(fileID)
+
+	assert.NoError(suite.T(), err)
+	if archiveData == nil {
+		suite.FailNow("archive data not found")
+
+		return
+	}
+
+	suite.Equal("/backup", archiveData.BackupLocation)
+	suite.Equal(fileID, archiveData.BackupFilePath)
+}
+func (suite *DatabaseTests) TestSetBackedUp_FileID_Not_Exists() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	notExistingFileID := uuid.NewString()
+	assert.EqualError(suite.T(), db.SetBackedUp("/backup", notExistingFileID, notExistingFileID), sql.ErrNoRows.Error())
 }

@@ -1565,3 +1565,26 @@ WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archiv
 
 	return size.V, count.V, nil
 }
+
+// SetBackedUp sets the file backup_path and backup_location
+func (dbs *SDAdb) SetBackedUp(location, path, fileID string) error {
+	dbs.checkAndReconnectIfNeeded()
+
+	db := dbs.DB
+	const setBackedUp = "UPDATE sda.files SET backup_location = $1, backup_path = $2 WHERE id = $3;"
+	r, err := db.Exec(setBackedUp, location, path, fileID)
+	if err != nil {
+		return fmt.Errorf("setBackedUp error: %s", err.Error())
+	}
+
+	rowsAffected, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("setBackedUp error: %s", err.Error())
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
