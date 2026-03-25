@@ -4,13 +4,36 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var loadConfigOnce sync.Once
+
+func ensureTestConfig(t *testing.T) {
+	t.Helper()
+
+	loadConfigOnce.Do(func() {
+		t.Setenv("DB_HOST", "localhost")
+		t.Setenv("DB_USER", "test")
+		t.Setenv("DB_PASSWORD", "test")
+		t.Setenv("GRPC_HOST", "localhost")
+		t.Setenv("AUTH_ALLOW_OPAQUE", "true")
+
+		oldArgs := os.Args
+		os.Args = []string{oldArgs[0]}
+		defer func() { os.Args = oldArgs }()
+
+		require.NoError(t, configv2.Load())
+	})
+}
 
 func init() {
 	gin.SetMode(gin.TestMode)
@@ -135,7 +158,8 @@ func TestHasDatasetAccess(t *testing.T) {
 // v2 route wiring tests — verify RegisterRoutes applies auth middleware correctly
 
 func TestRoutes_AuthRequired(t *testing.T) {
-	err := middleware.InitAuthForTesting()
+	ensureTestConfig(t)
+	err := middleware.InitAuth()
 	require.NoError(t, err)
 
 	router := gin.New()
@@ -184,7 +208,8 @@ func TestRoutes_ServiceInfoNoAuth(t *testing.T) {
 }
 
 func TestRoutes_OldV1PathsReturn404(t *testing.T) {
-	err := middleware.InitAuthForTesting()
+	ensureTestConfig(t)
+	err := middleware.InitAuth()
 	require.NoError(t, err)
 
 	router := gin.New()

@@ -84,36 +84,6 @@ var (
 	legacyCookieName = "sda_session_key"
 )
 
-// InitAuthForTesting initializes the auth middleware with an empty keyset for testing.
-// This allows middleware to run without valid keys, causing authentication to fail.
-func InitAuthForTesting() error {
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-	if err != nil {
-		return err
-	}
-	sessionCache = &SessionCache{cache: cache}
-
-	tokenCacheInst, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
-		MaxCost:     100000,
-		BufferItems: 64,
-	})
-	if err != nil {
-		return err
-	}
-	tokenCache = &SessionCache{cache: tokenCacheInst}
-
-	auth = &Authenticator{
-		Keyset: jwk.NewSet(),
-	}
-
-	return nil
-}
-
 // InitAuth initializes the authentication middleware.
 // This should be called during application startup.
 // It loads JWT public keys from either a local path or remote JWKS URL.
@@ -454,7 +424,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 
 	auditDenied := func(c *gin.Context, status int) {
 		auditLogger.Log(c.Request.Context(), audit.Event{
-			Event:         "download.denied",
+			Event:         audit.EventDenied,
 			CorrelationID: c.GetString("correlationId"),
 			Path:      c.Request.URL.Path,
 			HTTPStatus:    status,
