@@ -17,7 +17,7 @@ func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 		logger.Log(context.Background(), Event{
 			Event:         EventCompleted,
 			CorrelationID: "abc-123",
-			Path:      "/files/test",
+			Path:          "/files/test",
 			HTTPStatus:    200,
 		})
 	})
@@ -33,7 +33,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 		FileID:        "file-001",
 		DatasetID:     "EGAD00000000001",
 		CorrelationID: "corr-123",
-		Path:      "/files/file-001",
+		Path:          "/files/file-001",
 		HTTPStatus:    200,
 	})
 
@@ -57,7 +57,7 @@ func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 		Type:          "something-else",
 		Event:         EventDenied,
 		CorrelationID: "corr-456",
-		Path:      "/files/file-002",
+		Path:          "/files/file-002",
 		HTTPStatus:    403,
 	})
 
@@ -102,7 +102,7 @@ func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         EventFailed,
 		CorrelationID: "corr-000",
-		Path:      "/files/file-004",
+		Path:          "/files/file-004",
 		HTTPStatus:    500,
 	})
 	after := time.Now().UTC()
@@ -122,7 +122,7 @@ func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         EventDenied,
 		CorrelationID: "corr-omit",
-		Path:      "/files/file-005",
+		Path:          "/files/file-005",
 		HTTPStatus:    401,
 	})
 
@@ -153,13 +153,13 @@ func TestStdoutLogger_MultipleEvents(t *testing.T) {
 	logger.Log(context.Background(), Event{
 		Event:         EventCompleted,
 		CorrelationID: "corr-a",
-		Path:      "/files/a",
+		Path:          "/files/a",
 		HTTPStatus:    200,
 	})
 	logger.Log(context.Background(), Event{
 		Event:         EventDenied,
 		CorrelationID: "corr-b",
-		Path:      "/files/b",
+		Path:          "/files/b",
 		HTTPStatus:    403,
 	})
 
@@ -182,7 +182,7 @@ func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 		Event:         EventCompleted,
 		UserID:        "user@example.org",
 		CorrelationID: "corr-contract",
-		Path:      "/files/file-006",
+		Path:          "/files/file-006",
 		HTTPStatus:    200,
 	})
 

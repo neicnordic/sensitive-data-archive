@@ -21,7 +21,7 @@ const (
 
 // Event represents an audit event for download operations.
 type Event struct {
-	Type             string    `json:"type"`  // routing tag: always "audit"
+	Type             string    `json:"type"` // routing tag: always "audit"
 	Event            EventName `json:"event"`
 	Timestamp        time.Time `json:"timestamp"`
 	UserID           string    `json:"userId"`

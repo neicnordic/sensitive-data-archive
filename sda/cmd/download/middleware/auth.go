@@ -426,7 +426,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 		auditLogger.Log(c.Request.Context(), audit.Event{
 			Event:         audit.EventDenied,
 			CorrelationID: c.GetString("correlationId"),
-			Path:      c.Request.URL.Path,
+			Path:          c.Request.URL.Path,
 			HTTPStatus:    status,
 		})
 	}
