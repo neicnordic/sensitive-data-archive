@@ -675,11 +675,12 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		err = db.UpdateFileEventLog(fileID, "ready", testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
-	filelist, err := db.GetUserFiles("unknownuser", "", true)
+	filelist, nextCursor, err := db.GetUserFiles("unknownuser", "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
+	assert.Equal(suite.T(), "", nextCursor)
 
-	filelist, err = db.GetUserFiles(testUser, "", true)
+	filelist, nextCursor, err = db.GetUserFiles(testUser, "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
 
@@ -688,9 +689,10 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		assert.Contains(suite.T(), fileInfo.AccessionID, "stableID-00", "incorrect file accession ID")
 	}
 
-	filteredFilelist, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true)
+	filteredFilelist, nextCursor, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), 3, len(filteredFilelist), "file list is of incorrect length")
+	assert.Equal(suite.T(), "", nextCursor)
 
 	db.Close()
 }
