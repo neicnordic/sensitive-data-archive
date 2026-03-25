@@ -37,7 +37,7 @@ func TestList(t *testing.T) {
 	defer func() { helpers.GetResponseBody = originalFunc }()
 	helpers.GetResponseBody = mockHelpers.GetResponseBody
 
-	err := List("http://example.com", "test-token", "testuser")
+	err := List("http://example.com", "test-token", "testuser", 0, "")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
