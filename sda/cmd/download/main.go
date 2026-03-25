@@ -332,15 +332,13 @@ type productionConfig struct {
 // that its dependencies are satisfied.
 func validatePermissionModel(model string, visaEnabled bool) error {
 	switch model {
-	case "ownership":
+	case "ownership", "combined":
 		return nil
 	case "visa":
 		if !visaEnabled {
 			return fmt.Errorf("permission.model is %q but visa.enabled is false — this combination would deny all requests", model)
 		}
 
-		return nil
-	case "combined":
 		return nil
 	default:
 		return fmt.Errorf("invalid permission.model %q: must be ownership, visa, or combined", model)
