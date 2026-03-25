@@ -3,10 +3,17 @@ set -e
 
 # Test the new sda/cmd/download service (v2 API)
 # This test runs AFTER files have been mapped to a dataset (40_mapper_test.sh)
+# Skips gracefully if the download service is not available (e.g. in sync stack)
 
 cd shared || true
 
 echo "=== Testing Download Service (v2 API) ==="
+
+# Check if the download service is reachable before running tests
+if ! curl -s --connect-timeout 3 -o /dev/null "http://download:8080/health/live" 2>/dev/null; then
+    echo "Download service not available, skipping download v2 tests"
+    exit 0
+fi
 
 token="$(cat /shared/token)"
 
