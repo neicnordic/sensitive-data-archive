@@ -11,10 +11,6 @@ api:
 log:
   level: "debug"
 
-# gRPC Health check
-health:
-  port: 8081
-
 # Database
 db:
   host: "postgres"
@@ -82,7 +78,6 @@ cache:
 # Storage configuration (S3 backend)
 # NOTE: endpoint includes http:// for proper URL parsing in storage/v2
 storage:
-  backend: "archive"
   archive:
     s3:
       - endpoint: "http://s3:9000"

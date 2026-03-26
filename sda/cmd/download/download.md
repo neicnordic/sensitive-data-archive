@@ -395,7 +395,6 @@ db:
 | `API_PORT`       | `api.port`       | Port to listen on              | `8080`    |
 | `API_SERVER_CERT`| `api.server-cert`| Path to TLS certificate        |           |
 | `API_SERVER_KEY` | `api.server-key` | Path to TLS private key        |           |
-| `HEALTH_PORT`    | `health.port`    | gRPC health check port         | `8081`    |
 
 ### Database
 
@@ -466,14 +465,12 @@ At least one of `jwt.pubkey-path` or `jwt.pubkey-url` must be configured.
 
 ### Storage
 
-Storage is configured using the `storage/v2` package. The `storage.backend` flag
-(default: `archive`) selects the named storage backend.
+Storage is configured using the `storage/v2` package with the `archive` backend.
 
 Example S3 configuration:
 
 ```yaml
 storage:
-  backend: "archive"
   archive:
     s3:
       - endpoint: "s3.example.com"

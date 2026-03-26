@@ -6,10 +6,6 @@ api:
   host: "0.0.0.0"
   port: 8080
 
-# gRPC Health check server
-health:
-  port: 8081
-
 # Database configuration (connects to integration test PostgreSQL)
 db:
   host: "localhost"
@@ -45,10 +41,8 @@ session:
   http-only: true
   name: "sda_session"
 
-# Storage configuration for storage/v2
-# The backend name is "archive" by default (see config.StorageBackend())
+# Storage configuration (archive backend via storage/v2)
 storage:
-  backend: "archive"
   archive:
     s3:
       - endpoint: "localhost:19000"

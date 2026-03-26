@@ -226,7 +226,6 @@ services:
       - "localhost:host-gateway"
     ports:
       - "8085:8080"
-      - "8086:8081"
     restart: always
     volumes:
       - ./sda/download-config.yaml:/config.yaml

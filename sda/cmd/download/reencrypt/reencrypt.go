@@ -193,7 +193,10 @@ func (c *Client) ReencryptHeaderWithEditList(ctx context.Context, oldHeader []by
 	return res.GetHeader(), nil
 }
 
-// HealthCheck verifies the gRPC connection can be established.
+// HealthCheck validates that the gRPC client can be constructed with the
+// configured options. Note: grpc.NewClient does no I/O, so this does NOT
+// verify that the remote reencrypt service is reachable.
+// TODO: perform a real RPC (e.g. grpc health check) to verify reachability.
 func (c *Client) HealthCheck() error {
 	return c.connect()
 }

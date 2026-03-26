@@ -20,7 +20,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/handlers"
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/health"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
@@ -57,15 +56,6 @@ func run() error {
 	if err := validatePermissionModel(config.PermissionModel(), config.VisaEnabled()); err != nil {
 		return err
 	}
-
-	// Start gRPC health server
-	go func() {
-		if err := health.Start(config.HealthPort()); err != nil {
-			log.Errorf("health server error: %v", err)
-			cancel()
-		}
-	}()
-	defer health.Stop()
 
 	// Initialize database
 	if err := database.Init(); err != nil {
@@ -145,11 +135,11 @@ func run() error {
 	}
 
 	// Initialize storage/v2 reader
-	storageReader, err := storage.NewReader(ctx, config.StorageBackend())
+	storageReader, err := storage.NewReader(ctx, "archive")
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage reader: %w", err)
 	}
-	log.Infof("storage reader initialized for backend: %s", config.StorageBackend())
+	log.Info("storage reader initialized")
 
 	// Initialize gRPC reencrypt client
 	reencryptOpts := []reencrypt.ClientOption{
@@ -241,9 +231,7 @@ func run() error {
 		}
 	}()
 
-	// Mark service as ready
-	health.SetServingStatus(health.Serving)
-	log.Infof("health server listening at: :%d", config.HealthPort())
+	log.Info("service ready")
 
 	// Wait for shutdown signal
 	select {
@@ -252,9 +240,6 @@ func run() error {
 	case <-ctx.Done():
 		log.Info("context cancelled")
 	}
-
-	// Mark service as not serving
-	health.SetServingStatus(health.NotServing)
 
 	// Graceful shutdown
 	log.Info("shutting down server...")

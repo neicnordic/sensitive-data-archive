@@ -13,7 +13,6 @@ var (
 	apiPort       int
 	apiServerCert string
 	apiServerKey  string
-	healthPort    int
 
 	// Database configuration
 	dbHost     string
@@ -25,7 +24,6 @@ var (
 	dbCACert   string
 
 	// Storage configuration
-	storageBackend string
 
 	// gRPC reencrypt service configuration
 	grpcHost       string
@@ -133,17 +131,6 @@ func init() {
 				apiServerKey = viper.GetString(flagName)
 			},
 		},
-		&config.Flag{
-			Name: "health.port",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Int(flagName, 8081, "Port for gRPC health check server")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				healthPort = viper.GetInt(flagName)
-			},
-		},
-
 		// Database flags
 		&config.Flag{
 			Name: "db.host",
@@ -213,18 +200,6 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				dbCACert = viper.GetString(flagName)
-			},
-		},
-
-		// Storage flags
-		&config.Flag{
-			Name: "storage.backend",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "archive", "Storage backend name (used for storage/v2 configuration)")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				storageBackend = viper.GetString(flagName)
 			},
 		},
 
@@ -672,11 +647,6 @@ func APIServerKey() string {
 	return apiServerKey
 }
 
-// HealthPort returns the port for the gRPC health check server.
-func HealthPort() int {
-	return healthPort
-}
-
 // DBHost returns the database host.
 func DBHost() string {
 	return dbHost
@@ -710,11 +680,6 @@ func DBSSLMode() string {
 // DBCACert returns the path to the database CA certificate.
 func DBCACert() string {
 	return dbCACert
-}
-
-// StorageBackend returns the storage backend name.
-func StorageBackend() string {
-	return storageBackend
 }
 
 // GRPCHost returns the gRPC service host.

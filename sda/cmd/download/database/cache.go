@@ -179,7 +179,6 @@ func (c *CachedDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Datas
 	return info, nil
 }
 
-
 // GetFileByID returns file information by stable ID.
 // Results are cached with FileTTL. This is particularly important
 // for streaming use cases where the same file may be requested
