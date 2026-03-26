@@ -75,7 +75,6 @@ func (m *mockDatabase) GetDatasetInfo(_ context.Context, _ string) (*database.Da
 	return m.datasetInfo, nil
 }
 
-
 func (m *mockDatabase) GetFileByID(_ context.Context, _ string) (*database.File, error) {
 	if m.err != nil {
 		return nil, m.err

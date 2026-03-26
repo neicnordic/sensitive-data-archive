@@ -203,7 +203,6 @@ func TestGetDatasetInfo_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-
 func TestGetFileByID(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
@@ -459,8 +458,6 @@ func TestGetDatasetInfo_QueryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to query dataset info")
 }
 
-
-
 func TestGetFileByID_QueryError(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
 	defer cleanup()
@@ -591,7 +588,6 @@ func (m *mockTestDatabase) GetUserDatasets(_ context.Context, _ []string) ([]Dat
 func (m *mockTestDatabase) GetDatasetInfo(_ context.Context, _ string) (*DatasetInfo, error) {
 	return nil, nil
 }
-
 
 func (m *mockTestDatabase) GetFileByID(_ context.Context, _ string) (*File, error) {
 	return nil, nil

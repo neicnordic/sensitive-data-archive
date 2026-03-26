@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package middleware
 
@@ -33,6 +32,7 @@ type fakeDatasetLookup struct {
 
 func (f *fakeDatasetLookup) GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error) {
 	atomic.AddInt32(&f.calls, 1)
+
 	return f.datasets, nil
 }
 
@@ -285,6 +285,7 @@ func newVisaValidator(t *testing.T, datasetID, issuer string) *visa.Validator {
 	t.Helper()
 
 	validator, _ := newVisaValidatorWithUserinfoCounter(t, datasetID, issuer)
+
 	return validator
 }
 
@@ -365,7 +366,7 @@ func newUserinfoServer(t *testing.T, passports []string, status int, calls *int3
 		if status != http.StatusOK {
 			return
 		}
-		payload, _ := json.Marshal(map[string]interface{}{
+		payload, _ := json.Marshal(map[string]any{
 			"sub":               "user-123",
 			"ga4gh_passport_v1": passports,
 		})
@@ -388,8 +389,8 @@ func newJWKSServer(t *testing.T, key jwk.Key) *httptest.Server {
 	}))
 }
 
-func visaClaim(dataset string) map[string]interface{} {
-	return map[string]interface{}{
+func visaClaim(dataset string) map[string]any {
+	return map[string]any{
 		"type":       "ControlledAccessGrants",
 		"by":         "https://example.org/issuer",
 		"value":      dataset,
@@ -399,7 +400,7 @@ func visaClaim(dataset string) map[string]interface{} {
 	}
 }
 
-func signVisaJWT(t *testing.T, priv *rsa.PrivateKey, jku, kid, iss, sub string, visaClaim map[string]interface{}, exp time.Time) string {
+func signVisaJWT(t *testing.T, priv *rsa.PrivateKey, jku, kid, iss, sub string, visaClaim map[string]any, exp time.Time) string {
 	t.Helper()
 
 	token := jwt.New()

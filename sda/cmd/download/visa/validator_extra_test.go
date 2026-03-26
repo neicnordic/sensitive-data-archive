@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package visa
 
@@ -291,7 +290,7 @@ func setupValidatorWithPassports(t *testing.T, passports []string, trusted []Tru
 	return validator
 }
 
-func setupValidatorWithUntrustedIssuer(t *testing.T, visaClaim map[string]interface{}) (*Validator, Identity, string) {
+func setupValidatorWithUntrustedIssuer(t *testing.T, visaClaim map[string]any) (*Validator, Identity, string) {
 	t.Helper()
 
 	priv, pub, kid := newRSAKeyPair(t)
@@ -324,7 +323,7 @@ func setupValidatorWithUntrustedIssuer(t *testing.T, visaClaim map[string]interf
 	return validator, identity, "opaque-token"
 }
 
-func setupValidatorWithIdentityMode(t *testing.T, visaClaim map[string]interface{}, mode, subject, issuer string) (*Validator, Identity, string) {
+func setupValidatorWithIdentityMode(t *testing.T, visaClaim map[string]any, mode, subject, issuer string) (*Validator, Identity, string) {
 	t.Helper()
 
 	priv, pub, kid := newRSAKeyPair(t)

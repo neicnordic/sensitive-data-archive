@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package visa
 
@@ -96,8 +95,8 @@ func TestGetVisaDatasets_SuffixExtraction(t *testing.T) {
 	assert.Equal(t, []string{"EGAD005"}, result.Datasets)
 }
 
-func baseVisaClaim(value string) map[string]interface{} {
-	return map[string]interface{}{
+func baseVisaClaim(value string) map[string]any {
+	return map[string]any{
 		"type":       "ControlledAccessGrants",
 		"by":         "https://example.org/issuer",
 		"value":      value,
@@ -107,7 +106,7 @@ func baseVisaClaim(value string) map[string]interface{} {
 	}
 }
 
-func setupValidatorWithVisa(t *testing.T, visaClaim map[string]interface{}, datasetIDMode string) (*Validator, Identity, string) {
+func setupValidatorWithVisa(t *testing.T, visaClaim map[string]any, datasetIDMode string) (*Validator, Identity, string) {
 	t.Helper()
 
 	priv, pub, kid := newRSAKeyPair(t)

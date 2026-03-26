@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package visa
 
@@ -69,7 +68,7 @@ func newFailingJWKSServer(t *testing.T) *httptest.Server {
 func newUserinfoServer(t *testing.T, passports []string) *httptest.Server {
 	t.Helper()
 
-	payload, err := json.Marshal(map[string]interface{}{
+	payload, err := json.Marshal(map[string]any{
 		"sub":               "user-123",
 		"ga4gh_passport_v1": passports,
 	})
@@ -81,7 +80,7 @@ func newUserinfoServer(t *testing.T, passports []string) *httptest.Server {
 	}))
 }
 
-func signVisaJWT(t *testing.T, priv *rsa.PrivateKey, jku, kid, iss, sub string, visa map[string]interface{}, exp time.Time) string {
+func signVisaJWT(t *testing.T, priv *rsa.PrivateKey, jku, kid, iss, sub string, visa map[string]any, exp time.Time) string {
 	t.Helper()
 
 	token := jwt.New()

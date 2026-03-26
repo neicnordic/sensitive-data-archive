@@ -475,7 +475,6 @@ func (p *PostgresDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Dat
 	return &info, nil
 }
 
-
 // GetFileByID returns file information by stable ID.
 func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, error) {
 	stmt := p.preparedStatements[getFileByIDQuery]
@@ -695,4 +694,3 @@ func escapeLikePrefix(prefix string) string {
 
 	return r.Replace(prefix) + "%"
 }
-

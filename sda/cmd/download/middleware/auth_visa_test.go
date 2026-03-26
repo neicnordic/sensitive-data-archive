@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package middleware
 
@@ -24,8 +23,8 @@ import (
 )
 
 func TestLooksLikeJWT(t *testing.T) {
-	header := map[string]interface{}{"alg": "RS256", "typ": "JWT"}
-	payload := map[string]interface{}{"sub": "user", "exp": time.Now().Add(1 * time.Hour).Unix()}
+	header := map[string]any{"alg": "RS256", "typ": "JWT"}
+	payload := map[string]any{"sub": "user", "exp": time.Now().Add(1 * time.Hour).Unix()}
 
 	token := b64JSON(t, header) + "." + b64JSON(t, payload) + ".signature"
 	assert.True(t, looksLikeJWT(token))
@@ -109,7 +108,7 @@ func TestAuthenticate_OpaqueToken_Disallowed(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func b64JSON(t *testing.T, value interface{}) string {
+func b64JSON(t *testing.T, value any) string {
 	t.Helper()
 
 	data, err := json.Marshal(value)

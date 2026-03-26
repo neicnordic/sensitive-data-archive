@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package middleware
 
@@ -18,7 +17,7 @@ var authAllowOpaque bool
 var oidcIssuer string
 
 // Use unsafe to ensure go:linkname is permitted.
-var _ = unsafe.Pointer(nil)
+var _ = unsafe.Pointer(nil) //nolint:gosec // required for go:linkname
 
 func setPermissionModel(t *testing.T, value string) {
 	prev := permissionModel

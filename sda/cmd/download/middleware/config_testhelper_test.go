@@ -1,5 +1,4 @@
 //go:build visas
-// +build visas
 
 package middleware
 
