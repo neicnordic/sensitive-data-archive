@@ -22,7 +22,6 @@ const (
 	getDatasetIDsByUserQuery         = "getDatasetIDsByUser"
 	getUserDatasetsQuery             = "getUserDatasets"
 	getDatasetInfoQuery              = "getDatasetInfo"
-	getDatasetFilesQuery             = "getDatasetFiles"
 	getFileByIDQuery                 = "getFileByID"
 	getFileByPathQuery               = "getFileByPath"
 	checkFilePermissionQuery         = "checkFilePermission"
@@ -86,26 +85,6 @@ var queries = map[string]string{
 		LEFT JOIN sda.files f ON fd.file_id = f.id
 		WHERE d.stable_id = $1
 		GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at`,
-
-	// getDatasetFiles returns files in a dataset
-	// Checksums are stored in sda.checksums table, not in files table
-	getDatasetFilesQuery: `
-		SELECT
-			f.stable_id,
-			d.stable_id as dataset_id,
-			f.submission_file_path,
-			f.archive_file_path,
-			f.archive_location,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			c.checksum as decrypted_checksum,
-			c.type as decrypted_checksum_type
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
-		WHERE d.stable_id = $1 AND f.stable_id IS NOT NULL
-		ORDER BY f.submission_file_path`,
 
 	getFileByIDQuery: `
 		SELECT
@@ -229,9 +208,6 @@ type Database interface {
 
 	// GetDatasetInfo returns metadata for a specific dataset.
 	GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error)
-
-	// GetDatasetFiles returns files in a dataset.
-	GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error)
 
 	// GetFileByID returns file information by stable ID.
 	GetFileByID(ctx context.Context, fileID string) (*File, error)
@@ -486,7 +462,7 @@ func (p *PostgresDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Dat
 		&info.FileCount,
 		&info.TotalSize,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -499,48 +475,6 @@ func (p *PostgresDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Dat
 	return &info, nil
 }
 
-// GetDatasetFiles returns files in a dataset.
-func (p *PostgresDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error) {
-	stmt := p.preparedStatements[getDatasetFilesQuery]
-	rows, err := stmt.QueryContext(ctx, datasetID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query dataset files: %w", err)
-	}
-	defer rows.Close()
-
-	var files []File
-	for rows.Next() {
-		var f File
-		var archivePath, archiveLocation, decryptedChecksum, decryptedChecksumType sql.NullString
-		var archiveSize, decryptedSize sql.NullInt64
-		if err := rows.Scan(
-			&f.ID,
-			&f.DatasetID,
-			&f.SubmittedPath,
-			&archivePath,
-			&archiveLocation,
-			&archiveSize,
-			&decryptedSize,
-			&decryptedChecksum,
-			&decryptedChecksumType,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan file row: %w", err)
-		}
-		f.ArchivePath = archivePath.String
-		f.ArchiveLocation = archiveLocation.String
-		f.ArchiveSize = archiveSize.Int64
-		f.DecryptedSize = decryptedSize.Int64
-		f.DecryptedChecksum = decryptedChecksum.String
-		f.DecryptedChecksumType = decryptedChecksumType.String
-		files = append(files, f)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating file rows: %w", err)
-	}
-
-	return files, nil
-}
 
 // GetFileByID returns file information by stable ID.
 func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, error) {
@@ -562,7 +496,7 @@ func (p *PostgresDB) GetFileByID(ctx context.Context, fileID string) (*File, err
 		&headerHex,
 		&f.CreatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -621,7 +555,7 @@ func (p *PostgresDB) GetFileByPath(ctx context.Context, datasetID, filePath stri
 		&headerHex,
 		&f.CreatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -762,49 +696,3 @@ func escapeLikePrefix(prefix string) string {
 	return r.Replace(prefix) + "%"
 }
 
-// Package-level functions that delegate to the registered database
-
-// GetAllDatasets returns all datasets (for allow-all-data mode).
-func GetAllDatasets(ctx context.Context) ([]Dataset, error) {
-	return db.GetAllDatasets(ctx)
-}
-
-// GetUserDatasets returns datasets the user has access to based on their allowed dataset IDs.
-func GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error) {
-	return db.GetUserDatasets(ctx, datasetIDs)
-}
-
-// GetDatasetInfo returns metadata for a specific dataset.
-func GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error) {
-	return db.GetDatasetInfo(ctx, datasetID)
-}
-
-// GetDatasetFiles returns files in a dataset.
-func GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error) {
-	return db.GetDatasetFiles(ctx, datasetID)
-}
-
-// GetFileByID returns file information by stable ID.
-func GetFileByID(ctx context.Context, fileID string) (*File, error) {
-	return db.GetFileByID(ctx, fileID)
-}
-
-// GetFileByPath returns file information by dataset and submitted path.
-func GetFileByPath(ctx context.Context, datasetID, filePath string) (*File, error) {
-	return db.GetFileByPath(ctx, datasetID, filePath)
-}
-
-// CheckFilePermission verifies the user has access to download a file.
-func CheckFilePermission(ctx context.Context, fileID string, visas []string) (bool, error) {
-	return db.CheckFilePermission(ctx, fileID, visas)
-}
-
-// CheckDatasetExists checks if a dataset with the given stable_id exists.
-func CheckDatasetExists(ctx context.Context, datasetID string) (bool, error) {
-	return db.CheckDatasetExists(ctx, datasetID)
-}
-
-// GetFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
-func GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
-	return db.GetFileChecksums(ctx, fileID, source)
-}

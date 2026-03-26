@@ -179,29 +179,6 @@ func (c *CachedDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Datas
 	return info, nil
 }
 
-// GetDatasetFiles returns files in a dataset.
-// Results are cached with DatasetTTL.
-func (c *CachedDB) GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error) {
-	key := "dataset:files:" + datasetID
-
-	if val, found := c.cache.Get(key); found {
-		if rval, ok := val.([]File); ok {
-			log.Debugf("cache hit: GetDatasetFiles(%s)", datasetID)
-
-			return rval, nil
-		}
-	}
-
-	log.Debugf("cache miss: GetDatasetFiles(%s)", datasetID)
-	files, err := c.db.GetDatasetFiles(ctx, datasetID)
-	if err != nil {
-		return nil, err
-	}
-
-	c.cache.SetWithTTL(key, files, 1, c.config.DatasetTTL)
-
-	return files, nil
-}
 
 // GetFileByID returns file information by stable ID.
 // Results are cached with FileTTL. This is particularly important

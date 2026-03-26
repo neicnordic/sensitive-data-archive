@@ -64,14 +64,6 @@ func (m *MockDatabase) GetDatasetInfo(ctx context.Context, datasetID string) (*D
 	return args.Get(0).(*DatasetInfo), args.Error(1)
 }
 
-func (m *MockDatabase) GetDatasetFiles(ctx context.Context, datasetID string) ([]File, error) {
-	args := m.Called(ctx, datasetID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-
-	return args.Get(0).([]File), args.Error(1)
-}
 
 func (m *MockDatabase) GetFileByID(ctx context.Context, fileID string) (*File, error) {
 	args := m.Called(ctx, fileID)
@@ -381,39 +373,6 @@ func TestCachedDB_GetDatasetInfo_CacheHit(t *testing.T) {
 	mockDB.AssertExpectations(t)
 }
 
-func TestCachedDB_GetDatasetFiles_CacheHit(t *testing.T) {
-	mockDB := new(MockDatabase)
-	cfg := CacheConfig{
-		FileTTL:       1 * time.Minute,
-		PermissionTTL: 1 * time.Minute,
-		DatasetTTL:    1 * time.Minute,
-	}
-
-	cachedDB, err := NewCachedDB(mockDB, cfg)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	expectedFiles := []File{
-		{ID: "file1", DatasetID: "dataset1", SubmittedPath: "/file1.txt"},
-		{ID: "file2", DatasetID: "dataset1", SubmittedPath: "/file2.txt"},
-	}
-
-	mockDB.On("GetDatasetFiles", ctx, "dataset1").Return(expectedFiles, nil).Once()
-
-	files1, err := cachedDB.GetDatasetFiles(ctx, "dataset1")
-	require.NoError(t, err)
-	assert.Equal(t, expectedFiles, files1)
-
-	// Wait for ristretto to process the set
-	time.Sleep(10 * time.Millisecond)
-
-	// Second call should hit cache
-	files2, err := cachedDB.GetDatasetFiles(ctx, "dataset1")
-	require.NoError(t, err)
-	assert.Equal(t, expectedFiles, files2)
-
-	mockDB.AssertExpectations(t)
-}
 
 func TestCachedDB_GetAllDatasets_CacheHit(t *testing.T) {
 	mockDB := new(MockDatabase)

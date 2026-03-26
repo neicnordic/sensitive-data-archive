@@ -203,34 +203,6 @@ func TestGetDatasetInfo_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetDatasetFiles(t *testing.T) {
-	db, mock, cleanup := setupMockDB(t)
-	defer cleanup()
-
-	rows := sqlmock.NewRows([]string{
-		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
-		"archive_location", "archive_file_size", "decrypted_file_size", "decrypted_file_checksum", "decrypted_file_checksum_type",
-	}).
-		AddRow("file-1", "dataset-1", "/path/to/file.txt", "/archive/file.c4gh", "s3:9000/archive", int64(1024), int64(900), "abc123", "SHA256").
-		AddRow("file-2", "dataset-1", "/path/to/file2.txt", nil, nil, nil, nil, nil, nil)
-
-	mock.ExpectQuery(queries[getDatasetFilesQuery]).
-		WithArgs("dataset-1").
-		WillReturnRows(rows)
-
-	files, err := db.GetDatasetFiles(context.Background(), "dataset-1")
-
-	assert.NoError(t, err)
-	assert.Len(t, files, 2)
-	assert.Equal(t, "file-1", files[0].ID)
-	assert.Equal(t, "/path/to/file.txt", files[0].SubmittedPath)
-	assert.Equal(t, "s3:9000/archive", files[0].ArchiveLocation)
-	assert.Equal(t, int64(1024), files[0].ArchiveSize)
-	assert.Equal(t, "file-2", files[1].ID)
-	assert.Empty(t, files[1].ArchivePath)
-	assert.Empty(t, files[1].ArchiveLocation)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
 
 func TestGetFileByID(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
@@ -487,40 +459,7 @@ func TestGetDatasetInfo_QueryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to query dataset info")
 }
 
-func TestGetDatasetFiles_QueryError(t *testing.T) {
-	db, mock, cleanup := setupMockDB(t)
-	defer cleanup()
 
-	mock.ExpectQuery(queries[getDatasetFilesQuery]).
-		WithArgs("dataset-1").
-		WillReturnError(sql.ErrConnDone)
-
-	files, err := db.GetDatasetFiles(context.Background(), "dataset-1")
-
-	assert.Error(t, err)
-	assert.Nil(t, files)
-	assert.Contains(t, err.Error(), "failed to query dataset files")
-}
-
-func TestGetDatasetFiles_Empty(t *testing.T) {
-	db, mock, cleanup := setupMockDB(t)
-	defer cleanup()
-
-	rows := sqlmock.NewRows([]string{
-		"stable_id", "dataset_id", "submission_file_path", "archive_file_path",
-		"archive_file_size", "decrypted_file_size", "decrypted_file_checksum", "decrypted_file_checksum_type",
-	})
-
-	mock.ExpectQuery(queries[getDatasetFilesQuery]).
-		WithArgs("empty-dataset").
-		WillReturnRows(rows)
-
-	files, err := db.GetDatasetFiles(context.Background(), "empty-dataset")
-
-	assert.NoError(t, err)
-	assert.Empty(t, files)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
 
 func TestGetFileByID_QueryError(t *testing.T) {
 	db, mock, cleanup := setupMockDB(t)
@@ -653,9 +592,6 @@ func (m *mockTestDatabase) GetDatasetInfo(_ context.Context, _ string) (*Dataset
 	return nil, nil
 }
 
-func (m *mockTestDatabase) GetDatasetFiles(_ context.Context, _ string) ([]File, error) {
-	return nil, nil
-}
 
 func (m *mockTestDatabase) GetFileByID(_ context.Context, _ string) (*File, error) {
 	return nil, nil
