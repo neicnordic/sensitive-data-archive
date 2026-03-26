@@ -18,6 +18,19 @@ ignore:
   # Test files (already excluded by default, but explicit)
   - "**/*_test.go"
 
+coverage:
+  status:
+    project:
+      default:
+        threshold: 1%
+    patch:
+      default:
+        target: 20%
+
+flags:
+  unittests:
+    carryforward: true
+
 comment:
   layout: "reach,diff,flags,files"
   behavior: default
