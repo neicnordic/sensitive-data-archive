@@ -15,13 +15,15 @@ var (
 	apiServerKey  string
 
 	// Database configuration
-	dbHost     string
-	dbPort     int
-	dbUser     string
-	dbPassword string
-	dbDatabase string
-	dbSSLMode  string
-	dbCACert   string
+	dbHost       string
+	dbPort       int
+	dbUser       string
+	dbPassword   string
+	dbDatabase   string
+	dbSSLMode    string
+	dbCACert     string
+	dbClientCert string
+	dbClientKey  string
 
 	// Storage configuration
 
@@ -200,6 +202,27 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				dbCACert = viper.GetString(flagName)
+			},
+		},
+
+		&config.Flag{
+			Name: "db.clientcert",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to client certificate for database mTLS")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				dbClientCert = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "db.clientkey",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to client key for database mTLS")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				dbClientKey = viper.GetString(flagName)
 			},
 		},
 
@@ -680,6 +703,16 @@ func DBSSLMode() string {
 // DBCACert returns the path to the database CA certificate.
 func DBCACert() string {
 	return dbCACert
+}
+
+// DBClientCert returns the path to the client certificate for database mTLS.
+func DBClientCert() string {
+	return dbClientCert
+}
+
+// DBClientKey returns the path to the client key for database mTLS.
+func DBClientKey() string {
+	return dbClientKey
 }
 
 // GRPCHost returns the gRPC service host.

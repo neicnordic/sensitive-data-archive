@@ -284,6 +284,12 @@ func GetDB() Database {
 // Init initializes the database connection using configuration values.
 // All queries are prepared at startup to verify correctness and improve runtime performance.
 func Init() error {
+	if config.DBSSLMode() == "verify-full" {
+		if config.DBClientCert() == "" || config.DBClientKey() == "" {
+			return errors.New("both db.clientcert and db.clientkey are required when db.sslmode=verify-full")
+		}
+	}
+
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		config.DBHost(),
@@ -296,6 +302,14 @@ func Init() error {
 
 	if config.DBCACert() != "" {
 		connStr += fmt.Sprintf(" sslrootcert=%s", config.DBCACert())
+	}
+
+	if config.DBClientCert() != "" {
+		connStr += fmt.Sprintf(" sslcert=%s", config.DBClientCert())
+	}
+
+	if config.DBClientKey() != "" {
+		connStr += fmt.Sprintf(" sslkey=%s", config.DBClientKey())
 	}
 
 	sqlDB, err := sql.Open("postgres", connStr)

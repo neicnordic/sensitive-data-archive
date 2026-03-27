@@ -407,6 +407,8 @@ db:
 | `DB_DATABASE` | `db.database` | Database name                                       | `sda`       |
 | `DB_SSLMODE`  | `db.sslmode`  | SSL mode (disable, allow, prefer, require, verify-ca, verify-full) | `prefer` |
 | `DB_CACERT`   | `db.cacert`   | Path to CA certificate for database TLS             |             |
+| `DB_CLIENTCERT`| `db.clientcert`| Path to client certificate for database mTLS       |             |
+| `DB_CLIENTKEY` | `db.clientkey` | Path to client key for database mTLS               |             |
 
 ### JWT / Authentication
 
