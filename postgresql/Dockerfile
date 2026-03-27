@@ -1,4 +1,4 @@
-FROM postgres:15.4-alpine3.17
+FROM postgres:16.1-alpine3.17
 
 ARG BUILD_DATE
 ARG SOURCE_COMMIT
