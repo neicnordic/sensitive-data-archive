@@ -396,6 +396,14 @@ db:
 | `API_SERVER_CERT`| `api.server-cert`| Path to TLS certificate        |           |
 | `API_SERVER_KEY` | `api.server-key` | Path to TLS private key        |           |
 
+### Service Info
+
+| Variable            | Config Key        | Description                                      | Default        |
+|---------------------|-------------------|--------------------------------------------------|----------------|
+| `SERVICE_ID`        | `service.id`      | GA4GH service-info ID (reverse domain notation)  | `neicnordic.sda.download` |
+| `SERVICE_ORG_NAME`  | `service.org-name`| Organization name for service-info               | *required*     |
+| `SERVICE_ORG_URL`   | `service.org-url` | Organization URL for service-info                | *required*     |
+
 ### Database
 
 | Variable      | Config Key    | Description                                         | Default     |

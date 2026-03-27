@@ -7,6 +7,12 @@ api:
   host: "0.0.0.0"
   port: 8080
 
+# Service info
+service:
+  id: "neicnordic.sda.download"
+  org-name: "NBIS"
+  org-url: "https://nbis.se"
+
 # Logging
 log:
   level: "debug"

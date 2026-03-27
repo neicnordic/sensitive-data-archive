@@ -22,6 +22,9 @@ type Handlers struct {
 	auditLogger     audit.Logger
 	grpcHost        string
 	grpcPort        int
+	serviceID       string
+	serviceOrgName  string
+	serviceOrgURL   string
 }
 
 // New creates a new Handlers instance with the given options.

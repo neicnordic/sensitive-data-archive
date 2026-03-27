@@ -190,6 +190,7 @@ func run() error {
 		handlers.WithStorageReader(storageReader),
 		handlers.WithReencryptClient(reencryptClient),
 		handlers.WithAuditLogger(auditLogger),
+		handlers.WithServiceInfo(config.ServiceID(), config.ServiceOrgName(), config.ServiceOrgURL()),
 	}
 	if visaValidator != nil {
 		handlerOpts = append(handlerOpts, handlers.WithVisaValidator(visaValidator))

@@ -6,6 +6,12 @@ api:
   host: "0.0.0.0"
   port: 8080
 
+# Service info (GA4GH service-info endpoint)
+service:
+  id: "neicnordic.sda.download"
+  org-name: "NBIS"
+  org-url: "https://nbis.se"
+
 # Database configuration (connects to integration test PostgreSQL)
 db:
   host: "localhost"

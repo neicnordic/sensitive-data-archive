@@ -31,7 +31,7 @@ type serviceInfoOrg struct {
 func (h *Handlers) ServiceInfo(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=300")
 	c.JSON(http.StatusOK, serviceInfoResponse{
-		ID:   "se.nbis.sda.download",
+		ID:   h.serviceID,
 		Name: "SDA Download",
 		Type: serviceInfoType{
 			Group:    "org.ga4gh",
@@ -39,8 +39,8 @@ func (h *Handlers) ServiceInfo(c *gin.Context) {
 			Version:  "1.0.0",
 		},
 		Organization: serviceInfoOrg{
-			Name: "NBIS",
-			URL:  "https://nbis.se",
+			Name: h.serviceOrgName,
+			URL:  h.serviceOrgURL,
 		},
 		Version: "2.0.0",
 	})

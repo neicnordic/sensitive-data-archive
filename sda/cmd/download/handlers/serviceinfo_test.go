@@ -16,7 +16,11 @@ func TestServiceInfo_Response(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request, _ = http.NewRequest(http.MethodGet, "/service-info", nil)
 
-	h := newTestHandlers(t)
+	h, err := New(
+		WithDatabase(&mockDatabase{}),
+		WithServiceInfo("fi.csc.sda.download", "CSC", "https://csc.fi"),
+	)
+	require.NoError(t, err)
 	h.ServiceInfo(c)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -24,15 +28,15 @@ func TestServiceInfo_Response(t *testing.T) {
 	assert.Equal(t, "public, max-age=300", w.Header().Get("Cache-Control"))
 
 	var response serviceInfoResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "se.nbis.sda.download", response.ID)
+	assert.Equal(t, "fi.csc.sda.download", response.ID)
 	assert.Equal(t, "SDA Download", response.Name)
 	assert.Equal(t, "org.ga4gh", response.Type.Group)
 	assert.Equal(t, "drs", response.Type.Artifact)
 	assert.Equal(t, "1.0.0", response.Type.Version)
-	assert.Equal(t, "NBIS", response.Organization.Name)
-	assert.Equal(t, "https://nbis.se", response.Organization.URL)
+	assert.Equal(t, "CSC", response.Organization.Name)
+	assert.Equal(t, "https://csc.fi", response.Organization.URL)
 	assert.Equal(t, "2.0.0", response.Version)
 }

@@ -26,6 +26,8 @@ func ensureTestConfig(t *testing.T) {
 		t.Setenv("DB_PASSWORD", "test")
 		t.Setenv("GRPC_HOST", "localhost")
 		t.Setenv("AUTH_ALLOW_OPAQUE", "true")
+		t.Setenv("SERVICE_ORG_NAME", "Test")
+		t.Setenv("SERVICE_ORG_URL", "https://test.example.com")
 
 		oldArgs := os.Args
 		os.Args = []string{oldArgs[0]}

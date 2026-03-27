@@ -43,6 +43,15 @@ func WithAuditLogger(l audit.Logger) func(*Handlers) {
 	}
 }
 
+// WithServiceInfo sets the GA4GH service-info fields.
+func WithServiceInfo(id, orgName, orgURL string) func(*Handlers) {
+	return func(h *Handlers) {
+		h.serviceID = id
+		h.serviceOrgName = orgName
+		h.serviceOrgURL = orgURL
+	}
+}
+
 // WithGRPCReencryptHost sets the gRPC reencrypt service host (deprecated, use WithReencryptClient).
 func WithGRPCReencryptHost(host string) func(*Handlers) {
 	return func(h *Handlers) {

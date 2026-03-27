@@ -304,12 +304,8 @@ func Init() error {
 		connStr += fmt.Sprintf(" sslrootcert=%s", config.DBCACert())
 	}
 
-	if config.DBClientCert() != "" {
-		connStr += fmt.Sprintf(" sslcert=%s", config.DBClientCert())
-	}
-
-	if config.DBClientKey() != "" {
-		connStr += fmt.Sprintf(" sslkey=%s", config.DBClientKey())
+	if config.DBClientCert() != "" && config.DBClientKey() != "" {
+		connStr += fmt.Sprintf(" sslcert=%s sslkey=%s", config.DBClientCert(), config.DBClientKey())
 	}
 
 	sqlDB, err := sql.Open("postgres", connStr)

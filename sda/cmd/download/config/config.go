@@ -14,6 +14,11 @@ var (
 	apiServerCert string
 	apiServerKey  string
 
+	// Service info
+	serviceID      string
+	serviceOrgName string
+	serviceOrgURL  string
+
 	// Database configuration
 	dbHost       string
 	dbPort       int
@@ -133,6 +138,38 @@ func init() {
 				apiServerKey = viper.GetString(flagName)
 			},
 		},
+		// Service info flags
+		&config.Flag{
+			Name: "service.id",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "neicnordic.sda.download", "GA4GH service-info ID (reverse domain notation)")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				serviceID = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "service.org-name",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Organization name for service-info")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				serviceOrgName = viper.GetString(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "service.org-url",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Organization URL for service-info")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				serviceOrgURL = viper.GetString(flagName)
+			},
+		},
+
 		// Database flags
 		&config.Flag{
 			Name: "db.host",
@@ -668,6 +705,21 @@ func APIServerCert() string {
 // APIServerKey returns the path to the server key.
 func APIServerKey() string {
 	return apiServerKey
+}
+
+// ServiceID returns the GA4GH service-info ID.
+func ServiceID() string {
+	return serviceID
+}
+
+// ServiceOrgName returns the organization name for service-info.
+func ServiceOrgName() string {
+	return serviceOrgName
+}
+
+// ServiceOrgURL returns the organization URL for service-info.
+func ServiceOrgURL() string {
+	return serviceOrgURL
 }
 
 // DBHost returns the database host.
