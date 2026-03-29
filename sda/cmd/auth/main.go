@@ -39,6 +39,18 @@ type AuthHandler struct {
 	htmlDir      string
 	staticDir    string
 	pubKey       string
+	Handoffs     HandoffStore
+}
+
+type exchangeReq struct {
+	Code string `json:"code"`
+}
+
+type exchangeResp struct {
+	Token     string `json:"token"`
+	Exp       string `json:"exp"`
+	Sub       string `json:"sub"`
+	TokenType string `json:"token_type"`
 }
 
 // getS3Config retrieves S3 config from session flash and serves it as a
@@ -301,6 +313,56 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	}
 
 	s := sessions.Get(ctx)
+	returnToVal := s.Get("return_to")
+	tokenTypeVal := s.Get("token_type")
+
+	if returnToVal != nil {
+		returnTo := returnToVal.(string)
+		tokenType := "raw"
+		if tokenTypeVal != nil {
+			tokenType = tokenTypeVal.(string)
+		}
+
+		var token, exp string
+		sub := oidcData.OIDCID.User
+
+		switch tokenType {
+		case "resigned":
+			token = oidcData.OIDCID.ResignedToken
+			exp = oidcData.OIDCID.ExpDateResigned
+		default:
+			token = oidcData.OIDCID.RawToken
+			exp = oidcData.OIDCID.ExpDateRaw
+
+		}
+
+		code, err := auth.Handoffs.Put(HandoffItem{
+			Token:     token,
+			Exp:       exp,
+			Sub:       sub,
+			TokenType: tokenType,
+			CreatedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			ctx.StatusCode(iris.StatusInternalServerError)
+			_, _ = ctx.WriteString("failed to create handoff code")
+
+			return
+		}
+
+		// one-time
+		s.Delete("return_to")
+		s.Delete("token_type")
+
+		sep := "?"
+		if strings.Contains(returnTo, "?") {
+			sep = "&"
+		}
+		ctx.Redirect(returnTo+sep+"code="+code, iris.StatusSeeOther)
+
+		return
+	}
+
 	s.SetFlash("oidcInbox", oidcData.S3ConfInbox)
 	s.SetFlash("oidcDownload", oidcData.S3ConfDownload)
 	ctx.ViewData("cegaID", auth.Config.Cega.ID)
@@ -335,6 +397,50 @@ func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
 
 		return
 	}
+}
+
+// getOIDCStart sets the return_to and token_type parameters in the session, then calls getOIDC.
+func (auth AuthHandler) getOIDCStart(ctx iris.Context) {
+	returnTo := ctx.URLParam("return_to")
+	tokenType := ctx.URLParamDefault("token_type", "resigned") // raw|resigned
+
+	if returnTo == "" {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("missing return_to")
+		return
+	}
+
+	// PoC validation; for real use implement strict allowlist
+	s := sessions.Get(ctx)
+	s.Set("return_to", returnTo)
+	s.Set("token_type", tokenType)
+
+	auth.getOIDC(ctx) // existing method that sets state + redirects to IdP
+}
+
+// postOIDCExchange handles the exchange of a handoff code for OIDC login data, and returns the data as JSON.
+// This is used by external services that want to authenticate users using auth as OIDC.
+func (auth AuthHandler) postOIDCExchange(ctx iris.Context) {
+	var req exchangeReq
+	if err := ctx.ReadJSON(&req); err != nil || req.Code == "" {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("invalid request")
+		return
+	}
+
+	item, ok := auth.Handoffs.GetAndDelete(req.Code)
+	if !ok {
+		ctx.StatusCode(iris.StatusNotFound)
+		_, _ = ctx.WriteString("code not found or expired")
+		return
+	}
+
+	_ = ctx.JSON(exchangeResp{
+		Token:     item.Token,
+		Exp:       item.Exp,
+		Sub:       item.Sub,
+		TokenType: item.TokenType,
+	})
 }
 
 // getOIDCConfInbox returns an s3config file for uploading to the Inbox
@@ -390,6 +496,7 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
+		Handoffs:     NewMemoryHandoffStore(2 * time.Minute),
 	}
 
 	// Initialise web server
@@ -439,6 +546,10 @@ func main() {
 	app.Get("/oidc/s3conf-download", authHandler.getOIDCConfDownload)
 	app.Get("/oidc/login", authHandler.getOIDCLogin)
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
+
+	// OIDC login and exchange endpoints for external webapps
+	app.Get("/oidc/start", authHandler.getOIDCStart)
+	app.Post("/oidc/exchange", authHandler.postOIDCExchange)
 
 	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
