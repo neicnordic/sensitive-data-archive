@@ -240,6 +240,16 @@ jobs:
             bash -x "$runscript";
           done
 
+  sda-download-v2_integration_test:
+    needs:
+      - build_images
+    name: download v2 integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test download v2
+        run: docker compose -f .github/integration/sda-download-v2-integration.yml run --rm integration_test
+
   sda-doa_integration_test:
     name: sda-doa ${{ matrix.storage }} integration tests
     needs:
