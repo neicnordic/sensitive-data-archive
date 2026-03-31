@@ -1,0 +1,54 @@
+# Configuration for old sda-download service (from sda-download module)
+# This uses the old config format expected by the standalone sda-download service
+
+app:
+  host: "0.0.0.0"
+  port: 8080
+  middleware: "token-clientversion"
+  minimalcliversion: "v0.2.0"
+
+log:
+  level: "info"
+  format: "json"
+
+storage:
+  archive:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        region: "us-east-1"
+        bucket_prefix: "archive"
+        disable_https: true
+
+grpc:
+  host: "reencrypt"
+  port: 50051
+
+c4gh:
+  filepath: "/shared/c4gh.sec.pem"
+  passphrase: "c4ghpass"
+  privateKeys:
+    - filepath: "/shared/c4gh.sec.pem"
+      passphrase: "c4ghpass"
+
+db:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+oidc:
+  configuration:
+    url: "http://mockauth:8000/.well-known/openid-configuration"
+
+session:
+  expiration: 3600
+  # The benchmark runner reaches this service via the Docker hostname
+  # "download-old", so the session cookie must be scoped to that host.
+  domain: "download-old"
+  secure: false
+  httponly: true
+  name: "sda_session_key"

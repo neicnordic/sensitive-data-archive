@@ -64,6 +64,8 @@ tags:
     description: File metadata and download operations.
   - name: Health
     description: Service health endpoints.
+  - name: DRS
+    description: GA4GH Data Repository Service (DRS) 1.5 compatible endpoints.
 
 paths:
   /service-info:
@@ -85,16 +87,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceInfo"
               example:
-                id: org.neic.sda.download
-                name: SDA Data Out API
+                id: se.nbis.sda.download
+                name: SDA Download
                 type:
-                  group: org.neic
-                  artifact: sda-download
-                  version: 2.0.0
+                  group: org.ga4gh
+                  artifact: drs
+                  version: 1.0.0
                 description: Sensitive Data Archive file download service
                 organization:
-                  name: NeIC
-                  url: https://neic.no
+                  name: NBIS
+                  url: https://nbis.se
                 version: 2.0.0
                 environment: production
         "500":
@@ -298,8 +300,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
         "400":
@@ -358,8 +358,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
           content:
@@ -378,8 +376,6 @@ paths:
               $ref: "#/components/headers/ContentRange"
             ETag:
               $ref: "#/components/headers/ETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
           content:
@@ -541,8 +537,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -587,8 +581,6 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
           content:
             application/octet-stream:
               schema:
@@ -605,8 +597,6 @@ paths:
               $ref: "#/components/headers/ContentRange"
             ETag:
               $ref: "#/components/headers/ContentETag"
-            Last-Modified:
-              $ref: "#/components/headers/LastModified"
           content:
             application/octet-stream:
               schema:
@@ -644,6 +634,71 @@ paths:
             # 3) Concatenate into a valid Crypt4GH file
             cat header.bin content.bin > file.c4gh
 
+  /objects/{path}:
+    get:
+      operationId: getDrsObject
+      summary: Resolve a dataset file to a DRS 1.5 object
+      description: |
+        Resolves a `{datasetId}/{filePath}` to a minimal GA4GH DRS 1.5 `DrsObject`
+        with a pre-resolved `access_url` pointing to the file content endpoint.
+
+        This endpoint enables htsget-rs and other DRS-aware clients to discover
+        download URLs without knowing the internal file ID.
+
+        The `{path}` parameter is composite: `{datasetId}/{filePath}`,
+        e.g. `EGAD00001000001/samples/sample1.bam.c4gh`. Everything before the
+        first `/` is the dataset ID; everything after is the file path.
+
+        **Note:** Some OpenAPI code generators may not handle slash-containing
+        path parameters. Clients should URL-encode slashes in filePath segments
+        if their HTTP library requires it. The server accepts both encoded and
+        unencoded paths (`UseRawPath` is enabled).
+      tags:
+        - DRS
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: |
+            Composite path: `{datasetId}/{filePath}`. Everything before the first `/`
+            is the dataset ID; everything after is the file path within the dataset.
+          schema:
+            type: string
+          example: "EGAD00001000001/samples/controls/sample1.bam.c4gh"
+      responses:
+        '200':
+          description: DRS object with resolved access URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrsObject'
+        '400':
+          description: Malformed path (missing dataset or file component)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Access denied (also returned when the resource does not exist)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /health/ready:
     get:
       tags: [Health]
@@ -658,10 +713,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReadinessStatus"
               example:
-                c4ghService: responding
-                database: responding
-                oidcServer: responding
-                storageBackend: responding
+                status: ok
+                services:
+                  database: ok
+                  grpc: ok
+                  storage: ok
         "503":
           description: Unhealthy service
 
@@ -792,7 +848,7 @@ components:
         id:
           type: string
           description: Unique service identifier in reverse domain name format
-          example: org.neic.sda.download
+          example: se.nbis.sda.download
         name:
           type: string
           description: Human-readable service name
@@ -802,13 +858,13 @@ components:
           properties:
             group:
               type: string
-              example: org.neic
+              example: org.ga4gh
             artifact:
               type: string
-              example: sda-download
+              example: drs
             version:
               type: string
-              example: 2.0.0
+              example: 1.0.0
           required: [group, artifact, version]
         description:
           type: string
@@ -818,11 +874,11 @@ components:
           properties:
             name:
               type: string
-              example: NeIC
+              example: NBIS
             url:
               type: string
               format: uri
-              example: https://neic.no
+              example: https://nbis.se
           required: [name, url]
         version:
           type: string
@@ -871,16 +927,94 @@ components:
 
     ReadinessStatus:
       type: object
-      additionalProperties: true
       properties:
-        c4ghService:
+        status:
           type: string
-        database:
+          description: Overall status (ok or degraded)
+          example: ok
+        services:
+          type: object
+          additionalProperties:
+            type: string
+          description: Per-service health status
+          example:
+            database: ok
+            grpc: ok
+            storage: ok
+      required: [status]
+
+    DrsObject:
+      type: object
+      description: Minimal GA4GH DRS 1.5 object response.
+      required:
+        - id
+        - self_uri
+        - size
+        - created_time
+        - checksums
+        - access_methods
+      properties:
+        id:
           type: string
-        oidcServer:
+          description: DRS object identifier (file stable ID).
+          example: "urn:neic:001-002-003"
+        self_uri:
           type: string
-        storageBackend:
+          description: Self-referential DRS URI.
+          example: "drs://download.example.org/urn:neic:001-002-003"
+        size:
+          type: integer
+          format: int64
+          description: Encrypted blob size in bytes (size of the data served by access_url).
+        created_time:
           type: string
+          format: date-time
+          description: File creation timestamp (RFC 3339).
+          example: "2026-01-15T10:30:00Z"
+        checksums:
+          type: array
+          minItems: 1
+          description: Checksums computed over the encrypted blob bytes.
+          items:
+            $ref: '#/components/schemas/DrsChecksum'
+        access_methods:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/DrsAccessMethod'
+    DrsChecksum:
+      type: object
+      required:
+        - checksum
+        - type
+      properties:
+        checksum:
+          type: string
+          description: Checksum value.
+        type:
+          type: string
+          description: Checksum algorithm (e.g. "sha-256", "md5").
+    DrsAccessMethod:
+      type: object
+      required:
+        - type
+        - access_url
+      properties:
+        type:
+          type: string
+          description: Access type (always "https").
+          example: "https"
+        access_url:
+          $ref: '#/components/schemas/DrsAccessURL'
+    DrsAccessURL:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          description: Pre-resolved download URL for the file content.
+          example: "https://download.example.org/files/urn:neic:001-002-003/content"
 
   parameters:
     DatasetIdPath:
@@ -967,7 +1101,7 @@ components:
       schema:
         type: string
       description: |
-        Makes the Range request conditional on the entity tag (ETag) or Last-Modified value.
+        Makes the Range request conditional on the entity tag (ETag).
         Commonly used to resume downloads safely.
       example: "\"686897696a7c876b7e\""
 
@@ -1066,12 +1200,6 @@ components:
       schema:
         type: string
       example: "\"a1b2c3d4e5f6g7h8\""
-
-    LastModified:
-      description: Last modification time of the resource (HTTP-date format per RFC 9110).
-      schema:
-        type: string
-      example: "Fri, 14 Feb 2025 14:51:26 GMT"
 
     ContentDisposition:
       description: Suggested filename for saving the download.

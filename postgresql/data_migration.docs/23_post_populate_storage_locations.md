@@ -1,0 +1,163 @@
+# Data Migration Plan POST schema migration version 23
+
+
+## 1. Ensure schema migration has taken place
+Ensure schema version is at 23 and [23_expand_files_table_with_storage_locations.sql](../migratedb.d/23_expand_files_table_with_storage_locations.sql)
+has been executed.
+
+Checked by
+```sql
+SELECT max(version) AS current_version FROM sda.dbschema_version;
+```
+If result of query is not 23, do not proceed with instructions.
+
+## 2. Prep
+Note: Prep is only needed if you have multiple s3 buckets / posix volumes for a storage
+   
+Repeat steps for each s3 bucket / posix volume 
+
+### 2.1. Get file ids file for a storage 
+ 
+#### If S3 storage
+Get all files from each s3 bucket
+```bash
+aws s3api list-objects-v2 --endpoint ${ENDPOINT} --bucket ${BUCKET} > ${STORAGE_NAME}_raw
+```
+
+Transform raw response to just list of keys
+```bash
+jq -r '.Contents[].Key' ${STORAGE_NAME}_raw > ${STORAGE_NAME}_keys
+```
+
+#### If Posix storage
+```bash
+find . -type f -print | sed 's|^\./||' > ${STORAGE_NAME}_keys
+```
+
+### 2.2. Create new staging tables to support DB migration
+
+
+```sql
+CREATE TABLE sda.temp_file_in_${STORAGE_NAME} ( 
+key TEXT PRIMARY KEY
+);
+``` 
+
+### 2.3. Populate tables
+```bash
+psql -U $user -d sda -At -h $host -p $port -c "\copy sda.temp_file_in_${STORAGE_NAME} from '/path/to/${STORAGE_NAME}_keys' with delimiter as ','"
+```
+
+## 3. Run data migration queries
+Run the following data migrations in a transaction such that transaction can be aborted in case something goes wrong and rollback is desired.
+
+So if something goes wrong after [3.1 Start transaction](#31-start-transaction) and before 
+[3.5 Commit transaction](#35-commit) you can run
+```sql
+ROLLBACK;
+```
+to rollback the transaction.
+
+### 3.1. Start transaction
+```sql
+BEGIN;
+```
+
+### 3.2. Inbox Location
+
+If posix inbox replace `${INBOX_ENDPOINT}/${INBOX_BUCKET}` with `/${INBOX_POSIX_VOLUME}`
+
+If you only have one inbox storage
+```sql
+UPDATE sda.files
+SET submission_location = '${INBOX_ENDPOINT}/${INBOX_BUCKET}';
+```
+
+If you only have multiple inbox storages, repeat following UPDATE statement per bucket/volume you have
+```sql
+UPDATE sda.files AS f
+SET submission_location = '${INBOX_ENDPOINT}/${INBOX_BUCKET}'
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk
+WHERE CONCAT(REPLACE(submission_user, '@', '_'), '/', submission_file_path) = in_buk.key;
+```
+
+### 3.3. Archive Location
+
+If posix archive replace `${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}` with `/${ARCHIVE_POSIX_VOLUME}`
+
+If you only have one archive storage
+```sql
+UPDATE sda.files 
+SET archive_location ='${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}'
+WHERE archive_file_path != '';
+```
+
+If you only have multiple archive storages, repeat following UPDATE statement per bucket/volume you have
+```sql
+UPDATE sda.files AS f
+SET archive_location = '${ARCHIVE_ENDPOINT}/${ARCHIVE_BUCKET}'
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
+WHERE f.id::text = in_buk.key
+AND archive_file_path != '';
+```
+
+### 3.4 Backup location
+Skip these steps if you do not have a backup storage
+
+#### 3.4.1 Populate backup_path
+Currently, the `backup_path` was not being populated when a file was backed up, this is now needed. Currently the `backup_path`
+is always the same as `archive_file_path`.
+
+```sql
+UPDATE sda.files
+SET backup_path = archive_file_path
+WHERE archive_file_path != '';
+```
+
+#### 3.4.2 Populate backup_location
+If posix backup replace '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}' with '/${BACKUP_POSIX_VOLUME}'
+
+If you only have one backup storage
+```sql
+UPDATE sda.files 
+SET backup_location ='${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
+WHERE backup_path != '';
+```
+If you only have multiple backup storages, repeat following UPDATE statement per bucket/volume you have
+```sql
+UPDATE sda.files AS f
+SET backup_location = '${BACKUP_ENDPOINT}/${BACKUP_BUCKET}'
+FROM sda.temp_file_in_${STORAGE_NAME} AS in_buk 
+WHERE f.id::text = in_buk.key
+AND backup_path != '';
+```
+
+### 3.5 Commit
+Commit the transaction
+```sql
+COMMIT;
+```
+
+## 4. Clean up
+Only needed if you did the [2. Prep step](#2-prep) and created staging tables
+
+Repeat DROP table statement per staging table created
+```sql
+DROP TABLE sda.temp_file_in_${STORAGE_NAME}; 
+```
+
+## 5. Ensure all files have been updated
+```sql
+SELECT count(id) FROM sda.files WHERE submission_location IS NULL OR (archive_location IS NULL AND archive_file_path != '');
+```
+If there exists rows, then there are issues and the required locations of the files are not known.
+To resolve you could either manually delete those sda.files entries or ensure the files are uploaded to the expected locations.
+
+### 5.1 Backup location verification
+Skip this step if you do not have a backup storage
+
+```sql
+SELECT count(id) FROM sda.files WHERE backup_location IS NULL AND backup_path != '';
+```
+If there exists rows, then there are issues and the backup locations of the files are not known.
+To resolve you could either manually delete those sda.files entries or ensure the files are uploaded to the expected locations.
