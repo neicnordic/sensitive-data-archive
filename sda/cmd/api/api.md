@@ -37,7 +37,7 @@ Endpoints:
     Example (follow-up page using `X-Next-Cursor`):
 
     ```bash
-    curl -H "Authorization: Bearer $token" -H "X-Next-Cursor: $cursor" -X GET "https://HOSTNAME/files?path_prefix=submission-1&cursor=$cursor"
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/files?path_prefix=submission-1&limit=100&cursor=$cursor"
     ```
 
   If the `token` is invalid, 401 is returned.
