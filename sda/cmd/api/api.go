@@ -362,9 +362,17 @@ func getFiles(c *gin.Context) {
 	// parse optional pagination params
 	limit := 0
 	if l := c.DefaultQuery("limit", "0"); l != "0" {
-		if li, err := strconv.Atoi(l); err == nil {
-			limit = li
+		li, err := strconv.Atoi(l)
+		if err != nil || li < 1 {
+			c.JSON(400, "invalid limit parameter: must be a positive integer")
+
+			return
 		}
+		const maxLimit = 10000
+		if li > maxLimit {
+			li = maxLimit
+		}
+		limit = li
 	}
 	cursor := c.DefaultQuery("cursor", "")
 
@@ -1008,9 +1016,17 @@ func listUserFiles(c *gin.Context) {
 	// parse optional pagination params
 	limit := 0
 	if l := c.DefaultQuery("limit", "0"); l != "0" {
-		if li, err := strconv.Atoi(l); err == nil {
-			limit = li
+		li, err := strconv.Atoi(l)
+		if err != nil || li < 1 {
+			c.AbortWithStatusJSON(400, "invalid limit parameter: must be a positive integer")
+
+			return
 		}
+		const maxLimit = 10000
+		if li > maxLimit {
+			li = maxLimit
+		}
+		limit = li
 	}
 	cursor := c.DefaultQuery("cursor", "")
 	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
