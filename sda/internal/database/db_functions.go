@@ -1082,7 +1082,8 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &lastEventAt)
+		var rowEventAt time.Time
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowEventAt)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1099,6 +1100,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		if fi.Status != "disabled" {
 			files = append(files, fi)
 			lastID = fi.FileID
+			lastEventAt = rowEventAt
 		}
 	}
 
