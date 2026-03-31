@@ -19,6 +19,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// ErrInvalidCursor is returned when a pagination cursor cannot be decoded or parsed.
+var ErrInvalidCursor = errors.New("invalid cursor")
+
 // RegisterFile inserts a file in the database with its inbox location, along with a "registered" log
 // event. If the file already exists in the database, the entry is updated, but
 // a new file event is always inserted.
@@ -1015,7 +1018,8 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
-	// last_event_at is denormalized on sda.files via trigger, avoiding a lateral join on file_event_log
+	// last_event_at is denormalized on sda.files via trigger to support efficient keyset pagination ordering.
+	// A lateral join on file_event_log is still required to obtain the latest event status.
 	const baseQuery = `
 SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(fel.event, '') as event, f.created_at, f.submission_file_size,
 	   COALESCE(f.last_event_at, f.created_at) as last_event_at
@@ -1025,7 +1029,7 @@ FROM sda.files AS f
 	) fel ON TRUE
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
-	AND fd.file_id IS NULL
+	AND fd.file_id IS NULL AND COALESCE(fel.event, '') != 'disabled'
 ` // ORDER/LIMIT appended later
 
 	pathPrefixLen := 1
@@ -1041,31 +1045,33 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	if lim <= 0 {
 		lim = 1000
 	}
+	// Fetch one extra row to determine whether a next page exists.
+	fetchLim := lim + 1
 
 	var rows *sql.Rows
 	var err error
 	if cursor == "" {
 		query := baseQuery + "ORDER BY last_event_at DESC, f.id DESC LIMIT $4;"
-		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, lim)
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
 	} else {
-		// decode cursor: base64("<unixnano>|<fileid>")
-		decoded, derr := base64.StdEncoding.DecodeString(cursor)
+		// decode cursor: base64url("<unixnano>|<fileid>")
+		decoded, derr := base64.RawURLEncoding.DecodeString(cursor)
 		if derr != nil {
-			return nil, "", fmt.Errorf("invalid cursor: %w", derr)
+			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, derr)
 		}
 		parts := strings.SplitN(string(decoded), "|", 2)
 		if len(parts) != 2 {
-			return nil, "", fmt.Errorf("invalid cursor format")
+			return nil, "", fmt.Errorf("%w: unexpected format", ErrInvalidCursor)
 		}
 		unixnano, perr := strconv.ParseInt(parts[0], 10, 64)
 		if perr != nil {
-			return nil, "", fmt.Errorf("invalid cursor timestamp: %w", perr)
+			return nil, "", fmt.Errorf("%w: invalid timestamp", ErrInvalidCursor)
 		}
 		cursorTime := time.Unix(0, unixnano)
 		cursorID := parts[1]
 
 		query := baseQuery + "AND (COALESCE(f.last_event_at, f.created_at) < $4 OR (COALESCE(f.last_event_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
-		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, lim)
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, fetchLim)
 	}
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
@@ -1096,9 +1102,10 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 			fi.AccessionID = accessionID.String
 		}
 
-		// Add instance of struct (file) to array if the status is not disabled
-		if fi.Status != "disabled" {
-			files = append(files, fi)
+		files = append(files, fi)
+		// Track cursor position only up to lim rows; the (lim+1)-th row just
+		// signals that more data exists and is not returned to the caller.
+		if len(files) <= lim {
 			lastID = fi.FileID
 			lastEventAt = rowEventAt
 		}
@@ -1108,12 +1115,16 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		return nil, "", err
 	}
 
-	// Determine next cursor
+	// Determine next cursor: present only when the extra probe row was returned.
 	nextCursor := ""
-	if len(files) >= lim && lastID != "" {
-		// cursor is base64("<unixnano>|<fileid>")
+	hasMore := len(files) > lim
+	if hasMore {
+		files = files[:lim]
+	}
+	if hasMore && lastID != "" {
+		// cursor is base64url("<unixnano>|<fileid>")
 		raw := fmt.Sprintf("%d|%s", lastEventAt.UnixNano(), lastID)
-		nextCursor = base64.StdEncoding.EncodeToString([]byte(raw))
+		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
 	}
 
 	return files, nextCursor, nil

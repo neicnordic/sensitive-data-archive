@@ -33,7 +33,7 @@ BEGIN
     CREATE FUNCTION sda.update_files_last_event_at()
     RETURNS TRIGGER AS $update_files_last_event_at$
     BEGIN
-        UPDATE sda.files SET last_event_at = NEW.started_at WHERE id = NEW.file_id;
+        UPDATE sda.files SET last_event_at = GREATEST(last_event_at, NEW.started_at) WHERE id = NEW.file_id;
         RETURN NEW;
     END;
     $update_files_last_event_at$ LANGUAGE plpgsql;
