@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -292,7 +293,7 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 	for {
 		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, userID)
 		if cursor != "" {
-			reqURL += "&cursor=" + cursor
+			reqURL += "&cursor=" + url.QueryEscape(cursor)
 		}
 
 		req, err := http.NewRequest("GET", reqURL, nil)

@@ -378,6 +378,11 @@ func getFiles(c *gin.Context) {
 
 	files, nextCursor, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false, limit, cursor)
 	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
 
@@ -1031,6 +1036,11 @@ func listUserFiles(c *gin.Context) {
 	cursor := c.DefaultQuery("cursor", "")
 	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
 	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
