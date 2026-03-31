@@ -1136,6 +1136,10 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
 	// Determine next cursor
 	nextCursor := ""
 	if len(files) >= lim && lastID != "" {
