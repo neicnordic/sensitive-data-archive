@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -675,11 +676,12 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		err = db.UpdateFileEventLog(fileID, "ready", testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
-	filelist, err := db.GetUserFiles("unknownuser", "", true)
+	filelist, nextCursor, err := db.GetUserFiles("unknownuser", "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
+	assert.Equal(suite.T(), "", nextCursor)
 
-	filelist, err = db.GetUserFiles(testUser, "", true)
+	filelist, nextCursor, err = db.GetUserFiles(testUser, "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
 
@@ -688,9 +690,45 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		assert.Contains(suite.T(), fileInfo.AccessionID, "stableID-00", "incorrect file accession ID")
 	}
 
-	filteredFilelist, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true)
+	filteredFilelist, nextCursor, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), 3, len(filteredFilelist), "file list is of incorrect length")
+	assert.Equal(suite.T(), "", nextCursor)
+
+	// Verify keyset pagination: use a page size smaller than the total to force multiple pages.
+	pageLimit := 2
+	seen := make(map[string]struct{})
+
+	page, cursor, err := db.GetUserFiles(testUser, "", true, pageLimit, "")
+	assert.NoError(suite.T(), err, "failed to get first paginated page")
+	assert.LessOrEqual(suite.T(), len(page), pageLimit, "first page exceeds limit")
+	assert.NotEmpty(suite.T(), cursor, "expected non-empty cursor when more files remain")
+	for _, fi := range page {
+		seen[fi.FileID] = struct{}{}
+	}
+
+	for cursor != "" {
+		page, cursor, err = db.GetUserFiles(testUser, "", true, pageLimit, cursor)
+		assert.NoError(suite.T(), err, "failed to get subsequent paginated page")
+		assert.LessOrEqual(suite.T(), len(page), pageLimit, "page exceeds limit")
+		for _, fi := range page {
+			_, dup := seen[fi.FileID]
+			assert.False(suite.T(), dup, "duplicate file ID across pages: %s", fi.FileID)
+			seen[fi.FileID] = struct{}{}
+		}
+	}
+
+	assert.Equal(suite.T(), testCases, len(seen), "pagination did not return all files without duplicates")
+
+	// An invalid cursor must return ErrInvalidCursor.
+	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, "not-a-valid-cursor!!!")
+	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor")
+
+	// A valid base64 string that does not match the expected "<unixnano>|<id>" format should
+	// also return ErrInvalidCursor.
+	badFormatCursor := base64.RawURLEncoding.EncodeToString([]byte("badformat"))
+	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, badFormatCursor)
+	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor format")
 
 	db.Close()
 }

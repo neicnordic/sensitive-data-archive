@@ -21,8 +21,23 @@ Endpoints:
 
     It is possible to limit the returned results by supplying a base path prefix in the query. In this case only files that have a path that starts with `submission-1` will be returned.
 
+    The endpoint also supports keyset pagination using a `cursor` query parameter and an optional `limit`.
+
+    - `limit` (optional): maximum number of items to return. If omitted or 0 a server default page size is used.
+    - `cursor` (optional): opaque cursor returned from a previous page. To fetch the first page omit this parameter.
+
+    The response will include an `X-Next-Cursor` header when there are more pages available. The cursor is opaque (base64-encoded) and should be passed unchanged to the next request.
+
+    Example (first page, limit 100):
+
     ```bash
-    curl -H "Authorization: Bearer $token" -X GET https://HOSTNAME/files?path_prefix=submission-1
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/files?path_prefix=submission-1&limit=100"
+    ```
+
+    Example (follow-up page using `X-Next-Cursor`):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/files?path_prefix=submission-1&limit=100&cursor=$cursor"
     ```
 
   If the `token` is invalid, 401 is returned.
@@ -265,18 +280,29 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/users/:username/files`
   - accepts `GET` requests
-  - Returns all files (that are not part of a dataset) for a user with active uploads as a JSON array
+  - Returns files (that are not part of a dataset) for a user with active uploads as a JSON array, paginated using a keyset cursor.
 
-    Example:
+    Example (first page):
 
     ```bash
     curl -H "Authorization: Bearer $token" -X GET  https://HOSTNAME/users/submitter@example.org/files
     ```
 
-    It is possible to limit the returned results by supplying a base path prefix in the query. In this case only files that have a path that starts with `submission-1` will be returned.
+    The endpoint supports the same pagination as `/files`:
 
-      ```bash
-    curl -H "Authorization: Bearer $token" -X GET https://HOSTNAME/users/submitter@example.org/files?path_prefix=submission-1
+    - `limit` (optional): maximum number of items to return.
+    - `cursor` (optional): an opaque cursor returned in `X-Next-Cursor` from a previous page.
+
+    Example (page with limit):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/users/submitter@example.org/files?path_prefix=submission-1&limit=50"
+    ```
+
+    Example (follow-up page):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/users/submitter@example.org/files?cursor=$cursor"
     ```
 
   - Error codes

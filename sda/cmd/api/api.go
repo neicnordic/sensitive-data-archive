@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -358,12 +359,38 @@ func getFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false)
+	// parse optional pagination params
+	limit := 0
+	if l := c.DefaultQuery("limit", "0"); l != "0" {
+		li, err := strconv.Atoi(l)
+		if err != nil || li < 1 {
+			c.JSON(400, "invalid limit parameter: must be a positive integer")
+
+			return
+		}
+		const maxLimit = 10000
+		if li > maxLimit {
+			li = maxLimit
+		}
+		limit = li
+	}
+	cursor := c.DefaultQuery("cursor", "")
+
+	files, nextCursor, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false, limit, cursor)
 	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
 
 		return
+	}
+
+	if nextCursor != "" {
+		c.Header("X-Next-Cursor", nextCursor)
 	}
 
 	// Return response
@@ -991,11 +1018,36 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
 
-	files, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true)
+	// parse optional pagination params
+	limit := 0
+	if l := c.DefaultQuery("limit", "0"); l != "0" {
+		li, err := strconv.Atoi(l)
+		if err != nil || li < 1 {
+			c.AbortWithStatusJSON(400, "invalid limit parameter: must be a positive integer")
+
+			return
+		}
+		const maxLimit = 10000
+		if li > maxLimit {
+			li = maxLimit
+		}
+		limit = li
+	}
+	cursor := c.DefaultQuery("cursor", "")
+	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
 	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
+	}
+
+	if nextCursor != "" {
+		c.Header("X-Next-Cursor", nextCursor)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")

@@ -5,10 +5,12 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,9 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
 )
+
+// ErrInvalidCursor is returned when a pagination cursor cannot be decoded or parsed.
+var ErrInvalidCursor = errors.New("invalid cursor")
 
 // RegisterFile inserts a file in the database with its inbox location, along with a "registered" log
 // event. If the file already exists in the database, the entry is updated, but
@@ -989,38 +994,43 @@ func (dbs *SDAdb) setSubmissionFileSize(fileID string, submissionFileSize int64)
 }
 
 // GetUserFiles retrieves all the files a user submitted
-func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool, limit int, cursor string) ([]*SubmissionFileInfo, string, error) {
 	var err error
 
 	files := []*SubmissionFileInfo{}
+	var nextCursor string
 
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
-		files, err = dbs.getUserFiles(userID, pathPrefix, allData)
+		files, nextCursor, err = dbs.getUserFiles(userID, pathPrefix, allData, limit, cursor)
 		if err == nil {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	return files, err
+	return files, nextCursor, err
 }
 
 // getUserFiles is the actual function performing work for GetUserFiles
-func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error) {
+func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit int, cursor string) ([]*SubmissionFileInfo, string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
-
-	// select all files (that are not part of a dataset) of the user, each one annotated with its latest event
-	const query = `
-SELECT DISTINCT ON (f.id) f.id, f.submission_file_path, f.stable_id, fel.event, f.created_at, f.submission_file_size FROM sda.files AS f
-    LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
-    LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
+	// last_event_at is denormalized on sda.files via trigger to support efficient keyset pagination ordering.
+	// A lateral join on file_event_log is still required to obtain the latest event status.
+	const baseQuery = `
+SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(fel.event, '') as event, f.created_at, f.submission_file_size,
+	   COALESCE(f.last_event_at, f.created_at) as last_event_at
+FROM sda.files AS f
+	LEFT JOIN LATERAL (
+		SELECT event FROM sda.file_event_log WHERE file_id = f.id ORDER BY started_at DESC LIMIT 1
+	) fel ON TRUE
+	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
-    AND fd.file_id IS NULL
-ORDER BY f.id, fel.started_at DESC;`
+	AND fd.file_id IS NULL AND COALESCE(fel.event, '') != 'disabled'
+` // ORDER/LIMIT appended later
 
 	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}
@@ -1030,24 +1040,58 @@ ORDER BY f.id, fel.started_at DESC;`
 		pathPrefixArg.String = pathPrefix
 	}
 
-	// nolint:rowserrcheck
-	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen)
+	// default limit
+	lim := limit
+	if lim <= 0 {
+		lim = 1000
+	}
+	// Fetch one extra row to determine whether a next page exists.
+	fetchLim := lim + 1
+
+	var rows *sql.Rows
+	var err error
+	if cursor == "" {
+		query := baseQuery + "ORDER BY last_event_at DESC, f.id DESC LIMIT $4;"
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
+	} else {
+		// decode cursor: base64url("<unixnano>|<fileid>")
+		decoded, derr := base64.RawURLEncoding.DecodeString(cursor)
+		if derr != nil {
+			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, derr)
+		}
+		parts := strings.SplitN(string(decoded), "|", 2)
+		if len(parts) != 2 {
+			return nil, "", fmt.Errorf("%w: unexpected format", ErrInvalidCursor)
+		}
+		unixnano, perr := strconv.ParseInt(parts[0], 10, 64)
+		if perr != nil {
+			return nil, "", fmt.Errorf("%w: invalid timestamp", ErrInvalidCursor)
+		}
+		cursorTime := time.Unix(0, unixnano)
+		cursorID := parts[1]
+
+		query := baseQuery + "AND (COALESCE(f.last_event_at, f.created_at) < $4 OR (COALESCE(f.last_event_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, fetchLim)
+	}
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
 
-		return nil, err
+		return nil, "", err
 	}
 	defer rows.Close()
 
 	// Iterate rows
+	var lastEventAt time.Time
+	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize)
+		var rowEventAt time.Time
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowEventAt)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		if submissionFileSize.Valid {
@@ -1058,13 +1102,32 @@ ORDER BY f.id, fel.started_at DESC;`
 			fi.AccessionID = accessionID.String
 		}
 
-		// Add instance of struct (file) to array if the status is not disabled
-		if fi.Status != "disabled" {
-			files = append(files, fi)
+		files = append(files, fi)
+		// Track cursor position only up to lim rows; the (lim+1)-th row just
+		// signals that more data exists and is not returned to the caller.
+		if len(files) <= lim {
+			lastID = fi.FileID
+			lastEventAt = rowEventAt
 		}
 	}
 
-	return files, nil
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
+	// Determine next cursor: present only when the extra probe row was returned.
+	nextCursor := ""
+	hasMore := len(files) > lim
+	if hasMore {
+		files = files[:lim]
+	}
+	if hasMore && lastID != "" {
+		// cursor is base64url("<unixnano>|<fileid>")
+		raw := fmt.Sprintf("%d|%s", lastEventAt.UnixNano(), lastID)
+		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
+	}
+
+	return files, nextCursor, nil
 }
 
 // list all users with files not yet assigned to a dataset
