@@ -1015,13 +1015,13 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
-	// Use lateral join to get latest event per file, then order by that timestamp desc
+	// last_event_at is denormalized on sda.files via trigger, avoiding a lateral join on file_event_log
 	const baseQuery = `
 SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(fel.event, '') as event, f.created_at, f.submission_file_size,
-	   COALESCE(fel.started_at, f.created_at) as last_event_at
+	   COALESCE(f.last_event_at, f.created_at) as last_event_at
 FROM sda.files AS f
 	LEFT JOIN LATERAL (
-		SELECT event, started_at FROM sda.file_event_log WHERE file_id = f.id ORDER BY started_at DESC LIMIT 1
+		SELECT event FROM sda.file_event_log WHERE file_id = f.id ORDER BY started_at DESC LIMIT 1
 	) fel ON TRUE
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
@@ -1064,7 +1064,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		cursorTime := time.Unix(0, unixnano)
 		cursorID := parts[1]
 
-		query := baseQuery + "AND (COALESCE(fel.started_at, f.created_at) < $4 OR (COALESCE(fel.started_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
+		query := baseQuery + "AND (COALESCE(f.last_event_at, f.created_at) < $4 OR (COALESCE(f.last_event_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, lim)
 	}
 	if err != nil {
