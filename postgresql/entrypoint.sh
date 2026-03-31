@@ -7,7 +7,7 @@ if [[ "$1" == postgres* ]] && [ "$(id -u)" = '0' ]; then
 		find /var/lib/postgresql \! -user postgres -exec chown postgres '{}' +
 	fi
 
-	exec su-exec postgres "${BASH_SOURCE[0]}" "$@"
+	exec su postgres "${BASH_SOURCE[0]}" "$@"
 fi
 
 migrate() {
