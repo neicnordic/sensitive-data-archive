@@ -1,0 +1,228 @@
+# Lightweight dev stack for the sda-download v2 API.
+#
+# Starts the minimum services needed for local webapp development:
+# postgres, minio, mockoidc, reencrypt, and the download service.
+# Database is pre-seeded with a test dataset and file.
+#
+# Usage:
+#   docker compose up -d
+#   TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
+#   curl -H "Authorization: Bearer $TOKEN" http://localhost:8085/datasets
+
+services:
+  postgres:
+    build:
+      context: ../../postgresql
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}-postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    networks:
+      default:
+        aliases:
+          - s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  # Generates JWT keys, c4gh keys, and a dev token
+  credentials:
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -e
+        apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
+        apt-get -o DPkg::Lock::Timeout=60 install -y postgresql-client > /dev/null
+        pip install --upgrade pip > /dev/null
+        pip install joserfc crypt4gh > /dev/null
+
+        # Create database role for download service
+        psql -U postgres -h postgres -d sda -c "ALTER ROLE download LOGIN PASSWORD 'download';" || true
+        psql -U postgres -h postgres -d sda -c "GRANT base TO download;" || true
+
+        # Create RSA key pair for JWT signing
+        # Uses the same hardcoded key as mockoidc.py so tokens are interchangeable
+        mkdir -p /shared/keys/pub
+        if [ ! -f "/shared/keys/jwt.key" ]; then
+            cat > /shared/keys/jwt.key << 'PRIVKEY'
+        -----BEGIN PRIVATE KEY-----
+        MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDhuZjxPmOGUIW1
+        LhxzKfxkN+1aTbvI5w+AptqT33X+bWuzfjvhEodiNz0bBfQgJJpQ3TZ8J1IZpM2F
+        Tnzox+FGxKPe5T9Mgngzd4N6eByWVPXoNMk7IdmBXMdPZBFSyjMW4ba1MELCpiKV
+        05de4J5opRDwmHmyMqYJxBk78e3iiYYixVk+j1Ku+yFl4d2R29y2+O9PlZegJloe
+        8FGnKIGZApS/8t9iyCkXg8WbjSPzgYCTQKxn/E4lcGdTrAt/McKrWmAuppcr+rpP
+        +BInm3l5Zu/QiRSZcMb5O460ojP9eKnaUlDpGZv9CY5j4x4lq8vjU2kK77YXBO8I
+        2oxse5a5AgMBAAECggEABbwSX6anHqVzECxQurhJWj51gELTT4JXSXxztygJNmKP
+        RushGFHBMMSYf9RB5IMpjH5iQPs6wb4HHqjk0YEqfwLF6wbF+eqipSQXKghdKZCV
+        AsY8io0MmpXB1omDSygp7h3j52yHdayE2muav+VTAPOYn5QwG0/gGgVqYrR9x7CM
+        iTuyOIuGNO4Wlly4/5RhLtSo0pal9AgBvX4crtVEwN8tPgqPVo9w71bSROt9EVNI
+        3cZiFFrrapYiifckIGiPGQYQUd5ej9Mq/77Fa0fv0pk0ONQV8HwstQ5HY2WwJWsn
+        mccF9plVTzem7N/vo+T+hFRPUO9TZUao91mMV8iV5QKBgQD1nZbQW3NHdol0fXA8
+        nw5JRkTLZx1zcZ5l36WVPkwCjJOyXQ2vWHm4lz7F81Rr8dQnMKLWMDKjrBT9Dbfs
+        xYK2bYxENS1W/n+0jOIaX/792DY9tfX7vvHU9yGSdoJE5os6DGCHYInOD0xnRmnl
+        3vS7gKv8miDwDzFsbjtDg6WfSwKBgQDrRLkmmfZCMcmLA02YSrErAlUseuyad7lY
+        HEJApXKfn262iHELlQa2zOBZpJGXIcHsNf1XGpMeU5pH+ILKE4Y5qbclq+AzFCcZ
+        nBFUfDeawmWdV5FJqNDd1L8Mb8aE+6q0Y5rNb3RL7A2ypH2ZeYKSGpHz3C7Rn5KW
+        voWAXRWriwKBgQCH4bxK3x0ivxiCgtcyIojDzwVGRnDLqmMIVzeDHqjsjBs2BTcJ
+        9/e3QK1w1BKzeWF2oPilaJrLY+tkqE9FxWtwQ6DjJ0xDIZ9DIuH/13X5t8EiWOWS
+        devSdzpyje+58JW78pcArk7u2hXZ2OHDU5qvlRsRL6/jP3SHWWCeFFnviwKBgGov
+        M02r0YygwfEfBYeFtp7Nx7lypZU2Eg4levWIdsp6f9KclEEA+u3IXD25XAiVMNw2
+        pegJU3stioWPMSCZXUxrQAEdqOwE3XzehqfWBJaxxIEWQ7m2Gsb0PWIUlMnyeGJA
+        Tl8IPboCiVAmk5WQVREyMsuYhf0Qg23MAZ8k5CHvAoGBAJm55NQZVKAEDGd4a21q
+        TDcRddtPwwL2oP3qa0gbGk4YFRUCrX99hIejOTvQW1xf6vGxTd7E1QizvFse4yRz
+        ZRKyXIc7DCcdzOnpMrSd1+aXwZtRHLSw0EDS6PWeJZdjJYHxl2YpAmMdURdcGTrH
+        b6b/6vhU90+xL14CX7Awofp/
+        -----END PRIVATE KEY-----
+        PRIVKEY
+            cat > /shared/keys/pub/jwt.pub << 'PUBKEY'
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4bmY8T5jhlCFtS4ccyn8
+        ZDftWk27yOcPgKbak991/m1rs3474RKHYjc9GwX0ICSaUN02fCdSGaTNhU586Mfh
+        RsSj3uU/TIJ4M3eDengcllT16DTJOyHZgVzHT2QRUsozFuG2tTBCwqYildOXXuCe
+        aKUQ8Jh5sjKmCcQZO/Ht4omGIsVZPo9SrvshZeHdkdvctvjvT5WXoCZaHvBRpyiB
+        mQKUv/LfYsgpF4PFm40j84GAk0CsZ/xOJXBnU6wLfzHCq1pgLqaXK/q6T/gSJ5t5
+        eWbv0IkUmXDG+TuOtKIz/Xip2lJQ6Rmb/QmOY+MeJavL41NpCu+2FwTvCNqMbHuW
+        uQIDAQAB
+        -----END PUBLIC KEY-----
+        PUBKEY
+            chmod 644 /shared/keys/pub/jwt.pub /shared/keys/jwt.key
+        fi
+
+        # Create trusted issuers for visa validation
+        cat > "/shared/trusted-issuers.json" <<'ISSUERS'
+        [
+          {
+            "iss": "https://demo.example",
+            "jku": "http://mockauth:8000/jwks"
+          }
+        ]
+        ISSUERS
+
+        # Generate c4gh key pair (used by reencrypt and seed)
+        if [ ! -f "/shared/c4gh.pub.pem" ]; then
+            printf 'c4ghpass\nc4ghpass\n' | crypt4gh-keygen --sk /shared/c4gh.sec.pem --pk /shared/c4gh.pub.pem
+            chmod 644 /shared/c4gh.sec.pem /shared/c4gh.pub.pem
+        fi
+
+        echo "Credentials ready"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.11-slim-bookworm
+    volumes:
+      - shared:/shared
+
+  # Create a real Crypt4GH test file, upload to MinIO, seed database
+  seed:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
+        apt-get -o DPkg::Lock::Timeout=60 install -y curl postgresql-client > /dev/null
+        pip install --upgrade pip > /dev/null
+        pip install crypt4gh > /dev/null
+        curl -sL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+        chmod +x /usr/local/bin/mc
+        sh /seed.sh
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    image: python:3.11-slim-bookworm
+    volumes:
+      - ./seed.sh:/seed.sh:ro
+      - shared:/shared
+
+  # Mock OIDC server with /tokens endpoint for easy token retrieval
+  mockauth:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip > /dev/null
+        pip install aiohttp Authlib joserfc > /dev/null
+        python -u /mockoidc.py
+    image: python:3.10-slim
+    volumes:
+      - ./mockoidc.py:/mockoidc.py
+    ports:
+      - "8000:8000"
+    restart: always
+
+  # gRPC re-encryption service (needed for file downloads)
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    command: [sda-reencrypt]
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ./reencrypt-config.yaml:/config.yaml
+      - shared:/shared
+
+  # Download service v2
+  download:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mockauth:
+        condition: service_started
+    environment:
+      - CONFIG_FILE=/config.yaml
+    ports:
+      - "8085:8080"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+volumes:
+  minio_data:
+  postgres_data:
+  shared:
