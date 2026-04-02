@@ -174,6 +174,17 @@ integrationtest-sda-download-v2-up: build-all
 integrationtest-sda-download-v2-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml down -v --remove-orphans
 
+# Lightweight dev stack for download API v2 (webapp development)
+dev-download-v2-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/download-v2-dev/compose.yml up -d
+	@echo ""
+	@echo "Download API v2 ready at http://localhost:8085"
+	@echo "Get a token:  TOKEN=\$$(curl -s http://localhost:8000/tokens | jq -r '.[0]')"
+	@echo "Try it:       curl -H \"Authorization: Bearer \$$TOKEN\" http://localhost:8085/datasets"
+
+dev-download-v2-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/download-v2-dev/compose.yml down -v --remove-orphans
+
 # Download benchmark (compares old vs new public endpoints)
 # Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
 # The benchmark runs in a container with auto-configuration from the environment
