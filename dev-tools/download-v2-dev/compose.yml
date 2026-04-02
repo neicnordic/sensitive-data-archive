@@ -135,7 +135,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim-bookworm
+    image: python:3.14-slim-trixie
     volumes:
       - shared:/shared
 
@@ -161,7 +161,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim-bookworm
+    image: python:3.14-slim-trixie
     volumes:
       - ./seed.sh:/seed.sh:ro
       - shared:/shared
@@ -175,7 +175,7 @@ services:
         pip install --upgrade pip > /dev/null
         pip install aiohttp Authlib joserfc > /dev/null
         python -u /mockoidc.py
-    image: python:3.10-slim
+    image: python:3.14-slim-trixie
     volumes:
       - ./mockoidc.py:/mockoidc.py
     ports:
