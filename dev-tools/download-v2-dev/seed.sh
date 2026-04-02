@@ -57,6 +57,7 @@ mc pipe myminio/archive/test-file.c4gh < /tmp/body.bin
 echo "Uploaded to MinIO: archive/test-file.c4gh"
 
 # Load computed metadata
+# shellcheck source=/dev/null
 . /tmp/seed_metadata.env
 
 # Seed database (upserts so reruns are safe with persistent volumes)
