@@ -303,6 +303,9 @@ global:
       s3BucketPrefix: "sync"
       s3Region: "us-east-1"
       locationBrokerCacheTTL: ""
+      maxBuckets: 1
+      maxObjects: ""
+      maxSize: ""
     remote:
       host: ""
       port: ""
