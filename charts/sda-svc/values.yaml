@@ -457,6 +457,12 @@ credentials:
     mqPassword: ""
 
   ingest:
+    sourceQueue: "ingest"
+    ## @param ingest.sourceQueue
+    ## Name of the queue the ingest service consumes ingest triggers from
+    archivedQueue: "archived"
+    ## @param ingest.archivedQueue
+    ## Name of the queue the ingest produces archived messages to
     dbUser: ""
     dbPassword: ""
     mqUser: ""

@@ -441,7 +441,10 @@ func NewConfig(app string) (*Config, error) {
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
 
-	case "finalize", "ingest", "mapper", "verify", "intercept":
+	case "ingest":
+		c.configSchemas()
+
+	case "finalize", "mapper", "verify", "intercept":
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
