@@ -302,9 +302,10 @@ global:
       s3SecretKey: ""
       s3BucketPrefix: "sync"
       s3Region: "us-east-1"
+      s3ChunkSize: ""
       locationBrokerCacheTTL: ""
       maxBuckets: 1
-      maxObjects: ""
+      maxObjects: null
       maxSize: ""
     remote:
       host: ""
