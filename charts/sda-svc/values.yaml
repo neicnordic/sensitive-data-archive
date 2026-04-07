@@ -121,6 +121,7 @@ global:
     s3SecretKey: null
     s3Port: 443
     maxBuckets: 1
+    locationBrokerCacheTTL: ""
   # The lines below is only used with POSIX backend
     volumePath: "/archive"
     nfsServer: ""
@@ -139,6 +140,7 @@ global:
     s3SecretKey: null
     s3Port: 443
     maxBuckets: 1
+    locationBrokerCacheTTL: ""
   # The lines below is only used with POSIX backend
     volumePath: "/backup"
     nfsServer: ""
@@ -300,6 +302,7 @@ global:
       s3SecretKey: ""
       s3BucketPrefix: "sync"
       s3Region: "us-east-1"
+      locationBrokerCacheTTL: ""
     remote:
       host: ""
       port: ""
