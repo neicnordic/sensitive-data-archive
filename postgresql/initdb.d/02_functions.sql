@@ -16,19 +16,19 @@ CREATE TRIGGER files_last_modified
     FOR EACH ROW
     EXECUTE PROCEDURE files_updated();
 
--- Keep files.last_event_at in sync with file_event_log inserts
-CREATE FUNCTION update_files_last_event_at()
-RETURNS TRIGGER AS $update_files_last_event_at$
+-- Keep files.last_event in sync with file_event_log inserts
+CREATE FUNCTION update_files_last_event()
+RETURNS TRIGGER AS $update_files_last_event$
 BEGIN
-    UPDATE sda.files SET last_event_at = GREATEST(last_event_at, NEW.started_at) WHERE id = NEW.file_id;
+    UPDATE sda.files SET last_event = NEW.event WHERE id = NEW.file_id;
     RETURN NEW;
 END;
-$update_files_last_event_at$ LANGUAGE plpgsql;
+$update_files_last_event$ LANGUAGE plpgsql;
 
 CREATE TRIGGER file_event_log_update_last_event
     AFTER INSERT ON sda.file_event_log
     FOR EACH ROW
-    EXECUTE PROCEDURE update_files_last_event_at();
+    EXECUTE PROCEDURE update_files_last_event();
 
 -- Function for registering files on upload
 CREATE FUNCTION sda.register_file(file_id TEXT, submission_location TEXT, submission_file_path TEXT, submission_user TEXT)

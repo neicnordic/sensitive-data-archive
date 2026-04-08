@@ -38,7 +38,7 @@ VALUES (0, now(), 'Created with version'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
        (23, now(), 'Expand files table with storage locations'),
-       (24, now(), 'Add last_event_at column to files for pagination performance');
+       (24, now(), 'Add last_event column to files to avoid join on file_event_log');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -80,8 +80,8 @@ CREATE TABLE files (
     encryption_method    TEXT,
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
-    -- Denormalized from file_event_log for pagination performance
-    last_event_at        TIMESTAMP WITH TIME ZONE,
+    -- Denormalized from file_event_log to avoid join when listing files
+    last_event           TEXT,
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
@@ -96,7 +96,7 @@ CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_
 CREATE INDEX files_submission_location_idx ON files(submission_location);
 CREATE INDEX files_archive_location_idx ON files(archive_location);
 CREATE INDEX files_backup_location_idx ON files(backup_location);
-CREATE INDEX files_user_last_event_pagination_idx ON files(submission_user, last_event_at DESC, id DESC);
+CREATE INDEX files_user_created_at_pagination_idx ON files(submission_user, created_at DESC, id DESC);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (

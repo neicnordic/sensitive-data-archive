@@ -1018,18 +1018,15 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
-	// last_event_at is denormalized on sda.files via trigger to support efficient keyset pagination ordering.
-	// A lateral join on file_event_log is still required to obtain the latest event status.
+	// last_event is denormalized on sda.files via trigger so no join on file_event_log is needed.
+	// created_at is used as the cursor column for keyset pagination.
 	const baseQuery = `
-SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(fel.event, '') as event, f.created_at, f.submission_file_size,
-	   COALESCE(f.last_event_at, f.created_at) as last_event_at
+SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size,
+	   f.created_at as cursor_at
 FROM sda.files AS f
-	LEFT JOIN LATERAL (
-		SELECT event FROM sda.file_event_log WHERE file_id = f.id ORDER BY started_at DESC LIMIT 1
-	) fel ON TRUE
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
-	AND fd.file_id IS NULL AND COALESCE(fel.event, '') != 'disabled'
+	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') != 'disabled'
 ` // ORDER/LIMIT appended later
 
 	pathPrefixLen := 1
@@ -1051,7 +1048,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	var rows *sql.Rows
 	var err error
 	if cursor == "" {
-		query := baseQuery + "ORDER BY last_event_at DESC, f.id DESC LIMIT $4;"
+		query := baseQuery + "ORDER BY f.created_at DESC, f.id DESC LIMIT $4;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
 	} else {
 		// decode cursor: base64url("<unixnano>|<fileid>")
@@ -1070,7 +1067,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		cursorTime := time.Unix(0, unixnano)
 		cursorID := parts[1]
 
-		query := baseQuery + "AND (COALESCE(f.last_event_at, f.created_at) < $4 OR (COALESCE(f.last_event_at, f.created_at) = $4 AND f.id < $5)) ORDER BY last_event_at DESC, f.id DESC LIMIT $6;"
+		query := baseQuery + "AND (f.created_at < $4 OR (f.created_at = $4 AND f.id < $5)) ORDER BY f.created_at DESC, f.id DESC LIMIT $6;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, fetchLim)
 	}
 	if err != nil {
@@ -1081,15 +1078,15 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	defer rows.Close()
 
 	// Iterate rows
-	var lastEventAt time.Time
+	var lastCreatedAt time.Time
 	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		var rowEventAt time.Time
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowEventAt)
+		var rowCreatedAt time.Time
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowCreatedAt)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1107,7 +1104,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		// signals that more data exists and is not returned to the caller.
 		if len(files) <= lim {
 			lastID = fi.FileID
-			lastEventAt = rowEventAt
+			lastCreatedAt = rowCreatedAt
 		}
 	}
 
@@ -1123,7 +1120,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	}
 	if hasMore && lastID != "" {
 		// cursor is base64url("<unixnano>|<fileid>")
-		raw := fmt.Sprintf("%d|%s", lastEventAt.UnixNano(), lastID)
+		raw := fmt.Sprintf("%d|%s", lastCreatedAt.UnixNano(), lastID)
 		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
 	}
 
