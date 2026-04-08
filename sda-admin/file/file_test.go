@@ -2,7 +2,9 @@ package file
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"testing"
 
@@ -16,11 +18,11 @@ type MockHelpers struct {
 	mock.Mock
 }
 
-// Mock the GetResponseBody function
-func (m *MockHelpers) GetResponseBody(url, token string) ([]byte, error) {
+// Mock the GetPagedResponseBody function
+func (m *MockHelpers) GetPagedResponseBody(url, token string) ([]byte, http.Header, error) {
 	args := m.Called(url, token)
 
-	return args.Get(0).([]byte), args.Error(1)
+	return args.Get(0).([]byte), args.Get(1).(http.Header), args.Error(2)
 }
 
 // Mock the PostRequest function
@@ -32,14 +34,15 @@ func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, e
 
 func TestList(t *testing.T) {
 	mockHelpers := new(MockHelpers)
-	mockHelpers.On("GetResponseBody", "http://example.com/users/testuser/files", "test-token").Return([]byte(`["file1", "file2"]`), nil)
+	mockHelpers.On("GetPagedResponseBody", "http://example.com/users/testuser/files", "test-token").
+		Return([]byte(`["file1", "file2"]`), http.Header{}, nil)
 
-	// Replace the original GetResponseBody with the mock
-	originalFunc := helpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalFunc }()
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
+	// Replace the original GetPagedResponseBody with the mock
+	originalFunc := helpers.GetPagedResponseBody
+	defer func() { helpers.GetPagedResponseBody = originalFunc }()
+	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
 
-	err := List("http://example.com", "test-token", "testuser", 0, "")
+	err := List("http://example.com", "test-token", "testuser")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -249,24 +252,41 @@ func TestRotateKey_Failure(t *testing.T) {
 	mockHelpers.AssertExpectations(t)
 }
 
-func TestListWithCursor(t *testing.T) {
+func TestListMultiPage(t *testing.T) {
 	mockHelpers := new(MockHelpers)
-	// Replace the original GetResponseBody with the mock
-	originalFunc := helpers.GetResponseBody
-	defer func() { helpers.GetResponseBody = originalFunc }()
-	helpers.GetResponseBody = mockHelpers.GetResponseBody
+	// Replace the original GetPagedResponseBody with the mock
+	originalFunc := helpers.GetPagedResponseBody
+	defer func() { helpers.GetPagedResponseBody = originalFunc }()
+	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
 
-	// Build expected URL the same way List does
-	parsedURL, _ := url.Parse("http://example.com")
-	parsedURL.Path = path.Join(parsedURL.Path, "users", "testuser", "files")
-	q := parsedURL.Query()
-	q.Set("limit", "10")
-	q.Set("cursor", "abc123")
-	parsedURL.RawQuery = q.Encode()
+	// Replace waitForContinue so the test doesn't block on stdin
+	originalWait := waitForContinue
+	defer func() { waitForContinue = originalWait }()
+	waitForContinue = func() error { return nil }
 
-	mockHelpers.On("GetResponseBody", parsedURL.String(), "test-token").Return([]byte(`["file1"]`), nil)
+	// Build expected URLs the same way List does
+	baseURL, _ := url.Parse("http://example.com")
+	baseURL.Path = path.Join(baseURL.Path, "users", "testuser", "files")
 
-	err := List("http://example.com", "test-token", "testuser", 10, "abc123")
+	page2URL := *baseURL
+	q2 := page2URL.Query()
+	q2.Set("cursor", "tok1")
+	page2URL.RawQuery = q2.Encode()
+
+	// First page returns a cursor; second page returns none.
+	mockHelpers.On("GetPagedResponseBody", baseURL.String(), "test-token").
+		Return([]byte(`["file1"]`), http.Header{"X-Next-Cursor": []string{"tok1"}}, nil)
+	mockHelpers.On("GetPagedResponseBody", page2URL.String(), "test-token").
+		Return([]byte(`["file2"]`), http.Header{}, nil)
+
+	// Feed stdin with a newline so waitForContinue fallback (non-tty) won't block.
+	r, w, _ := os.Pipe()
+	oldStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+	_ = w.Close()
+
+	err := List("http://example.com", "test-token", "testuser")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
