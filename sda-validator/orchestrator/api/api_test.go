@@ -38,7 +38,7 @@ func (ts *ValidatorAPITestSuite) SetupSuite() {
 	ts.mockBroker = &mockBroker{}
 
 	ts.httpTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch req.RequestURI {
+		switch req.URL.Path {
 		case "/users/test_user/files", "/users/different_user/files":
 			// Set the response status code
 			w.WriteHeader(http.StatusOK)
