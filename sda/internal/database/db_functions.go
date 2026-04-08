@@ -1039,9 +1039,9 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	}
 
 	// default limit
-	lim := limit
-	if lim <= 0 {
-		lim = 1000
+	lim := 1000
+	if limit > 0 {
+		lim = limit
 	}
 	// Fetch one extra row to determine whether a next page exists.
 	fetchLim := lim + 1
