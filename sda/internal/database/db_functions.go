@@ -1019,10 +1019,11 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 	// last_event is denormalized on sda.files via trigger so no join on file_event_log is needed.
-	// created_at is used as the cursor column for keyset pagination.
+	// last_modified is already maintained by the files_updated trigger (fires on every UPDATE,
+	// including the last_event update), so it is used as the cursor column for keyset pagination.
 	const baseQuery = `
 SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size,
-	   f.created_at as cursor_at
+	   f.last_modified as cursor_at
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
@@ -1048,7 +1049,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	var rows *sql.Rows
 	var err error
 	if cursor == "" {
-		query := baseQuery + "ORDER BY f.created_at DESC, f.id DESC LIMIT $4;"
+		query := baseQuery + "ORDER BY f.last_modified DESC, f.id DESC LIMIT $4;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
 	} else {
 		// decode cursor: base64url("<unixnano>|<fileid>")
@@ -1067,7 +1068,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		cursorTime := time.Unix(0, unixnano)
 		cursorID := parts[1]
 
-		query := baseQuery + "AND (f.created_at < $4 OR (f.created_at = $4 AND f.id < $5)) ORDER BY f.created_at DESC, f.id DESC LIMIT $6;"
+		query := baseQuery + "AND (f.last_modified < $4 OR (f.last_modified = $4 AND f.id < $5)) ORDER BY f.last_modified DESC, f.id DESC LIMIT $6;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, fetchLim)
 	}
 	if err != nil {
@@ -1078,15 +1079,15 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	defer rows.Close()
 
 	// Iterate rows
-	var lastCreatedAt time.Time
+	var lastModified time.Time
 	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		var rowCreatedAt time.Time
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowCreatedAt)
+		var rowLastModified time.Time
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowLastModified)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1104,7 +1105,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		// signals that more data exists and is not returned to the caller.
 		if len(files) <= lim {
 			lastID = fi.FileID
-			lastCreatedAt = rowCreatedAt
+			lastModified = rowLastModified
 		}
 	}
 
@@ -1120,7 +1121,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	}
 	if hasMore && lastID != "" {
 		// cursor is base64url("<unixnano>|<fileid>")
-		raw := fmt.Sprintf("%d|%s", lastCreatedAt.UnixNano(), lastID)
+		raw := fmt.Sprintf("%d|%s", lastModified.UnixNano(), lastID)
 		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
 	}
 
