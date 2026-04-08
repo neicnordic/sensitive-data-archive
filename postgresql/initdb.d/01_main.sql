@@ -96,7 +96,7 @@ CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_
 CREATE INDEX files_submission_location_idx ON files(submission_location);
 CREATE INDEX files_archive_location_idx ON files(archive_location);
 CREATE INDEX files_backup_location_idx ON files(backup_location);
-CREATE INDEX files_user_created_at_pagination_idx ON files(submission_user, created_at DESC, id DESC);
+CREATE INDEX files_user_last_modified_pagination_idx ON files(submission_user, last_modified DESC, id DESC);
 
 -- The user info is used by auth to be able to link users to their name and email
 CREATE TABLE userinfo (

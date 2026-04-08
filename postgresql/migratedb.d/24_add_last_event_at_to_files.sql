@@ -25,9 +25,10 @@ BEGIN
     ) AS sub
     WHERE f.id = sub.file_id;
 
-    -- Create index for keyset pagination using created_at (submission_user, created_at DESC, id DESC)
-    CREATE INDEX files_user_created_at_pagination_idx
-        ON sda.files(submission_user, created_at DESC, id DESC);
+    -- Create index for keyset pagination using last_modified (already kept up to date
+    -- by the files_updated trigger, including when last_event is updated).
+    CREATE INDEX files_user_last_modified_pagination_idx
+        ON sda.files(submission_user, last_modified DESC, id DESC);
 
     -- Create trigger to keep last_event in sync on future inserts
     CREATE FUNCTION sda.update_files_last_event()
