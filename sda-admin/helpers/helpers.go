@@ -54,6 +54,38 @@ func GetBody(url, token string) ([]byte, error) {
 	return resBody, nil
 }
 
+// GetBodyWithHeaders sends a GET request and returns the response body and headers.
+func GetBodyWithHeaders(rawURL, token string) ([]byte, http.Header, error) {
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create the request, reason: %v", err)
+	}
+
+	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Content-Type", "application/json")
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get response, reason: %v", err)
+	}
+	defer res.Body.Close()
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read response body, reason: %v", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("server returned status %d: %s", res.StatusCode, string(resBody))
+	}
+
+	return resBody, res.Header, nil
+}
+
+// necessary for mocking in unit tests
+var GetPagedResponseBody = GetBodyWithHeaders
+
 // necessary for mocking in unit tests
 var PostRequest = PostReq
 
