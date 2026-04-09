@@ -22,7 +22,7 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
-	ingestConfv2 "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
+	ingestConf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
@@ -63,9 +63,19 @@ func run() error {
 	defer cancel()
 
 	app := Ingest{}
-	ingestConf, err := config.NewConfig("ingest")
+	conf, err := config.NewConfig("ingest")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
+	}
+
+	dbConf := conf.Database
+	app.DB, err = database.NewSDAdb(dbConf)
+	if err != nil {
+		return fmt.Errorf("failed to initialize sda db due to: %v", err)
+	}
+	defer app.DB.Close()
+	if app.DB.Version < 23 {
+		return errors.New("database schema v23 is required")
 	}
 
 	app.MQ, err = rabbitmq.NewRabbitMQBroker(ctx, nil)
@@ -82,14 +92,6 @@ func run() error {
 		}
 	}()
 
-	app.DB, err = database.NewSDAdb(ingestConf.Database)
-	if err != nil {
-		return fmt.Errorf("failed to initialize sda db due to: %v", err)
-	}
-	defer app.DB.Close()
-	if app.DB.Version < 23 {
-		return errors.New("database schema v23 is required")
-	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
 		return errors.New("no C4GH private keys configured")
@@ -130,7 +132,7 @@ func run() error {
 
 	consumeErr := make(chan error, 1)
 	go func() {
-		consumeErr <- app.MQ.Subscribe(ctx, "", ingestConfv2.SourceQueue(), app.handleMessage)
+		consumeErr <- app.MQ.Subscribe(ctx, "", ingestConf.SourceQueue(), app.handleMessage)
 	}()
 
 	sigc := make(chan os.Signal, 1)
@@ -152,7 +154,7 @@ func (app *Ingest) handleMessage(ctx context.Context, message *v2.Message) ([]fu
 
 	log.Debugf("recieved message: %s", message.Key)
 
-	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", ingestConfv2.SchemaPath()), message.Body)
+	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", ingestConf.SchemaPath()), message.Body)
 	if err != nil {
 		app.publishErrorMessage(ctx, message, err)
 		return nil, err
@@ -171,7 +173,7 @@ func (app *Ingest) handleMessage(ctx context.Context, message *v2.Message) ([]fu
 	case "cancel":
 		return app.cancelFile(ctx, message.Key, message)
 	case "ingest":
-		return app.ingestFile(ctx, message.Key, ingestionTrigger.FilePath, ingestionTrigger.User, ingestConfv2.ArchivedQueue(), message)
+		return app.ingestFile(ctx, message.Key, ingestionTrigger.FilePath, ingestionTrigger.User, ingestConf.ArchivedQueue(), message)
 	default:
 		log.Warnf("unknown ingest type: %s", ingestionTrigger.Type)
 	}
@@ -409,7 +411,7 @@ func (app *Ingest) notifyArchived(fileID, filePath, user, checksum, archivedQueu
 		Body: messageBody,
 	}
 
-	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", ingestConfv2.SchemaPath()), messageBody)
+	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", ingestConf.SchemaPath()), messageBody)
 	if err != nil {
 		app.publishErrorMessage(context.TODO(), message, err)
 		return rabbitmq.TerminalError{Err: fmt.Errorf("invalid JSON schema :%w", err)}
