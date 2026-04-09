@@ -50,7 +50,7 @@ func init() {
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				port = viper.GetInt(flagName)
+				defaultConfig.port = viper.GetInt(flagName)
 			},
 		},
 		&config.Flag{

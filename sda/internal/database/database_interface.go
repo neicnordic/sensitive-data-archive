@@ -12,5 +12,5 @@ type Database interface {
 	GetMappingData(accessionID string) (*MappingData, error)
 	GetSubmissionLocation(ctx context.Context, fileID string) (string, error)
 	CancelFile(ctx context.Context, fileID, message string) error
-	IsFileInDataset(ctx context.Context, fileID string) (bool, error)
+	IsFileInDataset(ctx context.Context, fileID string) (string, error)
 }

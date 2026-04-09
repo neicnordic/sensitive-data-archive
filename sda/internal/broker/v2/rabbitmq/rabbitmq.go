@@ -3,9 +3,11 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
+	"time"
 
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
+	log "github.com/sirupsen/logrus"
 )
 
 type rmqBroker struct {
@@ -15,6 +17,19 @@ type rmqBroker struct {
 	channel            *amqp.Channel
 	publishConfirmChan <-chan amqp.Confirmation
 	config             *options
+}
+
+type TerminalError struct{ Err error }
+
+func (e TerminalError) Error() string { return e.Err.Error() }
+
+func (e TerminalError) Unwrap() error {
+	return e.Err
+}
+
+func IsTerminal(err error) bool {
+	_, ok := err.(TerminalError)
+	return ok
 }
 
 func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.Broker, error) {
@@ -65,16 +80,94 @@ func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.B
 	return rmq, nil
 }
 
-func (broker *rmqBroker) Subscribe(ctx context.Context, consumerGroup, sourceQueue string, handleFunc func(context.Context, broker.Message) ([]func(), error)) error {
-	panic("implement me")
-}
-func (broker *rmqBroker) Publish(ctx context.Context, destinationQueue string, message broker.Message) error {
-	panic("implement me")
+func (b *rmqBroker) Subscribe(ctx context.Context, consumerGroup, sourceQueue string, handleFunc func(context.Context, *broker.Message) ([]func(), error)) error {
+	messageChan, err := b.channel.Consume(
+		sourceQueue,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case message, ok := <-messageChan:
+			if !ok {
+				log.Debugf("channel closed")
+				return nil
+			}
+			msg := &broker.Message{
+				Key:     message.CorrelationId,
+				Headers: message.Headers,
+				Body:    message.Body,
+			}
+
+			callbacks, err := handleFunc(ctx, msg)
+			if err != nil {
+				if err := message.Nack(false, !IsTerminal(err)); err != nil {
+					log.Errorf("failed to nack message, reason: %v", err)
+				}
+				continue
+			}
+
+			if err := message.Ack(false); err != nil {
+				log.Errorf("failed to ack message, reason: %v", err)
+			}
+
+			for _, callback := range callbacks {
+				callback()
+			}
+
+		case <-ctx.Done():
+			if err := b.channel.Cancel("", true); err != nil {
+				log.Errorf("failed to cancel channel, reason: %v", err)
+			}
+		}
+	}
 }
 
-func (broker *rmqBroker) Close() error {
-	panic("implement me")
+func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, message broker.Message) error {
+	err := b.channel.PublishWithContext(
+		ctx,
+		"",
+		destinationQueue,
+		false,
+		false,
+		amqp.Publishing{
+			Headers:         message.Headers,
+			ContentEncoding: "UTF-8",
+			ContentType:     "application/json",
+			DeliveryMode:    amqp.Persistent,
+			CorrelationId:   message.Key,
+			Priority:        0,
+			Body:            message.Body,
+			Timestamp:       time.Now(),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to publish message, reason: %v", err)
+	}
+	return nil
 }
-func (broker *rmqBroker) Alive() bool {
-	panic("implement me")
+
+func (b *rmqBroker) Close() error {
+	if err := b.channel.Close(); err != nil {
+		fmt.Errorf("failed to close broker channel connection, reason: %v", err)
+	}
+
+	if err := b.connection.Close(); err != nil {
+		fmt.Errorf("failed to close broker connection, reason: %v", err)
+	}
+
+	return nil
+}
+
+func (b *rmqBroker) Alive() bool {
+	return b.connection != nil && !b.connection.IsClosed() && b.channel != nil
 }
