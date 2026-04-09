@@ -24,6 +24,7 @@ type options struct {
 	caCert        string
 	clientCert    string
 	clientKey     string
+	timeout       int
 }
 
 var defaultConfig *options
@@ -31,18 +32,16 @@ var defaultConfig *options
 func init() {
 	defaultConfig = new(options)
 	config.RegisterFlags(
-		// Server flags
 		&config.Flag{
 			Name: "broker.host",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "0.0.0.0", "Host address to the rabbitmq server")
+				flagSet.String(flagName, "rabbitmq", "Host address to the rabbitmq server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
 				defaultConfig.host = viper.GetString(flagName)
 			},
 		},
-
 		&config.Flag{
 			Name: "broker.port",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
@@ -50,7 +49,7 @@ func init() {
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				port = viper.GetInt(flagName)
+				defaultConfig.port = viper.GetInt(flagName)
 			},
 		},
 		&config.Flag{
@@ -76,7 +75,7 @@ func init() {
 		&config.Flag{
 			Name: "broker.vhost",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Virtual host used to connect the rabbitmq server")
+				flagSet.String(flagName, "/sda", "Virtual host used to connect the rabbitmq server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -87,7 +86,7 @@ func init() {
 		&config.Flag{
 			Name: "broker.exchange",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Exchange when publishing messages to the rabbitmq server")
+				flagSet.String(flagName, "sda", "Exchange when publishing messages to the rabbitmq server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -144,6 +143,16 @@ func init() {
 				defaultConfig.prefetchCount = viper.GetInt(flagName)
 			},
 		},
+		&config.Flag{
+			Name: "broker.timeout",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 5, "Time to wait before trying to reconnect to MQ server")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				defaultConfig.timeout = viper.GetInt(flagName)
+			},
+		},
 	)
 }
 
@@ -161,6 +170,7 @@ func (cfg *options) clone() *options {
 		caCert:        cfg.caCert,
 		clientCert:    cfg.clientCert,
 		clientKey:     cfg.clientKey,
+		timeout:       cfg.timeout,
 	}
 }
 
@@ -174,8 +184,7 @@ func (cfg *options) buildMQURI() string {
 	return fmt.Sprintf("%s://%s:%s@%s:%d%s", protocol, cfg.user, cfg.password, cfg.host, cfg.port, cfg.vhost)
 }
 
-func (cfg *options) setupTlsConfig() (*tls.Config, error) {
-	// Read system CAs
+func (cfg *options) setupTLSConfig() (*tls.Config, error) {
 	systemCAs, err := x509.SystemCertPool()
 	if err != nil {
 		log.Errorf("failed to read system CAs: %v", err)
