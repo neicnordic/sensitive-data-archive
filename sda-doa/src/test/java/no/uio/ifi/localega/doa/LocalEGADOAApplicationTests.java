@@ -387,6 +387,13 @@ class LocalEGADOAApplicationTests {
                 .correlationId(UUID.randomUUID().toString())
                 .build();
 
+        String publicKey = FileUtils.readFileToString(new File("test/crypt4gh/my.pub.pem"), Charset.defaultCharset())
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r\n", "\\n")
+                .replace("\n", "\\n")
+                .replace("\r", "\\n")
+                .replace("\t", "\\t");
         String message = String.format("{\n" +
                         "\t\"jwtToken\" : \"%s\",\n" +
                         "\t\"%s\": \"%s\",\n" +
@@ -395,7 +402,7 @@ class LocalEGADOAApplicationTests {
                 token,
                 dataset ? "datasetId" : "fileId",
                 id,
-                FileUtils.readFileToString(new File("test/crypt4gh/my.pub.pem"), Charset.defaultCharset()));
+                publicKey);
         channel.basicPublish("",
                 "exportRequests",
                 properties,
