@@ -7,9 +7,11 @@
   "additionalProperties": false,
   "required": [
     "jwtToken",
-    "datasetId",
-    "fileId",
     "publicKey"
+  ],
+  "anyOf": [
+    { "required": ["datasetId"] },
+    { "required": ["fileId"] }
   ],
   "properties": {
     "jwtToken": {
@@ -33,25 +35,14 @@
       "minLength": 20
     },
     "startCoordinate": {
-      "type": "integer",
+      "type": "string",
       "description": "The starting byte offset for the export.",
-      "minimum": 0
+      "pattern": "^[0-9]+$"
     },
     "endCoordinate": {
-      "type": "integer",
+      "type": "string",
       "description": "The ending byte offset for the export.",
-      "minimum": 0
-    }
-  },
-  "if": {
-    "properties": {
-      "endCoordinate": { "minimum": 1 }
-    }
-  },
-  "then": {
-    "description": "Ensure endCoordinate is greater than or equal to startCoordinate",
-    "properties": {
-      "endCoordinate": { "minimum": 0 }
+      "pattern": "^[0-9]+$"
     }
   }
 }
