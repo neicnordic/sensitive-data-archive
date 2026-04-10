@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -1019,11 +1018,10 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 	// last_event is denormalized on sda.files via trigger so no join on file_event_log is needed.
-	// last_modified is already maintained by the files_updated trigger (fires on every UPDATE,
-	// including the last_event update), so it is used as the cursor column for keyset pagination.
+	// submission_file_path is used as the cursor column for keyset pagination, reusing the
+	// existing files_submission_user_submission_file_path_idx index.
 	const baseQuery = `
-SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size,
-	   f.last_modified as cursor_at
+SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
 WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
@@ -1049,10 +1047,11 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	var rows *sql.Rows
 	var err error
 	if cursor == "" {
-		query := baseQuery + "ORDER BY f.last_modified DESC, f.id DESC LIMIT $4;"
+		query := baseQuery + "ORDER BY f.submission_file_path ASC, f.id ASC LIMIT $4;"
 		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
 	} else {
-		// decode cursor: base64url("<unixnano>|<fileid>")
+		// decode cursor: base64url("<fileid>|<path>") — id is first so splitting on the
+		// first '|' is safe even when the path itself contains '|' characters.
 		decoded, derr := base64.RawURLEncoding.DecodeString(cursor)
 		if derr != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, derr)
@@ -1061,15 +1060,11 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		if len(parts) != 2 {
 			return nil, "", fmt.Errorf("%w: unexpected format", ErrInvalidCursor)
 		}
-		unixnano, perr := strconv.ParseInt(parts[0], 10, 64)
-		if perr != nil {
-			return nil, "", fmt.Errorf("%w: invalid timestamp", ErrInvalidCursor)
-		}
-		cursorTime := time.Unix(0, unixnano)
-		cursorID := parts[1]
+		cursorID := parts[0]
+		cursorPath := parts[1]
 
-		query := baseQuery + "AND (f.last_modified < $4 OR (f.last_modified = $4 AND f.id < $5)) ORDER BY f.last_modified DESC, f.id DESC LIMIT $6;"
-		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorTime, cursorID, fetchLim)
+		query := baseQuery + "AND (f.submission_file_path > $4 OR (f.submission_file_path = $4 AND f.id > $5)) ORDER BY f.submission_file_path ASC, f.id ASC LIMIT $6;"
+		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorPath, cursorID, fetchLim)
 	}
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
@@ -1079,15 +1074,14 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	defer rows.Close()
 
 	// Iterate rows
-	var lastModified time.Time
+	var lastPath string
 	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
 		// Read rows into struct
 		fi := &SubmissionFileInfo{}
 		var submissionFileSize sql.NullInt64
-		var rowLastModified time.Time
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize, &rowLastModified)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1105,7 +1099,7 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		// signals that more data exists and is not returned to the caller.
 		if len(files) <= lim {
 			lastID = fi.FileID
-			lastModified = rowLastModified
+			lastPath = fi.InboxPath
 		}
 	}
 
@@ -1120,8 +1114,8 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		files = files[:lim]
 	}
 	if hasMore && lastID != "" {
-		// cursor is base64url("<unixnano>|<fileid>")
-		raw := fmt.Sprintf("%d|%s", lastModified.UnixNano(), lastID)
+		// cursor is base64url("<fileid>|<path>")
+		raw := fmt.Sprintf("%s|%s", lastID, lastPath)
 		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
 	}
 
