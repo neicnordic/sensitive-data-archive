@@ -466,6 +466,22 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 400, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
+
+	// Get with list-type=2
+	w = httptest.NewRecorder()
+	r.Method = "GET"
+	r.URL, _ = url.Parse("/dummy?list-type=2")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+
+	// Get with uploads
+	w = httptest.NewRecorder()
+	r.Method = "GET"
+	r.URL, _ = url.Parse("/dummy?uploads")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 }
 
 func (s *ProxyTests) TestMessageFormatting() {
