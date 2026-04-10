@@ -150,7 +150,7 @@ func (app *Ingest) handleMessage(ctx context.Context, message *v2.Message) ([]fu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	log.Debugf("recieved message: %s", message.Key)
+	log.Debugf("received message: %s", message.Key)
 
 	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", ingestConf.SchemaPath()), message.Body)
 	if err != nil {
@@ -177,7 +177,7 @@ func (app *Ingest) handleMessage(ctx context.Context, message *v2.Message) ([]fu
 	}
 
 	callbackFunc := func() {
-		log.Infof("message processesd and Acked: %s", message.Key)
+		log.Infof("message processed and Acked: %s", message.Key)
 	}
 
 	return []func(){callbackFunc}, nil
@@ -240,7 +240,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *v2.Me
 	}
 
 	cb := func() {
-		log.Infof("successfully canceled and cleand up file: %s", fileID)
+		log.Infof("successfully canceled and cleaned up file: %s", fileID)
 	}
 
 	return []func(){cb}, nil
@@ -343,7 +343,7 @@ func (app *Ingest) decryptHeader(fileID string, reader *bufio.Reader) ([]byte, *
 	var matchingKey *[32]byte
 
 	for _, key := range app.ArchiveKeyList {
-		header, err := tryDecrypt(key, headerBuffer)
+		header, err := app.tryDecrypt(key, headerBuffer)
 		if err == nil {
 			decryptedHeader = header
 			matchingKey = key
@@ -418,12 +418,7 @@ func (app *Ingest) notifyArchived(fileID, filePath, user, checksum, archivedQueu
 	pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err = app.MQ.Publish(pubCtx, archivedQueue, archivedMessage)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return app.MQ.Publish(pubCtx, archivedQueue, archivedMessage)
 }
 
 func (app *Ingest) publishErrorMessage(ctx context.Context, message *v2.Message, err error) {
@@ -436,7 +431,7 @@ func (app *Ingest) publishErrorMessage(ctx context.Context, message *v2.Message,
 	}
 }
 
-func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
+func (app *Ingest) tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 	log.Debugln("Try decrypting the first data block")
 	a := bytes.NewReader(buf)
 	b, err := streaming.NewCrypt4GHReader(a, *key, nil)
