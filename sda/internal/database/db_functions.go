@@ -1002,7 +1002,7 @@ func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool, limit in
 	// 2, 4, 8, 16, 32 seconds between each retry event.
 	for count := 1; count <= RetryTimes; count++ {
 		files, nextCursor, err = dbs.getUserFiles(userID, pathPrefix, allData, limit, cursor)
-		if err == nil {
+		if err == nil || errors.Is(err, ErrInvalidCursor) {
 			break
 		}
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)

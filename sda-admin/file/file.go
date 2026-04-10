@@ -3,6 +3,7 @@ package file
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -96,7 +97,8 @@ func waitForUserContinue() error {
 			return nil
 		case 3: // Ctrl+C
 			fmt.Fprintln(os.Stderr)
-			os.Exit(0)
+
+			return io.EOF
 		}
 	}
 }

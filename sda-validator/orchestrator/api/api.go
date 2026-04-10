@@ -290,8 +290,9 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 	var userFiles []*model.UserFilesResponse
 	cursor := ""
 
+	client := &http.Client{}
 	for {
-		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, userID)
+		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, url.PathEscape(userID))
 		if cursor != "" {
 			reqURL += "&cursor=" + url.QueryEscape(cursor)
 		}
@@ -306,8 +307,7 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 		req.Header.Add("Content-Type", "application/json")
 
 		// Send the request
-		client := &http.Client{}
-		res, err := client.Do(req) // #nosec G704 -- host originates from configuration, TODO verify if to sanitize userID
+		res, err := client.Do(req) // #nosec G704 -- host originates from configuration
 		if err != nil {
 			return nil, fmt.Errorf("failed to get response, reason: %v", err)
 		}

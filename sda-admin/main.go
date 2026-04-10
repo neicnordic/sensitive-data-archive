@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/c4ghkeyhash"
@@ -338,6 +339,10 @@ func handleFileListCommand() error {
 	}
 
 	if err := file.List(apiURI, token, username); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+
 		return fmt.Errorf("error: failed to get files, reason: %v", err)
 	}
 
