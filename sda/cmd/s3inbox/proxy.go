@@ -28,10 +28,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type uniqueFileID struct {
-	username, filePath string
-}
-
 // Proxy represents the toplevel object in this application
 type Proxy struct {
 	s3Conf    config.S3InboxConf
@@ -40,7 +36,6 @@ type Proxy struct {
 	messenger *broker.AMQPBroker
 	database  *database.SDAdb
 	client    *http.Client
-	fileIDs   map[uniqueFileID]string
 }
 
 // The Event struct
@@ -70,15 +65,16 @@ type ErrorResponse struct {
 
 // The different types of requests
 const (
-	MakeBucket S3RequestType = iota
-	RemoveBucket
-	List
-	Put
-	Get
-	Delete
-	AbortMultipart
-	Policy
-	Other
+	Unsupported S3RequestType = iota
+	ListObjectsV2
+	ListObjects
+	PutObject
+	UploadPart
+	CreateMultiPartUpload
+	CompleteMultiPartUpload
+	ListMultiPartUpload
+	AbortMultiPartUpload
+	GetBucketLocation
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
@@ -93,208 +89,205 @@ func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Auth
 		messenger: messenger,
 		database:  db,
 		client:    client,
-		fileIDs:   make(map[uniqueFileID]string),
 	}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
-		log.Debugln("Request not authenticated")
-		p.notAuthorized(w, r)
+		p.notAuthorized(w, err.Error())
 
 		return
 	}
 
-	switch t := p.detectRequestType(r); t {
-	case MakeBucket, RemoveBucket, Delete, Policy, Get:
-		// Not allowed
-		log.Debug("not allowed known")
-		p.notAllowedResponse(w, r)
-	case Put, List, Other, AbortMultipart:
-		// Allowed
-		log.Debug("allowed known")
-		p.allowedResponse(w, r, token)
+	s3RequestType := detectS3RequestType(r)
+	switch s3RequestType {
+	// These actions we just forward to the s3 backend after ensuring that requests have been made user specific by
+	// prepareForwardPathAndQuery
+	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUpload, AbortMultiPartUpload:
+		p.forwardRequest(s3RequestType, w, r, token)
+	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
+		p.handleUpload(s3RequestType, w, r, token)
 	default:
-		log.Debugf("Unexpected request (%v) not allowed", r)
-		p.notAllowedResponse(w, r)
+		p.notAllowedResponse(w, fmt.Sprintf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery))
 	}
 }
 
 // Report 500 to the user, log the original error
-func (p *Proxy) internalServerError(w http.ResponseWriter, r *http.Request, err string) {
+func (p *Proxy) internalServerError(w http.ResponseWriter, err string) {
 	log.Error(err)
-	msg := fmt.Sprintf("Internal server error for request (%v)", r)
-	reportError(http.StatusInternalServerError, msg, w)
+	reportError(http.StatusInternalServerError, "Internal Error", w)
 }
 
-func (p *Proxy) notAllowedResponse(w http.ResponseWriter, _ *http.Request) {
-	reportError(http.StatusForbidden, "not allowed response", w)
+func (p *Proxy) notAllowedResponse(w http.ResponseWriter, err string) {
+	log.Warn(err)
+	reportError(http.StatusForbidden, "Forbidden", w)
 }
 
-func (p *Proxy) notAuthorized(w http.ResponseWriter, _ *http.Request) {
-	reportError(http.StatusUnauthorized, "not authorized", w)
+func (p *Proxy) notAuthorized(w http.ResponseWriter, err string) {
+	log.Warn(err)
+	reportError(http.StatusUnauthorized, "Unauthorized", w)
 }
 
-func (p *Proxy) allowedResponse(w http.ResponseWriter, r *http.Request, token jwt.Token) {
-	log.Debug("prepend")
-	// Check whether token username and filepath match
-	str, err := url.ParseRequestURI(r.URL.Path)
-	if err != nil || str.Path == "" {
-		reportError(http.StatusBadRequest, err.Error(), w)
+// prepareForwardPathAndQuery prepares the new path and query to be used for the s3 request to be user specific when
+// reaching the s3 backend
+func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPath, originQuery, tokenSubject string) (string, string, error) {
+	str, err := url.ParseRequestURI(originPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	if str.Path == "" {
+		return "", "", fmt.Errorf("invalid path: %s", originPath)
 	}
 
 	path := strings.Split(str.Path, "/")
-	if strings.Contains(token.Subject(), "@") {
-		if strings.ReplaceAll(token.Subject(), "@", "_") != path[1] {
-			reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
-
-			return
-		}
-	} else if token.Subject() != path[1] {
-		reportError(http.StatusBadRequest, fmt.Sprintf("token supplied username: %s, but URL had: %s", token.Subject(), path[1]), w)
-
-		return
+	if strings.Contains(tokenSubject, "@") {
+		tokenSubject = strings.ReplaceAll(tokenSubject, "@", "_")
 	}
-	err = p.prependBucketToHostPath(r)
+
+	userNameInPath := path[1]
+	if tokenSubject != userNameInPath {
+		return "", "", fmt.Errorf("token supplied username: %s, but URL had: %s", tokenSubject, path[1])
+	}
+
+	var newPath, newQuery string
+	switch s3RequestType {
+	case ListObjects, ListObjectsV2:
+		newPath = "/" + p.s3Conf.Bucket
+		if strings.Contains(originQuery, "prefix") {
+			params := strings.Split(originQuery, "prefix=")
+			if !strings.HasPrefix(params[1], tokenSubject) {
+				newQuery = params[0] + "prefix=" + tokenSubject + "%2F" + params[1]
+			}
+		} else {
+			newQuery = originQuery + "&prefix=" + tokenSubject + "%2F"
+		}
+	default:
+		newPath = "/" + p.s3Conf.Bucket + originPath
+		newQuery = originQuery
+	}
+
+	return newPath, newQuery, nil
+}
+
+// forwardRequest forwards the request to the s3 backend after making request user specific, then forwards response to client
+func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	var err error
+	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
 	if err != nil {
 		reportError(http.StatusBadRequest, err.Error(), w)
-	}
-
-	username := token.Subject()
-	rawFilepath := strings.Replace(r.URL.Path, "/"+p.s3Conf.Bucket+"/", "", 1)
-	anonymizedFilepath := helper.AnonymizeFilepath(rawFilepath, username)
-
-	filePath, err := formatUploadFilePath(anonymizedFilepath)
-	if err != nil {
-		reportError(http.StatusNotAcceptable, err.Error(), w)
 
 		return
 	}
 
-	fileIdentifier := uniqueFileID{
-		username: username,
-		filePath: filePath,
-	}
-
-	location := p.s3Conf.Endpoint + "/" + p.s3Conf.Bucket
-	// if this is an upload request
-	if p.detectRequestType(r) == Put && p.fileIDs[fileIdentifier] == "" {
-		// register file in database
-		log.Debugf("registering file %v in the database with location: %s", r.URL.Path, location)
-		p.fileIDs[fileIdentifier], err = p.database.RegisterFile(nil, location, filePath, username)
-		log.Debugf("fileId: %v", p.fileIDs[fileIdentifier])
-		if err != nil {
-			p.internalServerError(w, r, fmt.Sprintf("failed to register file in database: %v", err))
-
-			return
-		}
-
-		// check if the file already exists, in that case send an overwrite message,
-		// so that the FEGA portal is informed that a new version of the file exists.
-		err = p.sendMessageOnOverwrite(r, p.fileIDs[fileIdentifier], rawFilepath, token)
-		if err != nil {
-			p.internalServerError(w, r, err.Error())
-
-			return
-		}
-	}
-
-	log.Debug("Forwarding to backend")
-	s3response, err := p.forwardToBackend(r)
+	s3response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, r, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(w, fmt.Sprintf("forwarding error: %v", err))
+
+		return
+	}
+
+	if err := p.forwardResponseToClient(s3response, w); err != nil {
+		p.internalServerError(w, fmt.Sprintf("failed to forward reponse to client: %v", err))
+	}
+}
+func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	username := token.Subject()
+
+	var err error
+	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
+	if err != nil {
+		reportError(http.StatusBadRequest, err.Error(), w)
+
+		return
+	}
+
+	s3FilePath := strings.Replace(r.URL.Path, "/"+p.s3Conf.Bucket+"/", "", 1)
+	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
+	if err != nil {
+		reportError(http.StatusBadRequest, err.Error(), w)
+
+		return
+	}
+
+	fileID, err := p.database.GetFileIDInInbox(r.Context(), username, filePath)
+	if err != nil {
+		p.internalServerError(w, fmt.Sprintf("failed to check/get existing file id from database: %v", err))
+
+		return
+	}
+
+	// if this is an upload request
+	if fileID == "" {
+		fileID, err = p.database.RegisterFile(nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
+		if err != nil {
+			p.internalServerError(w, fmt.Sprintf("failed to register file in database: %v", err))
+
+			return
+		}
+	}
+
+	// check if the file already exists when an upload completes, in that case send an overwrite message,
+	// so that the FEGA portal is informed that a new version
+	if s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload {
+		if err := p.sendMessageOnOverwrite(r.Context(), username, fileID, s3FilePath, filePath); err != nil {
+			p.internalServerError(w, err.Error())
+
+			return
+		}
+	}
+
+	s3Response, err := p.forwardRequestToBackend(r)
+	if err != nil {
+		p.internalServerError(w, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
 
 	// Send message to upstream and set file as uploaded in the database
 	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
-	if p.uploadFinishedSuccessfully(r, s3response) {
-		log.Debug("create message")
-		message, err := p.CreateMessageFromRequest(r, token, anonymizedFilepath)
+	if s3Response.StatusCode == 200 && (s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload) {
+		message, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
 		if err != nil {
-			p.internalServerError(w, r, err.Error())
+			p.internalServerError(w, err.Error())
 
 			return
 		}
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			p.internalServerError(w, r, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
+			p.internalServerError(w, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
 
 			return
 		}
 
-		err = p.checkAndSendMessage(p.fileIDs[fileIdentifier], jsonMessage, r)
-		if err != nil {
-			p.internalServerError(w, r, fmt.Sprintf("broker error: %v", err))
+		if err = p.checkAndSendMessage(fileID, jsonMessage); err != nil {
+			p.internalServerError(w, fmt.Sprintf("broker error: %v", err))
 
 			return
 		}
 
-		// The following block is for treating the case when the client loses connection to the server and then it reconnects to a
-		// different instance of s3inbox. For more details see #1358.
-		if p.fileIDs[fileIdentifier] == "" {
-			p.fileIDs[fileIdentifier], err = p.database.GetFileIDByUserPathAndStatus(username, filePath, "registered")
-			if err != nil {
-				p.internalServerError(w, r, fmt.Sprintf("failed to retrieve fileID from database: %v", err))
-
-				return
-			}
-
-			log.Debugf("resuming work on file with fileId: %v", p.fileIDs[fileIdentifier])
-		}
-
-		if err := p.storeObjectSizeInDB(r.Context(), rawFilepath, p.fileIDs[fileIdentifier]); err != nil {
-			log.Errorf("storeObjectSizeInDB failed because: %s", err.Error())
-			p.internalServerError(w, r, "storeObjectSizeInDB failed")
+		if err := p.storeObjectSizeInDB(r.Context(), s3FilePath, fileID); err != nil {
+			p.internalServerError(w, fmt.Sprintf("storeObjectSizeInDB failed because: %v", err))
 
 			return
 		}
 
-		log.Debugf("marking file %v as 'uploaded' in database", p.fileIDs[fileIdentifier])
-		err = p.database.UpdateFileEventLog(p.fileIDs[fileIdentifier], "uploaded", "inbox", "{}", string(jsonMessage))
-		if err != nil {
-			p.internalServerError(w, r, fmt.Sprintf("could not connect to db: %v", err))
+		if err := p.database.UpdateFileEventLog(fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
+			p.internalServerError(w, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
-
-		delete(p.fileIDs, fileIdentifier)
+		log.Infof("user: %s, uploaded file: %s, with id: %s", username, filePath, fileID)
 	}
 
-	// Writing non-200 to the response before the headers propagate the error
-	// to the s3cmd client.
-	// Writing 200 here breaks uploads though, and writing non-200 codes after
-	// the headers results in the error message always being
-	// "MD5 Sums don't match!".
-	if s3response.StatusCode < 200 || s3response.StatusCode > 299 {
-		w.WriteHeader(s3response.StatusCode)
+	if err := p.forwardResponseToClient(s3Response, w); err != nil {
+		p.internalServerError(w, fmt.Sprintf("failed to forward reponse to client: %v", err))
 	}
-
-	// Redirect answer
-	log.Debug("redirect answer")
-	for header, values := range s3response.Header {
-		for _, value := range values {
-			w.Header().Add(header, value)
-		}
-	}
-
-	_, err = io.Copy(w, s3response.Body)
-	if err != nil {
-		p.internalServerError(w, r, fmt.Sprintf("redirect error: %v", err))
-
-		return
-	}
-
-	// Read any remaining data in the connection and
-	// Close so connection can be reused.
-	_, _ = io.ReadAll(s3response.Body)
-	_ = s3response.Body.Close()
 }
 
 // Renew the connection to MQ if necessary, then send message
-func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte, r *http.Request) error {
+func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte) error {
 	var err error
 	if p.messenger == nil {
 		return errors.New("messenger is down")
@@ -315,7 +308,6 @@ func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte, r *http.R
 		}
 	}
 
-	log.Debugf("Sending message with id %s", fileID)
 	if err := p.messenger.SendMessage(fileID, p.messenger.Conf.Exchange, p.messenger.Conf.RoutingKey, jsonMessage); err != nil {
 		return fmt.Errorf("error when sending message to broker: %v", err)
 	}
@@ -323,115 +315,51 @@ func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte, r *http.R
 	return nil
 }
 
-func (p *Proxy) uploadFinishedSuccessfully(req *http.Request, response *http.Response) bool {
-	if response.StatusCode != 200 {
-		return false
-	}
-
-	switch req.Method {
-	case http.MethodPut:
-		if !strings.Contains(req.URL.String(), "partNumber") {
-			return true
-		}
-
-		return false
-	case http.MethodPost:
-		if strings.Contains(req.URL.String(), "uploadId") {
-			return true
-		}
-
-		return false
-	default:
-
-		return false
-	}
-}
-
-func (p *Proxy) forwardToBackend(r *http.Request) (*http.Response, error) {
+func (p *Proxy) forwardRequestToBackend(r *http.Request) (*http.Response, error) {
 	p.resignHeader(r)
-
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3Conf.Endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
+	nr, err := http.NewRequest(r.Method, p.s3Conf.Endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration
 	if err != nil {
-		log.Debug("error when redirecting the request")
-		log.Debug(err)
-
 		return nil, err
 	}
 	nr.Header = r.Header
 	contentLength, _ := strconv.ParseInt(r.Header.Get("content-length"), 10, 64)
 	nr.ContentLength = contentLength
 
-	return p.client.Do(nr) // #nosec G704 -- endpoint and port controlled by configuration, TODO verify if r.URL needs to be sanitized
+	return p.client.Do(nr) // #nosec G704 -- endpoint and port controlled by configuration
 }
-
-// Add bucket to host path
-func (p *Proxy) prependBucketToHostPath(r *http.Request) error {
-	bucket := p.s3Conf.Bucket
-
-	// Extract username for request's url path
-	str, err := url.ParseRequestURI(r.URL.Path)
-	if err != nil || str.Path == "" {
-		return fmt.Errorf("failed to get path from query (%v)", r.URL.Path)
+func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.ResponseWriter) error {
+	// Writing non-200 to the response before the headers propagate the error
+	// to the s3cmd client.
+	// Writing 200 here breaks uploads though, and writing non-200 codes after
+	// the headers results in the error message always being
+	// "MD5 Sums don't match!".
+	if s3response.StatusCode < 200 || s3response.StatusCode > 299 {
+		w.WriteHeader(s3response.StatusCode)
 	}
-	path := strings.Split(str.Path, "/")
-	username := path[1]
 
-	log.Debugf("incoming path: %s", r.URL.Path)
-	log.Debugf("incoming raw: %s", r.URL.RawQuery)
-
-	// Restructure request to query the users folder instead of the general bucket
-	switch r.Method {
-	case http.MethodGet:
-		switch {
-		case strings.Contains(r.URL.String(), "?uploadId"):
-			// resume multipart upload
-			r.URL.Path = "/" + bucket + r.URL.Path
-		case strings.Contains(r.URL.String(), "?uploads"):
-			// list multipart upload
-			r.URL.Path = "/" + bucket
-			r.URL.RawQuery = "uploads&prefix=" + username + "%2F"
-		case strings.Contains(r.URL.String(), "?delimiter"):
-			r.URL.Path = "/" + bucket + "/"
-			if strings.Contains(r.URL.RawQuery, "&prefix") {
-				params := strings.Split(r.URL.RawQuery, "&prefix=")
-				r.URL.RawQuery = params[0] + "&prefix=" + username + "%2F" + params[1]
-			} else {
-				r.URL.RawQuery = r.URL.RawQuery + "&prefix=" + username + "%2F"
-			}
-			log.Debug("new Raw Query: ", r.URL.RawQuery)
-		case strings.Contains(r.URL.String(), "?location") || strings.Contains(r.URL.String(), "&prefix"):
-			r.URL.Path = "/" + bucket + "/"
-			log.Debug("new Path: ", r.URL.Path)
-		default:
-			r.URL.Path = "/" + bucket + "/"
+	for header, values := range s3response.Header {
+		for _, value := range values {
+			w.Header().Add(header, value)
 		}
-	case http.MethodPost:
-		r.URL.Path = "/" + bucket + r.URL.Path
-		log.Debug("new Path: ", r.URL.Path)
-	case http.MethodPut:
-		r.URL.Path = "/" + bucket + r.URL.Path
-		log.Info("new PUT Path: ", r.URL.Path)
-	case http.MethodDelete:
-		if strings.Contains(r.URL.String(), "?uploadId") {
-			// abort multipart upload
-			r.URL.Path = "/" + bucket + r.URL.Path
-		}
-	default:
-		log.Errorf("unknown request: %s", r.Method)
-
-		return errors.New("unknown request method")
 	}
-	log.Infof("User: %v, Request type %v, Path: %v", username, r.Method, r.URL.Path)
+
+	if _, err := io.Copy(w, s3response.Body); err != nil {
+		return err
+	}
+
+	// Read any remaining data in the connection and
+	// Close so connection can be reused.
+	_, _ = io.ReadAll(s3response.Body)
+	_ = s3response.Body.Close()
 
 	return nil
 }
 
 // Function for signing the headers of the s3 requests
-// Used for for creating a signature for with the default
+// Used for creating a signature for with the default
 // credentials of the s3 service and the user's signature (authentication)
 func (p *Proxy) resignHeader(r *http.Request) *http.Request {
-	log.Debugf("Generating resigning header for %s", p.s3Conf.Endpoint)
 	r.Header.Del("X-Amz-Security-Token")
 	r.Header.Del("X-Forwarded-Port")
 	r.Header.Del("X-Forwarded-Proto")
@@ -449,94 +377,109 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 	return signer.SignV4(*r, p.s3Conf.AccessKey, p.s3Conf.SecretKey, "", p.s3Conf.Region)
 }
 
-// Not necessarily a function on the struct since it does not use any of the
-// members.
-func (p *Proxy) detectRequestType(r *http.Request) S3RequestType {
-	switch r.Method {
-	case http.MethodGet:
-		switch {
-		case strings.HasSuffix(r.URL.String(), "/"):
-			log.Debug("detect Get")
+// detectS3RequestType detects which s3 actions is being taken based upon the http method, path and query
+// Allowed actions:
+//
+// * GetBucketLocation == GET /${bucket}?location
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLocation.html
+//
+// * ListObjectsV2 == GET /${bucket}?list-type=2
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
+// For ListObjectsV2 we enforce that the prefix query argument starts with the token.Subject() such that a user can
+// only see files within a directory named by the token subject
+//
+// * ListObjects == GET /${bucket}
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html
+// Checked by makings sure there are nu query params that indicate other actions
+// Checks that any of the following are not present in the query:
+// "acl", "policy", "cors", "lifecycle", "versioning", "logging", "tagging", "encryption", "website", "notification",
+//
+//	"replication", "analytics", "metrics", "inventory", "ownershipControls", "publicAccessBlock", "object-lock"
+//
+// * PutObject == PUT /${bucket}/${object}
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
+// partNumber and uploadId query arguments not present
+// We ensure x-amz-copy-source is not present to now allow CopyObject
+//
+// * UploadPart == PUT /${bucket}/${object}
+// For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html
+// partNumber and uploadId query arguments present
+//
+// * CreateMultiPartUpload == POST /${bucket}/${object}?uploads
+// For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html
+//
+// * CompleteMultiPartUpload == POST /${bucket}/${object}?uploads
+// For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
+//
+// * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploads
+// For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
+//
+// * ListMultiPartUpload == Get /${bucket}/${object}?uploadId
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
+func detectS3RequestType(r *http.Request) S3RequestType {
+	query := r.URL.Query()
 
-			return Get
-		case strings.Contains(r.URL.String(), "?acl"):
-			log.Debug("detect Policy")
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	isBucketPath := len(pathParts) == 1 && pathParts[0] != ""
+	isObjectPath := len(pathParts) > 1 && pathParts[0] != "" && pathParts[1] != ""
 
-			return Policy
-		default:
-			log.Debug("detect List")
-
-			return List
-		}
-	case http.MethodDelete:
-		switch {
-		case strings.HasSuffix(r.URL.String(), "/"):
-			log.Debug("detect RemoveBucket")
-
-			return RemoveBucket
-		case strings.Contains(r.URL.String(), "uploadId"):
-			log.Debug("detect AbortMultipart")
-
-			return AbortMultipart
-		default:
-			// Do we allow deletion of files?
-			log.Debug("detect Delete")
-
-			return Delete
-		}
-	case http.MethodPut:
-		switch {
-		case strings.HasSuffix(r.URL.String(), "/"):
-			log.Debug("detect MakeBucket")
-
-			return MakeBucket
-		case strings.Contains(r.URL.String(), "?policy"):
-			log.Debug("detect Policy")
-
-			return Policy
-		default:
-			// Should decide if we will handle copy here or through authentication
-			log.Debug("detect Put")
-
-			return Put
-		}
+	switch {
+	// ListObjectsV2
+	case r.Method == http.MethodGet && isBucketPath && query.Get("list-type") == "2":
+		return ListObjectsV2
+	case r.Method == http.MethodGet && isObjectPath && query.Has("uploadId"):
+		return ListMultiPartUpload
+	case r.Method == http.MethodGet && isBucketPath && query.Has("location"):
+		return GetBucketLocation
+	case r.Method == http.MethodGet && isBucketPath && !query.Has("acl") && !query.Has("policy") &&
+		!query.Has("cors") && !query.Has("lifecycle") && !query.Has("versioning") &&
+		!query.Has("location") && !query.Has("logging") && !query.Has("tagging") &&
+		!query.Has("encryption") && !query.Has("website") && !query.Has("notification") &&
+		!query.Has("replication") && !query.Has("analytics") && !query.Has("metrics") &&
+		!query.Has("inventory") && !query.Has("ownershipControls") && !query.Has("publicAccessBlock") &&
+		!query.Has("object-lock"):
+		return ListObjects
+	case r.Method == http.MethodPut && isObjectPath && !query.Has("partNumber") && !query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
+		return PutObject
+	case r.Method == http.MethodPut && isObjectPath && query.Has("partNumber") && query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
+		return UploadPart
+	case r.Method == http.MethodPost && isObjectPath && query.Has("uploads"):
+		return CreateMultiPartUpload
+	case r.Method == http.MethodPost && isObjectPath && query.Has("uploadId"):
+		return CompleteMultiPartUpload
+	case r.Method == http.MethodDelete && isObjectPath && query.Has("uploadId"):
+		return AbortMultiPartUpload
 	default:
-		log.Debug("detect Other")
-
-		return Other
+		return Unsupported
 	}
 }
 
 // CreateMessageFromRequest is a function that can take a http request and
 // figure out the correct rabbitmq message to send from it.
-func (p *Proxy) CreateMessageFromRequest(r *http.Request, claims jwt.Token, anonymizedFilepath string) (Event, error) {
+func (p *Proxy) CreateMessageFromRequest(ctx context.Context, username, s3FilePath string) (Event, error) {
 	event := Event{}
 	checksum := Checksum{}
 	var err error
 
-	checksum.Value, event.Filesize, err = p.requestInfo(r.Context(), r.URL.Path)
+	checksum.Value, event.Filesize, err = p.requestInfo(ctx, s3FilePath)
 	if err != nil {
 		return event, fmt.Errorf("could not get checksum information: %s", err)
 	}
 
 	// Case for simple upload
 	event.Operation = "upload"
-	event.Filepath = anonymizedFilepath
+	event.Filepath = s3FilePath
 
-	event.Username = claims.Subject()
+	event.Username = username
 	checksum.Type = "md5"
 	event.Checksum = []any{checksum}
-	privateClaims := claims.PrivateClaims()
-	log.Info("user ", event.Username, " with pilot ", privateClaims["pilot"], " uploaded file ", event.Filepath, " with checksum ", checksum.Value, " at ", time.Now())
 
 	return event, nil
 }
 
 // RequestInfo is a function that makes a request to the S3 and collects
 // the etag and size information for the uploaded document
-func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64, error) {
-	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
-
+func (p *Proxy) requestInfo(ctx context.Context, filePath string) (string, int64, error) {
 	input := &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
 		Key:    aws.String(filePath),
@@ -544,8 +487,6 @@ func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64
 
 	result, err := p.s3Client.HeadObject(ctx, input)
 	if err != nil {
-		log.Debug(err.Error())
-
 		return "", 0, err
 	}
 
@@ -558,48 +499,43 @@ func (p *Proxy) requestInfo(ctx context.Context, fullPath string) (string, int64
 
 // checkFileExists makes a request to the S3 to check whether the file already
 // is uploaded. Returns a bool indicating whether the file was found.
-func (p *Proxy) checkFileExists(ctx context.Context, fullPath string) (bool, error) {
-	filePath := strings.Replace(fullPath, "/"+p.s3Conf.Bucket+"/", "", 1)
-
+func (p *Proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, error) {
 	result, err := p.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
-		Key:    aws.String(filePath),
+		Key:    aws.String(s3FilePath),
 	})
 
 	if err != nil && strings.Contains(err.Error(), "StatusCode: 404") {
-		log.Debugf("s3 could not find file %s: %s", fullPath, err.Error())
-
 		return false, nil
 	}
 
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(r *http.Request, fileID, rawFilepath string, token jwt.Token) error {
-	exist, err := p.checkFileExists(r.Context(), r.URL.Path)
+func (p *Proxy) sendMessageOnOverwrite(ctx context.Context, username, fileID, s3FilePath, filepath string) error {
+	exist, err := p.checkFileExists(ctx, s3FilePath)
 	if err != nil {
 		return err
 	}
-	if exist {
-		username := token.Subject()
-		msg := schema.InboxRemove{
-			User:      username,
-			FilePath:  rawFilepath,
-			Operation: "remove",
-		}
+	if !exist {
+		return nil
+	}
 
-		privateClaims := token.PrivateClaims()
-		log.Info("user ", msg.User, " with pilot ", privateClaims["pilot"], " will overwrite file ", msg.FilePath, " at ", time.Now())
+	log.Infof("user: %s, reuploaded file: %s, with id: %s", username, filepath, fileID)
+	msg := schema.InboxRemove{
+		User:      username,
+		FilePath:  s3FilePath,
+		Operation: "remove",
+	}
 
-		jsonMessage, err := json.Marshal(msg)
-		if err != nil {
-			return err
-		}
+	jsonMessage, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
 
-		err = p.checkAndSendMessage(fileID, jsonMessage, r)
-		if err != nil {
-			return err
-		}
+	err = p.checkAndSendMessage(fileID, jsonMessage)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -651,10 +587,10 @@ func reportError(errorCode int, message string, w http.ResponseWriter) {
 	}
 }
 
-func (p *Proxy) storeObjectSizeInDB(ctx context.Context, path, fileID string) error {
+func (p *Proxy) storeObjectSizeInDB(ctx context.Context, s3FilePath, fileID string) error {
 	o, err := p.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(p.s3Conf.Bucket),
-		Key:    aws.String(path),
+		Key:    aws.String(s3FilePath),
 	})
 	if err != nil {
 		return err

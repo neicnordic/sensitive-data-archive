@@ -134,6 +134,9 @@ func (s *ProxyTests) SetupTest() {
 	if err != nil {
 		s.T().FailNow()
 	}
+	if err := s.token.Set("sub", "dummy"); err != nil {
+		s.T().FailNow()
+	}
 
 	s3cfg, err := s3config.LoadDefaultConfig(context.TODO(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.s3Conf.AccessKey, s.s3Conf.SecretKey, "")))
 	if err != nil {
@@ -268,14 +271,6 @@ func (s *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(s.T(), 403, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
-	// Normal get is dissallowed
-	w = httptest.NewRecorder()
-	r.Method = "GET"
-	r.URL, _ = url.Parse("/asdf/")
-	proxy.ServeHTTP(w, r)
-	assert.Equal(s.T(), 403, w.Result().StatusCode)
-	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
-
 	// Put policy is disallowed
 	w = httptest.NewRecorder()
 	r.Method = "PUT"
@@ -317,8 +312,8 @@ func (s *ProxyTests) TestServeHTTPS3Unresponsive() {
 
 	// Just try to list the files
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/dummy/asdf")
-	proxy.allowedResponse(w, r, s.token)
+	r.URL, _ = url.Parse("/dummy")
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
 
@@ -336,7 +331,7 @@ func (s *ProxyTests) TestServeHTTP_MQConnectionClosed() {
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(s.T(), proxy.messenger.Connection.IsClosed())
 }
@@ -355,7 +350,7 @@ func (s *ProxyTests) TestServeHTTP_MQChannelClosed() {
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode) // nolint:bodyclose
 	assert.False(s.T(), proxy.messenger.Channel.IsClosed())
 }
@@ -375,7 +370,7 @@ func (s *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 500, w.Result().StatusCode) // nolint:bodyclose
 }
 
@@ -387,10 +382,10 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
 
 	// List files works
-	r, err := http.NewRequest("GET", "/dummy/file", nil)
+	r, err := http.NewRequest("GET", "/dummy", nil)
 	assert.NoError(s.T(), err)
 	w := httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore()) // Testing the pinged interface
@@ -401,15 +396,15 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.NoError(s.T(), err)
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\";", "Content-Length": "5"}
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
 	// Put with partnumber sends no message
 	w = httptest.NewRecorder()
 	r.Method = "PUT"
-	r.URL, _ = url.Parse("/dummy/file?partNumber=5")
-	proxy.allowedResponse(w, r, s.token)
+	r.URL, _ = url.Parse("/dummy/file?partNumber=5&uploadId=1")
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
@@ -417,15 +412,7 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	r.Method = "POST"
 	r.URL, _ = url.Parse("/dummy/file?uploadId=5")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
-	assert.Equal(s.T(), 200, w.Result().StatusCode)
-	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
-
-	// Post without uploadId sends no message
-	r.Method = "POST"
-	r.URL, _ = url.Parse("/dummy/file")
-	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
@@ -433,7 +420,7 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	r.Method = "DELETE"
 	r.URL, _ = url.Parse("/dummy/asdf?uploadId=123")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
@@ -441,33 +428,33 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	// that trigger different code paths in the code.
 	// Delimiter alone
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/dummy/file?delimiter=puppe")
+	r.URL, _ = url.Parse("/dummy?delimiter=puppe")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
 	// Show multiparts uploads
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/dummy/file?uploads")
+	r.URL, _ = url.Parse("/dummy/file?uploadId=1")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
 	// Delimiter alone together with prefix
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/dummy/file?delimiter=puppe&prefix=asdf")
+	r.URL, _ = url.Parse("/dummy?delimiter=puppe&prefix=asdf")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
 	// Location parameter
 	r.Method = "GET"
-	r.URL, _ = url.Parse("/dummy/file?location=fnuffe")
+	r.URL, _ = url.Parse("/dummy?location=fnuffe")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
@@ -476,8 +463,8 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	r.Method = "PUT"
 	r.URL, _ = url.Parse("/dummy/fi|le")
 	w = httptest.NewRecorder()
-	proxy.allowedResponse(w, r, s.token)
-	assert.Equal(s.T(), 406, w.Result().StatusCode)
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 400, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 }
 
@@ -496,7 +483,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "1234"}
-	msg, err := proxy.CreateMessageFromRequest(r, claims, "new_file.txt")
+	msg, err := proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 
@@ -512,7 +499,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r, jwt.New(), "new_file.txt")
+	msg, err = proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 	assert.Equal(s.T(), "upload", msg.Operation)
@@ -537,7 +524,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	w := httptest.NewRecorder()
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/elixirid/db-test-file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/elixirid/file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>5</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "5"}
-	proxy.allowedResponse(w, r, s.token)
+	proxy.ServeHTTP(w, r)
 	res := w.Result()
 	defer res.Body.Close()
 	assert.Equal(s.T(), 200, res.StatusCode)
