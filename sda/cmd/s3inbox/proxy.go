@@ -619,5 +619,9 @@ func (p *Proxy) storeObjectSizeInDB(ctx context.Context, s3FilePath, fileID stri
 		return err
 	}
 
+	if o.ContentLength == nil {
+		return errors.New("s3 content length not available")
+	}
+
 	return p.database.SetSubmissionFileSize(fileID, *o.ContentLength)
 }
