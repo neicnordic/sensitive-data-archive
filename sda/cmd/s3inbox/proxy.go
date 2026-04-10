@@ -72,7 +72,8 @@ const (
 	UploadPart
 	CreateMultiPartUpload
 	CompleteMultiPartUpload
-	ListMultiPartUpload
+	ListMultiPartUploads
+	ListParts
 	AbortMultiPartUpload
 	GetBucketLocation
 )
@@ -104,7 +105,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch s3RequestType {
 	// These actions we just forward to the s3 backend after ensuring that requests have been made user specific by
 	// prepareForwardPathAndQuery
-	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUpload, AbortMultiPartUpload:
+	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUploads, AbortMultiPartUpload, ListParts:
 		p.forwardRequest(s3RequestType, w, r, token)
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
 		p.handleUpload(s3RequestType, w, r, token)
@@ -153,7 +154,7 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 
 	var newPath, newQuery string
 	switch s3RequestType {
-	case ListObjects, ListObjectsV2, ListMultiPartUpload:
+	case ListObjects, ListObjectsV2, ListMultiPartUploads:
 		newPath = "/" + p.s3Conf.Bucket
 
 		queryValues, err := url.ParseQuery(originQuery)
@@ -401,7 +402,7 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 //
 // * ListObjects == GET /${bucket}
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html
-// Checked by makings sure there are nu query params that indicate other actions
+// Checked by making sure there are no query params that indicate other actions
 // Checks that any of the following are not present in the query:
 // "acl", "policy", "cors", "lifecycle", "versioning", "logging", "tagging", "encryption", "website", "notification",
 //
@@ -410,7 +411,7 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * PutObject == PUT /${bucket}/${object}
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
 // partNumber and uploadId query arguments not present
-// We ensure x-amz-copy-source is not present to now allow CopyObject
+// We ensure x-amz-copy-source is not present to not allow CopyObject
 //
 // * UploadPart == PUT /${bucket}/${object}
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html
@@ -425,8 +426,11 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
 //
-// * ListMultiPartUpload == Get /${bucket}/${object}?uploads
+// * ListParts == Get /${bucket}/${object}?uploadId
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
+//
+// * ListMultiPartUploads == Get /${bucket}?uploads
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html
 func detectS3RequestType(r *http.Request) S3RequestType {
 	query := r.URL.Query()
 
@@ -438,8 +442,10 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 	// ListObjectsV2
 	case r.Method == http.MethodGet && isBucketPath && query.Get("list-type") == "2":
 		return ListObjectsV2
-	case r.Method == http.MethodGet && isObjectPath && query.Has("uploads"):
-		return ListMultiPartUpload
+	case r.Method == http.MethodGet && isBucketPath && query.Has("uploads"):
+		return ListMultiPartUploads
+	case r.Method == http.MethodGet && isObjectPath && query.Has("uploadId"):
+		return ListParts
 	case r.Method == http.MethodGet && isBucketPath && query.Has("location"):
 		return GetBucketLocation
 	case r.Method == http.MethodGet && isBucketPath && !query.Has("acl") && !query.Has("policy") &&
@@ -448,7 +454,7 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		!query.Has("encryption") && !query.Has("website") && !query.Has("notification") &&
 		!query.Has("replication") && !query.Has("analytics") && !query.Has("metrics") &&
 		!query.Has("inventory") && !query.Has("ownershipControls") && !query.Has("publicAccessBlock") &&
-		!query.Has("object-lock") && !query.Has("uploads"):
+		!query.Has("object-lock") && !query.Has("uploads") && !query.Has("uploadId"):
 		return ListObjects
 	case r.Method == http.MethodPut && isObjectPath && !query.Has("partNumber") && !query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
 		return PutObject
