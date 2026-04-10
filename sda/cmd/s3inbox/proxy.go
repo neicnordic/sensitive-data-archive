@@ -157,6 +157,8 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 
 	var newPath, newQuery string
 	switch s3RequestType {
+	case GetBucketLocation:
+		newPath = "/" + p.s3Conf.Bucket
 	case ListObjects, ListObjectsV2, ListMultiPartUploads:
 		newPath = "/" + p.s3Conf.Bucket
 
