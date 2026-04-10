@@ -155,14 +155,24 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 	switch s3RequestType {
 	case ListObjects, ListObjectsV2:
 		newPath = "/" + p.s3Conf.Bucket
-		if strings.Contains(originQuery, "prefix") {
-			params := strings.Split(originQuery, "prefix=")
-			if !strings.HasPrefix(params[1], tokenSubject) {
-				newQuery = params[0] + "prefix=" + tokenSubject + "%2F" + params[1]
-			}
-		} else {
-			newQuery = originQuery + "&prefix=" + tokenSubject + "%2F"
+
+		queryValues, err := url.ParseQuery(originQuery)
+		if err != nil {
+			return "", "", err
 		}
+		requiredPrefix := tokenSubject + "/"
+		existingPrefix := queryValues.Get("prefix")
+		switch {
+		case existingPrefix == "":
+			queryValues.Set("prefix", requiredPrefix)
+		case existingPrefix == tokenSubject:
+			queryValues.Set("prefix", requiredPrefix)
+		case strings.HasPrefix(existingPrefix, requiredPrefix):
+			queryValues.Set("prefix", existingPrefix)
+		default:
+			queryValues.Set("prefix", requiredPrefix+existingPrefix)
+		}
+		newQuery = queryValues.Encode()
 	default:
 		newPath = "/" + p.s3Conf.Bucket + originPath
 		newQuery = originQuery
@@ -329,6 +339,12 @@ func (p *Proxy) forwardRequestToBackend(r *http.Request) (*http.Response, error)
 	return p.client.Do(nr) // #nosec G704 -- endpoint and port controlled by configuration
 }
 func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.ResponseWriter) error {
+	for header, values := range s3response.Header {
+		for _, value := range values {
+			w.Header().Add(header, value)
+		}
+	}
+
 	// Writing non-200 to the response before the headers propagate the error
 	// to the s3cmd client.
 	// Writing 200 here breaks uploads though, and writing non-200 codes after
@@ -336,12 +352,6 @@ func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.Respon
 	// "MD5 Sums don't match!".
 	if s3response.StatusCode < 200 || s3response.StatusCode > 299 {
 		w.WriteHeader(s3response.StatusCode)
-	}
-
-	for header, values := range s3response.Header {
-		for _, value := range values {
-			w.Header().Add(header, value)
-		}
 	}
 
 	if _, err := io.Copy(w, s3response.Body); err != nil {
@@ -408,10 +418,10 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * CreateMultiPartUpload == POST /${bucket}/${object}?uploads
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html
 //
-// * CompleteMultiPartUpload == POST /${bucket}/${object}?uploads
+// * CompleteMultiPartUpload == POST /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
 //
-// * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploads
+// * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
 //
 // * ListMultiPartUpload == Get /${bucket}/${object}?uploadId
