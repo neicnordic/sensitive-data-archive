@@ -153,7 +153,7 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 
 	var newPath, newQuery string
 	switch s3RequestType {
-	case ListObjects, ListObjectsV2:
+	case ListObjects, ListObjectsV2, ListMultiPartUpload:
 		newPath = "/" + p.s3Conf.Bucket
 
 		queryValues, err := url.ParseQuery(originQuery)
@@ -199,7 +199,7 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 	}
 
 	if err := p.forwardResponseToClient(s3response, w); err != nil {
-		p.internalServerError(w, fmt.Sprintf("failed to forward reponse to client: %v", err))
+		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
 }
 func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
@@ -292,7 +292,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, fmt.Sprintf("failed to forward reponse to client: %v", err))
+		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
 }
 
@@ -354,14 +354,15 @@ func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.Respon
 		w.WriteHeader(s3response.StatusCode)
 	}
 
+	defer func() {
+		// Read any remaining data in the connection and
+		// Close so connection can be reused.
+		_, _ = io.ReadAll(s3response.Body)
+		_ = s3response.Body.Close()
+	}()
 	if _, err := io.Copy(w, s3response.Body); err != nil {
 		return err
 	}
-
-	// Read any remaining data in the connection and
-	// Close so connection can be reused.
-	_, _ = io.ReadAll(s3response.Body)
-	_ = s3response.Body.Close()
 
 	return nil
 }
@@ -424,7 +425,7 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
 //
-// * ListMultiPartUpload == Get /${bucket}/${object}?uploadId
+// * ListMultiPartUpload == Get /${bucket}/${object}?uploads
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
 func detectS3RequestType(r *http.Request) S3RequestType {
 	query := r.URL.Query()
@@ -437,7 +438,7 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 	// ListObjectsV2
 	case r.Method == http.MethodGet && isBucketPath && query.Get("list-type") == "2":
 		return ListObjectsV2
-	case r.Method == http.MethodGet && isObjectPath && query.Has("uploadId"):
+	case r.Method == http.MethodGet && isObjectPath && query.Has("uploads"):
 		return ListMultiPartUpload
 	case r.Method == http.MethodGet && isBucketPath && query.Has("location"):
 		return GetBucketLocation
@@ -447,7 +448,7 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		!query.Has("encryption") && !query.Has("website") && !query.Has("notification") &&
 		!query.Has("replication") && !query.Has("analytics") && !query.Has("metrics") &&
 		!query.Has("inventory") && !query.Has("ownershipControls") && !query.Has("publicAccessBlock") &&
-		!query.Has("object-lock"):
+		!query.Has("object-lock") && !query.Has("uploads"):
 		return ListObjects
 	case r.Method == http.MethodPut && isObjectPath && !query.Has("partNumber") && !query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
 		return PutObject
