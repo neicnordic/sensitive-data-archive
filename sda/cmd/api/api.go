@@ -370,7 +370,9 @@ func getFiles(c *gin.Context) {
 		}
 		const maxLimit = 10000
 		if li > maxLimit {
-			li = maxLimit
+			c.JSON(400, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxLimit))
+
+			return
 		}
 		limit = li
 	}
@@ -1029,7 +1031,9 @@ func listUserFiles(c *gin.Context) {
 		}
 		const maxLimit = 10000
 		if li > maxLimit {
-			li = maxLimit
+			c.AbortWithStatusJSON(400, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxLimit))
+
+			return
 		}
 		limit = li
 	}
