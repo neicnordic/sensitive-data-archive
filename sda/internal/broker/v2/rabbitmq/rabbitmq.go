@@ -19,16 +19,16 @@ type rmqBroker struct {
 	config             *options
 }
 
-type TerminalError struct{ Err error }
+type RequeueError struct{ Err error }
 
-func (e TerminalError) Error() string { return e.Err.Error() }
+func (e RequeueError) Error() string { return e.Err.Error() }
 
-func (e TerminalError) Unwrap() error {
+func (e RequeueError) Unwrap() error {
 	return e.Err
 }
 
-func IsTerminal(err error) bool {
-	_, ok := err.(TerminalError)
+func RequeueMessage(err error) bool {
+	_, ok := err.(RequeueError)
 	return ok
 }
 
@@ -110,7 +110,7 @@ func (b *rmqBroker) Subscribe(ctx context.Context, consumerGroup, sourceQueue st
 
 			callbacks, err := handleFunc(ctx, msg)
 			if err != nil {
-				if err := message.Nack(false, !IsTerminal(err)); err != nil {
+				if err := message.Nack(false, RequeueMessage(err)); err != nil {
 					log.Errorf("failed to nack message, reason: %v", err)
 				}
 				continue

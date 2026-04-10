@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -137,7 +136,7 @@ func run() error {
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	select {
 	case <-sigc:
-		slog.Info("Shutting down")
+		log.Info("shutting down")
 		cancel()
 		<-consumeErr
 	case err := <-consumeErr:
@@ -259,7 +258,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(filePath, user))
 	if err != nil {
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
-			return nil, rabbitmq.TerminalError{Err: err}
+			return nil, err
 		}
 		return nil, err
 	}
@@ -309,7 +308,7 @@ func (app *Ingest) processAndUpload(ctx context.Context, fileID string, source i
 	bufReader := bufio.NewReaderSize(teedReader, headerPeekSize)
 	header, privateKey, err := app.decryptHeader(fileID, bufReader)
 	if err != nil {
-		return IngestSummary{}, rabbitmq.TerminalError{Err: fmt.Errorf("failed to decrypt file: %s", fileID)}
+		return IngestSummary{}, err
 	}
 
 	publicKey := keys.DerivePublicKey(*privateKey)
@@ -339,23 +338,17 @@ func (app *Ingest) decryptHeader(fileID string, reader *bufio.Reader) ([]byte, *
 		return nil, nil, fmt.Errorf("failed to peek header: %w", err)
 	}
 
-	var decryptedHeader []byte
-	var matchingKey *[32]byte
-
 	for _, key := range app.ArchiveKeyList {
 		header, err := app.tryDecrypt(key, headerBuffer)
 		if err == nil {
-			decryptedHeader = header
-			matchingKey = key
-			break
+			if _, discardErr := reader.Discard(len(header)); discardErr != nil {
+				return nil, nil, fmt.Errorf("failed to discard header from stream: %w", discardErr)
+			}
+			return header, key, nil
 		}
 	}
 
-	if matchingKey == nil {
-		return nil, nil, fmt.Errorf("all keys failed to decrypt file: %s", fileID)
-	}
-
-	return decryptedHeader, matchingKey, nil
+	return nil, nil, fmt.Errorf("all keys failed to decrypt file: %s, reason: %v", fileID, err)
 }
 
 func (app *Ingest) finalizeDatabaseRecords(ctx context.Context, fileID string, summary IngestSummary, message *v2.Message) error {
@@ -412,7 +405,7 @@ func (app *Ingest) notifyArchived(fileID, filePath, user, checksum, archivedQueu
 	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", ingestConf.SchemaPath()), messageBody)
 	if err != nil {
 		app.publishErrorMessage(context.TODO(), message, err)
-		return rabbitmq.TerminalError{Err: fmt.Errorf("invalid JSON schema :%w", err)}
+		return err
 	}
 
 	pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -436,22 +429,16 @@ func (app *Ingest) tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 	a := bytes.NewReader(buf)
 	b, err := streaming.NewCrypt4GHReader(a, *key, nil)
 	if err != nil {
-		log.Error(err)
-
 		return nil, err
 	}
 	_, err = b.ReadByte()
 	if err != nil {
-		log.Error(err)
-
 		return nil, err
 	}
 
 	f := bytes.NewReader(buf)
 	header, err := headers.ReadHeader(f)
 	if err != nil {
-		log.Error(err)
-
 		return nil, err
 	}
 
