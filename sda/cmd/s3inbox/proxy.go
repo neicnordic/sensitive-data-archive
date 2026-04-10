@@ -192,16 +192,18 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 		return
 	}
 
-	s3response, err := p.forwardRequestToBackend(r)
+	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
 		p.internalServerError(w, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
 
-	if err := p.forwardResponseToClient(s3response, w); err != nil {
+	if err := p.forwardResponseToClient(s3Response, w); err != nil {
 		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
+
+	_ = s3Response.Body.Close()
 }
 func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
@@ -295,6 +297,8 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
 		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
+
+	_ = s3Response.Body.Close()
 }
 
 // Renew the connection to MQ if necessary, then send message
@@ -339,8 +343,8 @@ func (p *Proxy) forwardRequestToBackend(r *http.Request) (*http.Response, error)
 
 	return p.client.Do(nr) // #nosec G704 -- endpoint and port controlled by configuration
 }
-func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.ResponseWriter) error {
-	for header, values := range s3response.Header {
+func (p *Proxy) forwardResponseToClient(s3Response *http.Response, w http.ResponseWriter) error {
+	for header, values := range s3Response.Header {
 		for _, value := range values {
 			w.Header().Add(header, value)
 		}
@@ -351,19 +355,16 @@ func (p *Proxy) forwardResponseToClient(s3response *http.Response, w http.Respon
 	// Writing 200 here breaks uploads though, and writing non-200 codes after
 	// the headers results in the error message always being
 	// "MD5 Sums don't match!".
-	if s3response.StatusCode < 200 || s3response.StatusCode > 299 {
-		w.WriteHeader(s3response.StatusCode)
+	if s3Response.StatusCode < 200 || s3Response.StatusCode > 299 {
+		w.WriteHeader(s3Response.StatusCode)
 	}
 
-	defer func() {
-		// Read any remaining data in the connection and
-		// Close so connection can be reused.
-		_, _ = io.ReadAll(s3response.Body)
-		_ = s3response.Body.Close()
-	}()
-	if _, err := io.Copy(w, s3response.Body); err != nil {
+	if _, err := io.Copy(w, s3Response.Body); err != nil {
 		return err
 	}
+
+	// Read any remaining data in the connection
+	_, _ = io.ReadAll(s3Response.Body)
 
 	return nil
 }
