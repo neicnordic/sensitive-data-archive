@@ -68,17 +68,7 @@ func run() error {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
 
-	dbConf := conf.Database
-	app.DB, err = database.NewSDAdb(dbConf)
-	if err != nil {
-		return fmt.Errorf("failed to initialize sda db due to: %v", err)
-	}
-	defer app.DB.Close()
-	if app.DB.Version < 23 {
-		return errors.New("database schema v23 is required")
-	}
-
-	app.MQ, err = rabbitmq.NewRabbitMQBroker(ctx, nil)
+	app.MQ, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
@@ -92,6 +82,14 @@ func run() error {
 		}
 	}()
 
+	app.DB, err = database.NewSDAdb(conf.Database)
+	if err != nil {
+		return fmt.Errorf("failed to initialize sda db due to: %v", err)
+	}
+	defer app.DB.Close()
+	if app.DB.Version < 23 {
+		return errors.New("database schema v23 is required")
+	}
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
 		return errors.New("no C4GH private keys configured")
