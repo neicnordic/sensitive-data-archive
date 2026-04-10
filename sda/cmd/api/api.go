@@ -1019,7 +1019,7 @@ func listUserFiles(c *gin.Context) {
 	log.Debugln(username)
 
 	// parse optional pagination params
-	limit := 0
+	limit := 1000
 	if l := c.DefaultQuery("limit", "0"); l != "0" {
 		li, err := strconv.Atoi(l)
 		if err != nil || li < 1 {

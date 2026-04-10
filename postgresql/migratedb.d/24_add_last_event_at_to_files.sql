@@ -13,7 +13,7 @@ BEGIN
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
     -- Add denormalized column storing the latest event name (e.g. 'registered', 'uploaded')
-    ALTER TABLE sda.files ADD COLUMN last_event TEXT;
+    ALTER TABLE sda.files ADD COLUMN last_event TEXT REFERENCES file_events(title);
 
     -- Backfill from existing event log data
     UPDATE sda.files AS f
