@@ -81,7 +81,7 @@ CREATE TABLE files (
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
     -- Denormalized from file_event_log to avoid join when listing files
-    last_event           TEXT,
+    last_event           TEXT REFERENCES file_events(title),
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
