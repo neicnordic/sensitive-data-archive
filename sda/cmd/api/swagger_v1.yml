@@ -275,6 +275,21 @@ paths:
   /files:
     get:
       description: List all files belonging to the calling user that is not part of a dataset.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 1000
+            maximum: 10000
+          required: false
+          description: Maximum number of files to return per page.
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          required: false
+          description: Opaque pagination cursor from the X-Next-Cursor response header of the previous page.
       responses:
         "200":
           content:
@@ -284,8 +299,13 @@ paths:
                 items:
                   $ref: "#/components/schemas/FileInfo"
           description: Successful operation
+          headers:
+            X-Next-Cursor:
+              schema:
+                type: string
+              description: Opaque cursor to pass as ?cursor= to retrieve the next page. Absent when there are no more pages.
         "400":
-          description: Bad username
+          description: Invalid limit or cursor parameter
         "401":
           description: Authentication failure
         "500":
@@ -339,6 +359,20 @@ paths:
             type: string
           required: false
           description: The inbox path prefix to filter entries on.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 1000
+            maximum: 10000
+          required: false
+          description: Maximum number of files to return per page.
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          required: false
+          description: Opaque pagination cursor from the X-Next-Cursor response header of the previous page.
       responses:
         "200":
           content:
@@ -348,8 +382,13 @@ paths:
                 items:
                   $ref: "#/components/schemas/FileInfo"
           description: Successful operation
+          headers:
+            X-Next-Cursor:
+              schema:
+                type: string
+              description: Opaque cursor to pass as ?cursor= to retrieve the next page. Absent when there are no more pages.
         "400":
-          description: Bad username
+          description: Invalid limit or cursor parameter
         "401":
           description: Authentication failure
         "500":
