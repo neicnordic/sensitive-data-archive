@@ -142,11 +142,14 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 		return "", "", fmt.Errorf("invalid path: %s", originPath)
 	}
 
-	path := strings.Split(str.Path, "/")
 	if strings.Contains(tokenSubject, "@") {
 		tokenSubject = strings.ReplaceAll(tokenSubject, "@", "_")
 	}
 
+	path := strings.Split(str.Path, "/")
+	if len(path) < 2 || path[1] == "" {
+		return "", "", fmt.Errorf("invalid path: %s", originPath)
+	}
 	userNameInPath := path[1]
 	if tokenSubject != userNameInPath {
 		return "", "", fmt.Errorf("token supplied username: %s, but URL had: %s", tokenSubject, path[1])
