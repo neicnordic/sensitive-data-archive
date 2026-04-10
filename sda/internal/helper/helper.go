@@ -94,6 +94,7 @@ func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.Token, error) {
 	if err := token.Set("sub", "dummy"); err != nil {
 		return nil, err
 	}
+
 	return token, nil
 }
 

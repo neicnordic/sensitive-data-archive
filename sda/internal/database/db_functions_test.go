@@ -1913,7 +1913,7 @@ func (suite *DatabaseTests) TestGetFileIDInInbox() {
 	fileID, err := db.RegisterFile(nil, "/inbox", "TestGetFileIDInInbox.c4gh", "testuser")
 	assert.NoError(suite.T(), err, "failed to register file in database")
 
-	fileIdFromDB, err := db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
+	fileIDFromDB, err := db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), fileID, fileIdFromDB)
+	assert.Equal(suite.T(), fileID, fileIDFromDB)
 }

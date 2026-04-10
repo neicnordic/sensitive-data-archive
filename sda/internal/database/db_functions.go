@@ -119,7 +119,7 @@ WHERE id_and_event.event = $3;`
 }
 
 // GetFileIDInInbox gets the file id of a file which last known event is either 'registered', 'uploaded', or 'disabled'
-// as that means that ingestion has not been triggered and users is allowed continue uploading or reupload the file to the inbox
+// as that means that ingestion has not been triggered and users are allowed continue uploading or reupload the file to the inbox
 // if no row is found does not return sql.ErrNoRows, just empty string in id return field
 func (dbs *SDAdb) GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
@@ -143,6 +143,7 @@ WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled');`
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
+
 		return "", err
 	}
 
