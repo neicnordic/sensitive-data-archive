@@ -1,0 +1,70 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-rotatekey
+  labels:
+    role: rotatekey
+    app: {{ template "sda.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ template "sda.fullname" . }}-rotatekey
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.rotatekey.replicaCount | default 1 }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-rotatekey
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.name" . }}-rotatekey
+        role: rotatekey
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/rotatekey-secrets.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+        {{- end }}
+        {{- if .Values.rotatekey.annotations }}
+{{- toYaml .Values.rotatekey.annotations | nindent 8 -}}
+        {{- end }}
+    spec:
+      {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        runAsUser: 65534
+        group: 65534
+        {{- if .Values.global.extraSecurityContext }}
+{{- toYaml .Values.global.extraSecurityContext | nindent 8 -}}
+        {{- end }}
+      containers:
+      - name: rotatekey
+        image: "{{ .Values.rotatekey.image.repository }}:{{ .Values.rotatekey.image.tag }}"
+        imagePullPolicy: {{ .Values.rotatekey.image.pullPolicy | default "IfNotPresent" }}
+        args: ["-config", "{{ template "configPath" . }}/config.yaml"]
+        env:
+        - name: CONFIGFILE
+          value: {{ template "confFile" . }}
+        resources:
+{{ toYaml .Values.rotatekey.resources | indent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: {{ template "configPath" . }}
+        - name: c4gh
+          mountPath: {{ template "c4ghPath" . }}
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 0440
+          secretName: {{ template "sda.fullname" . }}-rotatekey
+      - name: c4gh
+        secret:
+          defaultMode: 0440
+          secretName: {{ required "A secret for the c4gh keys is required" .Values.global.c4gh.secretName }}
+{{- end }}
