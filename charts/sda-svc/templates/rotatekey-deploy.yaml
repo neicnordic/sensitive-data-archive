@@ -1,0 +1,71 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-rotatekey
+  labels:
+    role: rotatekey
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ .Release.Name }}-rotatekey
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.rotatekey.replicaCount | default 1 }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-rotatekey
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-rotatekey
+        role: rotatekey
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/config: {{ include (print $.Template.BasePath "/rotatekey-secrets.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+        {{- end }}
+        {{- if .Values.rotatekey.annotations }}
+{{- toYaml .Values.rotatekey.annotations | nindent 8 -}}
+        {{- end }}
+    spec:
+      {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: rotatekey
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        command: ["sda-rotatekey"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        env:
+        - name: CONFIGFILE
+          value: {{ include "confFile" . }}
+        resources:
+{{ toYaml .Values.rotatekey.resources | trim | indent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: {{ template "configPath" . }}
+      enableServiceLinks: false
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 0440
+          secretName: {{ template "sda.fullname" . }}-rotatekey
+      restartPolicy: Always
+{{- end }}
