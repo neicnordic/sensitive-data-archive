@@ -593,7 +593,6 @@ func formatUploadFilePath(filePath string) (string, error) {
 
 // Write the error and its status code to the response
 func reportError(errorCode int, message string, w http.ResponseWriter) {
-	log.Error(message)
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
