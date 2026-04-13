@@ -1,0 +1,18 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.downloadV2.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-download-v2
+  labels:
+    app: {{ template "sda.fullname" . }}-download-v2
+spec:
+  ports:
+  - name: download-v2
+    port: {{ ternary 443 80 .Values.global.tls.enabled }}
+    targetPort: download-v2
+    protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}-download-v2
+{{- end }}
+{{- end }}
