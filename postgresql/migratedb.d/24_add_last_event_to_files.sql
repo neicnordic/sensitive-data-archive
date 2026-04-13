@@ -39,6 +39,11 @@ BEGIN
         FOR EACH ROW
         EXECUTE PROCEDURE sda.update_files_last_event();
 
+    -- Grant UPDATE on last_event to roles that insert into file_event_log
+    -- but previously only had SELECT on sda.files (e.g. api, mapper)
+    GRANT UPDATE (last_event) ON sda.files TO api;
+    GRANT UPDATE (last_event) ON sda.files TO mapper;
+
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
   END IF;
