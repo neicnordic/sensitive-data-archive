@@ -19,19 +19,6 @@ type rmqBroker struct {
 	config             *options
 }
 
-type RequeueError struct{ Err error }
-
-func (e RequeueError) Error() string { return e.Err.Error() }
-
-func (e RequeueError) Unwrap() error {
-	return e.Err
-}
-
-func RequeueMessage(err error) bool {
-	_, ok := err.(RequeueError)
-	return ok
-}
-
 func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.Broker, error) {
 	rmq := &rmqBroker{
 		ctx:    ctx,
@@ -54,6 +41,11 @@ func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.B
 		}
 		amqpConf.TLSClientConfig = tlsConf
 	}
+
+	rmq.config.port = 5672
+	rmq.config.user = "ingest"
+	rmq.config.password = "ingest"
+	rmq.config.vhost = "/sda"
 
 	rmq.connection, err = amqp.DialConfig(rmq.config.buildMQURI(), amqpConf)
 	if err != nil {
@@ -110,7 +102,7 @@ func (b *rmqBroker) Subscribe(ctx context.Context, consumerGroup, sourceQueue st
 
 			callbacks, err := handleFunc(ctx, msg)
 			if err != nil {
-				if err := message.Nack(false, RequeueMessage(err)); err != nil {
+				if err := message.Nack(false, false); err != nil {
 					log.Errorf("failed to nack message, reason: %v", err)
 				}
 				continue

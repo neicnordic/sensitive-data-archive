@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -246,27 +247,72 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *v2.Me
 }
 
 func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archivedQueue string, message *v2.Message) ([]func(), error) {
-	status, submissionLocation, err := app.ensureFileRegistered(ctx, fileID, filePath, user)
-	if err != nil {
+
+	deadLetterQueue := func() {
+		app.MQ.Publish(ctx, "error", *message)
+	}
+
+	setErrorEvent := func(details string, message *v2.Message) func() {
+		return func() {
+			originalMessage, _ := json.Marshal(message.Body)
+			app.DB.UpdateFileEventLog(fileID, "error", "ingest", details, string(originalMessage))
+		}
+	}
+
+	status, err := app.DB.GetFileStatus(fileID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 
-	if status == "disabled" {
+	var submissionLocation string
+
+	switch status {
+	case "uploaded", "disabled":
+		break
+
+	// files uploaded not through S3Inbox or sftpInbox will leave the files without a status registered in the database, for those files we want to register them on a ingestion trigger
+	case "":
+		var findFileErr error
+		// since we don't have submission location in storage, we need to look through all configured storage locations
+		submissionLocation, findFileErr := app.InboxReader.FindFile(ctx, filePath)
+		// register file even if FindFile returns empty submissionLocation, as we will add an error file event log to it
+		fileID, err = app.DB.RegisterFile(&fileID, submissionLocation, filePath, user)
+		if err != nil {
+			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
+			return nil, err
+		}
+
+		if err != nil {
+			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, err.Error())
+			return nil, err
+		}
+
+		if findFileErr != nil {
+			details := fmt.Sprintf("failed to find submission location for file in all configured storage locations, file-id: %s", fileID)
+			log.Errorf(details)
+			return []func(){deadLetterQueue, setErrorEvent(details, message)}, nil
+		}
+		return nil, nil
+
+	default:
+		log.Warnf("file: %s recieved ingestion trigger with status: %s", fileID, status)
 		return nil, nil
 	}
 
 	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(filePath, user))
 	if err != nil {
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
-			return nil, err
+			details := fmt.Sprintf("failed to open file to ingest, reason (%s)", err.Error())
+			return []func(){deadLetterQueue, setErrorEvent(details, message)}, err
 		}
-		return nil, err
+		return nil, nil
 	}
 	defer sourceReader.Close()
 
 	summary, err := app.processAndUpload(ctx, fileID, sourceReader)
 	if err != nil {
-		return nil, err
+		details := fmt.Sprintf("could not process file: %s, reason: (%s)", fileID, err.Error())
+		return []func(){deadLetterQueue, setErrorEvent(details, message)}, err
 	}
 
 	if err := app.finalizeDatabaseRecords(ctx, fileID, summary, message); err != nil {
@@ -274,31 +320,13 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	}
 
 	callback := func() {
-		err := app.notifyArchived(fileID, filePath, user, summary.Checksum, archivedQueue, message)
+		err := app.notifyArchived(ctx, fileID, filePath, user, summary.Checksum, archivedQueue, message)
 		if err != nil {
 			log.Errorf("deferred notification failed for %s: %v", fileID, err)
 		}
 	}
 
 	return []func(){callback}, nil
-}
-
-func (app *Ingest) ensureFileRegistered(ctx context.Context, fileID, filePath, user string) (string, string, error) {
-	status, err := app.DB.GetFileStatus(fileID)
-	if err != nil {
-		return status, "", err
-	}
-
-	submissionLocation, err := app.DB.GetSubmissionLocation(ctx, fileID)
-	if err != nil {
-		return status, "", err
-	}
-
-	if status != "" && submissionLocation == "" {
-		return status, "", fmt.Errorf("file %s is registered but missing submission location", fileID)
-	}
-
-	return status, submissionLocation, nil
 }
 
 func (app *Ingest) processAndUpload(ctx context.Context, fileID string, source io.ReadCloser) (IngestSummary, error) {
@@ -314,11 +342,11 @@ func (app *Ingest) processAndUpload(ctx context.Context, fileID string, source i
 	publicKey := keys.DerivePublicKey(*privateKey)
 	keyHash := hex.EncodeToString(publicKey[:])
 	if err := app.DB.SetKeyHash(keyHash, fileID); err != nil {
-		return IngestSummary{}, err //TODO: Think about how to handle this, remember to implement uploadCancel logic
+		return IngestSummary{}, err
 	}
 
 	if err := app.DB.StoreHeader(header, fileID); err != nil {
-		return IngestSummary{}, err //TODO: Think about how to handle this, remember to implement uploadCancel logic
+		return IngestSummary{}, err
 	}
 
 	location, err := app.ArchiveWriter.WriteFile(ctx, fileID, bufReader)
@@ -334,7 +362,7 @@ func (app *Ingest) processAndUpload(ctx context.Context, fileID string, source i
 
 func (app *Ingest) decryptHeader(fileID string, reader *bufio.Reader) ([]byte, *[32]byte, error) {
 	headerBuffer, err := reader.Peek(headerPeekSize)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return nil, nil, fmt.Errorf("failed to peek header: %w", err)
 	}
 
@@ -383,7 +411,7 @@ func (app *Ingest) finalizeDatabaseRecords(ctx context.Context, fileID string, s
 	return nil
 }
 
-func (app *Ingest) notifyArchived(fileID, filePath, user, checksum, archivedQueue string, message *v2.Message) error {
+func (app *Ingest) notifyArchived(ctx context.Context, fileID, filePath, user, checksum, archivedQueue string, message *v2.Message) error {
 	msg := schema.IngestionVerification{
 		User:               user,
 		FilePath:           filePath,
@@ -404,7 +432,7 @@ func (app *Ingest) notifyArchived(fileID, filePath, user, checksum, archivedQueu
 
 	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", ingestConf.SchemaPath()), messageBody)
 	if err != nil {
-		app.publishErrorMessage(context.TODO(), message, err)
+		app.publishErrorMessage(ctx, message, err)
 		return err
 	}
 
