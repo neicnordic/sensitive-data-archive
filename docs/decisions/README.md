@@ -94,6 +94,7 @@ superseded-by: "0005-use-new-approach.md"
 | --- | --- | --- |
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
 | [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
+| [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
 
 ## More information
 
