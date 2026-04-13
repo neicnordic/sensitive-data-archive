@@ -49,9 +49,9 @@ if [ "$1" == "sda-mq" ]; then
 
     if [ "$4" == "federated" ]; then
       if [ "$3" = true ] ; then
-        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username=admin --port=15671 --ssl --ssl-cert-file=/etc/rabbitmq/tls/tls.crt --ssl-key-file=/etc/rabbitmq/tls/tls.key --ssl-ca-cert-file=/etc/rabbitmq/tls/ca.crt --ssl-disable-hostname-verification --password="$ADMINPASS" declare queue --vhost=sda name=from_cega durable=true
+        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username admin --password "$ADMINPASS" --host 127.0.0.1 --port 15671 --use-tls --tls-cert-file /etc/rabbitmq/tls/tls.crt --tls-key-file /etc/rabbitmq/tls/tls.key --tls-ca-cert-file /etc/rabbitmq/tls/ca.crt declare queue --vhost sda --name from_cega --durable true
       else
-        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username=admin --password="$ADMINPASS" declare queue --vhost=sda name=from_cega durable=true
+        kubectl exec broker-sda-mq-0 -- rabbitmqadmin --username admin --password "$ADMINPASS" --host 127.0.0.1 declare queue --vhost sda --name from_cega --durable true
       fi
     fi
 fi
