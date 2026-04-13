@@ -8,7 +8,7 @@ cd shared || true
 
 # test that listing all buckets is not allowed
 list_all_buckets=$(s3cmd -c s3cfg -q ls 2>&1)
-if ! [[ "$list_all_buckets" =~ "not allowed response" ]]; then
+if ! [[ "$list_all_buckets" =~ "Forbidden" ]]; then
     echo "list buckets should fail"
     exit 1
 fi
@@ -25,7 +25,7 @@ cp s3cfg bads3cfg
 sed -i "s/access_token=.*/access_token=invalid/" bads3cfg
 
 unathorized=$(s3cmd -c bads3cfg -q ls s3://test_dummy.org/ 2>&1)
-if ! [[ "$unathorized" =~ "not authorized" ]]; then
+if ! [[ "$unathorized" =~ "Unauthorized" ]]; then
     echo "testing unathorized call failed"
     exit 1
 fi

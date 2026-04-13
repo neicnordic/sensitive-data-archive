@@ -1904,3 +1904,26 @@ func (suite *DatabaseTests) TestSetBackedUp_FileID_Not_Exists() {
 	notExistingFileID := uuid.NewString()
 	assert.EqualError(suite.T(), db.SetBackedUp("/backup", notExistingFileID, notExistingFileID), sql.ErrNoRows.Error())
 }
+
+func (suite *DatabaseTests) TestGetFileIDInInbox() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	fileID, err := db.RegisterFile(nil, "/inbox", "TestGetFileIDInInbox.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	fileIDFromDB, err := db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), fileID, fileIDFromDB)
+}
+
+func (suite *DatabaseTests) TestGetFileIDInInbox_NotFound() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	fileIDFromDB, err := db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "", fileIDFromDB)
+}

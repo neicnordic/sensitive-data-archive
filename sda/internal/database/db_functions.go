@@ -118,6 +118,38 @@ WHERE id_and_event.event = $3;`
 	return fileID, nil
 }
 
+// GetFileIDInInbox gets the file id of a file which last known event is either 'registered', 'uploaded', or 'disabled'
+// as that means that ingestion has not been triggered and users are allowed continue uploading or reupload the file to the inbox
+// if no row is found does not return sql.ErrNoRows, just empty string in id return field
+func (dbs *SDAdb) GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error) {
+	dbs.checkAndReconnectIfNeeded()
+	db := dbs.DB
+
+	const getFileID = `
+SELECT id_and_event.id
+FROM (
+    SELECT DISTINCT ON (f.id) f.id, fel.event FROM sda.files AS f
+        LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
+    WHERE f.submission_user = $1
+      AND f.submission_file_path = $2
+      AND f.stable_id IS NULL
+    ORDER BY f.id, fel.started_at DESC LIMIT 1
+    ) AS id_and_event
+WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled');`
+
+	var fileID string
+
+	if err := db.QueryRowContext(ctx, getFileID, submissionUser, filePath).Scan(&fileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+
+		return "", err
+	}
+
+	return fileID, nil
+}
+
 // CheckStableIDOwnedByUser checks if the file a stableID links to belongs to the user
 // Returns true if a file is found by the stableID and user, false if not found
 func (dbs *SDAdb) CheckStableIDOwnedByUser(stableID, user string) (bool, error) {
