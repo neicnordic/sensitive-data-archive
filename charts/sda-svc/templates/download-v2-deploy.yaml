@@ -74,7 +74,7 @@ spec:
         args: ["--config-file", "{{ include "confFile" . }}"]
         ports:
         - name: download-v2
-          containerPort: {{ ternary 8443 8080 .Values.global.tls.enabled }}
+          containerPort: 8080
           protocol: TCP
         livenessProbe:
           httpGet:
