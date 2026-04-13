@@ -19,15 +19,15 @@ type MockHelpers struct {
 }
 
 // Mock the GetPagedResponseBody function
-func (m *MockHelpers) GetPagedResponseBody(url, token string) ([]byte, http.Header, error) {
-	args := m.Called(url, token)
+func (m *MockHelpers) GetPagedResponseBody(apiURL, token string) ([]byte, http.Header, error) {
+	args := m.Called(apiURL, token)
 
 	return args.Get(0).([]byte), args.Get(1).(http.Header), args.Error(2)
 }
 
 // Mock the PostRequest function
-func (m *MockHelpers) PostRequest(url, token string, jsonBody []byte) ([]byte, error) {
-	args := m.Called(url, token, jsonBody)
+func (m *MockHelpers) PostRequest(apiURL, token string, jsonBody []byte) ([]byte, error) {
+	args := m.Called(apiURL, token, jsonBody)
 
 	return args.Get(0).([]byte), args.Error(1)
 }

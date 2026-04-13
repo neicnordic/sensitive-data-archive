@@ -113,6 +113,7 @@ GRANT INSERT ON sda.datasets TO mapper;
 GRANT SELECT ON sda.datasets TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.datasets_id_seq TO mapper;
 GRANT SELECT ON sda.files TO mapper;
+GRANT UPDATE (last_event) ON sda.files TO mapper;
 GRANT INSERT ON sda.file_event_log TO mapper;
 GRANT INSERT ON sda.file_dataset TO mapper;
 GRANT SELECT ON sda.file_dataset TO mapper;

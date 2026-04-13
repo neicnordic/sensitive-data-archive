@@ -681,7 +681,7 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
 	assert.Equal(suite.T(), "", nextCursor)
 
-	filelist, nextCursor, err = db.GetUserFiles(testUser, "", true, 0, "")
+	filelist, _, err = db.GetUserFiles(testUser, "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get file list")
 	assert.Equal(suite.T(), testCases, len(filelist), "file list is of incorrect length")
 
