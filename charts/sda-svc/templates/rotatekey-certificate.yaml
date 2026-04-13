@@ -1,0 +1,26 @@
+{{- if .Values.global.tls.enabled }}
+{{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "sda.fullname" . }}-rotatekey-certs
+spec:
+  secretName: {{ template "sda.fullname" . }}-rotatekey-certs
+  duration: 2160h # 90d
+  commonName: {{ template "sda.fullname" . }}-rotatekey
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - client auth
+    - server auth
+  dnsNames:
+    - {{ template "sda.fullname" . }}-rotatekey
+    - {{ template "sda.fullname" . }}-rotatekey.{{ .Release.Namespace }}.svc
+  issuerRef:
+    name: {{ template "TLSissuer" . }}
+    kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
+    group: cert-manager.io
+{{- end -}}
+{{- end -}}

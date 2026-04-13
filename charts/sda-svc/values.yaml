@@ -194,6 +194,8 @@ global:
     secretName:
     publicKey:
     publicKeyData:
+    rotatePubKey:
+    rotatePubKeyData:
     privateKeys:
     - keyName:
       passphrase:
@@ -380,6 +382,12 @@ credentials:
     mqUser: ""
     mqPassword: ""
 
+  rotatekey:
+    dbUser: ""
+    dbPassword: ""
+    mqUser: ""
+    mqPassword: ""
+
 ##################################
 # Service specific settings
 
@@ -560,7 +568,7 @@ ingest:
     secretName: ""
 
 intercept:
-  name: ingest
+  name: intercept
   replicaCount: 1
   resources:
     requests:
@@ -753,6 +761,24 @@ verify:
   annotations: {}
   tls:
     secretName: ""
+
+rotatekey:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/neicnordic/sda-pipeline
+    tag: latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "1000m"
+  tls:
+    secretName: ""
+  grpc:
+    host: "reencrypt"
+    port: 50051
 
 jobs:
   image: postgres:15.4-alpine
