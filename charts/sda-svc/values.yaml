@@ -257,63 +257,99 @@ global:
       secretName: ""
 
   downloadV2:
-    enabled: false  # opt-in during migration
+    # @param global.downloadV2.enabled enable the v2 download service (opt-in during migration)
+    enabled: false
 
     service:
+      # @param global.downloadV2.service.id GA4GH service-info identifier (reverse domain notation)
       id: "neicnordic.sda.download"
+      # @param global.downloadV2.service.orgName organization name for GA4GH service-info
       orgName: ""
+      # @param global.downloadV2.service.orgURL organization URL for GA4GH service-info
       orgURL: ""
 
     app:
-      environment: ""  # set to "production" for production guards
+      # @param global.downloadV2.app.environment set to "production" to enable production guards
+      environment: ""
 
     jwt:
+      # @param global.downloadV2.jwt.pubkeyPath path to directory containing JWT public key PEM files
       pubkeyPath: ""
+      # @param global.downloadV2.jwt.pubkeyURL URL to JWKS endpoint for JWT verification
       pubkeyURL: ""
+      # @param global.downloadV2.jwt.allowAllData allow all authenticated users access to all datasets (testing only)
       allowAllData: false
 
     session:
+      # @param global.downloadV2.session.expiration session expiration time in seconds
       expiration: 3600
+      # @param global.downloadV2.session.domain cookie domain, defaults to ingress hostname if empty
       domain: ""
+      # @param global.downloadV2.session.secure use secure cookies (HTTPS only)
       secure: true
+      # @param global.downloadV2.session.httpOnly HTTP-only cookies (not accessible via JavaScript)
       httpOnly: true
+      # @param global.downloadV2.session.name session cookie name
       name: "sda_session"
 
     permission:
+      # @param global.downloadV2.permission.model permission model: ownership, visa, or combined
       model: "combined"
 
     auth:
+      # @param global.downloadV2.auth.allowOpaque allow userinfo-based auth for opaque (non-JWT) tokens
       allowOpaque: true
 
     visa:
+      # @param global.downloadV2.visa.enabled enable GA4GH visa support for dataset access
       enabled: false
+      # @param global.downloadV2.visa.source visa source: userinfo (GA4GH compliant) or token (legacy)
       source: "userinfo"
-      userinfoURL: ""  # optional, auto-discovered from oidc.issuer if empty
-      trustedIssuers: []  # [{iss: "...", jku: "..."}]
+      # @param global.downloadV2.visa.userinfoURL userinfo endpoint URL, auto-discovered from global.oidc.provider if empty
+      userinfoURL: ""
+      # @param global.downloadV2.visa.trustedIssuers list of trusted issuer+JKU pairs [{iss: "", jku: ""}]
+      trustedIssuers: []
+      # @param global.downloadV2.visa.datasetIdMode dataset ID extraction: raw (exact visa value) or suffix (last URL/URN segment)
       datasetIdMode: "raw"
+      # @param global.downloadV2.visa.identityMode identity binding: broker-bound, strict-sub, or strict-iss-sub
       identityMode: "broker-bound"
+      # @param global.downloadV2.visa.validateAsserted reject visas where asserted timestamp is in the future
       validateAsserted: true
+      # @param global.downloadV2.visa.allowInsecureJku allow HTTP (non-TLS) JKU URLs in trusted issuers (testing only)
       allowInsecureJku: false
       cache:
+        # @param global.downloadV2.visa.cache.tokenTTL token-keyed cache TTL in seconds
         tokenTTL: 3600
+        # @param global.downloadV2.visa.cache.jwkTTL JWK cache TTL in seconds
         jwkTTL: 300
+        # @param global.downloadV2.visa.cache.validationTTL visa validation cache TTL in seconds
         validationTTL: 120
+        # @param global.downloadV2.visa.cache.userinfoTTL userinfo cache TTL in seconds
         userinfoTTL: 60
       limits:
+        # @param global.downloadV2.visa.limits.maxVisas maximum visas to process per passport
         maxVisas: 200
+        # @param global.downloadV2.visa.limits.maxJwksPerRequest maximum distinct JKU fetches per request
         maxJwksPerRequest: 10
+        # @param global.downloadV2.visa.limits.maxVisaSize maximum visa JWT size in bytes
         maxVisaSize: 16384
 
     cache:
+      # @param global.downloadV2.cache.enabled enable database query caching
       enabled: true
+      # @param global.downloadV2.cache.fileTTL file query cache TTL in seconds
       fileTTL: 300
+      # @param global.downloadV2.cache.permissionTTL permission check cache TTL in seconds
       permissionTTL: 120
+      # @param global.downloadV2.cache.datasetTTL dataset query cache TTL in seconds
       datasetTTL: 300
 
     pagination:
+      # @param global.downloadV2.pagination.hmacSecret HMAC secret for page tokens (required in production, must be same across replicas)
       hmacSecret: ""
 
     audit:
+      # @param global.downloadV2.audit.required require a real audit logger (fail startup if noop would be used)
       required: false
 
   oidc:
