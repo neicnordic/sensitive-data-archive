@@ -246,10 +246,12 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 		}
 	}
 
-	// check if the file already exists when an upload completes, in that case send an overwrite message,
+	isReupload := false
+	// check if the file already exists when an upload completes, in that case send an overwrite message when the s3 has responded with 200,
 	// so that the FEGA portal is informed that a new version
 	if s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload {
-		if err := p.sendMessageOnOverwrite(r.Context(), username, fileID, s3FilePath, filePath); err != nil {
+		isReupload, err = p.checkFileExists(r.Context(), s3FilePath)
+		if err != nil {
 			p.internalServerError(w, err.Error())
 
 			return
@@ -262,6 +264,9 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 		return
 	}
+	defer func() {
+		_ = s3Response.Body.Close()
+	}()
 
 	// Send message to upstream and set file as uploaded in the database
 	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
@@ -296,14 +301,22 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 			return
 		}
-		log.Infof("user: %s, uploaded file: %s, with id: %s", username, filePath, fileID)
+
+		if isReupload {
+			log.Infof("user: %s, reuploaded file: %s, with id: %s", username, filePath, fileID)
+			if err := p.sendMessageOnOverwrite(username, fileID, s3FilePath); err != nil {
+				p.internalServerError(w, err.Error())
+
+				return
+			}
+		} else {
+			log.Infof("user: %s, uploaded file: %s, with id: %s", username, filePath, fileID)
+		}
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
 		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
-
-	_ = s3Response.Body.Close()
 }
 
 // Renew the connection to MQ if necessary, then send message
@@ -535,16 +548,7 @@ func (p *Proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(ctx context.Context, username, fileID, s3FilePath, filepath string) error {
-	exist, err := p.checkFileExists(ctx, s3FilePath)
-	if err != nil {
-		return err
-	}
-	if !exist {
-		return nil
-	}
-
-	log.Infof("user: %s, reuploaded file: %s, with id: %s", username, filepath, fileID)
+func (p *Proxy) sendMessageOnOverwrite(username, fileID, s3FilePath string) error {
 	msg := schema.InboxRemove{
 		User:      username,
 		FilePath:  s3FilePath,
