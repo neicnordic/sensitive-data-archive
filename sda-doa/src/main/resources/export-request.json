@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/main/sda-doa/src/main/resources/export-request.json",
+  "title": "Export Request Message",
+  "description": "Validation schema for sensitive data export requests via RabbitMQ.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jwtToken",
+    "publicKey"
+  ],
+  "anyOf": [
+    { "required": ["datasetId"] },
+    { "required": ["fileId"] }
+  ],
+  "properties": {
+    "jwtToken": {
+      "type": "string",
+      "description": "The JWT bearer token for authorization.",
+      "pattern": "^[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*$"
+    },
+    "datasetId": {
+      "type": "string",
+      "description": "Unique identifier for the dataset.",
+      "minLength": 1
+    },
+    "fileId": {
+      "type": "string",
+      "description": "Unique identifier for the specific file.",
+      "minLength": 1
+    },
+    "publicKey": {
+      "type": "string",
+      "description": "The encryption public key in Crypt4GH or PEM format.",
+      "minLength": 20
+    },
+    "startCoordinate": {
+      "type": "string",
+      "description": "The starting byte offset for the export.",
+      "pattern": "^[0-9]+$"
+    },
+    "endCoordinate": {
+      "type": "string",
+      "description": "The ending byte offset for the export.",
+      "pattern": "^[0-9]+$"
+    }
+  }
+}
