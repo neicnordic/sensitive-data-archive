@@ -1,0 +1,49 @@
+{{- if (or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType)) (not .Values.global.deploymentType)) }}
+{{- if and .Values.global.ingress.deploy .Values.global.downloadV2.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "sda.fullname" . }}-download-v2-ingress
+  labels:
+    app: {{ template "sda.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.global.ingress.labels }}
+{{ toYaml .Values.global.ingress.labels | indent 4 }}
+{{- end }}
+  annotations:
+{{- if .Values.global.ingress.annotations }}
+{{ toYaml .Values.global.ingress.annotations | indent 4 }}
+{{- end }}
+{{- if .Values.downloadV2.ingressAnnotations }}
+{{ toYaml .Values.downloadV2.ingressAnnotations | indent 4 }}
+{{- end }}
+    {{- if .Values.global.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.global.ingress.clusterIssuer | quote }}
+    {{- else if .Values.global.ingress.issuer }}
+    cert-manager.io/issuer: {{ .Values.global.ingress.issuer | quote }}
+    {{- end }}
+spec:
+{{- if .Values.global.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.global.ingress.ingressClassName }}
+{{- end }}
+  rules:
+  - host: {{ required "An ingress hostname is required for download-v2!" .Values.global.ingress.hostName.downloadV2 }}
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: {{ template "sda.fullname" . }}-download-v2
+            port:
+              number: {{ ternary 443 80 .Values.global.tls.enabled }}
+{{- if .Values.global.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ required "An ingress hostname is required for download-v2!" .Values.global.ingress.hostName.downloadV2 }}
+    secretName: {{ if .Values.global.ingress.secretNames.downloadV2 }}{{ .Values.global.ingress.secretNames.downloadV2 }}{{ else }}"{{ template "sda.fullname" . }}-ingress-download-v2"{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}
