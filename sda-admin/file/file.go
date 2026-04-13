@@ -72,7 +72,7 @@ var waitForContinue = waitForUserContinue
 // the next page. In raw terminal mode a single keystroke suffices; when stdin
 // is not a tty (e.g. piped input or tests) it falls back to line-buffered read.
 func waitForUserContinue() error {
-	fd := int(os.Stdin.Fd())
+	fd := int(os.Stdin.Fd()) //nolint:gosec
 	if !term.IsTerminal(fd) {
 		_, err := fmt.Fscanln(os.Stdin)
 
