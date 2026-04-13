@@ -196,14 +196,6 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/**/}}
-{{- define "dbUserDownloadV2" -}}
-{{- ternary .Values.global.db.user .Values.credentials.downloadV2.dbUser (empty .Values.credentials.downloadV2.dbUser) -}}
-{{- end -}}
-{{- define "dbPassDownloadV2" -}}
-{{- ternary .Values.global.db.password .Values.credentials.downloadV2.dbPassword (empty .Values.credentials.downloadV2.dbPassword) -}}
-{{- end -}}
-
-{{/**/}}
 {{- define "dbUserFinalize" -}}
 {{- ternary .Values.global.db.user .Values.credentials.finalize.dbUser (empty .Values.credentials.finalize.dbUser) -}}
 {{- end -}}

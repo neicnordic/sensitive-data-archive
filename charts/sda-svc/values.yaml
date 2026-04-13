@@ -270,10 +270,6 @@ global:
       pubkeyURL: ""
       allowAllData: false
 
-    oidc:
-      issuer: ""
-      audience: ""
-
     session:
       expiration: 3600
       domain: ""
@@ -390,10 +386,6 @@ credentials:
     dbPassword: ""
 
   download:
-    dbUser: ""
-    dbPassword: ""
-
-  downloadV2:
     dbUser: ""
     dbPassword: ""
 
