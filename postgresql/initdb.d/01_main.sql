@@ -81,7 +81,7 @@ CREATE TABLE files (
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
     -- Denormalized from file_event_log to avoid join when listing files
-    last_event           TEXT,
+    last_event           TEXT REFERENCES file_events(title),
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
@@ -164,9 +164,6 @@ VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
        ( 0, 'error'       , 'An Error occurred, check the error table'),
        ( 1, 'disabled'    , 'Disables the file for all actions'),
        ( 2, 'enabled'     , 'Reenables a disabled file');
-
--- Add FK now that file_events exists
-ALTER TABLE files ADD CONSTRAINT files_last_event_fk FOREIGN KEY (last_event) REFERENCES file_events(title);
 
 
 -- Keeps track of all events for the files, with timestamps and user_ids.
