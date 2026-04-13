@@ -37,7 +37,8 @@ VALUES (0, now(), 'Created with version'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
-       (23, now(), 'Expand files table with storage locations');
+       (23, now(), 'Expand files table with storage locations'),
+       (24, now(), 'Add last_event column to files to avoid join on file_event_log');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -78,6 +79,9 @@ CREATE TABLE files (
     header               TEXT,
     encryption_method    TEXT,
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
+
+    -- Denormalized from file_event_log to avoid join when listing files
+    last_event           TEXT,
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
@@ -160,6 +164,9 @@ VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
        ( 0, 'error'       , 'An Error occurred, check the error table'),
        ( 1, 'disabled'    , 'Disables the file for all actions'),
        ( 2, 'enabled'     , 'Reenables a disabled file');
+
+-- Add FK now that file_events exists
+ALTER TABLE files ADD CONSTRAINT files_last_event_fk FOREIGN KEY (last_event) REFERENCES file_events(title);
 
 
 -- Keeps track of all events for the files, with timestamps and user_ids.

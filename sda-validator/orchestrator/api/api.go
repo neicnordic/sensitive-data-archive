@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -286,38 +287,57 @@ type getUserFilesResponse struct {
 }
 
 func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (*getUserFilesResponse, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaAPIURL, userID), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
-	}
-
-	// TODO how to handle auth in better way, TBD #989
-	req.Header.Add("Authorization", "Bearer "+api.sdaAPIToken)
-	req.Header.Add("Content-Type", "application/json")
-
-	// Send the request
-	client := &http.Client{}
-	res, err := client.Do(req) // #nosec G704 -- host originates from configuration, TODO verify if to sanitize userID
-	if err != nil {
-		return nil, fmt.Errorf("failed to get response, reason: %v", err)
-	}
-	defer res.Body.Close()
-
-	// Check the status code
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
-	}
-
-	// Read the response body
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body, reason: %v", err)
-	}
-
 	var userFiles []*model.UserFilesResponse
+	cursor := ""
 
-	if err := json.Unmarshal(resBody, &userFiles); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
+	client := &http.Client{}
+	for {
+		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, url.PathEscape(userID))
+		if cursor != "" {
+			reqURL += "&cursor=" + url.QueryEscape(cursor)
+		}
+
+		req, err := http.NewRequest("GET", reqURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create the request, reason: %v", err)
+		}
+
+		// TODO how to handle auth in better way, TBD #989
+		req.Header.Add("Authorization", "Bearer "+api.sdaAPIToken)
+		req.Header.Add("Content-Type", "application/json")
+
+		// Send the request
+		res, err := client.Do(req) // #nosec G704 -- host originates from configuration
+		if err != nil {
+			return nil, fmt.Errorf("failed to get response, reason: %v", err)
+		}
+
+		// Check the status code
+		if res.StatusCode != http.StatusOK {
+			res.Body.Close()
+
+			return nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
+		}
+
+		// Read the response body
+		resBody, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body, reason: %v", err)
+		}
+
+		var pageFiles []*model.UserFilesResponse
+		if err := json.Unmarshal(resBody, &pageFiles); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
+		}
+
+		userFiles = append(userFiles, pageFiles...)
+
+		// Check for next page
+		cursor = res.Header.Get("X-Next-Cursor")
+		if cursor == "" {
+			break
+		}
 	}
 
 	rsp := &getUserFilesResponse{

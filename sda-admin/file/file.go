@@ -3,11 +3,14 @@ package file
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 	"path"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/helpers"
 	"github.com/tidwall/pretty"
+	"golang.org/x/term"
 )
 
 type RequestBodyFileIngest struct {
@@ -21,7 +24,9 @@ type RequestBodyFileAccession struct {
 	User        string `json:"user"`
 }
 
-// List returns all files
+// List fetches and prints all files for username, auto-paginating.
+// After each page (when more remain) the user is prompted to press Enter or
+// Space for the next page, or Ctrl+C to abort.
 func List(apiURI, token, username string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
@@ -29,14 +34,73 @@ func List(apiURI, token, username string) error {
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
 
-	response, err := helpers.GetResponseBody(parsedURL.String(), token)
-	if err != nil {
+	cursor := ""
+	for {
+		u := *parsedURL
+		if cursor != "" {
+			q := u.Query()
+			q.Set("cursor", cursor)
+			u.RawQuery = q.Encode()
+		}
+
+		body, headers, err := helpers.GetPagedResponseBody(u.String(), token)
+		if err != nil {
+			return err
+		}
+
+		fmt.Print(string(pretty.Pretty(body)))
+
+		cursor = headers.Get("X-Next-Cursor")
+		if cursor == "" {
+			break
+		}
+
+		fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
+		if err := waitForContinue(); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	return nil
+}
+
+// waitForContinue is a variable so it can be replaced in tests.
+var waitForContinue = waitForUserContinue
+
+// waitForUserContinue waits for the user to press Enter or Space before showing
+// the next page. In raw terminal mode a single keystroke suffices; when stdin
+// is not a tty (e.g. piped input or tests) it falls back to line-buffered read.
+func waitForUserContinue() error {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		_, err := fmt.Fscanln(os.Stdin)
+
 		return err
 	}
 
-	fmt.Print(string(pretty.Pretty(response)))
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		_, err = fmt.Fscanln(os.Stdin)
 
-	return nil
+		return err
+	}
+	defer term.Restore(fd, oldState) //nolint:errcheck
+
+	buf := make([]byte, 1)
+	for {
+		if _, err := os.Stdin.Read(buf); err != nil {
+			return err
+		}
+		switch buf[0] {
+		case '\r', '\n', ' ':
+			return nil
+		case 3: // Ctrl+C
+			fmt.Fprintln(os.Stderr)
+
+			return io.EOF
+		}
+	}
 }
 
 // Ingest triggers the ingestion of a file via the SDA API.
