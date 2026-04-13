@@ -1,0 +1,161 @@
+# Benchmark Compose File
+# Extends sda-s3-integration.yml to add benchmark-specific services
+# This file is used for comparing old sda-download vs new sda/cmd/download
+
+include:
+  - path: sda-s3-integration.yml
+
+services:
+  # Override credentials to use benchmark-specific script
+  credentials:
+    command:
+      - "/bin/sh"
+      - "/scripts/make_benchmark_credentials.sh"
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
+
+  # Override download service to use benchmark config (visa-based auth to match old service)
+  download:
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mockauth:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./sda/download-config-benchmark.yaml:/config.yaml
+      - shared:/shared
+
+  # Add network alias for minio so storage URLs work correctly
+  minio:
+    networks:
+      default:
+        aliases:
+          - s3
+
+  # Old download service (from sda-download module) for comparison
+  download-old:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    container_name: download-old
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mockauth:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    environment:
+      - configFile=/config.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "8089:8080"
+      - "8091:8081"
+    restart: always
+    volumes:
+      - ./sda/download-config-old.yaml:/config.yaml
+      - shared:/shared
+
+  # Mock OIDC server for both download services (visa-based auth)
+  # Uses the same RSA key as credentials script for token compatibility
+  mockauth:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip > /dev/null
+        pip install aiohttp Authlib joserfc > /dev/null
+        python -u /mockoidc.py
+    container_name: mockauth
+    image: python:3.10-slim
+    volumes:
+      - ./scripts/mockoidc.py:/mockoidc.py
+    ports:
+      - "8000:8000"
+    restart: always
+
+  # Benchmark runner - compares public endpoint performance between old and new
+  benchmark:
+    container_name: benchmark
+    command:
+      - "/bin/sh"
+      - "-c"
+      - |
+        apk add --no-cache git &&
+        cd /sda &&
+        go run ./cmd/download/benchmark
+    depends_on:
+      download:
+        condition: service_started
+      download-old:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - OLD_URL=http://download-old:8080
+      - NEW_URL=http://download:8080
+      - PGHOST=postgres
+      - PGUSER=postgres
+      - PGPASSWORD=rootpasswd
+      - PGDATABASE=sda
+      - ITERATIONS=${BENCHMARK_ITERATIONS:-5}
+      - REQUESTS=${BENCHMARK_REQUESTS:-100}
+      - CONCURRENCY=${BENCHMARK_CONCURRENCY:-10}
+      - BENCHMARK_MODE=${BENCHMARK_MODE:-endpoint-e2e}
+      - VERIFY_PRIVATE_KEY_PATH=${VERIFY_PRIVATE_KEY_PATH:-/shared/c4gh.sec.pem}
+      - VERIFY_PRIVATE_KEY_PASSPHRASE=${VERIFY_PRIVATE_KEY_PASSPHRASE:-c4ghpass}
+    image: golang:1.25-alpine
+    profiles:
+      - benchmark
+    volumes:
+      - shared:/shared
+      - ../../sda:/sda
+
+  # Override integration_test to also depend on benchmark services and access scripts
+  integration_test:
+    volumes:
+      - shared:/shared
+      - ./tests:/tests
+      - ./scripts:/scripts
+    depends_on:
+      auth-cega:
+        condition: service_started
+      auth-aai:
+        condition: service_started
+      cega-nss:
+        condition: service_started
+      credentials:
+        condition: service_completed_successfully
+      finalize:
+        condition: service_started
+      ingest:
+        condition: service_started
+      mapper:
+        condition: service_started
+      s3inbox:
+        condition: service_started
+      verify:
+        condition: service_started
+      api:
+        condition: service_started
+      reencrypt:
+        condition: service_started
+      rotatekey:
+        condition: service_started
+      download:
+        condition: service_started
+      download-old:
+        condition: service_started

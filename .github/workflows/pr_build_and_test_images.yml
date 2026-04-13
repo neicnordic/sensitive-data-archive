@@ -106,7 +106,7 @@ jobs:
           category: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
 
       # Only run trivy scan with markdown output and add PR comment if PR changes the relevant file
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -133,7 +133,7 @@ jobs:
 
       - name: Comment PR
         if: steps.changes.outputs.changed == 'true'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: ${{ matrix.name }} Trivy results
           path: trivy-comment.md
@@ -240,6 +240,16 @@ jobs:
             bash -x "$runscript";
           done
 
+  sda-download-v2_integration_test:
+    needs:
+      - build_images
+    name: download v2 integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test download v2
+        run: docker compose -f .github/integration/sda-download-v2-integration.yml run --rm integration_test
+
   sda-doa_integration_test:
     name: sda-doa ${{ matrix.storage }} integration tests
     needs:
@@ -307,7 +317,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Initialise k3d
         id: initK3D

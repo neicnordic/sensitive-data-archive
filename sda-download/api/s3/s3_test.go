@@ -77,42 +77,6 @@ func (ts *S3TestSuite) TestGetBucketLocation() {
 	assert.Equal(ts.T(), expected, string(body), "Wrong location from S3")
 }
 
-func (ts *S3TestSuite) TestListBuckets() {
-	// Setup a mock database to handle queries
-
-	query := `SELECT stable_id, created_at FROM sda.datasets WHERE stable_id = \$1`
-	ts.Mock.ExpectQuery(query).WithArgs("dataset1").
-		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "nyss"))
-	ts.Mock.ExpectQuery(query).WithArgs("dataset10").
-		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "nyligen"))
-	ts.Mock.ExpectQuery(query).WithArgs("https://url/dataset").
-		WillReturnRows(sqlmock.NewRows([]string{"stable_id", "created_at"}).AddRow("dataset1", "snart"))
-
-	// Send a request through the middleware to get datasets
-	w := httptest.NewRecorder()
-	_, router := gin.CreateTestContext(w)
-
-	router.GET("/*path", middleware.TokenMiddleware(), Download)
-	router.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
-
-	response := w.Result()
-	body, err := io.ReadAll(response.Body)
-	assert.Nil(ts.T(), err, "failed to parse body from location response")
-	defer response.Body.Close()
-
-	expected := xml.Header +
-		"<ListAllMyBucketsResult><Buckets>" +
-		"<Bucket><CreationDate>nyss</CreationDate><Name>dataset1</Name></Bucket>" +
-		"<Bucket><CreationDate>nyligen</CreationDate><Name>dataset1</Name></Bucket>" +
-		"<Bucket><CreationDate>snart</CreationDate><Name>dataset1</Name></Bucket>" +
-		"</Buckets><Owner></Owner></ListAllMyBucketsResult>"
-
-	assert.Equal(ts.T(), expected, string(body), "Wrong bucket list from S3")
-
-	err = ts.Mock.ExpectationsWereMet()
-	assert.Nilf(ts.T(), err, "there were unfulfilled expectations: %s", err)
-}
-
 func (ts *S3TestSuite) TestListByPrefix() {
 	// Setup a mock database to handle queries
 	fileInfo := &database.FileInfo{
@@ -282,5 +246,38 @@ func (ts *S3TestSuite) TestParseParams() {
 		_ = response.Body.Close()
 
 		assert.Equal(ts.T(), http.StatusAccepted, response.StatusCode, "Request failed")
+	}
+}
+
+func (ts *S3TestSuite) TestUnauthorizedAccess() {
+	// Define paths that should trigger a 403 because they don't match
+	// the datasets defined in SetupTest (dataset1, dataset10, etc.)
+	unauthorizedPaths := []string{
+		"/not_dataset_exists/file_no.exists",
+		"/dataset2/somefile.txt",
+		"/secret-dataset",
+	}
+
+	for _, path := range unauthorizedPaths {
+		w := httptest.NewRecorder()
+		_, router := gin.CreateTestContext(w)
+
+		router.GET("/*path", middleware.TokenMiddleware(), Download)
+
+		req := httptest.NewRequest("GET", path, nil)
+		router.ServeHTTP(w, req)
+
+		response := w.Result()
+
+		// ASSERT: It should return 403 Forbidden, NOT the ListBuckets XML
+		assert.Equal(ts.T(), http.StatusForbidden, response.StatusCode,
+			"Path %s should have returned 403 Forbidden", path)
+
+		// Verify the body is not the XML bucket list
+		body, err := io.ReadAll(response.Body)
+		assert.Nil(ts.T(), err, "failed to parse body from location response")
+		_ = response.Body.Close()
+		assert.NotContains(ts.T(), string(body), "<ListAllMyBucketsResult>",
+			"Response for %s should not contain bucket list", path)
 	}
 }

@@ -253,6 +253,35 @@ services:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
 
+  # New download service (sda/cmd/download) - feature of this branch
+  download:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    container_name: download
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mock-aai:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - CONFIG_FILE=/config.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - "8085:8080"
+    restart: always
+    volumes:
+      - ./sda/download-config-s3.yaml:/config.yaml
+      - shared:/shared
+
   rotatekey:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-rotatekey]
@@ -362,6 +391,7 @@ services:
       - "8800:8080"
     volumes:
       - "./sda/aai-mock:/etc/lsaai-mock"
+
   aai-db:
     container_name: ls-aai-db
     environment:
@@ -378,6 +408,7 @@ services:
     image: mysql/mysql-server:latest
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
+
   integration_test:
     container_name: tester
     command:
@@ -408,6 +439,8 @@ services:
       reencrypt:
         condition: service_started
       rotatekey:
+        condition: service_started
+      download:
         condition: service_started
     extra_hosts:
       - "localhost:host-gateway"
