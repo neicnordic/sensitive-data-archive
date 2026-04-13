@@ -9,7 +9,7 @@ metadata:
 spec:
   ports:
   - name: download-v2
-    port: {{ ternary 443 80 .Values.global.tls.enabled }}
+    port: 8080
     targetPort: download-v2
     protocol: TCP
   selector:
