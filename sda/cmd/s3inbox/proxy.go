@@ -458,6 +458,14 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 	isObjectPath := len(pathParts) > 1 && pathParts[0] != "" && pathParts[1] != ""
 
 	switch {
+	// Unsupported actions
+	case query.Has("acl") || query.Has("policy") ||
+		query.Has("cors") || query.Has("lifecycle") || query.Has("versioning") ||
+		query.Has("logging") || query.Has("tagging") || query.Has("encryption") ||
+		query.Has("website") || query.Has("notification") || query.Has("replication") ||
+		query.Has("analytics") || query.Has("metrics") || query.Has("inventory") ||
+		query.Has("ownershipControls") || query.Has("publicAccessBlock") || query.Has("object-lock"):
+		return Unsupported
 	// ListObjectsV2
 	case r.Method == http.MethodGet && isBucketPath && query.Get("list-type") == "2":
 		return ListObjectsV2
@@ -467,13 +475,7 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		return ListParts
 	case r.Method == http.MethodGet && isBucketPath && query.Has("location"):
 		return GetBucketLocation
-	case r.Method == http.MethodGet && isBucketPath && !query.Has("acl") && !query.Has("policy") &&
-		!query.Has("cors") && !query.Has("lifecycle") && !query.Has("versioning") &&
-		!query.Has("location") && !query.Has("logging") && !query.Has("tagging") &&
-		!query.Has("encryption") && !query.Has("website") && !query.Has("notification") &&
-		!query.Has("replication") && !query.Has("analytics") && !query.Has("metrics") &&
-		!query.Has("inventory") && !query.Has("ownershipControls") && !query.Has("publicAccessBlock") &&
-		!query.Has("object-lock") && !query.Has("uploads") && !query.Has("uploadId"):
+	case r.Method == http.MethodGet && isBucketPath:
 		return ListObjects
 	case r.Method == http.MethodPut && isObjectPath && !query.Has("partNumber") && !query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
 		return PutObject
