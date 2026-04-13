@@ -326,16 +326,22 @@ func (dbs *SDAdb) CancelFile(ctx context.Context, fileID string, message string)
 }
 
 // IsFileInDataset checks if a file has been added to a dataset
-func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (bool, error) {
+func (dbs *SDAdb) IsFileInDataset(ctx context.Context, fileID string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
-	const query = `SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE file_id = $1);`
+	const query = `SELECT dataset_id FROM sda.file_dataset WHERE file_id = $1 LIMIT 1;`
 
-	var inDataset bool
-	err := db.QueryRowContext(ctx, query, fileID).Scan(&inDataset)
+	var datasetID string
+	err := db.QueryRowContext(ctx, query, fileID).Scan(&datasetID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
 
-	return inDataset, err
+	return datasetID, err
 }
 
 func (dbs *SDAdb) GetFileStatus(fileID string) (string, error) {

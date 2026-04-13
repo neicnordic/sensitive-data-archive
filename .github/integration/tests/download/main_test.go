@@ -397,7 +397,7 @@ func (ts *TestSuite) Test13_OpaqueTokenDownloadFile() {
 	pubkeyBase64 := ts.readPublicKeyBase64()
 	opaqueToken := "integration_test@example.org"
 	headers := map[string]string{
-		"Authorization":    "Bearer " + opaqueToken,
+		"Authorization":     "Bearer " + opaqueToken,
 		"X-C4GH-Public-Key": pubkeyBase64,
 	}
 

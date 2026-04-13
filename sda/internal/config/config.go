@@ -271,8 +271,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.port",
 			"broker.user",
 			"broker.password",
-			"broker.queue",
-			"broker.routingkey",
 			"db.host",
 			"db.port",
 			"db.user",
