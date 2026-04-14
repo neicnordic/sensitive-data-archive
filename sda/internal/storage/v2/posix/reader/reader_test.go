@@ -139,6 +139,72 @@ func (ts *ReaderTestSuite) TestGetFileSize() {
 	ts.Equal(int64(len("file 6 content in dir2")), fileSize)
 }
 
+func (ts *ReaderTestSuite) TestPing() {
+	err := ts.reader.Ping(context.TODO())
+	ts.NoError(err)
+}
+
+func (ts *ReaderTestSuite) TestPing_PathGone() {
+	configDir := ts.T().TempDir()
+	vanishDir := ts.T().TempDir()
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  ping_fail_test:
+    posix:
+    - path: %s
+`, vanishDir)), 0600); err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	viper.SetConfigFile(filepath.Join(configDir, "config.yaml"))
+	ts.Require().NoError(viper.ReadInConfig())
+
+	reader, err := NewReader("ping_fail_test")
+	ts.Require().NoError(err)
+
+	// Remove the directory after creating the reader
+	ts.Require().NoError(os.Remove(vanishDir))
+
+	err = reader.Ping(context.TODO())
+	ts.Error(err)
+	ts.Contains(err.Error(), "failed to ping POSIX path")
+}
+
+func (ts *ReaderTestSuite) TestPing_PathIsFile() {
+	configDir := ts.T().TempDir()
+	dir := ts.T().TempDir()
+	filePath := filepath.Join(dir, "a_file")
+
+	if err := os.WriteFile(filePath, []byte("hello"), 0600); err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  ping_file_test:
+    posix:
+    - path: %s
+`, dir)), 0600); err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	viper.SetConfigFile(filepath.Join(configDir, "config.yaml"))
+	ts.Require().NoError(viper.ReadInConfig())
+
+	reader, err := NewReader("ping_file_test")
+	ts.Require().NoError(err)
+
+	// Replace the directory with a file
+	ts.Require().NoError(os.RemoveAll(dir))
+	ts.Require().NoError(os.WriteFile(dir, []byte("now a file"), 0600))
+	defer os.Remove(dir)
+
+	err = reader.Ping(context.TODO())
+	ts.Error(err)
+	ts.Contains(err.Error(), "not a directory")
+}
+
 func (ts *ReaderTestSuite) TestFindFile() {
 	for _, test := range []struct {
 		testName         string

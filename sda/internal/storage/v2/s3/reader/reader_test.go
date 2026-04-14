@@ -753,3 +753,48 @@ func (ts *ReaderTestSuite) TestNewFileReaderSeeker_InvalidLocation() {
 	_, err := ts.reader.NewFileReader(context.TODO(), "", "")
 	ts.EqualError(err, storageerrors.ErrorInvalidLocation.Error())
 }
+
+func (ts *ReaderTestSuite) TestPing() {
+	err := ts.reader.Ping(context.TODO())
+	ts.NoError(err)
+}
+
+func (ts *ReaderTestSuite) TestPing_EndpointDown() {
+	// Create a reader with a stopped server
+	configDir := ts.T().TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasSuffix(req.RequestURI, "ListBuckets") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><ListAllMyBucketsResult><Buckets></Buckets></ListAllMyBucketsResult>`)
+
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  ping_fail_test:
+    s3:
+    - endpoint: %s
+      access_key: ak
+      secret_key: sk
+      disable_https: true
+      region: us-east-1
+`, server.URL)), 0600); err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	viper.SetConfigFile(filepath.Join(configDir, "config.yaml"))
+	ts.Require().NoError(viper.ReadInConfig())
+
+	reader, err := NewReader(context.TODO(), "ping_fail_test")
+	ts.Require().NoError(err)
+
+	// Stop the server, then ping should fail
+	server.Close()
+
+	err = reader.Ping(context.TODO())
+	ts.Error(err)
+	ts.Contains(err.Error(), "failed to ping S3 endpoint")
+}
