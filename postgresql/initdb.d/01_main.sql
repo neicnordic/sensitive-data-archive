@@ -58,6 +58,28 @@ CREATE TABLE encryption_keys (
     description       TEXT
 );
 
+-- This table is used to define events for file event logging.
+CREATE TABLE file_events (
+    id                  SERIAL PRIMARY KEY,
+    title               VARCHAR(64) UNIQUE, -- short name of the action
+    description         TEXT
+);
+
+-- These are the default file events to log.
+INSERT INTO file_events(id,title,description)
+VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
+       (10, 'uploaded'    , 'Upload to the inbox has finished'),
+       (20, 'submitted'   , 'User has submitted the file to the archive'),
+       (30, 'ingested'    , 'File information has been added to the database'),
+       (40, 'archived'    , 'File has been moved to the archive'),
+       (50, 'verified'    , 'Checksums have been verified in the archived file'),
+       (60, 'backed up'   , 'File has been backed up'),
+       (70, 'ready'       , 'File is ready for access requests'),
+       (80, 'downloaded'  , 'Downloaded by user'),
+       ( 0, 'error'       , 'An Error occurred, check the error table'),
+       ( 1, 'disabled'    , 'Disables the file for all actions'),
+       ( 2, 'enabled'     , 'Reenables a disabled file');
+
 -- `files` is the main table of the schema, holding the file paths, encryption
 -- header, and stable id.
 CREATE TABLE files (
@@ -81,7 +103,7 @@ CREATE TABLE files (
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
     -- Denormalized from file_event_log to avoid join when listing files
-    last_event           TEXT,
+    last_event           TEXT REFERENCES file_events(title),
 
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
@@ -142,32 +164,6 @@ CREATE TABLE file_dataset (
     dataset_id          INT REFERENCES datasets(id) NOT NULL,
     CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id)
 );
-
--- This table is used to define events for file event logging.
-CREATE TABLE file_events (
-    id                  SERIAL PRIMARY KEY,
-    title               VARCHAR(64) UNIQUE, -- short name of the action
-    description         TEXT
-);
-
--- These are the default file events to log.
-INSERT INTO file_events(id,title,description)
-VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
-       (10, 'uploaded'    , 'Upload to the inbox has finished'),
-       (20, 'submitted'   , 'User has submitted the file to the archive'),
-       (30, 'ingested'    , 'File information has been added to the database'),
-       (40, 'archived'    , 'File has been moved to the archive'),
-       (50, 'verified'    , 'Checksums have been verified in the archived file'),
-       (60, 'backed up'   , 'File has been backed up'),
-       (70, 'ready'       , 'File is ready for access requests'),
-       (80, 'downloaded'  , 'Downloaded by user'),
-       ( 0, 'error'       , 'An Error occurred, check the error table'),
-       ( 1, 'disabled'    , 'Disables the file for all actions'),
-       ( 2, 'enabled'     , 'Reenables a disabled file');
-
--- Add FK now that file_events exists
-ALTER TABLE files ADD CONSTRAINT files_last_event_fk FOREIGN KEY (last_event) REFERENCES file_events(title);
-
 
 -- Keeps track of all events for the files, with timestamps and user_ids.
 CREATE TABLE file_event_log (
