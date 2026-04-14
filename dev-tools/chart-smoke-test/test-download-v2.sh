@@ -185,6 +185,8 @@ HELM_ARGS=(
     --set global.downloadV2.service.orgName=TestOrg
     --set global.downloadV2.service.orgURL=http://test.org
     --set global.ingress.hostName.downloadV2=dl-v2.local
+    # Single-node k3d can't satisfy topology spread for the default 2 replicas
+    --set downloadV2.replicaCount=1
 )
 
 # Render only v2 templates and apply directly
@@ -193,15 +195,12 @@ for tmpl in download-v2-secrets download-v2-deploy download-v2-service; do
         --show-only "templates/${tmpl}.yaml"
 done | kubectl apply -f -
 
-# Scale to 1 replica (single-node cluster can't satisfy topology spread for 2)
-kubectl scale deploy pipeline-sda-svc-download-v2 --replicas=1
-
 wait_for_pod "app=pipeline-sda-svc-download-v2" 60
 
 # -- 6. smoke tests --
 echo "=== Step 5: smoke tests ==="
 
-SVC="pipeline-sda-svc-download-v2:80"
+SVC="pipeline-sda-svc-download-v2"
 
 run_curl() {
     local name="$1"; shift

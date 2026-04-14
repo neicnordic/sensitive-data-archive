@@ -38,7 +38,7 @@ spec:
           service:
             name: {{ template "sda.fullname" . }}-download-v2
             port:
-              number: 8080
+              number: 80
 {{- if .Values.global.tls.enabled }}
   tls:
   - hosts:
