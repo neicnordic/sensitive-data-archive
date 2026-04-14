@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
@@ -121,4 +122,29 @@ func (m *mockDatabase) GetDatasetFilesPaginated(_ context.Context, _ string, _ d
 	}
 
 	return m.datasetFilesPaged, nil
+}
+
+// mockStorageReader is a mock implementation of storage.Reader for testing.
+type mockStorageReader struct {
+	pingErr error
+}
+
+func (m *mockStorageReader) NewFileReader(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (m *mockStorageReader) NewFileReadSeeker(_ context.Context, _, _ string) (io.ReadSeekCloser, error) {
+	return nil, nil
+}
+
+func (m *mockStorageReader) FindFile(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStorageReader) GetFileSize(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStorageReader) Ping(_ context.Context) error {
+	return m.pingErr
 }

@@ -40,7 +40,13 @@ func (h *Handlers) HealthReady(c *gin.Context) {
 
 	// Check storage reader
 	if h.storageReader != nil {
-		services["storage"] = "ok"
+		if err := h.storageReader.Ping(ctx); err != nil {
+			log.Warnf("health check: storage ping failed: %v", err)
+			services["storage"] = "error: " + err.Error()
+			allHealthy = false
+		} else {
+			services["storage"] = "ok"
+		}
 	} else {
 		services["storage"] = "error: not configured"
 		allHealthy = false
@@ -48,7 +54,7 @@ func (h *Handlers) HealthReady(c *gin.Context) {
 
 	// Check gRPC reencrypt client
 	if h.reencryptClient != nil {
-		if err := h.reencryptClient.HealthCheck(); err != nil {
+		if err := h.reencryptClient.HealthCheck(ctx); err != nil {
 			log.Warnf("health check: grpc connection failed: %v", err)
 			services["grpc"] = "error: " + err.Error()
 			allHealthy = false

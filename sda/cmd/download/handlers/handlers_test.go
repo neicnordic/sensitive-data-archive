@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,9 +12,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var loadConfigOnce sync.Once
@@ -113,6 +119,135 @@ func TestHealthReady_Degraded(t *testing.T) {
 	assert.Equal(t, "ok", response.Services["database"])
 	assert.Contains(t, response.Services["storage"], "not configured")
 	assert.Contains(t, response.Services["grpc"], "not configured")
+}
+
+func TestHealthReady_StorageAndDBHealthy(t *testing.T) {
+	router := gin.New()
+	mockDB := &mockDatabase{}
+	mockStorage := &mockStorageReader{}
+	h, err := New(WithDatabase(mockDB), WithStorageReader(mockStorage))
+	require.NoError(t, err)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/health/ready", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	var response HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	// Still degraded because grpc is not configured
+	assert.Equal(t, "degraded", response.Status)
+	assert.Equal(t, "ok", response.Services["database"])
+	assert.Equal(t, "ok", response.Services["storage"])
+	assert.Contains(t, response.Services["grpc"], "not configured")
+}
+
+func TestHealthReady_StorageUnhealthy(t *testing.T) {
+	router := gin.New()
+	mockDB := &mockDatabase{}
+	mockStorage := &mockStorageReader{pingErr: fmt.Errorf("connection refused")}
+	h, err := New(WithDatabase(mockDB), WithStorageReader(mockStorage))
+	require.NoError(t, err)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/health/ready", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	var response HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "degraded", response.Status)
+	assert.Contains(t, response.Services["storage"], "connection refused")
+}
+
+// startHealthGRPCServer starts a gRPC server with a health service reporting
+// the given status. Returns the listening port and a stop function.
+func startHealthGRPCServer(t *testing.T, status healthgrpc.HealthCheckResponse_ServingStatus) (int, func()) {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+
+	srv := grpc.NewServer()
+	healthSrv := health.NewServer()
+	healthSrv.SetServingStatus("", status)
+	healthgrpc.RegisterHealthServer(srv, healthSrv)
+
+	go func() { _ = srv.Serve(lis) }()
+
+	return lis.Addr().(*net.TCPAddr).Port, srv.Stop
+}
+
+func TestHealthReady_AllHealthy(t *testing.T) {
+	port, stopServer := startHealthGRPCServer(t, healthgrpc.HealthCheckResponse_SERVING)
+	defer stopServer()
+
+	reencryptClient := reencrypt.NewClient("localhost", port)
+	defer reencryptClient.Close()
+
+	router := gin.New()
+	h, err := New(
+		WithDatabase(&mockDatabase{}),
+		WithStorageReader(&mockStorageReader{}),
+		WithReencryptClient(reencryptClient),
+	)
+	require.NoError(t, err)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/health/ready", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", response.Status)
+	assert.Equal(t, "ok", response.Services["database"])
+	assert.Equal(t, "ok", response.Services["storage"])
+	assert.Equal(t, "ok", response.Services["grpc"])
+}
+
+func TestHealthReady_GrpcUnhealthy(t *testing.T) {
+	port, stopServer := startHealthGRPCServer(t, healthgrpc.HealthCheckResponse_NOT_SERVING)
+	defer stopServer()
+
+	reencryptClient := reencrypt.NewClient("localhost", port)
+	defer reencryptClient.Close()
+
+	router := gin.New()
+	h, err := New(
+		WithDatabase(&mockDatabase{}),
+		WithStorageReader(&mockStorageReader{}),
+		WithReencryptClient(reencryptClient),
+	)
+	require.NoError(t, err)
+	h.RegisterRoutes(router)
+
+	req, _ := http.NewRequest(http.MethodGet, "/health/ready", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	var response HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "degraded", response.Status)
+	assert.Equal(t, "ok", response.Services["database"])
+	assert.Equal(t, "ok", response.Services["storage"])
+	assert.Contains(t, response.Services["grpc"], "NOT_SERVING")
 }
 
 // Test that hasDatasetAccess helper works correctly
