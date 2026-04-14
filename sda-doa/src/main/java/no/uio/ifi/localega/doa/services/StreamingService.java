@@ -118,7 +118,7 @@ public class StreamingService {
         return new SequenceInputStream(headerInputStream, bodyInputStream);
     }
 
-    private InputStream getFileInputStream(LEGAFile file) throws IOException, InvalidKeyException, NoSuchAlgorithmException, InsufficientDataException, InvalidResponseException, InternalException, ErrorResponseException, ServerException, XmlParserException {
+    private InputStream getFileInputStream(LEGAFile file) throws IOException, MinioException {
         String filePath = file.getFilePath();
         try { // S3
             BigInteger s3FileId = new BigInteger(filePath);
