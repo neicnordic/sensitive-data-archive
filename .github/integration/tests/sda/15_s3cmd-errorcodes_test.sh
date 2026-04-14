@@ -30,5 +30,36 @@ if ! [[ "$unathorized" =~ "Unauthorized" ]]; then
     exit 1
 fi
 
+aws configure set aws_access_key_id dummy # Value dont matter as we authenticate with the aws_session_token
+aws configure set aws_secret_access_key dummy # Value dont matter as we authenticate with the aws_session_token
+aws configure set aws_session_token "$(grep 'access_token' s3cfg | cut -d "=" -f 2 | xargs)"
+
+listResponse=$(aws s3api list-objects --endpoint http://s3inbox:8000 --bucket test_dummy.org)
+if (( $(echo "$listResponse" | grep -c "test_dummy.org") == 0 )); then
+  echo "found no files for users when listing towards s3inbox with ListObjects call"
+  exit 1
+fi
+
+listV2Response=$(aws s3api list-objects --endpoint http://s3inbox:8000 --bucket test_dummy.org)
+if (( $(echo "$listV2Response" | grep -c "test_dummy.org") == 0 )); then
+  echo "found no files for users when listing towards s3inbox with ListObjectsV2 call"
+  exit 1
+fi
+
+
+aws configure set aws_session_token "$(cat token)"
+
+listResponse=$(aws s3api list-objects --endpoint http://s3inbox:8000 --bucket testu_lifescience-ri.eu)
+if ! (( $(echo "$listResponse" | grep -c "test_dummy.org") == 0 )); then
+  echo "found other users files when listing towards s3inbox with ListObjects call"
+  exit 1
+fi
+
+listV2Response=$(aws s3api list-objects-v2 --endpoint http://s3inbox:8000 --bucket testu_lifescience-ri.eu)
+if ! (( $(echo "$listV2Response" | grep -c "test_dummy.org") == 0 )); then
+  echo "found other users files when listing towards s3inbox with ListObjectsV2 call"
+  exit 1
+fi
+
 
 echo "s3cmd error messages tested successfully"
