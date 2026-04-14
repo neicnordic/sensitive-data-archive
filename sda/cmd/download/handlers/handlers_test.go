@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -149,7 +149,7 @@ func TestHealthReady_StorageAndDBHealthy(t *testing.T) {
 func TestHealthReady_StorageUnhealthy(t *testing.T) {
 	router := gin.New()
 	mockDB := &mockDatabase{}
-	mockStorage := &mockStorageReader{pingErr: fmt.Errorf("connection refused")}
+	mockStorage := &mockStorageReader{pingErr: errors.New("connection refused")}
 	h, err := New(WithDatabase(mockDB), WithStorageReader(mockStorage))
 	require.NoError(t, err)
 	h.RegisterRoutes(router)
@@ -165,7 +165,7 @@ func TestHealthReady_StorageUnhealthy(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "degraded", response.Status)
-	assert.Contains(t, response.Services["storage"], "connection refused")
+	assert.Equal(t, "error: backend unresponsive", response.Services["storage"])
 }
 
 // startHealthGRPCServer starts a gRPC server with a health service reporting
@@ -247,7 +247,7 @@ func TestHealthReady_GrpcUnhealthy(t *testing.T) {
 	assert.Equal(t, "degraded", response.Status)
 	assert.Equal(t, "ok", response.Services["database"])
 	assert.Equal(t, "ok", response.Services["storage"])
-	assert.Contains(t, response.Services["grpc"], "NOT_SERVING")
+	assert.Equal(t, "error: backend unresponsive", response.Services["grpc"])
 }
 
 // Test that hasDatasetAccess helper works correctly
