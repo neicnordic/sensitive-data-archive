@@ -1,7 +1,10 @@
 """Mock OIDC server for download service local development.
 
-Provides JWT/JWKS validation, userinfo with GA4GH visas, and a /tokens
-endpoint for easy token retrieval (matching the v1 developer experience).
+Provides OIDC discovery, JWKS metadata, userinfo with GA4GH visas, and a
+/tokens endpoint for easy token retrieval (matching the v1 developer
+experience). Tokens are generated for local dev; the /userinfo handler
+does not verify JWT signatures or claims — it only decodes the payload
+to extract the subject.
 
 Uses the same RSA key as make_download_credentials.sh so tokens are
 accepted by the download service.
