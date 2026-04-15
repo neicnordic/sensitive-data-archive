@@ -38,7 +38,7 @@ spec:
           role: reencrypt
     ports:
     - protocol: TCP
-      port: {{ .Values.global.reencrypt.port | int }}
+      port: {{ ternary 50443 (.Values.global.reencrypt.port | default 50051 | int) .Values.global.tls.enabled }}
   {{- if .Values.global.networkPolicy.ingressNamespace }}
   ingress:
     - from:
