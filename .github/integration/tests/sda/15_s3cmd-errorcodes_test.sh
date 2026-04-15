@@ -40,7 +40,7 @@ if (( $(echo "$listResponse" | grep -c "test_dummy.org") == 0 )); then
   exit 1
 fi
 
-listV2Response=$(aws s3api list-objects --endpoint http://s3inbox:8000 --bucket test_dummy.org)
+listV2Response=$(aws s3api list-objects-v2 --endpoint http://s3inbox:8000 --bucket test_dummy.org)
 if (( $(echo "$listV2Response" | grep -c "test_dummy.org") == 0 )); then
   echo "found no files for users when listing towards s3inbox with ListObjectsV2 call"
   exit 1
