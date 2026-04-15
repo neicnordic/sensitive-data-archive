@@ -96,7 +96,8 @@ func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Auth
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
-		p.notAuthorized(w, err.Error())
+		log.Warnf("unauthorized user attempted: method: %s, path: %s, query: %s", r.Method, r.URL.Path, r.URL.RawQuery)
+		reportErrorToClient(http.StatusUnauthorized, "Unauthorized", w)
 
 		return
 	}
@@ -110,24 +111,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
 		p.handleUpload(s3RequestType, w, r, token)
 	default:
-		p.notAllowedResponse(w, fmt.Sprintf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery))
+		log.Warnf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery)
+		reportErrorToClient(http.StatusForbidden, "Forbidden", w)
 	}
 }
 
 // Report 500 to the user, log the original error
-func (p *Proxy) internalServerError(w http.ResponseWriter, err string) {
-	log.Error(err)
+func (p *Proxy) internalServerError(w http.ResponseWriter, tokenSubject, httpMethod, path, query, err string) {
+	log.Errorf("user: %s, method: %s, path: %s, query: %s, encountered internal error: %s", tokenSubject, httpMethod, path, query, err)
 	reportErrorToClient(http.StatusInternalServerError, "Internal Error", w)
-}
-
-func (p *Proxy) notAllowedResponse(w http.ResponseWriter, err string) {
-	log.Warn(err)
-	reportErrorToClient(http.StatusForbidden, "Forbidden", w)
-}
-
-func (p *Proxy) notAuthorized(w http.ResponseWriter, err string) {
-	log.Warn(err)
-	reportErrorToClient(http.StatusUnauthorized, "Unauthorized", w)
 }
 
 // prepareForwardPathAndQuery prepares the new path and query to be used for the s3 request to be user specific when
@@ -201,13 +193,13 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 
 	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
 
 	_ = s3Response.Body.Close()
@@ -235,7 +227,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 	fileID, err := p.database.GetFileIDInInbox(r.Context(), username, filePath)
 	if err != nil {
-		p.internalServerError(w, fmt.Sprintf("failed to check/get existing file id from database: %v", err))
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to check/get existing file id from database: %v", err))
 
 		return
 	}
@@ -244,7 +236,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	if fileID == "" {
 		fileID, err = p.database.RegisterFile(nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
 		if err != nil {
-			p.internalServerError(w, fmt.Sprintf("failed to register file in database: %v", err))
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to register file in database: %v", err))
 
 			return
 		}
@@ -256,7 +248,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	if s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload {
 		isReupload, err = p.checkFileExists(r.Context(), s3FilePath)
 		if err != nil {
-			p.internalServerError(w, err.Error())
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 			return
 		}
@@ -264,7 +256,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
 
 		return
 	}
@@ -277,31 +269,31 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	if s3Response.StatusCode == 200 && (s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload) {
 		message, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
 		if err != nil {
-			p.internalServerError(w, err.Error())
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 			return
 		}
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			p.internalServerError(w, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
 
 			return
 		}
 
 		if err = p.checkAndSendMessage(fileID, jsonMessage); err != nil {
-			p.internalServerError(w, fmt.Sprintf("broker error: %v", err))
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("broker error: %v", err))
 
 			return
 		}
 
 		if err := p.storeObjectSizeInDB(r.Context(), s3FilePath, fileID); err != nil {
-			p.internalServerError(w, fmt.Sprintf("storeObjectSizeInDB failed because: %v", err))
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("storeObjectSizeInDB failed because: %v", err))
 
 			return
 		}
 
 		if err := p.database.UpdateFileEventLog(fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
-			p.internalServerError(w, fmt.Sprintf("could not connect to db: %v", err))
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
@@ -309,7 +301,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 		if isReupload {
 			log.Infof("user: %s, reuploaded file: %s, with id: %s", username, filePath, fileID)
 			if err := p.sendMessageOnOverwrite(username, fileID, s3FilePath); err != nil {
-				p.internalServerError(w, err.Error())
+				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 				return
 			}
@@ -319,7 +311,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, fmt.Sprintf("failed to forward response to client: %v", err))
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
 	}
 }
 
