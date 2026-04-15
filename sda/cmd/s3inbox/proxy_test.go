@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -166,6 +167,65 @@ func (s *ProxyTests) SetupTest() {
 func (s *ProxyTests) TearDownTest() {
 	s.fakeServer.Close()
 	s.database.Close()
+}
+
+// TestAllowedResponse_concurrent_put_races_onFileIDs reproduces the concurrent
+// map-write crash from #2295 by driving many parallel PUT requests through
+// allowedResponse. On main this fails under -race with "concurrent map writes".
+// After #2382 (which removes the shared fileIDs map) it should pass cleanly and
+// acts as a regression guard against reintroducing unsynchronised shared state
+// in the upload path.
+func (s *ProxyTests) TestAllowedResponse_concurrent_put_races_onFileIDs() {
+	db, err := database.NewSDAdb(s.DBConf)
+	if !assert.NoError(s.T(), err) {
+		return
+	}
+	defer db.Close()
+
+	const workers = 50
+	const rounds = 20
+
+	db.DB.SetMaxOpenConns(workers)
+	db.DB.SetMaxIdleConns(workers)
+
+	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), nil, db, new(tls.Config))
+	proxy.s3Conf.Endpoint = ":" // force forwardToBackend to fail after the fileIDs write
+
+	for round := 0; round < rounds; round++ {
+		start := make(chan struct{})
+		statusCodes := make(chan int, workers)
+
+		var wg sync.WaitGroup
+		wg.Add(workers)
+
+		for i := 0; i < workers; i++ {
+			n := round*workers + i
+			go func(n int) {
+				defer wg.Done()
+				req := httptest.NewRequest(
+					http.MethodPut,
+					fmt.Sprintf("/dummy/race-%04d.c4gh", n),
+					http.NoBody,
+				)
+				rec := httptest.NewRecorder()
+
+				tok := jwt.New()
+				_ = tok.Set("sub", "dummy")
+
+				<-start
+				proxy.allowedResponse(rec, req, tok)
+				statusCodes <- rec.Code
+			}(n)
+		}
+
+		close(start)
+		wg.Wait()
+		close(statusCodes)
+
+		for code := range statusCodes {
+			assert.Equal(s.T(), http.StatusInternalServerError, code)
+		}
+	}
 }
 
 type FakeServer struct {
