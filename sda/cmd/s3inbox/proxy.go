@@ -117,17 +117,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Report 500 to the user, log the original error
 func (p *Proxy) internalServerError(w http.ResponseWriter, err string) {
 	log.Error(err)
-	reportError(http.StatusInternalServerError, "Internal Error", w)
+	reportErrorToClient(http.StatusInternalServerError, "Internal Error", w)
 }
 
 func (p *Proxy) notAllowedResponse(w http.ResponseWriter, err string) {
 	log.Warn(err)
-	reportError(http.StatusForbidden, "Forbidden", w)
+	reportErrorToClient(http.StatusForbidden, "Forbidden", w)
 }
 
 func (p *Proxy) notAuthorized(w http.ResponseWriter, err string) {
 	log.Warn(err)
-	reportError(http.StatusUnauthorized, "Unauthorized", w)
+	reportErrorToClient(http.StatusUnauthorized, "Unauthorized", w)
 }
 
 // prepareForwardPathAndQuery prepares the new path and query to be used for the s3 request to be user specific when
@@ -193,7 +193,8 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
 	if err != nil {
-		reportError(http.StatusBadRequest, err.Error(), w)
+		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -217,7 +218,8 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
 	if err != nil {
-		reportError(http.StatusBadRequest, err.Error(), w)
+		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -225,7 +227,8 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	s3FilePath := strings.Replace(r.URL.Path, "/"+p.s3Conf.Bucket+"/", "", 1)
 	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
 	if err != nil {
-		reportError(http.StatusBadRequest, err.Error(), w)
+		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -595,7 +598,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 }
 
 // Write the error and its status code to the response
-func reportError(errorCode int, message string, w http.ResponseWriter) {
+func reportErrorToClient(errorCode int, message string, w http.ResponseWriter) {
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
