@@ -132,7 +132,7 @@ FROM (
         LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
     WHERE f.submission_user = $1
       AND f.submission_file_path = $2
-      AND f.stable_id IS NULL
+      AND f.archive_file_path = ''
     ORDER BY f.id, fel.started_at DESC LIMIT 1
     ) AS id_and_event
 WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled');`
