@@ -1916,6 +1916,18 @@ func (suite *DatabaseTests) TestGetFileIDInInbox() {
 	fileIDFromDB, err := db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), fileID, fileIDFromDB)
+
+	assert.NoError(suite.T(), db.SetArchived("/archive", FileInfo{fmt.Sprintf("%x", sha256.New()), 1000, fileID, fmt.Sprintf("%x", sha256.New()), -1, fmt.Sprintf("%x", sha256.New())}, fileID))
+
+	fileIDFromDB, err = db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "", fileIDFromDB)
+
+	assert.NoError(suite.T(), db.CancelFile(context.TODO(), fileID, "{}"))
+
+	fileIDFromDB, err = db.GetFileIDInInbox(context.TODO(), "testuser", "TestGetFileIDInInbox.c4gh")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), fileID, fileIDFromDB)
 }
 
 func (suite *DatabaseTests) TestGetFileIDInInbox_NotFound() {
