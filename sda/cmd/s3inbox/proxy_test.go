@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -169,6 +170,51 @@ func (s *ProxyTests) SetupTest() {
 func (s *ProxyTests) TearDownTest() {
 	s.fakeServer.Close()
 	s.database.Close()
+}
+
+// TestServeHTTP_concurrent_put_noRace verifies that after the in-memory
+// fileIDs map was replaced with Postgres-backed lookups (#2382), concurrent
+// PUT requests no longer trigger the "fatal error: concurrent map writes"
+// crash from #2295. The same-shaped test fails on main under -race with
+// warnings on proxy.go:182/185/195 and the fatal error. Here it should pass.
+func (s *ProxyTests) TestServeHTTP_concurrent_put_noRace() {
+	db, err := database.NewSDAdb(s.DBConf)
+	if !assert.NoError(s.T(), err) {
+		return
+	}
+	defer db.Close()
+
+	const workers = 50
+	const rounds = 20
+
+	db.DB.SetMaxOpenConns(workers)
+	db.DB.SetMaxIdleConns(workers)
+
+	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), nil, db, new(tls.Config))
+	proxy.s3Conf.Endpoint = ":" // force forwardRequestToBackend to fail fast
+
+	for round := 0; round < rounds; round++ {
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(workers)
+
+		for i := 0; i < workers; i++ {
+			n := round*workers + i
+			go func(n int) {
+				defer wg.Done()
+				req := httptest.NewRequest(
+					http.MethodPut,
+					fmt.Sprintf("/dummy/race-%04d.c4gh", n),
+					http.NoBody,
+				)
+				rec := httptest.NewRecorder()
+				<-start
+				proxy.ServeHTTP(rec, req)
+			}(n)
+		}
+		close(start)
+		wg.Wait()
+	}
 }
 
 type FakeServer struct {
