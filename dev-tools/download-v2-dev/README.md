@@ -84,7 +84,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 The stack is pre-seeded with:
 
 - **Dataset**: `EGAD00000000001` ("Test Dataset")
-- **File**: `EGAF00000000001` (`test-file.c4gh`, 1000 bytes archived, 500 bytes decrypted)
+- **File**: `EGAF00000000001` (`test-file.c4gh`)
 - **User**: `integration_test@example.org` (file owner)
 
 ## Using with sda-auth

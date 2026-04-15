@@ -9,6 +9,8 @@
 #   TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
 #   curl -H "Authorization: Bearer $TOKEN" http://localhost:8085/datasets
 
+name: download-v2-dev
+
 services:
   postgres:
     build:
