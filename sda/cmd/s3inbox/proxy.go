@@ -264,8 +264,8 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 		_ = s3Response.Body.Close()
 	}()
 
-	// Send message to upstream and set file as uploaded in the database
-	// nolint: nestif // We need a nested if statement for checking whether fileId is persisted during possible reconnections
+	// Send message to upstream and set file as uploaded in the database when upload is complete(PutObject / CompleteMultipartUpload)
+	// nolint: nestif
 	if s3Response.StatusCode == 200 && (s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload) {
 		message, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
 		if err != nil {
