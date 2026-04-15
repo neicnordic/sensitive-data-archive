@@ -267,7 +267,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	// Send message to upstream and set file as uploaded in the database when upload is complete(PutObject / CompleteMultipartUpload)
 	// nolint: nestif
 	if s3Response.StatusCode == 200 && (s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload) {
-		message, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
+		message, checksum, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
 		if err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
@@ -299,14 +299,14 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 		}
 
 		if isReupload {
-			log.Infof("user: %s, reuploaded file: %s, with id: %s", username, filePath, fileID)
+			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
 			if err := p.sendMessageOnOverwrite(username, fileID, s3FilePath); err != nil {
 				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 				return
 			}
 		} else {
-			log.Infof("user: %s, uploaded file: %s, with id: %s", username, filePath, fileID)
+			log.Infof("user: %s, uploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
 		}
 	}
 
@@ -490,14 +490,14 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 
 // CreateMessageFromRequest is a function that can take a http request and
 // figure out the correct rabbitmq message to send from it.
-func (p *Proxy) CreateMessageFromRequest(ctx context.Context, username, s3FilePath string) (Event, error) {
+func (p *Proxy) CreateMessageFromRequest(ctx context.Context, username, s3FilePath string) (Event, string, error) {
 	event := Event{}
 	checksum := Checksum{}
 	var err error
 
 	checksum.Value, event.Filesize, err = p.requestInfo(ctx, s3FilePath)
 	if err != nil {
-		return event, fmt.Errorf("could not get checksum information: %s", err)
+		return event, "", fmt.Errorf("could not get checksum information: %s", err)
 	}
 
 	// Case for simple upload
@@ -508,7 +508,7 @@ func (p *Proxy) CreateMessageFromRequest(ctx context.Context, username, s3FilePa
 	checksum.Type = "md5"
 	event.Checksum = []any{checksum}
 
-	return event, nil
+	return event, checksum.Value, nil
 }
 
 // RequestInfo is a function that makes a request to the S3 and collects
