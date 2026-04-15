@@ -287,10 +287,18 @@ type getUserFilesResponse struct {
 }
 
 func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (*getUserFilesResponse, error) {
-	var userFiles []*model.UserFilesResponse
-	cursor := ""
+	rsp := &getUserFilesResponse{
+		fileInformation: make(map[string]*model.FileInformation),
+	}
 
-	client := &http.Client{}
+	// Build a set of still-needed paths so we can stop pagination early.
+	needed := make(map[string]struct{}, len(requestedFilePaths))
+	for _, p := range requestedFilePaths {
+		needed[p] = struct{}{}
+	}
+
+	cursor := ""
+	client := &http.Client{} // reuse across pages for connection pooling
 	for {
 		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, url.PathEscape(userID))
 		if cursor != "" {
@@ -331,7 +339,24 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 			return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
 		}
 
-		userFiles = append(userFiles, pageFiles...)
+		// Match page entries against still-needed paths; stop early when all found.
+		for _, userFile := range pageFiles {
+			inboxPath := strings.TrimSuffix(userFile.InboxPath, ".c4gh")
+			if _, ok := needed[inboxPath]; ok {
+				rsp.fileInformation[inboxPath] = &model.FileInformation{
+					FileID:             userFile.FileID,
+					FilePath:           inboxPath,
+					SubmissionFileSize: userFile.SubmissionFileSize,
+				}
+				rsp.sumFilesSize += userFile.SubmissionFileSize
+				delete(needed, inboxPath)
+			}
+		}
+
+		// All requested paths found — no need to fetch more pages.
+		if len(needed) == 0 {
+			break
+		}
 
 		// Check for next page
 		cursor = res.Header.Get("X-Next-Cursor")
@@ -340,28 +365,10 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 		}
 	}
 
-	rsp := &getUserFilesResponse{
-		fileInformation: make(map[string]*model.FileInformation),
-	}
-
-	for _, filePath := range requestedFilePaths {
-		fileFound := false
-		for _, userFile := range userFiles {
-			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
-			if filePath == userFile.InboxPath {
-				rsp.fileInformation[filePath] = &model.FileInformation{
-					FileID:             userFile.FileID,
-					FilePath:           userFile.InboxPath,
-					SubmissionFileSize: userFile.SubmissionFileSize,
-				}
-				fileFound = true
-				rsp.sumFilesSize += userFile.SubmissionFileSize
-
-				break
-			}
-		}
-		if !fileFound {
-			rsp.missingFiles = append(rsp.missingFiles, filePath)
+	// Any paths still in `needed` were not found.
+	for _, requestedPath := range requestedFilePaths {
+		if _, ok := needed[requestedPath]; ok {
+			rsp.missingFiles = append(rsp.missingFiles, requestedPath)
 		}
 	}
 

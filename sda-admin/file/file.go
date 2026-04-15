@@ -2,8 +2,8 @@ package file
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path"
@@ -12,6 +12,9 @@ import (
 	"github.com/tidwall/pretty"
 	"golang.org/x/term"
 )
+
+// ErrAborted is returned when the user explicitly cancels an interactive prompt (e.g. Ctrl+C).
+var ErrAborted = errors.New("aborted by user")
 
 type RequestBodyFileIngest struct {
 	Filepath string `json:"filepath"`
@@ -98,7 +101,7 @@ func waitForUserContinue() error {
 		case 3: // Ctrl+C
 			fmt.Fprintln(os.Stderr)
 
-			return io.EOF
+			return ErrAborted
 		}
 	}
 }

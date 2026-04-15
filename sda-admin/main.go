@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/neicnordic/sensitive-data-archive/sda-admin/c4ghkeyhash"
@@ -339,7 +338,7 @@ func handleFileListCommand() error {
 	}
 
 	if err := file.List(apiURI, token, username); err != nil {
-		if errors.Is(err, io.EOF) {
+		if errors.Is(err, file.ErrAborted) {
 			return nil
 		}
 

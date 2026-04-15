@@ -347,6 +347,32 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 	}
 }
 
+const defaultPageLimit = 1000
+const maxPageLimit = 10000
+
+// parseLimitParam reads the optional "limit" query parameter, validates it and
+// returns the effective limit. On validation failure it writes a 400 response
+// via c and returns -1 so the caller can return early.
+func parseLimitParam(c *gin.Context) int {
+	l := c.DefaultQuery("limit", "0")
+	if l == "0" {
+		return defaultPageLimit
+	}
+	li, err := strconv.Atoi(l)
+	if err != nil || li < 1 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "invalid limit parameter: must be a positive integer")
+
+		return -1
+	}
+	if li > maxPageLimit {
+		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxPageLimit))
+
+		return -1
+	}
+
+	return li
+}
+
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -360,21 +386,9 @@ func getFiles(c *gin.Context) {
 	}
 
 	// parse optional pagination params
-	limit := 1000
-	if l := c.DefaultQuery("limit", "0"); l != "0" {
-		li, err := strconv.Atoi(l)
-		if err != nil || li < 1 {
-			c.JSON(400, "invalid limit parameter: must be a positive integer")
-
-			return
-		}
-		const maxLimit = 10000
-		if li > maxLimit {
-			c.JSON(400, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxLimit))
-
-			return
-		}
-		limit = li
+	limit := parseLimitParam(c)
+	if limit < 0 {
+		return
 	}
 	cursor := c.DefaultQuery("cursor", "")
 
@@ -1021,21 +1035,9 @@ func listUserFiles(c *gin.Context) {
 	log.Debugln(username)
 
 	// parse optional pagination params
-	limit := 1000
-	if l := c.DefaultQuery("limit", "0"); l != "0" {
-		li, err := strconv.Atoi(l)
-		if err != nil || li < 1 {
-			c.AbortWithStatusJSON(400, "invalid limit parameter: must be a positive integer")
-
-			return
-		}
-		const maxLimit = 10000
-		if li > maxLimit {
-			c.AbortWithStatusJSON(400, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxLimit))
-
-			return
-		}
-		limit = li
+	limit := parseLimitParam(c)
+	if limit < 0 {
+		return
 	}
 	cursor := c.DefaultQuery("cursor", "")
 	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
