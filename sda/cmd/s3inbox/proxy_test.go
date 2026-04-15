@@ -499,7 +499,7 @@ func (s *ProxyTests) TestMessageFormatting() {
 	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, &helper.AlwaysDeny{}, s.messenger, s.database, new(tls.Config))
 	s.fakeServer.resp = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>test</Name><Prefix>/user/new_file.txt</Prefix><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated><Contents><Key>/user/new_file.txt</Key><LastModified>2020-03-10T13:20:15.000Z</LastModified><ETag>&#34;0a44282bd39178db9680f24813c41aec-1&#34;</ETag><Size>1234</Size><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
 	s.fakeServer.headHeaders = map[string]string{"ETag": "\"0a44282bd39178db9680f24813c41aec-1\"", "Content-Length": "1234"}
-	msg, err := proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
+	msg, checksumValue, err := proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 
@@ -512,10 +512,11 @@ func (s *ProxyTests) TestMessageFormatting() {
 	_ = json.Unmarshal(c, &checksum)
 	assert.Equal(s.T(), "md5", checksum.Type)
 	assert.Equal(s.T(), "0a44282bd39178db9680f24813c41aec-1", checksum.Value)
+	assert.Equal(s.T(), "0a44282bd39178db9680f24813c41aec-1", checksumValue)
 
 	// Test single shot upload
 	r.Method = "PUT"
-	msg, err = proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
+	msg, _, err = proxy.CreateMessageFromRequest(r.Context(), claims.Subject(), "new_file.txt")
 	assert.Nil(s.T(), err)
 	assert.IsType(s.T(), Event{}, msg)
 	assert.Equal(s.T(), "upload", msg.Operation)
