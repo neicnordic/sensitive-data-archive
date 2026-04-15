@@ -98,7 +98,7 @@ func (u *AlwaysAllow) Authenticate(_ *http.Request) (jwt.Token, error) {
 	return token, nil
 }
 
-// AlwaysAllow is an Authenticator that always authenticates
+// AlwaysDeny is an Authenticator that always denies authentication
 type AlwaysDeny struct{}
 
 // Authenticate does not authenticate anyone.
