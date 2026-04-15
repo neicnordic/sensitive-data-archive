@@ -27,12 +27,16 @@ BEGIN
 
     -- Create trigger to keep last_event in sync on future inserts
     CREATE FUNCTION sda.update_files_last_event()
-    RETURNS TRIGGER AS $update_files_last_event$
+    RETURNS TRIGGER
+    LANGUAGE plpgsql
+    SECURITY DEFINER
+    SET search_path = pg_catalog, sda
+    AS $update_files_last_event$
     BEGIN
         UPDATE sda.files SET last_event = NEW.event WHERE id = NEW.file_id;
         RETURN NEW;
     END;
-    $update_files_last_event$ LANGUAGE plpgsql;
+    $update_files_last_event$;
 
     CREATE TRIGGER file_event_log_update_last_event
         AFTER INSERT ON sda.file_event_log

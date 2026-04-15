@@ -724,7 +724,7 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, "not-a-valid-cursor!!!")
 	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor")
 
-	// A valid base64 string that does not match the expected "<unixnano>|<id>" format should
+	// A valid base64url string that does not match the expected "<fileid>|<path>" format should
 	// also return ErrInvalidCursor.
 	badFormatCursor := base64.RawURLEncoding.EncodeToString([]byte("badformat"))
 	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, badFormatCursor)

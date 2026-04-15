@@ -277,6 +277,12 @@ paths:
       description: List all files belonging to the calling user that is not part of a dataset.
       parameters:
         - in: query
+          name: path_prefix
+          schema:
+            type: string
+          required: false
+          description: Only return files whose submission path starts with this prefix.
+        - in: query
           name: limit
           schema:
             type: integer
