@@ -273,9 +273,7 @@ global:
       environment: ""
 
     jwt:
-      # @param global.downloadV2.jwt.pubkeyPath path to directory containing JWT public key PEM files
-      pubkeyPath: ""
-      # @param global.downloadV2.jwt.pubkeyURL URL to JWKS endpoint for JWT verification
+      # @param global.downloadV2.jwt.pubkeyURL URL to JWKS endpoint for JWT verification (alternative to mounting keys via global.oidc.jwtSecret)
       pubkeyURL: ""
       # @param global.downloadV2.jwt.allowAllData allow all authenticated users access to all datasets (testing only)
       allowAllData: false
@@ -357,6 +355,8 @@ global:
     jwkPath: "/jwk"
     id: ""
     secret: ""
+    # @param global.oidc.jwtSecret name of k8s secret containing JWT public keys for token verification (optional)
+    jwtSecret: ""
 
   s3Inbox:
     url: ""

@@ -101,6 +101,10 @@ spec:
         - name: iss
           mountPath: {{ template "trustedIssPath" . }}
         {{- end }}
+        {{- if .Values.global.oidc.jwtSecret }}
+        - name: jwt
+          mountPath: {{ template "jwtPath" . }}
+        {{- end }}
       {{- end }}
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
@@ -134,6 +138,12 @@ spec:
           secret:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-download-v2-iss
+        {{- end }}
+        {{- if .Values.global.oidc.jwtSecret }}
+        - name: jwt
+          secret:
+            defaultMode: 0440
+            secretName: {{ .Values.global.oidc.jwtSecret }}
         {{- end }}
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
