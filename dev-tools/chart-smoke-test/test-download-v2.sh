@@ -4,9 +4,9 @@
 # Prerequisites: docker, k3d, kubectl, helm
 #
 # Usage:
-#   ./dev-tools/k3d/test-download-v2.sh              # full run (build + deploy + test)
-#   ./dev-tools/k3d/test-download-v2.sh --no-build    # skip image build (reuse existing)
-#   ./dev-tools/k3d/test-download-v2.sh --cleanup      # tear down cluster and exit
+#   ./dev-tools/chart-smoke-test/test-download-v2.sh              # full run (build + deploy + test)
+#   ./dev-tools/chart-smoke-test/test-download-v2.sh --no-build    # skip image build (reuse existing)
+#   ./dev-tools/chart-smoke-test/test-download-v2.sh --cleanup      # tear down cluster and exit
 set -euo pipefail
 
 CLUSTER_NAME="sda-download-v2-test"
