@@ -50,6 +50,93 @@ wait_for_pod() {
     fi
 }
 
+# Render the v2 templates across config combinations (TLS, storage, ingress,
+# networkPolicy) without deploying — catches regressions in templates that the
+# single-slice deploy test doesn't exercise (ingress, certificate, netpol).
+render_matrix() {
+    echo "=== Template render matrix ==="
+    local matrix_pass=0 matrix_fail=0
+    local failed=()
+
+    local base=(
+        --set global.deploymentType=external
+        --set global.download.enabled=false
+        --set global.doa.enabled=false
+        --set global.db.host=db --set global.db.user=u --set global.db.password=p
+        --set global.broker.host=mq --set global.broker.username=u --set global.broker.password=p
+        --set global.archive.s3Url=http://s3
+        --set global.archive.s3AccessKey=a --set global.archive.s3SecretKey=s
+        --set global.reencrypt.host=r
+        --set global.api.jwtSecret=s --set global.api.rbacFileSecret=r
+        --set global.oidc.id=id --set global.oidc.secret=s --set global.oidc.provider=http://oidc
+        --set global.c4gh.secretName=c --set global.c4gh.publicKey=p
+        --set "global.c4gh.privateKeys[0].keyName=k"
+        --set "global.c4gh.privateKeys[0].passphrase=p"
+        --set "global.c4gh.privateKeys[0].keyData=d"
+        --set global.ingress.hostName.api=api.t
+        --set global.ingress.hostName.auth=auth.t
+        --set global.ingress.hostName.download=download.t
+        --set global.ingress.hostName.syncapi=syncapi.t
+        --set global.ingress.hostName.downloadV2=dl-v2.t
+        --set global.downloadV2.enabled=true
+        --set global.downloadV2.service.orgName=TestOrg
+        --set global.downloadV2.service.orgURL=http://t
+        --set downloadV2.replicaCount=1
+    )
+
+    for tls in false true; do
+        for storage in s3 posix; do
+            for ingress in false true; do
+                for netpol in false true; do
+                    local desc="tls=$tls storage=$storage ingress=$ingress netpol=$netpol"
+                    local args=("${base[@]}"
+                        --set "global.tls.enabled=$tls"
+                        --set "global.archive.storageType=$storage"
+                        --set "global.ingress.deploy=$ingress"
+                        --set "global.networkPolicy.create=$netpol"
+                    )
+                    if [ "$tls" = "true" ]; then
+                        args+=(--set global.tls.issuer=test-issuer)
+                    fi
+                    if [ "$storage" = "posix" ]; then
+                        args+=(--set global.archive.existingClaim=archive-pvc)
+                    fi
+                    if helm template test charts/sda-svc "${args[@]}" >/dev/null 2>&1; then
+                        echo "  PASS  $desc"
+                        matrix_pass=$((matrix_pass + 1))
+                    else
+                        echo "  FAIL  $desc"
+                        matrix_fail=$((matrix_fail + 1))
+                        failed+=("$desc")
+                    fi
+                done
+            done
+        done
+    done
+
+    echo "  Matrix: $matrix_pass passed, $matrix_fail failed"
+    if [ "$matrix_fail" -gt 0 ]; then
+        echo "  Failing combinations:"
+        for c in "${failed[@]}"; do
+            echo "    - $c"
+            helm template test charts/sda-svc "${base[@]}" \
+                --set "global.tls.enabled=$(echo "$c" | sed -n 's/.*tls=\([^ ]*\).*/\1/p')" \
+                --set "global.archive.storageType=$(echo "$c" | sed -n 's/.*storage=\([^ ]*\).*/\1/p')" \
+                --set "global.ingress.deploy=$(echo "$c" | sed -n 's/.*ingress=\([^ ]*\).*/\1/p')" \
+                --set "global.networkPolicy.create=$(echo "$c" | sed -n 's/.*netpol=\([^ ]*\).*/\1/p')" \
+                2>&1 | tail -2 | sed 's/^/      /'
+        done
+        return 1
+    fi
+    return 0
+}
+
+# -- 0. render matrix (fast fail) --
+if ! render_matrix; then
+    echo "Template matrix failed — aborting before any cluster work"
+    exit 1
+fi
+
 # -- 1. cluster --
 echo "=== Step 1: k3d cluster ==="
 if k3d cluster list 2>/dev/null | grep -q "$CLUSTER_NAME"; then
