@@ -22,7 +22,9 @@ import (
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
@@ -37,7 +39,7 @@ type Ingest struct {
 	BackupWriter   storage.Writer
 	ArchiveReader  storage.Reader
 	ArchiveKeyList []*[32]byte
-	DB             *database.SDAdb
+	db             database.Database
 	InboxReader    storage.Reader
 	MQ             *broker.AMQPBroker
 }
@@ -50,6 +52,10 @@ func main() {
 func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
 
 	app := Ingest{}
 	ingestConf, err := config.NewConfig("ingest")
@@ -75,24 +81,25 @@ func run() error {
 			}
 		}
 	}()
-	app.DB, err = database.NewSDAdb(ingestConf.Database)
+	app.db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
-	defer app.DB.Close()
-	if app.DB.Version < 23 {
-		return errors.New("database schema v23 is required")
+	defer app.db.Close()
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
+
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
 		return errors.New("no C4GH private keys configured")
 	}
 
-	if err := app.registerC4GHKey(); err != nil {
+	if err := app.registerC4GHKey(ctx); err != nil {
 		return fmt.Errorf("failed to register c4gh key, due to: %v", err)
 	}
 
-	storageLocationBroker, err := locationbroker.NewLocationBroker(app.DB)
+	storageLocationBroker, err := locationbroker.NewLocationBroker(app.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize location broker, due to: %v", err)
 	}
@@ -215,15 +222,15 @@ func (app *Ingest) handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 }
 
-func (app *Ingest) registerC4GHKey() error {
-	h, err := app.DB.ListKeyHashes()
+func (app *Ingest) registerC4GHKey(ctx context.Context) error {
+	h, err := app.db.ListKeyHashes(ctx)
 	if err != nil {
 		return err
 	}
 	if len(h) == 0 {
 		for num, key := range app.ArchiveKeyList {
 			publicKey := keys.DerivePublicKey(*key)
-			if err := app.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), fmt.Sprintf("bootstrapped key: %d", num)); err != nil {
+			if err := app.db.AddKeyHash(ctx, hex.EncodeToString(publicKey[:]), fmt.Sprintf("bootstrapped key: %d", num)); err != nil {
 				return err
 			}
 		}
@@ -236,7 +243,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 	m, _ := json.Marshal(message)
 
 	// Check if file can be cancelled
-	inDataset, err := app.DB.IsFileInDataset(ctx, fileID)
+	inDataset, err := app.db.IsFileInDataset(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to check if file with id: %s is in a dataset, due to %v", fileID, err)
 
@@ -260,7 +267,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		return "ack"
 	}
 
-	archiveData, err := app.DB.GetArchived(fileID)
+	archiveData, err := app.db.GetArchived(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to get archive data for file with id: %s, due to %v", fileID, err)
 
@@ -289,7 +296,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		}
 	}
 
-	if err := app.DB.CancelFile(ctx, fileID, string(m)); err != nil {
+	if err := app.db.CancelFile(ctx, fileID, string(m)); err != nil {
 		log.Errorf("failed to cancel file with id: %s, due to %v", fileID, err)
 
 		return "nack"
@@ -299,14 +306,14 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 }
 
 func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema.IngestionTrigger) string {
-	status, err := app.DB.GetFileStatus(fileID)
+	status, err := app.db.GetFileStatus(ctx, fileID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Errorf("failed to get status for file, fileID: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
 	}
 
-	submissionLocation, err := app.DB.GetSubmissionLocation(ctx, fileID)
+	submissionLocation, err := app.db.GetSubmissionLocation(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to get submission location for file, fileID: %s, reason: (%s)", fileID, err.Error())
 
@@ -326,7 +333,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		var findFileErr, registerErr error
 		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.FilePath)
 		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
-		fileID, registerErr = app.DB.RegisterFile(&fileID, submissionLocation, message.FilePath, message.User)
+		fileID, registerErr = app.db.RegisterFile(ctx, &fileID, submissionLocation, message.FilePath, message.User)
 		if registerErr != nil {
 			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, registerErr.Error())
 
@@ -335,7 +342,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 		if findFileErr != nil {
 			log.Errorf("failed to find submission location for file in all configured storage locations, file-id: %s", fileID)
-			if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
+			if err := app.setFileEventErrorAndSendToErrorQueue(ctx, fileID, &broker.InfoError{
 				Error:           "Failed to open file to ingest, file not found in any of the configured storage locations",
 				Reason:          findFileErr.Error(),
 				OriginalMessage: message,
@@ -358,7 +365,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	if err != nil {
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
 			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
-			if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
+			if err := app.setFileEventErrorAndSendToErrorQueue(ctx, fileID, &broker.InfoError{
 				Error:           "Failed to open file to ingest",
 				Reason:          err.Error(),
 				OriginalMessage: message,
@@ -385,7 +392,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	}
 
 	m, _ := json.Marshal(message)
-	if err = app.DB.UpdateFileEventLog(fileID, "submitted", "ingest", "{}", string(m)); err != nil {
+	if err = app.db.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to set ingestion status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 	}
 
@@ -454,7 +461,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				// Check if decryption was successful with any key
 				if privateKey == nil {
 					log.Errorf("All keys failed to decrypt the submitted file, file-id: %s", fileID)
-					if err := app.setFileEventErrorAndSendToErrorQueue(fileID, &broker.InfoError{
+					if err := app.setFileEventErrorAndSendToErrorQueue(ctx, fileID, &broker.InfoError{
 						Error:           "Trying to decrypt the submitted file failed",
 						Reason:          "Decryption failed with the available key(s)",
 						OriginalMessage: message,
@@ -474,7 +481,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				// Set the file's hex encoded public key
 				publicKey := keys.DerivePublicKey(*privateKey)
 				keyhash := hex.EncodeToString(publicKey[:])
-				err = app.DB.SetKeyHash(keyhash, fileID)
+				err = app.db.SetKeyHash(ctx, keyhash, fileID)
 				if err != nil {
 					log.Errorf("Key hash %s could not be set for file, file-id: %s, reason: (%s)", keyhash, fileID, err.Error())
 					readFileAck <- "nack"
@@ -484,7 +491,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 				}
 
 				log.Debugln("store header")
-				if err := app.DB.StoreHeader(header, fileID); err != nil {
+				if err := app.db.StoreHeader(ctx, header, fileID); err != nil {
 					log.Errorf("StoreHeader failed, file-id: %s, reason: (%s)", fileID, err.Error())
 					readFileAck <- "nack"
 					uploadCancel()
@@ -563,7 +570,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 	_ = contentReader.Close()
 
 	// At this point we should do checksum comparison, but that requires updating the AWS library
-	fileInfo := database.FileInfo{}
+	fileInfo := new(database.FileInfo)
 	fileInfo.Path = fileID
 	fileInfo.UploadedChecksum = fmt.Sprintf("%x", hash.Sum(nil))
 	fileInfo.Size, err = app.ArchiveReader.GetFileSize(ctx, location, fileID)
@@ -575,7 +582,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 
 	log.Debugf("Wrote archived file (file-id: %s, user: %s, filepath: %s, archivepath: %s, archivedsize: %d)", fileID, message.User, message.FilePath, fileID, fileInfo.Size)
 
-	status, err = app.DB.GetFileStatus(fileID)
+	status, err = app.db.GetFileStatus(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: (%s)", fileID, err.Error())
 
@@ -588,13 +595,13 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		return "ack"
 	}
 
-	if err := app.DB.SetArchived(location, fileInfo, fileID); err != nil {
+	if err := app.db.SetArchived(ctx, location, fileInfo, fileID); err != nil {
 		log.Errorf("SetArchived failed, file-id: %s, reason: (%s)", fileID, err.Error())
 
 		return "nack"
 	}
 
-	if err := app.DB.UpdateFileEventLog(fileID, "archived", "ingest", "{}", string(m)); err != nil {
+	if err := app.db.UpdateFileEventLog(ctx, fileID, "archived", "ingest", "{}", string(m)); err != nil {
 		log.Errorf("failed to set event log status for file, file-id: %s, reason: %s", fileID, err.Error())
 
 		return "nack"
@@ -658,10 +665,10 @@ func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 	return header, nil
 }
 
-func (app *Ingest) setFileEventErrorAndSendToErrorQueue(fileID string, infoError *broker.InfoError) error {
+func (app *Ingest) setFileEventErrorAndSendToErrorQueue(ctx context.Context, fileID string, infoError *broker.InfoError) error {
 	jsonMsg, _ := json.Marshal(map[string]string{"error": infoError.Error, "reason": infoError.Reason})
 	m, _ := json.Marshal(infoError.OriginalMessage)
-	if err := app.DB.UpdateFileEventLog(fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
+	if err := app.db.UpdateFileEventLog(ctx, fileID, "error", "ingest", string(jsonMsg), string(m)); err != nil {
 		log.Errorf("failed to set error status for file from message, file-id: %s, reason: %s", fileID, err.Error())
 	}
 	body, _ := json.Marshal(infoError)
