@@ -77,20 +77,9 @@ spec:
           containerPort: 8080
           protocol: TCP
         livenessProbe:
-          httpGet:
-            path: /health/live
-            port: download-v2
-            scheme: HTTP
-          initialDelaySeconds: {{ .Values.downloadV2.livenessProbe.initialDelaySeconds | default 10 }}
-          periodSeconds: {{ .Values.downloadV2.livenessProbe.periodSeconds | default 30 }}
-          timeoutSeconds: {{ .Values.downloadV2.livenessProbe.timeoutSeconds | default 5 }}
+{{ toYaml .Values.downloadV2.livenessProbe | trim | indent 10 }}
         readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: download-v2
-            scheme: HTTP
-          periodSeconds: {{ .Values.downloadV2.readinessProbe.periodSeconds | default 10 }}
-          timeoutSeconds: {{ .Values.downloadV2.readinessProbe.timeoutSeconds | default 9 }}
+{{ toYaml .Values.downloadV2.readinessProbe | trim | indent 10 }}
         resources:
 {{ toYaml .Values.downloadV2.resources | trim | indent 10 }}
         volumeMounts:
