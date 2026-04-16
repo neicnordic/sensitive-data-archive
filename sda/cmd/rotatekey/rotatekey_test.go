@@ -20,6 +20,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
@@ -52,7 +53,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
+	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
 		Tag:        "15.4-alpine3.17",
 		Env: []string{
@@ -73,8 +74,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
+	dbPort, _ = strconv.Atoi(postgresContainer.GetPort("5432/tcp"))
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
@@ -106,7 +107,7 @@ func TestMain(m *testing.M) {
 		}
 	})
 	if err != nil {
-		if err := pool.Purge(postgres); err != nil {
+		if err := pool.Purge(postgresContainer); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
 		log.Fatalf("Could not start resource: %s", err)
@@ -132,7 +133,7 @@ func TestMain(m *testing.M) {
 
 		return nil
 	}); err != nil {
-		if err := pool.Purge(postgres); err != nil {
+		if err := pool.Purge(postgresContainer); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
 		if err := pool.Purge(rabbitmq); err != nil {
@@ -145,7 +146,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	log.Println("tests completed")
-	if err := pool.Purge(postgres); err != nil {
+	if err := pool.Purge(postgresContainer); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	if err := pool.Purge(rabbitmq); err != nil {
@@ -160,6 +161,7 @@ type TestSuite struct {
 	app            RotateKey
 	fileID         string
 	privateKeyList []*[32]byte
+	verificationDB *sql.DB
 }
 type server struct {
 	re.UnimplementedReencryptServer
@@ -170,22 +172,29 @@ func TestRotateKeyTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }
 
+func (ts *TestSuite) TearDownSuite() {
+	_ = ts.app.db.Close()
+}
 func (ts *TestSuite) SetupSuite() {
 	ts.app.Conf = &config.Config{}
 	ts.app.Conf.Broker.SchemasPath = "../../schemas/isolated"
 	var err error
-	ts.app.DB, err = database.NewSDAdb(database.DBConf{
-		Host:     "localhost",
-		Port:     dbPort,
-		User:     "postgres",
-		Password: "rootpasswd",
-		Database: "sda",
-		SslMode:  "disable",
-	})
+	ts.app.db, err = postgres.NewPostgresSQLDatabase(
+		postgres.Host("localhost"),
+		postgres.Port(dbPort),
+		postgres.User("postgres"),
+		postgres.Password("rootpasswd"),
+		postgres.DatabaseName("sda"),
+		postgres.Schema("sda"),
+		postgres.SslMode("disable"),
+	)
 	if err != nil {
 		ts.FailNow("Failed to create DB connection")
 	}
-
+	ts.verificationDB, err = sql.Open("postgres", fmt.Sprintf("host=localhost port=%d user=postgres password=rootpasswd dbname=sda sslmode=disable search_path=sda", dbPort))
+	if err != nil {
+		ts.FailNow("Failed to create DB connection")
+	}
 	ts.app.MQ, err = broker.NewMQ(broker.MQConf{
 		Host:     "localhost",
 		Port:     mqPort,
@@ -205,37 +214,37 @@ func (ts *TestSuite) SetupSuite() {
 	}
 
 	for i, kh := range []string{"79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", hex.EncodeToString(publicKey[:])} {
-		if err := ts.app.DB.AddKeyHash(kh, fmt.Sprintf("key num: %d", i)); err != nil {
+		if err := ts.app.db.AddKeyHash(context.TODO(), kh, fmt.Sprintf("key num: %d", i)); err != nil {
 			ts.FailNow("failed to register a public key")
 		}
 	}
 
 	ts.app.Conf.RotateKey.PublicKey = &publicKey
 
-	ts.fileID, err = ts.app.DB.RegisterFile(nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
+	ts.fileID, err = ts.app.db.RegisterFile(context.TODO(), nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
 	if err != nil {
 		ts.FailNow("Failed to register file in DB")
 	}
 	for _, status := range []string{"uploaded", "archived", "verified"} {
-		if err = ts.app.DB.UpdateFileEventLog(ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
+		if err = ts.app.db.UpdateFileEventLog(context.TODO(), ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
 			ts.FailNow("Failed to set status of file in DB")
 		}
 	}
-	if err := ts.app.DB.SetKeyHash("79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", ts.fileID); err != nil {
+	if err := ts.app.db.SetKeyHash(context.TODO(), "79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", ts.fileID); err != nil {
 		ts.FailNow("Failed to set key hash of file in DB")
 	}
-	if err := ts.app.DB.StoreHeader([]byte("637279707434676801000000010000006c000000000000004f6ae97503ac19b6316cb3330ea4e55e0fa98ed7342afc79deec64606aa33a587e78743695f3be5d5b9d0f386c2b66aefb06de07c506eccec4910455d75f54ce6324b98b4dd35dcc6c0684bbf8a05fb5c2976f540dbbbc95646c2e55ec52c5833115e5659"), ts.fileID); err != nil {
+	if err := ts.app.db.StoreHeader(context.TODO(), []byte("637279707434676801000000010000006c000000000000004f6ae97503ac19b6316cb3330ea4e55e0fa98ed7342afc79deec64606aa33a587e78743695f3be5d5b9d0f386c2b66aefb06de07c506eccec4910455d75f54ce6324b98b4dd35dcc6c0684bbf8a05fb5c2976f540dbbbc95646c2e55ec52c5833115e5659"), ts.fileID); err != nil {
 		ts.FailNow("Failed to store header of file in DB")
 	}
 
-	fileInfo := database.FileInfo{
-		ArchiveChecksum:   "239729e2f471a02f8b43374fa58ea2d3a85ec93874b58696030b4af804c32f36",
+	fileInfo := &database.FileInfo{
+		ArchivedChecksum:  "239729e2f471a02f8b43374fa58ea2d3a85ec93874b58696030b4af804c32f36",
 		DecryptedChecksum: "9aa63cfe45c560c8f16dde4b002a3fe38afa69801df6a6e266b757ab6aace2d8",
 		DecryptedSize:     34,
 		Path:              ts.fileID,
 		Size:              59,
 	}
-	if err := ts.app.DB.SetVerified(fileInfo, ts.fileID); err != nil {
+	if err := ts.app.db.SetVerified(context.TODO(), fileInfo, ts.fileID); err != nil {
 		ts.FailNow("Failed to store header of file in DB")
 	}
 
@@ -315,7 +324,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 		},
 	} {
 		ts.T().Run(test.testName, func(t *testing.T) {
-			res, msg, err := ts.app.reEncryptHeader(test.fileID)
+			res, msg, err := ts.app.reEncryptHeader(context.TODO(), test.fileID)
 			assert.Equal(t, res, test.expectedRes)
 			assert.Equal(t, msg, test.expectedMgs)
 			assert.Equal(t, err, test.expectedError)
@@ -323,8 +332,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 			// Verify that the backup was actually created in the DB for successful cases
 			if test.verifyBackup {
 				var count int
-				query := "SELECT count(*) FROM sda.file_headers_backup WHERE file_id = $1"
-				err := ts.app.DB.DB.QueryRow(query, test.fileID).Scan(&count)
+				err := ts.verificationDB.QueryRow("SELECT count(*) FROM sda.file_headers_backup WHERE file_id = $1", test.fileID).Scan(&count)
 				assert.NoError(t, err)
 				assert.GreaterOrEqual(t, count, 1, "Backup record should exist in sda.file_headers_backup")
 			}
