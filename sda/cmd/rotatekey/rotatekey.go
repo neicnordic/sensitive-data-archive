@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
@@ -28,7 +30,7 @@ import (
 type RotateKey struct {
 	Conf          *config.Config
 	MQ            *broker.AMQPBroker
-	DB            *database.SDAdb
+	DB            database.Database
 	PubKeyEncoded string
 }
 
@@ -63,7 +65,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	app.DB, err = database.NewSDAdb(app.Conf.Database)
+	app.DB, err = postgres.database.Init(app.Conf.Database)
 	if err != nil {
 		panic(err)
 	}
@@ -292,4 +294,24 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 	}
 
 	return "ack", "", nil
+}
+
+// Check that a key hash exists in the database
+func (app *RotateKey) checkKeyHash(ctx context.Context, keyhash string) error {
+	hashes, err := app.DB.ListKeyHashes()
+	if err != nil {
+		return err
+	}
+
+	for n := range hashes {
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
+			return nil
+		}
+
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
+			return errors.New("the c4gh key hash has been deprecated")
+		}
+	}
+
+	return errors.New("the c4gh key hash is not registered")
 }
