@@ -16,6 +16,7 @@ import (
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	log "github.com/sirupsen/logrus"
@@ -55,7 +56,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
+	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
 		Tag:        "15.2-alpine3.17",
 		Env: []string{
@@ -76,8 +77,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
+	dbPort, _ = strconv.Atoi(postgresContainer.GetPort("5432/tcp"))
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
@@ -101,7 +102,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	log.Println("tests completed")
-	if err := pool.Purge(postgres); err != nil {
+	if err := pool.Purge(postgresContainer); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	pvo := docker.PruneVolumesOptions{Filters: make(map[string][]string), Context: context.Background()}
@@ -124,12 +125,6 @@ func (s *SyncTest) SetupTest() {
 	viper.Set("broker.user", "guest")
 	viper.Set("broker.password", "guest")
 	viper.Set("broker.queue", "test")
-	viper.Set("db.host", "localhost")
-	viper.Set("db.port", dbPort)
-	viper.Set("db.user", "postgres")
-	viper.Set("db.password", "rootpasswd")
-	viper.Set("db.database", "sda")
-	viper.Set("db.sslmode", "disable")
 	viper.Set("sync.centerPrefix", "prefix")
 	viper.Set("sync.remote.host", "http://remote.example")
 	viper.Set("sync.remote.user", "user")
@@ -153,30 +148,36 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	s.SetupTest()
 	defer os.RemoveAll(s.keyPath)
 
-	conf, err := config.NewConfig("sync")
+	var err error
+	db, err = postgres.NewPostgresSQLDatabase(
+		postgres.Host("localhost"),
+		postgres.Port(dbPort),
+		postgres.User("postgres"),
+		postgres.Password("rootpasswd"),
+		postgres.DatabaseName("sda"),
+		postgres.Schema("sda"),
+		postgres.SslMode("disable"),
+	)
 	assert.NoError(s.T(), err)
+	defer func() { _ = db.Close() }()
 
-	db, err = database.NewSDAdb(conf.Database)
-	assert.NoError(s.T(), err)
-
-	fileID, err := db.RegisterFile(nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
+	fileID, err := db.RegisterFile(context.TODO(), nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.SetAccessionID("ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
+	err = db.SetAccessionID(context.TODO(), "ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(s.T(), err)
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
-	fileInfo := database.FileInfo{ArchiveChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
+	fileInfo := &database.FileInfo{ArchivedChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 
-	err = db.SetArchived("/archive", fileInfo, fileID)
+	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(fileInfo, fileID)
+	err = db.SetVerified(context.TODO(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
 
-	accessions := []string{"ed6af454-d910-49e3-8cda-488a6f246e67"}
-	assert.NoError(s.T(), db.MapFilesToDataset("cd532362-e06e-4461-8490-b9ce64b8d9e7", accessions), "failed to map file to dataset")
+	assert.NoError(s.T(), db.MapFileToDataset(context.TODO(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID), "failed to map file to dataset")
 
 	m := []byte(`{"type":"mapping", "dataset_id": "cd532362-e06e-4461-8490-b9ce64b8d9e7", "accession_ids": ["ed6af454-d910-49e3-8cda-488a6f246e67"]}`)
-	jsonData, err := buildSyncDatasetJSON(m)
+	jsonData, err := buildSyncDatasetJSON(context.TODO(), m)
 	assert.NoError(s.T(), err)
 	dataset := []byte(`{"dataset_id":"cd532362-e06e-4461-8490-b9ce64b8d9e7","dataset_files":[{"filepath":"dummy.user/test/file1.c4gh","file_id":"ed6af454-d910-49e3-8cda-488a6f246e67","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}],"user":"dummy.user"}`)
 	assert.Equal(s.T(), string(dataset), string(jsonData))
