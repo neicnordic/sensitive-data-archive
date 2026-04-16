@@ -26,6 +26,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
@@ -40,13 +41,14 @@ type ProxyTests struct {
 	s3Conf         config.S3InboxConf // actual s3 container
 	s3Client       *s3.Client
 
-	DBConf     database.DBConf
-	fakeServer *FakeServer
-	MQConf     broker.MQConf
-	messenger  *broker.AMQPBroker
-	database   *database.SDAdb
-	auth       *userauth.ValidateFromToken
-	token      jwt.Token
+	fakeServer     *FakeServer
+	MQConf         broker.MQConf
+	messenger      *broker.AMQPBroker
+	database       database.Database
+	verificationDB *sql.DB
+
+	auth  *userauth.ValidateFromToken
+	token jwt.Token
 }
 
 func TestProxyTestSuite(t *testing.T) {
@@ -86,7 +88,7 @@ func (s *ProxyTests) SetupTest() {
 	// Create a configuration for the fake MQ
 	s.MQConf = broker.MQConf{
 		Host:     "127.0.0.1",
-		Port:     MQport,
+		Port:     mqPort,
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",
@@ -96,19 +98,26 @@ func (s *ProxyTests) SetupTest() {
 	s.messenger = &broker.AMQPBroker{}
 
 	// Create a database configuration for the fake database
-	s.DBConf = database.DBConf{
-		Host:       "127.0.0.1",
-		Port:       DBport,
-		User:       "postgres",
-		Password:   "rootpasswd",
-		Database:   "sda",
-		CACert:     "",
-		SslMode:    "disable",
-		ClientCert: "",
-		ClientKey:  "",
+	s.database, err = postgres.NewPostgresSQLDatabase(
+		postgres.Host("127.0.0.1"),
+		postgres.Port(dbPort),
+		postgres.User("postgres"),
+		postgres.Password("rootpasswd"),
+		postgres.DatabaseName("sda"),
+		postgres.Schema("sda"),
+		postgres.CACert(""),
+		postgres.SslMode("disable"),
+		postgres.ClientCert(""),
+		postgres.ClientKey(""),
+	)
+	if err != nil {
+		s.FailNow("failed to connect to database", err)
 	}
 
-	s.database = &database.SDAdb{}
+	s.verificationDB, err = sql.Open("postgres", fmt.Sprintf("host=127.0.0.1 port=%d user=postgres password=rootpasswd dbname=sda sslmode=disable search_path=sda", dbPort))
+	if err != nil {
+		s.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
+	}
 
 	// Create temp demo rsa key pair
 	demoKeysPath := "demo-rsa-keys"
@@ -169,7 +178,8 @@ func (s *ProxyTests) SetupTest() {
 
 func (s *ProxyTests) TearDownTest() {
 	s.fakeServer.Close()
-	s.database.Close()
+	_ = s.database.Close()
+	_ = s.verificationDB.Close()
 }
 
 // TestServeHTTP_concurrent_put_noRace verifies that after the in-memory
@@ -178,19 +188,10 @@ func (s *ProxyTests) TearDownTest() {
 // crash from #2295. The same-shaped test fails on main under -race with
 // warnings on proxy.go:182/185/195 and the fatal error. Here it should pass.
 func (s *ProxyTests) TestServeHTTP_concurrent_put_noRace() {
-	db, err := database.NewSDAdb(s.DBConf)
-	if !assert.NoError(s.T(), err) {
-		return
-	}
-	defer db.Close()
-
 	const workers = 50
 	const rounds = 20
 
-	db.DB.SetMaxOpenConns(workers)
-	db.DB.SetMaxIdleConns(workers)
-
-	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), nil, db, new(tls.Config))
+	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), nil, s.database, new(tls.Config))
 	proxy.s3Conf.Endpoint = ":" // force forwardRequestToBackend to fail fast
 
 	for round := 0; round < rounds; round++ {
@@ -367,8 +368,7 @@ func (s *ProxyTests) TestServeHTTP_MQConnectionClosed() {
 	// Set up
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
-	db, _ := database.NewSDAdb(s.DBConf)
-	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 
 	// Test that the mq connection will be restored when needed
 	proxy.messenger.Connection.Close()
@@ -386,8 +386,7 @@ func (s *ProxyTests) TestServeHTTP_MQChannelClosed() {
 	// Set up
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
-	db, _ := database.NewSDAdb(s.DBConf)
-	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 
 	// Test that the mq channel will be restored when needed
 	proxy.messenger.Channel.Close()
@@ -405,8 +404,7 @@ func (s *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 	// Set up
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
-	db, _ := database.NewSDAdb(s.DBConf)
-	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 
 	// Test that the correct status code is returned when mq connection can't be created
 	proxy.messenger.Conf.Port = 123456
@@ -424,8 +422,7 @@ func (s *ProxyTests) TestServeHTTP_MQ_Unavailable() {
 func (s *ProxyTests) TestServeHTTP_allowed() {
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
-	db, _ := database.NewSDAdb(s.DBConf)
-	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 
 	// List files works
 	r, err := http.NewRequest("GET", "/dummy", nil)
@@ -570,14 +567,11 @@ func (s *ProxyTests) TestMessageFormatting() {
 }
 
 func (s *ProxyTests) TestDatabaseConnection() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
 	// Start proxy that allows everything
-	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 
 	// PUT a file into the system
 	filename := "/dummy/db-test-file"
@@ -593,15 +587,10 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	assert.Equal(s.T(), 200, res.StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
-	// Check that the file is registered and uploaded in the database
-	// connect to the database
-	db.DB, err = sql.Open(s.DBConf.PgDataSource())
-	assert.Nil(s.T(), err, "Failed to connect to database")
-
 	// Check that the file is in the database
 	var fileID, location string
 	query := "SELECT id, submission_location FROM sda.files WHERE submission_file_path = $1;"
-	err = db.DB.QueryRow(query, anonymFilename).Scan(&fileID, &location)
+	err = s.verificationDB.QueryRow(query, anonymFilename).Scan(&fileID, &location)
 	assert.Nil(s.T(), err, "Failed to query database")
 	assert.NotNil(s.T(), fileID, "File not found in database")
 	assert.Equal(s.T(), fmt.Sprintf("%s/%s", s.s3Fakeconf.Endpoint, s.s3Fakeconf.Bucket), location)
@@ -610,7 +599,7 @@ func (s *ProxyTests) TestDatabaseConnection() {
 	for _, status := range []string{"registered", "uploaded"} {
 		var exists int
 		query = "SELECT 1 FROM sda.file_event_log WHERE event = $1 AND file_id = $2;"
-		err = db.DB.QueryRow(query, status, fileID).Scan(&exists)
+		err = s.verificationDB.QueryRow(query, status, fileID).Scan(&exists)
 		assert.Nil(s.T(), err, "Failed to find '%v' event in database", status)
 		assert.Equal(s.T(), exists, 1, "File '%v' event does not exist", status)
 	}
@@ -635,13 +624,10 @@ func (s *ProxyTests) TestFormatUploadFilePath() {
 }
 
 func (s *ProxyTests) TestCheckFileExists() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
-	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), messenger, db, new(tls.Config))
+	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
 	res, err := proxy.checkFileExists(context.TODO(), "/dummy/file")
 	assert.True(s.T(), res)
 	assert.Nil(s.T(), err)
@@ -650,9 +636,6 @@ func (s *ProxyTests) TestCheckFileExists() {
 func (s *ProxyTests) TestCheckFileExists_nonExistingFile() {
 	// Check that looking for a non-existing file gives (false, nil)
 	// from checkFileExists
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
@@ -665,9 +648,6 @@ func (s *ProxyTests) TestCheckFileExists_nonExistingFile() {
 func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Check that errors when connecting to S3 are forwarded
 	// and that checkFileExists return (false, someError)
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
@@ -693,36 +673,14 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	assert.Contains(s.T(), err.Error(), "StatusCode: 403")
 }
 
-func (s *ProxyTests) TestStoreObjectSizeInDB_dbFailure() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-
-	mq, err := broker.NewMQ(s.MQConf)
-	assert.NoError(s.T(), err)
-	defer mq.Connection.Close()
-
-	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	proxy.database = db
-
-	fileID, err := db.RegisterFile(nil, "/inbox", "/dummy/file", "test-user")
-	assert.NoError(s.T(), err)
-	assert.NotNil(s.T(), fileID)
-
-	db.Close()
-	assert.NoError(s.T(), proxy.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
-}
-
 func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
 	mq, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer mq.Connection.Close()
 
 	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	proxy.database = db
-	fileID, err := db.RegisterFile(nil, "/inbox", "/dummy/file", "test-user")
+
+	fileID, err := proxy.database.RegisterFile(context.TODO(), nil, "/inbox", "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -742,18 +700,13 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 // This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
 // happens to fast so that it is not ready and returns a false 404.
 func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
-	db, err := database.NewSDAdb(s.DBConf)
-	assert.NoError(s.T(), err)
-	defer db.Close()
-
 	mq, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 	defer mq.Connection.Close()
 
 	p := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	p.database = db
 
-	fileID, err := db.RegisterFile(nil, "/inbox", "/test/new_file", "test-user")
+	fileID, err := p.database.RegisterFile(context.TODO(), nil, "/inbox", "/test/new_file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
@@ -782,9 +735,8 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 
 	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/test/new_file", fileID))
 
-	const getObjectSize = "SELECT submission_file_size FROM sda.files WHERE id = $1;"
 	var objectSize int64
 	// If the S3 backend haven't had the time to process the request above correctly this will generate an error.
-	assert.NoError(s.T(), p.database.DB.QueryRow(getObjectSize, fileID).Scan(&objectSize))
+	assert.NoError(s.T(), s.verificationDB.QueryRow("SELECT submission_file_size FROM sda.files WHERE id = $1;", fileID).Scan(&objectSize))
 	assert.Equal(s.T(), int64(10*1024*1024), objectSize)
 }

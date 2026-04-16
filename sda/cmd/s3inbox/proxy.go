@@ -34,7 +34,7 @@ type Proxy struct {
 	s3Client  *s3.Client
 	auth      userauth.Authenticator
 	messenger *broker.AMQPBroker
-	database  *database.SDAdb
+	database  database.Database
 	client    *http.Client
 }
 
@@ -79,7 +79,7 @@ const (
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Authenticator, messenger *broker.AMQPBroker, db *database.SDAdb, tlsConf *tls.Config) *Proxy {
+func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Authenticator, messenger *broker.AMQPBroker, db database.Database, tlsConf *tls.Config) *Proxy {
 	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
@@ -234,7 +234,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 	// if this is an upload request
 	if fileID == "" {
-		fileID, err = p.database.RegisterFile(nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
+		fileID, err = p.database.RegisterFile(r.Context(), nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
 		if err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to register file in database: %v", err))
 
@@ -292,7 +292,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 
-		if err := p.database.UpdateFileEventLog(fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
+		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
@@ -624,5 +624,5 @@ func (p *Proxy) storeObjectSizeInDB(ctx context.Context, s3FilePath, fileID stri
 		return errors.New("s3 content length not available")
 	}
 
-	return p.database.SetSubmissionFileSize(fileID, *o.ContentLength)
+	return p.database.SetSubmissionFileSize(ctx, fileID, *o.ContentLength)
 }
