@@ -20,7 +20,9 @@ import (
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
@@ -31,7 +33,7 @@ import (
 
 var (
 	key           *[32]byte
-	db            *database.SDAdb
+	db            database.Database
 	conf          *config.Config
 	mqBroker      *broker.AMQPBroker
 	archiveReader storage.Reader
@@ -46,19 +48,24 @@ func main() {
 func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
 	var err error
 	conf, err = config.NewConfig("sync")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
 
-	db, err = database.NewSDAdb(conf.Database)
+	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer db.Close()
-	if db.Version < 23 {
-		return errors.New("database schema v23 is required")
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
 	mqBroker, err = broker.NewMQ(conf.Broker)
@@ -192,7 +199,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	log.Infoln("buildSyncDatasetJSON")
-	blob, err := buildSyncDatasetJSON(delivered.Body)
+	blob, err := buildSyncDatasetJSON(ctx, delivered.Body)
 	if err != nil {
 		log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
 	}
@@ -210,16 +217,16 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 }
 
-func syncFiles(ctx context.Context, stableID string) error {
+func syncFiles(ctx context.Context, accessionID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	log.Debugf("syncing file %s", stableID)
-	inboxPath, err := db.GetInboxPath(stableID)
+	log.Debugf("syncing file %s", accessionID)
+	inboxPath, err := db.GetInboxPath(ctx, accessionID)
 	if err != nil {
 		return fmt.Errorf("failed to get inbox path, reason: %v", err)
 	}
 
-	archivePath, archiveLocation, err := db.GetArchivePathAndLocation(stableID)
+	archivePath, archiveLocation, err := db.GetArchivePathAndLocation(ctx, accessionID)
 	if err != nil {
 		return fmt.Errorf("failed to get archive path and location, reason: %v", err)
 	}
@@ -237,7 +244,7 @@ func syncFiles(ctx context.Context, stableID string) error {
 		_ = file.Close()
 	}()
 
-	header, err := db.GetHeaderForStableID(stableID)
+	header, err := db.GetHeaderByAccessionID(ctx, accessionID)
 	if err != nil {
 		return fmt.Errorf("failed to get header from db, reason: %v", err)
 	}
@@ -274,7 +281,7 @@ func syncFiles(ctx context.Context, stableID string) error {
 	return nil
 }
 
-func buildSyncDatasetJSON(b []byte) ([]byte, error) {
+func buildSyncDatasetJSON(ctx context.Context, b []byte) ([]byte, error) {
 	var msg schema.DatasetMapping
 	_ = json.Unmarshal(b, &msg)
 
@@ -283,7 +290,7 @@ func buildSyncDatasetJSON(b []byte) ([]byte, error) {
 	}
 
 	for _, ID := range msg.AccessionIDs {
-		data, err := db.GetSyncData(ID)
+		data, err := db.GetSyncData(ctx, ID)
 		if err != nil {
 			return nil, err
 		}
