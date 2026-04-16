@@ -20,7 +20,9 @@ import (
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -29,7 +31,7 @@ import (
 )
 
 var (
-	db             *database.SDAdb
+	db             database.Database
 	mqBroker       *broker.AMQPBroker
 	archiveReader  storage.Reader
 	archiveKeyList []*[32]byte
@@ -44,18 +46,22 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
 	conf, err := config.NewConfig("verify")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	db, err = database.NewSDAdb(conf.Database)
+	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer db.Close()
 
-	if db.Version < 23 {
-		return errors.New("database schema v23 is required")
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 	mqBroker, err = broker.NewMQ(conf.Broker)
 	if err != nil {
@@ -155,7 +161,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	)
 
 	// If the file has been canceled by the uploader, don't spend time working on it.
-	status, err := db.GetFileStatus(message.FileID)
+	status, err := db.GetFileStatus(ctx, message.FileID)
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
 		// Send the message to an error queue so it can be analyzed.
@@ -185,7 +191,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
-	header, err := db.GetHeader(message.FileID)
+	header, err := db.GetHeader(ctx, message.FileID)
 	if err != nil {
 		log.Errorf("GetHeader failed for file with ID: %v, reason: %v", message.FileID, err.Error())
 		if err := delivered.Ack(false); err != nil {
@@ -208,7 +214,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
-	archiveLocation, err := db.GetArchiveLocation(message.FileID)
+	archiveLocation, err := db.GetArchiveLocation(ctx, message.FileID)
 	if err != nil {
 		log.Errorf("failed to get archive location of file: %s, error: %v", message.FileID, err)
 
@@ -221,7 +227,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	if archiveLocation == "" {
 		log.Errorf("archive location for file: %s, not known in database", message.FileID)
 		jsonMsg, _ := json.Marshal(map[string]string{"error": "archive location for file not known in database"})
-		if err := db.UpdateFileEventLog(message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
+		if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
 			log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
 		}
 
@@ -244,13 +250,13 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
-	var file database.FileInfo
+	file := new(database.FileInfo)
 	file.Size, err = archiveReader.GetFileSize(ctx, archiveLocation, message.ArchivePath)
 	if err != nil { //nolint:nestif
 		log.Errorf("Failed to get archived file size, file-id: %s, archive-path: %s, reason: (%s)", message.FileID, message.ArchivePath, err.Error())
 		if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
 			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-			if err := db.UpdateFileEventLog(message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
+			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
 				log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
 			}
 		}
@@ -352,12 +358,12 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	// At this point we should do checksum comparison
-	file.ArchiveChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
+	file.ArchivedChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
 	file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
 
 	switch {
 	case message.ReVerify:
-		decrypted, err := db.GetDecryptedChecksum(message.FileID)
+		decrypted, err := db.GetDecryptedChecksum(ctx, message.FileID)
 		if err != nil {
 			log.Errorf("failed to get unencrypted checksum for file, file-id: %s, reason: %s", message.FileID, err.Error())
 			if err := delivered.Nack(false, true); err != nil {
@@ -369,7 +375,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		if file.DecryptedChecksum != decrypted {
 			log.Errorf("encrypted checksum don't match for file, file-id: %s", message.FileID)
-			if err := db.UpdateFileEventLog(message.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 				log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
@@ -384,9 +390,9 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			return
 		}
 
-		if file.ArchiveChecksum != message.EncryptedChecksums[0].Value {
-			log.Errorf("encrypted checksum mismatch for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchiveChecksum)
-			if err := db.UpdateFileEventLog(message.FileID, "error", "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
+		if file.ArchivedChecksum != message.EncryptedChecksums[0].Value {
+			log.Errorf("encrypted checksum mismatch for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchivedChecksum)
+			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
 				log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
@@ -418,7 +424,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			// Logging is in ValidateJSON so just restart on new message
 			return
 		}
-		status, err := db.GetFileStatus(message.FileID)
+		status, err := db.GetFileStatus(ctx, message.FileID)
 		if err != nil {
 			log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
 			// Send the message to an error queue so it can be analyzed.
@@ -449,7 +455,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			return
 		}
 
-		fileInfo, err := db.GetFileInfo(message.FileID)
+		fileInfo, err := db.GetFileInfo(ctx, message.FileID)
 		if err != nil {
 			log.Errorf("failed to get info for file, file-id: %s", message.FileID)
 			if err := delivered.Nack(false, true); err != nil {
@@ -460,7 +466,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		}
 
 		if fileInfo.DecryptedChecksum != fmt.Sprintf("%x", sha256hash.Sum(nil)) {
-			if err := db.SetVerified(file, message.FileID); err != nil {
+			if err := db.SetVerified(ctx, file, message.FileID); err != nil {
 				log.Errorf("SetVerified failed, file-id: %s, reason: (%s)", message.FileID, err.Error())
 				if err := delivered.Nack(false, true); err != nil {
 					log.Errorf("failed to Nack message, reason: (%s)", err.Error())
@@ -472,7 +478,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			log.Infof("file is already verified, file-id: %s", message.FileID)
 		}
 
-		if err := db.UpdateFileEventLog(message.FileID, "verified", "ingest", "{}", string(verifiedMessage)); err != nil {
+		if err := db.UpdateFileEventLog(ctx, message.FileID, "verified", "ingest", "{}", string(verifiedMessage)); err != nil {
 			log.Errorf("failed to set event log status for file, file-id: %s", message.FileID)
 			if err := delivered.Nack(false, true); err != nil {
 				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
