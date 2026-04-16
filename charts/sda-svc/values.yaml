@@ -630,7 +630,7 @@ downloadV2:
     httpGet:
       path: /health/live
       port: download-v2
-      # scheme set in deploy template via ternary on global.tls.enabled
+      scheme: HTTP
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
@@ -638,7 +638,7 @@ downloadV2:
     httpGet:
       path: /health/ready
       port: download-v2
-      # scheme set in deploy template via ternary on global.tls.enabled
+      scheme: HTTP
     periodSeconds: 10
     timeoutSeconds: 9
   resources:
