@@ -18,7 +18,11 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var DBport, MQport, s3Port int
+var dbPort, mqPort, s3Port int
+
+var dockerPool *dockertest.Pool
+
+var postgresContainerName string
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -28,19 +32,20 @@ func TestMain(m *testing.M) {
 	rootDir := path.Join(path.Dir(b), "../../../")
 
 	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
-	pool, err := dockertest.NewPool("")
+	var err error
+	dockerPool, err = dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("Could not construct pool: %s", err)
 	}
 
 	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
+	err = dockerPool.Client.Ping()
 	if err != nil {
 		log.Fatalf("Could not connect to Docker: %s", err)
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	minio, err := pool.RunWithOptions(&dockertest.RunOptions{
+	minio, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Name:       "s3test",
 		Repository: "minio/minio",
 		Tag:        "RELEASE.2023-05-18T00-05-36Z",
@@ -73,7 +78,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
+	if err := dockerPool.Retry(func() error {
 		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
@@ -82,13 +87,13 @@ func TestMain(m *testing.M) {
 
 		return nil
 	}); err != nil {
-		if err := pool.Purge(minio); err != nil {
+		if err := dockerPool.Purge(minio); err != nil {
 			log.Panicf("Could not purge resource: %s", err)
 		}
 		log.Panicf("Could not connect to minio: %s", err)
 	}
 	// pulls an image, creates a container based on it and runs it
-	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
+	postgres, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
 		Tag:        "15.2-alpine3.17",
 		Env: []string{
@@ -97,6 +102,14 @@ func TestMain(m *testing.M) {
 		},
 		Mounts: []string{
 			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
+		},
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"5432/tcp": {
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: "35431", // Setting port as we want to simulate a db connection issue in TestClosedDBHealthchecks and for docker to give same port back when connecting the postgres container to the network again
+				},
+			},
 		},
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
@@ -109,12 +122,14 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
+	postgresContainerName = postgres.Container.Name
+
 	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	DBport, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
-	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
+	dockerPool.MaxWait = 120 * time.Second
+	if err = dockerPool.Retry(func() error {
 		db, err := sql.Open("postgres", databaseURL)
 		if err != nil {
 			log.Println(err)
@@ -131,7 +146,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
+	rabbitmq, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "rabbitmq",
 		Tag:        "3-management-alpine",
 	}, func(config *docker.HostConfig) {
@@ -145,7 +160,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	MQport, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
+	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
 	mqHostAndPort := rabbitmq.GetHostPort("15672/tcp")
 
 	client = http.Client{Timeout: 5 * time.Second}
@@ -156,7 +171,7 @@ func TestMain(m *testing.M) {
 	req.SetBasicAuth("guest", "guest")
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
+	if err := dockerPool.Retry(func() error {
 		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
@@ -165,7 +180,7 @@ func TestMain(m *testing.M) {
 
 		return nil
 	}); err != nil {
-		if err := pool.Purge(rabbitmq); err != nil {
+		if err := dockerPool.Purge(rabbitmq); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
 		log.Fatalf("Could not connect to rabbitmq: %s", err)
@@ -180,7 +195,7 @@ func TestMain(m *testing.M) {
 		log.Panic("Failed to create EC keys")
 	}
 	// pulls an image, creates a container based on it and runs it
-	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
+	oidc, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "python",
 		Tag:        "3.10-slim",
 		Cmd: []string{
@@ -212,7 +227,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
+	if err := dockerPool.Retry(func() error {
 		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
@@ -221,7 +236,7 @@ func TestMain(m *testing.M) {
 
 		return nil
 	}); err != nil {
-		if err := pool.Purge(oidc); err != nil {
+		if err := dockerPool.Purge(oidc); err != nil {
 			log.Panicf("Could not purge oidc resource: %s", err)
 		}
 		log.Panicf("Could not connect to oidc: %s", err)
@@ -231,16 +246,16 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	log.Println("tests completed")
-	if err := pool.Purge(postgres); err != nil {
+	if err := dockerPool.Purge(postgres); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
-	if err := pool.Purge(rabbitmq); err != nil {
+	if err := dockerPool.Purge(rabbitmq); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
-	if err := pool.Purge(oidc); err != nil {
+	if err := dockerPool.Purge(oidc); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
-	if err := pool.Purge(minio); err != nil {
+	if err := dockerPool.Purge(minio); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 
