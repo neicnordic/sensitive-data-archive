@@ -29,7 +29,9 @@ import (
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
@@ -54,6 +56,7 @@ var (
 	auth        *userauth.ValidateFromToken
 	inboxReader storage.Reader
 	inboxWriter storage.Writer
+	db          database.Database
 )
 
 func main() {
@@ -65,18 +68,22 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
 	Conf, err = config.NewConfig("api")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
 
-	Conf.API.DB, err = database.NewSDAdb(Conf.Database)
+	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer Conf.API.DB.Close()
-	if Conf.API.DB.Version < 23 {
-		return errors.New("database schema v23 is required")
+	defer db.Close()
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
@@ -99,7 +106,7 @@ func run() error {
 		}
 	}()
 
-	lb, err := locationbroker.NewLocationBroker(Conf.API.DB)
+	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new location broker, due to: %v", err)
 	}
@@ -271,23 +278,22 @@ func readinessResponse(c *gin.Context) {
 		}
 	}
 
-	if dbRes := checkDB(c, Conf.API.DB, 5*time.Millisecond); dbRes != nil {
+	if dbRes := checkDB(c, db, 5*time.Millisecond); dbRes != nil {
 		log.Debugf("DB connection error :%v", dbRes)
-		Conf.API.DB.Reconnect()
 		statusCode = http.StatusServiceUnavailable
 	}
 
 	c.JSON(statusCode, "")
 }
 
-func checkDB(ctx context.Context, db *database.SDAdb, timeout time.Duration) error {
+func checkDB(ctx context.Context, db database.Database, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	if db.DB == nil {
+	if db == nil {
 		return errors.New("database is nil")
 	}
 
-	return db.DB.PingContext(ctx)
+	return db.Ping(ctx)
 }
 
 func auditLog(auditFields log.Fields) {
@@ -389,7 +395,7 @@ func getFiles(c *gin.Context) {
 	}
 	cursor := c.DefaultQuery("cursor", "")
 
-	files, nextCursor, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false, limit, cursor)
+	files, nextCursor, err := db.GetUserFiles(c, token.Subject(), c.Query("path_prefix"), false, limit, cursor)
 	if err != nil {
 		if errors.Is(err, database.ErrInvalidCursor) {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
@@ -406,8 +412,22 @@ func getFiles(c *gin.Context) {
 		c.Header("X-Next-Cursor", nextCursor)
 	}
 
+	rsp := make([]*submissionFileInfo, len(files))
+
+	for i, f := range files {
+		rsp[i] = &submissionFileInfo{
+			AccessionID:        f.AccessionID,
+			FileID:             f.FileID,
+			InboxPath:          f.InboxPath,
+			Status:             f.Status,
+			SubmissionFileSize: f.SubmissionFileSize,
+			CreatedAt:          f.CreatedAt,
+		}
+
+	}
+
 	// Return response
-	c.JSON(200, files)
+	c.JSON(200, rsp)
 }
 
 /*
@@ -435,7 +455,7 @@ func ingestFile(c *gin.Context) {
 			return
 		}
 		// Get the user and the inbox filepath
-		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "uploaded")
+		fileDetails, err := db.GetFileDetails(c, c.Query("fileid"), "uploaded")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "file information not found")
 
@@ -459,7 +479,7 @@ func ingestFile(c *gin.Context) {
 
 			return
 		}
-		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(ingest.User, ingest.FilePath, "uploaded")
+		fileID, err = db.GetFileIDByUserPathAndStatus(c, ingest.User, ingest.FilePath, "uploaded")
 		if err != nil {
 			if fileID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -510,7 +530,7 @@ func deleteFile(c *gin.Context) {
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
+	filePath, location, err := db.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
 	if err != nil {
 		log.Errorf("getting file from fileID failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
@@ -540,7 +560,7 @@ func deleteFile(c *gin.Context) {
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	if err := Conf.API.DB.UpdateFileEventLog(fileID, "disabled", "api", "{}", "{}"); err != nil {
+	if err := db.UpdateFileEventLog(c, fileID, "disabled", "api", "{}", "{}"); err != nil {
 		log.Errorf("set status deleted failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -601,7 +621,7 @@ func downloadFile(c *gin.Context) {
 
 	// Retrieve the actual file path for the user's file.
 	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, location, err := Conf.API.DB.GetUploadedSubmissionFilePathAndLocation(c,
+	filePath, location, err := db.GetUploadedSubmissionFilePathAndLocation(c,
 		strings.TrimPrefix(c.Param("username"), "/"),
 		fileID,
 	)
@@ -700,14 +720,14 @@ func setAccession(c *gin.Context) {
 			return
 		}
 		// Get the user and the inbox filepath
-		fileDetails, err := Conf.API.DB.GetFileDetailsFromUUID(c.Query("fileid"), "verified")
+		fileDetails, err := db.GetFileDetails(c, c.Query("fileid"), "verified")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "file details not found")
 
 			return
 		}
 		// Get the decrypted checksum
-		fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(c.Query("fileid"))
+		fileDecrChecksum, err := db.GetDecryptedChecksum(c, c.Query("fileid"))
 		if err != nil {
 			log.Debugln(err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, "required data missing")
@@ -733,7 +753,7 @@ func setAccession(c *gin.Context) {
 
 			return
 		}
-		fileID, err = Conf.API.DB.GetFileIDByUserPathAndStatus(accession.User, accession.FilePath, "verified")
+		fileID, err = db.GetFileIDByUserPathAndStatus(c, accession.User, accession.FilePath, "verified")
 		if err != nil {
 			if fileID == "" {
 				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
@@ -744,7 +764,7 @@ func setAccession(c *gin.Context) {
 			return
 		}
 		// Get decrypted checksum
-		fileDecrChecksum, err := Conf.API.DB.GetDecryptedChecksum(fileID)
+		fileDecrChecksum, err := db.GetDecryptedChecksum(c, fileID)
 		if err != nil {
 			log.Debugln(err.Error())
 			c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
@@ -801,8 +821,8 @@ func createDataset(c *gin.Context) {
 	}
 
 	// Check that the files the accession ids are linked to belong to the user of the dataset
-	for _, stableID := range dataset.AccessionIDs {
-		belongsToUser, err := Conf.API.DB.CheckStableIDOwnedByUser(stableID, dataset.User)
+	for _, accessionID := range dataset.AccessionIDs {
+		belongsToUser, err := db.CheckAccessionIDOwnedByUser(c, accessionID, dataset.User)
 		if err != nil {
 			log.Errorln(err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -810,7 +830,7 @@ func createDataset(c *gin.Context) {
 			return
 		}
 		if !belongsToUser {
-			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID: %s not found or owned by other user", stableID))
+			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID: %s not found or owned by other user", accessionID))
 
 			return
 		}
@@ -842,7 +862,7 @@ func createDataset(c *gin.Context) {
 
 func releaseDataset(c *gin.Context) {
 	datasetID := strings.TrimPrefix(c.Param("dataset"), "/")
-	ok, err := Conf.API.DB.CheckIfDatasetExists(datasetID)
+	ok, err := db.CheckIfDatasetExists(c, datasetID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -854,7 +874,7 @@ func releaseDataset(c *gin.Context) {
 		return
 	}
 
-	status, err := Conf.API.DB.GetDatasetStatus(datasetID)
+	status, err := db.GetDatasetStatus(c, datasetID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -944,7 +964,7 @@ func rotateKeyDataset(c *gin.Context) {
 	}
 
 	// Check if dataset exists
-	exists, err := Conf.API.DB.CheckIfDatasetExists(datasetID)
+	exists, err := db.CheckIfDatasetExists(c, datasetID)
 	if err != nil {
 		log.Errorf("failed to check if dataset %s exists, reason: %v", datasetID, err)
 		c.JSON(http.StatusInternalServerError, "failed to check dataset existence")
@@ -959,7 +979,7 @@ func rotateKeyDataset(c *gin.Context) {
 	}
 
 	// Get all files in the dataset
-	files, err := Conf.API.DB.GetDatasetFileIDs(datasetID)
+	files, err := db.GetDatasetFileIDs(c, datasetID)
 	if err != nil {
 		log.Errorf("failed to get dataset files for dataset %s, reason: %v", datasetID, err)
 		c.JSON(http.StatusInternalServerError, "failed to get dataset files")
@@ -1013,7 +1033,7 @@ func rotateKeyDataset(c *gin.Context) {
 }
 
 func listActiveUsers(c *gin.Context) {
-	users, err := Conf.API.DB.ListActiveUsers()
+	users, err := db.ListActiveUsers(c)
 	if err != nil {
 		log.Debugln("ListActiveUsers failed")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -1039,7 +1059,7 @@ func listUserFiles(c *gin.Context) {
 		return
 	}
 	cursor := c.DefaultQuery("cursor", "")
-	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
+	files, nextCursor, err := db.GetUserFiles(c, username, c.Query("path_prefix"), true, limit, cursor)
 	if err != nil {
 		if errors.Is(err, database.ErrInvalidCursor) {
 			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
@@ -1055,8 +1075,21 @@ func listUserFiles(c *gin.Context) {
 		c.Header("X-Next-Cursor", nextCursor)
 	}
 
+	rsp := make([]*submissionFileInfo, len(files))
+
+	for i, f := range files {
+		rsp[i] = &submissionFileInfo{
+			AccessionID:        f.AccessionID,
+			FileID:             f.FileID,
+			InboxPath:          f.InboxPath,
+			Status:             f.Status,
+			SubmissionFileSize: f.SubmissionFileSize,
+			CreatedAt:          f.CreatedAt,
+		}
+	}
+
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.JSON(200, files)
+	c.JSON(200, rsp)
 }
 
 // addC4ghHash handles the addition of a hashed public key to the database.
@@ -1111,7 +1144,7 @@ func addC4ghHash(c *gin.Context) {
 		return
 	}
 
-	err = Conf.API.DB.AddKeyHash(hex.EncodeToString(pubKey[:]), c4gh.Description)
+	err = db.AddKeyHash(c, hex.EncodeToString(pubKey[:]), c4gh.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "key hash already exists") {
 			c.AbortWithStatusJSON(
@@ -1140,7 +1173,7 @@ func addC4ghHash(c *gin.Context) {
 }
 
 func listC4ghHashes(c *gin.Context) {
-	hashes, err := Conf.API.DB.ListKeyHashes()
+	hashes, err := db.ListKeyHashes(c)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -1157,12 +1190,24 @@ func listC4ghHashes(c *gin.Context) {
 		}
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.JSON(200, hashes)
+
+	rsp := make([]*c4ghKeyHash, len(hashes))
+
+	for i, hash := range hashes {
+		rsp[i] = &c4ghKeyHash{
+			Hash:         hash.Hash,
+			Description:  hash.Description,
+			CreatedAt:    hash.CreatedAt,
+			DeprecatedAt: hash.DeprecatedAt,
+		}
+	}
+
+	c.JSON(200, rsp)
 }
 
 func deprecateC4ghHash(c *gin.Context) {
 	keyHash := strings.TrimPrefix(c.Param("keyHash"), "/")
-	err = Conf.API.DB.DeprecateKeyHash(keyHash)
+	err = db.DeprecateKeyHash(c, keyHash)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -1171,26 +1216,48 @@ func deprecateC4ghHash(c *gin.Context) {
 }
 
 func listAllDatasets(c *gin.Context) {
-	datasets, err := Conf.API.DB.ListDatasets()
+	datasets, err := db.ListDatasets(c)
 	if err != nil {
 		log.Errorf("ListAllDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	c.JSON(http.StatusOK, datasets)
+
+	rsp := make([]*datasetInfo, len(datasets))
+
+	for i, d := range datasets {
+		rsp[i] = &datasetInfo{
+			DatasetID: d.DatasetID,
+			Status:    d.Status,
+			Timestamp: d.Timestamp,
+		}
+	}
+
+	c.JSON(http.StatusOK, rsp)
 }
 
 func listUserDatasets(c *gin.Context) {
 	username := strings.TrimPrefix(c.Param("username"), "/")
-	datasets, err := Conf.API.DB.ListUserDatasets(username)
+	datasets, err := db.ListUserDatasets(c, username)
 	if err != nil {
 		log.Errorf("ListUserDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	c.JSON(http.StatusOK, datasets)
+
+	rsp := make([]*datasetInfo, len(datasets))
+
+	for i, d := range datasets {
+		rsp[i] = &datasetInfo{
+			DatasetID: d.DatasetID,
+			Status:    d.Status,
+			Timestamp: d.Timestamp,
+		}
+	}
+
+	c.JSON(http.StatusOK, rsp)
 }
 
 func listDatasets(c *gin.Context) {
@@ -1200,18 +1267,29 @@ func listDatasets(c *gin.Context) {
 
 		return
 	}
-	datasets, err := Conf.API.DB.ListUserDatasets(token.Subject())
+	datasets, err := db.ListUserDatasets(c, token.Subject())
 	if err != nil {
 		log.Errorf("ListDatasets failed, reason: %s", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	c.JSON(http.StatusOK, datasets)
+
+	rsp := make([]*datasetInfo, len(datasets))
+
+	for i, d := range datasets {
+		rsp[i] = &datasetInfo{
+			DatasetID: d.DatasetID,
+			Status:    d.Status,
+			Timestamp: d.Timestamp,
+		}
+	}
+
+	c.JSON(http.StatusOK, rsp)
 }
 
 func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
-	reVerify, err := Conf.API.DB.GetReVerificationData(accessionID)
+	reverificationData, err := db.GetReVerificationData(c, accessionID)
 	if err != nil {
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			c.AbortWithStatusJSON(http.StatusNotFound, "accession ID not found")
@@ -1222,7 +1300,17 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 
 		return c, err
 	}
-
+	reVerify := schema.IngestionVerification{
+		User:        reverificationData.SubmissionUser,
+		FilePath:    reverificationData.SubmissionFilePath,
+		FileID:      reverificationData.FileID,
+		ArchivePath: reverificationData.ArchiveFilePath,
+		EncryptedChecksums: []schema.Checksums{{
+			Type:  reverificationData.ArchivedCheckSumType,
+			Value: reverificationData.ArchivedCheckSum,
+		}},
+		ReVerify: false,
+	}
 	marshaledMsg, _ := json.Marshal(&reVerify)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Errorln(err.Error())
@@ -1253,7 +1341,7 @@ func reVerifyFile(c *gin.Context) {
 
 func reVerifyDataset(c *gin.Context) {
 	dataset := strings.TrimPrefix(c.Param("dataset"), "/")
-	files, err := Conf.API.DB.GetDatasetFiles(dataset)
+	files, err := db.GetDatasetFiles(c, dataset)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 

@@ -18,7 +18,8 @@ func init() {
 SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
- WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
+ WHERE f.submission_user = $1 
+    AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') != 'disabled'
 	AND ($4::UUID IS NULL OR f.id > $4::UUID)
 ORDER BY f.id ASC LIMIT $5;
@@ -76,7 +77,7 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 		// Read rows into struct
 		fi := new(database.SubmissionFileInfo)
 		var submissionFileSize sql.NullInt64
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreateAt, &submissionFileSize)
+		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreatedAt, &submissionFileSize)
 		if err != nil {
 			return nil, "", err
 		}
