@@ -16,7 +16,9 @@ import (
 	"github.com/kataras/iris/v12/sessions"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -39,6 +41,7 @@ type AuthHandler struct {
 	htmlDir      string
 	staticDir    string
 	pubKey       string
+	db           database.Database
 }
 
 // getS3Config retrieves S3 config from session flash and serves it as a
@@ -222,7 +225,7 @@ func (auth AuthHandler) getEGAConf(ctx iris.Context) {
 // getOIDC redirects to the oidc page defined in auth.Config
 func (auth AuthHandler) getOIDC(ctx iris.Context) {
 	state := uuid.New()
-	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true})
+	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
 	redirectURI := ctx.Request().URL.Query().Get("redirect_uri")
 	if redirectURI != "" {
@@ -265,7 +268,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
-	err = auth.Config.DB.UpdateUserInfo(idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
+	err = auth.db.UpdateUserInfo(ctx, idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
 	if err != nil {
 		log.Warn("Could not log user info.")
 	}
@@ -368,6 +371,11 @@ func addCSPheaders(ctx iris.Context) {
 
 func main() {
 	// Initialise config
+	if err := configv2.Load(); err != nil {
+		log.Errorf("failed to load config: %v", err)
+		os.Exit(1)
+	}
+
 	conf, err := config.NewConfig("auth")
 	if err != nil {
 		log.Errorf("Failed to generate config, reason: %v", err)
@@ -411,16 +419,22 @@ func main() {
 	app.Use(sess.Handler())
 
 	// Connect to DB
-	authHandler.Config.DB, err = database.NewSDAdb(conf.Database)
+	authHandler.db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		log.Error(err)
 		panic(err)
 	}
-	if authHandler.Config.DB.Version < 14 {
-		log.Error("database schema v14 is required")
+	dbSchemaVersion, err := authHandler.db.SchemaVersion()
+	if err != nil {
+		log.Errorf("database connection issue: %v", err)
 		panic(err)
 	}
-	defer authHandler.Config.DB.Close()
+	if dbSchemaVersion < 14 {
+		err := fmt.Errorf("database schema v14 is required, current: %d", dbSchemaVersion)
+		log.Error(err.Error())
+		panic(err)
+	}
+	defer authHandler.db.Close()
 
 	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
 	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
