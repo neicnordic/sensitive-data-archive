@@ -36,7 +36,7 @@ type SubmissionFileInfo struct {
 	InboxPath          string
 	Status             string
 	SubmissionFileSize int64
-	CreateAt           string
+	CreatedAt          string
 }
 
 type DatasetInfo struct {
