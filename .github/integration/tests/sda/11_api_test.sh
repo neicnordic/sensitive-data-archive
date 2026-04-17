@@ -53,9 +53,9 @@ if [ "$resp" != "200" ]; then
 fi
 
 # Verify the deprecated key has a deprecated_at timestamp set
-depr="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq -r .[1].deprecated_at)"
+depr="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/c4gh-keys/list" | jq -r .[1].deprecatedAt)"
 if [ -z "$depr" ] || [ "$depr" = "null" ]; then
-	echo "Error when listing key hash, deprecated_at should be set, got: $depr"
+	echo "Error when listing key hash, deprecatedAt should be set, got: $depr"
 	exit 1
 fi
 
