@@ -63,8 +63,12 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 		pg.preparedStatements[queryName] = preparedStmt
 	}
 
-	stmt := pg.preparedStatements[getSchemaVersionQuery]
+	pg.db.SetMaxIdleConns(pg.config.maxIdleConnections)
+	pg.db.SetMaxOpenConns(pg.config.maxOpenConnections)
+	pg.db.SetConnMaxIdleTime(pg.config.connectionMaxIdleTime)
+	pg.db.SetConnMaxLifetime(pg.config.connectionMaxLifeTime)
 
+	stmt := pg.preparedStatements[getSchemaVersionQuery]
 	if err := stmt.QueryRow().Scan(&pg.schemaVersion); err != nil {
 		_ = pg.Close()
 

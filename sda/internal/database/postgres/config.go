@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/spf13/pflag"
@@ -9,30 +10,38 @@ import (
 )
 
 type dbConfig struct {
-	host         string
-	port         int
-	user         string
-	password     string
-	databaseName string
-	schema       string
-	cACert       string
-	sslMode      string
-	clientCert   string
-	clientKey    string
+	host                  string
+	port                  int
+	user                  string
+	password              string
+	databaseName          string
+	schema                string
+	cACert                string
+	sslMode               string
+	clientCert            string
+	clientKey             string
+	maxIdleConnections    int
+	maxOpenConnections    int
+	connectionMaxIdleTime time.Duration
+	connectionMaxLifeTime time.Duration
 }
 
 // Initialize globalConf with default values
 var globalConf = &dbConfig{
-	host:         "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
-	port:         0,  // No default, needs to be provided by config / NewPostgresSQLDatabase options
-	user:         "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
-	password:     "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
-	databaseName: "sda",
-	schema:       "sda",
-	cACert:       "",
-	sslMode:      "disable",
-	clientCert:   "",
-	clientKey:    "",
+	host:                  "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
+	port:                  0,  // No default, needs to be provided by config / NewPostgresSQLDatabase options
+	user:                  "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
+	password:              "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
+	databaseName:          "sda",
+	schema:                "sda",
+	cACert:                "",
+	sslMode:               "disable",
+	clientCert:            "",
+	clientKey:             "",
+	maxIdleConnections:    2,
+	maxOpenConnections:    0,
+	connectionMaxIdleTime: 0,
+	connectionMaxLifeTime: 0,
 }
 
 func init() {
@@ -137,6 +146,46 @@ func init() {
 				globalConf.schema = viper.GetString(flagName)
 			},
 		},
+		&config.Flag{
+			Name: "database.max_idle_connections",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, globalConf.maxIdleConnections, "Sets the maximum number of connections in the idle connection pool, set to <= 0 for unlimited")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				globalConf.maxIdleConnections = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "database.max_open_connections",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, globalConf.maxOpenConnections, "Sets the maximum number of open connections to the database, set to <= 0 for unlimited")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				globalConf.maxOpenConnections = viper.GetInt(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "database.connection_max_idle_time",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Duration(flagName, globalConf.connectionMaxIdleTime, "Sets the maximum amount of time a connection may be idle, set to <= 0 for unlimited. Expects a go time.Duration parsable string")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				globalConf.connectionMaxIdleTime = viper.GetDuration(flagName)
+			},
+		},
+		&config.Flag{
+			Name: "database.connection_max_life_time",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Duration(flagName, globalConf.connectionMaxLifeTime, "Sets the maximum amount of time a connection may be reused, set to <= 0 for unlimited. Expects a go time.Duration parsable string")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				globalConf.connectionMaxLifeTime = viper.GetDuration(flagName)
+			},
+		},
 	)
 }
 
@@ -191,18 +240,43 @@ func Schema(v string) func(c *dbConfig) {
 	}
 }
 
+func MaxIdleConnections(v int) func(c *dbConfig) {
+	return func(c *dbConfig) {
+		c.maxIdleConnections = v
+	}
+}
+func MaxOpenConnections(v int) func(c *dbConfig) {
+	return func(c *dbConfig) {
+		c.maxOpenConnections = v
+	}
+}
+func ConnectionMaxIdleTime(v time.Duration) func(c *dbConfig) {
+	return func(c *dbConfig) {
+		c.connectionMaxIdleTime = v
+	}
+}
+func ConnectionMaxLifeTime(v time.Duration) func(c *dbConfig) {
+	return func(c *dbConfig) {
+		c.connectionMaxLifeTime = v
+	}
+}
+
 func (c *dbConfig) clone() *dbConfig {
 	return &dbConfig{
-		host:         c.host,
-		port:         c.port,
-		user:         c.user,
-		password:     c.password,
-		databaseName: c.databaseName,
-		schema:       c.schema,
-		cACert:       c.cACert,
-		sslMode:      c.sslMode,
-		clientCert:   c.clientCert,
-		clientKey:    c.clientKey,
+		host:                  c.host,
+		port:                  c.port,
+		user:                  c.user,
+		password:              c.password,
+		databaseName:          c.databaseName,
+		schema:                c.schema,
+		cACert:                c.cACert,
+		sslMode:               c.sslMode,
+		clientCert:            c.clientCert,
+		clientKey:             c.clientKey,
+		maxIdleConnections:    c.maxIdleConnections,
+		maxOpenConnections:    c.maxOpenConnections,
+		connectionMaxIdleTime: c.connectionMaxIdleTime,
+		connectionMaxLifeTime: c.connectionMaxLifeTime,
 	}
 }
 
