@@ -14,7 +14,9 @@ import (
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
@@ -24,7 +26,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var db *database.SDAdb
+var db database.Database
 var mqBroker *broker.AMQPBroker
 var archiveReader storage.Reader
 var backupWriter storage.Writer
@@ -40,18 +42,22 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
 	conf, err := config.NewConfig("finalize")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	db, err = database.NewSDAdb(conf.Database)
+	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer db.Close()
 
-	if db.Version < 23 {
-		return errors.New("database schema v23 is required")
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
 	mqBroker, err = broker.NewMQ(conf.Broker)
@@ -145,7 +151,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(delivered.Body, &message)
 	// If the file has been canceled by the uploader, don't spend time working on it.
-	status, err := db.GetFileStatus(fileID)
+	status, err := db.GetFileStatus(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: %v", fileID, err)
 		if err := delivered.Nack(false, true); err != nil {
@@ -194,7 +200,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		return
 	}
 
-	accessionIDExists, err := db.CheckAccessionIDExists(message.AccessionID, fileID)
+	accessionIDExists, err := db.CheckAccessionIDExists(ctx, message.AccessionID, fileID)
 	if err != nil {
 		log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", fileID, err)
 		if err := delivered.Nack(false, true); err != nil {
@@ -226,7 +232,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		return
 	case "same":
-		log.Infof("file already has a stable ID, marking it as ready, file-id: %s", fileID)
+		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", fileID)
 	default:
 		if backupInStorage {
 			if err = backupFile(ctx, delivered); err != nil {
@@ -239,7 +245,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			}
 		}
 
-		if err := db.SetAccessionID(message.AccessionID, fileID); err != nil {
+		if err := db.SetAccessionID(ctx, message.AccessionID, fileID); err != nil {
 			log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", fileID, err)
 			if err := delivered.Nack(false, true); err != nil {
 				log.Errorf("failed to Nack message, reason: %v", err)
@@ -250,7 +256,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	// Mark file as "ready"
-	if err := db.UpdateFileEventLog(fileID, "ready", "finalize", "{}", string(delivered.Body)); err != nil {
+	if err := db.UpdateFileEventLog(ctx, fileID, "ready", "finalize", "{}", string(delivered.Body)); err != nil {
 		log.Errorf("set status ready failed, file-id: %s, reason: %v", fileID, err)
 		if err := delivered.Nack(false, true); err != nil {
 			log.Errorf("failed to Nack message, reason: %v", err)
@@ -277,7 +283,7 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	log.Debug("Backup initiated")
 	fileID := delivered.CorrelationId
 
-	archiveData, err := db.GetArchived(fileID)
+	archiveData, err := db.GetArchived(ctx, fileID)
 	if err != nil {
 		return fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
@@ -326,11 +332,11 @@ func backupFile(ctx context.Context, delivered amqp.Delivery) error {
 	_ = contentReader.Close()
 
 	// Mark file as "backed up" and populate backup path and location
-	if err := db.SetBackedUp(backupLocation, archiveData.FilePath, fileID); err != nil {
+	if err := db.SetBackedUp(ctx, backupLocation, archiveData.FilePath, fileID); err != nil {
 		return fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
 	}
 
-	if err := db.UpdateFileEventLog(fileID, "backed up", "finalize", "{}", string(delivered.Body)); err != nil {
+	if err := db.UpdateFileEventLog(ctx, fileID, "backed up", "finalize", "{}", string(delivered.Body)); err != nil {
 		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
 
