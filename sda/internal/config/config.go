@@ -135,19 +135,21 @@ type OrchestratorConf struct {
 }
 
 type AuthConf struct {
-	OIDC            OIDCConfig
-	DB              *database.SDAdb
-	Cega            CegaConfig
-	JwtIssuer       string
-	JwtPrivateKey   string
-	JwtSignatureAlg string
-	JwtTTL          int
-	Server          ServerConfig
-	S3Inbox         string
-	ResignJwt       bool
-	InfoURL         string
-	InfoText        string
-	PublicFile      string
+	OIDC              OIDCConfig
+	DB                *database.SDAdb
+	Cega              CegaConfig
+	JwtIssuer         string
+	JwtPrivateKey     string
+	JwtSignatureAlg   string
+	JwtTTL            int
+	Server            ServerConfig
+	S3Inbox           string
+	ResignJwt         bool
+	InfoURL           string
+	InfoText          string
+	PublicFile        string
+	ReturnToAllowlist []string
+	ExchangeSecret    string
 }
 
 type OIDCConfig struct {
@@ -485,6 +487,27 @@ func NewConfig(app string) (*Config, error) {
 		if viper.IsSet("server.key") {
 			c.Server.Key = viper.GetString("server.key")
 		}
+
+		// Allowlist of return_to callback URLs.
+		if viper.IsSet("auth.returnToAllowlist") {
+			c.Auth.ReturnToAllowlist = viper.GetStringSlice("auth.returnToAllowlist")
+
+			// If env var is provided as a single comma-separated string,
+			// GetStringSlice may not split it as expected, so handle that.
+			if len(c.Auth.ReturnToAllowlist) == 1 {
+				raw := strings.TrimSpace(c.Auth.ReturnToAllowlist[0])
+				if strings.Contains(raw, ",") {
+					c.Auth.ReturnToAllowlist = strings.Split(raw, ",")
+				}
+			}
+			for i := range c.Auth.ReturnToAllowlist {
+				c.Auth.ReturnToAllowlist[i] = strings.TrimSpace(c.Auth.ReturnToAllowlist[i])
+			}
+		}
+
+		// Shared secret used to protect /oidc/exchange.
+		// Optional: if empty, /oidc/exchange should be disabled by the auth service.
+		c.Auth.ExchangeSecret = strings.TrimSpace(viper.GetString("auth.exchangeSecret"))
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
 		err := c.configDatabase()

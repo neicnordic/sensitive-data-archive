@@ -628,4 +628,16 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
 	_, err = NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+
+	viper.Set("auth.returnToAllowlist", []string{"https://portal/auth/callback"})
+	viper.Set("auth.exchangeSecret", "somesecret")
+	c, err := NewConfig("auth")
+	assert.NoError(ts.T(), err, "unexpected failure")
+	assert.Equal(ts.T(), []string{"https://portal/auth/callback"}, c.Auth.ReturnToAllowlist)
+	assert.Equal(ts.T(), "somesecret", c.Auth.ExchangeSecret)
+
+	viper.Set("auth.returnToAllowlist", "https://portal/auth/callback, https://portal2./auth/callback")
+	c, err = NewConfig("auth")
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), []string{"https://portal/auth/callback", "https://portal2/auth/callback"}, c.Auth.ReturnToAllowlist)
 }
