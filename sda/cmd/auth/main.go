@@ -410,12 +410,40 @@ func (auth AuthHandler) getOIDCStart(ctx iris.Context) {
 		return
 	}
 
-	// PoC validation; for real use implement strict allowlist
+	allowlist := normalizeAllowlist(auth.Config.ReturnToAllowlist)
+	if len(allowlist) == 0 {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("return_to allowlist not configured")
+		return
+	}
+
+	u, err := validateReturnTo(returnTo)
+	if err != nil {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("invalid return_to")
+		return
+	}
+
+	// Enforce https except for localhost/127.0.0.1 (for development)
+	if u.Scheme != "https" {
+		if !(u.Scheme == "http" && isLocalhost(u.Hostname())) {
+			ctx.StatusCode(iris.StatusBadRequest)
+			_, _ = ctx.WriteString("return_to must be https")
+			return
+		}
+	}
+
+	if !isAllowedReturnTo(returnTo, allowlist) {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("return_to not allowed")
+		return
+	}
+
 	s := sessions.Get(ctx)
 	s.Set("return_to", returnTo)
 	s.Set("token_type", tokenType)
 
-	auth.getOIDC(ctx) // existing method that sets state + redirects to IdP
+	auth.getOIDC(ctx)
 }
 
 // postOIDCExchange handles the exchange of a handoff code for OIDC login data, and returns the data as JSON.
