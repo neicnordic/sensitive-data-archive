@@ -447,6 +447,20 @@ func (auth AuthHandler) getOIDCStart(ctx iris.Context) {
 // postOIDCExchange handles the exchange of a handoff code for OIDC login data, and returns the data as JSON.
 // This is used by external services that want to authenticate users using auth as OIDC.
 func (auth AuthHandler) postOIDCExchange(ctx iris.Context) {
+	expected := strings.TrimSpace(auth.Config.ExchangeSecret)
+	if expected == "" {
+		ctx.StatusCode(iris.StatusNotFound)
+		_, _ = ctx.WriteString("not found")
+		return
+	}
+
+	provided := ctx.GetHeader("X-SDA-AUTH-EXCHANGE-SECRET")
+	if provided == "" || provided != expected {
+		ctx.StatusCode(iris.StatusUnauthorized)
+		_, _ = ctx.WriteString("unauthorized")
+		return
+	}
+
 	var req exchangeReq
 	if err := ctx.ReadJSON(&req); err != nil || req.Code == "" {
 		ctx.StatusCode(iris.StatusBadRequest)
@@ -575,7 +589,6 @@ func main() {
 
 	// OIDC login and exchange endpoints for external webapps
 	app.Get("/oidc/start", authHandler.getOIDCStart)
-	fmt.Println(authHandler.Config.ExchangeSecret)
 	if strings.TrimSpace(authHandler.Config.ExchangeSecret) != "" {
 		app.Post("/oidc/exchange", authHandler.postOIDCExchange)
 	} else {
