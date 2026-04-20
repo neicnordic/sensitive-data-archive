@@ -575,7 +575,12 @@ func main() {
 
 	// OIDC login and exchange endpoints for external webapps
 	app.Get("/oidc/start", authHandler.getOIDCStart)
-	app.Post("/oidc/exchange", authHandler.postOIDCExchange)
+	fmt.Println(authHandler.Config.ExchangeSecret)
+	if strings.TrimSpace(authHandler.Config.ExchangeSecret) != "" {
+		app.Post("/oidc/exchange", authHandler.postOIDCExchange)
+	} else {
+		log.Warn("exchange secret not set; /oidc/exchange endpoint disabled")
+	}
 
 	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
