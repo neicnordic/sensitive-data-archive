@@ -45,6 +45,9 @@ func isAllowedReturnTo(raw string, allowlist []string) bool {
 	return false
 }
 
-func isLocalhost(hostname string) bool {
-	return hostname == "localhost" || hostname == "127.0.0.1"
+func schemeAllowed(scheme string, allowInsecure bool) bool {
+	if scheme == "https" {
+		return true
+	}
+	return allowInsecure && scheme == "http"
 }

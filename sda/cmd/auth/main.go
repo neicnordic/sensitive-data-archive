@@ -424,13 +424,11 @@ func (auth AuthHandler) getOIDCStart(ctx iris.Context) {
 		return
 	}
 
-	// Enforce https except for localhost/127.0.0.1 (for development)
-	if u.Scheme != "https" {
-		if !(u.Scheme == "http" && isLocalhost(u.Hostname())) {
-			ctx.StatusCode(iris.StatusBadRequest)
-			_, _ = ctx.WriteString("return_to must be https")
-			return
-		}
+	// Enforce https unless explicitly configured otherwise
+	if !schemeAllowed(u.Scheme, auth.Config.AllowInsecureReturnTo) {
+		ctx.StatusCode(iris.StatusBadRequest)
+		_, _ = ctx.WriteString("return_to must be https")
+		return
 	}
 
 	if !isAllowedReturnTo(returnTo, allowlist) {

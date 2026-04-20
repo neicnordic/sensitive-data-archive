@@ -135,21 +135,22 @@ type OrchestratorConf struct {
 }
 
 type AuthConf struct {
-	OIDC              OIDCConfig
-	DB                *database.SDAdb
-	Cega              CegaConfig
-	JwtIssuer         string
-	JwtPrivateKey     string
-	JwtSignatureAlg   string
-	JwtTTL            int
-	Server            ServerConfig
-	S3Inbox           string
-	ResignJwt         bool
-	InfoURL           string
-	InfoText          string
-	PublicFile        string
-	ReturnToAllowlist []string
-	ExchangeSecret    string
+	OIDC                  OIDCConfig
+	DB                    *database.SDAdb
+	Cega                  CegaConfig
+	JwtIssuer             string
+	JwtPrivateKey         string
+	JwtSignatureAlg       string
+	JwtTTL                int
+	Server                ServerConfig
+	S3Inbox               string
+	ResignJwt             bool
+	InfoURL               string
+	InfoText              string
+	PublicFile            string
+	ReturnToAllowlist     []string
+	ExchangeSecret        string
+	AllowInsecureReturnTo bool
 }
 
 type OIDCConfig struct {
@@ -508,6 +509,10 @@ func NewConfig(app string) (*Config, error) {
 		// Shared secret used to protect /oidc/exchange.
 		// Optional: if empty, /oidc/exchange should be disabled by the auth service.
 		c.Auth.ExchangeSecret = strings.TrimSpace(viper.GetString("auth.exchangeSecret"))
+
+		// Disallow return_to non-https callback URLs unless explicitly set.
+		viper.SetDefault("auth.allowInsecureReturnTo", false)
+		c.Auth.AllowInsecureReturnTo = viper.GetBool("auth.allowInsecureReturnTo")
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
 		err := c.configDatabase()

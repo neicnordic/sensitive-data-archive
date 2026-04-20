@@ -635,9 +635,12 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	assert.NoError(ts.T(), err, "unexpected failure")
 	assert.Equal(ts.T(), []string{"https://portal/auth/callback"}, c.Auth.ReturnToAllowlist)
 	assert.Equal(ts.T(), "somesecret", c.Auth.ExchangeSecret)
+	assert.False(ts.T(), c.Auth.AllowInsecureReturnTo)
 
-	viper.Set("auth.returnToAllowlist", "https://portal/auth/callback, https://portal2./auth/callback")
+	viper.Set("auth.returnToAllowlist", "https://portal/auth/callback,https://portal2/auth/callback")
+	viper.Set("auth.allowInsecureReturnTo", true)
 	c, err = NewConfig("auth")
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), []string{"https://portal/auth/callback", "https://portal2/auth/callback"}, c.Auth.ReturnToAllowlist)
+	assert.True(ts.T(), c.Auth.AllowInsecureReturnTo)
 }

@@ -47,8 +47,9 @@ func TestIsAllowedReturnTo(t *testing.T) {
 	assert.False(t, isAllowedReturnTo("http://portal.com/auth/callback", allowlist))
 }
 
-func TestIsLocalhost(t *testing.T) {
-	assert.True(t, isLocalhost("localhost"))
-	assert.True(t, isLocalhost("127.0.0.1"))
-	assert.False(t, isLocalhost("portal.com"))
+func TestSchemeAllowed(t *testing.T) {
+	assert.True(t, schemeAllowed("https", false))
+	assert.False(t, schemeAllowed("http", false))
+	assert.True(t, schemeAllowed("http", true))
+	assert.False(t, schemeAllowed("ftp", true))
 }
