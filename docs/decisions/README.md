@@ -113,10 +113,14 @@ superseded-by: "0005-use-new-approach.md"
 | [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
 | [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md) | Introduce RFCs as an upstream exploration phase for ADRs | proposed |
 
-Numbers `0001` and `0004` are reserved by open ADR PRs
-([#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263),
-[#2320](https://github.com/neicnordic/sensitive-data-archive/pull/2320)). The
-next free ADR number for a new decision is `0006`.
+Numbers `0001` and `0004` were proposed in PRs
+[#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263) and
+[#2320](https://github.com/neicnordic/sensitive-data-archive/pull/2320) but
+are being converted to RFCs per
+[ADR-0005](0005-introduce-rfcs-as-upstream-exploration-phase.md). Per the
+*"numbers are never reused"* rule from
+[ADR-0000](0000-use-markdown-architectural-decision-records.md), those ADR
+numbers stay retired.
 
 ## More information
 

@@ -87,10 +87,13 @@ Confirmation is delivered in two steps:
 
 1. The merge of this PR creates `docs/rfcs/` with its README and template, and
    adds the promotion rule to `docs/decisions/README.md`.
-2. Two follow-up PRs close the currently open ADR PRs
-   ([#2263][pr-2263], [#2320][pr-2320]) and re-open their content as RFCs.
-   Successful completion of those follow-ups confirms that the flow works in
-   practice.
+2. The two currently open ADR PRs ([#2263][pr-2263], [#2320][pr-2320]) are
+   converted in place to RFC PRs: the files move from `docs/decisions/` to
+   `docs/rfcs/`, the front matter and body are reshaped to the RFC template,
+   and the PRs are relabelled `rfc`. The existing PR discussion threads are
+   preserved — they are exactly the kind of exploration an RFC should
+   capture. Successful completion of those conversions confirms the flow
+   works in practice.
 
 ## Pros and Cons of the Options
 
@@ -136,7 +139,7 @@ Confirmation is delivered in two steps:
 | Promotion trigger | The team can honestly write *"Chosen option: X, because Y"* |
 | Promotion mechanics | Create a new ADR file under the next free ADR number from [`docs/decisions/template.md`](template.md), pulling across the relevant content from the RFC. In the RFC: flip `status` to `promoted`, set `promoted-to` to the ADR filename(s), freeze the body. Promotion is only complete once the index in [this README](README.md#index) and the RFC index are both updated. |
 | One RFC, multiple ADRs | Supported: `promoted-to` accepts a list of ADR filenames. |
-| Reserved ADR numbers | `0001` and `0004` are reserved by open ADR PRs ([#2263][pr-2263], [#2320][pr-2320]). The next free ADR number is `0005` (this ADR); the number after is `0006`. |
+| Retired ADR numbers | `0001` and `0004` were proposed in open PRs ([#2263][pr-2263], [#2320][pr-2320]) but will not be accepted as ADRs; their content is converted to RFCs under this ADR's flow. In line with the *"numbers are never reused"* rule from [ADR-0000][adr-0000], those ADR numbers stay retired. |
 | RFC lifetime | Unlimited. An RFC living for a long time without promotion is not a defect. Stale RFCs are surfaced at the bi-weekly NeIC SDA-Devs meet-up. |
 | Post-promotion edits | A `promoted` or `withdrawn` RFC is frozen — only metadata and index rows change. Revisions to a decision live in the ADR. |
 | ADR lifecycle unchanged | The ADR status lifecycle (`proposed` → `accepted` \| `rejected` \| `deprecated` \| `superseded`) is **not** modified by this ADR. ADR statuses only apply to files in `docs/decisions/`. |
