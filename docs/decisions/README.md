@@ -36,6 +36,22 @@ already obvious from the code or commit message.
 Not every change needs a record — use your judgement. The pull request template
 includes a checkbox as a reminder.
 
+## RFCs — upstream exploration
+
+When the team recognises an architectural question but cannot yet commit to a
+specific answer, write an [RFC](../rfcs/) instead of an ADR. RFCs live in
+`docs/rfcs/` and reuse the MADR structure of this template, minus
+`## Decision Outcome` and `### Confirmation`, plus `## Open Questions`.
+
+An RFC is **promoted** to an ADR when the team can honestly write
+*"Chosen option: X, because Y"*. Promotion creates a new ADR file here under
+the next free ADR number; the original RFC file stays in `docs/rfcs/` as a
+frozen reference to the exploration. ADR statuses (`proposed`, `accepted`,
+etc.) only apply to files in this directory.
+
+See [ADR-0005](0005-introduce-rfcs-as-upstream-exploration-phase.md) for the
+rationale and the full promotion procedure.
+
 ## How to create a decision record
 
 1. Copy the template:
@@ -95,6 +111,12 @@ superseded-by: "0005-use-new-approach.md"
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
 | [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
 | [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
+| [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md) | Introduce RFCs as an upstream exploration phase for ADRs | proposed |
+
+Numbers `0001` and `0004` are reserved by open ADR PRs
+([#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263),
+[#2320](https://github.com/neicnordic/sensitive-data-archive/pull/2320)). The
+next free ADR number for a new decision is `0006`.
 
 ## More information
 
