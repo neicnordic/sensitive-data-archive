@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -455,9 +456,10 @@ func (auth AuthHandler) postOIDCExchange(ctx iris.Context) {
 	}
 
 	provided := ctx.GetHeader("X-SDA-AUTH-EXCHANGE-SECRET")
-	if provided == "" || provided != expected {
+	if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
 		ctx.StatusCode(iris.StatusUnauthorized)
 		_, _ = ctx.WriteString("unauthorized")
+
 		return
 	}
 
