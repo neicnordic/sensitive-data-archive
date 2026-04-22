@@ -113,6 +113,8 @@ ROTATE_PUB="-----BEGIN CRYPT4GH PUBLIC KEY-----
 fFmwrVXywijqMoaLX95CgIXp6klJuo5MOLf/I3+BQ1Q=
 -----END CRYPT4GH PUBLIC KEY-----"
 
+ROTATE_PUB_BASE64=$(echo "$ROTATE_PUB" | base64 -w0)
+
 # OLD_PRIV is the encrypted private key corresponding to OLD_PUB, with passphrase "pass"
 OLD_PRIV="-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----
 YzRnaC12MQAGc2NyeXB0ABQAAAAA9yimIi6tLdrRZim6rlojxQARY2hhY2hhMjBf
@@ -150,7 +152,7 @@ HELM_ARGS=(
     --set global.configPath='/.secrets'
 
     # rotatekey
-    --set "global.c4gh.rotatePubKeyData=$ROTATE_PUB"
+    --set "global.c4gh.rotatePubKeyData=$ROTATE_PUB_BASE64"
 
     # --- database ---
     --set global.db.host=postgres-sda-db
