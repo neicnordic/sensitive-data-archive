@@ -112,7 +112,7 @@ func TestOIDCStart_InsecureHTTPAllowed_NotRejectedByValidation(t *testing.T) {
 func TestOIDCExchange_DisabledWhenNoSecret(t *testing.T) {
 	h := AuthHandler{
 		Config:   config.AuthConf{ExchangeSecret: ""},
-		Handoffs: NewMemoryHandoffStore(2 * time.Minute),
+		Handoffs: NewMemoryHandoffStore(2*time.Minute, 100),
 	}
 
 	e := newTestApp(t, h)
@@ -128,7 +128,7 @@ func TestOIDCExchange_DisabledWhenNoSecret(t *testing.T) {
 func TestOIDCExchange_UnauthorizedWhenSecretMissingOrWrong(t *testing.T) {
 	h := AuthHandler{
 		Config:   config.AuthConf{ExchangeSecret: "supersecret"},
-		Handoffs: NewMemoryHandoffStore(2 * time.Minute),
+		Handoffs: NewMemoryHandoffStore(2*time.Minute, 100),
 	}
 
 	e := newTestApp(t, h)
@@ -150,7 +150,7 @@ func TestOIDCExchange_UnauthorizedWhenSecretMissingOrWrong(t *testing.T) {
 }
 
 func TestOIDCExchange_SuccessAndSingleUse(t *testing.T) {
-	store := NewMemoryHandoffStore(2 * time.Minute)
+	store := NewMemoryHandoffStore(2*time.Minute, 100)
 	code, err := store.Put(HandoffItem{
 		Token:     "token123",
 		Exp:       "2099-01-01 00:00:00",
@@ -195,7 +195,7 @@ func TestOIDCExchange_SuccessAndSingleUse(t *testing.T) {
 func TestOIDCExchange_InvalidJSON(t *testing.T) {
 	h := AuthHandler{
 		Config:   config.AuthConf{ExchangeSecret: "supersecret"},
-		Handoffs: NewMemoryHandoffStore(2 * time.Minute),
+		Handoffs: NewMemoryHandoffStore(2*time.Minute, 100),
 	}
 
 	e := newTestApp(t, h)
@@ -213,7 +213,7 @@ func TestOIDCExchange_InvalidJSON(t *testing.T) {
 func TestOIDCExchange_EmptyCode(t *testing.T) {
 	h := AuthHandler{
 		Config:   config.AuthConf{ExchangeSecret: "supersecret"},
-		Handoffs: NewMemoryHandoffStore(2 * time.Minute),
+		Handoffs: NewMemoryHandoffStore(2*time.Minute, 100),
 	}
 
 	e := newTestApp(t, h)

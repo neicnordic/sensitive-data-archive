@@ -8,7 +8,7 @@ import (
 )
 
 func TestMemoryHandoffStore_PutAndGetAndDelete(t *testing.T) {
-	s := NewMemoryHandoffStore(2 * time.Minute)
+	s := NewMemoryHandoffStore(2*time.Minute, 100)
 
 	item := HandoffItem{
 		Token:     "token",
@@ -35,7 +35,7 @@ func TestMemoryHandoffStore_PutAndGetAndDelete(t *testing.T) {
 }
 
 func TestMemoryHandoffStore_Expired(t *testing.T) {
-	s := NewMemoryHandoffStore(1 * time.Millisecond)
+	s := NewMemoryHandoffStore(1*time.Millisecond, 100)
 
 	item := HandoffItem{
 		Token:     "token",
@@ -56,7 +56,7 @@ func TestMemoryHandoffStore_Expired(t *testing.T) {
 }
 
 func TestMemoryHandoffStore_GetMissing(t *testing.T) {
-	s := NewMemoryHandoffStore(2 * time.Minute)
+	s := NewMemoryHandoffStore(2*time.Minute, 100)
 
 	_, ok := s.GetAndDelete("does-not-exist")
 	assert.False(t, ok)
@@ -64,7 +64,7 @@ func TestMemoryHandoffStore_GetMissing(t *testing.T) {
 
 func TestRandomCode_UniqueEnough(t *testing.T) {
 	// Not a strict uniqueness proof; just a sanity check.
-	s := NewMemoryHandoffStore(2 * time.Minute)
+	s := NewMemoryHandoffStore(2*time.Minute, 100)
 
 	item := HandoffItem{
 		Token:     "token",
@@ -80,4 +80,14 @@ func TestRandomCode_UniqueEnough(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, code1, code2)
+}
+
+func TestMemoryHandoffStore_Full(t *testing.T) {
+	s := NewMemoryHandoffStore(2*time.Minute, 1)
+
+	_, err := s.Put(HandoffItem{CreatedAt: time.Now().UTC()})
+	assert.NoError(t, err)
+
+	_, err = s.Put(HandoffItem{CreatedAt: time.Now().UTC()})
+	assert.ErrorIs(t, err, ErrHandoffStoreFull)
 }

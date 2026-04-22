@@ -3,9 +3,12 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"sync"
 	"time"
 )
+
+var ErrHandoffStoreFull = errors.New("handoff store is full")
 
 type HandoffItem struct {
 	Token     string
@@ -21,15 +24,17 @@ type HandoffStore interface {
 }
 
 type MemoryHandoffStore struct {
-	mu   sync.Mutex
-	data map[string]HandoffItem
-	ttl  time.Duration
+	mu         sync.Mutex
+	data       map[string]HandoffItem
+	ttl        time.Duration
+	maxEntries int
 }
 
-func NewMemoryHandoffStore(ttl time.Duration) *MemoryHandoffStore {
+func NewMemoryHandoffStore(ttl time.Duration, maxEntries int) *MemoryHandoffStore {
 	return &MemoryHandoffStore{
-		data: make(map[string]HandoffItem),
-		ttl:  ttl,
+		data:       make(map[string]HandoffItem),
+		ttl:        ttl,
+		maxEntries: maxEntries,
 	}
 }
 
@@ -40,6 +45,11 @@ func (s *MemoryHandoffStore) Put(item HandoffItem) (string, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.maxEntries > 0 && len(s.data) >= s.maxEntries {
+		return "", ErrHandoffStoreFull
+	}
+
 	s.data[code] = item
 	return code, nil
 }

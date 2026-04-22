@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -345,8 +346,13 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 			CreatedAt: time.Now().UTC(),
 		})
 		if err != nil {
-			ctx.StatusCode(iris.StatusInternalServerError)
-			_, _ = ctx.WriteString("failed to create handoff code")
+			if errors.Is(err, ErrHandoffStoreFull) {
+				log.Warn("handoff store full; refusing to issue new handoff code")
+			} else {
+				log.WithError(err).Error("failed to create handoff code")
+			}
+			ctx.StatusCode(iris.StatusServiceUnavailable)
+			_, _ = ctx.WriteString("service temporarily unavailable")
 
 			return
 		}
@@ -538,7 +544,7 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
-		Handoffs:     NewMemoryHandoffStore(2 * time.Minute),
+		Handoffs:     NewMemoryHandoffStore(60*time.Second, 100),
 	}
 
 	// Initialise web server
