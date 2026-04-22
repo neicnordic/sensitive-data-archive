@@ -75,6 +75,8 @@ spec:
         env:
           - name: CONFIGFILE
             value: {{ include "confFile" . }}
+          - name: CONFIG_FILE
+            value: {{ include "confFile" . }}
         resources:
 {{ toYaml .Values.sync.resources | trim | indent 10 }}
         volumeMounts:

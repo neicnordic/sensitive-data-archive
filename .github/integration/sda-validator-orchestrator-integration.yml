@@ -200,6 +200,7 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USER=validator_orchestrator
       - DATABASE_PASSWORD=validator_orchestrator
+      - DATABASE_NAME=sda_validator_orchestrator
       - CONFIG_FILE=/validators/config/config.yaml
       - JWT_PUB_KEY_URL=http://localhost:8800/oidc/jwk
       - RBAC_POLICY_FILE_PATH=/validators/config/rbac.policy

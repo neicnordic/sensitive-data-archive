@@ -60,6 +60,8 @@ spec:
         env:
         - name: CONFIGFILE
           value: {{ template "confFile" . }}
+        - name: CONFIG_FILE
+          value: {{ template "confFile" . }}
         resources:
 {{ toYaml .Values.intercept.resources | trim | indent 10 }}
     {{- if not .Values.global.vaultSecrets }}
