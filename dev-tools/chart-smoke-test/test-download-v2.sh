@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local k3d smoke test for the v2 download service chart.
 #
-# Prerequisites: docker, k3d, kubectl, helm
+# Prerequisites: docker, k3d, kubectl, helm, yq (mikefarah), jq
 #
 # Usage:
 #   ./dev-tools/chart-smoke-test/test-download-v2.sh              # full run (build + deploy + test)
@@ -46,6 +46,16 @@ wait_for_pod() {
     if ! kubectl wait --for=condition=ready pod -l "$label" --timeout="${timeout}s" 2>/dev/null; then
         echo "Pod $label not ready after ${timeout}s"
         kubectl logs -l "$label" --tail=20 2>/dev/null
+        return 1
+    fi
+}
+
+wait_for_deploy() {
+    local name="$1" timeout="$2"
+    echo "Waiting for deployment $name to be Available (${timeout}s)..."
+    if ! kubectl rollout status "deploy/$name" --timeout="${timeout}s"; then
+        echo "Deployment $name not Available after ${timeout}s"
+        kubectl logs "deploy/$name" --tail=30 2>/dev/null
         return 1
     fi
 }
@@ -271,6 +281,10 @@ HELM_ARGS=(
     --set global.downloadV2.enabled=true
     --set global.downloadV2.service.orgName=TestOrg
     --set global.downloadV2.service.orgURL=http://test.org
+    # trustedIssuers set to exercise the iss.json secret (visa.enabled stays false
+    # so the pod doesn't need a reachable OIDC endpoint).
+    --set "global.downloadV2.visa.trustedIssuers[0].iss=https://example.com/oidc"
+    --set "global.downloadV2.visa.trustedIssuers[0].jku=https://example.com/jwks"
     --set global.ingress.hostName.downloadV2=dl-v2.local
     # Single-node k3d can't satisfy topology spread for the default 2 replicas
     --set downloadV2.replicaCount=1
@@ -282,10 +296,37 @@ for tmpl in download-v2-secrets download-v2-deploy download-v2-service; do
         --show-only "templates/${tmpl}.yaml"
 done | kubectl apply -f -
 
-wait_for_pod "app=pipeline-sda-svc-download-v2" 60
+wait_for_deploy "pipeline-sda-svc-download-v2" 120
 
-# -- 6. smoke tests --
-echo "=== Step 5: smoke tests ==="
+# -- 6a. secret content tests --
+echo "=== Step 5a: secret content tests ==="
+
+SECRET="pipeline-sda-svc-download-v2"
+ISS_SECRET="pipeline-sda-svc-download-v2-iss"
+
+CONFIG_YAML=$(kubectl get secret "$SECRET" -o jsonpath='{.data.config\.yaml}' | base64 -d)
+
+check "config.yaml .service.org-name"  "TestOrg" \
+    "$(echo "$CONFIG_YAML" | yq '.service.org-name')"
+check "config.yaml .service.org-url"   "http://test.org" \
+    "$(echo "$CONFIG_YAML" | yq '.service.org-url')"
+check "config.yaml .api.port"          "8080" \
+    "$(echo "$CONFIG_YAML" | yq '.api.port')"
+check "config.yaml .storage.archive.s3[0].endpoint" "http://minio:443" \
+    "$(echo "$CONFIG_YAML" | yq '.storage.archive.s3[0].endpoint')"
+check "config.yaml .db.host"           "postgres-sda-db" \
+    "$(echo "$CONFIG_YAML" | yq '.db.host')"
+
+ISS_JSON=$(kubectl get secret "$ISS_SECRET" -o jsonpath='{.data.iss\.json}' | base64 -d)
+check "iss.json is valid JSON"         "parsed" \
+    "$(echo "$ISS_JSON" | jq -e . >/dev/null 2>&1 && echo parsed || echo invalid)"
+check "iss.json [0].iss"               "https://example.com/oidc" \
+    "$(echo "$ISS_JSON" | jq -r '.[0].iss')"
+check "iss.json [0].jku"               "https://example.com/jwks" \
+    "$(echo "$ISS_JSON" | jq -r '.[0].jku')"
+
+# -- 6b. HTTP smoke tests --
+echo "=== Step 5b: HTTP smoke tests ==="
 
 SVC="pipeline-sda-svc-download-v2"
 
