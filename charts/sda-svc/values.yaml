@@ -194,7 +194,8 @@ global:
     secretName:
     publicKey:
     publicKeyData:
-    rotatePubKeyData: # contains the public key data,  not the path to the file
+    ## @param rotatePubKeyData, contains the PEM encoded public key as a base64 encoded string
+    rotatePubKeyData:
     privateKeys:
     - keyName:
       passphrase:
