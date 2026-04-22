@@ -217,6 +217,14 @@ global:
     password: ""
     port: 5432
     sslMode: "verify-full"
+    ## @param maxIdleConnections, Sets the maximum number of connections in the idle connection pool, set to <= 0 for unlimited
+    maxIdleConnections: 2
+    ## @param maxOpenConnections, Sets the maximum number of open connections to the database, set to <= 0 for unlimited
+    maxOpenConnections: 0
+    ## @param connectionMaxIdleTime, Sets the maximum amount of time a connection may be idle, set to <= 0 for unlimited. Expects a go time.Duration parsable string
+    connectionMaxIdleTime: "0"
+    ## @param connectionMaxLifeTime, Sets the maximum amount of time a connection may be reused, set to <= 0 for unlimited. Expects a go time.Duration parsable string
+    connectionMaxLifeTime: "0"
 
   doa:
     enabled: false
