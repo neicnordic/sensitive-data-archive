@@ -241,8 +241,8 @@ services:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
-      - DB_PASSWORD=inbox
-      - DB_USER=inbox
+      - DATABASE_PASSWORD=inbox
+      - DATABASE_USER=inbox
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -270,8 +270,8 @@ services:
     environment:
       - BROKER_PASSWORD=api
       - BROKER_USER=api
-      - DB_PASSWORD=api
-      - DB_USER=api
+      - DATABASE_PASSWORD=api
+      - DATABASE_USER=api
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
