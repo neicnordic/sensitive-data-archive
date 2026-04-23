@@ -151,6 +151,13 @@ type AuthConf struct {
 	ReturnToAllowlist     []string
 	ExchangeSecret        string
 	AllowInsecureReturnTo bool
+	Handoff               AuthHandoff
+}
+
+type AuthHandoff struct {
+	TTLSeconds             time.Duration
+	MaxEntries             int
+	CleanupIntervalSeconds time.Duration
 }
 
 type OIDCConfig struct {
@@ -506,13 +513,33 @@ func NewConfig(app string) (*Config, error) {
 			}
 		}
 
-		// Shared secret used to protect /oidc/exchange.
-		// Optional: if empty, /oidc/exchange should be disabled by the auth service.
+		// Secret used to protect /oidc/exchange.
 		c.Auth.ExchangeSecret = strings.TrimSpace(viper.GetString("auth.exchangeSecret"))
 
 		// Disallow return_to non-https callback URLs unless explicitly set.
 		viper.SetDefault("auth.allowInsecureReturnTo", false)
 		c.Auth.AllowInsecureReturnTo = viper.GetBool("auth.allowInsecureReturnTo")
+
+		// Handoff time configuration
+		viper.SetDefault("auth.handoff.TTLSeconds", 60)
+		viper.SetDefault("auth.handoff.MaxEntries", 100)
+		viper.SetDefault("auth.handoff.CleanupIntervalSeconds", 15)
+
+		ttlSec := viper.GetInt("auth.handoff.TTLSeconds")
+		cleanupSec := viper.GetInt("auth.handoff.CleanupIntervalSeconds")
+		maxEntries := viper.GetInt("auth.handoff.MaxEntries")
+		if ttlSec <= 0 {
+			return nil, fmt.Errorf("handoff TTL must be at least 1 second")
+		}
+		if cleanupSec <= 0 {
+			return nil, fmt.Errorf("handoff cleanup interval must be at least 1 second")
+		}
+		if maxEntries <= 0 {
+			return nil, fmt.Errorf("handoff max entries must be at least 1")
+		}
+		c.Auth.Handoff.TTLSeconds = time.Duration(ttlSec) * time.Second
+		c.Auth.Handoff.CleanupIntervalSeconds = time.Duration(cleanupSec) * time.Second
+		c.Auth.Handoff.MaxEntries = maxEntries
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
 		err := c.configDatabase()

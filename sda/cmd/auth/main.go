@@ -545,14 +545,14 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
-		Handoffs:     NewMemoryHandoffStore(60*time.Second, 100),
+		Handoffs:     NewMemoryHandoffStore(conf.Auth.Handoff.TTLSeconds, conf.Auth.Handoff.MaxEntries),
 	}
 
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
 	defer cleanupCancel()
 
 	if memStore, ok := authHandler.Handoffs.(*MemoryHandoffStore); ok {
-		memStore.StartCleanup(cleanupCtx, 15*time.Second, func(removed int) {
+		memStore.StartCleanup(cleanupCtx, conf.Auth.Handoff.CleanupIntervalSeconds, func(removed int) {
 			log.Debugf("cleaned up %d expired handoff codes", removed)
 		})
 	}

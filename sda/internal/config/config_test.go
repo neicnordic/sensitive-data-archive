@@ -643,4 +643,17 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), []string{"https://portal/auth/callback", "https://portal2/auth/callback"}, c.Auth.ReturnToAllowlist)
 	assert.True(ts.T(), c.Auth.AllowInsecureReturnTo)
+
+	assert.Equal(ts.T(), 60*time.Second, c.Auth.Handoff.TTLSeconds)
+	assert.Equal(ts.T(), 15*time.Second, c.Auth.Handoff.CleanupIntervalSeconds)
+	assert.Equal(ts.T(), 100, c.Auth.Handoff.MaxEntries)
+	viper.Set("auth.handoff.TTLSeconds", 0)
+	c, err = NewConfig("auth")
+	assert.ErrorContains(ts.T(), err, "must be at least 1 second")
+	viper.Set("auth.handoff.MaxEntries", 0)
+	c, err = NewConfig("auth")
+	assert.ErrorContains(ts.T(), err, "must be at least 1")
+	viper.Set("auth.handoff.CleanupIntervalSeconds", 0)
+	c, err = NewConfig("auth")
+	assert.ErrorContains(ts.T(), err, "must be at least 1 second")
 }
