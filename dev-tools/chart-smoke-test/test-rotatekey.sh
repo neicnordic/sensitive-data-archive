@@ -175,18 +175,13 @@ HELM_ARGS=(
     --set global.archive.s3Port=9000
     --set global.archive.s3AccessKey=access
     --set global.archive.s3SecretKey=secretkey
-    --set global.archive.s3BucketPrefix=sda
 
     # --- reencrypt  ---
     --set global.reencrypt.host=pipeline-sda-svc-reencrypt
     --set global.reencrypt.port=50051
     --set reencrypt.readinessProbe.grpc.port=50051
 
-    # --- OIDC & security ---
-    --set global.oidc.provider=http://oidc
-    --set global.oidc.id=test
-    --set global.oidc.secret=test
-    --set global.api.jwtSecret=jwt-secret
+    # --- security ---
     --set global.api.rbacFileSecret=rbac
 
     # --- c4gh for reencrypt  ---
@@ -195,9 +190,6 @@ HELM_ARGS=(
     --set "global.c4gh.privateKeys[0].passphrase=pass"
 
     # --- ingress ---
-    --set global.ingress.hostName.download="download.local"
-    --set global.ingress.hostName.ingest="ingest.local"
-    --set global.ingress.hostName.api="api.local"
     --set global.ingress.deploy=false
 
     # --- logging ---
