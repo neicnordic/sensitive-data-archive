@@ -5,7 +5,7 @@ metadata:
   name: {{ template "sda.fullname" . }}-rotatekey
   labels:
     role: rotatekey
-    app: {{ template "sda.fullname" . }}
+    app: {{ template "sda.fullname" . }}-rotatekey
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     component: {{ .Release.Name }}-rotatekey
     release: {{ .Release.Name }}
