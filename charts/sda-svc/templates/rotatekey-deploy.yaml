@@ -61,11 +61,22 @@ spec:
         volumeMounts:
         - name: config
           mountPath: {{ template "configPath" . }}
+        {{- if .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+          readOnly: true
+        {{- end }}
       enableServiceLinks: false
       volumes:
       - name: config
         secret:
           defaultMode: 0440
           secretName: {{ template "sda.fullname" . }}-rotatekey
+      {{- if .Values.global.tls.enabled }}
+      - name: tls
+        secret:
+          defaultMode: 0440
+          secretName: {{ template "sda.fullname" . }}-rotatekey-certs
+      {{- end }}
       restartPolicy: Always
 {{- end }}
