@@ -401,26 +401,15 @@ func Download(c *gin.Context) {
 		}
 
 		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
-			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-			start, end, err = adjustSeekPos(seekStream, start, end)
+		fileStream = io.MultiReader(newHr, file)
+		if !wholeFile {
+			start, end, err = adjustSeekPos(fileStream, start, end)
 			if err != nil {
 				log.Errorf("Could not seek stream: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
 
 				return
 			}
-			fileStream = seekStream
 		}
 	default:
 		// Reencrypt header for use with the loaded internal key
@@ -433,20 +422,7 @@ func Download(c *gin.Context) {
 		}
 
 		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
-			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-		}
-
+		fileStream = io.MultiReader(newHr, file)
 		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.C4GH.PrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
@@ -474,12 +450,10 @@ func Download(c *gin.Context) {
 	}
 }
 
-var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+var adjustSeekPos = func(fileStream io.Reader, start, end int64) (int64, int64, error) {
 	if start != 0 {
-		// We don't want to read from start, skip ahead to where we should be
-		_, err := fileStream.Seek(start, 0)
-		if err != nil {
-			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		if _, err := io.CopyN(io.Discard, fileStream, start); err != nil {
+			return 0, 0, err
 		}
 		// adjust end to reflect that the file start has been moved
 		end -= start

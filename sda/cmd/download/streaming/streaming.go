@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -362,6 +361,3 @@ func StreamBodyOnly(cfg StreamBodyConfig) error {
 
 	return nil
 }
-
-// SeekableMultiReader is a re-export of storage.SeekableMultiReader for convenience.
-var SeekableMultiReader = storage.SeekableMultiReader
