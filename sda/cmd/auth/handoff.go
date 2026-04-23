@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -76,4 +77,49 @@ func randomCode(nbytes int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// CleanupExpired removes expired handoff items from the store.
+// It returns the number of removed items.
+func (s *MemoryHandoffStore) CleanupExpired() int {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	removed := 0
+	for code, item := range s.data {
+		if now.Sub(item.CreatedAt) > s.ttl {
+			delete(s.data, code)
+			removed++
+		}
+	}
+	return removed
+}
+
+// StartCleanup starts a background goroutine that periodically removes expired items.
+// It stops when ctx is done.
+// Safe to call once; if you call multiple times, you'll start multiple cleanup loops.
+func (s *MemoryHandoffStore) StartCleanup(ctx context.Context, interval time.Duration, onCleanup func(removed int)) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+
+	ticker := time.NewTicker(interval)
+
+	go func() {
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				removed := s.CleanupExpired()
+				if removed > 0 && onCleanup != nil {
+					onCleanup(removed)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

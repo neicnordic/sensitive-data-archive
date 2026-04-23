@@ -91,3 +91,16 @@ func TestMemoryHandoffStore_Full(t *testing.T) {
 	_, err = s.Put(HandoffItem{CreatedAt: time.Now().UTC()})
 	assert.ErrorIs(t, err, ErrHandoffStoreFull)
 }
+
+func TestMemoryHandoffStore_CleanupExpired(t *testing.T) {
+	s := NewMemoryHandoffStore(10*time.Millisecond, 100)
+
+	// insert expired
+	s.mu.Lock()
+	s.data["x"] = HandoffItem{CreatedAt: time.Now().Add(-time.Hour)}
+	s.mu.Unlock()
+
+	removed := s.CleanupExpired()
+	assert.Equal(t, 1, removed)
+	assert.Equal(t, 0, len(s.data))
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -545,6 +546,15 @@ func main() {
 		staticDir:    "./frontend/static",
 		pubKey:       "",
 		Handoffs:     NewMemoryHandoffStore(60*time.Second, 100),
+	}
+
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+
+	if memStore, ok := authHandler.Handoffs.(*MemoryHandoffStore); ok {
+		memStore.StartCleanup(cleanupCtx, 15*time.Second, func(removed int) {
+			log.Debugf("cleaned up %d expired handoff codes", removed)
+		})
 	}
 
 	// Initialise web server
