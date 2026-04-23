@@ -9,6 +9,10 @@ fi
 MQ_PORT=5672
 SCHEME=HTTP
 GRPC_PORT=50051
+ROTATE_PUB="-----BEGIN CRYPT4GH PUBLIC KEY-----
+fFmwrVXywijqMoaLX95CgIXp6klJuo5MOLf/I3+BQ1Q=
+-----END CRYPT4GH PUBLIC KEY-----"
+ROTATE_PUB_BASE64=$(printf '%s' "$ROTATE_PUB" | base64 -w0)
 if [ "$3" == "true" ]; then
     MQ_PORT=5671
     SCHEME=HTTPS
@@ -81,6 +85,7 @@ if [ "$1" == "sda-svc" ]; then
         --set s3Inbox.readinessProbe.httpGet.scheme="$SCHEME" \
         --set syncAPI.readinessProbe.httpGet.scheme="$SCHEME" \
         --set reencrypt.readinessProbe.grpc.port="$GRPC_PORT" \
+        --set "global.c4gh.rotatePubKeyData=$ROTATE_PUB_BASE64" \
         -f "$dir/values.yaml" \
         --wait
 fi
