@@ -326,12 +326,7 @@ func Download(c *gin.Context) {
 	}
 
 	// Get archive file handle
-	var file io.ReadCloser
-	if wholeFile {
-		file, err = ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
-	} else {
-		file, err = ArchiveReader.NewFileReadSeeker(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
-	}
+	file, err := ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	if err != nil {
 		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
 		c.String(http.StatusInternalServerError, "archive error")
@@ -403,9 +398,9 @@ func Download(c *gin.Context) {
 		newHr := bytes.NewReader(newHeader)
 		fileStream = io.MultiReader(newHr, file)
 		if !wholeFile {
-			start, end, err = adjustSeekPos(fileStream, start, end)
+			start, end, err = adjustToStartPosition(fileStream, start, end)
 			if err != nil {
-				log.Errorf("Could not seek stream: %v", err)
+				log.Errorf("Could not adjust start position: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
 
 				return
@@ -431,9 +426,9 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
+		start, end, err = adjustToStartPosition(c4ghfileStream, start, end)
 		if err != nil {
-			log.Errorf("Could not seek stream: %v", err)
+			log.Errorf("Could not adjust start position: %v", err)
 			c.String(http.StatusInternalServerError, "file decoding error")
 
 			return
@@ -450,7 +445,7 @@ func Download(c *gin.Context) {
 	}
 }
 
-var adjustSeekPos = func(fileStream io.Reader, start, end int64) (int64, int64, error) {
+func adjustToStartPosition(fileStream io.Reader, start, end int64) (int64, int64, error) {
 	if start != 0 {
 		if _, err := io.CopyN(io.Discard, fileStream, start); err != nil {
 			return 0, 0, err
