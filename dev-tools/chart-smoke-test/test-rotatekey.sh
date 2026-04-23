@@ -167,7 +167,6 @@ HELM_ARGS=(
     --set global.broker.username=admin
     --set global.broker.password=mqpass
     --set global.broker.rotateKeyQueue=rotatekey
-    --set global.broker.routingKey=rotate
     --set global.broker.prefetchCount=2
 
     # --- archive ---
