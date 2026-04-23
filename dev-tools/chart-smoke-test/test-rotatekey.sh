@@ -143,13 +143,8 @@ HELM_ARGS=(
     # --- basic image/service settings ---
     --set image.tag=local-test
     --set image.pullPolicy=IfNotPresent
-    --set rotatekey.enabled=true
     --set global.tls.enabled=false
     --set global.rbacEnabled=false
-
-    --set global.secretsPath='/.secrets'
-    --set global.c4ghPath='/.secrets/c4gh'
-    --set global.configPath='/.secrets'
 
     # rotatekey
     --set "global.c4gh.rotatePubKeyData=$ROTATE_PUB_BASE64"
@@ -168,13 +163,6 @@ HELM_ARGS=(
     --set global.broker.password=mqpass
     --set global.broker.rotateKeyQueue=rotatekey
     --set global.broker.prefetchCount=2
-
-    # --- archive ---
-    --set global.archive.storageType=s3
-    --set global.archive.s3Url=http://minio
-    --set global.archive.s3Port=9000
-    --set global.archive.s3AccessKey=access
-    --set global.archive.s3SecretKey=secretkey
 
     # --- reencrypt  ---
     --set global.reencrypt.host=pipeline-sda-svc-reencrypt
@@ -199,7 +187,7 @@ HELM_ARGS=(
 
 
 echo "=== Step 5: deploy rotatekey ==="
-for tmpl in shared-secrets rotatekey-secrets rotatekey-deploy reencrypt-secrets re-encrypt-deploy re-encrypt-service; do
+for tmpl in rotatekey-secrets rotatekey-deploy reencrypt-secrets re-encrypt-deploy re-encrypt-service; do
     helm template pipeline charts/sda-svc "${HELM_ARGS[@]}" \
         --show-only "templates/${tmpl}.yaml"
 done | kubectl apply -f -
