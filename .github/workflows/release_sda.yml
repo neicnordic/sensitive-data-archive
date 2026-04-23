@@ -76,7 +76,7 @@ jobs:
 
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }}
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         env:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
