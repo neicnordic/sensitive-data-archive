@@ -606,7 +606,12 @@ func main() {
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
 	// OIDC login and exchange endpoints for external webapps
-	app.Get("/oidc/start", authHandler.getOIDCStart)
+	allowlist := normalizeAllowlist(authHandler.Config.ReturnToAllowlist)
+	if len(allowlist) > 0 {
+		app.Get("/oidc/start", authHandler.getOIDCStart)
+	} else {
+		log.Warn("return_to allowlist not configured; /oidc/start endpoint disabled")
+	}
 	if strings.TrimSpace(authHandler.Config.ExchangeSecret) != "" {
 		app.Post("/oidc/exchange", authHandler.postOIDCExchange)
 	} else {
