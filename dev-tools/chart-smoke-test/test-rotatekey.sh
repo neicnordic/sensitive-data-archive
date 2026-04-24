@@ -251,16 +251,6 @@ INSERT INTO sda.checksums (file_id, checksum, type, source) VALUES
 ('$FILE_ID', '$DUMMY_CHECKSUM_UNENCRYPTED', 'SHA256', 'UNENCRYPTED');
 EOF
 
-# Create the queue (rotatekey will publish the verification message here after processing)
-kubectl run mq-setup --rm -i --restart=Never --image=curlimages/curl -- \
-  curl -s -u admin:mqpass -X PUT "http://broker-sda-mq:15672/api/queues/sda/verify" \
-  -d '{"durable":true,"auto_delete":false}'
-
-# Bind the queue to the 'archived' routing key
-kubectl run mq-bind --rm -i --restart=Never --image=curlimages/curl -- \
-  curl -s -u admin:mqpass -X POST "http://broker-sda-mq:15672/api/bindings/sda/e/sda/q/verify" \
-  -d '{"routing_key":"archived"}'
-
 # Trigger the rotation via RabbitMQ
 echo "Publishing rotation message to RabbitMQ..."
 kubectl run mq-trigger --rm -i --restart=Never --image=curlimages/curl -- \
@@ -307,8 +297,8 @@ else
     fail=$((fail + 1))
 fi
 
-# Peek into the 'verify' queue to see if rotatekey sent the message
-VALIDATION_QUEUE="verify"
+# Peek into the 'archived' queue to see if rotatekey sent the message
+VALIDATION_QUEUE="archived"
 MQ_RESPONSE=$(kubectl run mq-trigger --rm -i --restart=Never --image=curlimages/curl -- \
   curl -s -u admin:mqpass \
   -X POST "http://broker-sda-mq:15672/api/queues/sda/${VALIDATION_QUEUE}/get" \
