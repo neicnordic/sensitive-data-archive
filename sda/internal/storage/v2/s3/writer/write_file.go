@@ -7,7 +7,8 @@ import (
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 )
 
@@ -49,13 +50,19 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		return "", err
 	}
 
-	uploader := transfermanager.New(client, func(u *transfermanager.Options) {
-		// Type conversation safe as chunkSizeBytes checked to be between 5mb and 1gb (in bytes)
+	// Classical multipart via the stable s3/manager; the preview s3/transfermanager
+	// emits STREAMING-UNSIGNED-PAYLOAD-TRAILER which older Ceph RGW rejects.
+	// RequestChecksumCalculation must also be set on the Uploader itself — the
+	// multipart path ignores the s3.Client setting and otherwise forces CRC32,
+	// which re-triggers the streaming trailer middleware.
+	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
+		// Type conversion safe as chunkSizeBytes is checked to be between 5mb and 1gb (in bytes)
 		//nolint:gosec // disable G115
-		u.PartSizeBytes = int64(writer.activeEndpoint.chunkSizeBytes)
+		u.PartSize = int64(writer.activeEndpoint.chunkSizeBytes)
+		u.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	})
 
-	_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Body:   fileContent,
 		Bucket: aws.String(activeBucket),
 		Key:    aws.String(filePath),
