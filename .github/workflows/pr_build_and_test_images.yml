@@ -359,13 +359,19 @@ jobs:
 
       - name: Check deployment
         run: |
-          sleep 30
+          echo "Waiting for pods to be ready..."
           for n in api auth download finalize inbox ingest mapper reencrypt rotatekey sync syncapi verify; do
+            # Skip services based on storage type
             if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
               continue
             fi
-            if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
-              echo "$n is not ready after 30s, exiting"
+
+            echo "Checking $n..."
+            # Dynamic wait: up to 90 seconds per service.
+            if ! kubectl wait --for=condition=ready pod -l role="$n" --timeout=90s; then
+              echo "ERROR: $n is not ready after 90s"
+              kubectl describe pod -l role="$n"
+              kubectl logs -l role="$n" --tail=20
               exit 1
             fi
           done
