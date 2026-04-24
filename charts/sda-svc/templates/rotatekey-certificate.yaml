@@ -1,4 +1,4 @@
-{{- if .Values.global.tls.enabled }}
+{{- if and .Values.global.c4gh.rotatePubKeyData .Values.global.tls.enabled (not .Values.global.pkiService) }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 apiVersion: cert-manager.io/v1
 kind: Certificate

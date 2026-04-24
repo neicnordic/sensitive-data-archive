@@ -1,3 +1,4 @@
+{{- if .Values.global.c4gh.rotatePubKeyData }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: apps/v1
 kind: Deployment
@@ -79,4 +80,5 @@ spec:
           secretName: {{ template "sda.fullname" . }}-rotatekey-certs
       {{- end }}
       restartPolicy: Always
+{{- end }}
 {{- end }}
