@@ -36,7 +36,7 @@ wait_for_pod() { # wait for a pod with the given label to be ready, with a timeo
     echo "Waiting for pod $label to be ready (${timeout}s)..."
     if ! kubectl wait --for=condition=ready pod -l "$label" --timeout="${timeout}s" 2>/dev/null; then
         echo "Pod $label not ready after ${timeout}s"
-        kubectl logs -l "$label" --tail=20 2>/dev/null
+        kubectl logs -l "$label" --tail=20 2>/dev/null || true
         return 1
     fi
 }
@@ -113,7 +113,7 @@ ROTATE_PUB="-----BEGIN CRYPT4GH PUBLIC KEY-----
 fFmwrVXywijqMoaLX95CgIXp6klJuo5MOLf/I3+BQ1Q=
 -----END CRYPT4GH PUBLIC KEY-----"
 
-ROTATE_PUB_BASE64=$(echo "$ROTATE_PUB" | base64 -w0)
+ROTATE_PUB_BASE64=$(printf '%s' "$ROTATE_PUB" | base64 | tr -d '\n')
 
 # OLD_PRIV is the encrypted private key corresponding to OLD_PUB, with passphrase "pass"
 OLD_PRIV="-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----
@@ -184,7 +184,6 @@ HELM_ARGS=(
     --set global.log.level=debug
     --set global.log.format=json
 )
-
 
 echo "=== Step 5: deploy rotatekey ==="
 for tmpl in rotatekey-secrets rotatekey-deploy reencrypt-secrets re-encrypt-deploy re-encrypt-service; do
@@ -265,7 +264,6 @@ kubectl run mq-trigger --rm -i --restart=Never --image=curlimages/curl -- \
 
 echo "Waiting for services to react..."
 sleep 5
-
 
 echo "=== Step 8: Verification ==="
 fail=0
