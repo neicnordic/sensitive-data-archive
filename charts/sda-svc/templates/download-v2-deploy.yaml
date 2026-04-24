@@ -71,7 +71,9 @@ spec:
           seccompProfile:
             type: "RuntimeDefault"
         command: ["sda-download"]
-        args: ["--config-file", "{{ include "confFile" . }}"]
+        env:
+        - name: CONFIG_FILE
+          value: {{ include "confFile" . }}
         ports:
         - name: download-v2
           containerPort: 8080
