@@ -6,7 +6,9 @@ metadata:
   name: {{ template "sda.fullname" . }}-rotatekey-certs
 spec:
   secretName: {{ template "sda.fullname" . }}-rotatekey-certs
+
   duration: 2160h # 90d
+
   commonName: {{ template "sda.fullname" . }}-rotatekey
   isCA: false
   privateKey:
@@ -17,6 +19,8 @@ spec:
   dnsNames:
     - {{ template "sda.fullname" . }}-rotatekey
     - {{ template "sda.fullname" . }}-rotatekey.{{ .Release.Namespace }}.svc
+  ipAddresses:
+    - 127.0.0.1
   issuerRef:
     name: {{ template "TLSissuer" . }}
     kind: {{ ternary "Issuer" "ClusterIssuer" (empty .Values.global.tls.clusterIssuer )}}
