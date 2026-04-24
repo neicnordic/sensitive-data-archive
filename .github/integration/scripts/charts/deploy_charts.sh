@@ -12,7 +12,7 @@ GRPC_PORT=50051
 ROTATE_PUB="-----BEGIN CRYPT4GH PUBLIC KEY-----
 fFmwrVXywijqMoaLX95CgIXp6klJuo5MOLf/I3+BQ1Q=
 -----END CRYPT4GH PUBLIC KEY-----"
-ROTATE_PUB_BASE64=$(printf '%s' "$ROTATE_PUB" | base64 -w0)
+ROTATE_PUB_BASE64=$(printf '%s' "$ROTATE_PUB" | base64 | tr -d '\n')
 if [ "$3" == "true" ]; then
     MQ_PORT=5671
     SCHEME=HTTPS
@@ -35,6 +35,14 @@ if [ "$1" == "sda-db" ]; then
         --set persistence.enabled=false \
         --set resources=null \
         --wait
+
+    echo "Registering rotation key in database..."
+    ROTATE_HEX=$(echo "$ROTATE_PUB" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\n\r ')
+    DB_POD=$(kubectl get pods -l app=postgres-sda-db -o jsonpath='{.items[0].metadata.name}')
+    kubectl exec "$DB_POD" -- env PGPASSWORD="$ROOTPASS" psql -U postgres -d sda -c "
+        INSERT INTO sda.encryption_keys (key_hash, description)
+        VALUES ('$ROTATE_HEX', 'rotation key')
+        ON CONFLICT DO NOTHING;"
 fi
 
 if [ "$1" == "sda-mq" ]; then
