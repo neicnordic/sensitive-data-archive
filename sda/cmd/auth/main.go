@@ -339,6 +339,13 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 
 		}
 
+		if auth.Handoffs == nil {
+			ctx.StatusCode(iris.StatusServiceUnavailable)
+			_, _ = ctx.WriteString("handoff not enabled")
+
+			return
+		}
+
 		code, err := auth.Handoffs.Put(HandoffItem{
 			Token:     token,
 			Exp:       exp,
@@ -477,6 +484,13 @@ func (auth AuthHandler) postOIDCExchange(ctx iris.Context) {
 		return
 	}
 
+	if auth.Handoffs == nil {
+		ctx.StatusCode(iris.StatusServiceUnavailable)
+		_, _ = ctx.WriteString("handoff not enabled")
+
+		return
+	}
+
 	item, ok := auth.Handoffs.GetAndDelete(req.Code)
 	if !ok {
 		ctx.StatusCode(iris.StatusNotFound)
@@ -545,16 +559,28 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
-		Handoffs:     NewMemoryHandoffStore(conf.Auth.Handoff.TTLSeconds, conf.Auth.Handoff.MaxEntries),
+		Handoffs:     nil,
 	}
 
-	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
-	defer cleanupCancel()
+	// Decide whether to enable the handoff store and related endpoints based on config
+	allowlist := normalizeAllowlist(authHandler.Config.ReturnToAllowlist)
+	startEnabled := len(allowlist) > 0
+	exchangeEnabled := strings.TrimSpace(authHandler.Config.ExchangeSecret) != ""
+	handoffEnabled := startEnabled && exchangeEnabled
 
-	if memStore, ok := authHandler.Handoffs.(*MemoryHandoffStore); ok {
-		memStore.StartCleanup(cleanupCtx, conf.Auth.Handoff.CleanupIntervalSeconds, func(removed int) {
-			log.Debugf("cleaned up %d expired handoff codes", removed)
-		})
+	var cleanupCancel context.CancelFunc = func() {}
+	if handoffEnabled {
+		authHandler.Handoffs = NewMemoryHandoffStore(conf.Auth.Handoff.TTLSeconds, conf.Auth.Handoff.MaxEntries)
+
+		var cleanupCtx context.Context
+		cleanupCtx, cleanupCancel = context.WithCancel(context.Background())
+		defer cleanupCancel()
+
+		if memStore, ok := authHandler.Handoffs.(*MemoryHandoffStore); ok {
+			memStore.StartCleanup(cleanupCtx, conf.Auth.Handoff.CleanupIntervalSeconds, func(removed int) {
+				log.Debugf("cleaned up %d expired handoff codes", removed)
+			})
+		}
 	}
 
 	// Initialise web server
@@ -606,13 +632,12 @@ func main() {
 	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
 
 	// OIDC login and exchange endpoints for external webapps
-	allowlist := normalizeAllowlist(authHandler.Config.ReturnToAllowlist)
-	if len(allowlist) > 0 {
+	if startEnabled {
 		app.Get("/oidc/start", authHandler.getOIDCStart)
 	} else {
 		log.Warn("return_to allowlist not configured; /oidc/start endpoint disabled")
 	}
-	if strings.TrimSpace(authHandler.Config.ExchangeSecret) != "" {
+	if exchangeEnabled {
 		app.Post("/oidc/exchange", authHandler.postOIDCExchange)
 	} else {
 		log.Warn("exchange secret not set; /oidc/exchange endpoint disabled")
