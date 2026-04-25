@@ -1,6 +1,16 @@
+---
+# These are optional metadata elements. Feel free to remove any of them.
+status: proposed # proposed | accepted | rejected | deprecated | superseded
+superseded-by:
+date: "2026-04-27"
+decision-makers: [] # list everyone involved in the decision
+consulted: [] # list everyone whose opinions are sought (typically subject-matter experts); and with whom there is a two-way communication
+informed: [] # list everyone who is kept up-to-date on progress; and with whom there is a one-way communication
+---
+
 # Brokered OIDC login via `sda-auth` with one-time code handoff to `sda-download-UI` webapp
 
-## Context
+## Context and Problem Statement
 
 We need a simple web login experience for a server-side web application (e.g., Next.js) that:
 
@@ -11,11 +21,11 @@ We need a simple web login experience for a server-side web application (e.g., N
 
 `sda-auth` currently supports interactive OIDC login and can produce tokens, but it does not provide a standard mechanism to redirect back to an external relying party with a token or code. It primarily renders HTML templates and offers a JSON endpoint (`/oidc/cors_login`) that is not directly suitable for a clean redirect-back flow.
 
-## Proposal
+### Proposal
 
 Adopt a brokered handoff flow where `sda-auth` performs OIDC login and then issues a **short-lived, single-use handoff code** that can be exchanged for a token by the webapp (a “code flow” between the webapp and `sda-auth`).
 
-### Summary of changes (current implementation)
+### Summary of changes (implementated)
 
 `sda-auth` has been extended with:
 
@@ -39,7 +49,7 @@ Adopt a brokered handoff flow where `sda-auth` performs OIDC login and then issu
     - Client must send `X-SDA-AUTH-EXCHANGE-SECRET: <secret>`
     - Endpoint is disabled (not registered) if `auth.exchange_secret` is not set.
 
-### Feature gating
+#### Feature gating
 
 To reduce unnecessary background work and avoid unused state:
 
@@ -47,7 +57,7 @@ To reduce unnecessary background work and avoid unused state:
 - `/oidc/exchange` is only registered if `auth.exchange_secret` is set (non-empty after trimming).
 - The in-memory handoff store (and its cleanup goroutine) is only created if **both** are enabled.
 
-## Expected webapp behavior
+### Expected webapp behavior
 
 - Webapp login button redirects user to `sda-auth /oidc/start` with a `return_to` callback on the webapp.
 - Webapp callback endpoint:
@@ -56,7 +66,7 @@ To reduce unnecessary background work and avoid unused state:
   - stores the token server-side (e.g., encrypted HttpOnly cookie or server-side session)
   - redirects user to the homepage without the code in the URL
 
-## Rationale
+### Rationale
 
 This approach:
 
@@ -73,19 +83,50 @@ This approach:
 - Avoid browser storage of JWTs.
 - Different origins (subdomains); redirect-based integration preferred.
 
-## Architecture / Flow
+## Considered Options
 
-### Actors
+Alternatives Considered (rejected)
+
+1. Use `/oidc/cors_login` + browser JS relay
+   - pushes token handling into browser and complicates SSR.
+2. Direct OIDC in the webapp (bypass `sda-auth`)
+   - would lose central broker behavior and resigned-token functionality.
+   - would need configured OIDC service at the IdP
+
+## Decision Outcome
+
+See proposed solution and justification above.
+
+### Consequences
+
+#### Positive
+
+- Avoids re-implementing an OIDC client for a webapp that is part of the sda stack.
+- Meets requirements: brokered login, redirect-back, server-side token availability.
+- Minimal and backwards-compatible `sda-auth` changes.
+- Supports both raw and resigned tokens.
+
+#### Negative / Tradeoffs
+
+- In-memory store requires sticky sessions or single replica.
+- New endpoints must be secured (allowlist + exchange secret).
+- Adds coupling: webapp depends on `sda-auth`.
+
+## More Information
+
+### Architecture / Flow
+
+#### Actors
 
 - User browser
 - `sda-auth` at `sda-auth.example.se`
 - Webapp at `download-portal.example.se`
 - OIDC Provider
 
-### Sequence
+#### Sequence
 
 1. Browser → Webapp: user clicks Login
-2. Webapp → Browser: redirect to  
+2. Webapp → Browser: redirect to
    `https://sda-auth.example.se/oidc/start?return_to=https://download-portal.example.se/auth/callback&token_type=resigned`
 3. Browser → `sda-auth`: `/oidc/start` validates and stores `return_to` + `token_type` in session, then redirects to IdP
 4. Browser ↔ IdP: user authenticates
@@ -99,7 +140,7 @@ This approach:
 9. `sda-auth` returns token; invalidates code
 10. Webapp sets secure session and redirects browser to `/`
 
-## Implementation Notes
+### Implementation Notes
 
 - `sda-auth` uses an injected `HandoffStore` interface with a `MemoryHandoffStore` implementation:
   - TTL (configured)
@@ -112,14 +153,14 @@ This approach:
   - `token_type=raw` → raw OIDC token
   - `token_type=resigned` → resigned token (if enabled)
 
-## Security Considerations
+### Security Considerations
 
-### What is exposed to the browser?
+#### What is exposed to the browser?
 
 - The **handoff code** is in the webapp callback URL query parameter.
 - The **JWT is not** exposed in the URL or HTML by this broker flow (unless the user uses the existing template endpoints).
 
-### Mitigations
+#### Mitigations
 
 - Code is:
   - short-lived (TTL)
@@ -135,51 +176,26 @@ This approach:
   - endpoint disabled if secret is not set
   - (recommended) additionally restrict by network policy/ingress so only the webapp can call it
 
-### Cookies / SameSite
+### Operational Considerations / Risks
 
-- State/session cookies remain scoped to `sda-auth` and are used only between browser and `sda-auth`.
-- The webapp maintains its own session cookie (HttpOnly, Secure, SameSite=Lax).
-
-## Operational Considerations / Risks
-
-### Multi-replica `sda-auth`
+#### Multi-replica `sda-auth`
 
 Because the handoff store is in-memory:
 
 - If `sda-auth` runs multiple replicas behind a load balancer, the callback request and exchange request may hit different replicas, causing “code not found”.
 
 **Mitigations (choose one for production):**
+
 1. Sticky sessions at ingress for `sda-auth` (cookie affinity), or
 2. Single replica, or
-3. Replace in-memory store with shared storage (e.g., Redis/DB) (not currently implemented).
 
-### Failure modes
+#### Failure modes
 
 - Expired/invalid code → webapp callback fails; user must retry login.
 - Exchange endpoint unreachable → webapp cannot establish session.
 - OIDC errors handled as today.
 
-## Alternatives Considered (rejected)
-
-1. Use `/oidc/cors_login` + browser JS relay
-   - pushes token handling into browser and complicates SSR.
-2. Direct OIDC in the webapp (bypass `sda-auth`)
-   - would lose central broker behavior and resigned-token functionality.
-
-## Consequences
-
-### Positive
-- Meets requirements: brokered login, redirect-back, server-side token availability.
-- Minimal and backwards-compatible `sda-auth` changes.
-- Supports both raw and resigned tokens.
-- Avoids exposing JWT in browser URL.
-
-### Negative / Tradeoffs
-- In-memory store requires sticky sessions or single replica for HA.
-- New endpoints must be secured (allowlist + exchange secret).
-- Adds coupling: webapp depends on `sda-auth`.
-
-## Sequence diagram (Mermaid)
+### Sequence diagram (Mermaid)
 
 ```mermaid
 sequenceDiagram
@@ -216,7 +232,7 @@ sequenceDiagram
   end
 ```
 
-## How to test (local)
+## How to test proposed implementation (local)
 
 From repo root:
 
