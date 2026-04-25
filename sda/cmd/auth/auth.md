@@ -4,6 +4,8 @@ This service allows users to log in both via LS-AAI (OIDC) or EGA (NSS).
 
 After successful authentication users will be able to get the `access token` and download the `S3 config file` needed in order to be able to upload files to the [S3Inbox service](../s3inbox/s3inbox.md).
 
+In addition to the interactive HTML-based login, `sda-auth` can be configured to also act as an **OIDC broker** for external server-side web applications by issuing a **short-lived, single-use handoff code** that the webapp can exchange server-to-server for a token.
+
 ## Choosing provider login
 
 The `auth` allows for two different types of login providers: `EGA` and `LS_AAI` (OIDC). It is possible, to run the service using both or only one of the providers.
@@ -14,27 +16,30 @@ In order to remove the `EGA` option, remove the `CEGA_ID` and `CEGA_SECRET` opti
 
 The following settings can be configured for deploying the service, either by using environment variables or a YAML file.
 
-| Parameter               | Description                                                                          | Defined value                           |
-| ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------- |
-| `AUTH_CEGA_AUTHURL`     | CEGA server endpoint                                                                 | `http://cega:8443/lega/v1/legas/users/` |
-| `AUTH_CEGA_ID`          | CEGA server authentication id                                                        | `dummy`                                 |
-| `AUTH_CEGA_SECRET`      | CEGA server authentication secret                                                    | `dummy`                                 |
-| `AUTH_CORS_CREDENTIALS` | If cookies, authorization headers, and TLS client certificates are allowed over CORS | `false`                                 |
-| `AUTH_CORS_METHODS`     | Allowed Cross-Origin Resource Sharing (CORS) methods                                 | `""`                                    |
-| `AUTH_CORS_ORIGINS`     | Allowed Cross-Origin Resource Sharing (CORS) origins                                 | `""`                                    |
-| `AUTH_JWT_ISSUER`       | Issuer of JWT tokens                                                                 | `http://auth:8080`                      |
-| `AUTH_JWT_PRIVATEKEY`   | Path to private key for signing the JWT token                                        | `keys/sign-jwt.key`                     |
-| `AUTH_JWT_SIGNATUREALG` | Algorithm used to sign the JWT token. ES256 (ECDSA) or RS256 (RSA) are supported     | `ES256`                                 |
-| `AUTH_JWT_TOKENTTL`     | TTL of the resigned token in hours                                                   | `168`                                   |
-| `AUTH_RESIGNJWT`        | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it                 | `""`                                    |
-| `AUTH_S3INBOX`          | S3 inbox host                                                                        | `http://s3.example.com`                 |
-| `LOG_LEVEL`             | Log level                                                                            | `info`                                  |
-| `OIDC_ID`               | OIDC authentication id                                                               | `XC56EL11xx`                            |
-| `OIDC_SECRET`           | OIDC authentication secret                                                           | `wHPVQaYXmdDHg`                         |
-| `OIDC_PROVIDER`         | OIDC issuer URL                                                                      | `http://oidc:8080`                      |
-| `OIDC_JWKPATH`          | JWK endpoint where the public key can be retrieved for token validation              | `/jwks`                                 |
-| `SERVER_CERT`           | Certificate file path                                                                | `""`                                    |
-| `SERVER_KEY`            | Private key file path                                                                | `""`                                    |
+| Parameter                    | Description                                                                          | Defined value                           |
+| ---------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------- |
+| `AUTH_CEGA_AUTHURL`          | CEGA server endpoint                                                                 | `http://cega:8443/lega/v1/legas/users/` |
+| `AUTH_CEGA_ID`               | CEGA server authentication id                                                        | `dummy`                                 |
+| `AUTH_CEGA_SECRET`           | CEGA server authentication secret                                                    | `dummy`                                 |
+| `AUTH_CORS_CREDENTIALS`      | If cookies, authorization headers, and TLS client certificates are allowed over CORS | `false`                                 |
+| `AUTH_CORS_METHODS`          | Allowed Cross-Origin Resource Sharing (CORS) methods                                 | `""`                                    |
+| `AUTH_CORS_ORIGINS`          | Allowed Cross-Origin Resource Sharing (CORS) origins                                 | `""`                                    |
+| `AUTH_JWT_ISSUER`            | Issuer of JWT tokens                                                                 | `http://auth:8080`                      |
+| `AUTH_JWT_PRIVATEKEY`        | Path to private key for signing the JWT token                                        | `keys/sign-jwt.key`                     |
+| `AUTH_JWT_SIGNATUREALG`      | Algorithm used to sign the JWT token. ES256 (ECDSA) or RS256 (RSA) are supported     | `ES256`                                 |
+| `AUTH_JWT_TOKENTTL`          | TTL of the resigned token in hours                                                   | `168`                                   |
+| `AUTH_RESIGNJWT`             | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it                 | `""`                                    |
+| `AUTH_S3INBOX`               | S3 inbox host                                                                        | `http://s3.example.com`                 |
+| `AUTH_RETURNTO_ALLOWLIST`    | Allowlist of valid `return_to` URLs for `/oidc/start` (comma-separated)              | `""`                                    |
+| `AUTH_ALLOWINSECURE_RETURNTO`| Allow `http://` return_to (dev only)                                                 | `false`                                 |
+| `AUTH_EXCHANGE_SECRET`       | Shared secret required for `/oidc/exchange`                                          | `""`                                    |
+| `LOG_LEVEL`                  | Log level                                                                            | `info`                                  |
+| `OIDC_ID`                    | OIDC authentication id                                                               | `XC56EL11xx`                            |
+| `OIDC_SECRET`                | OIDC authentication secret                                                           | `wHPVQaYXmdDHg`                         |
+| `OIDC_PROVIDER`              | OIDC issuer URL                                                                      | `http://oidc:8080`                      |
+| `OIDC_JWKPATH`               | JWK endpoint where the public key can be retrieved for token validation              | `/jwks`                                 |
+| `SERVER_CERT`                | Certificate file path                                                                | `""`                                    |
+| `SERVER_KEY`                 | Private key file path                                                                | `""`                                    |
 
 ## Running with Cross-Origin Resource Sharing (CORS)
 
