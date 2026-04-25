@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,8 +24,14 @@ func newTestApp(t *testing.T, h AuthHandler) *httptest.Expect {
 	sess := sessions.New(sessions.Config{Cookie: "_session_id", AllowReclaim: true})
 	app.Use(sess.Handler())
 
-	app.Get("/oidc/start", h.getOIDCStart)
-	app.Post("/oidc/exchange", h.postOIDCExchange)
+	allowlist := normalizeAllowlist(h.Config.ReturnToAllowlist)
+	if len(allowlist) > 0 {
+		app.Get("/oidc/start", h.getOIDCStart)
+	}
+
+	if strings.TrimSpace(h.Config.ExchangeSecret) != "" {
+		app.Post("/oidc/exchange", h.postOIDCExchange)
+	}
 
 	return httptest.New(t, app)
 }
@@ -109,10 +116,49 @@ func TestOIDCStart_InsecureHTTPAllowed_NotRejectedByValidation(t *testing.T) {
 	assert.NotEqual(t, iris.StatusBadRequest, r.Raw().StatusCode)
 }
 
+func TestOIDCStart_DisabledWhenNoAllowlist(t *testing.T) {
+	h := AuthHandler{
+		Config: config.AuthConf{
+			ReturnToAllowlist:     nil,
+			AllowInsecureReturnTo: false,
+		},
+		OAuth2Config: oauth2.Config{
+			Endpoint: oauth2.Endpoint{AuthURL: "https://issuer.example.org/auth"},
+		},
+	}
+
+	e := newTestApp(t, h)
+
+	e.GET("/oidc/start").
+		WithQuery("return_to", "https://portal.example.org/auth/callback").
+		WithQuery("token_type", "raw").
+		Expect().
+		Status(iris.StatusNotFound)
+}
+
+func TestOIDCStart_DisabledWhenAllowlistOnlyWhitespace(t *testing.T) {
+	h := AuthHandler{
+		Config: config.AuthConf{
+			ReturnToAllowlist:     []string{"   "},
+			AllowInsecureReturnTo: false,
+		},
+		OAuth2Config: oauth2.Config{
+			Endpoint: oauth2.Endpoint{AuthURL: "https://issuer.example.org/auth"},
+		},
+	}
+
+	e := newTestApp(t, h)
+
+	e.GET("/oidc/start").
+		WithQuery("return_to", "https://portal.example.org/auth/callback").
+		Expect().
+		Status(iris.StatusNotFound)
+}
+
 func TestOIDCExchange_DisabledWhenNoSecret(t *testing.T) {
 	h := AuthHandler{
 		Config:   config.AuthConf{ExchangeSecret: ""},
-		Handoffs: NewMemoryHandoffStore(2*time.Minute, 100),
+		Handoffs: nil,
 	}
 
 	e := newTestApp(t, h)
@@ -228,4 +274,20 @@ func TestOIDCExchange_EmptyCode(t *testing.T) {
 		WithBytes(b.Bytes()).
 		Expect().
 		Status(iris.StatusBadRequest)
+}
+
+func TestOIDCExchange_ServiceUnavailableWhenStoreNil(t *testing.T) {
+	h := AuthHandler{
+		Config:   config.AuthConf{ExchangeSecret: "supersecret"},
+		Handoffs: nil,
+	}
+	e := newTestApp(t, h)
+
+	e.POST("/oidc/exchange").
+		WithHeader("Content-Type", "application/json").
+		WithHeader("X-SDA-AUTH-EXCHANGE-SECRET", "supersecret").
+		WithBytes([]byte(`{"code":"abc"}`)).
+		Expect().
+		Status(iris.StatusServiceUnavailable).
+		Body().Contains("handoff not enabled")
 }
