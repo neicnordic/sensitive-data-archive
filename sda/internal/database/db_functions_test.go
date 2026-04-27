@@ -92,7 +92,45 @@ func (suite *DatabaseTests) TestUpdateFileEventLog() {
 	assert.NoError(suite.T(), err, "Failed to check if uploaded file event exists")
 	assert.True(suite.T(), exists, "UpdateFileEventLog() did not insert a row into sda.file_event_log with id: "+fileID)
 
+	var lastEvent string
+	err = db.DB.QueryRow("SELECT last_event FROM sda.files WHERE id=$1", fileID).Scan(&lastEvent)
+	assert.NoError(suite.T(), err, "Failed to read denormalized file event")
+	assert.Equal(suite.T(), "uploaded", lastEvent, "UpdateFileEventLog() did not update files.last_event")
+
 	db.Close()
+}
+
+func (suite *DatabaseTests) TestUpdateFileEventLogRollbackRestoresLastEvent() {
+	db, err := NewSDAdb(suite.dbConf)
+	assert.NoError(suite.T(), err, "got %v when creating new connection", err)
+	defer db.Close()
+
+	fileID, err := db.RegisterFile(nil, "/inbox", "/testuser/file4-rollback.c4gh", "testuser")
+	assert.NoError(suite.T(), err, "failed to register file in database")
+
+	var lastEventBefore string
+	err = db.DB.QueryRow("SELECT last_event FROM sda.files WHERE id=$1", fileID).Scan(&lastEventBefore)
+	assert.NoError(suite.T(), err, "failed to read last_event before transaction")
+	assert.Equal(suite.T(), "registered", lastEventBefore)
+
+	tx, err := db.DB.Begin()
+	assert.NoError(suite.T(), err, "failed to begin transaction")
+
+	_, err = tx.Exec("INSERT INTO sda.file_event_log (file_id, event, user_id, details, message) VALUES ($1, 'disabled', 'system', '{}', '{}')", fileID)
+	assert.NoError(suite.T(), err, "failed to insert file event inside transaction")
+
+	var lastEventInTx string
+	err = tx.QueryRow("SELECT last_event FROM sda.files WHERE id=$1", fileID).Scan(&lastEventInTx)
+	assert.NoError(suite.T(), err, "failed to read last_event inside transaction")
+	assert.Equal(suite.T(), "disabled", lastEventInTx)
+
+	err = tx.Rollback()
+	assert.NoError(suite.T(), err, "failed to rollback transaction")
+
+	var lastEventAfter string
+	err = db.DB.QueryRow("SELECT last_event FROM sda.files WHERE id=$1", fileID).Scan(&lastEventAfter)
+	assert.NoError(suite.T(), err, "failed to read last_event after rollback")
+	assert.Equal(suite.T(), "registered", lastEventAfter)
 }
 
 func (suite *DatabaseTests) TestStoreHeader() {
@@ -676,6 +714,13 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 		err = db.UpdateFileEventLog(fileID, "ready", testUser, "{}", "{}")
 		assert.NoError(suite.T(), err, "failed to update satus of file in database")
 	}
+	disabledFileID, err := db.RegisterFile(nil, "/inbox", fmt.Sprintf("%v/submission_b/TestGetUserFiles-disabled.c4gh", testUser), testUser)
+	assert.NoError(suite.T(), err, "failed to register disabled file in database")
+	err = db.UpdateFileEventLog(disabledFileID, "disabled", testUser, "{}", "{}")
+	assert.NoError(suite.T(), err, "failed to set file as disabled in database")
+	err = db.SetAccessionID("stableID-disabled", disabledFileID)
+	assert.NoError(suite.T(), err, "failed to set accession id for disabled file")
+
 	filelist, nextCursor, err := db.GetUserFiles("unknownuser", "", true, 0, "")
 	assert.NoError(suite.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(suite.T(), filelist, "file list of unknown user is not empty")
@@ -688,6 +733,7 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	for _, fileInfo := range filelist {
 		assert.Equal(suite.T(), "ready", fileInfo.Status, "incorrect file status")
 		assert.Contains(suite.T(), fileInfo.AccessionID, "stableID-00", "incorrect file accession ID")
+		assert.NotEqual(suite.T(), disabledFileID, fileInfo.FileID, "disabled files should not be returned")
 	}
 
 	filteredFilelist, nextCursor, err := db.GetUserFiles(testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
