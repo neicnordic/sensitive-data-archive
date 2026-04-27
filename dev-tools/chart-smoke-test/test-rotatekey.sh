@@ -147,7 +147,7 @@ HELM_ARGS=(
     --set global.rbacEnabled=false
 
     # rotatekey
-    --set "global.c4gh.rotatePubKeyData=$ROTATE_PUB_BASE64"
+    --set global.c4gh.rotatePubKeyData="$ROTATE_PUB_BASE64"
 
     # --- database ---
     --set global.db.host=postgres-sda-db
