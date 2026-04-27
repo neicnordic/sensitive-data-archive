@@ -279,14 +279,21 @@ func TestListMultiPage(t *testing.T) {
 	mockHelpers.On("GetPagedResponseBody", page2URL.String(), "test-token").
 		Return([]byte(`["file2"]`), http.Header{}, nil)
 
-	// Feed stdin with a newline so waitForContinue fallback (non-tty) won't block.
-	r, w, _ := os.Pipe()
-	oldStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = oldStdin }()
-	_ = w.Close()
-
 	err := List("http://example.com", "test-token", "testuser")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
+}
+
+func TestWaitForUserContinue_NonTTYAutoContinues(t *testing.T) {
+	r, w, err := os.Pipe()
+	assert.NoError(t, err)
+	defer r.Close()
+	defer w.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	err = waitForUserContinue()
+	assert.NoError(t, err)
 }
