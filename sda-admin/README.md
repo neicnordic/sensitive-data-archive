@@ -28,6 +28,11 @@ Use the following command to return all files belonging to the specified user `t
 sda-admin file list -user test-user@example.org
 ```
 
+The command follows paginated API responses automatically. When more files are
+available, `sda-admin` prints the current page and prompts for `Enter` or
+`Space` before fetching the next page. Users do not need to pass a cursor
+manually.
+
 
 ## Ingest a file
 
