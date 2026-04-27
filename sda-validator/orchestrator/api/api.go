@@ -373,7 +373,7 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 			break
 		}
 		if _, seen := seenCursors[nextCursor]; seen {
-			return nil, fmt.Errorf("sda api returned a repeated pagination cursor")
+			return nil, errors.New("sda api returned a repeated pagination cursor")
 		}
 		seenCursors[nextCursor] = struct{}{}
 		cursor = nextCursor
