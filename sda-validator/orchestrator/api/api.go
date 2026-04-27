@@ -286,6 +286,8 @@ type getUserFilesResponse struct {
 	missingFiles    []string
 }
 
+const maxUserFilesPageFetches = 1000
+
 func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (*getUserFilesResponse, error) {
 	rsp := &getUserFilesResponse{
 		fileInformation: make(map[string]*model.FileInformation),
@@ -298,8 +300,15 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 	}
 
 	cursor := ""
+	seenCursors := make(map[string]struct{})
+	pageFetches := 0
 	client := &http.Client{} // reuse across pages for connection pooling
 	for {
+		pageFetches++
+		if pageFetches > maxUserFilesPageFetches {
+			return nil, fmt.Errorf("sda api pagination exceeded %d pages", maxUserFilesPageFetches)
+		}
+
 		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, url.PathEscape(userID))
 		if cursor != "" {
 			reqURL += "&cursor=" + url.QueryEscape(cursor)
@@ -359,10 +368,15 @@ func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []st
 		}
 
 		// Check for next page
-		cursor = res.Header.Get("X-Next-Cursor")
-		if cursor == "" {
+		nextCursor := res.Header.Get("X-Next-Cursor")
+		if nextCursor == "" {
 			break
 		}
+		if _, seen := seenCursors[nextCursor]; seen {
+			return nil, fmt.Errorf("sda api returned a repeated pagination cursor")
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
 	}
 
 	// Any paths still in `needed` were not found.
