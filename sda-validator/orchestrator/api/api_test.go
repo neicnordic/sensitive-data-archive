@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -320,6 +321,78 @@ func (ts *ValidatorAPITestSuite) TestValidatePost_ExceedValidationFileSizeLimit(
 	ts.Equal(http.StatusBadRequest, w.Code)
 	ts.Equal(`{"error":"requested files exceed the file size limit"}`, w.Body.String())
 }
+
+func (ts *ValidatorAPITestSuite) TestGetUserFiles_PaginatesUntilRequestedFilesFound() {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requestCount.Add(1)
+		ts.Equal("/users/test_user/files", req.URL.Path)
+
+		switch req.URL.Query().Get("cursor") {
+		case "":
+			w.Header().Set("X-Next-Cursor", "page-2")
+			_, _ = w.Write([]byte(`[{"fileID":"test-file-id-1","inboxPath":"testFile1.c4gh","submissionFileSize":1024}]`))
+		case "page-2":
+			_, _ = w.Write([]byte(`[{"fileID":"test-file-id-5","inboxPath":"test_dir/testFile5.c4gh","submissionFileSize":2048}]`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	api := &validatorAPIImpl{sdaAPIURL: server.URL, sdaAPIToken: "mock-token"}
+	rsp, err := api.getUserFiles("test_user", []string{"testFile1", "test_dir/testFile5"})
+	if err != nil {
+		ts.FailNow(err.Error(), "expected paginated getUserFiles to succeed")
+	}
+
+	ts.Equal(int32(2), requestCount.Load())
+	ts.Len(rsp.fileInformation, 2)
+	ts.Empty(rsp.missingFiles)
+	ts.Equal(int64(3072), rsp.sumFilesSize)
+	ts.Contains(rsp.fileInformation, "testFile1")
+	ts.Contains(rsp.fileInformation, "test_dir/testFile5")
+}
+
+func (ts *ValidatorAPITestSuite) TestGetUserFiles_StopsEarlyWhenFirstPageHasAllRequestedFiles() {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("X-Next-Cursor", "should-not-be-used")
+		_, _ = w.Write([]byte(`[
+			{"fileID":"test-file-id-1","inboxPath":"testFile1.c4gh","submissionFileSize":1024},
+			{"fileID":"test-file-id-5","inboxPath":"test_dir/testFile5.c4gh","submissionFileSize":2048}
+		]`))
+	}))
+	defer server.Close()
+
+	api := &validatorAPIImpl{sdaAPIURL: server.URL, sdaAPIToken: "mock-token"}
+	rsp, err := api.getUserFiles("test_user", []string{"testFile1", "test_dir/testFile5"})
+	if err != nil {
+		ts.FailNow(err.Error(), "expected early-exit getUserFiles to succeed")
+	}
+
+	ts.Equal(int32(1), requestCount.Load())
+	ts.Len(rsp.fileInformation, 2)
+	ts.Empty(rsp.missingFiles)
+}
+
+func (ts *ValidatorAPITestSuite) TestGetUserFiles_FailsOnRepeatedPaginationCursor() {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("X-Next-Cursor", "repeat-cursor")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	api := &validatorAPIImpl{sdaAPIURL: server.URL, sdaAPIToken: "mock-token"}
+	rsp, err := api.getUserFiles("test_user", []string{"missing-file"})
+	ts.Nil(rsp)
+	ts.EqualError(err, "sda api returned a repeated pagination cursor")
+	ts.Equal(int32(2), requestCount.Load())
+}
+
 func (ts *ValidatorAPITestSuite) TestAdminValidatePost_NoTokenInContext() {
 	ginEngine := openapi.NewRouter(openapi.ApiHandleFunctions{
 		ValidatorOrchestratorAPI: &validatorAPIImpl{
