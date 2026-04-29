@@ -1,0 +1,58 @@
+{{- if .Values.global.networkPolicy.create }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.downloadV2.enabled }}
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-download-v2
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-download-v2
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: database
+    ports:
+    - protocol: TCP
+      port: {{ .Values.global.db.port | default 5432 | int }}
+  - to:
+    {{- if .Values.global.networkPolicy.internalNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.internalNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: reencrypt
+    ports:
+    - protocol: TCP
+      port: {{ ternary 50443 (.Values.global.reencrypt.port | default 50051 | int) .Values.global.tls.enabled }}
+  {{- if .Values.global.networkPolicy.ingressNamespace }}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ .Values.global.networkPolicy.ingressNamespace }}
+          podSelector:
+            matchLabels:
+              {{ .Values.global.networkPolicy.ingressLabelMatch | nindent 14 }}
+        ports:
+          - protocol: TCP
+            port: 8080
+  {{- end }}
+---
+{{- end }}
+{{- end }}
+{{- end }}
