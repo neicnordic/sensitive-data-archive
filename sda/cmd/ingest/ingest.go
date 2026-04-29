@@ -44,6 +44,7 @@ type Ingest struct {
 
 func main() {
 	if err := run(); err != nil {
+		log.Error("failed the thingy")
 		log.Fatal(err)
 	}
 }
