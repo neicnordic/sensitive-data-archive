@@ -213,7 +213,7 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, backen
 		return activeBucket, nil
 	}
 
-	slices.SortFunc(bucketsWithPrefix, strings.Compare)
+	sortBucketsNumerically(bucketsWithPrefix, endpointConf.BucketPrefix)
 
 	// find first bucket with available object count and size
 	for _, bucket := range bucketsWithPrefix {
@@ -253,4 +253,22 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, backen
 	}
 
 	return activeBucket, nil
+}
+
+// sortBucketsNumerically sorts buckets in place by the integer suffix that
+// follows prefix so `<prefix>10` comes after `<prefix>9`, not after
+// `<prefix>1`. With plain lexical ordering the 11th bucket lookup picked
+// `<prefix>9` as the "latest" entry and tried to recreate `<prefix>2`,
+// which the S3 API then rejected with BucketAlreadyExists (#2413). If a
+// bucket name can't be parsed as `<prefix><number>` we fall back to
+// lexical ordering between that pair so the function stays total.
+func sortBucketsNumerically(buckets []string, prefix string) {
+	slices.SortFunc(buckets, func(a, b string) int {
+		aInc, aErr := strconv.Atoi(strings.TrimPrefix(a, prefix))
+		bInc, bErr := strconv.Atoi(strings.TrimPrefix(b, prefix))
+		if aErr != nil || bErr != nil {
+			return strings.Compare(a, b)
+		}
+		return aInc - bInc
+	})
 }
