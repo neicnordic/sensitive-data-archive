@@ -350,27 +350,21 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 const defaultPageLimit = 1000
 const maxPageLimit = 10000
 
-// parseLimitParam reads the optional "limit" query parameter, validates it and
-// returns the effective limit. On validation failure it writes a 400 response
-// via c and returns -1 so the caller can return early.
-func parseLimitParam(c *gin.Context) int {
-	l := c.DefaultQuery("limit", "0")
-	if l == "0" {
-		return defaultPageLimit
+// parseLimitParam parses and validates the optional "limit" query parameter.
+// It returns the effective limit and an error if the value is invalid.
+func parseLimitParam(limitStr string) (int, error) {
+	if limitStr == "0" || limitStr == "" {
+		return defaultPageLimit, nil
 	}
-	li, err := strconv.Atoi(l)
+	li, err := strconv.Atoi(limitStr)
 	if err != nil || li < 1 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "invalid limit parameter: must be a positive integer")
-
-		return -1
+		return 0, fmt.Errorf("invalid limit parameter: must be a positive integer")
 	}
 	if li > maxPageLimit {
-		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("invalid limit parameter: must not exceed %d", maxPageLimit))
-
-		return -1
+		return 0, fmt.Errorf("invalid limit parameter: must not exceed %d", maxPageLimit)
 	}
 
-	return li
+	return li, nil
 }
 
 // getFiles returns the files from the database for a specific user
@@ -386,8 +380,10 @@ func getFiles(c *gin.Context) {
 	}
 
 	// parse optional pagination params
-	limit := parseLimitParam(c)
-	if limit < 0 {
+	limit, err := parseLimitParam(c.DefaultQuery("limit", "0"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
 		return
 	}
 	cursor := c.DefaultQuery("cursor", "")
@@ -1035,8 +1031,10 @@ func listUserFiles(c *gin.Context) {
 	log.Debugln(username)
 
 	// parse optional pagination params
-	limit := parseLimitParam(c)
-	if limit < 0 {
+	limit, err := parseLimitParam(c.DefaultQuery("limit", "0"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
 		return
 	}
 	cursor := c.DefaultQuery("cursor", "")
