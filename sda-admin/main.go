@@ -339,7 +339,7 @@ func handleFileListCommand() error {
 
 	if err := file.List(apiURI, token, username); err != nil {
 		if errors.Is(err, file.ErrAborted) {
-			os.Exit(1)
+			return file.ErrAborted
 		}
 
 		return fmt.Errorf("error: failed to get files, reason: %v", err)
@@ -673,7 +673,9 @@ func main() {
 		}
 	case "file":
 		if err := handleFileCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			if !errors.Is(err, file.ErrAborted) {
+				fmt.Fprintln(os.Stderr, err)
+			}
 			os.Exit(1)
 		}
 	case "dataset":

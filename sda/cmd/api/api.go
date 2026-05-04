@@ -351,15 +351,15 @@ const defaultPageLimit = 1000
 const maxPageLimit = 10000
 
 // parseLimitParam parses and validates the optional "limit" query parameter.
-// It returns 0 when the parameter is omitted or 0 (meaning: no pagination, return all).
+// It returns defaultPageLimit when the parameter is omitted or empty.
 // It returns an error if the value is not a valid positive integer or exceeds maxPageLimit.
 func parseLimitParam(limitStr string) (int, error) {
-	if limitStr == "0" || limitStr == "" {
-		return 0, nil
+	if limitStr == "" {
+		return defaultPageLimit, nil
 	}
 	li, err := strconv.Atoi(limitStr)
 	if err != nil || li < 1 {
-		return 0, fmt.Errorf("invalid limit parameter: must be a positive integer")
+		return 0, errors.New("invalid limit parameter: must be a positive integer")
 	}
 	if li > maxPageLimit {
 		return 0, fmt.Errorf("invalid limit parameter: must not exceed %d", maxPageLimit)
@@ -381,7 +381,7 @@ func getFiles(c *gin.Context) {
 	}
 
 	// parse optional pagination params
-	limit, err := parseLimitParam(c.DefaultQuery("limit", "0"))
+	limit, err := parseLimitParam(c.Query("limit"))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
@@ -1032,7 +1032,7 @@ func listUserFiles(c *gin.Context) {
 	log.Debugln(username)
 
 	// parse optional pagination params
-	limit, err := parseLimitParam(c.DefaultQuery("limit", "0"))
+	limit, err := parseLimitParam(c.Query("limit"))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
 
