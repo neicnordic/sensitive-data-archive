@@ -11,6 +11,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -20,11 +21,10 @@ type HealthcheckTestSuite struct {
 	suite.Suite
 	mockS3Conf     config.S3InboxConf // fakeserver
 	s3ClientToMock *s3.Client
-	DBConf         database.DBConf
 	fakeServer     *FakeServer
 	MQConf         broker.MQConf
 	messenger      *broker.AMQPBroker
-	database       *database.SDAdb
+	database       database.Database
 }
 
 func TestHealthTestSuite(t *testing.T) {
@@ -51,7 +51,7 @@ func (ts *HealthcheckTestSuite) SetupTest() {
 	// Create a configuration for the fake MQ
 	ts.MQConf = broker.MQConf{
 		Host:     "127.0.0.1",
-		Port:     MQport,
+		Port:     mqPort,
 		User:     "guest",
 		Password: "guest",
 		Vhost:    "/",
@@ -60,25 +60,26 @@ func (ts *HealthcheckTestSuite) SetupTest() {
 
 	ts.messenger = &broker.AMQPBroker{}
 
-	// Create a database configuration for the fake database
-	ts.DBConf = database.DBConf{
-		Host:       "127.0.0.1",
-		Port:       DBport,
-		User:       "postgres",
-		Password:   "rootpasswd",
-		Database:   "sda",
-		CACert:     "",
-		SslMode:    "disable",
-		ClientCert: "",
-		ClientKey:  "",
+	ts.database, err = postgres.NewPostgresSQLDatabase(
+		postgres.Host("127.0.0.1"),
+		postgres.Port(dbPort),
+		postgres.User("postgres"),
+		postgres.Password("rootpasswd"),
+		postgres.DatabaseName("sda"),
+		postgres.Schema("sda"),
+		postgres.CACert(""),
+		postgres.SslMode("disable"),
+		postgres.ClientCert(""),
+		postgres.ClientKey(""),
+	)
+	if err != nil {
+		ts.FailNow("failed to connect to database", err)
 	}
-
-	ts.database = &database.SDAdb{}
 }
 
 func (ts *HealthcheckTestSuite) TearDownTest() {
 	ts.fakeServer.Close()
-	ts.database.Close()
+	_ = ts.database.Close()
 }
 
 func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
@@ -103,10 +104,9 @@ func (ts *HealthcheckTestSuite) TestS3URL() {
 
 func (ts *HealthcheckTestSuite) TestHealthchecks() {
 	// Setup
-	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
 
 	w := httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
@@ -117,10 +117,9 @@ func (ts *HealthcheckTestSuite) TestHealthchecks() {
 
 func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	// Setup
-	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
 
 	// Check that 200 is reported
 	w := httptest.NewRecorder()
@@ -129,9 +128,32 @@ func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 	defer resp.Body.Close()
 	assert.Equal(ts.T(), 200, resp.StatusCode)
 
-	// Close connection to DB, check that connection is restored and 200 returned
+	pgContainer, _ := dockerPool.ContainerByName(postgresContainerName)
+	if pgContainer == nil {
+		ts.FailNow("postgres container not found")
+	}
+
+	networks, err := dockerPool.NetworksByName("bridge")
+	if err != nil || len(networks) != 1 {
+		ts.FailNow("failed to find docker network: bridge")
+	}
+
+	if err := pgContainer.DisconnectFromNetwork(&networks[0]); err != nil {
+		ts.FailNow("failed to disconnect postgres from bridge network")
+	}
+
 	w = httptest.NewRecorder()
-	p.database.Close()
+
+	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
+	resp = w.Result()
+	defer resp.Body.Close()
+	assert.Equal(ts.T(), 503, resp.StatusCode)
+
+	if err := pgContainer.ConnectToNetwork(&networks[0]); err != nil {
+		ts.FailNow("failed to connect postgres from bridge network")
+	}
+
+	w = httptest.NewRecorder()
 	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
 	resp = w.Result()
 	defer resp.Body.Close()
@@ -140,10 +162,9 @@ func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
 
 func (ts *HealthcheckTestSuite) TestNoS3Healthchecks() {
 	// Setup
-	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
 
 	// S3 unavailable, check that 503 is reported
 	w := httptest.NewRecorder()
@@ -156,10 +177,9 @@ func (ts *HealthcheckTestSuite) TestNoS3Healthchecks() {
 
 func (ts *HealthcheckTestSuite) TestNoMQHealthchecks() {
 	// Setup
-	db, _ := database.NewSDAdb(ts.DBConf)
 	messenger, err := broker.NewMQ(ts.MQConf)
 	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, db, new(tls.Config))
+	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
 
 	// Messenger unavailable, check that 503 is reported
 	p.messenger.Conf.Port = 123456

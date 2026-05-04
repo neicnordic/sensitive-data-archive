@@ -74,6 +74,8 @@ spec:
         env:
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
+        - name: CONFIG_FILE
+          value: {{ include "confFile" . }}
         ports:
         - name: auth
           containerPort: 8080

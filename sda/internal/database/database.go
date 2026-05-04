@@ -1,234 +1,190 @@
-// Package database provides functionalities for using the database,
-// providing high level functions
 package database
 
 import (
-	"database/sql"
-	"errors"
-	"fmt"
-	"time"
-
-	log "github.com/sirupsen/logrus"
+	"context"
 )
 
-// DBConf stores information about how to connect to the database backend
-type DBConf struct {
-	Host       string
-	Port       int
-	User       string
-	Password   string // #nosec G117 -- Export needed to access configuration atm
-	Database   string
-	CACert     string
-	SslMode    string
-	ClientCert string
-	ClientKey  string // #nosec G117 -- Export needed to access configuration atm
+type Transaction interface {
+	// Commit the transaction
+	Commit() error
+	// Rollback the transaction
+	Rollback() error
+	functions
 }
 
-// SDAdb struct that acts as a receiver for the DB update methods
-type SDAdb struct {
-	DB      *sql.DB
-	Version int
-	Config  DBConf
+type Database interface {
+	// BeginTransaction starts a database transaction, either commit or rollback needs to be called when done to release resources and close transaction
+	BeginTransaction(ctx context.Context) (Transaction, error)
+	// Close the database connection
+	Close() error
+	SchemaVersion() (int, error)
+	Ping(ctx context.Context) error
+
+	functions
 }
 
-// FileInfo is used by ingest for file metadata (path, size, checksum)
-type FileInfo struct {
-	ArchiveChecksum   string
-	Size              int64
-	Path              string
-	DecryptedChecksum string
-	DecryptedSize     int64
-	UploadedChecksum  string
-}
+// functions denotes the available database functions
+type functions interface {
+	// RegisterFile inserts a file in the database with its inbox location, along with a "registered" log
+	// event. If the file already exists in the database, the entry is updated, but
+	// a new file event is always inserted.
+	// If fileId is provided the new files table row will have that id, otherwise a new uuid will be generated
+	// If the unique unique_ingested constraint(submission_file_path, archive_file_path, submission_user) already exists
+	// and a different fileId is provided, the fileId in the database will NOT be updated.
+	RegisterFile(ctx context.Context, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error)
 
-type MappingData struct {
-	FileID             string
-	User               string
-	SubmissionFilePath string
-	SubmissionLocation string
-}
+	// GetUploadedSubmissionFilePathAndLocation returns the submission file path and location for a given user and fileID
+	// for a file which last event was 'uploaded' or
+	GetUploadedSubmissionFilePathAndLocation(ctx context.Context, submissionUser, fileID string) (string, string, error)
 
-type SyncData struct {
-	User     string
-	FilePath string
-	Checksum string
-}
-type ArchiveData struct {
-	FilePath string
-	Location string
-	FileSize int64
+	// GetFileIDByUserPathAndStatus checks if a file exists in the database for a given user and submission filepath
+	// and returns its fileID for the latest specified status
+	GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser, filePath, status string) (string, error)
 
-	BackupFilePath string
-	BackupLocation string
-}
+	// CheckAccessionIDOwnedByUser checks if the file a accessionID links to belongs to the user
+	// Returns true if a file is found by the accessionID and user, false if not found
+	CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error)
 
-type SubmissionFileInfo struct {
-	AccessionID        string `json:"accessionID,omitempty"`
-	FileID             string `json:"fileID"`
-	InboxPath          string `json:"inboxPath"`
-	Status             string `json:"fileStatus"`
-	SubmissionFileSize int64  `json:"submissionFileSize,omitempty"`
-	CreateAt           string `json:"createAt"`
-}
+	// UpdateFileEventLog updates the status in of the file in the files table
+	// The message parameter is the rabbitmq message sent on file upload.
+	UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error
 
-type DatasetInfo struct {
-	DatasetID string `json:"datasetID"`
-	Status    string `json:"status"`
-	Timestamp string `json:"timeStamp"`
-}
+	// StoreHeader stores the file header in the database
+	StoreHeader(ctx context.Context, header []byte, id string) error
 
-type FileDetails struct {
-	User string
-	Path string
-}
+	// RotateHeaderKey updates the file header in the database
+	RotateHeaderKey(ctx context.Context, header []byte, keyHash, fileID string) error
 
-// SchemaName is the name of the remote database schema to query
-var SchemaName = "sda"
+	// SetArchived marks the file as 'ARCHIVED' with its archive location
+	SetArchived(ctx context.Context, location string, file *FileInfo, fileID string) error
 
-// ConnectTimeout is how long to try to establish a connection to the database.
-// If set to <= 0, the system will try to connect forever.
-var ConnectTimeout = 1 * time.Hour
+	// CancelFile cancels the file and all actions that have been taken (eg, setting checksums, archiving, etc)
+	CancelFile(ctx context.Context, fileID string, message string) error
 
-// FastConnectTimeout sets how long the system will try to connect to the
-// database using the FastConnectRate.
-var FastConnectTimeout = 2 * time.Minute
+	// IsFileInDataset checks if a file has been added to a dataset
+	IsFileInDataset(ctx context.Context, fileID string) (bool, error)
 
-// FastConnectRate is how long to wait between attempts to connect to the
-// database during the before FastConnectTimeout.
-var FastConnectRate = 5 * time.Second
+	// GetFileStatus get the latest event for a file id
+	GetFileStatus(ctx context.Context, fileID string) (string, error)
 
-// SlowConnectRate is how long to wait between attempts to connect to the
-// database during the after FastConnectTimeout.
-var SlowConnectRate = 1 * time.Minute
+	// GetHeader retrieves the file header
+	GetHeader(ctx context.Context, fileID string) ([]byte, error)
 
-// dbRetryTimes is the number of times to retry the same function if it fails
-var RetryTimes = 5
+	// BackupHeader takes a backup of the current encryption header before it is rotated.
+	// It stores the fileID, the hex-encoded header, and the current timestamp in a backup table.
+	BackupHeader(ctx context.Context, fileID string, header []byte, keyHash string) error
 
-// NewSDAdb creates a new DB connection from the given DBConf variables.
-// Currently, only postgresql connections are supported.
-func NewSDAdb(config DBConf) (*SDAdb, error) {
-	dbs := SDAdb{DB: nil, Version: -1, Config: config}
+	// SetVerified sets the file decrypted file size and ARCHIVED and UNENCRYPTED checksums
+	SetVerified(ctx context.Context, file *FileInfo, fileID string) error
 
-	err := dbs.Connect()
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
-	}
+	// GetArchived retrieves the location and size of archive
+	GetArchived(ctx context.Context, fileID string) (*ArchiveData, error)
 
-	dbs.Version, err = dbs.getVersion()
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch database schema version: %v", err)
-	}
+	// CheckAccessionIDExists validates if an accessionID exists in the db
+	CheckAccessionIDExists(ctx context.Context, accessionID, fileID string) (string, error)
 
-	return &dbs, nil
-}
+	// SetAccessionID adds a stable id to a file
+	// identified by the user submitting it, inbox path and decrypted checksum
+	SetAccessionID(ctx context.Context, accessionID, fileID string) error
 
-// Connect attempts to connect to the database using the given dbs.ConnInfo.
-// Connection retries and timeouts are controlled by the ConnectTimeout,
-// FastConnectTimeout, FastConnectRate, and SlowConnectRate variables.
-func (dbs *SDAdb) Connect() error {
-	start := time.Now()
+	// GetAccessionID returns the stable id of a file identified by its file_id
+	GetAccessionID(ctx context.Context, fileID string) (string, error)
 
-	// if already connected - do nothing
-	if dbs.DB != nil {
-		err := dbs.DB.Ping()
-		if err == nil {
-			log.Infoln("Already connected to database")
+	// MapFileToDataset maps a file to a dataset in the database
+	MapFileToDataset(ctx context.Context, datasetID, fileID string) error
 
-			return nil
-		}
-	}
+	// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
+	GetInboxPath(ctx context.Context, accessionID string) (string, error)
 
-	// default error
-	err := errors.New("failed to connect within reconnect time")
+	// UpdateDatasetEvent marks the files in a dataset as "registered","released" or "deprecated"
+	UpdateDatasetEvent(ctx context.Context, datasetID, status, message string) error
 
-	log.Infoln("Connecting to database")
-	log.Debugf("host: %s:%d, database: %s, user: %s", dbs.Config.Host, dbs.Config.Port, dbs.Config.Database, dbs.Config.User)
+	// GetFileInfo returns info on a ingested file
+	GetFileInfo(ctx context.Context, id string) (*FileInfo, error)
 
-	for ConnectTimeout <= 0 || ConnectTimeout > time.Since(start) {
-		dbs.DB, err = sql.Open(dbs.Config.PgDataSource())
-		if err == nil {
-			log.Infoln("Connected to database")
-			// Open may just validate its arguments without creating a
-			// connection to the database. To verify that the data source name
-			// is valid, call Ping.
-			err = dbs.DB.Ping()
+	// GetSubmissionLocation returns the submission location for a file id
+	GetSubmissionLocation(ctx context.Context, fileID string) (string, error)
 
-			return err
-		}
-		if time.Since(start) < FastConnectTimeout {
-			log.Debug("Fast reconnect")
-			time.Sleep(FastConnectRate)
-		} else {
-			log.Debug("Slow reconnect")
-			time.Sleep(SlowConnectRate)
-		}
-	}
+	// GetHeaderByAccessionID retrieves the file header by using stable id
+	GetHeaderByAccessionID(ctx context.Context, accessionID string) ([]byte, error)
 
-	return err
-}
+	// GetMappingData retrieves the file information needed for mapping
+	GetMappingData(ctx context.Context, accessionID string) (*MappingData, error)
 
-// PgDataSource builds a postgresql data source string to use with sql.Open().
-func (config *DBConf) PgDataSource() (string, string) {
-	connInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.Database, config.SslMode)
+	// GetSyncData retrieves the file information needed to sync a dataset
+	GetSyncData(ctx context.Context, accessionID string) (*SyncData, error)
 
-	if config.SslMode == "disable" {
-		return "postgres", connInfo
-	}
+	// GetFileIDInInbox gets the file id of a file which last known event is either 'registered', 'uploaded', or 'disabled'
+	// as that means that ingestion has not been triggered and users are allowed continue uploading or reupload the file to the inbox
+	// if no row is found does not return sql.ErrNoRows, just empty string in id return field
+	GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error)
 
-	if config.CACert != "" {
-		connInfo += fmt.Sprintf(" sslrootcert=%s", config.CACert)
-	}
+	// CheckIfDatasetExists checks if a dataset already is registered
+	CheckIfDatasetExists(ctx context.Context, datasetID string) (bool, error)
 
-	if config.ClientCert != "" {
-		connInfo += fmt.Sprintf(" sslcert=%s", config.ClientCert)
-	}
+	// GetArchivePathAndLocation retrieves the archive_file_path and archive_location for a file with a given accessionID
+	GetArchivePathAndLocation(ctx context.Context, accessionID string) (string, string, error)
 
-	if config.ClientKey != "" {
-		connInfo += fmt.Sprintf(" sslkey=%s", config.ClientKey)
-	}
+	// GetArchiveLocation returns the archive location for a file ID
+	GetArchiveLocation(ctx context.Context, fileID string) (string, error)
 
-	return "postgres", connInfo
-}
+	// SetSubmissionFileSize sets the submission file size for a file
+	SetSubmissionFileSize(ctx context.Context, fileID string, submissionFileSize int64) error
 
-// getVersion fetches the database schema version. This function return -1 when
-// the version could not be fetched.
-func (dbs *SDAdb) getVersion() (int, error) {
-	dbs.checkAndReconnectIfNeeded()
+	// GetUserFiles retrieves all the files a user submitted
+	GetUserFiles(ctx context.Context, userID, pathPrefix string, allData bool) ([]*SubmissionFileInfo, error)
 
-	log.Debug("Fetching database schema version")
+	// ListActiveUsers list all users with files not yet assigned to a dataset
+	ListActiveUsers(ctx context.Context) ([]string, error)
 
-	query := "SELECT MAX(version) FROM sda.dbschema_version;"
+	// GetDatasetStatus returns the latest event for a dataset ID
+	GetDatasetStatus(ctx context.Context, datasetID string) (string, error)
 
-	var dbVersion = -1
-	err := dbs.DB.QueryRow(query).Scan(&dbVersion)
+	// AddKeyHash inserts a new key hash with description to the database
+	AddKeyHash(ctx context.Context, keyHash, keyDescription string) error
 
-	return dbVersion, err
-}
+	// GetKeyHash wraps getKeyHash with exponential stand-off retries
+	GetKeyHash(ctx context.Context, fileID string) (string, error)
 
-// checkAndReconnectIfNeeded validates the current connection with a ping
-// and tries to reconnect if necessary
-func (dbs *SDAdb) checkAndReconnectIfNeeded() {
-	err := dbs.DB.Ping()
-	if err != nil {
-		log.Errorf("Database connection problem: %v", err)
-		_ = dbs.Connect()
-	}
-}
+	// SetKeyHash sets the key hash used to encrypt a file
+	SetKeyHash(ctx context.Context, keyHash, fileID string) error
 
-func (dbs *SDAdb) Reconnect() {
-	_ = dbs.DB.Close()
-	dbs.DB, _ = sql.Open(dbs.Config.PgDataSource())
-}
+	// ListKeyHashes lists the hashes from the encryption_keys table
+	ListKeyHashes(ctx context.Context) ([]*C4ghKeyHash, error)
 
-// Close terminates the connection to the database
-func (dbs *SDAdb) Close() {
-	if dbs.DB == nil {
-		return
-	}
-	err := dbs.DB.Ping()
-	if err == nil {
-		log.Info("Closing database connection")
-		_ = dbs.DB.Close()
-	}
+	// DeprecateKeyHash sets a key hash as deprecated
+	DeprecateKeyHash(ctx context.Context, keyHash string) error
+
+	// ListDatasets lists all datasets, their latest event and timestamp
+	ListDatasets(ctx context.Context) ([]*DatasetInfo, error)
+
+	// ListUserDatasets lists all datasets, their latest event and timestamp created by a specifc user
+	ListUserDatasets(ctx context.Context, submissionUser string) ([]*DatasetInfo, error)
+
+	// UpdateUserInfo upserts user info
+	UpdateUserInfo(ctx context.Context, userID, name, email string, groups []string) error
+
+	// GetReVerificationData gets the data to verify a file ingestion by the accessionID
+	GetReVerificationData(ctx context.Context, accessionID string) (*ReVerificationData, error)
+
+	// GetReVerificationDataFromFileID gets the data to verify a file ingestion by the fileID
+	GetReVerificationDataFromFileID(ctx context.Context, fileID string) (*ReVerificationData, error)
+
+	// GetDecryptedChecksum gets the UNENCRYPTED checksum for a file ID
+	GetDecryptedChecksum(ctx context.Context, fileID string) (string, error)
+
+	// GetDatasetFiles returns all file accessionIDs in a dataset
+	GetDatasetFiles(ctx context.Context, datasetID string) ([]string, error)
+
+	// GetDatasetFileIDs returns all file IDs in a dataset
+	GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error)
+
+	// GetFileDetails retrieves user, path and correlation id by giving the file id
+	GetFileDetails(ctx context.Context, fileID, event string) (*FileDetails, error)
+
+	// GetSizeAndObjectCountOfLocation Sums the size and count of the files in a location
+	GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error)
+
+	// SetBackedUp sets the file backup_path and backup_location
+	SetBackedUp(ctx context.Context, location, path, fileID string) error
 }

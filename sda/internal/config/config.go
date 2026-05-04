@@ -10,7 +10,6 @@ import (
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -31,7 +30,6 @@ type ServerConfig struct {
 // Config is a parent object for all the different configuration parts
 type Config struct {
 	Broker       broker.MQConf
-	Database     database.DBConf
 	Server       ServerConfig
 	S3Inbox      S3InboxConf
 	API          APIConf
@@ -101,7 +99,6 @@ type APIConf struct {
 	Host        string
 	Port        int
 	Session     SessionConfig
-	DB          *database.SDAdb
 	MQ          *broker.AMQPBroker
 	Grpc        Grpc
 	AuditLogger *log.Logger
@@ -136,7 +133,6 @@ type OrchestratorConf struct {
 
 type AuthConf struct {
 	OIDC            OIDCConfig
-	DB              *database.SDAdb
 	Cega            CegaConfig
 	JwtIssuer       string
 	JwtPrivateKey   string
@@ -235,22 +231,12 @@ func NewConfig(app string) (*Config, error) {
 			"broker.port",
 			"broker.user",
 			"broker.password",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
 			"grpc.host",
 		}
 	case "auth":
 		requiredConfVars = []string{
 			"auth.s3Inbox",
 			"auth.publicFile",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
 		}
 
 		if viper.GetString("auth.cega.id") != "" && viper.GetString("auth.cega.secret") != "" {
@@ -273,27 +259,9 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"broker.queue",
 			"broker.routingkey",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
 		}
-	case "mapper":
+	case "mapper", "intercept":
 		// Mapper does not require broker.routingkey thus we remove it
-		requiredConfVars = []string{
-			"broker.host",
-			"broker.port",
-			"broker.user",
-			"broker.password",
-			"broker.queue",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
-		}
-	case "intercept":
 		requiredConfVars = []string{
 			"broker.host",
 			"broker.port",
@@ -335,11 +303,6 @@ func NewConfig(app string) (*Config, error) {
 			"broker.password",
 			"broker.queue",
 			"c4gh.rotatePubKeyPath",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
 			"grpc.host",
 		}
 	case "s3inbox":
@@ -365,11 +328,6 @@ func NewConfig(app string) (*Config, error) {
 			"c4gh.filepath",
 			"c4gh.passphrase",
 			"c4gh.syncPubKeyPath",
-			"db.host",
-			"db.port",
-			"db.user",
-			"db.password",
-			"db.database",
 			"sync.centerPrefix",
 			"sync.remote.host",
 			"sync.remote.user",
@@ -400,11 +358,6 @@ func NewConfig(app string) (*Config, error) {
 	switch app {
 	case "api":
 		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-
-		err = c.configDatabase()
 		if err != nil {
 			return nil, err
 		}
@@ -487,22 +440,8 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.Auth.S3Inbox = viper.GetString("auth.s3Inbox")
-		err := c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-	case "finalize", "ingest", "mapper", "verify":
-		err := c.configBroker()
-		if err != nil {
-			return nil, err
-		}
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
 
-		c.configSchemas()
-	case "intercept":
+	case "finalize", "ingest", "mapper", "verify", "intercept":
 		err := c.configBroker()
 		if err != nil {
 			return nil, err
@@ -532,13 +471,9 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		err := c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
 		c.configSchemas()
 
+		var err error
 		c.RotateKey.Grpc, err = configReEncryptClient()
 		if err != nil {
 			return nil, err
@@ -554,11 +489,6 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		err = c.configDatabase()
-		if err != nil {
-			return nil, err
-		}
-
 		if err := viper.UnmarshalKey("s3inbox", &c.S3Inbox); err != nil {
 			return nil, fmt.Errorf("failed to parse key configurations: %v", err)
 		}
@@ -569,11 +499,6 @@ func NewConfig(app string) (*Config, error) {
 		}
 	case "sync":
 		if err := c.configBroker(); err != nil {
-			return nil, err
-		}
-
-		err := c.configDatabase()
-		if err != nil {
 			return nil, err
 		}
 
@@ -697,40 +622,6 @@ func (c *Config) configBroker() error {
 	}
 
 	c.Broker = mq
-
-	return nil
-}
-
-// configDatabase provides configuration for the database
-func (c *Config) configDatabase() error {
-	db := database.DBConf{}
-
-	// All these are required
-	db.Host = viper.GetString("db.host")
-	db.Port = viper.GetInt("db.port")
-	db.User = viper.GetString("db.user")
-	db.Password = viper.GetString("db.password")
-	db.Database = viper.GetString("db.database")
-	db.SslMode = viper.GetString("db.sslmode")
-
-	// Optional settings
-	if db.SslMode == "verify-full" {
-		// Since verify-full is specified, these are required.
-		if !viper.IsSet("db.clientCert") && !viper.IsSet("db.clientKey") {
-			return errors.New("when db.sslMode is set to verify-full both db.clientCert and db.clientKey are needed")
-		}
-	}
-	if viper.IsSet("db.clientKey") {
-		db.ClientKey = viper.GetString("db.clientKey")
-	}
-	if viper.IsSet("db.clientCert") {
-		db.ClientCert = viper.GetString("db.clientCert")
-	}
-	if viper.IsSet("db.cacert") {
-		db.CACert = viper.GetString("db.cacert")
-	}
-
-	c.Database = db
 
 	return nil
 }

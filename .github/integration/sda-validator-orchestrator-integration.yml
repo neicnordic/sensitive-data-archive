@@ -200,6 +200,7 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USER=validator_orchestrator
       - DATABASE_PASSWORD=validator_orchestrator
+      - DATABASE_NAME=sda_validator_orchestrator
       - CONFIG_FILE=/validators/config/config.yaml
       - JWT_PUB_KEY_URL=http://localhost:8800/oidc/jwk
       - RBAC_POLICY_FILE_PATH=/validators/config/rbac.policy
@@ -241,8 +242,8 @@ services:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
-      - DB_PASSWORD=inbox
-      - DB_USER=inbox
+      - DATABASE_PASSWORD=inbox
+      - DATABASE_USER=inbox
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -270,8 +271,8 @@ services:
     environment:
       - BROKER_PASSWORD=api
       - BROKER_USER=api
-      - DB_PASSWORD=api
-      - DB_USER=api
+      - DATABASE_PASSWORD=api
+      - DATABASE_USER=api
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}

@@ -57,6 +57,8 @@ spec:
         env:
         - name: CONFIGFILE
           value: {{ include "confFile" . }}
+        - name: CONFIG_FILE
+          value: {{ include "confFile" . }}
         resources:
 {{ toYaml .Values.rotatekey.resources | trim | indent 10 }}
         volumeMounts:

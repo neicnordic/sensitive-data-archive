@@ -368,20 +368,207 @@ func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstBucketFull() 
 type notImplementedDatabase struct {
 }
 
-func (m *notImplementedDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, _ string) (uint64, uint64, error) {
+func (m *notImplementedDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) Close() error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SchemaVersion() (int, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) Ping(_ context.Context) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) RegisterFile(_ context.Context, _x *string, _, _, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileIDByUserPathAndStatus(_ context.Context, _, _, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) CheckAccessionIDOwnedByUser(_ context.Context, _, _ string) (bool, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) UpdateFileEventLog(_ context.Context, _, _, _, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) StoreHeader(_ context.Context, _ []byte, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) RotateHeaderKey(_ context.Context, _ []byte, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetArchived(_ context.Context, _ string, _ *database.FileInfo, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileStatus(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetHeader(_ context.Context, _ string) ([]byte, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) BackupHeader(_ context.Context, _ string, _ []byte, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetVerified(_ context.Context, _ *database.FileInfo, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetArchived(_ context.Context, _ string) (*database.ArchiveData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) CheckAccessionIDExists(_ context.Context, _, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetAccessionID(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetAccessionID(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) MapFileToDataset(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetInboxPath(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) UpdateDatasetEvent(_ context.Context, _, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileInfo(_ context.Context, id string) (*database.FileInfo, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetHeaderByAccessionID(_ context.Context, _ string) ([]byte, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetMappingData(_ context.Context, _ string) (*database.MappingData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetSyncData(_ context.Context, _ string) (*database.SyncData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileIDInInbox(_ context.Context, _, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) CheckIfDatasetExists(_ context.Context, _ string) (bool, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetArchivePathAndLocation(_ context.Context, _ string) (string, string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetArchiveLocation(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetSubmissionFileSize(_ context.Context, _ string, _ int64) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetUserFiles(_ context.Context, _, _ string, _ bool) ([]*database.SubmissionFileInfo, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) ListActiveUsers(_ context.Context) ([]string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetDatasetStatus(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) AddKeyHash(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetKeyHash(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetKeyHash(_ context.Context, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) ListKeyHashes(_ context.Context) ([]*database.C4ghKeyHash, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) DeprecateKeyHash(_ context.Context, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) ListDatasets(_ context.Context) ([]*database.DatasetInfo, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) ListUserDatasets(_ context.Context, _ string) ([]*database.DatasetInfo, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) UpdateUserInfo(_ context.Context, _, _, _ string, _ []string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetReVerificationData(_ context.Context, _ string) (*database.ReVerificationData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetReVerificationDataFromFileID(_ context.Context, _ string) (*database.ReVerificationData, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetDecryptedChecksum(_ context.Context, _ string) (string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetDatasetFiles(_ context.Context, _ string) ([]string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetDatasetFileIDs(_ context.Context, _ string) ([]string, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileDetails(_ context.Context, fileUUID, event string) (*database.FileDetails, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) SetBackedUp(_ context.Context, _, _, _ string) error {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, location string) (uint64, uint64, error) {
 	panic("function not expected to be called in unit tests")
 }
 
 func (m *notImplementedDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Context, _, _ string) (string, string, error) {
-	panic("function not expected to be called in unit tests")
-}
-func (m *notImplementedDatabase) GetArchiveLocation(_ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-func (m *notImplementedDatabase) GetArchivePathAndLocation(_ string) (string, string, error) {
-	panic("function not expected to be called in unit tests")
-}
-func (m *notImplementedDatabase) GetMappingData(_ string) (*database.MappingData, error) {
 	panic("function not expected to be called in unit tests")
 }
 

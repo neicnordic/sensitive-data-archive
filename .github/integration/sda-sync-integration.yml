@@ -99,8 +99,8 @@ services:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
-      - DB_PASSWORD=inbox
-      - DB_USER=inbox
+      - DATABASE_PASSWORD=inbox
+      - DATABASE_USER=inbox
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -129,8 +129,8 @@ services:
       - BROKER_USER=ingest
       - BROKER_QUEUE=ingest
       - BROKER_ROUTINGKEY=archived
-      - DB_PASSWORD=ingest
-      - DB_USER=ingest
+      - DATABASE_PASSWORD=ingest
+      - DATABASE_USER=ingest
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -154,8 +154,8 @@ services:
       - BROKER_USER=verify
       - BROKER_QUEUE=archived
       - BROKER_ROUTINGKEY=verified
-      - DB_PASSWORD=verify
-      - DB_USER=verify
+      - DATABASE_PASSWORD=verify
+      - DATABASE_USER=verify
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -179,8 +179,8 @@ services:
       - BROKER_USER=finalize
       - BROKER_QUEUE=accession
       - BROKER_ROUTINGKEY=completed
-      - DB_PASSWORD=finalize
-      - DB_USER=finalize
+      - DATABASE_PASSWORD=finalize
+      - DATABASE_USER=finalize
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -203,8 +203,8 @@ services:
       - BROKER_PASSWORD=mapper
       - BROKER_USER=mapper
       - BROKER_QUEUE=mappings
-      - DB_PASSWORD=mapper
-      - DB_USER=mapper
+      - DATABASE_PASSWORD=mapper
+      - DATABASE_USER=mapper
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -227,8 +227,8 @@ services:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
       - BROKER_QUEUE=mapping_stream
-      - DB_PASSWORD=sync
-      - DB_USER=sync
+      - DATABASE_PASSWORD=sync
+      - DATABASE_USER=sync
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -305,8 +305,8 @@ services:
     environment:
       - BROKER_PASSWORD=api
       - BROKER_USER=api
-      - DB_PASSWORD=api
-      - DB_USER=api
+      - DATABASE_PASSWORD=api
+      - DATABASE_USER=api
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}

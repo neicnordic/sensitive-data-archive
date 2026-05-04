@@ -67,10 +67,10 @@ var command = &cobra.Command{
 
 func init() {
 	viper.SetConfigName("config")
-
+	viper.AddConfigPath(".")
+	viper.SetConfigType("yaml")
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-	viper.SetConfigType("yaml")
 
 	command.Flags().String("config-path", ".", "Set the path viper will look for the config file at")
 	command.Flags().String("config-file", "", "Set the direct path to the config file")
@@ -121,7 +121,8 @@ func Load() error {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}

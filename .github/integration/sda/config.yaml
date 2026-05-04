@@ -82,13 +82,11 @@ broker:
   routingKey: ""
   ssl: "false"
 
-db:
+database:
   host: "postgres"
   port: "5432"
-  user: ""
-  password: ""
-  database: "sda"
-  sslmode: "disable"
+  name: "sda"
+  ssl_mode: "disable"
 
 c4gh:
   filePath: /shared/c4gh.sec.pem

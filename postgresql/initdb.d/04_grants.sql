@@ -111,6 +111,7 @@ CREATE ROLE mapper;
 GRANT USAGE ON SCHEMA sda TO mapper;
 GRANT INSERT ON sda.datasets TO mapper;
 GRANT SELECT ON sda.datasets TO mapper;
+GRANT UPDATE ON sda.datasets TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.datasets_id_seq TO mapper;
 GRANT SELECT ON sda.files TO mapper;
 GRANT INSERT ON sda.file_event_log TO mapper;
