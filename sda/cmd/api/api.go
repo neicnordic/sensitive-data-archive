@@ -351,10 +351,11 @@ const defaultPageLimit = 1000
 const maxPageLimit = 10000
 
 // parseLimitParam parses and validates the optional "limit" query parameter.
-// It returns the effective limit and an error if the value is invalid.
+// It returns 0 when the parameter is omitted or 0 (meaning: no pagination, return all).
+// It returns an error if the value is not a valid positive integer or exceeds maxPageLimit.
 func parseLimitParam(limitStr string) (int, error) {
 	if limitStr == "0" || limitStr == "" {
-		return defaultPageLimit, nil
+		return 0, nil
 	}
 	li, err := strconv.Atoi(limitStr)
 	if err != nil || li < 1 {

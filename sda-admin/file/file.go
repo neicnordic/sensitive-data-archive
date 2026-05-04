@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -82,9 +83,12 @@ func waitForUserContinue() error {
 
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
-		_, err = fmt.Fscanln(os.Stdin)
+		_, scanErr := fmt.Fscanln(os.Stdin)
+		if scanErr == nil || errors.Is(scanErr, io.EOF) {
+			return nil
+		}
 
-		return err
+		return scanErr
 	}
 	defer term.Restore(fd, oldState) //nolint:errcheck
 

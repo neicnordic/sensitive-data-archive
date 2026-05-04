@@ -339,7 +339,7 @@ func handleFileListCommand() error {
 
 	if err := file.List(apiURI, token, username); err != nil {
 		if errors.Is(err, file.ErrAborted) {
-			return nil
+			os.Exit(1)
 		}
 
 		return fmt.Errorf("error: failed to get files, reason: %v", err)

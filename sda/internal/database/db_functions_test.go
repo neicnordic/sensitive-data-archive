@@ -769,6 +769,11 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, "not-a-valid-cursor!!!")
 	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor")
 
+	// A valid base64url string that decodes to a non-UUID value must also return ErrInvalidCursor.
+	// "Zm9v" is base64url("foo"), which is valid base64 but not a UUID.
+	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, "Zm9v")
+	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for valid-base64 non-UUID cursor")
+
 	db.Close()
 }
 
