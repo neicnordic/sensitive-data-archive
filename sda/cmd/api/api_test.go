@@ -840,7 +840,7 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 }
 
 func (s *TestSuite) TestAPIGetFiles_Pagination() {
-	user := "pagination-test-user"
+	user := "dummy"
 	for i := range 5 {
 		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("pagtest/file-%02d.c4gh", i), user)
 		if err != nil {

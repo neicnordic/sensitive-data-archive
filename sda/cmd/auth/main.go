@@ -222,7 +222,7 @@ func (auth AuthHandler) getEGAConf(ctx iris.Context) {
 // getOIDC redirects to the oidc page defined in auth.Config
 func (auth AuthHandler) getOIDC(ctx iris.Context) {
 	state := uuid.New()
-	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true})
+	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
 	redirectURI := ctx.Request().URL.Query().Get("redirect_uri")
 	if redirectURI != "" {
