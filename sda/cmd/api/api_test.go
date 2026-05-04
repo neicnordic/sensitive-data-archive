@@ -839,6 +839,125 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 	assert.Equal(s.T(), 3, len(files))
 }
 
+func (s *TestSuite) TestAPIGetFiles_Pagination() {
+	user := "pagination-test-user"
+	for i := range 5 {
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("pagtest/file-%02d.c4gh", i), user)
+		if err != nil {
+			s.FailNow("failed to register file in database")
+		}
+		err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
+		if err != nil {
+			s.FailNow("failed to update status of file in database")
+		}
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	_, router := gin.CreateTestContext(httptest.NewRecorder())
+	router.GET("/files", rbac(e), getFiles)
+
+	// Non-numeric limit should return 400.
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/files?limit=abc", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "non-numeric limit should return 400")
+
+	// Negative limit should return 400.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/files?limit=-1", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "negative limit should return 400")
+
+	// Invalid cursor should return 400.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/files?cursor=not-valid-base64!!!", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "invalid cursor should return 400")
+
+	// limit=2 with 5 files must return X-Next-Cursor.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/files?path_prefix=pagtest&limit=2", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
+	assert.NotEmpty(s.T(), w.Header().Get("X-Next-Cursor"), "expected X-Next-Cursor header when more pages exist")
+
+	// Following the cursor must return the remaining files and no further cursor.
+	nextCursor := w.Header().Get("X-Next-Cursor")
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/files?path_prefix=pagtest&limit=2&cursor="+nextCursor, http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusOK, w.Code, "page-2 request should return 200")
+}
+
+func (s *TestSuite) TestListUserFiles_Pagination() {
+	user := "pagination-list-user"
+	for i := range 5 {
+		fileID, err := Conf.API.DB.RegisterFile(nil, s.inboxDir, fmt.Sprintf("paglisttest/file-%02d.c4gh", i), user)
+		if err != nil {
+			s.FailNow("failed to register file in database")
+		}
+		err = Conf.API.DB.UpdateFileEventLog(fileID, "uploaded", user, "{}", "{}")
+		if err != nil {
+			s.FailNow("failed to update status of file in database")
+		}
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	_, router := gin.CreateTestContext(httptest.NewRecorder())
+	router.GET("/users/:username/files", rbac(e), listUserFiles)
+
+	// Non-numeric limit should return 400.
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/users/"+user+"/files?limit=abc", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "non-numeric limit should return 400")
+
+	// Invalid cursor should return 400.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/users/"+user+"/files?cursor=!!!invalid!!!", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "invalid cursor should return 400")
+
+	// limit=2 with 5 files must return X-Next-Cursor.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/users/"+user+"/files?path_prefix=paglisttest&limit=2", http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+	router.ServeHTTP(w, r)
+	assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
+	assert.NotEmpty(s.T(), w.Header().Get("X-Next-Cursor"), "expected X-Next-Cursor header when more pages exist")
+}
+
 func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
 }

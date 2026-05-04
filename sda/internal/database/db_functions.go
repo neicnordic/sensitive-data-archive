@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
@@ -1029,7 +1030,7 @@ FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
  WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') != 'disabled'
-	AND ($4::TEXT IS NULL OR f.id > $4)
+	AND ($4::UUID IS NULL OR f.id > $4::UUID)
 ORDER BY f.id ASC LIMIT $5;`
 	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}
@@ -1039,10 +1040,10 @@ ORDER BY f.id ASC LIMIT $5;`
 		pathPrefixArg.String = pathPrefix
 	}
 
-	// default limit
-	lim := 1000
-	if limit > 0 {
-		lim = limit
+	// default limit: 0 means unlimited (return all rows, no cursor emitted).
+	lim := limit
+	if lim <= 0 {
+		lim = math.MaxInt32
 	}
 	// Fetch one extra row to determine whether a next page exists.
 	fetchLim := lim + 1
@@ -1053,8 +1054,12 @@ ORDER BY f.id ASC LIMIT $5;`
 		if derr != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, derr)
 		}
+		decodedStr := string(decoded)
+		if _, parseErr := uuid.Parse(decodedStr); parseErr != nil {
+			return nil, "", fmt.Errorf("%w: decoded cursor is not a valid file ID", ErrInvalidCursor)
+		}
 		cursorArg.Valid = true
-		cursorArg.String = string(decoded)
+		cursorArg.String = decodedStr
 	}
 
 	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorArg, fetchLim)

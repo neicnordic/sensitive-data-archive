@@ -23,7 +23,7 @@ Endpoints:
 
     The endpoint also supports keyset pagination using a `cursor` query parameter and an optional `limit`.
 
-    - `limit` (optional): maximum number of items to return. If omitted or 0 a server default page size is used.
+    - `limit` (optional): maximum number of items per page. If omitted or 0, all matching files are returned with no cursor.
     - `cursor` (optional): opaque cursor returned from a previous page. To fetch the first page omit this parameter.
 
     The response will include an `X-Next-Cursor` header when there are more pages available. The cursor is opaque (base64-encoded) and should be passed unchanged to the next request.
@@ -302,7 +302,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     Example (follow-up page):
 
     ```bash
-    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/users/submitter@example.org/files?cursor=$cursor"
+    curl -H "Authorization: Bearer $token" -X GET "https://HOSTNAME/users/submitter@example.org/files?path_prefix=submission-1&limit=50&cursor=$cursor"
     ```
 
   - Error codes
