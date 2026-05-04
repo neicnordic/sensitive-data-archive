@@ -37,7 +37,8 @@ VALUES (0, now(), 'Created with version'),
        (20, now(), 'Deprecate file_event_log.correlation_id column and migrate data where file_id != correlation_id'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
-       (23, now(), 'Expand files table with storage locations');
+       (23, now(), 'Expand files table with storage locations'),
+       (24, now(), 'Add last_event column to files to avoid join on file_event_log');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -56,6 +57,28 @@ CREATE TABLE encryption_keys (
     deprecated_at     TIMESTAMP WITH TIME ZONE,
     description       TEXT
 );
+
+-- This table is used to define events for file event logging.
+CREATE TABLE file_events (
+    id                  SERIAL PRIMARY KEY,
+    title               VARCHAR(64) UNIQUE, -- short name of the action
+    description         TEXT
+);
+
+-- These are the default file events to log.
+INSERT INTO file_events(id,title,description)
+VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
+       (10, 'uploaded'    , 'Upload to the inbox has finished'),
+       (20, 'submitted'   , 'User has submitted the file to the archive'),
+       (30, 'ingested'    , 'File information has been added to the database'),
+       (40, 'archived'    , 'File has been moved to the archive'),
+       (50, 'verified'    , 'Checksums have been verified in the archived file'),
+       (60, 'backed up'   , 'File has been backed up'),
+       (70, 'ready'       , 'File is ready for access requests'),
+       (80, 'downloaded'  , 'Downloaded by user'),
+       ( 0, 'error'       , 'An Error occurred, check the error table'),
+       ( 1, 'disabled'    , 'Disables the file for all actions'),
+       ( 2, 'enabled'     , 'Reenables a disabled file');
 
 -- `files` is the main table of the schema, holding the file paths, encryption
 -- header, and stable id.
@@ -79,6 +102,9 @@ CREATE TABLE files (
     encryption_method    TEXT,
     key_hash             TEXT REFERENCES encryption_keys(key_hash),
 
+    -- Denormalized from file_event_log to avoid join when listing files
+    last_event           TEXT REFERENCES file_events(title),
+
     -- Table Audit / Logs
     created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
     last_modified_by     NAME DEFAULT CURRENT_USER, --
@@ -89,6 +115,7 @@ CREATE TABLE files (
 );
 -- Add indexes to the files table
 CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_user, submission_file_path);
+CREATE INDEX files_submission_user_id_idx ON files(submission_user, id);
 CREATE INDEX files_submission_location_idx ON files(submission_location);
 CREATE INDEX files_archive_location_idx ON files(archive_location);
 CREATE INDEX files_backup_location_idx ON files(backup_location);
@@ -138,29 +165,6 @@ CREATE TABLE file_dataset (
     dataset_id          INT REFERENCES datasets(id) NOT NULL,
     CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id)
 );
-
--- This table is used to define events for file event logging.
-CREATE TABLE file_events (
-    id                  SERIAL PRIMARY KEY,
-    title               VARCHAR(64) UNIQUE, -- short name of the action
-    description         TEXT
-);
-
--- These are the default file events to log.
-INSERT INTO file_events(id,title,description)
-VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
-       (10, 'uploaded'    , 'Upload to the inbox has finished'),
-       (20, 'submitted'   , 'User has submitted the file to the archive'),
-       (30, 'ingested'    , 'File information has been added to the database'),
-       (40, 'archived'    , 'File has been moved to the archive'),
-       (50, 'verified'    , 'Checksums have been verified in the archived file'),
-       (60, 'backed up'   , 'File has been backed up'),
-       (70, 'ready'       , 'File is ready for access requests'),
-       (80, 'downloaded'  , 'Downloaded by user'),
-       ( 0, 'error'       , 'An Error occurred, check the error table'),
-       ( 1, 'disabled'    , 'Disables the file for all actions'),
-       ( 2, 'enabled'     , 'Reenables a disabled file');
-
 
 -- Keeps track of all events for the files, with timestamps and user_ids.
 CREATE TABLE file_event_log (

@@ -6,6 +6,7 @@ require (
 	github.com/neicnordic/crypt4gh v1.12.0
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/pretty v1.2.1
+	golang.org/x/term v0.41.0
 )
 
 require (
@@ -15,6 +16,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

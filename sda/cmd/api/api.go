@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -346,6 +347,27 @@ func rbac(e *casbin.Enforcer) gin.HandlerFunc {
 	}
 }
 
+const defaultPageLimit = 1000
+const maxPageLimit = 10000
+
+// parseLimitParam parses and validates the optional "limit" query parameter.
+// It returns defaultPageLimit when the parameter is omitted or empty.
+// It returns an error if the value is not a valid positive integer or exceeds maxPageLimit.
+func parseLimitParam(limitStr string) (int, error) {
+	if limitStr == "" {
+		return defaultPageLimit, nil
+	}
+	li, err := strconv.Atoi(limitStr)
+	if err != nil || li < 1 {
+		return 0, errors.New("invalid limit parameter: must be a positive integer")
+	}
+	if li > maxPageLimit {
+		return 0, fmt.Errorf("invalid limit parameter: must not exceed %d", maxPageLimit)
+	}
+
+	return li, nil
+}
+
 // getFiles returns the files from the database for a specific user
 func getFiles(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -358,12 +380,30 @@ func getFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false)
+	// parse optional pagination params
+	limit, err := parseLimitParam(c.Query("limit"))
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+	cursor := c.DefaultQuery("cursor", "")
+
+	files, nextCursor, err := Conf.API.DB.GetUserFiles(token.Subject(), c.Query("path_prefix"), false, limit, cursor)
+	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		// something went wrong with querying or parsing rows
 		c.JSON(502, err.Error())
 
 		return
+	}
+
+	if nextCursor != "" {
+		c.Header("X-Next-Cursor", nextCursor)
 	}
 
 	// Return response
@@ -991,11 +1031,28 @@ func listUserFiles(c *gin.Context) {
 	username = strings.TrimSuffix(username, "/files")
 	log.Debugln(username)
 
-	files, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true)
+	// parse optional pagination params
+	limit, err := parseLimitParam(c.Query("limit"))
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+
+		return
+	}
+	cursor := c.DefaultQuery("cursor", "")
+	files, nextCursor, err := Conf.API.DB.GetUserFiles(username, c.Query("path_prefix"), true, limit, cursor)
+	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 		return
+	}
+
+	if nextCursor != "" {
+		c.Header("X-Next-Cursor", nextCursor)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")

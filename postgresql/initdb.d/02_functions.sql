@@ -16,6 +16,24 @@ CREATE TRIGGER files_last_modified
     FOR EACH ROW
     EXECUTE PROCEDURE files_updated();
 
+-- Keep files.last_event in sync with file_event_log inserts
+CREATE FUNCTION sda.update_files_last_event()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, sda
+AS $update_files_last_event$
+BEGIN
+    UPDATE sda.files SET last_event = NEW.event WHERE id = NEW.file_id;
+    RETURN NEW;
+END;
+$update_files_last_event$;
+
+CREATE TRIGGER file_event_log_update_last_event
+    AFTER INSERT ON sda.file_event_log
+    FOR EACH ROW
+    EXECUTE PROCEDURE sda.update_files_last_event();
+
 -- Function for registering files on upload
 CREATE FUNCTION sda.register_file(file_id TEXT, submission_location TEXT, submission_file_path TEXT, submission_user TEXT)
     RETURNS TEXT AS $register_file$

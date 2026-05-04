@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -286,62 +287,94 @@ type getUserFilesResponse struct {
 }
 
 func (api *validatorAPIImpl) getUserFiles(userID string, requestedFilePaths []string) (*getUserFilesResponse, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/users/%s/files", api.sdaAPIURL, userID), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create the request, reason: %v", err)
-	}
-
-	// TODO how to handle auth in better way, TBD #989
-	req.Header.Add("Authorization", "Bearer "+api.sdaAPIToken)
-	req.Header.Add("Content-Type", "application/json")
-
-	// Send the request
-	client := &http.Client{}
-	res, err := client.Do(req) // #nosec G704 -- host originates from configuration, TODO verify if to sanitize userID
-	if err != nil {
-		return nil, fmt.Errorf("failed to get response, reason: %v", err)
-	}
-	defer res.Body.Close()
-
-	// Check the status code
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
-	}
-
-	// Read the response body
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body, reason: %v", err)
-	}
-
-	var userFiles []*model.UserFilesResponse
-
-	if err := json.Unmarshal(resBody, &userFiles); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
-	}
-
 	rsp := &getUserFilesResponse{
 		fileInformation: make(map[string]*model.FileInformation),
 	}
 
-	for _, filePath := range requestedFilePaths {
-		fileFound := false
-		for _, userFile := range userFiles {
-			userFile.InboxPath = strings.TrimSuffix(userFile.InboxPath, ".c4gh")
-			if filePath == userFile.InboxPath {
-				rsp.fileInformation[filePath] = &model.FileInformation{
+	// Build a set of still-needed paths so we can stop pagination early.
+	needed := make(map[string]struct{}, len(requestedFilePaths))
+	for _, p := range requestedFilePaths {
+		needed[p] = struct{}{}
+	}
+
+	cursor := ""
+	seenCursors := make(map[string]struct{})
+	client := &http.Client{} // reuse across pages for connection pooling
+	for {
+		reqURL := fmt.Sprintf("%s/users/%s/files?limit=1000", api.sdaAPIURL, url.PathEscape(userID))
+		if cursor != "" {
+			reqURL += "&cursor=" + url.QueryEscape(cursor)
+		}
+
+		req, err := http.NewRequest("GET", reqURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create the request, reason: %v", err)
+		}
+
+		// TODO how to handle auth in better way, TBD #989
+		req.Header.Add("Authorization", "Bearer "+api.sdaAPIToken)
+		req.Header.Add("Content-Type", "application/json")
+
+		// Send the request
+		res, err := client.Do(req) // #nosec G704 -- host originates from configuration
+		if err != nil {
+			return nil, fmt.Errorf("failed to get response, reason: %v", err)
+		}
+
+		// Check the status code
+		if res.StatusCode != http.StatusOK {
+			res.Body.Close()
+
+			return nil, fmt.Errorf("server returned status %d: url: %s", res.StatusCode, req.URL.String())
+		}
+
+		// Read the response body
+		resBody, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body, reason: %v", err)
+		}
+
+		var pageFiles []*model.UserFilesResponse
+		if err := json.Unmarshal(resBody, &pageFiles); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, reason: %v", err)
+		}
+
+		// Match page entries against still-needed paths; stop early when all found.
+		for _, userFile := range pageFiles {
+			inboxPath := strings.TrimSuffix(userFile.InboxPath, ".c4gh")
+			if _, ok := needed[inboxPath]; ok {
+				rsp.fileInformation[inboxPath] = &model.FileInformation{
 					FileID:             userFile.FileID,
-					FilePath:           userFile.InboxPath,
+					FilePath:           inboxPath,
 					SubmissionFileSize: userFile.SubmissionFileSize,
 				}
-				fileFound = true
 				rsp.sumFilesSize += userFile.SubmissionFileSize
-
-				break
+				delete(needed, inboxPath)
 			}
 		}
-		if !fileFound {
-			rsp.missingFiles = append(rsp.missingFiles, filePath)
+
+		// All requested paths found — no need to fetch more pages.
+		if len(needed) == 0 {
+			break
+		}
+
+		// Check for next page
+		nextCursor := res.Header.Get("X-Next-Cursor")
+		if nextCursor == "" {
+			break
+		}
+		if _, seen := seenCursors[nextCursor]; seen {
+			return nil, errors.New("sda api returned a repeated pagination cursor")
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
+	}
+
+	// Any paths still in `needed` were not found.
+	for _, requestedPath := range requestedFilePaths {
+		if _, ok := needed[requestedPath]; ok {
+			rsp.missingFiles = append(rsp.missingFiles, requestedPath)
 		}
 	}
 
