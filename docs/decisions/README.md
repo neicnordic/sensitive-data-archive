@@ -109,6 +109,7 @@ superseded-by: "0005-use-new-approach.md"
 | # | Decision | Status |
 | --- | --- | --- |
 | [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
+| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere — Go code and database | proposed |
 | [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
 | [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
 | [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md) | Introduce RFCs as an upstream exploration phase for ADRs | proposed |
