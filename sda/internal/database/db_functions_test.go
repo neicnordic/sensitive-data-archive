@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -769,12 +768,6 @@ func (suite *DatabaseTests) TestGetUserFiles() {
 	// An invalid cursor must return ErrInvalidCursor.
 	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, "not-a-valid-cursor!!!")
 	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor")
-
-	// A valid base64url string that does not match the expected "<fileid>|<path>" format should
-	// also return ErrInvalidCursor.
-	badFormatCursor := base64.RawURLEncoding.EncodeToString([]byte("badformat"))
-	_, _, err = db.GetUserFiles(testUser, "", true, pageLimit, badFormatCursor)
-	assert.ErrorIs(suite.T(), err, ErrInvalidCursor, "expected ErrInvalidCursor for bad cursor format")
 
 	db.Close()
 }

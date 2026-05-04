@@ -1021,16 +1021,16 @@ func (dbs *SDAdb) getUserFiles(userID, pathPrefix string, allData bool, limit in
 	files := []*SubmissionFileInfo{}
 	db := dbs.DB
 	// last_event is denormalized on sda.files via trigger so no join on file_event_log is needed.
-	// submission_file_path is used as the cursor column for keyset pagination, reusing the
-	// existing files_submission_user_submission_file_path_idx index.
-	const baseQuery = `
+	// f.id (primary key) is used as the cursor for keyset pagination — a single query form
+	// works for both the first page (cursorArg IS NULL) and subsequent pages (f.id > cursorArg).
+	const query = `
 SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
-WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
+ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') != 'disabled'
-` // ORDER/LIMIT appended later
-
+	AND ($4::TEXT IS NULL OR f.id > $4)
+ORDER BY f.id ASC LIMIT $5;`
 	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}
 	if pathPrefix != "" {
@@ -1047,28 +1047,17 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	// Fetch one extra row to determine whether a next page exists.
 	fetchLim := lim + 1
 
-	var rows *sql.Rows
-	var err error
-	if cursor == "" {
-		query := baseQuery + "ORDER BY f.submission_file_path ASC, f.id ASC LIMIT $4;"
-		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, fetchLim)
-	} else {
-		// decode cursor: base64url("<fileid>|<path>") — id is first so splitting on the
-		// first '|' is safe even when the path itself contains '|' characters.
+	cursorArg := sql.NullString{}
+	if cursor != "" {
 		decoded, derr := base64.RawURLEncoding.DecodeString(cursor)
 		if derr != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, derr)
 		}
-		parts := strings.SplitN(string(decoded), "|", 2)
-		if len(parts) != 2 {
-			return nil, "", fmt.Errorf("%w: unexpected format", ErrInvalidCursor)
-		}
-		cursorID := parts[0]
-		cursorPath := parts[1]
-
-		query := baseQuery + "AND (f.submission_file_path > $4 OR (f.submission_file_path = $4 AND f.id > $5)) ORDER BY f.submission_file_path ASC, f.id ASC LIMIT $6;"
-		rows, err = db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorPath, cursorID, fetchLim)
+		cursorArg.Valid = true
+		cursorArg.String = string(decoded)
 	}
+
+	rows, err := db.Query(query, userID, pathPrefixArg, pathPrefixLen, cursorArg, fetchLim)
 	if err != nil {
 		log.Errorf("Error querying user files: %v", err)
 
@@ -1077,7 +1066,6 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 	defer rows.Close()
 
 	// Iterate rows
-	var lastPath string
 	var lastID string
 	for rows.Next() {
 		var accessionID sql.NullString
@@ -1102,7 +1090,6 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		// signals that more data exists and is not returned to the caller.
 		if len(files) <= lim {
 			lastID = fi.FileID
-			lastPath = fi.InboxPath
 		}
 	}
 
@@ -1117,9 +1104,8 @@ WHERE f.submission_user = $1 AND ($2::TEXT IS NULL OR substr(f.submission_file_p
 		files = files[:lim]
 	}
 	if hasMore && lastID != "" {
-		// cursor is base64url("<fileid>|<path>")
-		raw := fmt.Sprintf("%s|%s", lastID, lastPath)
-		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(raw))
+		// cursor is base64url("<fileid>")
+		nextCursor = base64.RawURLEncoding.EncodeToString([]byte(lastID))
 	}
 
 	return files, nextCursor, nil
