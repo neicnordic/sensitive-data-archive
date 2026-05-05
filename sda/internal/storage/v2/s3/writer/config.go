@@ -269,6 +269,7 @@ func sortBucketsNumerically(buckets []string, prefix string) {
 		if aErr != nil || bErr != nil {
 			return strings.Compare(a, b)
 		}
+
 		return aInc - bInc
 	})
 }
