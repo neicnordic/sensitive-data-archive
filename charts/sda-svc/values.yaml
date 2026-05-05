@@ -30,6 +30,12 @@ global:
 # options are `federated` or `isolated`
   schemaType: "federated"
 
+# Deployment environment marker. Today only the v2 download service reads it
+# (`app.environment: production` enables production-only safety guards), but
+# it lives at global scope so other services can adopt the same toggle later.
+# @param global.environment deployment environment ("production" enables prod guards)
+  environment: ""
+
   ingress:
     deploy: true
     ingressClassName: ""
@@ -269,10 +275,6 @@ global:
       orgName: ""
       # @param global.downloadV2.service.orgURL organization URL for GA4GH service-info
       orgURL: ""
-
-    app:
-      # @param global.downloadV2.app.environment set to "production" to enable production guards
-      environment: ""
 
     jwt:
       # @param global.downloadV2.jwt.pubkeyURL URL to JWKS endpoint for JWT verification (alternative to mounting keys via global.oidc.jwtSecret)
