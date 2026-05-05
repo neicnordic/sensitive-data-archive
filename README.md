@@ -233,26 +233,69 @@ Removing the cluster can be done using the `make k3d-delete-cluster` command or 
 
 ### Deploy the components
 
-Deployment of the charts can be done as describe below in more detail, or by using the corresponding command in the [Makefile](./Makefile)
+Deployment of the charts can be done as described below in more detail, or by using the corresponding command in the [Makefile](./Makefile)
 
 #### Makefile commands
 
-- make k3d-deploy-dependencies-federated - bootstrap dependencies, F-EGA use case
-- make k3d-deploy-dependencies-isolated - bootstrap dependencies, standalone use case
-- make k3d-import-images - build and import images into the default cluster named `k3s-default`
-- make k3d-deploy-postgres - deploy the sda-db chart without TLS
-- make k3d-deploy-rabbitmq-federated - deploy the sda-mq chart without TLS, F-EGA use case
-- make k3d-deploy-rabbitmq-isolated - deploy the sda-mq chart without TLS, standalone use case
-- make k3d-deploy-sda-s3-federated - deploy the sda-svc chart with S3 storage without TLS, F-EGA use case
-- make k3d-deploy-sda-s3-isolated - deploy the sda-svc chart with S3 storage without TLS, standalone use case
-- make k3d-deploy-sda-posix - deploy the sda-svc chart with POSIX storage without TLS
-- make k3d-cleanup-all-deployments - Remove all deployed components and dependencies
+bootstrap dependencies, F-EGA use case
+```bash 
+make k3d-deploy-dependencies-federated
+```
+
+bootstrap dependencies, standalone use case
+```bash 
+make k3d-deploy-dependencies-isolated
+```
+
+build and import images into the default cluster named ```bash k3s-default`
+```bash 
+make k3d-import-images
+```
+
+deploy the sda-db chart without TLS
+```bash 
+make k3d-deploy-postgres
+```
+
+deploy the sda-mq chart without TLS, F-EGA use case
+```bash 
+make k3d-deploy-rabbitmq-federated
+```
+
+deploy the sda-mq chart without TLS, standalone use case
+```bash 
+make k3d-deploy-rabbitmq-isolated
+```
+
+deploy the sda-svc chart with S3 storage without TLS, F-EGA use case
+```bash 
+make k3d-deploy-sda-s3-federated
+```
+
+deploy the sda-svc chart with S3 storage without TLS, standalone use case
+```bash 
+make k3d-deploy-sda-s3-isolated
+```
+
+deploy the sda-svc chart with POSIX storage without TLS
+```bash 
+make k3d-deploy-sda-posix
+```
+
+Remove all deployed components and dependencies
+```bash 
+make k3d-cleanup-all-deployments
+```
 
 #### Bootstrap the dependencies
 
-This script requires [yq](https://github.com/mikefarah/yq/releases/latest), the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest) as well as [xxd](https://manpages.org/xxd) and [jq](https://manpages.org/jq) to be installed.
+Running the bootstrap commands requires [yq](https://github.com/mikefarah/yq/releases/latest), the GO version of [crypt4gh](https://github.com/neicnordic/crypt4gh/releases/latest) as well as [xxd](https://manpages.org/xxd) and [jq](https://manpages.org/jq) to be installed.
 
-Bootstrap the dependencies with the command: `make k3d-deploy-dependencies-[federated|isolated]`.
+Bootstrap the dependencies with the command:
+
+```bash
+make k3d-deploy-dependencies-[federated|isolated]
+```
 
 #### Deploy the Sensitive Data Archive components
 
