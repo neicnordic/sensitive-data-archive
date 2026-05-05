@@ -35,7 +35,7 @@ func init() {
 		&config.Flag{
 			Name: "broker.host",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "rabbitmq", "Host address to the rabbitmq server")
+				flagSet.String(flagName, "", "Host address to the rabbitmq server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
