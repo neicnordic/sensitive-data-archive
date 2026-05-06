@@ -133,6 +133,77 @@ Configured via `visa.identity.mode`:
 
 ## Endpoints
 
+### Migrating from v1 (sda-download)
+
+This service replaces the standalone [sda-download](https://github.com/neicnordic/sda-download)
+Go service. The HTTP surface has been reorganised; the table below maps the
+common v1 endpoints to their v2 equivalents.
+
+#### Endpoint mapping
+
+| v1 endpoint                                | v2 endpoint                                  | Notes                                                                                   |
+|--------------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------|
+| `GET /metadata/datasets`                   | `GET /datasets`                              | Returns paginated objects with metadata, not a flat array of dataset IDs                |
+| `GET /metadata/datasets/{ds}/files`        | `GET /datasets/:datasetId/files`             | Paginated; response shape changed (see below)                                           |
+| `GET /files/{fileId}`                      | `GET /files/:fileId`                         | Path unchanged. Re-encrypted Crypt4GH file. Range support via HTTP `Range` header only. |
+| `HEAD /files/{fileId}`                     | `HEAD /files/:fileId`                        | Path unchanged                                                                          |
+| `GET /s3/{datasetid}/{fileid}` (decrypted) | _Removed_                                    | Decrypted streaming is no longer offered. Clients decrypt locally with their c4gh key.  |
+| `GET /s3-encrypted/{datasetid}/{fileid}`   | `GET /files/:fileId/content`                 | Returns encrypted data segments only (no Crypt4GH header). Range supported.             |
+| _New in v2_                                | `GET /files/:fileId/header`                  | Re-encrypted Crypt4GH header only — useful for htsget-style clients that fetch the header once and stream content separately. |
+| _New in v2_                                | `GET /objects/:datasetId/:filePath`          | GA4GH DRS 1.5 object endpoint. Returns checksums of the **encrypted** blob (per DRS).   |
+
+#### File listing response shape
+
+v1 returned a flat array; v2 wraps the array in an envelope and renames a few
+fields:
+
+| v1 field                        | v2 field                              | Notes                                                                                |
+|---------------------------------|---------------------------------------|--------------------------------------------------------------------------------------|
+| `fileId`                        | `fileId`                              | Unchanged                                                                            |
+| `filePath`                      | `filePath`                            | Unchanged                                                                            |
+| `displayFileName`               | _Removed_                             | Derive from `filePath` if needed (final path segment)                                |
+| `decryptedFileSize`             | `decryptedSize`                       | Renamed                                                                              |
+| _(not in v1)_                   | `size`                                | Encrypted blob size (the bytes served at `downloadUrl`)                              |
+| `decryptedFileChecksum` + `decryptedFileChecksumType` | `checksums[]` array | Same source (`UNENCRYPTED`), array shape allows multiple algorithms — see [Checksums](#checksums) |
+| _(not in v1)_                   | `downloadUrl`                         | Convenience pointer to `/files/:fileId`                                              |
+| _(top-level)_                   | `nextPageToken`                       | Pagination cursor — see [Pagination](#pagination) below                              |
+
+#### Other behavioural changes
+
+- **Public-key header renamed.** v1 used `Client-public-key`; v2 uses `X-C4GH-Public-Key`
+  (still base64-encoded). v1's separate `?scheme=` query parameter has been removed
+  — encode dataset IDs as path segments directly.
+- **Range parameters removed.** v1 accepted `?startCoordinate=&endCoordinate=`
+  query parameters as well as the HTTP `Range` header. v2 only honours `Range:
+  bytes=START-END`, which keeps it aligned with standard HTTP byte-range semantics.
+- **`ETag` semantics changed.** v1 set `ETag` to the plaintext SHA-256 of the
+  file (i.e. the same value as `decryptedFileChecksum`). v2 sets `ETag` to a
+  SHA-256 of the re-encrypted Crypt4GH header — it is stable per (file, recipient
+  key) but is **not** a full-file digest and is **not** the plaintext checksum.
+  Use `checksums[]` from `/datasets/:ds/files` for end-to-end verification.
+- **Session cookie default renamed** from `sda_session_key` to `sda_session`. The
+  legacy name is still accepted for backwards compatibility — see
+  [Session Caching](#session-caching).
+- **`X-Amz-Security-Token` accepted** alongside `Authorization: Bearer` to support
+  S3-style clients. v1 only accepted `Authorization`.
+
+#### Pagination
+
+v1 list endpoints returned a single response with the full result set. v2
+returns paginated envelopes:
+
+```json
+{
+  "datasets": [ ... ],
+  "nextPageToken": "ptk_7f9K2mQxVb3N"
+}
+```
+
+If `nextPageToken` is non-null, pass it as `?page_token=<token>` to retrieve
+the next page. The `page_size` parameter is optional and bounded server-side.
+Page tokens are HMAC-signed and tied to the originating query — do not modify
+or reuse them across different queries.
+
 ### Health Endpoints
 
 #### `GET /health/ready`
@@ -228,6 +299,34 @@ Example:
 curl -H "Authorization: Bearer $token" https://HOSTNAME/datasets/EGAD00000000001/files
 ```
 
+Response:
+
+```json
+{
+  "files": [
+    {
+      "fileId": "EGAF00000000001",
+      "filePath": "samples/sample1.bam.c4gh",
+      "size": 1048576,
+      "decryptedSize": 1048512,
+      "checksums": [
+        {"type": "sha256", "checksum": "7d2c8b4a..."}
+      ],
+      "downloadUrl": "/files/EGAF00000000001"
+    }
+  ],
+  "nextPageToken": null
+}
+```
+
+`checksums[]` are over the decrypted (plaintext) file content. This is the
+value to verify against after decrypting the downloaded `.c4gh` file. It
+replaces v1's `decryptedFileChecksum` / `decryptedFileChecksumType` fields,
+shaped as an array so a file can carry multiple algorithms.
+
+See [Checksums](#checksums) for the differences between this endpoint and
+the DRS object endpoint.
+
 ### File Endpoints
 
 All file endpoints require authentication. Download endpoints also require a Crypt4GH
@@ -303,6 +402,31 @@ curl -H "Authorization: Bearer $token" \
      -H "Range: bytes=0-65535" \
      https://HOSTNAME/files/EGAF00000000001/content
 ```
+
+### Checksums
+
+The service exposes two distinct checksum values for each file. Pick the one
+that matches what your client is verifying:
+
+| Endpoint                          | Source        | Describes                                    | Use for                                       |
+|-----------------------------------|---------------|----------------------------------------------|-----------------------------------------------|
+| `GET /datasets/:ds/files`         | `UNENCRYPTED` | Decrypted (plaintext) file content           | End-user integrity check after decrypting     |
+| `GET /objects/:ds/:filePath` (DRS)| `ARCHIVED`    | Encrypted blob in archive (per DRS 1.5 spec) | DRS-aware tooling (htsget-rs, etc.)           |
+
+For users downloading a file and verifying it locally, the value to compare
+against is the `UNENCRYPTED` checksum returned by `/datasets/:ds/files`. The
+`ARCHIVED` checksum exists to satisfy GA4GH DRS 1.5, where `size` and
+`checksums` must describe the bytes served at `access_url`.
+
+**v1 to v2 mapping:** if you previously read `decryptedFileChecksum` from v1's
+`/metadata/datasets/{ds}/files`, the v2 equivalent is `checksums[]` on
+`/datasets/:ds/files`. Same source, just shaped as an array.
+
+**The bytes returned by `GET /files/:fileId/content` match neither checksum
+directly.** The Crypt4GH header is re-encrypted per recipient key on every
+request, so the wire bytes change between requests. The `ETag` on this
+response is `sha256` of the re-encrypted header only, not a full-file digest.
+Verify after decryption against the `UNENCRYPTED` checksum.
 
 ### DRS Object Endpoint
 
