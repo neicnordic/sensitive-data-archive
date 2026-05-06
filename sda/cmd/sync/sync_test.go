@@ -161,23 +161,23 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	assert.NoError(s.T(), err)
 	defer func() { _ = db.Close() }()
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
+	fileID, err := db.RegisterFile(context.Background(), nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.SetAccessionID(context.TODO(), "ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
+	err = db.SetAccessionID(context.Background(), "ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
 	assert.NoError(s.T(), err)
 
 	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
 	fileInfo := &database.FileInfo{ArchivedChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
 
-	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
+	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(context.TODO(), fileInfo, fileID)
+	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
 
-	assert.NoError(s.T(), db.MapFileToDataset(context.TODO(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID), "failed to map file to dataset")
+	assert.NoError(s.T(), db.MapFileToDataset(context.Background(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID), "failed to map file to dataset")
 
 	m := []byte(`{"type":"mapping", "dataset_id": "cd532362-e06e-4461-8490-b9ce64b8d9e7", "accession_ids": ["ed6af454-d910-49e3-8cda-488a6f246e67"]}`)
-	jsonData, err := buildSyncDatasetJSON(context.TODO(), m)
+	jsonData, err := buildSyncDatasetJSON(context.Background(), m)
 	assert.NoError(s.T(), err)
 	dataset := []byte(`{"dataset_id":"cd532362-e06e-4461-8490-b9ce64b8d9e7","dataset_files":[{"filepath":"dummy.user/test/file1.c4gh","file_id":"ed6af454-d910-49e3-8cda-488a6f246e67","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}],"user":"dummy.user"}`)
 	assert.Equal(s.T(), string(dataset), string(jsonData))
