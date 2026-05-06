@@ -318,9 +318,9 @@ type TestSuite struct {
 }
 
 func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, hash.Hash) {
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update status of file in database")
 
 	encSha := sha256.New()
@@ -338,11 +338,11 @@ func helperCreateVerifiedTestFile(s *TestSuite, user, filePath string) (string, 
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
+	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(context.TODO(), fileInfo, fileID)
+	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "verified", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "verified", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update status of file in database")
 
 	return fileID, decSha
@@ -634,8 +634,8 @@ func (s *TestSuite) SetupTest() {
 }
 
 func (s *TestSuite) TestDatabasePingCheck() {
-	assert.Error(s.T(), checkDB(context.TODO(), nil, 1*time.Second), "nil DB should fail")
-	assert.NoError(s.T(), checkDB(context.TODO(), db, 1*time.Second), "ping should succeed")
+	assert.Error(s.T(), checkDB(context.Background(), nil, 1*time.Second), "nil DB should fail")
+	assert.NoError(s.T(), checkDB(context.Background(), db, 1*time.Second), "ping should succeed")
 }
 
 func (s *TestSuite) TestAPIGetFiles() {
@@ -680,11 +680,11 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 	// Insert a file and make sure it is listed
 	file1 := fmt.Sprintf("/%v/TestAPIGetFiles.c4gh", s.User)
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, file1, s.User)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, file1, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 
 	latestStatus := "uploaded"
-	err = db.UpdateFileEventLog(context.TODO(), fileID, latestStatus, s.User, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, latestStatus, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when trying to update file status")
 
 	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
@@ -699,12 +699,12 @@ func (s *TestSuite) TestAPIGetFiles() {
 	assert.NoError(s.T(), err)
 
 	// Update the file's status and make sure only the lastest status is listed
-	err = db.SetAccessionID(context.TODO(), "accessionID", fileID)
+	err = db.SetAccessionID(context.Background(), "accessionID", fileID)
 	if err != nil {
 		s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), "accessionID", fileID)
 	}
 	latestStatus = "ready"
-	err = db.UpdateFileEventLog(context.TODO(), fileID, latestStatus, s.User, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, latestStatus, s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when trying to update file status")
 
 	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
@@ -724,7 +724,7 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 	// Insert a second file and make sure it is listed
 	file2 := fmt.Sprintf("/%v/TestAPIGetFiles2.c4gh", s.User)
-	_, err = db.RegisterFile(context.TODO(), nil, s.inboxDir, file2, s.User)
+	_, err = db.RegisterFile(context.Background(), nil, s.inboxDir, file2, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
 
 	resp, err = client.Do(req) // #nosec G704 -- request controlled by unit test
@@ -750,17 +750,17 @@ func (s *TestSuite) TestAPIGetFiles() {
 
 func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {
 	for i := 1; i <= 2; i++ {
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", "submission_b", i), "dummy")
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
-		err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", "dummy", "{}", "{}")
+		err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", "dummy", "{}", "{}")
 		if err != nil {
 			s.FailNow("failed to update status of file in database")
 		}
 
-		if err := db.SetSubmissionFileSize(context.TODO(), fileID, int64(2*i)); err != nil {
+		if err := db.SetSubmissionFileSize(context.Background(), fileID, int64(2*i)); err != nil {
 			s.FailNow("failed to set submission file size")
 		}
 	}
@@ -818,12 +818,12 @@ func (s *TestSuite) TestAPIGetFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
 
-			err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+			err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 			if err != nil {
 				s.FailNow("failed to update satus of file in database")
 			}
@@ -1312,9 +1312,9 @@ func (s *TestSuite) TestIngestFile_WithPayload() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1371,9 +1371,9 @@ func (s *TestSuite) TestIngestFile_WithPayload_NoUser() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1405,9 +1405,9 @@ func (s *TestSuite) TestIngestFile_WithPayload_WrongUser() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1438,9 +1438,9 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file10.c4gh"
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1472,9 +1472,9 @@ func (s *TestSuite) TestIngestFile_WrongFilePath() {
 func (s *TestSuite) TestIngestFile_WithFileID() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file11.c4gh"
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1517,9 +1517,9 @@ func (s *TestSuite) TestIngestFile_WithFileID() {
 func (s *TestSuite) TestIngestFile_WithFileID_WrongID() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file11.c4gh"
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1543,9 +1543,9 @@ func (s *TestSuite) TestIngestFile_WithFileID_WrongID() {
 func (s *TestSuite) TestIngestFile_BothFileIDAndPayloadProvided() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err)
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1880,9 +1880,9 @@ func (s *TestSuite) TestCreateDataset() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update status of file in database")
 
 	encSha := sha256.New()
@@ -1900,16 +1900,16 @@ func (s *TestSuite) TestCreateDataset() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
+	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
-	err = db.SetVerified(context.TODO(), fileInfo, fileID)
+	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.SetAccessionID(context.TODO(), "API:accession-id-11", fileID)
+	err = db.SetAccessionID(context.Background(), "API:accession-id-11", fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file accession", err)
 
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "ready", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "ready", user, "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when setting file status ready", err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -1962,9 +1962,9 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	encSha := sha256.New()
@@ -1982,19 +1982,19 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
+	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
-	err = db.SetVerified(context.TODO(), fileInfo, fileID)
+	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.SetAccessionID(context.TODO(), "API:accession-id-11", fileID)
+	err = db.SetAccessionID(context.Background(), "API:accession-id-11", fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.SetAccessionID(context.TODO(), "API:accession-id-11", fileID)
+	err = db.SetAccessionID(context.Background(), "API:accession-id-11", fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "ready", "finalize", "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "ready", "finalize", "{}", "{}")
 	assert.NoError(s.T(), err, "got (%v) when marking file as ready", err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -2084,9 +2084,9 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	encSha := sha256.New()
@@ -2104,16 +2104,16 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 		DecryptedChecksum: fmt.Sprintf("%x", decSha.Sum(nil)),
 		DecryptedSize:     948,
 	}
-	err = db.SetArchived(context.TODO(), "/archive", fileInfo, fileID)
+	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Archived")
 
-	err = db.SetVerified(context.TODO(), fileInfo, fileID)
+	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.SetAccessionID(context.TODO(), "API:accession-id-11", fileID)
+	err = db.SetAccessionID(context.Background(), "API:accession-id-11", fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
-	err = db.SetAccessionID(context.TODO(), "API:accession-id-11", fileID)
+	err = db.SetAccessionID(context.Background(), "API:accession-id-11", fileID)
 	assert.NoError(s.T(), err, "got (%v) when marking file as verified", err)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -2142,27 +2142,27 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 func (s *TestSuite) TestReleaseDataset() {
 	user := "TestReleaseDataset"
 	for i := 0; i < 3; i++ {
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
-		err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+		err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 		if err != nil {
 			s.FailNow("failed to update satus of file in database")
 		}
 
 		accessionID := fmt.Sprintf("accession_%s_0%d", user, i)
-		err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+		err = db.SetAccessionID(context.Background(), accessionID, fileID)
 		if err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
-		if err := db.MapFileToDataset(context.TODO(), "API:dataset-01", fileID); err != nil {
+		if err := db.MapFileToDataset(context.Background(), "API:dataset-01", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-01", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-01", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
@@ -2275,18 +2275,18 @@ func (s *TestSuite) TestReleaseDataset_DeprecatedDataset() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
 
-			err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+			err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 			if err != nil {
 				s.FailNow("failed to update satus of file in database")
 			}
 
 			accessionID := fmt.Sprintf("accession_%s_0%d", user, i)
-			err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+			err = db.SetAccessionID(context.Background(), accessionID, fileID)
 			if err != nil {
 				s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 			}
@@ -2294,13 +2294,13 @@ func (s *TestSuite) TestReleaseDataset_DeprecatedDataset() {
 			if user != "user_example.org" {
 				continue
 			}
-			if err := db.MapFileToDataset(context.TODO(), "test-dataset-01", fileID); err != nil {
+			if err := db.MapFileToDataset(context.Background(), "test-dataset-01", fileID); err != nil {
 				s.FailNow("failed to map files to dataset")
 			}
 		}
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "test-dataset-01", "deprecated", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "test-dataset-01", "deprecated", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
@@ -2337,18 +2337,18 @@ func (s *TestSuite) TestListActiveUsers() {
 	testUsers := []string{"User-A", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 3; i++ {
-			fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
+			fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), user)
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
 
-			err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+			err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 			if err != nil {
 				s.FailNow("failed to update satus of file in database")
 			}
 
 			accessionID := fmt.Sprintf("accession_%s_0%d", user, i)
-			err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+			err = db.SetAccessionID(context.Background(), accessionID, fileID)
 			if err != nil {
 				s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 			}
@@ -2357,7 +2357,7 @@ func (s *TestSuite) TestListActiveUsers() {
 				continue
 			}
 
-			if err = db.MapFileToDataset(context.TODO(), "test-dataset-01", fileID); err != nil {
+			if err = db.MapFileToDataset(context.Background(), "test-dataset-01", fileID); err != nil {
 				s.FailNow("failed to map files to dataset")
 			}
 		}
@@ -2399,18 +2399,18 @@ func (s *TestSuite) TestListUserFiles() {
 	testUsers := []string{"user_example.org", "User-B", "User-C"}
 	for _, user := range testUsers {
 		for i := 0; i < 5; i++ {
-			fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/%v/TestGetUserFiles-00%d.c4gh", user, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
 
-			err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+			err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 			if err != nil {
 				s.FailNow("failed to update satus of file in database")
 			}
 
 			accessionID := fmt.Sprintf("accession_%s_0%d", user, i)
-			err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+			err = db.SetAccessionID(context.Background(), accessionID, fileID)
 			if err != nil {
 				s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 			}
@@ -2420,7 +2420,7 @@ func (s *TestSuite) TestListUserFiles() {
 			}
 
 			if i < 3 {
-				if err = db.MapFileToDataset(context.TODO(), "test-dataset-01", fileID); err != nil {
+				if err = db.MapFileToDataset(context.Background(), "test-dataset-01", fileID); err != nil {
 					s.FailNow("failed to map files to dataset")
 				}
 			}
@@ -2470,12 +2470,12 @@ func (s *TestSuite) TestListUserFiles_filteredSelection() {
 				sub = "submission_b"
 			}
 
-			fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
+			fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("%s/TestGetUserFiles-00%d.c4gh", sub, i), strings.ReplaceAll(user, "_", "@"))
 			if err != nil {
 				s.FailNow("failed to register file in database")
 			}
 
-			err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}")
+			err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
 			if err != nil {
 				s.FailNow("failed to update satus of file in database")
 			}
@@ -2634,7 +2634,7 @@ func (s *TestSuite) TestAddC4ghHash_notBase64() {
 }
 
 func (s *TestSuite) TestListC4ghHashes() {
-	assert.NoError(s.T(), db.AddKeyHash(context.TODO(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
+	assert.NoError(s.T(), db.AddKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23", "this is a test key"), "failed to register key in database")
 
 	expectedResponse := c4ghKeyHash{
 		Hash:         "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc23",
@@ -2676,7 +2676,7 @@ func (s *TestSuite) TestListC4ghHashes() {
 }
 
 func (s *TestSuite) TestDeprecateC4ghHash() {
-	assert.NoError(s.T(), db.AddKeyHash(context.TODO(), "abc8f5cc8d936ce437a52cd9991453839581fc69ee26e0daefde6a5d2660fc23", "this is a deprecation test key"), "failed to register key in database")
+	assert.NoError(s.T(), db.AddKeyHash(context.Background(), "abc8f5cc8d936ce437a52cd9991453839581fc69ee26e0daefde6a5d2660fc23", "this is a deprecation test key"), "failed to register key in database")
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(s.T(), setupJwtAuth())
@@ -2706,7 +2706,7 @@ func (s *TestSuite) TestDeprecateC4ghHash() {
 }
 
 func (s *TestSuite) TestDeprecateC4ghHash_wrongHash() {
-	assert.NoError(s.T(), db.AddKeyHash(context.TODO(), "abc8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99", "this is a deprecation test key"), "failed to register key in database")
+	assert.NoError(s.T(), db.AddKeyHash(context.Background(), "abc8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc99", "this is a deprecation test key"), "failed to register key in database")
 
 	gin.SetMode(gin.ReleaseMode)
 	assert.NoError(s.T(), setupJwtAuth())
@@ -2731,34 +2731,34 @@ func (s *TestSuite) TestDeprecateC4ghHash_wrongHash() {
 
 func (s *TestSuite) TestListDatasets() {
 	for i := 0; i < 5; i++ {
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/dummy/TestGetUserFiles-00%d.c4gh", i), "dummy")
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
 		accessionID := fmt.Sprintf("accession_%s_0%d", "dummy", i)
-		err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+		err = db.SetAccessionID(context.Background(), accessionID, fileID)
 		if err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
 
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-01", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-01", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-02", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-02", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-01", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-01", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "released", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "released", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
@@ -2788,33 +2788,33 @@ func (s *TestSuite) TestListDatasets() {
 
 func (s *TestSuite) TestListUserDatasets() {
 	for i := 0; i < 5; i++ {
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), strings.ReplaceAll("user_example.org", "_", "@"))
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
 		accessionID := fmt.Sprintf("accession_%s_0%d", "user_example.org", i)
-		err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+		err = db.SetAccessionID(context.Background(), accessionID, fileID)
 		if err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
 
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-01", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-01", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-02", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-02", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-01", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-01", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "released", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "released", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
@@ -2844,33 +2844,33 @@ func (s *TestSuite) TestListUserDatasets() {
 
 func (s *TestSuite) TestListDatasetsAsUser() {
 	for i := 0; i < 5; i++ {
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), s.User)
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, fmt.Sprintf("/user_example.org/TestGetUserFiles-00%d.c4gh", i), s.User)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
 		accessionID := fmt.Sprintf("accession_user_example.org_0%d", i)
-		err = db.SetAccessionID(context.TODO(), accessionID, fileID)
+		err = db.SetAccessionID(context.Background(), accessionID, fileID)
 		if err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
 
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-01", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-01", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
-		if err = db.MapFileToDataset(context.TODO(), "API:dataset-02", fileID); err != nil {
+		if err = db.MapFileToDataset(context.Background(), "API:dataset-02", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-01", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-01", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "registered", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "registered", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
-	if err := db.UpdateDatasetEvent(context.TODO(), "API:dataset-02", "released", "{}"); err != nil {
+	if err := db.UpdateDatasetEvent(context.Background(), "API:dataset-02", "released", "{}"); err != nil {
 		s.FailNow("failed to update dataset event")
 	}
 
@@ -2902,12 +2902,12 @@ func (s *TestSuite) TestReVerifyFile() {
 	user := "TestReVerify"
 	for i := 0; i < 3; i++ {
 		filePath := fmt.Sprintf("/%v/TestReVerify-00%d.c4gh", user, i)
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
-		if err := db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}"); err != nil {
+		if err := db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}"); err != nil {
 			s.FailNow("failed to update satus of file in database")
 		}
 		encSha := sha256.New()
@@ -2930,19 +2930,19 @@ func (s *TestSuite) TestReVerifyFile() {
 			Size:              1000,
 			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := db.SetArchived(context.TODO(), "/archive", fileInfo, fileID); err != nil {
+		if err := db.SetArchived(context.Background(), "/archive", fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Archived")
 		}
 
-		if err := db.SetVerified(context.TODO(), fileInfo, fileID); err != nil {
+		if err := db.SetVerified(context.Background(), fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Verified")
 		}
 
 		accessionID := fmt.Sprintf("accession_%s_0%d", user, i)
-		if err := db.SetAccessionID(context.TODO(), accessionID, fileID); err != nil {
+		if err := db.SetAccessionID(context.Background(), accessionID, fileID); err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
-		if err := db.UpdateFileEventLog(context.TODO(), fileID, "ready", "finalize", "{}", "{}"); err != nil {
+		if err := db.UpdateFileEventLog(context.Background(), fileID, "ready", "finalize", "{}", "{}"); err != nil {
 			s.FailNowf("got (%s) when updating file status: %s", err.Error(), filePath)
 		}
 	}
@@ -3004,12 +3004,12 @@ func (s *TestSuite) TestReVerifyDataset() {
 	user := "TestReVerifyDataset"
 	for i := 0; i < 3; i++ {
 		filePath := fmt.Sprintf("/%v/TestReVerifyDataset-00%d.c4gh", user, i)
-		fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, user)
+		fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
 		if err != nil {
 			s.FailNow("failed to register file in database")
 		}
 
-		if err := db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", user, "{}", "{}"); err != nil {
+		if err := db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}"); err != nil {
 			s.FailNow("failed to update satus of file in database")
 		}
 		encSha := sha256.New()
@@ -3032,22 +3032,22 @@ func (s *TestSuite) TestReVerifyDataset() {
 			Size:              1000,
 			UploadedChecksum:  fmt.Sprintf("%x", encSha.Sum(nil)),
 		}
-		if err := db.SetArchived(context.TODO(), "/archive", fileInfo, fileID); err != nil {
+		if err := db.SetArchived(context.Background(), "/archive", fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Archived")
 		}
 
-		if err := db.SetVerified(context.TODO(), fileInfo, fileID); err != nil {
+		if err := db.SetVerified(context.Background(), fileInfo, fileID); err != nil {
 			s.FailNow("failed to mark file as Verified")
 		}
 
 		accessionID := fmt.Sprintf("%s_0%d", user, i)
-		if err := db.SetAccessionID(context.TODO(), accessionID, fileID); err != nil {
+		if err := db.SetAccessionID(context.Background(), accessionID, fileID); err != nil {
 			s.FailNowf("got (%s) when setting accession ID: %s, %s", err.Error(), accessionID, fileID)
 		}
-		if err := db.UpdateFileEventLog(context.TODO(), fileID, "ready", "finalize", "{}", "{}"); err != nil {
+		if err := db.UpdateFileEventLog(context.Background(), fileID, "ready", "finalize", "{}", "{}"); err != nil {
 			s.FailNowf("got (%s) when updating file status: %s", err.Error(), filePath)
 		}
-		if err := db.MapFileToDataset(context.TODO(), "test-dataset-01", fileID); err != nil {
+		if err := db.MapFileToDataset(context.Background(), "test-dataset-01", fileID); err != nil {
 			s.FailNow("failed to map files to dataset")
 		}
 	}
@@ -3123,9 +3123,9 @@ func (s *TestSuite) TestDownloadFile() {
 	defer ts.Close()
 
 	// Register the file in the database
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filepath.Base(s.GoodC4ghFile), s.User)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filepath.Base(s.GoodC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", s.User, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	// Mock request to download the file
@@ -3210,9 +3210,9 @@ func (s *TestSuite) TestDownloadFile_fileNotExist() {
 
 	// Register a file in the database (but don't create the actual file)
 	filePath := fmt.Sprintf("/%v/nonexistent.c4gh", s.User)
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filePath, s.User)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", s.User, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	// Mock request to download the file
@@ -3242,9 +3242,9 @@ func (s *TestSuite) TestDownloadFile_badC4ghFile() {
 	defer ts.Close()
 
 	// Register a file in the database (but don't create the actual file)
-	fileID, err := db.RegisterFile(context.TODO(), nil, s.inboxDir, filepath.Base(s.BadC4ghFile), s.User)
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filepath.Base(s.BadC4ghFile), s.User)
 	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.UpdateFileEventLog(context.TODO(), fileID, "uploaded", s.User, "{}", "{}")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", s.User, "{}", "{}")
 	assert.NoError(s.T(), err, "failed to update satus of file in database")
 
 	// Mock request to download the file
@@ -3274,7 +3274,7 @@ func (s *TestSuite) TestReencryptHeader() {
 	}
 
 	// Call the function under test
-	newHeader, err := reencryptHeader(context.TODO(), s.FileHeader, s.UserKey.PubKeyBase64)
+	newHeader, err := reencryptHeader(context.Background(), s.FileHeader, s.UserKey.PubKeyBase64)
 	if err != nil {
 		s.T().Fatal("reencryptHeader failed:", err)
 	}
@@ -3288,7 +3288,7 @@ func (s *TestSuite) TestReencryptHeader_failedToConnect() {
 	// Mock the server address to an invalid one
 	Conf.API.Grpc.Host, Conf.API.Grpc.Port, _ = splitHostPort("localhost:9999")
 
-	newHeader, err := reencryptHeader(context.TODO(), s.FileHeader, s.UserKey.PubKeyBase64)
+	newHeader, err := reencryptHeader(context.Background(), s.FileHeader, s.UserKey.PubKeyBase64)
 	if err == nil {
 		s.T().Fatal("Expected an error due to failed connection, but got nil")
 	}

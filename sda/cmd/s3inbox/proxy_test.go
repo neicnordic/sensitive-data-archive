@@ -68,7 +68,7 @@ func (s *ProxyTests) SetupTest() {
 		Region:    "us-east-1",
 	}
 	var err error
-	s.s3ClientToFake, err = newS3Client(context.TODO(), s.s3Fakeconf)
+	s.s3ClientToFake, err = newS3Client(context.Background(), s.s3Fakeconf)
 	if err != nil {
 		s.FailNow(err.Error())
 	}
@@ -80,7 +80,7 @@ func (s *ProxyTests) SetupTest() {
 		Bucket:    "buckbuck",
 		Region:    "us-east-1",
 	}
-	s.s3Client, err = newS3Client(context.TODO(), s.s3Conf)
+	s.s3Client, err = newS3Client(context.Background(), s.s3Conf)
 	if err != nil {
 		s.FailNow(err.Error())
 	}
@@ -148,7 +148,7 @@ func (s *ProxyTests) SetupTest() {
 		s.T().FailNow()
 	}
 
-	s3cfg, err := s3config.LoadDefaultConfig(context.TODO(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.s3Conf.AccessKey, s.s3Conf.SecretKey, "")))
+	s3cfg, err := s3config.LoadDefaultConfig(context.Background(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.s3Conf.AccessKey, s.s3Conf.SecretKey, "")))
 	if err != nil {
 		s.FailNow("bad")
 	}
@@ -161,12 +161,12 @@ func (s *ProxyTests) SetupTest() {
 			o.UsePathStyle = true
 		},
 	)
-	_, _ = s3Client.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: aws.String(s.s3Conf.Bucket)})
+	_, _ = s3Client.CreateBucket(context.Background(), &s3.CreateBucketInput{Bucket: aws.String(s.s3Conf.Bucket)})
 	if err != nil {
 		_, _ = fmt.Println(err.Error())
 	}
 
-	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+	output, err := s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Body:            strings.NewReader("This is a test"),
 		Bucket:          aws.String(s.s3Conf.Bucket),
 		Key:             aws.String("/dummy/file"),
@@ -628,7 +628,7 @@ func (s *ProxyTests) TestCheckFileExists() {
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), messenger, s.database, new(tls.Config))
-	res, err := proxy.checkFileExists(context.TODO(), "/dummy/file")
+	res, err := proxy.checkFileExists(context.Background(), "/dummy/file")
 	assert.True(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -640,7 +640,7 @@ func (s *ProxyTests) TestCheckFileExists_nonExistingFile() {
 	assert.NoError(s.T(), err)
 	defer messenger.Connection.Close()
 	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
-	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	res, err := proxy.checkFileExists(context.Background(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.Nil(s.T(), err)
 }
@@ -655,9 +655,9 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Unaccessible S3 (wrong port)
 	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 	proxy.s3Conf.Endpoint = "http://127.0.0.1:1111"
-	proxy.s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	proxy.s3Client, err = newS3Client(context.Background(), proxy.s3Conf)
 	assert.NoError(s.T(), err)
-	res, err := proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	res, err := proxy.checkFileExists(context.Background(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "S3: HeadObject")
@@ -665,9 +665,9 @@ func (s *ProxyTests) TestCheckFileExists_unresponsive() {
 	// Bad access key gives 403
 	proxy.s3Conf.Endpoint = s.s3Conf.Endpoint
 	proxy.s3Conf.AccessKey = "invaild"
-	proxy.s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	proxy.s3Client, err = newS3Client(context.Background(), proxy.s3Conf)
 	assert.NoError(s.T(), err)
-	res, err = proxy.checkFileExists(context.TODO(), "nonexistingfilepath")
+	res, err = proxy.checkFileExists(context.Background(), "nonexistingfilepath")
 	assert.False(s.T(), res)
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "StatusCode: 403")
@@ -680,21 +680,21 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_s3Failure() {
 
 	proxy := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 
-	fileID, err := proxy.database.RegisterFile(context.TODO(), nil, "/inbox", "/dummy/file", "test-user")
+	fileID, err := proxy.database.RegisterFile(context.Background(), nil, "/inbox", "/dummy/file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
 	// Detect autentication failure
 	proxy.s3Conf.AccessKey = "badKey"
-	proxy.s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	proxy.s3Client, err = newS3Client(context.Background(), proxy.s3Conf)
 	assert.NoError(s.T(), err)
-	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
+	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.Background(), "/dummy/file", fileID))
 
 	// Detect unresponsive backend service
 	proxy.s3Conf.Endpoint = "http://127.0.0.1:1234"
-	proxy.s3Client, err = newS3Client(context.TODO(), proxy.s3Conf)
+	proxy.s3Client, err = newS3Client(context.Background(), proxy.s3Conf)
 	assert.NoError(s.T(), err)
-	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.TODO(), "/dummy/file", fileID))
+	assert.Error(s.T(), proxy.storeObjectSizeInDB(context.Background(), "/dummy/file", fileID))
 }
 
 // This test is intended to try to catch some issues we sometimes see when a query to the S3 backend
@@ -706,11 +706,11 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 
 	p := NewProxy(s.s3Conf, s.s3Client, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
 
-	fileID, err := p.database.RegisterFile(context.TODO(), nil, "/inbox", "/test/new_file", "test-user")
+	fileID, err := p.database.RegisterFile(context.Background(), nil, "/inbox", "/test/new_file", "test-user")
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), fileID)
 
-	s3cfg, err := s3config.LoadDefaultConfig(context.TODO(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.s3Conf.AccessKey, s.s3Conf.SecretKey, "")))
+	s3cfg, err := s3config.LoadDefaultConfig(context.Background(), s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.s3Conf.AccessKey, s.s3Conf.SecretKey, "")))
 	if err != nil {
 		s.FailNow(err.Error())
 	}
@@ -724,7 +724,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 		},
 	)
 
-	output, err := s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+	output, err := s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Body:            strings.NewReader(strings.Repeat("A", 10*1024*1024)),
 		Bucket:          aws.String(s.s3Conf.Bucket),
 		Key:             aws.String("/test/new_file"),
@@ -733,7 +733,7 @@ func (s *ProxyTests) TestStoreObjectSizeInDB_fastCheck() {
 	assert.NoError(s.T(), err)
 	assert.NotNil(s.T(), output, output)
 
-	assert.NoError(s.T(), p.storeObjectSizeInDB(context.TODO(), "/test/new_file", fileID))
+	assert.NoError(s.T(), p.storeObjectSizeInDB(context.Background(), "/test/new_file", fileID))
 
 	var objectSize int64
 	// If the S3 backend haven't had the time to process the request above correctly this will generate an error.

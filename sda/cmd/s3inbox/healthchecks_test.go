@@ -43,7 +43,7 @@ func (ts *HealthcheckTestSuite) SetupTest() {
 		Region:    "us-east-1",
 	}
 	var err error
-	ts.s3ClientToMock, err = newS3Client(context.TODO(), ts.mockS3Conf)
+	ts.s3ClientToMock, err = newS3Client(context.Background(), ts.mockS3Conf)
 	if err != nil {
 		ts.FailNow(err.Error())
 	}

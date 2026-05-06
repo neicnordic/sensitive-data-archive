@@ -214,26 +214,26 @@ func (ts *TestSuite) SetupSuite() {
 	}
 
 	for i, kh := range []string{"79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", hex.EncodeToString(publicKey[:])} {
-		if err := ts.app.db.AddKeyHash(context.TODO(), kh, fmt.Sprintf("key num: %d", i)); err != nil {
+		if err := ts.app.db.AddKeyHash(context.Background(), kh, fmt.Sprintf("key num: %d", i)); err != nil {
 			ts.FailNow("failed to register a public key")
 		}
 	}
 
 	ts.app.Conf.RotateKey.PublicKey = &publicKey
 
-	ts.fileID, err = ts.app.db.RegisterFile(context.TODO(), nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
+	ts.fileID, err = ts.app.db.RegisterFile(context.Background(), nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
 	if err != nil {
 		ts.FailNow("Failed to register file in DB")
 	}
 	for _, status := range []string{"uploaded", "archived", "verified"} {
-		if err = ts.app.db.UpdateFileEventLog(context.TODO(), ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
+		if err = ts.app.db.UpdateFileEventLog(context.Background(), ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
 			ts.FailNow("Failed to set status of file in DB")
 		}
 	}
-	if err := ts.app.db.SetKeyHash(context.TODO(), "79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", ts.fileID); err != nil {
+	if err := ts.app.db.SetKeyHash(context.Background(), "79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", ts.fileID); err != nil {
 		ts.FailNow("Failed to set key hash of file in DB")
 	}
-	if err := ts.app.db.StoreHeader(context.TODO(), []byte("637279707434676801000000010000006c000000000000004f6ae97503ac19b6316cb3330ea4e55e0fa98ed7342afc79deec64606aa33a587e78743695f3be5d5b9d0f386c2b66aefb06de07c506eccec4910455d75f54ce6324b98b4dd35dcc6c0684bbf8a05fb5c2976f540dbbbc95646c2e55ec52c5833115e5659"), ts.fileID); err != nil {
+	if err := ts.app.db.StoreHeader(context.Background(), []byte("637279707434676801000000010000006c000000000000004f6ae97503ac19b6316cb3330ea4e55e0fa98ed7342afc79deec64606aa33a587e78743695f3be5d5b9d0f386c2b66aefb06de07c506eccec4910455d75f54ce6324b98b4dd35dcc6c0684bbf8a05fb5c2976f540dbbbc95646c2e55ec52c5833115e5659"), ts.fileID); err != nil {
 		ts.FailNow("Failed to store header of file in DB")
 	}
 
@@ -244,7 +244,7 @@ func (ts *TestSuite) SetupSuite() {
 		Path:              ts.fileID,
 		Size:              59,
 	}
-	if err := ts.app.db.SetVerified(context.TODO(), fileInfo, ts.fileID); err != nil {
+	if err := ts.app.db.SetVerified(context.Background(), fileInfo, ts.fileID); err != nil {
 		ts.FailNow("Failed to store header of file in DB")
 	}
 
@@ -324,7 +324,7 @@ func (ts *TestSuite) TestReEncryptHeader() {
 		},
 	} {
 		ts.T().Run(test.testName, func(t *testing.T) {
-			res, msg, err := ts.app.reEncryptHeader(context.TODO(), test.fileID)
+			res, msg, err := ts.app.reEncryptHeader(context.Background(), test.fileID)
 			assert.Equal(t, res, test.expectedRes)
 			assert.Equal(t, msg, test.expectedMgs)
 			assert.Equal(t, err, test.expectedError)
