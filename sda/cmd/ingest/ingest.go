@@ -314,6 +314,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 	}
 	if err := tx.Commit(); err != nil {
 		log.Errorf("failed to commit CancelFile transaction, reason: %v", err)
+		_ = tx.Rollback()
 
 		return "nack"
 	}
@@ -368,6 +369,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		}
 		if err := tx.Commit(); err != nil {
 			log.Errorf("failed to commit RegisterFile transaction, reason: %v", err)
+			_ = tx.Rollback()
 
 			return "nack"
 		}

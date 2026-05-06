@@ -252,6 +252,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 		}
 		if err := tx.Commit(); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to commit RegisterFile transaction, reason: %v", err))
+			_ = tx.Rollback()
 
 			return
 		}
