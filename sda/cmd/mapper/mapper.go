@@ -175,13 +175,21 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			if err != nil {
 				log.Errorf("failed to get file info for file with accession-id: %s, can not map file to dataset: %s, due to: %v", aID, mappings.DatasetID, err)
 
-				continue
+				if err := delivered.Nack(false, true); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
+
+				return
 			}
 
 			if fileMappingData == nil {
 				log.Errorf("could not find file with accession-id: %s, can not map file to dataset: %s", aID, mappings.DatasetID)
 
-				continue
+				if err := delivered.Nack(false, false); err != nil {
+					log.Errorf("failed to Nack message, reason: (%v)", err)
+				}
+
+				return
 			}
 			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID); err != nil {
 				log.Errorf("failed to map file: %s to dataset-id: %s, reason: %v", fileMappingData.FileID, mappings.DatasetID, err)
