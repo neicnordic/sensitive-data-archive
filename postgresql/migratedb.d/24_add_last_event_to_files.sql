@@ -15,6 +15,10 @@ BEGIN
     -- Add denormalized column storing the latest event name (e.g. 'registered', 'uploaded')
     ALTER TABLE sda.files ADD COLUMN last_event TEXT REFERENCES sda.file_events(title);
 
+    -- Disable the files_last_modified trigger so the backfill does not
+    -- overwrite last_modified / last_modified_by on every existing row.
+    ALTER TABLE sda.files DISABLE TRIGGER files_last_modified;
+
     -- Backfill from existing event log data
     UPDATE sda.files AS f
     SET last_event = sub.event
@@ -24,6 +28,8 @@ BEGIN
         ORDER BY file_id, started_at DESC
     ) AS sub
     WHERE f.id = sub.file_id;
+
+    ALTER TABLE sda.files ENABLE TRIGGER files_last_modified;
 
     -- Add index to support efficient keyset pagination on (submission_user, id)
     CREATE INDEX IF NOT EXISTS files_submission_user_id_idx ON sda.files(submission_user, id);
