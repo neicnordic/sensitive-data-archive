@@ -112,7 +112,8 @@ global:
     storageType: "" # s3 or posix
     maxObjects: null
     maxSize: ""
-  # The six lines below is only used with S3 backend
+    locationBrokerCacheTTL: ""
+    # The lines below are only used when storageType is "S3"
     s3Url: ""
     s3BucketPrefix: "archive"
     s3Region: "us-east-1"
@@ -121,7 +122,7 @@ global:
     s3SecretKey: null
     s3Port: 443
     maxBuckets: 1
-  # The lines below is only used with POSIX backend
+    # The lines below are only used when storageType is "posix"
     volumePath: "/archive"
     nfsServer: ""
     nfsPath: ""
@@ -130,7 +131,8 @@ global:
     storageType: "" # s3 or posix, leave empty for no backup
     maxObjects: null
     maxSize: ""
-  # The six lines below is only used with S3 backend
+    locationBrokerCacheTTL: ""
+    # The lines below are only used when storageType is "S3"
     s3Url: ""
     s3BucketPrefix: "backup"
     s3Region: "us-east-1"
@@ -139,7 +141,7 @@ global:
     s3SecretKey: null
     s3Port: 443
     maxBuckets: 1
-  # The lines below is only used with POSIX backend
+    # The lines below are only used when storageType is "posix"
     volumePath: "/backup"
     nfsServer: ""
     nfsPath: ""
@@ -192,6 +194,8 @@ global:
     secretName:
     publicKey:
     publicKeyData:
+    ## @param rotatePubKeyData, contains the PEM encoded public key as a base64 encoded string
+    rotatePubKeyData:
     privateKeys:
     - keyName:
       passphrase:
@@ -300,6 +304,11 @@ global:
       s3SecretKey: ""
       s3BucketPrefix: "sync"
       s3Region: "us-east-1"
+      s3ChunkSize: ""
+      locationBrokerCacheTTL: ""
+      maxBuckets: 1
+      maxObjects: null
+      maxSize: ""
     remote:
       host: ""
       port: ""
@@ -368,6 +377,12 @@ credentials:
     mqPassword: ""
 
   verify:
+    dbUser: ""
+    dbPassword: ""
+    mqUser: ""
+    mqPassword: ""
+
+  rotatekey:
     dbUser: ""
     dbPassword: ""
     mqUser: ""
@@ -553,7 +568,7 @@ ingest:
     secretName: ""
 
 intercept:
-  name: ingest
+  name: intercept
   replicaCount: 1
   resources:
     requests:
@@ -743,6 +758,19 @@ verify:
 # Extra annotations to attach to the pod
 # This should be a multi-line string mapping directly to the a map of
 # the annotations to apply to the service pods
+  annotations: {}
+  tls:
+    secretName: ""
+
+rotatekey:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "1000m"
   annotations: {}
   tls:
     secretName: ""

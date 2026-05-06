@@ -59,6 +59,22 @@ func (reader *Reader) getS3ClientForEndpoint(ctx context.Context, endpoint strin
 	return nil, nil, storageerrors.ErrorNoEndpointConfiguredForLocation
 }
 
+// Ping verifies all configured S3 endpoints are reachable by calling ListBuckets.
+func (reader *Reader) Ping(ctx context.Context) error {
+	for _, e := range reader.endpoints {
+		client, err := e.getS3Client(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to ping S3 endpoint: %s, due to: %v", e.Endpoint, err)
+		}
+
+		if _, err = client.ListBuckets(ctx, &s3.ListBucketsInput{}); err != nil {
+			return fmt.Errorf("failed to ping S3 endpoint: %s, due to: %v", e.Endpoint, err)
+		}
+	}
+
+	return nil
+}
+
 // parseLocation attempts to parse a location to a s3 endpoint, and a bucket
 // expected format of location is "${ENDPOINT}/${BUCKET}
 func parseLocation(location string) (string, string, error) {

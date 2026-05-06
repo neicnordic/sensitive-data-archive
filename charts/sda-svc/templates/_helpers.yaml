@@ -291,6 +291,23 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 {{/**/}}
 
+{{/*
+rotatekey credentials
+*/}}
+{{- define "mqUserRotate" -}}
+{{- ternary .Values.global.broker.username .Values.credentials.rotatekey.mqUser (empty .Values.credentials.rotatekey.mqUser) -}}
+{{- end -}}
+{{- define "mqPassRotate" -}}
+{{- ternary .Values.global.broker.password .Values.credentials.rotatekey.mqPassword (empty .Values.credentials.rotatekey.mqPassword) -}}
+{{- end -}}
+{{- define "dbUserRotate" -}}
+{{- ternary .Values.global.db.user .Values.credentials.rotatekey.dbUser (empty .Values.credentials.rotatekey.dbUser) -}}
+{{- end -}}
+{{- define "dbPassRotate" -}}
+{{- ternary .Values.global.db.password .Values.credentials.rotatekey.dbPassword (empty .Values.credentials.rotatekey.dbPassword) -}}
+{{- end -}}
+{{/**/}}
+
 {{- define "dbSSLmode" -}}
 {{- if .Values.global.tls.enabled }}
   {{- printf "%s" .Values.global.db.sslMode }}

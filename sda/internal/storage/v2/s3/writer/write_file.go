@@ -56,10 +56,9 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	})
 
 	_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
-		Body:            fileContent,
-		Bucket:          aws.String(activeBucket),
-		Key:             aws.String(filePath),
-		ContentEncoding: aws.String("application/octet-stream"),
+		Body:   fileContent,
+		Bucket: aws.String(activeBucket),
+		Key:    aws.String(filePath),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to upload object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, activeBucket, writer.activeEndpoint.Endpoint, err)

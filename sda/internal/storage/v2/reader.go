@@ -21,6 +21,8 @@ type Reader interface {
 	FindFile(ctx context.Context, filePath string) (string, error)
 	// GetFileSize will return the size of the file specified by the file path and location
 	GetFileSize(ctx context.Context, location, filePath string) (int64, error)
+	// Ping verifies the storage backend is reachable
+	Ping(ctx context.Context) error
 }
 
 type reader struct {
@@ -87,6 +89,23 @@ func (r *reader) GetFileSize(ctx context.Context, location, filePath string) (in
 	}
 
 	return 0, storageerrors.ErrorNoValidReader
+}
+
+func (r *reader) Ping(ctx context.Context) error {
+	var errs []error
+
+	if r.s3Reader != nil {
+		if err := r.s3Reader.Ping(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if r.posixReader != nil {
+		if err := r.posixReader.Ping(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 func (r *reader) FindFile(ctx context.Context, filePath string) (string, error) {

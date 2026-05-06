@@ -326,12 +326,7 @@ func Download(c *gin.Context) {
 	}
 
 	// Get archive file handle
-	var file io.ReadCloser
-	if wholeFile {
-		file, err = ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
-	} else {
-		file, err = ArchiveReader.NewFileReadSeeker(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
-	}
+	file, err := ArchiveReader.NewFileReader(c, fileDetails.ArchiveLocation, fileDetails.ArchivePath)
 	if err != nil {
 		log.Errorf("could not find archive file %s, %s", fileDetails.ArchivePath, err)
 		c.String(http.StatusInternalServerError, "archive error")
@@ -401,26 +396,15 @@ func Download(c *gin.Context) {
 		}
 
 		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			seekStream, err := storage.SeekableMultiReader(newHr, seeker)
+		fileStream = io.MultiReader(newHr, file)
+		if !wholeFile {
+			start, end, err = adjustToStartPosition(fileStream, start, end)
 			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
+				log.Errorf("Could not adjust start position: %v", err)
 				c.String(http.StatusInternalServerError, "file decoding error")
 
 				return
 			}
-			start, end, err = adjustSeekPos(seekStream, start, end)
-			if err != nil {
-				log.Errorf("Could not seek stream: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-			fileStream = seekStream
 		}
 	default:
 		// Reencrypt header for use with the loaded internal key
@@ -433,20 +417,7 @@ func Download(c *gin.Context) {
 		}
 
 		newHr := bytes.NewReader(newHeader)
-
-		if wholeFile {
-			fileStream = io.MultiReader(newHr, file)
-		} else {
-			seeker, _ := file.(io.ReadSeeker)
-			fileStream, err = storage.SeekableMultiReader(newHr, seeker)
-			if err != nil {
-				log.Errorf("Failed to construct SeekableMultiReader, reason: %v", err)
-				c.String(http.StatusInternalServerError, "file decoding error")
-
-				return
-			}
-		}
-
+		fileStream = io.MultiReader(newHr, file)
 		c4ghfileStream, err := streaming.NewCrypt4GHReader(fileStream, config.Config.C4GH.PrivateKey, nil)
 		defer c4ghfileStream.Close()
 		if err != nil {
@@ -455,9 +426,9 @@ func Download(c *gin.Context) {
 
 			return
 		}
-		start, end, err = adjustSeekPos(c4ghfileStream, start, end)
+		start, end, err = adjustToStartPosition(c4ghfileStream, start, end)
 		if err != nil {
-			log.Errorf("Could not seek stream: %v", err)
+			log.Errorf("Could not adjust start position: %v", err)
 			c.String(http.StatusInternalServerError, "file decoding error")
 
 			return
@@ -474,12 +445,10 @@ func Download(c *gin.Context) {
 	}
 }
 
-var adjustSeekPos = func(fileStream io.ReadSeeker, start, end int64) (int64, int64, error) {
+func adjustToStartPosition(fileStream io.Reader, start, end int64) (int64, int64, error) {
 	if start != 0 {
-		// We don't want to read from start, skip ahead to where we should be
-		_, err := fileStream.Seek(start, 0)
-		if err != nil {
-			return 0, 0, fmt.Errorf("error occurred while finding sending start: %v", err)
+		if _, err := io.CopyN(io.Discard, fileStream, start); err != nil {
+			return 0, 0, err
 		}
 		// adjust end to reflect that the file start has been moved
 		end -= start

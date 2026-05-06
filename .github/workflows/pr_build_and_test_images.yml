@@ -81,7 +81,7 @@ jobs:
             org.opencontainers.image.version=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }} sarif
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }} markdown output
         if: steps.changes.outputs.changed == 'true'
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
@@ -359,13 +359,19 @@ jobs:
 
       - name: Check deployment
         run: |
-          sleep 30
-          for n in api auth download finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          echo "Waiting for pods to be ready..."
+          for n in api auth download finalize inbox ingest mapper reencrypt rotatekey sync syncapi verify; do
+            # Skip services based on storage type
             if [ ${{matrix.storage}} == "posix" ] && [ "$n" == "auth" ] || [ "$n" == "sync" ] || [ "$n" == "syncapi" ]; then
               continue
             fi
-            if [ ! $(kubectl get pods -l role="$n" -o=jsonpath='{.items[*].status.containerStatuses[0].ready}' | grep true) ]; then
-              echo "$n is not ready after 30s, exiting"
+
+            echo "Checking $n..."
+            # Dynamic wait: up to 90 seconds per service.
+            if ! kubectl wait --for=condition=ready pod -l role="$n" --timeout=90s; then
+              echo "ERROR: $n is not ready after 90s"
+              kubectl describe pod -l role="$n"
+              kubectl logs -l role="$n" --tail=20
               exit 1
             fi
           done
@@ -375,7 +381,7 @@ jobs:
         run: |
           kubectl get pods
           sleep 1
-          for svc in api auth finalize inbox ingest mapper reencrypt sync syncapi verify; do
+          for svc in api auth finalize inbox ingest mapper reencrypt rotatekey sync syncapi verify; do
             echo "## describe $svc" && kubectl describe pod -l role="$svc"
             sleep 1
             echo "## logs $svc" && kubectl logs -l role="$svc"

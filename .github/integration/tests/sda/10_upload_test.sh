@@ -67,8 +67,8 @@ if [ "$num_rows" -ne 5 ]; then
 fi
 
 num_log_rows=$(psql -U postgres -h postgres -d sda -At -c "SELECT COUNT(*) from sda.file_event_log;")
-if [ "$num_log_rows" -ne 12 ]; then
-    echo "database queries for file_event_logs failed, expected 12 got $num_log_rows"
+if [ "$num_log_rows" -ne 11 ]; then
+    echo "database queries for file_event_logs failed, expected 11 got $num_log_rows"
     exit 1
 fi
 
