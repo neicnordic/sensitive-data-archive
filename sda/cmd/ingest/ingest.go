@@ -296,8 +296,24 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message schema
 		}
 	}
 
-	if err := app.db.CancelFile(ctx, fileID, string(m)); err != nil {
+	// Ideally this transaction should span the whole message processing, but for now just spans the CancelFile
+	tx, err := app.db.BeginTransaction(ctx)
+	if err != nil {
+		log.Errorf("failed to begin transaction, reason: %v", err)
+
+		return "nack"
+	}
+	if err := tx.CancelFile(ctx, fileID, string(m)); err != nil {
 		log.Errorf("failed to cancel file with id: %s, due to %v", fileID, err)
+
+		if err := tx.Rollback(); err != nil {
+			log.Errorf("failed to rollback CancelFile transaction, reason: %v", err)
+		}
+
+		return "nack"
+	}
+	if err := tx.Commit(); err != nil {
+		log.Errorf("failed to commit CancelFile transaction, reason: %v", err)
 
 		return "nack"
 	}
@@ -332,10 +348,26 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
 		var findFileErr, registerErr error
 		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.FilePath)
+
+		// Ideally this transaction should span the whole message processing, but for now just spans the RegisterFile
+		tx, err := app.db.BeginTransaction(ctx)
+		if err != nil {
+			log.Errorf("failed to begin transaction, reason: %v", err)
+
+			return "nack"
+		}
 		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
-		fileID, registerErr = app.db.RegisterFile(ctx, &fileID, submissionLocation, message.FilePath, message.User)
+		fileID, registerErr = tx.RegisterFile(ctx, &fileID, submissionLocation, message.FilePath, message.User)
 		if registerErr != nil {
 			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, registerErr.Error())
+			if err := tx.Rollback(); err != nil {
+				log.Errorf("failed to rollback RegisterFile transaction, reason: %v", err)
+			}
+
+			return "nack"
+		}
+		if err := tx.Commit(); err != nil {
+			log.Errorf("failed to commit RegisterFile transaction, reason: %v", err)
 
 			return "nack"
 		}
