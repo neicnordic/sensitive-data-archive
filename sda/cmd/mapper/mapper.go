@@ -166,6 +166,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		}
 	}()
 
+	var filesToCleanFromInbox []*database.MappingData
+
 	switch mappings.Type {
 	case "mapping":
 		log.Debug("mapping type operation, mapping files to dataset")
@@ -208,10 +210,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 				continue
 			}
 
-			unanonymizedSubmissionFilePath := helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)
-			if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath); err != nil {
-				log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath, err)
-			}
+			filesToCleanFromInbox = append(filesToCleanFromInbox, fileMappingData)
 		}
 
 		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(delivered.Body)); err != nil {
@@ -262,6 +261,13 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 		}
 
 		return
+	}
+
+	for _, fileMappingData := range filesToCleanFromInbox {
+		unanonymizedSubmissionFilePath := helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)
+		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath); err != nil {
+			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath, err)
+		}
 	}
 
 	if err := delivered.Ack(false); err != nil {
