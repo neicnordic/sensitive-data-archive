@@ -23,10 +23,10 @@ Endpoints:
 
     The endpoint also supports keyset pagination using a `cursor` query parameter and an optional `limit`.
 
-    - `limit` (optional): maximum number of items per page. If omitted or 0, all matching files are returned with no cursor.
+    - `limit` (optional): maximum number of items per page. If omitted, the API defaults to `1000`. The value must be a positive integer; non-positive values such as `0` are rejected with `400 Bad Request`.
     - `cursor` (optional): opaque cursor returned from a previous page. To fetch the first page omit this parameter.
 
-    The response will include an `X-Next-Cursor` header when there are more pages available. The cursor is opaque (base64-encoded) and should be passed unchanged to the next request.
+    The response will include an `X-Next-Cursor` header when there are more pages available. The cursor is opaque (base64-encoded) and should be passed unchanged to the next request. To fetch all matching files, request the first page and continue making follow-up requests with the returned cursor until no `X-Next-Cursor` header is present.
 
     Example (first page, limit 100):
 

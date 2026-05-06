@@ -994,9 +994,10 @@ func (dbs *SDAdb) setSubmissionFileSize(fileID string, submissionFileSize int64)
 }
 
 // GetUserFiles retrieves a page of files submitted by a user.
-// It returns up to limit files (default 1000 when limit == 0) and, when more
-// results are available, a non-empty nextCursor that can be passed to a
-// subsequent call to continue listing from the next page.
+// It returns up to limit files when limit is positive; non-positive limits are
+// treated as unbounded. When more results are available, it returns a
+// non-empty nextCursor that can be passed to a subsequent call to continue
+// listing from the next page.
 func (dbs *SDAdb) GetUserFiles(userID, pathPrefix string, allData bool, limit int, cursor string) ([]*SubmissionFileInfo, string, error) {
 	var err error
 
