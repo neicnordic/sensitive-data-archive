@@ -1300,7 +1300,7 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 
 		return c, err
 	}
-	reVerify := schema.IngestionVerification{
+	reVerifyMsg := schema.IngestionVerification{
 		User:        reverificationData.SubmissionUser,
 		FilePath:    reverificationData.SubmissionFilePath,
 		FileID:      reverificationData.FileID,
@@ -1309,9 +1309,9 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 			Type:  reverificationData.ArchivedCheckSumType,
 			Value: reverificationData.ArchivedCheckSum,
 		}},
-		ReVerify: false,
+		ReVerify: true,
 	}
-	marshaledMsg, _ := json.Marshal(&reVerify)
+	marshaledMsg, _ := json.Marshal(&reVerifyMsg)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
 		log.Errorln(err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
@@ -1319,7 +1319,7 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 		return c, err
 	}
 
-	err = Conf.API.MQ.SendMessage(reVerify.FileID, Conf.Broker.Exchange, "archived", marshaledMsg)
+	err = Conf.API.MQ.SendMessage(reVerifyMsg.FileID, Conf.Broker.Exchange, "archived", marshaledMsg)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
