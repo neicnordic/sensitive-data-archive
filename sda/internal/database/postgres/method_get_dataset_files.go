@@ -24,7 +24,10 @@ WHERE id IN (
 }
 
 func (db *pgDb) getDatasetFiles(ctx context.Context, tx *sql.Tx, datasetID string) ([]string, error) {
-	stmt := db.getPreparedStmt(tx, getDatasetFilesQuery)
+	stmt, err := db.getPreparedStmt(tx, getDatasetFilesQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var accessions []string
 	rows, err := stmt.QueryContext(ctx, datasetID)

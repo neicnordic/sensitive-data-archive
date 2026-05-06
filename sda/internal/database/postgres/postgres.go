@@ -120,12 +120,21 @@ func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, err
 	}, nil
 }
 
-func (db *pgDb) getPreparedStmt(tx *sql.Tx, queryName string) *sql.Stmt {
-	if tx == nil {
-		return db.preparedStatements[queryName]
+func (db *pgDb) getPreparedStmt(tx *sql.Tx, queryName string) (*sql.Stmt, error) {
+	if db == nil || db.preparedStatements == nil {
+		return nil, errors.New("database not initialized")
 	}
 
-	return tx.Stmt(db.preparedStatements[queryName])
+	stmt := db.preparedStatements[queryName]
+	if stmt == nil {
+		return nil, fmt.Errorf("statement with name: %s not found", queryName)
+	}
+
+	if tx == nil {
+		return stmt, nil
+	}
+
+	return tx.Stmt(stmt), nil
 }
 
 func (db *pgDb) RegisterFile(ctx context.Context, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {

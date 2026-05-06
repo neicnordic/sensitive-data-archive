@@ -17,7 +17,10 @@ WHERE d.stable_id = $1;
 }
 
 func (db *pgDb) getDatasetFileIDs(ctx context.Context, tx *sql.Tx, datasetID string) ([]string, error) {
-	stmt := db.getPreparedStmt(tx, getDatasetFileIDsQuery)
+	stmt, err := db.getPreparedStmt(tx, getDatasetFileIDsQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var fileIDs []string
 	rows, err := stmt.QueryContext(ctx, datasetID)

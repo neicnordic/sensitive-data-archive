@@ -19,7 +19,10 @@ WHERE f.stable_id = $1 AND cs.source = 'ARCHIVED';
 `
 }
 func (db *pgDb) getReVerificationData(ctx context.Context, tx *sql.Tx, accessionID string) (*database.ReVerificationData, error) {
-	stmt := db.getPreparedStmt(tx, getReVerificationDataQuery)
+	stmt, err := db.getPreparedStmt(tx, getReVerificationDataQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	reVerificationData := new(database.ReVerificationData)
 

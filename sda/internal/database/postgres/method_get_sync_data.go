@@ -19,7 +19,10 @@ WHERE f.stable_id = $1 AND cs.source = 'UNENCRYPTED';
 }
 
 func (db *pgDb) getSyncData(ctx context.Context, tx *sql.Tx, accessionID string) (*database.SyncData, error) {
-	stmt := db.getPreparedStmt(tx, getSyncDataQuery)
+	stmt, err := db.getPreparedStmt(tx, getSyncDataQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	data := new(database.SyncData)
 	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&data.User, &data.FilePath, &data.Checksum); err != nil {

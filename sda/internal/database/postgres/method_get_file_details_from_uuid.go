@@ -19,7 +19,10 @@ WHERE f.id = $1 and fel.event = $2;
 }
 
 func (db *pgDb) getFileDetails(ctx context.Context, tx *sql.Tx, fileID, event string) (*database.FileDetails, error) {
-	stmt := db.getPreparedStmt(tx, getFileDetailsQuery)
+	stmt, err := db.getPreparedStmt(tx, getFileDetailsQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	info := new(database.FileDetails)
 	if err := stmt.QueryRowContext(ctx, fileID, event).Scan(&info.User, &info.Path); err != nil {

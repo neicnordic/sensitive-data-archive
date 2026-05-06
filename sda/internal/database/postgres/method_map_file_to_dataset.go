@@ -27,9 +27,15 @@ RETURNING id;
 }
 
 func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fileID string) error {
-	stmt := db.getPreparedStmt(tx, mapFileToDatasetQuery)
+	stmt, err := db.getPreparedStmt(tx, mapFileToDatasetQuery)
+	if err != nil {
+		return err
+	}
 
-	insertDatasetStmt := db.getPreparedStmt(tx, mapFileToDatasetInsertDatasetQuery)
+	insertDatasetStmt, err := db.getPreparedStmt(tx, mapFileToDatasetInsertDatasetQuery)
+	if err != nil {
+		return err
+	}
 
 	var dbDatasetID string
 

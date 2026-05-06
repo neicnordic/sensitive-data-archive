@@ -24,7 +24,10 @@ WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archiv
 }
 
 func (db *pgDb) getSizeAndObjectCountOfLocation(ctx context.Context, tx *sql.Tx, location string) (uint64, uint64, error) {
-	stmt := db.getPreparedStmt(tx, getSizeAndObjectCountOfLocationQuery)
+	stmt, err := db.getPreparedStmt(tx, getSizeAndObjectCountOfLocationQuery)
+	if err != nil {
+		return 0, 0, err
+	}
 
 	var size, count sql.Null[uint64]
 	if err := stmt.QueryRowContext(ctx, location).Scan(&size, &count); err != nil {

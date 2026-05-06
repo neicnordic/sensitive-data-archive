@@ -16,7 +16,10 @@ VALUES($1, $2) ON CONFLICT DO NOTHING;
 }
 
 func (db *pgDb) addKeyHash(ctx context.Context, tx *sql.Tx, keyHash, keyDescription string) error {
-	stmt := db.getPreparedStmt(tx, addKeyHashQuery)
+	stmt, err := db.getPreparedStmt(tx, addKeyHashQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, keyHash, keyDescription)
 	if err != nil {

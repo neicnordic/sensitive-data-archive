@@ -16,7 +16,10 @@ WHERE id = $2;
 `
 }
 func (db *pgDb) setKeyHash(ctx context.Context, tx *sql.Tx, keyHash, fileID string) error {
-	stmt := db.getPreparedStmt(tx, setKeyHashQuery)
+	stmt, err := db.getPreparedStmt(tx, setKeyHashQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, keyHash, fileID)
 	if err != nil {

@@ -17,7 +17,10 @@ AND source = 'UNENCRYPTED';
 }
 
 func (db *pgDb) getDecryptedChecksum(ctx context.Context, tx *sql.Tx, id string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getDecryptedChecksumQuery)
+	stmt, err := db.getPreparedStmt(tx, getDecryptedChecksumQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var unencryptedChecksum string
 	if err := stmt.QueryRowContext(ctx, id).Scan(&unencryptedChecksum); err != nil {

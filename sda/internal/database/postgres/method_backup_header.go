@@ -22,7 +22,10 @@ SET header = EXCLUDED.header,
 }
 
 func (db *pgDb) backupHeader(ctx context.Context, tx *sql.Tx, fileID string, header []byte, keyHash string) error {
-	stmt := db.getPreparedStmt(tx, backupHeaderQuery)
+	stmt, err := db.getPreparedStmt(tx, backupHeaderQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, fileID, hex.EncodeToString(header), keyHash)
 	if err != nil {

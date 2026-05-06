@@ -18,7 +18,10 @@ WHERE id = $2;
 }
 
 func (db *pgDb) storeHeader(ctx context.Context, tx *sql.Tx, header []byte, id string) error {
-	stmt := db.getPreparedStmt(tx, storeHeaderQuery)
+	stmt, err := db.getPreparedStmt(tx, storeHeaderQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, hex.EncodeToString(header), id)
 	if err != nil {

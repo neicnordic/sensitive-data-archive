@@ -17,7 +17,10 @@ VALUES($1, $2, $3, $4, $5);
 `
 }
 func (db *pgDb) updateFileEventLog(ctx context.Context, tx *sql.Tx, fileUUID, event, user, details, message string) error {
-	stmt := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	stmt, err := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, fileUUID, event, user, details, message)
 	if err != nil {

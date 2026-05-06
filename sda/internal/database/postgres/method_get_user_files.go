@@ -27,7 +27,10 @@ ORDER BY f.id ASC LIMIT $5;
 }
 
 func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix string, allData bool, limit int, cursor string) ([]*database.SubmissionFileInfo, string, error) {
-	stmt := db.getPreparedStmt(tx, getUserFilesQuery)
+	stmt, err := db.getPreparedStmt(tx, getUserFilesQuery)
+	if err != nil {
+		return nil, "", err
+	}
 
 	pathPrefixLen := 1
 	pathPrefixArg := sql.NullString{}

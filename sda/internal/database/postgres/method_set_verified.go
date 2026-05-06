@@ -33,9 +33,18 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 func (db *pgDb) setVerified(ctx context.Context, tx *sql.Tx, file *database.FileInfo, fileID string) error {
-	stmt := db.getPreparedStmt(tx, setVerifiedQuery)
-	addArchiveChecksumStmt := db.getPreparedStmt(tx, setVerifiedAddArchiveChecksumQuery)
-	addUnencryptedChecksumStmt := db.getPreparedStmt(tx, setVerifiedAddUnencryptedChecksumQuery)
+	stmt, err := db.getPreparedStmt(tx, setVerifiedQuery)
+	if err != nil {
+		return err
+	}
+	addArchiveChecksumStmt, err := db.getPreparedStmt(tx, setVerifiedAddArchiveChecksumQuery)
+	if err != nil {
+		return err
+	}
+	addUnencryptedChecksumStmt, err := db.getPreparedStmt(tx, setVerifiedAddUnencryptedChecksumQuery)
+	if err != nil {
+		return err
+	}
 
 	if _, err := stmt.ExecContext(ctx, file.DecryptedSize, fileID); err != nil {
 		return fmt.Errorf("setVerified error: %s", err.Error())

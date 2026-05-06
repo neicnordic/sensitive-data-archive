@@ -18,7 +18,10 @@ ORDER BY created_at ASC;
 }
 
 func (db *pgDb) listKeyHashes(ctx context.Context, tx *sql.Tx) ([]*database.C4ghKeyHash, error) {
-	stmt := db.getPreparedStmt(tx, listKeyHashesQuery)
+	stmt, err := db.getPreparedStmt(tx, listKeyHashesQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var hashList []*database.C4ghKeyHash
 	rows, err := stmt.QueryContext(ctx)

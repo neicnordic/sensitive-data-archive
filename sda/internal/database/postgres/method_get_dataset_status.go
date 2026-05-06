@@ -16,11 +16,14 @@ ORDER BY id DESC LIMIT 1;
 `
 }
 func (db *pgDb) getDatasetStatus(ctx context.Context, tx *sql.Tx, datasetID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getDatasetStatusQuery)
+	stmt, err := db.getPreparedStmt(tx, getDatasetStatusQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var status string
-	err := stmt.QueryRowContext(ctx, datasetID).Scan(&status)
-	if err != nil {
+
+	if err := stmt.QueryRowContext(ctx, datasetID).Scan(&status); err != nil {
 		return "", err
 	}
 

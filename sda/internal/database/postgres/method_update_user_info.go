@@ -19,7 +19,10 @@ DO UPDATE SET name = excluded.name, email = excluded.email, groups = excluded.gr
 `
 }
 func (db *pgDb) updateUserInfo(ctx context.Context, tx *sql.Tx, userID, name, email string, groups []string) error {
-	stmt := db.getPreparedStmt(tx, updateUserInfoQuery)
+	stmt, err := db.getPreparedStmt(tx, updateUserInfoQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, userID, name, email, pq.Array(groups))
 	if err != nil {
