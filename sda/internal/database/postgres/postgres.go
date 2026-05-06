@@ -99,13 +99,15 @@ func (db *pgDb) Close() error {
 	if db.db == nil {
 		return nil
 	}
+
+	var err error
 	for queryName, stmt := range db.preparedStatements {
-		if err := stmt.Close(); err != nil {
-			log.Errorf("failed to close %s, stmt", queryName)
+		if stmtErr := stmt.Close(); stmtErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close %s stmt, due to: %w", queryName, stmtErr))
 		}
 	}
 
-	return db.db.Close()
+	return errors.Join(err, db.db.Close())
 }
 
 func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, error) {
