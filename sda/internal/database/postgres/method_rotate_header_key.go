@@ -18,7 +18,10 @@ WHERE id = $3;
 }
 
 func (db *pgDb) rotateHeaderKey(ctx context.Context, tx *sql.Tx, header []byte, keyHash, fileID string) error {
-	stmt := db.getPreparedStmt(tx, rotateHeaderKeyQuery)
+	stmt, err := db.getPreparedStmt(tx, rotateHeaderKeyQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, hex.EncodeToString(header), keyHash, fileID)
 	if err != nil {

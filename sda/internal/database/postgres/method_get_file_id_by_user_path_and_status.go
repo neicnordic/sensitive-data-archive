@@ -23,11 +23,14 @@ WHERE id_and_event.event = $3;
 }
 
 func (db *pgDb) getFileIDByUserPathAndStatus(ctx context.Context, tx *sql.Tx, submissionUser, filePath, status string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getFileIDByUserPathAndStatusQuery)
+	stmt, err := db.getPreparedStmt(tx, getFileIDByUserPathAndStatusQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var fileID string
-	err := stmt.QueryRowContext(ctx, submissionUser, filePath, status).Scan(&fileID)
-	if err != nil {
+
+	if err := stmt.QueryRowContext(ctx, submissionUser, filePath, status).Scan(&fileID); err != nil {
 		return "", err
 	}
 

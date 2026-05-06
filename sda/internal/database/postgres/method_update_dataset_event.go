@@ -15,7 +15,10 @@ VALUES($1, $2, $3);
 `
 }
 func (db *pgDb) updateDatasetEvent(ctx context.Context, tx *sql.Tx, datasetID, status, message string) error {
-	stmt := db.getPreparedStmt(tx, updateDatasetEventQuery)
+	stmt, err := db.getPreparedStmt(tx, updateDatasetEventQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, datasetID, status, message)
 	if err != nil {

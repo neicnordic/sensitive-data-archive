@@ -16,11 +16,13 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getKeyHash(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getKeyHashQuery)
+	stmt, err := db.getPreparedStmt(tx, getKeyHashQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var keyHash string
-	err := stmt.QueryRowContext(ctx, fileID).Scan(&keyHash)
-	if err != nil {
+	if err := stmt.QueryRowContext(ctx, fileID).Scan(&keyHash); err != nil {
 		return "", err
 	}
 

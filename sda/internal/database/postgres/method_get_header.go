@@ -17,7 +17,10 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getHeader(ctx context.Context, tx *sql.Tx, fileID string) ([]byte, error) {
-	stmt := db.getPreparedStmt(tx, getHeaderQuery)
+	stmt, err := db.getPreparedStmt(tx, getHeaderQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var hexString string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&hexString); err != nil {

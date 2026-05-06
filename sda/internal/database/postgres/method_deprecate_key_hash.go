@@ -18,7 +18,10 @@ AND deprecated_at IS NULL;
 }
 
 func (db *pgDb) deprecateKeyHash(ctx context.Context, tx *sql.Tx, keyHash string) error {
-	stmt := db.getPreparedStmt(tx, deprecateKeyHashQuery)
+	stmt, err := db.getPreparedStmt(tx, deprecateKeyHashQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, keyHash)
 	if err != nil {

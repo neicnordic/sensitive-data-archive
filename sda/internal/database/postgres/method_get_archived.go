@@ -19,7 +19,10 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getArchived(ctx context.Context, tx *sql.Tx, fileID string) (*database.ArchiveData, error) {
-	stmt := db.getPreparedStmt(tx, getArchivedQuery)
+	stmt, err := db.getPreparedStmt(tx, getArchivedQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var archiveFilePath string
 	var archiveLocation, backupFilePath, backupLocation sql.NullString

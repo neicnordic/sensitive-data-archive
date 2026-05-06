@@ -17,7 +17,10 @@ WHERE id = $2;
 }
 
 func (db *pgDb) setAccessionID(ctx context.Context, tx *sql.Tx, accessionID, fileID string) error {
-	stmt := db.getPreparedStmt(tx, setAccessionIDQuery)
+	stmt, err := db.getPreparedStmt(tx, setAccessionIDQuery)
+	if err != nil {
+		return err
+	}
 
 	result, err := stmt.ExecContext(ctx, accessionID, fileID)
 	if err != nil {

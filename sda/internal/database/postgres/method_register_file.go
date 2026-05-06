@@ -21,9 +21,15 @@ VALUES(COALESCE(CAST(NULLIF($1, '') AS UUID), gen_random_uuid()), $2, $3, $4, 'C
 }
 
 func (db *pgDb) registerFile(ctx context.Context, tx *sql.Tx, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
-	stmt := db.getPreparedStmt(tx, registerFileQuery)
+	stmt, err := db.getPreparedStmt(tx, registerFileQuery)
+	if err != nil {
+		return "", err
+	}
 
-	logFileEventStmt := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	logFileEventStmt, err := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var createdFileID string
 	fileIDArg := sql.NullString{}

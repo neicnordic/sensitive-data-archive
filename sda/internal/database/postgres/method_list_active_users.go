@@ -20,7 +20,10 @@ WHERE NOT EXISTS (
 }
 
 func (db *pgDb) listActiveUsers(ctx context.Context, tx *sql.Tx) ([]string, error) {
-	stmt := db.getPreparedStmt(tx, listActiveUsersQuery)
+	stmt, err := db.getPreparedStmt(tx, listActiveUsersQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	var users []string
 	rows, err := stmt.QueryContext(ctx)

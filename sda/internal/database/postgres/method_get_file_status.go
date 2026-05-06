@@ -17,11 +17,13 @@ ORDER BY id DESC LIMIT 1;
 }
 
 func (db *pgDb) getFileStatus(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getFileStatusQuery)
+	stmt, err := db.getPreparedStmt(tx, getFileStatusQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var status string
-	err := stmt.QueryRowContext(ctx, fileID).Scan(&status)
-	if err != nil {
+	if err := stmt.QueryRowContext(ctx, fileID).Scan(&status); err != nil {
 		return "", err
 	}
 

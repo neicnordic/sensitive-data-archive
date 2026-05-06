@@ -28,12 +28,15 @@ WHERE
 }
 
 func (db *pgDb) getUploadedSubmissionFilePathAndLocation(ctx context.Context, tx *sql.Tx, submissionUser, fileID string) (string, string, error) {
-	stmt := db.getPreparedStmt(tx, getUploadedSubmissionFilePathAndLocationQuery)
+	stmt, err := db.getPreparedStmt(tx, getUploadedSubmissionFilePathAndLocationQuery)
+	if err != nil {
+		return "", "", err
+	}
 
 	var filePath string
 	var location sql.NullString
-	err := stmt.QueryRowContext(ctx, submissionUser, fileID).Scan(&filePath, &location)
-	if err != nil {
+
+	if err := stmt.QueryRowContext(ctx, submissionUser, fileID).Scan(&filePath, &location); err != nil {
 		return "", "", err
 	}
 	// dont really care if location is valid, we just want null -> ""

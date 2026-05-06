@@ -23,9 +23,15 @@ WHERE stable_id = $1;
 }
 
 func (db *pgDb) checkAccessionIDExists(ctx context.Context, tx *sql.Tx, accessionID, fileID string) (string, error) {
-	sameIDStmt := db.getPreparedStmt(tx, checkAccessionIDExistsSameIDQuery)
+	sameIDStmt, err := db.getPreparedStmt(tx, checkAccessionIDExistsSameIDQuery)
+	if err != nil {
+		return "", err
+	}
 
-	idExistsStmt := db.getPreparedStmt(tx, checkAccessionIDExistsQuery)
+	idExistsStmt, err := db.getPreparedStmt(tx, checkAccessionIDExistsQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var same int
 	if err := sameIDStmt.QueryRowContext(ctx, accessionID, fileID).Scan(&same); err != nil {

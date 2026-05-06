@@ -20,7 +20,10 @@ WHERE f.id = $1 AND cs.source = 'ARCHIVED';
 }
 
 func (db *pgDb) getReVerificationDataFromFileID(ctx context.Context, tx *sql.Tx, fileID string) (*database.ReVerificationData, error) {
-	stmt := db.getPreparedStmt(tx, getReVerificationDataFromFileIDQuery)
+	stmt, err := db.getPreparedStmt(tx, getReVerificationDataFromFileIDQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	reVerificationData := new(database.ReVerificationData)
 

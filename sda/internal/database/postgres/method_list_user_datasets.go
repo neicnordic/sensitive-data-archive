@@ -30,7 +30,10 @@ WHERE (dataset_id, event_date) IN (
 }
 
 func (db *pgDb) listUserDatasets(ctx context.Context, tx *sql.Tx, submissionUser string) ([]*database.DatasetInfo, error) {
-	stmt := db.getPreparedStmt(tx, listUserDatasetsQuery)
+	stmt, err := db.getPreparedStmt(tx, listUserDatasetsQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	rows, err := stmt.QueryContext(ctx, submissionUser)
 	if err != nil {

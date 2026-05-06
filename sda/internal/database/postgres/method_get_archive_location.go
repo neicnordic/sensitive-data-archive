@@ -17,7 +17,10 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getArchiveLocation(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getArchiveLocationQuery)
+	stmt, err := db.getPreparedStmt(tx, getArchiveLocationQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var archiveLocation sql.NullString
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&archiveLocation); err != nil {

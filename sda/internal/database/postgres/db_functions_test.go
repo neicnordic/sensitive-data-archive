@@ -15,6 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestGetPreparedStmt tests that getPreparedStmt returns an error if requested query has not been prepared
+func (ts *DatabaseTests) TestGetPreparedStmt_NotExists() {
+	db := &pgDb{preparedStatements: make(map[string]*sql.Stmt)}
+
+	_, err := db.getPreparedStmt(nil, "not_exists")
+	ts.Error(err)
+}
+
 // TestRegisterFile tests that RegisterFile() behaves as intended
 func (ts *DatabaseTests) TestRegisterFile() {
 	for _, step := range []struct {

@@ -22,8 +22,14 @@ MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums w
 }
 
 func (db *pgDb) getFileInfo(ctx context.Context, tx *sql.Tx, id string) (*database.FileInfo, error) {
-	getFileIDStmt := db.getPreparedStmt(tx, getFileInfoQuery)
-	getChecksumStmt := db.getPreparedStmt(tx, getFileInfoChecksumQuery)
+	getFileIDStmt, err := db.getPreparedStmt(tx, getFileInfoQuery)
+	if err != nil {
+		return nil, err
+	}
+	getChecksumStmt, err := db.getPreparedStmt(tx, getFileInfoChecksumQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	info := new(database.FileInfo)
 	if err := getFileIDStmt.QueryRowContext(ctx, id).Scan(&info.Path, &info.Size); err != nil {

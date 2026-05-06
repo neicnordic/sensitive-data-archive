@@ -27,8 +27,14 @@ ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.chec
 }
 
 func (db *pgDb) setArchived(ctx context.Context, tx *sql.Tx, location string, file *database.FileInfo, fileID string) error {
-	stmt := db.getPreparedStmt(tx, setArchivedQuery)
-	addCheckSumStmt := db.getPreparedStmt(tx, setArchivedAddCheckSumQuery)
+	stmt, err := db.getPreparedStmt(tx, setArchivedQuery)
+	if err != nil {
+		return err
+	}
+	addCheckSumStmt, err := db.getPreparedStmt(tx, setArchivedAddCheckSumQuery)
+	if err != nil {
+		return err
+	}
 
 	if _, err := stmt.ExecContext(ctx, location, file.Path, file.Size, fileID); err != nil {
 		return fmt.Errorf("setArchived error: %s", err.Error())

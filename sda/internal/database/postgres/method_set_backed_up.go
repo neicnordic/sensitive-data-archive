@@ -17,7 +17,10 @@ WHERE id = $3;
 }
 
 func (db *pgDb) setBackedUp(ctx context.Context, tx *sql.Tx, location, path, fileID string) error {
-	stmt := db.getPreparedStmt(tx, setBackedUpQuery)
+	stmt, err := db.getPreparedStmt(tx, setBackedUpQuery)
+	if err != nil {
+		return err
+	}
 
 	r, err := stmt.ExecContext(ctx, location, path, fileID)
 	if err != nil {

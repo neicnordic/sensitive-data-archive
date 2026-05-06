@@ -24,11 +24,20 @@ WHERE file_id = $1
 }
 
 func (db *pgDb) cancelFile(ctx context.Context, tx *sql.Tx, fileID string, message string) error {
-	unsetArchivedStmt := db.getPreparedStmt(tx, cancelFileUnSetArchivedQuery)
+	unsetArchivedStmt, err := db.getPreparedStmt(tx, cancelFileUnSetArchivedQuery)
+	if err != nil {
+		return err
+	}
 
-	deleteChecksumsStmt := db.getPreparedStmt(tx, cancelFileDeleteChecksumsQuery)
+	deleteChecksumsStmt, err := db.getPreparedStmt(tx, cancelFileDeleteChecksumsQuery)
+	if err != nil {
+		return err
+	}
 
-	logFileEventStmt := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	logFileEventStmt, err := db.getPreparedStmt(tx, updateFileEventLogQuery)
+	if err != nil {
+		return err
+	}
 
 	if _, err := unsetArchivedStmt.ExecContext(ctx, fileID); err != nil {
 		return fmt.Errorf("failed to unset file data (file-id: %s): %v", fileID, err)

@@ -23,7 +23,10 @@ WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled');`
 }
 
 func (db *pgDb) getFileIDInInbox(ctx context.Context, tx *sql.Tx, submissionUser, filePath string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getFileIDInInboxQuery)
+	stmt, err := db.getPreparedStmt(tx, getFileIDInInboxQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var fileID string
 

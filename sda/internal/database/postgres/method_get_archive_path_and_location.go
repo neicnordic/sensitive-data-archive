@@ -16,12 +16,15 @@ WHERE stable_id = $1;
 }
 
 func (db *pgDb) getArchivePathAndLocation(ctx context.Context, tx *sql.Tx, accessionID string) (string, string, error) {
-	stmt := db.getPreparedStmt(tx, getArchivePathAndLocationQuery)
+	stmt, err := db.getPreparedStmt(tx, getArchivePathAndLocationQuery)
+	if err != nil {
+		return "", "", err
+	}
 
 	var archivePath string
 	var archiveLocation sql.NullString
-	err := stmt.QueryRowContext(ctx, accessionID).Scan(&archivePath, &archiveLocation)
-	if err != nil {
+
+	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&archivePath, &archiveLocation); err != nil {
 		return "", "", err
 	}
 

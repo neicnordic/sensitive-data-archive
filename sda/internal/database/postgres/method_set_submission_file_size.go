@@ -16,7 +16,10 @@ WHERE id = $2;
 }
 
 func (db *pgDb) setSubmissionFileSize(ctx context.Context, tx *sql.Tx, fileID string, submissionFileSize int64) error {
-	stmt := db.getPreparedStmt(tx, setSubmissionFileSizeQuery)
+	stmt, err := db.getPreparedStmt(tx, setSubmissionFileSizeQuery)
+	if err != nil {
+		return err
+	}
 
 	r, err := stmt.ExecContext(ctx, submissionFileSize, fileID)
 	if err != nil {

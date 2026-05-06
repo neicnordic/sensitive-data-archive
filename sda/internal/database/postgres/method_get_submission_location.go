@@ -17,7 +17,10 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getSubmissionLocation(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getSubmissionLocationQuery)
+	stmt, err := db.getPreparedStmt(tx, getSubmissionLocationQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var submissionLocation string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&submissionLocation); err != nil {

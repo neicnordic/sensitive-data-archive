@@ -19,7 +19,10 @@ WHERE stable_id = $1;
 }
 
 func (db *pgDb) getMappingData(ctx context.Context, tx *sql.Tx, accessionID string) (*database.MappingData, error) {
-	stmt := db.getPreparedStmt(tx, getMappingDataQuery)
+	stmt, err := db.getPreparedStmt(tx, getMappingDataQuery)
+	if err != nil {
+		return nil, err
+	}
 
 	data := &database.MappingData{}
 	var submissionLocation sql.NullString

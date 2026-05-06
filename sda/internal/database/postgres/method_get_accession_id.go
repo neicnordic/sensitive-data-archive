@@ -16,11 +16,13 @@ WHERE id = $1;
 }
 
 func (db *pgDb) getAccessionID(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getAccessionIDQuery)
+	stmt, err := db.getPreparedStmt(tx, getAccessionIDQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var aID string
-	err := stmt.QueryRowContext(ctx, fileID).Scan(&aID)
-	if err != nil {
+	if err := stmt.QueryRowContext(ctx, fileID).Scan(&aID); err != nil {
 		return "", err
 	}
 

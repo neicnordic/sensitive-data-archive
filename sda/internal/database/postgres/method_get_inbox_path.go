@@ -16,11 +16,13 @@ WHERE stable_id = $1;
 }
 
 func (db *pgDb) getInboxPath(ctx context.Context, tx *sql.Tx, accessionID string) (string, error) {
-	stmt := db.getPreparedStmt(tx, getInboxPathQuery)
+	stmt, err := db.getPreparedStmt(tx, getInboxPathQuery)
+	if err != nil {
+		return "", err
+	}
 
 	var inboxPath string
-	err := stmt.QueryRowContext(ctx, accessionID).Scan(&inboxPath)
-	if err != nil {
+	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&inboxPath); err != nil {
 		return "", err
 	}
 
