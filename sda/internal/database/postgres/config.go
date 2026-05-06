@@ -149,7 +149,7 @@ func init() {
 		&config.Flag{
 			Name: "database.max_idle_connections",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Int(flagName, globalConf.maxIdleConnections, "Sets the maximum number of connections in the idle connection pool, set to <= 0 for unlimited")
+				flagSet.Int(flagName, globalConf.maxIdleConnections, "Sets the maximum number of connections in the idle connection pool, if set to <= 0 no idle connections are retained.")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
