@@ -233,10 +233,25 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	}
 
 	// if this is an upload request
-	if fileID == "" {
-		fileID, err = p.database.RegisterFile(r.Context(), nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
+	if fileID == "" { // nolint: nestif
+		// Ideally this transaction should span the whole request processing, but for now just spans the RegisterFile
+		tx, err := p.database.BeginTransaction(r.Context())
+		if err != nil {
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to begin transaction, reason: %v", err))
+
+			return
+		}
+		fileID, err = tx.RegisterFile(r.Context(), nil, p.s3Conf.Endpoint+"/"+p.s3Conf.Bucket, filePath, username)
 		if err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to register file in database: %v", err))
+			if err := tx.Rollback(); err != nil {
+				log.Errorf("failed to rollback RegisterFile transaction, reason: %v", err)
+			}
+
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to commit RegisterFile transaction, reason: %v", err))
 
 			return
 		}
