@@ -63,25 +63,12 @@ func List(apiURI, token, username string) error {
 
 		cursor = headers.Get("X-Next-Cursor")
 
-		if isTTY {
-			fmt.Print(string(pretty.Pretty(body)))
-			if cursor == "" {
-				break
-			}
-			fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
-			if err := waitForContinue(); err != nil {
-				return err
-			}
-			fmt.Fprintln(os.Stderr)
-		} else {
-			var page []json.RawMessage
-			if err := json.Unmarshal(body, &page); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			allItems = append(allItems, page...)
-			if cursor == "" {
-				break
-			}
+		allItems, err = handleListPage(body, cursor, isTTY, allItems)
+		if err != nil {
+			return err
+		}
+		if cursor == "" {
+			break
 		}
 	}
 
@@ -97,6 +84,29 @@ func List(apiURI, token, username string) error {
 	}
 
 	return nil
+}
+
+func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawMessage) ([]json.RawMessage, error) {
+	if isTTY {
+		fmt.Print(string(pretty.Pretty(body)))
+		if cursor == "" {
+			return allItems, nil
+		}
+		fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
+		if err := waitForContinue(); err != nil {
+			return nil, err
+		}
+		fmt.Fprintln(os.Stderr)
+
+		return allItems, nil
+	}
+
+	var page []json.RawMessage
+	if err := json.Unmarshal(body, &page); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return append(allItems, page...), nil
 }
 
 // waitForContinue is a variable so it can be replaced in tests.
