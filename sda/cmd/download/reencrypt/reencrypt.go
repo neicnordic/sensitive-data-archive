@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // Client provides methods for re-encrypting crypt4gh headers.
@@ -193,12 +194,27 @@ func (c *Client) ReencryptHeaderWithEditList(ctx context.Context, oldHeader []by
 	return res.GetHeader(), nil
 }
 
-// HealthCheck validates that the gRPC client can be constructed with the
-// configured options. Note: grpc.NewClient does no I/O, so this does NOT
-// verify that the remote reencrypt service is reachable.
-// TODO: perform a real RPC (e.g. grpc health check) to verify reachability.
-func (c *Client) HealthCheck() error {
-	return c.connect()
+// HealthCheck verifies the remote reencrypt service is reachable and serving
+// using the standard gRPC health check protocol. The caller controls the
+// deadline via the provided context; no additional timeout is applied so
+// Kubernetes probe timeoutSeconds can bound the total duration.
+func (c *Client) HealthCheck(ctx context.Context) error {
+	if err := c.connect(); err != nil {
+		return err
+	}
+
+	client := healthgrpc.NewHealthClient(c.conn)
+
+	resp, err := client.Check(ctx, &healthgrpc.HealthCheckRequest{})
+	if err != nil {
+		return fmt.Errorf("grpc health check failed: %w", err)
+	}
+
+	if resp.GetStatus() != healthgrpc.HealthCheckResponse_SERVING {
+		return fmt.Errorf("reencrypt service status: %s", resp.GetStatus().String())
+	}
+
+	return nil
 }
 
 // Close closes the gRPC connection.
