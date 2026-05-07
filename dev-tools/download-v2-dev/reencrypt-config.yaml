@@ -1,0 +1,10 @@
+log:
+  format: "json"
+  level: "debug"
+
+c4gh:
+  filePath: /shared/c4gh.sec.pem
+  passphrase: "c4ghpass"
+  privateKeys:
+  - filePath: /shared/c4gh.sec.pem
+    passphrase: "c4ghpass"

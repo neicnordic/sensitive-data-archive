@@ -78,12 +78,16 @@ cat > "/shared/trusted-issuers.json" <<'EOF'
 ]
 EOF
 
-## create crypt4gh key
+## create crypt4gh keys
 if [ ! -f "/shared/c4gh.pub.pem" ]; then
     echo "downloading crypt4gh"
     latest_c4gh=$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
     curl --retry 100 -sL "https://github.com/neicnordic/crypt4gh/releases/download/${latest_c4gh}/crypt4gh_linux_x86_64.tar.gz" | tar -xz -C /shared/
-    /shared/crypt4gh generate -n /shared/c4gh -p c4gh
+    # Generate all keys the shared reencrypt config references; passphrases
+    # must match sda/config.yaml.
+    /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
+    /shared/crypt4gh generate -n /shared/sync -p syncPass
+    /shared/crypt4gh generate -n /shared/rotatekey -p rotatekeyPass
 fi
 
 echo "download credentials setup complete"
