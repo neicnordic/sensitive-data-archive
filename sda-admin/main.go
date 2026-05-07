@@ -673,9 +673,10 @@ func main() {
 		}
 	case "file":
 		if err := handleFileCommand(); err != nil {
-			if !errors.Is(err, file.ErrAborted) {
-				fmt.Fprintln(os.Stderr, err)
+			if errors.Is(err, file.ErrAborted) {
+				os.Exit(0)
 			}
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "dataset":

@@ -24,7 +24,15 @@ SECURITY DEFINER
 SET search_path = pg_catalog, sda
 AS $update_files_last_event$
 BEGIN
-    UPDATE sda.files SET last_event = NEW.event WHERE id = NEW.file_id;
+        UPDATE sda.files
+        SET last_event = NEW.event
+        WHERE id = NEW.file_id
+            AND NOT EXISTS (
+                    SELECT 1
+                    FROM sda.file_event_log AS fel
+                    WHERE fel.file_id = NEW.file_id
+                        AND fel.started_at > NEW.started_at
+            );
     RETURN NEW;
 END;
 $update_files_last_event$;
