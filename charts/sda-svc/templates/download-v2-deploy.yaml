@@ -1,0 +1,153 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.downloadV2.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sda.fullname" . }}-download-v2
+  labels:
+    role: download-v2
+    app: {{ template "sda.fullname" . }}-download-v2
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: {{ template "sda.fullname" . }}-download-v2
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.downloadV2.replicaCount }}
+  revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-download-v2
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "sda.fullname" . }}-download-v2
+        role: download-v2
+        release: {{ .Release.Name }}
+      annotations:
+        {{- if not .Values.global.vaultSecrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/download-v2-secrets.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.global.podAnnotations }}
+{{- toYaml .Values.global.podAnnotations | nindent 8 -}}
+{{- end }}
+{{- if .Values.downloadV2.annotations }}
+{{- toYaml .Values.downloadV2.annotations | nindent 8 -}}
+{{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+        topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app: {{ template "sda.fullname" . }}-download-v2
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "sda.fullname" . }}-download-v2
+            topologyKey: kubernetes.io/hostname
+    {{- if .Values.global.rbacEnabled}}
+      serviceAccountName: {{ .Release.Name }}
+    {{- end }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: download-v2
+        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: "RuntimeDefault"
+        command: ["sda-download"]
+        env:
+        - name: CONFIG_FILE
+          value: {{ include "confFile" . }}
+        ports:
+        - name: download-v2
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+{{ toYaml .Values.downloadV2.livenessProbe | trim | indent 10 }}
+        readinessProbe:
+{{ toYaml .Values.downloadV2.readinessProbe | trim | indent 10 }}
+        resources:
+{{ toYaml .Values.downloadV2.resources | trim | indent 10 }}
+        volumeMounts:
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
+        {{- if .Values.global.downloadV2.visa.trustedIssuers }}
+        - name: iss
+          mountPath: {{ template "trustedIssPath" . }}
+        {{- end }}
+        {{- if .Values.global.oidc.jwtSecret }}
+        - name: jwt
+          mountPath: {{ template "jwtPath" . }}
+        {{- end }}
+      {{- end }}
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+          mountPath: {{ .Values.global.archive.volumePath | quote }}
+      {{- end }}
+      enableServiceLinks: false
+      volumes:
+      {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+        {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
+          secret:
+            defaultMode: 0640
+            secretName: {{ template "sda.fullname" . }}-download-v2-certs
+        {{- else }}
+          secret:
+            defaultMode: 0640
+            secretName: {{ required "An certificate issuer or a TLS secret name is required for download-v2" .Values.downloadV2.tls.secretName }}
+        {{- end }}
+      {{- end }}
+      {{- if not .Values.global.vaultSecrets }}
+        - name: config
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-download-v2
+        {{- if .Values.global.downloadV2.visa.trustedIssuers }}
+        - name: iss
+          secret:
+            defaultMode: 0440
+            secretName: {{ template "sda.fullname" . }}-download-v2-iss
+        {{- end }}
+        {{- if .Values.global.oidc.jwtSecret }}
+        - name: jwt
+          secret:
+            defaultMode: 0440
+            secretName: {{ .Values.global.oidc.jwtSecret }}
+        {{- end }}
+      {{- end }}
+      {{- if eq "posix" .Values.global.archive.storageType }}
+        - name: archive
+        {{- if .Values.global.archive.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.archive.existingClaim }}
+        {{- else }}
+          nfs:
+            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
+            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+        {{- end }}
+      {{- end }}
+      restartPolicy: Always
+{{- end }}
+{{- end }}
