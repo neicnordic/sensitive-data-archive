@@ -1074,9 +1074,11 @@ ORDER BY f.id ASC LIMIT $5;`
 	}
 
 	// default limit: 0 means unlimited (return all rows, no cursor emitted).
+	// Clamped to math.MaxInt32-1 so that fetchLim = lim+1 never overflows int32
+	// on 32-bit platforms and avoids sending math.MaxInt32+1 as a LIMIT to Postgres.
 	lim := limit
 	if lim <= 0 {
-		lim = math.MaxInt32
+		lim = math.MaxInt32 - 1
 	}
 	// Fetch one extra row to determine whether a next page exists.
 	fetchLim := lim + 1

@@ -29,8 +29,14 @@ type RequestBodyFileAccession struct {
 }
 
 // List fetches and prints all files for username, auto-paginating.
-// After each page (when more remain) the user is prompted to press Enter or
-// Space for the next page, or Ctrl+C to abort.
+//
+// When stdout is a TTY (interactive session), each page is printed as it
+// arrives and the user is prompted to press Enter or Space for the next page,
+// or Ctrl+C to abort.
+//
+// When stdout is not a TTY (e.g. piped to jq or another program), all pages
+// are collected and emitted as a single JSON array so that consumers always
+// receive valid JSON.
 func List(apiURI, token, username string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
@@ -38,6 +44,9 @@ func List(apiURI, token, username string) error {
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
 
+	isTTY := term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec
+
+	var allItems []json.RawMessage
 	cursor := ""
 	for {
 		u := *parsedURL
@@ -52,18 +61,39 @@ func List(apiURI, token, username string) error {
 			return err
 		}
 
-		fmt.Print(string(pretty.Pretty(body)))
-
 		cursor = headers.Get("X-Next-Cursor")
-		if cursor == "" {
-			break
-		}
 
-		fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
-		if err := waitForContinue(); err != nil {
+		if isTTY {
+			fmt.Print(string(pretty.Pretty(body)))
+			if cursor == "" {
+				break
+			}
+			fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
+			if err := waitForContinue(); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr)
+		} else {
+			var page []json.RawMessage
+			if err := json.Unmarshal(body, &page); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+			allItems = append(allItems, page...)
+			if cursor == "" {
+				break
+			}
+		}
+	}
+
+	if !isTTY {
+		if allItems == nil {
+			allItems = make([]json.RawMessage, 0)
+		}
+		out, err := json.Marshal(allItems)
+		if err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr)
+		fmt.Print(string(pretty.Pretty(out)))
 	}
 
 	return nil

@@ -889,21 +889,30 @@ func (s *TestSuite) TestAPIGetFiles_Pagination() {
 	router.ServeHTTP(w, r)
 	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "invalid cursor should return 400")
 
-	// limit=2 with 5 files must return X-Next-Cursor.
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/files?path_prefix=pagtest&limit=2", http.NoBody)
-	r.Header.Add("Authorization", "Bearer "+s.Token)
-	router.ServeHTTP(w, r)
-	assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
-	assert.NotEmpty(s.T(), w.Header().Get("X-Next-Cursor"), "expected X-Next-Cursor header when more pages exist")
+	// Paginate through all pages with limit=2 over 5 files; collect every returned item.
+	var totalFiles []map[string]any
+	cursor := ""
+	for {
+		url := "/files?path_prefix=pagtest&limit=2"
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+		w = httptest.NewRecorder()
+		r = httptest.NewRequest(http.MethodGet, url, http.NoBody)
+		r.Header.Add("Authorization", "Bearer "+s.Token)
+		router.ServeHTTP(w, r)
+		assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
 
-	// Following the cursor must return the remaining files and no further cursor.
-	nextCursor := w.Header().Get("X-Next-Cursor")
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/files?path_prefix=pagtest&limit=2&cursor="+nextCursor, http.NoBody)
-	r.Header.Add("Authorization", "Bearer "+s.Token)
-	router.ServeHTTP(w, r)
-	assert.Equal(s.T(), http.StatusOK, w.Code, "page-2 request should return 200")
+		var page []map[string]any
+		assert.NoError(s.T(), json.NewDecoder(w.Body).Decode(&page))
+		totalFiles = append(totalFiles, page...)
+
+		cursor = w.Header().Get("X-Next-Cursor")
+		if cursor == "" {
+			break
+		}
+	}
+	assert.Equal(s.T(), 5, len(totalFiles), "all 5 pagtest files must be returned across pages")
 }
 
 func (s *TestSuite) TestListUserFiles_Pagination() {
@@ -949,13 +958,30 @@ func (s *TestSuite) TestListUserFiles_Pagination() {
 	router.ServeHTTP(w, r)
 	assert.Equal(s.T(), http.StatusBadRequest, w.Code, "invalid cursor should return 400")
 
-	// limit=2 with 5 files must return X-Next-Cursor.
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/users/"+user+"/files?path_prefix=paglisttest&limit=2", http.NoBody)
-	r.Header.Add("Authorization", "Bearer "+s.Token)
-	router.ServeHTTP(w, r)
-	assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
-	assert.NotEmpty(s.T(), w.Header().Get("X-Next-Cursor"), "expected X-Next-Cursor header when more pages exist")
+	// Paginate through all pages with limit=2 over 5 files; collect every returned item.
+	var totalUserFiles []map[string]any
+	userCursor := ""
+	for {
+		url := "/users/" + user + "/files?path_prefix=paglisttest&limit=2"
+		if userCursor != "" {
+			url += "&cursor=" + userCursor
+		}
+		w = httptest.NewRecorder()
+		r = httptest.NewRequest(http.MethodGet, url, http.NoBody)
+		r.Header.Add("Authorization", "Bearer "+s.Token)
+		router.ServeHTTP(w, r)
+		assert.Equal(s.T(), http.StatusOK, w.Code, "paginated request should return 200")
+
+		var page []map[string]any
+		assert.NoError(s.T(), json.NewDecoder(w.Body).Decode(&page))
+		totalUserFiles = append(totalUserFiles, page...)
+
+		userCursor = w.Header().Get("X-Next-Cursor")
+		if userCursor == "" {
+			break
+		}
+	}
+	assert.Equal(s.T(), 5, len(totalUserFiles), "all 5 paglisttest files must be returned across pages")
 }
 
 func TestApiTestSuite(t *testing.T) {
