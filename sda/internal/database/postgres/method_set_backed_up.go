@@ -24,12 +24,12 @@ func (db *pgDb) setBackedUp(ctx context.Context, tx *sql.Tx, location, path, fil
 
 	r, err := stmt.ExecContext(ctx, location, path, fileID)
 	if err != nil {
-		return fmt.Errorf("setBackedUp error: %s", err.Error())
+		return fmt.Errorf("setBackedUp error: %w", err)
 	}
 
 	rowsAffected, err := r.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("setBackedUp error: %s", err.Error())
+		return fmt.Errorf("setBackedUp error: %w", err)
 	}
 
 	if rowsAffected == 0 {
