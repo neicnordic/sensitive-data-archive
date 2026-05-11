@@ -47,15 +47,15 @@ func (db *pgDb) setVerified(ctx context.Context, tx *sql.Tx, file *database.File
 	}
 
 	if _, err := stmt.ExecContext(ctx, file.DecryptedSize, fileID); err != nil {
-		return fmt.Errorf("setVerified error: %s", err.Error())
+		return fmt.Errorf("setVerified error: %w", err)
 	}
 
 	if _, err := addArchiveChecksumStmt.ExecContext(ctx, fileID, file.ArchivedChecksum, "SHA256"); err != nil {
-		return fmt.Errorf("addArchiveChecksum error: %s", err.Error())
+		return fmt.Errorf("addArchiveChecksum error: %w", err)
 	}
 
 	if _, err := addUnencryptedChecksumStmt.ExecContext(ctx, fileID, file.DecryptedChecksum, "SHA256"); err != nil {
-		return fmt.Errorf("addUnencryptedChecksum error: %s", err.Error())
+		return fmt.Errorf("addUnencryptedChecksum error: %w", err)
 	}
 
 	return nil
