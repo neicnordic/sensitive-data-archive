@@ -90,10 +90,10 @@ global:
       configFile: "iss.json"
       iss:
         - iss: "http://oidc:8080"
-          jku: "http://oidc:8080/jwks"
+          jku: "http://oidc:8080/jwk"
   oidc:
     provider: "http://oidc:8080"
-    jwkPath: "/jwks"
+    jwkPath: "/jwk"
     id: DfCieZLuBU
     secret: DfCieZLuBU
   reencrypt:
