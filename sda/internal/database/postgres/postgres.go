@@ -79,7 +79,7 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 }
 
 func (db *pgDb) SchemaVersion() (int, error) {
-	if db.db == nil {
+	if db == nil || db.db == nil {
 		return 0, errors.New("database not initialized")
 	}
 
@@ -87,7 +87,7 @@ func (db *pgDb) SchemaVersion() (int, error) {
 }
 
 func (db *pgDb) Ping(ctx context.Context) error {
-	if db.db == nil {
+	if db == nil || db.db == nil {
 		return errors.New("database not initialized")
 	}
 
@@ -96,7 +96,7 @@ func (db *pgDb) Ping(ctx context.Context) error {
 
 // Close terminates the connection to the database
 func (db *pgDb) Close() error {
-	if db.db == nil {
+	if db == nil || db.db == nil {
 		return nil
 	}
 
@@ -111,6 +111,10 @@ func (db *pgDb) Close() error {
 }
 
 func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, error) {
+	if db == nil || db.db == nil {
+		return nil, errors.New("database not initialized")
+	}
+
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
