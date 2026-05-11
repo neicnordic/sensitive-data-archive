@@ -153,6 +153,10 @@ type IngestionUserError struct {
 	Reason   string `json:"reason"`
 }
 
+type UpdateEvent struct {
+	Reason string `json:"reason"`
+}
+
 type IngestionVerification struct {
 	User               string      `json:"user"`
 	FilePath           string      `json:"filepath"`
