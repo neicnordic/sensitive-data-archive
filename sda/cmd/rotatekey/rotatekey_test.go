@@ -174,6 +174,9 @@ func TestRotateKeyTestSuite(t *testing.T) {
 
 func (ts *TestSuite) TearDownSuite() {
 	_ = ts.app.db.Close()
+	if ts.verificationDB != nil {
+		ts.NoError(ts.verificationDB.Close())
+	}
 }
 func (ts *TestSuite) SetupSuite() {
 	ts.app.Conf = &config.Config{}

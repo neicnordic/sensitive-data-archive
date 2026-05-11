@@ -257,6 +257,15 @@ func (ts *TestSuite) SetupSuite() {
 	ts.UserName = "test-ingest"
 }
 
+func (ts *TestSuite) TearDownSuite() {
+	if ts.verificationDB != nil {
+		ts.NoError(ts.verificationDB.Close())
+	}
+	if ts.ingest.db != nil {
+		ts.NoError(ts.ingest.db.Close())
+	}
+}
+
 func (ts *TestSuite) SetupTest() {
 	ts.archiveDir = ts.T().TempDir()
 	ts.inboxDir = ts.T().TempDir()
