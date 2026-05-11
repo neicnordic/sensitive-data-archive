@@ -210,6 +210,8 @@ func setup(conf *config.Config) (*http.Server, error) {
 	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
 	// submission endpoints below here
 	r.POST("/file/ingest", rbac(e), ingestFile)                      // start ingestion of a file
+	r.GET("/file/events/:fileid", rbac(e), getFileEvent)             // get file events associated with a file
+	r.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)  // get file events associated with a file
 	r.POST("/file/accession", rbac(e), setAccession)                 // assign accession ID to a file
 	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)          // trigger reverification of a file
 	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
@@ -298,7 +300,7 @@ func checkDB(ctx context.Context, db database.Database, timeout time.Duration) e
 
 func auditLog(auditFields log.Fields) {
 	auditFields["audit"] = true
-	Conf.API.AuditLogger.WithFields(auditFields).Info("Incoming audit event")
+	Conf.API.AuditLogger.WithFields(auditFields).Info("incoming audit event")
 }
 
 func rbac(e *casbin.Enforcer) gin.HandlerFunc {
@@ -1326,6 +1328,59 @@ func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
 	}
 
 	return c, nil
+}
+
+func updateFileEvent(c *gin.Context) {
+	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
+	event := strings.TrimPrefix(c.Param("event"), "/")
+
+	var updateEvent schema.UpdateEvent
+	if err := c.BindJSON(&updateEvent); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error":  "json decoding : " + err.Error(),
+				"status": http.StatusBadRequest,
+			},
+		)
+	}
+
+	token, err := auth.Authenticate(c.Request)
+	if err != nil {
+		c.JSON(401, err.Error())
+
+		return
+	}
+
+	detailsMap := map[string]string{"reason": updateEvent.Reason}
+	details, err := json.Marshal(detailsMap)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to encode reason"})
+
+		return
+	}
+
+	err = Conf.API.DB.UpdateFileEventLog(fileID, event, token.Subject(), string(details), "{}")
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"fileID": fileID, "event": event, "reason": string(details)})
+}
+
+func getFileEvent(c *gin.Context) {
+	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
+
+	status, err := Conf.API.DB.GetFileStatus(fileID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": status})
 }
 
 func reVerifyFile(c *gin.Context) {
