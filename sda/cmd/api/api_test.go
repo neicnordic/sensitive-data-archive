@@ -604,6 +604,12 @@ func (s *TestSuite) TearDownSuite() {
 	if s.GrpcListener.Listener != nil {
 		_ = s.GrpcListener.Listener.Close()
 	}
+	if s.verificationDB != nil {
+		s.NoError(s.verificationDB.Close())
+	}
+	if db != nil {
+		s.NoError(db.Close())
+	}
 }
 func (s *TestSuite) SetupTest() {
 	_, err = s.verificationDB.Exec("TRUNCATE sda.files CASCADE")
