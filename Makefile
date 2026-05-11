@@ -317,3 +317,31 @@ k3d-deploy-sda-posix:
 	@bash .github/integration/scripts/charts/deploy_charts.sh sda-svc "$$(date +%F)" false posix
 k3d-cleanup-all-deployments:
 	@bash .github/integration/scripts/charts/cleanup.sh
+
+.PHONY: bench-verify bench-current bench-baseline bench-all
+bench-verify: ## Verify copied SQL in bench pkg matches upstream method_*.go
+	@cd sda && go test -run TestBenchVerifyCopiedSQL ./internal/database/benchmark/...
+
+bench-current: ## Bench prep vs noprep on this branch (Karl's tree); benchstat the delta
+	@cd sda && BENCH_ADAPTER=noprep go test -bench=. -run='^$$' -benchmem -count=$${BENCH_COUNT:-10} ./internal/database/benchmark/... | tee /tmp/sda-bench-01a.txt
+	@cd sda && BENCH_ADAPTER=prep   go test -bench=. -run='^$$' -benchmem -count=$${BENCH_COUNT:-10} ./internal/database/benchmark/... | tee /tmp/sda-bench-01b.txt
+	@echo ""
+	@echo "=== 01a noprep vs 01b prep (this branch only) ==="
+	@benchstat /tmp/sda-bench-01a.txt /tmp/sda-bench-01b.txt | tee /tmp/sda-bench-vs-01a-01b.txt
+
+bench-baseline: ## Bench main's pre-Karl SDAdb in a throwaway worktree (see dev-tools/bench-baseline-main/README.md)
+	@./dev-tools/bench-baseline-main/run.sh
+
+bench-all: ## Run baseline + current, benchstat across all three variants, print sprint-review summary
+	@./dev-tools/bench-baseline-main/run.sh
+	@$(MAKE) bench-current
+	@echo ""
+	@echo "=== 00 baseline-main vs 01a noprep ==="
+	@benchstat /tmp/sda-bench-00.txt /tmp/sda-bench-01a.txt | tee /tmp/sda-bench-vs-00-01a.txt
+	@echo ""
+	@echo "=== 00 baseline-main vs 01b prep ==="
+	@benchstat /tmp/sda-bench-00.txt /tmp/sda-bench-01b.txt | tee /tmp/sda-bench-vs-00-01b.txt
+	@./dev-tools/bench-baseline-main/summary.sh \
+		/tmp/sda-bench-vs-01a-01b.txt \
+		/tmp/sda-bench-vs-00-01a.txt \
+		/tmp/sda-bench-vs-00-01b.txt

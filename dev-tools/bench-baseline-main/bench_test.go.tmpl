@@ -1,0 +1,91 @@
+package benchmark
+
+import (
+	"fmt"
+	"testing"
+)
+
+// Variant 00 baseline: bench against main's SDAdb wrapper. No prep statements,
+// no context.Context, has per-call Ping in checkAndReconnectIfNeeded and the
+// retry loop. Bench names match the feature-branch package so benchstat can
+// compare across variants.
+//
+// UpdateFileEventLog takes string args for details/message (JSONB columns);
+// main's API cannot bind Go nil, so we pass "null" (a valid JSON literal).
+// The adapter bench on Karl's branch passes nil → SQL NULL, which is a small
+// asymmetry on this row only — does not affect 01a-vs-01b (both pass nil).
+
+func BenchmarkUpdateFileEventLog(b *testing.B) {
+	truncateTables(b, testDB)
+	fileID := seedFile(b, testDB)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := sdaDB.UpdateFileEventLog(fileID, "uploaded", "bench-user", "null", "null"); err != nil {
+			b.Fatalf("UpdateFileEventLog: %v", err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkGetFileStatus(b *testing.B) {
+	truncateTables(b, testDB)
+	fileID := seedFile(b, testDB)
+	if _, err := testDB.Exec(
+		`INSERT INTO sda.file_event_log(file_id, event, user_id, details, message)
+		 VALUES($1, 'uploaded', 'bench-user', NULL, NULL)`, fileID); err != nil {
+		b.Fatalf("seed event: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := sdaDB.GetFileStatus(fileID); err != nil {
+			b.Fatalf("GetFileStatus: %v", err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkStoreHeader(b *testing.B) {
+	truncateTables(b, testDB)
+	fileID := seedFile(b, testDB)
+	header := []byte{0xde, 0xad, 0xbe, 0xef}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := sdaDB.StoreHeader(header, fileID); err != nil {
+			b.Fatalf("StoreHeader: %v", err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkGetHeader(b *testing.B) {
+	truncateTables(b, testDB)
+	fileID := seedFile(b, testDB)
+	if err := sdaDB.StoreHeader([]byte{0xde, 0xad, 0xbe, 0xef}, fileID); err != nil {
+		b.Fatalf("seed header: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := sdaDB.GetHeader(fileID); err != nil {
+			b.Fatalf("GetHeader: %v", err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkGetArchivePathAndLocation(b *testing.B) {
+	truncateTables(b, testDB)
+	_ = seedFile(b, testDB)
+	accessionID := fmt.Sprintf("accession-%d", seedCounter)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := sdaDB.GetArchivePathAndLocation(accessionID); err != nil {
+			b.Fatalf("GetArchivePathAndLocation: %v", err)
+		}
+	}
+	b.StopTimer()
+}
