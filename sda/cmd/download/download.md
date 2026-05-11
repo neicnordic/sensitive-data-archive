@@ -143,12 +143,12 @@ common v1 endpoints to their v2 equivalents.
 
 | v1 endpoint                                | v2 endpoint                                  | Notes                                                                                   |
 |--------------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------|
-| `GET /metadata/datasets`                   | `GET /datasets`                              | Returns paginated objects with metadata, not a flat array of dataset IDs                |
+| `GET /metadata/datasets`                   | `GET /datasets`                              | Returns a paginated envelope `{ "datasets": [ids...], "nextPageToken": ... }`, not a flat array of strings |
 | `GET /metadata/datasets/{ds}/files`        | `GET /datasets/:datasetId/files`             | Paginated; response shape changed (see below)                                           |
-| `GET /files/{fileId}`                      | `GET /files/:fileId`                         | Path unchanged. Re-encrypted Crypt4GH file. Range support via HTTP `Range` header only. |
-| `HEAD /files/{fileId}`                     | `HEAD /files/:fileId`                        | Path unchanged                                                                          |
+| `GET /files/{fileId}`                      | `GET /files/:fileId`                         | Path unchanged, but always returns a Crypt4GH file re-encrypted to the recipient's public key. v1 could be configured to stream plaintext from `/files/...` when the service held a Crypt4GH private key; that mode no longer exists. See [Decrypted streaming has been removed](#decrypted-streaming-has-been-removed). Range support via HTTP `Range` header only. |
+| _Not in v1_                                | `HEAD /files/:fileId`                        | v1 only supported `HEAD` on `/s3/*path`. v2 adds `HEAD` to every download tier (`/files/:fileId`, `/files/:fileId/header`, `/files/:fileId/content`). |
 | `GET /s3/{datasetid}/{fileid}` (decrypted) | _Removed_                                    | Decrypted streaming is no longer offered. Clients decrypt locally with their c4gh key.  |
-| `GET /s3-encrypted/{datasetid}/{fileid}`   | `GET /files/:fileId/content`                 | Returns encrypted data segments only (no Crypt4GH header). Range supported.             |
+| `GET /s3-encrypted/{datasetid}/{fileid}`   | `GET /files/:fileId`                         | v1 prepended a re-encrypted Crypt4GH header before the body, so the closest complete `.c4gh` equivalent is the combined endpoint. Clients that fetch the header and body separately can use `/files/:fileId/header` + `/files/:fileId/content` instead. |
 | _New in v2_                                | `GET /files/:fileId/header`                  | Re-encrypted Crypt4GH header only — useful for htsget-style clients that fetch the header once and stream content separately. |
 | _New in v2_                                | `GET /objects/:datasetId/:filePath`          | GA4GH DRS 1.5 object endpoint. Returns checksums of the **encrypted** blob (per DRS).   |
 
@@ -163,29 +163,88 @@ fields:
 | `filePath`                      | `filePath`                            | Unchanged                                                                            |
 | `displayFileName`               | _Removed_                             | Derive from `filePath` if needed (final path segment)                                |
 | `decryptedFileSize`             | `decryptedSize`                       | Renamed                                                                              |
-| _(not in v1)_                   | `size`                                | Encrypted blob size (the bytes served at `downloadUrl`)                              |
+| _(not in v1)_                   | `size`                                | Archive blob size, excluding the Crypt4GH header. Matches the bytes served at `/files/:fileId/content`. The combined `/files/:fileId` response is larger by the re-encrypted header. |
 | `decryptedFileChecksum` + `decryptedFileChecksumType` | `checksums[]` array | Same source (`UNENCRYPTED`), array shape allows multiple algorithms — see [Checksums](#checksums) |
 | _(not in v1)_                   | `downloadUrl`                         | Convenience pointer to `/files/:fileId`                                              |
 | _(top-level)_                   | `nextPageToken`                       | Pagination cursor — see [Pagination](#pagination) below                              |
 
 #### Other behavioural changes
 
-- **Public-key header renamed.** v1 used `Client-public-key`; v2 uses `X-C4GH-Public-Key`
-  (still base64-encoded). v1's separate `?scheme=` query parameter has been removed
-  — encode dataset IDs as path segments directly.
+- **Public-key header renamed (and a second accepted name added).** v1 used
+  `Client-public-key`. v2 accepts the recipient public key (base64-encoded) on
+  exactly one of two headers: `X-C4GH-Public-Key` (preferred) or
+  `Htsget-Context-Public-Key` (for htsget-style clients). Supplying both
+  returns `400` with code `KEY_CONFLICT`; omitting both on an endpoint that
+  needs the key returns `400` with code `KEY_MISSING`. v1's separate
+  `?scheme=` query parameter has been removed — encode dataset IDs as path
+  segments directly.
 - **Range parameters removed.** v1 accepted `?startCoordinate=&endCoordinate=`
-  query parameters as well as the HTTP `Range` header. v2 only honours `Range:
-  bytes=START-END`, which keeps it aligned with standard HTTP byte-range semantics.
+  query parameters as well as the HTTP `Range` header. v2 only honours the
+  HTTP `Range` header, in the standard single byte-range forms:
+  `bytes=START-END`, `bytes=START-`, and `bytes=-SUFFIX`. Multi-range
+  requests (comma-separated ranges) are not supported and return `400`.
 - **`ETag` semantics changed.** v1 set `ETag` to the plaintext SHA-256 of the
-  file (i.e. the same value as `decryptedFileChecksum`). v2 sets `ETag` to a
-  SHA-256 of the re-encrypted Crypt4GH header — it is stable per (file, recipient
-  key) but is **not** a full-file digest and is **not** the plaintext checksum.
-  Use `checksums[]` from `/datasets/:ds/files` for end-to-end verification.
+  file (i.e. the same value as `decryptedFileChecksum`). v2 sets `ETag`
+  differently per endpoint, and in neither case is it the plaintext checksum:
+  - `GET /files/:fileId` (combined header + body) returns a SHA-256 of the
+    re-encrypted Crypt4GH header. Because the re-encryption step generates a
+    fresh ephemeral X25519 keypair on every call, the header bytes change on
+    every request, so this `ETag` changes per request and is not usable for
+    `If-Range` resume across requests.
+  - `GET /files/:fileId/content` returns a stable synthetic ETag derived from
+    `(fileId, archiveSize)`. It identifies the resource but is not a checksum
+    of the returned bytes; the returned bytes are the header-stripped archive
+    blob and do match the `ARCHIVED` checksum (see [Checksums](#checksums)).
+
+  Use `checksums[]` from `/datasets/:ds/files` for plaintext verification
+  after decryption.
 - **Session cookie default renamed** from `sda_session_key` to `sda_session`. The
   legacy name is still accepted for backwards compatibility — see
   [Session Caching](#session-caching).
 - **`X-Amz-Security-Token` accepted** alongside `Authorization: Bearer` to support
   S3-style clients. v1 only accepted `Authorization`.
+
+#### Decrypted streaming has been removed
+
+v1 could stream the plaintext file directly when the service was deployed
+with a Crypt4GH private key. This applied both to `/s3/{datasetid}/{fileid}`
+(the default `type` arm) and to `/files/{fileid}`, which shared the same
+handler. v2 does not. Every download returns Crypt4GH-encrypted bytes
+re-encrypted to the recipient's public key, and the client decrypts
+locally.
+
+If a v1 deployment used server-side decryption — whether through an htsget
+proxy reading plaintext off `/s3/...`, or clients pulling plaintext from
+`/files/{fileid}` — the operator has two options: move decryption to the
+consumer (the consumer generates its own Crypt4GH keypair, sends the public
+key on one of the accepted public-key headers (`X-C4GH-Public-Key` or
+`Htsget-Context-Public-Key`), and decrypts locally with its own private
+key), or run a decrypting proxy in front of the consumer that holds a
+Crypt4GH keypair on its behalf. The archive's private key is never shipped
+to clients.
+
+v1 also returned `400 Bad Request` from `/s3/...` when
+`ALLOW_UNENCRYPTED_DOWNLOAD` was off. v2 has no equivalent path; the
+`/files/:fileId` flow always returns encrypted bytes, so any v1 client
+branching on that `400` can drop the branch.
+
+#### Dataset IDs that contain a URL scheme
+
+v1 documented a `?scheme=https` query parameter to work around reverse-proxy
+issues with dataset IDs like `https://doi.org/abc/123`. v2 enables
+`router.UseRawPath`, so the dataset ID is passed as a single URL-encoded path
+segment:
+
+```bash
+# v1: /metadata/datasets/doi.org/abc/123/files?scheme=https
+# v2: /datasets/https%3A%2F%2Fdoi.org%2Fabc%2F123/files
+curl -H "Authorization: Bearer $token" \
+     "https://HOSTNAME/datasets/https%3A%2F%2Fdoi.org%2Fabc%2F123/files"
+```
+
+The router matches routes against the raw URL-encoded path, then
+`c.Param("datasetId")` returns the decoded value. v2 does not recognise the
+`?scheme=` query parameter.
 
 #### Pagination
 
@@ -199,8 +258,8 @@ returns paginated envelopes:
 }
 ```
 
-If `nextPageToken` is non-null, pass it as `?page_token=<token>` to retrieve
-the next page. The `page_size` parameter is optional and bounded server-side.
+If `nextPageToken` is non-null, pass it as `?pageToken=<token>` to retrieve
+the next page. The `pageSize` parameter is optional and bounded server-side.
 Page tokens are HMAC-signed and tied to the originating query — do not modify
 or reuse them across different queries.
 
@@ -251,12 +310,14 @@ All dataset endpoints require authentication.
 Returns a paginated list of datasets accessible to the authenticated user.
 
 - Query Parameters
-  - `page_size` (optional): Number of results per page
-  - `page_token` (optional): Opaque token for the next page
+  - `pageSize` (optional): Number of results per page
+  - `pageToken` (optional): Opaque token for the next page
 
-- Response: JSON array of dataset objects
+- Response: JSON envelope `{ "datasets": [...string IDs], "nextPageToken": ... }`
 - Error codes
   - `200` Success
+  - `400` Invalid `pageSize`, or malformed/expired/mismatched `pageToken`
+    (including a `pageSize` change between pages)
   - `401` Invalid or missing token
 
 Example:
@@ -285,11 +346,20 @@ curl -H "Authorization: Bearer $token" https://HOSTNAME/datasets/EGAD00000000001
 Returns a paginated list of files in the specified dataset.
 
 - Query Parameters
-  - `page_size` (optional): Number of results per page
-  - `page_token` (optional): Opaque token for the next page
+  - `pageSize` (optional): Number of results per page
+  - `pageToken` (optional): Opaque token for the next page
+  - `filePath` (optional): Exact dataset-relative file path. Returns at
+    most one result.
+  - `pathPrefix` (optional): Recursive prefix filter (for example
+    `samples/controls/`).
+  - `filePath` and `pathPrefix` are mutually exclusive; supplying both
+    returns `400` with code `FILTER_CONFLICT`. Either filter value over
+    4096 characters also returns `400`.
 
 - Error codes
   - `200` Success
+  - `400` Invalid pagination parameters, malformed/expired/mismatched
+    `pageToken`, or conflicting/oversized filters
   - `401` Invalid or missing token
   - `403` Access denied or dataset does not exist
 
@@ -329,8 +399,17 @@ the DRS object endpoint.
 
 ### File Endpoints
 
-All file endpoints require authentication. Download endpoints also require a Crypt4GH
-public key in the `X-C4GH-Public-Key` header (base64-encoded).
+All file endpoints require authentication. Endpoints that produce a re-encrypted
+Crypt4GH header — `GET /files/:fileId` (and `HEAD`) and `GET /files/:fileId/header`
+(and `HEAD`) — additionally require a base64-encoded Crypt4GH public key on
+exactly one of two request headers:
+
+- `X-C4GH-Public-Key` (preferred)
+- `Htsget-Context-Public-Key` (htsget-compatible alternative)
+
+Supplying both returns `400` with code `KEY_CONFLICT`. Omitting both returns
+`400` with code `KEY_MISSING`. The `/files/:fileId/content` endpoint streams
+pre-encrypted archive bytes unchanged and does not require a public key.
 
 Files are served through three tiers:
 
@@ -357,18 +436,23 @@ Downloads the complete re-encrypted file (header + data segments).
 
 - Request Headers
   - `Authorization: Bearer <token>` (required)
-  - `X-C4GH-Public-Key: <base64-encoded-key>` (required)
-  - `Range: bytes=START-END` (optional)
+  - Exactly one of `X-C4GH-Public-Key` or `Htsget-Context-Public-Key`
+    (required), value is the base64-encoded recipient Crypt4GH public key
+  - `Range` (optional): a single HTTP byte range — `bytes=START-END`,
+    `bytes=START-`, or `bytes=-SUFFIX`. Multi-range requests are rejected.
 
 - Response Headers
   - `Content-Type: application/octet-stream`
-  - `Content-Disposition: attachment; filename="<fileId>.c4gh"`
+  - `Content-Disposition: attachment; filename="<basename>.c4gh"` — `<basename>`
+    is the final path segment of the file's `submission_file_path`. The handler
+    appends `.c4gh` only if it is not already present.
   - `Accept-Ranges: bytes`
 
 - Error codes
   - `200` Download successful
   - `206` Partial content (Range request)
-  - `400` Missing public key header
+  - `400` Missing or conflicting public key header (`KEY_MISSING` /
+    `KEY_CONFLICT`), or invalid/multi-range `Range`
   - `401` Invalid or missing token
   - `403` Access denied or file does not exist
   - `500` Internal error (storage, reencrypt, or streaming failure)
@@ -388,6 +472,13 @@ Returns only the Crypt4GH header re-encrypted to the recipient's public key.
 Useful when the client needs to process the header separately. Does not support
 Range requests.
 
+- Response Headers
+  - `Content-Length`: size of the re-encrypted Crypt4GH header in bytes
+  - `SDA-Content-ETag`: the same stable synthetic ETag that
+    `/files/:fileId/content` returns as its `ETag`. Lets a client fetch the
+    header and the content in two separate requests and confirm that they
+    refer to the same archive blob.
+
 #### `HEAD /files/:fileId/content` and `GET /files/:fileId/content`
 
 Returns only the encrypted data segments (without the Crypt4GH header).
@@ -398,7 +489,6 @@ Example with Range:
 
 ```bash
 curl -H "Authorization: Bearer $token" \
-     -H "X-C4GH-Public-Key: $(base64 -w0 /path/to/c4gh.pub.pem)" \
      -H "Range: bytes=0-65535" \
      https://HOSTNAME/files/EGAF00000000001/content
 ```
@@ -422,11 +512,20 @@ against is the `UNENCRYPTED` checksum returned by `/datasets/:ds/files`. The
 `/metadata/datasets/{ds}/files`, the v2 equivalent is `checksums[]` on
 `/datasets/:ds/files`. Same source, just shaped as an array.
 
-**The bytes returned by `GET /files/:fileId/content` match neither checksum
-directly.** The Crypt4GH header is re-encrypted per recipient key on every
-request, so the wire bytes change between requests. The `ETag` on this
-response is `sha256` of the re-encrypted header only, not a full-file digest.
-Verify after decryption against the `UNENCRYPTED` checksum.
+**Which bytes match which checksum:**
+
+- `GET /files/:fileId/content` streams the header-stripped archive blob.
+  These bytes match the `ARCHIVED` checksum (the same value the DRS
+  endpoint exposes). Its `ETag` is a stable synthetic value derived from
+  `(fileId, archiveSize)` and is not itself a hash of the returned bytes.
+- `GET /files/:fileId` (combined) prepends a Crypt4GH header re-encrypted
+  to the recipient's public key. Re-encryption uses a fresh ephemeral
+  keypair on every call, so the header bytes — and therefore the wire
+  bytes — change on every request, and match neither stored checksum.
+  Its `ETag` is the SHA-256 of that re-encrypted header only, not a
+  full-file digest.
+- After decrypting locally, verify against the `UNENCRYPTED` checksum from
+  `/datasets/:ds/files`.
 
 ### DRS Object Endpoint
 
@@ -439,6 +538,14 @@ to a download URL without knowing the internal file ID.
 
 The path is composite: everything before the first `/` is the dataset ID, everything
 after is the file path within the dataset.
+
+> **Limitation with URL-like dataset IDs.** The handler splits the (decoded)
+> path at its first `/`. Dataset IDs that contain slashes after decoding
+> (such as `https://doi.org/...`) cannot currently be addressed via this
+> endpoint, because the split point is ambiguous. The non-DRS
+> `/datasets/:datasetId/files` route does not have this problem and accepts
+> a URL-encoded dataset ID as a single path segment (see [Dataset IDs that
+> contain a URL scheme](#dataset-ids-that-contain-a-url-scheme)).
 
 - Error codes
   - `200` DRS object returned
