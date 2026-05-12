@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -11,7 +12,7 @@ import (
 
 type dbConfig struct {
 	host                  string
-	port                  int
+	port                  uint16
 	user                  string
 	password              string
 	databaseName          string
@@ -59,11 +60,11 @@ func init() {
 		&config.Flag{
 			Name: "database.port",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Int(flagName, globalConf.port, "The port the database is served on")
+				flagSet.Uint16(flagName, globalConf.port, "The port the database is served on")
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
-				globalConf.port = viper.GetInt(flagName)
+				globalConf.port = viper.GetUint16(flagName)
 			},
 		},
 		&config.Flag{
@@ -194,7 +195,7 @@ func Host(v string) func(c *dbConfig) {
 		c.host = v
 	}
 }
-func Port(v int) func(c *dbConfig) {
+func Port(v uint16) func(c *dbConfig) {
 	return func(c *dbConfig) {
 		c.port = v
 	}
@@ -280,26 +281,18 @@ func (c *dbConfig) clone() *dbConfig {
 	}
 }
 
-// dataSourceName builds a postgresql data source string to use with sql.Open().
-func (c *dbConfig) dataSourceName() string {
-	connInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s search_path=%s",
-		c.host, c.port, c.user, c.password, c.databaseName, c.sslMode, c.schema)
-
-	if c.sslMode == "disable" {
-		return connInfo
+// buildPostgresConfig builds a postgresql config source string to use with sql.OpenDB().
+func (c *dbConfig) buildPostgresConfig() pq.Config {
+	return pq.Config{
+		Host:        c.host,
+		Port:        c.port,
+		Database:    c.databaseName,
+		User:        c.user,
+		Password:    c.password,
+		SSLMode:     pq.SSLMode(c.sslMode),
+		SSLCert:     c.clientCert,
+		SSLKey:      c.clientKey,
+		SSLRootCert: c.cACert,
+		Options:     fmt.Sprintf("-c search_path=%s", c.schema),
 	}
-
-	if c.cACert != "" {
-		connInfo = fmt.Sprintf("%s sslrootcert=%s", connInfo, c.cACert)
-	}
-
-	if c.clientCert != "" {
-		connInfo = fmt.Sprintf("%s sslcert=%s", connInfo, c.clientCert)
-	}
-
-	if c.clientKey != "" {
-		connInfo = fmt.Sprintf("%s sslkey=%s", connInfo, c.clientKey)
-	}
-
-	return connInfo
 }

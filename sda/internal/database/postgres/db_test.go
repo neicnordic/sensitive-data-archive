@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
 
@@ -26,7 +27,7 @@ type DatabaseTests struct {
 	verificationDB *sql.DB
 }
 
-var dbPort int
+var dbPort uint16
 
 func TestDatabaseTestSuite(t *testing.T) {
 	suite.Run(t, new(DatabaseTests))
@@ -75,7 +76,8 @@ func TestMain(m *testing.M) {
 	}
 
 	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbPortUint64, _ := strconv.ParseUint(postgres.GetPort("5432/tcp"), 10, 16)
+	dbPort = uint16(dbPortUint64)
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
@@ -139,11 +141,11 @@ func (ts *DatabaseTests) SetupTest() {
 		ts.FailNow("Could not connect to Postgres: %s", err)
 	}
 
-	ts.verificationDB, err = sql.Open("postgres", dbConf.dataSourceName())
+	pqConnectConfig, err := pq.NewConnectorConfig(dbConf.buildPostgresConfig())
 	if err != nil {
-		ts.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
+		ts.FailNow(fmt.Sprintf("failed to setup postgres connect config: %v", err))
 	}
-
+	ts.verificationDB = sql.OpenDB(pqConnectConfig)
 	if err := ts.verificationDB.Ping(); err != nil {
 		ts.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
 	}

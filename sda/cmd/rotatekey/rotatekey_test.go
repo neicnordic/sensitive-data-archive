@@ -31,7 +31,8 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-var dbPort, mqPort int
+var mqPort int
+var dbPort uint16
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -75,7 +76,8 @@ func TestMain(m *testing.M) {
 	}
 
 	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
-	dbPort, _ = strconv.Atoi(postgresContainer.GetPort("5432/tcp"))
+	dbPortUint64, _ := strconv.ParseUint(postgresContainer.GetPort("5432/tcp"), 10, 16)
+	dbPort = uint16(dbPortUint64)
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
