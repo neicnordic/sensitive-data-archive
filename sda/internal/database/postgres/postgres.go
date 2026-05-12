@@ -187,6 +187,10 @@ func (db *pgDb) GetFileStatus(ctx context.Context, fileID string) (string, error
 	return db.getFileStatus(ctx, nil, fileID)
 }
 
+func (db *pgDb) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	return db.getFileStatusHistory(ctx, nil, fileID)
+}
+
 func (db *pgDb) GetHeader(ctx context.Context, fileID string) ([]byte, error) {
 	return db.getHeader(ctx, nil, fileID)
 }
@@ -329,6 +333,10 @@ func (db *pgDb) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]stri
 
 func (db *pgDb) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {
 	return db.getFileDetails(ctx, nil, fileID, event)
+}
+
+func (db *pgDb) GetFileEvents(ctx context.Context) ([]string, error) {
+	return db.getFileEvents(ctx, nil)
 }
 
 func (db *pgDb) GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error) {

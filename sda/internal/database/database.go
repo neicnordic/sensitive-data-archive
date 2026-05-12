@@ -67,6 +67,9 @@ type functions interface {
 	// GetFileStatus get the latest event for a file id
 	GetFileStatus(ctx context.Context, fileID string) (string, error)
 
+	// GetFileStatusHistory gets all events for a file id
+	GetFileStatusHistory(ctx context.Context, fileID string) ([]FileStatus, error)
+
 	// GetHeader retrieves the file header
 	GetHeader(ctx context.Context, fileID string) ([]byte, error)
 
@@ -185,6 +188,9 @@ type functions interface {
 
 	// GetFileDetails retrieves user, path and correlation id by giving the file id
 	GetFileDetails(ctx context.Context, fileID, event string) (*FileDetails, error)
+
+	// GetFileEvents retrieves the event types that can be registered in the file_event_log table
+	GetFileEvents(ctx context.Context) ([]string, error)
 
 	// GetSizeAndObjectCountOfLocation Sums the size and count of the files in a location
 	GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error)
