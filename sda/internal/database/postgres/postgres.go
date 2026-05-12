@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	_ "github.com/lib/pq" // Import pg driver
+	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,12 +38,12 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 
 	pg := &pgDb{db: nil, config: dbConf}
 
-	var err error
-	pg.db, err = sql.Open("postgres", pg.config.dataSourceName())
+	pqConnectConfig, err := pq.NewConnectorConfig(pg.config.buildPostgresConfig())
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to setup postgres connect config: %w", err)
 	}
 
+	pg.db = sql.OpenDB(pqConnectConfig)
 	if err := pg.db.Ping(); err != nil {
 		_ = pg.db.Close()
 

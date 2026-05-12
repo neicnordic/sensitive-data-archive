@@ -18,7 +18,8 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var dbPort, mqPort, s3Port int
+var mqPort, s3Port int
+var dbPort uint16
 
 var dockerPool *dockertest.Pool
 
@@ -125,7 +126,8 @@ func TestMain(m *testing.M) {
 	postgresContainerName = postgres.Container.Name
 
 	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	dbPort, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbPortUint64, _ := strconv.ParseUint(postgres.GetPort("5432/tcp"), 10, 16)
+	dbPort = uint16(dbPortUint64)
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	dockerPool.MaxWait = 120 * time.Second
