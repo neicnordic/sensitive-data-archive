@@ -39,8 +39,8 @@ var globalConf = &dbConfig{
 	clientCert:            "",
 	clientKey:             "",
 	maxIdleConnections:    2,
-	maxOpenConnections:    0,
-	connectionMaxIdleTime: 0,
+	maxOpenConnections:    20,
+	connectionMaxIdleTime: 5 * time.Second,
 	connectionMaxLifeTime: 0,
 }
 
