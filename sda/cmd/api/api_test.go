@@ -26,6 +26,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
@@ -488,6 +489,7 @@ func (s *TestSuite) SetupSuite() {
 	{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
 	{"role":"submission","path":"/file/ingest","action":"POST"},
 	{"role":"submission","path":"/file/accession","action":"POST"},
+	{"role":"admin","path":"/file/events/:fileid/:event","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
 	{"role":"submission","path":"/users/:username/file/:fileid","action":"GET"},
@@ -754,6 +756,134 @@ func (s *TestSuite) TestAPIGetFiles() {
 		}
 	}
 	assert.NoError(s.T(), err)
+}
+
+func (s *TestSuite) TestAPIUpdateEvent_NoError() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, "submission_b/TestUpdateEvent.c4gh", "dummy")
+	if err != nil {
+		s.FailNow("failed to register file in database")
+	}
+
+	w := httptest.NewRecorder()
+	jsonBody := `{"reason": "setting event"}`
+	r := httptest.NewRequest("POST", fmt.Sprintf("http://%s:%d/file/events/%s/disabled", Conf.API.Host, Conf.API.Port, fileID), strings.NewReader(jsonBody))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestAPIUpdateEvent_BadFileID() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	fileID := uuid.NewString()
+
+	w := httptest.NewRecorder()
+	jsonBody := `{"reason": "setting event"}`
+	r := httptest.NewRequest("POST", fmt.Sprintf("http://%s:%d/file/events/%s/uploaded", Conf.API.Host, Conf.API.Port, fileID), strings.NewReader(jsonBody))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusNotFound, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestAPIUpdateEvent_BadEvent() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, "submission_b/TestUpdateEventBadEvent.c4gh", "dummy")
+	if err != nil {
+		s.FailNow("failed to register file in database")
+	}
+
+	w := httptest.NewRecorder()
+	jsonBody := `{"reason": "setting event"}`
+	r := httptest.NewRequest("POST", fmt.Sprintf("http://%s:%d/file/events/%s/badevent", Conf.API.Host, Conf.API.Port, fileID), strings.NewReader(jsonBody))
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func (s *TestSuite) TestAPIUpdateEvent_NoMessage() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, "submission_b/TestUpdateEventNoMessage.c4gh", "dummy")
+	if err != nil {
+		s.FailNow("failed to register file in database")
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", fmt.Sprintf("http://%s:%d/file/events/%s/badevent", Conf.API.Host, Conf.API.Port, fileID), nil)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)
+
+	router.ServeHTTP(w, r)
+	okResponse := w.Result()
+	defer okResponse.Body.Close()
+	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
 }
 
 func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {

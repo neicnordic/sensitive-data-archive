@@ -229,6 +229,66 @@ paths:
           description: Authentication failure.
         "500":
           description: Internal application error.
+  /file/events/{fileID}:
+    get:
+      description: Get the latest event associated with a given fileid
+      parameters:
+        - name: fileid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The unique identifier of the file.
+      responses:
+        '200':
+          description: File status retrieved successfully.
+        '401':
+          description: Authentication failure.
+        '500':
+          description: Internal server error.
+  /file/events/{fileID}/{event}:
+    post:
+      description: Logs an event for a specific file. The reason is extracted from the request body and stored alongside the event.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: fileid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The unique identifier of the file.
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The event type to log (e.g. "uploaded", "disabled").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Human-readable reason for the event.
+            example:
+              reason: "File event changed to disabled due to incorrect upload from user"
+      responses:
+        '200':
+          description: Event logged successfully.
+        '400':
+          description: Bad request — JSON decoding failed.
+        '401':
+          description: Authentication failure.
+        '404':
+          description: Not found — file not found
+        '500':
+          description: Internal server error.
   /file/{userName}/{fileID}:
     delete:
       description: Delete a file from the inbox

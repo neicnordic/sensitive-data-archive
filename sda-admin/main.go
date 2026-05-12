@@ -32,6 +32,10 @@ Commands:
                                 Assign accession ID to a file.
   file rotatekey -file-id FILEUUID
                                 Rotate encryption key for a specific file.
+  file get-event -file-id FILEUUID
+                                Retrieve the event / status for a given file
+  file update-event -file-id FILEUUID -event EVENT
+                                Update the event / status for a given file
   dataset create -user SUBMISSION_USER -dataset-id DATASET_ID accessionID [accessionID ...]
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
@@ -105,6 +109,23 @@ Options:
   -user USERNAME       Specify the username associated with the file.
   -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
+
+var getFileEventUsage = `Usage with file path and user: sda-admin file get-event -fileid <FILE_ID>
+Usage with file ID: sda-admin file get-event -fileid <FILE_ID>
+
+	Get the latest event associated with a file by providing the file id
+
+Options:
+  -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.`
+
+var updateFileEventUsage = `Usage with fileid and event: sda-admin file update-event -fileid <FILE_ID> -event <EVENT>
+Usage with file ID: sda-admin file update-event -fileid <FILE_ID> -event <EVENT>
+
+	Append the file_event_log with a new event for the given fileid
+
+Options:
+  -fileid <FILE_ID>     Specify the file ID of the file to assign the accession ID.
+	-event <EVENT>        Specity the event to update the file with`
 
 var fileRotateKeyUsage = `Usage: sda-admin file rotatekey -file-id FILEUUID
   Rotate encryption key for a specific file.
@@ -282,6 +303,10 @@ func handleHelpFile() error {
 		_, _ = fmt.Println(fileAccessionUsage)
 	case flag.Arg(2) == "rotatekey":
 		_, _ = fmt.Println(fileRotateKeyUsage)
+	case flag.Arg(2) == "get-event":
+		_, _ = fmt.Println(getFileEventUsage)
+	case flag.Arg(2) == "update-event":
+		_, _ = fmt.Println(updateFileEventUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -367,6 +392,14 @@ func handleFileCommand() error {
 		}
 	case "rotatekey":
 		if err := handleFileRotateKeyCommand(); err != nil {
+			return err
+		}
+	case "get-event":
+		if err := handleFileGetEvent(); err != nil {
+			return err
+		}
+	case "update-event":
+		if err := handleFileUpdateEvent(); err != nil {
 			return err
 		}
 	default:
@@ -460,6 +493,46 @@ func handleFileRotateKeyCommand() error {
 	if err != nil {
 		return fmt.Errorf("error: failed to rotate key for file, reason: %v", err)
 	}
+
+	return nil
+}
+
+func handleFileGetEvent() error {
+	var fileID string
+	fileGetEventCmd := flag.NewFlagSet("get-event", flag.ExitOnError)
+	fileGetEventCmd.StringVar(&fileID, "file-id", "", "File ID (UUID) to rotate key for")
+
+	if err := fileGetEventCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	body, err := file.GetEvent(apiURI, token, fileID)
+	if err != nil {
+		return fmt.Errorf("could not get event for file %s, reason: %v", fileID, err)
+	}
+
+	fmt.Printf("response: %s", body)
+
+	return nil
+}
+
+func handleFileUpdateEvent() error {
+	var fileID, event, reason string
+	fileGetEventCmd := flag.NewFlagSet("update-event", flag.ExitOnError)
+	fileGetEventCmd.StringVar(&fileID, "file-id", "", "File ID (UUID) to append event to")
+	fileGetEventCmd.StringVar(&event, "event", "", "Event to append")
+	fileGetEventCmd.StringVar(&reason, "reason", "", "Reason for changing the event_log")
+
+	if err := fileGetEventCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	_, err := file.PostEvent(apiURI, token, fileID, event, reason)
+	if err != nil {
+		return fmt.Errorf("could not get event for file %s, reason: %v", fileID, err)
+	}
+
+	fmt.Printf("appended event '%s' for file '%s'", event, fileID)
 
 	return nil
 }

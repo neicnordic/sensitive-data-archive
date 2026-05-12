@@ -1,5 +1,7 @@
 package database
 
+import "database/sql"
+
 type FileInfo struct {
 	Size              int64
 	Path              string
@@ -28,6 +30,14 @@ type ArchiveData struct {
 
 	BackupFilePath string
 	BackupLocation string
+}
+
+type FileStatus struct {
+	Event     string
+	User      string
+	Details   sql.NullString
+	Message   sql.NullString
+	CreatedAt string
 }
 
 type SubmissionFileInfo struct {
