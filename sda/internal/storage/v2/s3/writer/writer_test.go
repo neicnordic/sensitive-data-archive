@@ -416,6 +416,10 @@ func (m *notImplementedDatabase) GetFileStatus(_ context.Context, _ string) (str
 	panic("function not expected to be called in unit tests")
 }
 
+func (m *notImplementedDatabase) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	panic("function not expected to be called in unit tests")
+}
+
 func (m *notImplementedDatabase) GetHeader(_ context.Context, _ string) ([]byte, error) {
 	panic("function not expected to be called in unit tests")
 }
@@ -557,6 +561,10 @@ func (m *notImplementedDatabase) GetDatasetFileIDs(_ context.Context, _ string) 
 }
 
 func (m *notImplementedDatabase) GetFileDetails(_ context.Context, fileUUID, event string) (*database.FileDetails, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *notImplementedDatabase) GetFileEvents(_ context.Context) ([]string, error) {
 	panic("function not expected to be called in unit tests")
 }
 

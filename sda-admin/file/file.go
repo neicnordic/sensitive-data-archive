@@ -28,6 +28,10 @@ type RequestBodyFileAccession struct {
 	User        string `json:"user"`
 }
 
+type RequestBodyUpdateReason struct {
+	Reason string `json:"reason"`
+}
+
 // List fetches and prints all files for username, auto-paginating.
 //
 // When stdout is a TTY (interactive session), each page is printed as it
@@ -242,4 +246,40 @@ func RotateKey(apiURI, token, fileID string) error {
 	}
 
 	return nil
+}
+
+func GetEvent(apiURI, token, fileID string) ([]byte, error) {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedURL.Path = path.Join(parsedURL.Path, "file", "events", fileID)
+	responseBody, err := helpers.GetReq(parsedURL.String(), token, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseBody, nil
+}
+
+func PostEvent(apiURI, token, fileID, event, reason string) ([]byte, error) {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := RequestBodyUpdateReason{Reason: reason}
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedURL.Path = path.Join(parsedURL.Path, "file", "events", fileID, event)
+	responseBody, err := helpers.PostReq(parsedURL.String(), token, jsonBody)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseBody, nil
 }
