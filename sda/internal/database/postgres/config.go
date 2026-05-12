@@ -35,7 +35,7 @@ var globalConf = &dbConfig{
 	databaseName:          "sda",
 	schema:                "sda",
 	cACert:                "",
-	sslMode:               "disable",
+	sslMode:               "verify-full",
 	clientCert:            "",
 	clientKey:             "",
 	maxIdleConnections:    2,
