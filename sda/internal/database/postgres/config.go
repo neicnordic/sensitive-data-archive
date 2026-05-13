@@ -293,6 +293,6 @@ func (c *dbConfig) buildPostgresConfig() pq.Config {
 		SSLCert:     c.clientCert,
 		SSLKey:      c.clientKey,
 		SSLRootCert: c.cACert,
-		Options:     fmt.Sprintf("-c search_path=%s", c.schema),
+		Options:     fmt.Sprintf("-c search_path='%s'", c.schema),
 	}
 }
