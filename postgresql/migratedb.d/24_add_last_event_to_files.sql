@@ -31,9 +31,6 @@ BEGIN
 
     ALTER TABLE sda.files ENABLE TRIGGER files_last_modified;
 
-    -- Add index to support efficient keyset pagination on (submission_user, id)
-    CREATE INDEX IF NOT EXISTS files_submission_user_id_idx ON sda.files(submission_user, id);
-
     -- Create trigger to keep last_event in sync on future inserts
     CREATE FUNCTION sda.update_files_last_event()
     RETURNS TRIGGER
