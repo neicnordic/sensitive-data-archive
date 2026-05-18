@@ -423,7 +423,6 @@ func getFiles(c *gin.Context) {
 			SubmissionFileSize: f.SubmissionFileSize,
 			CreatedAt:          f.CreatedAt,
 		}
-
 	}
 
 	// Return response
