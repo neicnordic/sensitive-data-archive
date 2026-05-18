@@ -14,6 +14,7 @@ CREATE TABLE  dbschema_version (
 );
 
 INSERT INTO dbschema_version
+VALUES (0, now(), 'Created with version'),
        (1, now(), 'Noop version'),
        (2, now(), 'Added decrypted_checksum et al'),
        (3, now(), 'Reorganized out views/tables'),
