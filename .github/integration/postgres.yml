@@ -22,20 +22,19 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:jammy
+    image: ubuntu:latest
     volumes:
       - ./scripts:/scripts
 
   migration_helper:
     container_name: helper
     command:
-      - /usr/bin/tar
-      - -zxf
-      - /pgdata.tgz
-      - -C
-      - /pgdata/
-    image: ubuntu:jammy
-    user: 70:70
+      - /bin/bash
+      - -c
+      - "/usr/bin/tar -zxf /pgdata.tgz -C /pgdata/"
+      - "chmod -R 70:70 /pgdata"
+    image: ubuntu:latest
+    user: 0:70
     volumes:
       - pgmigrate:/pgdata
       - ./tests/postgres/pgdata.tgz:/pgdata.tgz
@@ -117,7 +116,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:jammy
+    image: ubuntu:latest
     profiles:
       - tests
     volumes:
