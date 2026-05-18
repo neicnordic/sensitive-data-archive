@@ -30,7 +30,7 @@ type dbConfig struct {
 // Initialize globalConf with default values
 var globalConf = &dbConfig{
 	host:                  "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
-	port:                  0,  // No default, needs to be provided by config / NewPostgresSQLDatabase options
+	port:                  5432,
 	user:                  "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
 	password:              "", // No default, needs to be provided by config / NewPostgresSQLDatabase options
 	databaseName:          "sda",
@@ -62,7 +62,7 @@ func init() {
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.Uint16(flagName, globalConf.port, "The port the database is served on")
 			},
-			Required: true,
+			Required: false,
 			AssignFunc: func(flagName string) {
 				globalConf.port = viper.GetUint16(flagName)
 			},
