@@ -19,29 +19,26 @@ global:
     jwtSecret: jwk
     rbacFileSecret: api-rbac
   archive:
-    storageType: s3
-    s3AccessKey: PLACEHOLDER_VALUE
-    s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: PLACEHOLDER_VALUE
-    s3Bucket: "archive"
-    s3Port: 9000
-    existingClaim: archive-pvc
+    s3:
+    - endpoint: PLACEHOLDER_VALUE
+      accessKey: PLACEHOLDER_VALUE
+      secretKey: PLACEHOLDER_VALUE
+      bucketPrefix: archive
+      port: 9000
   backupArchive:
-    storageType: "s3"
-    s3AccessKey: PLACEHOLDER_VALUE
-    s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: PLACEHOLDER_VALUE
-    s3Bucket: "backup"
-    s3Port: 9000
-    existingClaim: backup-pvc
+    s3:
+    - endpoint: PLACEHOLDER_VALUE
+      accessKey: PLACEHOLDER_VALUE
+      secretKey: PLACEHOLDER_VALUE
+      bucketPrefix: backup
+      port: 9000
   inbox:
-    storageType: s3
-    s3AccessKey: PLACEHOLDER_VALUE
-    s3SecretKey: PLACEHOLDER_VALUE
-    s3Url: PLACEHOLDER_VALUE
-    s3Port: 9000
-    s3Bucket: "inbox"
-    existingClaim: inbox-pvc
+    s3:
+    - endpoint: PLACEHOLDER_VALUE
+      accessKey: PLACEHOLDER_VALUE
+      secretKey: PLACEHOLDER_VALUE
+      bucketPrefix: inbox
+      port: 9000
   s3Inbox:
     accessKey: PLACEHOLDER_VALUE
     secretKey: PLACEHOLDER_VALUE
@@ -106,12 +103,13 @@ global:
     brokerQueue: "mapping_stream"
     centerPrefix: "SYNC"
     destination:
-      s3Url: PLACEHOLDER_VALUE
-      s3Port: 9000
-      s3AccessKey: PLACEHOLDER_VALUE
-      s3SecretKey: PLACEHOLDER_VALUE
-      s3BucketPrefix: "sync"
-      s3Region: "us-east-1"
+      s3:
+      - endpoint: PLACEHOLDER_VALUE
+        accessKey: PLACEHOLDER_VALUE
+        secretKey: PLACEHOLDER_VALUE
+        bucketPrefix: sync
+        port: 9000
+        region: us-east-1
     remote:
       host: "http://remote-sync"
       port: "8080"

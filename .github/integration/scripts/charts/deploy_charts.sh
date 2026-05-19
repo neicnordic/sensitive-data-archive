@@ -75,15 +75,30 @@ if [ "$1" == "sda-svc" ]; then
         sync_api_pass=pass
         sync_api_user=user
     fi
+    # Chart 4.0 uses s3:/posix: lists per backend. The base values.yaml
+    # ships S3 placeholders that dependencies.sh fills in. For the POSIX
+    # matrix run, override the lists explicitly so the chart renders the
+    # POSIX backends instead.
+    storage_overrides=()
+    if [ "$4" == "posix" ]; then
+        storage_overrides=(
+            --set 'global.archive.s3=null'
+            --set 'global.archive.posix[0].path=/archive'
+            --set 'global.archive.posix[0].volume.existingClaim=archive-pvc'
+            --set 'global.backupArchive.s3=null'
+            --set 'global.backupArchive.posix[0].path=/backup'
+            --set 'global.backupArchive.posix[0].volume.existingClaim=backup-pvc'
+            --set 'global.inbox.s3=null'
+            --set 'global.inbox.posix[0].path=/inbox'
+            --set 'global.inbox.posix[0].volume.existingClaim=inbox-pvc'
+        )
+    fi
     helm install pipeline charts/sda-svc \
         --set global.schemaType="$5" \
         --set image.tag="PR$2" \
         --set image.pullPolicy=IfNotPresent \
         --set global.tls.enabled="$3" \
         --set global.broker.port="$MQ_PORT" \
-        --set global.archive.storageType="$4" \
-        --set global.backupArchive.storageType="$4" \
-        --set global.inbox.storageType="$4" \
         --set global.sync.api.password="$sync_api_pass" \
         --set global.sync.api.user="$sync_api_user" \
         --set global.sync.remote.host="$sync_host" \
@@ -94,6 +109,7 @@ if [ "$1" == "sda-svc" ]; then
         --set syncAPI.readinessProbe.httpGet.scheme="$SCHEME" \
         --set reencrypt.readinessProbe.grpc.port="$GRPC_PORT" \
         --set global.c4gh.rotatePubKeyData="$ROTATE_PUB_BASE64" \
+        "${storage_overrides[@]}" \
         -f "$dir/values.yaml" \
         --wait
 fi
