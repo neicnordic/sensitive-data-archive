@@ -326,9 +326,9 @@ rotatekey credentials
 
 {{- define "inboxServicePort" -}}
   {{- if .Values.global.tls.enabled }}
-    {{- printf "%d" (ternary 2222 443 ( empty .Values.global.inbox.s3Url )) }}
+    {{- printf "%d" (ternary 2222 443 (empty .Values.global.inbox.s3)) }}
   {{- else }}
-    {{- printf "%d" (ternary 2222 80 ( empty .Values.global.inbox.s3Url )) }}
+    {{- printf "%d" (ternary 2222 80 (empty .Values.global.inbox.s3)) }}
   {{- end -}}
 {{- end -}}
 
@@ -342,4 +342,252 @@ rotatekey credentials
     {{- else if and .Values.global.tls.clusterIssuer }}
         {{- printf "%s" .Values.global.tls.clusterIssuer }}
     {{- end -}}
+{{- end -}}
+
+{{/*
+Render a storage-v2 backend block from list-shape values.
+
+Args (dict):
+  backend  string  Output backend name to emit ("archive", "backup", "inbox", "sync")
+  config   dict    Values subtree (.Values.global.archive, etc.)
+  tls      bool    TLS enabled (drives ca_cert + disable_https)
+  tlsPath  string  Path to mounted TLS certs (only used if tls=true)
+
+Emits a `<backend>:` map with `s3:` and/or `posix:` children. snake_case in
+output, camelCase in input. Emits nothing if both lists are empty.
+*/}}
+{{/*
+Require a storage backend to be configured (at least one s3 or posix
+entry). Use from secrets templates whose service cannot start without
+the backend (api, mapper, ingest, verify, finalize archive, sync,
+download, download-v2). Leave `backupArchive` optional — finalize
+silently skips backup rendering when it is empty.
+
+Args:
+- path:   dotted values path for the error message (e.g. "global.archive")
+- config: the backend config map (with .s3 and .posix lists)
+*/}}
+{{- define "sda.requireBackend" -}}
+{{- $cfg := .config -}}
+{{- if and (empty $cfg.s3) (empty $cfg.posix) -}}
+{{- fail (printf "%s must define at least one s3 or posix endpoint (chart 4.0 list shape). See charts/sda-svc/MIGRATION-4.0.md." .path) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sda.storageBackend" -}}
+{{- $cfg := .config -}}
+{{- $backend := .backend -}}
+{{- $vp := default $backend .valuesPath -}}
+{{- if or $cfg.s3 $cfg.posix -}}
+{{ $backend }}:
+  {{- if $cfg.s3 }}
+  s3:
+  {{- range $i, $e := $cfg.s3 }}
+  - endpoint: {{ required (printf "global.%s.s3[%d].endpoint is required" $vp $i) $e.endpoint }}{{ if $e.port }}:{{ $e.port }}{{ end }}
+    access_key: {{ required (printf "global.%s.s3[%d].accessKey is required" $vp $i) $e.accessKey }}
+    secret_key: {{ required (printf "global.%s.s3[%d].secretKey is required" $vp $i) $e.secretKey }}
+    bucket_prefix: {{ required (printf "global.%s.s3[%d].bucketPrefix is required" $vp $i) $e.bucketPrefix }}
+    region: {{ default "us-east-1" $e.region }}
+    {{- if $.tls }}
+    ca_cert: {{ $.tlsPath }}/ca.crt
+    {{- end }}
+    {{- if $e.chunkSize }}
+    chunk_size: {{ $e.chunkSize }}
+    {{- end }}
+    {{- if $e.maxBuckets }}
+    max_buckets: {{ $e.maxBuckets }}
+    {{- end }}
+    {{- if $e.maxObjects }}
+    max_objects: {{ $e.maxObjects }}
+    {{- end }}
+    {{- if $e.maxSize }}
+    max_size: {{ $e.maxSize }}
+    {{- end }}
+    {{- if $e.writerDisabled }}
+    writer_disabled: {{ $e.writerDisabled }}
+    {{- end }}
+    disable_https: {{ not $.tls }}
+  {{- end }}
+  {{- end }}
+  {{- if $cfg.posix }}
+  posix:
+  {{- range $i, $e := $cfg.posix }}
+  - path: {{ required (printf "global.%s.posix[%d].path is required" $vp $i) $e.path | quote }}
+    {{- if $e.maxObjects }}
+    max_objects: {{ $e.maxObjects }}
+    {{- end }}
+    {{- if $e.maxSize }}
+    max_size: {{ $e.maxSize }}
+    {{- end }}
+    {{- if $e.writerDisabled }}
+    writer_disabled: {{ $e.writerDisabled }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render the root-level location_broker.cache_ttl block by picking the first
+non-empty `locationBrokerCacheTTL` from the caller's priority-ordered
+list of backend names. The service reads this key at the config-file root
+via viper (see sda/internal/storage/v2/locationbroker/config.go:15) — not
+under any storage backend. Emits nothing if no listed backend sets it.
+
+Caller passes a dict:
+  ctx        the template context (.) so the helper can dereference Values
+  priority   ordered list of backend names to check in order, picked from
+             "archive", "backupArchive", "inbox", "syncDestination"
+*/}}
+{{- define "sda.locationBrokerCacheTTL" -}}
+{{- $ctx := .ctx -}}
+{{- $ttl := "" -}}
+{{- range .priority -}}
+  {{- if not $ttl -}}
+    {{- if eq . "archive" -}}
+      {{- if $ctx.Values.global.archive.locationBrokerCacheTTL -}}{{- $ttl = $ctx.Values.global.archive.locationBrokerCacheTTL -}}{{- end -}}
+    {{- else if eq . "backupArchive" -}}
+      {{- if $ctx.Values.global.backupArchive.locationBrokerCacheTTL -}}{{- $ttl = $ctx.Values.global.backupArchive.locationBrokerCacheTTL -}}{{- end -}}
+    {{- else if eq . "inbox" -}}
+      {{- if $ctx.Values.global.inbox.locationBrokerCacheTTL -}}{{- $ttl = $ctx.Values.global.inbox.locationBrokerCacheTTL -}}{{- end -}}
+    {{- else if eq . "syncDestination" -}}
+      {{- if and $ctx.Values.global.sync $ctx.Values.global.sync.destination $ctx.Values.global.sync.destination.locationBrokerCacheTTL -}}{{- $ttl = $ctx.Values.global.sync.destination.locationBrokerCacheTTL -}}{{- end -}}
+    {{- else -}}
+      {{- fail (printf "unknown backend %q for sda.locationBrokerCacheTTL" .) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if $ttl -}}
+location_broker:
+  cache_ttl: {{ $ttl }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Map a values-key backend name to a DNS-1123-safe lowercase volume prefix.
+k8s requires volume names match [a-z0-9]([-a-z0-9]*[a-z0-9])?.
+
+  archive          -> archive
+  backupArchive    -> backup-archive
+  inbox            -> inbox
+  syncDestination  -> sync-dest
+*/}}
+{{- define "sda.posixVolumePrefix" -}}
+{{- $m := dict "archive" "archive" "backupArchive" "backup-archive" "inbox" "inbox" "syncDestination" "sync-dest" -}}
+{{- $p := index $m . -}}
+{{- if not $p -}}{{- fail (printf "unknown backend name %q for sda.posixVolumePrefix" .) -}}{{- end -}}
+{{- $p -}}
+{{- end -}}
+
+{{/*
+Render `volumeMounts:` entries for each POSIX endpoint of a backend.
+
+Args (dict):
+  config   dict    Values subtree (.Values.global.archive, etc.)
+  name     string  Backend values-key name ("archive", "backupArchive", "inbox", "syncDestination")
+
+Produces one mount per posix entry, named "<prefix>-<index>" with mountPath
+from each entry's path.
+*/}}
+{{- define "sda.posixVolumeMounts" -}}
+{{- $prefix := include "sda.posixVolumePrefix" .name -}}
+{{- range $i, $e := .config.posix }}
+- name: {{ $prefix }}-{{ $i }}
+  mountPath: {{ $e.path | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Render `volumes:` entries for each POSIX endpoint of a backend.
+
+Args: same as sda.posixVolumeMounts.
+
+Each entry uses persistentVolumeClaim if volume.existingClaim is set,
+otherwise nfs with volume.nfsServer + volume.nfsPath.
+*/}}
+{{- define "sda.posixVolumes" -}}
+{{- $prefix := include "sda.posixVolumePrefix" .name -}}
+{{- /* "name" is the DNS-1123 alias used for the k8s volume prefix; the
+       values-path operators must edit differs for sync (syncDestination
+       → global.sync.destination). Self-locating errors below quote the
+       values path, not the alias. */ -}}
+{{- $backend := .name -}}
+{{- if eq $backend "syncDestination" -}}{{- $backend = "sync.destination" -}}{{- end -}}
+{{- range $i, $e := .config.posix }}
+- name: {{ $prefix }}-{{ $i }}
+  {{- $vol := required (printf "global.%s.posix[%d].volume is required (set volume.existingClaim or volume.nfsServer+nfsPath)" $backend $i) $e.volume }}
+  {{- if $vol.existingClaim }}
+  persistentVolumeClaim:
+    claimName: {{ $vol.existingClaim }}
+  {{- else }}
+  nfs:
+    server: {{ required (printf "global.%s.posix[%d].volume.nfsServer is required (or set volume.existingClaim)" $backend $i) $vol.nfsServer | quote }}
+    path: {{ default "/" $vol.nfsPath | quote }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Detect legacy 3.x scalar storage keys and fail with a migration message.
+Operators upgrading from 3.x without converting values.yaml to the 4.0
+list shape would otherwise silently get empty storage backends. This
+helper makes the failure mode loud and points at the migration doc.
+
+Use: {{- include "sda.detectLegacyStorageKeys" . }}
+Call once at template-render time (e.g. from any secrets template that
+emits storage config).
+*/}}
+{{- define "sda.detectLegacyStorageKeys" -}}
+{{- $legacyKeys := list "storageType" "s3Url" "s3Port" "s3BucketPrefix" "s3Region" "s3AccessKey" "s3SecretKey" "s3ChunkSize" "s3CaFile" "volumePath" "nfsServer" "nfsPath" "existingClaim" "maxBuckets" "maxObjects" "maxSize" -}}
+{{- $backends := dict "archive" .Values.global.archive "backupArchive" .Values.global.backupArchive "inbox" .Values.global.inbox -}}
+{{- range $name, $cfg := $backends -}}
+  {{- range $k := $legacyKeys -}}
+    {{- if and (hasKey $cfg $k) (not (empty (index $cfg $k))) -}}
+      {{- fail (printf "Legacy storage key global.%s.%s detected. Chart 4.0 replaced flat scalars with s3:/posix: lists. See charts/sda-svc/MIGRATION-4.0.md." $name $k) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if .Values.global.sync -}}
+  {{- if .Values.global.sync.destination -}}
+    {{- range $k := $legacyKeys -}}
+      {{- if and (hasKey $.Values.global.sync.destination $k) (not (empty (index $.Values.global.sync.destination $k))) -}}
+        {{- fail (printf "Legacy storage key global.sync.destination.%s detected. Chart 4.0 replaced flat scalars with s3:/posix: lists. See charts/sda-svc/MIGRATION-4.0.md." $k) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /* Forbid mixed inbox.s3 + inbox.posix — different services (s3-inbox vs sftp-inbox)
+       cannot share a single inbox Service selector. */ -}}
+{{- if and (not (empty .Values.global.inbox.s3)) (not (empty .Values.global.inbox.posix)) -}}
+{{- fail "global.inbox cannot have both s3 and posix lists populated — the chart deploys two different inbox services (s3-inbox, sftp-inbox) that share one Service selector. Pick one." -}}
+{{- end -}}
+{{- /* DOA legacy service has no plaintext path — block silent no-op when
+       doa.enabled is set without TLS. */ -}}
+{{- if and .Values.global.doa.enabled (not .Values.global.tls.enabled) -}}
+{{- fail "global.doa.enabled=true requires global.tls.enabled=true (the DOA legacy Java service has no plaintext path). Either enable TLS or set global.doa.enabled=false." -}}
+{{- end -}}
+{{- /* storage-v2 writers (archive, backupArchive, sync.destination) cannot
+       mix writer-enabled s3 + writer-enabled posix entries. Runtime returns
+       ErrorMultipleWritersNotSupported (sda/internal/storage/v2/writer.go).
+       Catch it here so operators see the cause at install time, not first
+       message processing. inbox is NOT checked here — see G7 (the chart
+       deploys two distinct inbox services that the operator picks via
+       inbox.s3 vs inbox.posix). */ -}}
+{{- $writerBackends := list
+    (dict "name" "archive"             "cfg" .Values.global.archive)
+    (dict "name" "backupArchive"       "cfg" .Values.global.backupArchive)
+  -}}
+{{- if and .Values.global.sync .Values.global.sync.destination -}}
+  {{- $writerBackends = append $writerBackends (dict "name" "sync.destination" "cfg" .Values.global.sync.destination) -}}
+{{- end -}}
+{{- range $writerBackends -}}
+  {{- $name := .name -}}{{- $cfg := .cfg -}}
+  {{- $s3w := 0 -}}{{- $posixW := 0 -}}
+  {{- range $cfg.s3 -}}{{- if not .writerDisabled -}}{{- $s3w = add $s3w 1 -}}{{- end -}}{{- end -}}
+  {{- range $cfg.posix -}}{{- if not .writerDisabled -}}{{- $posixW = add $posixW 1 -}}{{- end -}}{{- end -}}
+  {{- if and (gt $s3w 0) (gt $posixW 0) -}}
+    {{- fail (printf "global.%s has writer-enabled entries in both s3 and posix. storage-v2 supports only one writer implementation per backend (ErrorMultipleWritersNotSupported). Set writerDisabled: true on all but one writer; readers are unaffected." $name) -}}
+  {{- end -}}
+{{- end -}}
 {{- end -}}
