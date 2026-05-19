@@ -1,6 +1,6 @@
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
-{{- if eq "s3" .Values.global.inbox.storageType }}
+{{- if not (empty .Values.global.inbox.s3) }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
