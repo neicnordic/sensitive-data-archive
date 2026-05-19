@@ -101,9 +101,10 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
     {{- end }}
-    {{- if eq "posix" .Values.global.inbox.storageType }}
-        - name: inbox
-          mountPath: "/inbox"
+    {{- if .Values.global.inbox.posix }}
+      {{- include "sda.posixVolumeMounts" (dict
+          "config" .Values.global.inbox
+          "name" "inbox") | nindent 8 }}
     {{- end }}
       enableServiceLinks: false
       volumes:
@@ -144,15 +145,9 @@ spec:
             secretName: {{ required "An certificate issuer or a TLS secret name is required for api" .Values.api.tls.secretName }}
         {{- end }}
     {{- end }}
-      {{- if eq "posix" .Values.global.inbox.storageType }}
-        - name: inbox
-        {{- if .Values.global.inbox.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.inbox.existingClaim }}
-        {{- else }}
-          nfs:
-            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
-            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-        {{- end }}
+      {{- if .Values.global.inbox.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.inbox
+            "name" "inbox") | nindent 8 }}
       {{- end }}
 {{- end }}
