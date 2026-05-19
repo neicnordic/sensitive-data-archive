@@ -86,13 +86,15 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
     {{- end }}
-    {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-          mountPath: {{ .Values.global.archive.volumePath | quote }}
+    {{- if .Values.global.archive.posix }}
+        {{- include "sda.posixVolumeMounts" (dict
+            "config" .Values.global.archive
+            "name" "archive") | nindent 8 }}
     {{- end }}
-    {{- if eq "posix" .Values.global.backupArchive.storageType }}
-        - name: backup
-          mountPath: {{ .Values.global.backupArchive.volumePath | quote }}
+    {{- if .Values.global.backupArchive.posix }}
+        {{- include "sda.posixVolumeMounts" (dict
+            "config" .Values.global.backupArchive
+            "name" "backupArchive") | nindent 8 }}
     {{- end }}
       enableServiceLinks: false
       volumes:
@@ -114,27 +116,15 @@ spec:
             secretName: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
         {{- end }}
       {{- end }}
-      {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-        {{- if .Values.global.archive.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.archive.existingClaim }}
-        {{- else }}
-          nfs:
-            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
-            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-        {{- end }}
+      {{- if .Values.global.archive.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.archive
+            "name" "archive") | nindent 8 }}
       {{- end }}
-      {{- if eq "posix" .Values.global.backupArchive.storageType }}
-        - name: backup
-        {{- if .Values.global.backupArchive.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.backupArchive.existingClaim }}
-        {{- else }}
-          nfs:
-            server: {{ required "An backup NFS server is required" .Values.global.backupArchive.nfsServer | quote }}
-            path: {{ if .Values.global.backupArchive.nfsPath }}{{ .Values.global.backupArchive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-        {{- end }}
+      {{- if .Values.global.backupArchive.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.backupArchive
+            "name" "backupArchive") | nindent 8 }}
       {{- end }}
       restartPolicy: Always
 {{- end }}
