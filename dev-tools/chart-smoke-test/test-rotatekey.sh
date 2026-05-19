@@ -183,6 +183,15 @@ HELM_ARGS=(
     # --- logging ---
     --set global.log.level=debug
     --set global.log.format=json
+
+    # --- storage (chart 4.0 list shape; rotatekey doesn't use these but
+    #     chart fail-fast still requires them to be defined) ---
+    --set 'global.archive.s3[0].endpoint=http://archive'
+    --set 'global.archive.s3[0].accessKey=a'
+    --set 'global.archive.s3[0].secretKey=s'
+    --set 'global.archive.s3[0].bucketPrefix=archive'
+    --set 'global.inbox.posix[0].path=/inbox'
+    --set 'global.inbox.posix[0].volume.existingClaim=inbox-pvc'
 )
 
 echo "=== Step 5: deploy rotatekey ==="
