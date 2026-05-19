@@ -70,7 +70,7 @@ func init() {
 		&config.Flag{
 			Name: "database.user",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, globalConf.user, "Username to used to authenticate with in communication with database")
+				flagSet.String(flagName, globalConf.user, "Username used to authenticate with in communication with database")
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
@@ -80,7 +80,7 @@ func init() {
 		&config.Flag{
 			Name: "database.password",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, globalConf.password, "Password to used to authenticate with in communication with database")
+				flagSet.String(flagName, globalConf.password, "Password used to authenticate with in communication with database")
 			},
 			Required: true,
 			AssignFunc: func(flagName string) {
