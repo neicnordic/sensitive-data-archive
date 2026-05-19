@@ -103,11 +103,11 @@ if [ "$2" == "s3" ]; then
             --set tls.enabled=true,tls.certSecret=minio-tls,rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
 
     yq -i '
-.global.archive.s3Url = "https://minio.minio" |
-.global.backupArchive.s3Url = "https://minio.minio" |
-.global.inbox.s3Url = "https://minio.minio" |
+.global.archive.s3[0].endpoint = "https://minio.minio" |
+.global.backupArchive.s3[0].endpoint = "https://minio.minio" |
+.global.inbox.s3[0].endpoint = "https://minio.minio" |
 .global.s3Inbox.url = "https://minio.minio" |
-.global.sync.destination.s3Url = "https://minio.minio"
+.global.sync.destination.s3[0].endpoint = "https://minio.minio"
 ' "$values_file"
 
   else
@@ -121,11 +121,11 @@ if [ "$2" == "s3" ]; then
             --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
 
     yq -i '
-.global.archive.s3Url = "http://minio.minio" |
-.global.backupArchive.s3Url = "http://minio.minio" |
-.global.inbox.s3Url = "http://minio.minio" |
+.global.archive.s3[0].endpoint = "http://minio.minio" |
+.global.backupArchive.s3[0].endpoint = "http://minio.minio" |
+.global.inbox.s3[0].endpoint = "http://minio.minio" |
 .global.s3Inbox.url = "http://minio.minio" |
-.global.sync.destination.s3Url = "http://minio.minio"
+.global.sync.destination.s3[0].endpoint = "http://minio.minio"
 ' "$values_file"
 
   fi
@@ -146,20 +146,20 @@ if [ "$2" == "federated" ]; then
 fi
 
 yq -i '
-.global.archive.s3AccessKey = strenv(MINIO_ACCESS) |
-.global.archive.s3SecretKey = strenv(MINIO_SECRET) |
-.global.backupArchive.s3AccessKey = strenv(MINIO_ACCESS) |
-.global.backupArchive.s3SecretKey = strenv(MINIO_SECRET) |
+.global.archive.s3[0].accessKey = strenv(MINIO_ACCESS) |
+.global.archive.s3[0].secretKey = strenv(MINIO_SECRET) |
+.global.backupArchive.s3[0].accessKey = strenv(MINIO_ACCESS) |
+.global.backupArchive.s3[0].secretKey = strenv(MINIO_SECRET) |
 .global.broker.password = strenv(MQPASSWORD) |
 .global.c4gh.privateKeys[0].passphrase = strenv(C4GHPASSPHRASE) |
 .global.db.password = strenv(PGPASSWORD) |
 .global.db.admin.password = strenv(PGPASSWORD) |
-.global.inbox.s3AccessKey = strenv(MINIO_ACCESS) |
-.global.inbox.s3SecretKey = strenv(MINIO_SECRET) |
+.global.inbox.s3[0].accessKey = strenv(MINIO_ACCESS) |
+.global.inbox.s3[0].secretKey = strenv(MINIO_SECRET) |
 .global.s3Inbox.accessKey = strenv(MINIO_ACCESS) |
 .global.s3Inbox.secretKey = strenv(MINIO_SECRET) |
-.global.sync.destination.s3AccessKey = strenv(MINIO_ACCESS) |
-.global.sync.destination.s3SecretKey = strenv(MINIO_SECRET) |
+.global.sync.destination.s3[0].accessKey = strenv(MINIO_ACCESS) |
+.global.sync.destination.s3[0].secretKey = strenv(MINIO_SECRET) |
 .releasetest.secrets.accessToken = strenv(TEST_TOKEN)
 ' "$values_file"
 
