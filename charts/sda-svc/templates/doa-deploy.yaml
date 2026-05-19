@@ -1,4 +1,14 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.doa.enabled }}
+{{- $doaArcS3 := default (list) .Values.global.archive.s3 }}
+{{- $doaArcPosix := default (list) .Values.global.archive.posix }}
+{{- if gt (add (len $doaArcS3) (len $doaArcPosix)) 1 }}
+{{- fail "DOA cannot be enabled together with multi-endpoint archive (DOA reads only the first endpoint). Disable DOA or reduce to a single endpoint." }}
+{{- end }}
+{{- if and (empty .Values.global.archive.s3) (empty .Values.global.archive.posix) }}
+{{- fail "DOA is enabled but no archive endpoint is configured (set global.archive.s3 or global.archive.posix)" }}
+{{- end }}
+{{- end }}
 {{- if .Values.global.tls.enabled }}
 {{- if .Values.global.doa.enabled }}
 apiVersion: apps/v1
@@ -163,36 +173,56 @@ spec:
                 name: {{ template "sda.fullname" . }}-doa
                 key: dbPassword
         {{- end }}
-      {{- if eq "s3" .Values.global.archive.storageType }}
+      {{- if not (empty .Values.global.archive.s3) }}
+      {{- $arc := index .Values.global.archive.s3 0 }}
+      {{- $endpoint := required "A valid archive S3 endpoint is required" $arc.endpoint }}
+      {{- /* DOA's Java MinIO client takes host + port + secure separately,
+             while storage-v2 expects a URL with scheme. Normalize here so
+             operators can keep one endpoint string per backend. */}}
+      {{- $isHttp := hasPrefix "http://" $endpoint }}
+      {{- $hostPort := $endpoint | trimPrefix "https://" | trimPrefix "http://" }}
+      {{- $hp := splitList ":" $hostPort }}
+      {{- $doaHost := index $hp 0 }}
+      {{- $doaSecure := ternary "false" "true" $isHttp }}
+      {{- $doaPort := "" }}
+      {{- if gt (len $hp) 1 }}{{- $doaPort = index $hp 1 }}{{- end }}
+      {{- if and (empty $doaPort) $arc.port }}{{- $doaPort = $arc.port | toString }}{{- end }}
+      {{- if empty $doaPort }}{{- $doaPort = ternary "80" "443" (eq $doaSecure "false") }}{{- end }}
+        - name: ARCHIVE_TYPE
+          value: "s3"
         - name: S3_ENDPOINT
-          value: {{ required "A valid archive S3 URL entry is required!" .Values.global.archive.s3Url | quote }}
+          value: {{ $doaHost | quote }}
         - name: S3_PORT
-          value: {{ .Values.global.archive.s3Port | quote }}
+          value: {{ $doaPort | quote }}
+        - name: S3_REGION
+          value: {{ default "us-east-1" $arc.region }}
+        - name: S3_BUCKET
+          value: {{ $arc.bucketPrefix | quote }}
         {{- if not .Values.global.vaultSecrets }}
         - name: S3_ACCESS_KEY
           valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-s3archive-keys
-                key: s3ArchiveAccessKey
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveAccessKey
         - name: S3_SECRET_KEY
           valueFrom:
-              secretKeyRef:
-                name: {{ template "sda.fullname" . }}-s3archive-keys
-                key: s3ArchiveSecretKey
+            secretKeyRef:
+              name: {{ template "sda.fullname" . }}-s3archive-keys
+              key: s3ArchiveSecretKey
         {{- end }}
-        - name: S3_REGION
-          value: {{ .Values.global.archive.s3Region }}
         - name: S3_SECURE
-          value: "true"
-        - name: S3_BUCKET
-          value: {{ .Values.global.archive.s3BucketPrefix | quote}}
-        {{- if .Values.global.archive.s3CaFile }}
+          value: {{ $doaSecure | quote }}
+        {{- if and (eq $doaSecure "true") .Values.global.tls.enabled }}
         - name: S3_ROOT_CERT_PATH
           value: "/etc/ssl/certs/java/ca.crt"
         {{- end }}
-      {{- else }}
+      {{- end }}
+      {{- if not (empty .Values.global.archive.posix) }}
+      {{- $arc := index .Values.global.archive.posix 0 }}
+        - name: ARCHIVE_TYPE
+          value: "posix"
         - name: ARCHIVE_PATH
-          value: {{ .Values.global.archive.volumePath | quote }}
+          value: {{ $arc.path | quote }}
       {{- end }}
       {{- if .Values.global.oidc.pubKey }}
         - name: PASSPORT_PUBLIC_KEY_PATH
@@ -280,9 +310,10 @@ spec:
         - name: c4gh-key
           mountPath: {{ template "c4ghPath" . }}
       {{- end }}
-      {{- if eq "posix" .Values.global.archive.storageType }}
+      {{- if not (empty .Values.global.archive.posix) }}
+      {{- $arc := index .Values.global.archive.posix 0 }}
         - name: archive
-          mountPath: {{ .Values.global.archive.volumePath | quote }}
+          mountPath: {{ $arc.path | quote }}
       {{- end }}
       enableServiceLinks: false
       volumes:
@@ -327,15 +358,16 @@ spec:
                   - key: c4ghPassphrase
                     path: passphrase
       {{- end }}
-      {{- if eq "posix" .Values.global.archive.storageType }}
+      {{- if not (empty .Values.global.archive.posix) }}
+      {{- $arc := index .Values.global.archive.posix 0 }}
         - name: archive
-          {{- if .Values.global.archive.existingClaim }}
+        {{- if $arc.volume.existingClaim }}
           persistentVolumeClaim:
-            claimName: {{ .Values.global.archive.existingClaim }}
+            claimName: {{ $arc.volume.existingClaim }}
         {{- else }}
           nfs:
-            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
-            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
+            server: {{ required "An archive NFS server is required" $arc.volume.nfsServer | quote }}
+            path: {{ default "/" $arc.volume.nfsPath | quote }}
         {{- end }}
       {{- end }}
 {{- end }}
