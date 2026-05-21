@@ -85,3 +85,14 @@ It supports exporting traces in different protocols, eg: [OpenTelemetry Protocol
   * etc
 * Bad, because there will be a minor overhead in application from instrumentation
 * Bad, because there will be additional infrastructure components to maintain
+
+## More Information
+
+There is a [POC branch](https://github.com/neicnordic/sensitive-data-archive/tree/poc/otel_tracing_and_metrics)(based on quite old version of the sda-stack: v2.1.34) with the described setup.
+To test you can run:
+1. `make build-all`
+2. `make integrationtest-sda-s3-run`
+3. You can now go to http://localhost:3000 and login with admin:admin
+4. On the http://localhost:3000/explore you should be able to select Tempo, or Prometheus as source
+5. You should now be able to see Prometheus metrics and traces in grafana.
+ 
