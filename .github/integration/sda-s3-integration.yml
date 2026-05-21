@@ -16,49 +16,16 @@ services:
       - ./scripts:/scripts
       - shared:/shared
 
-
-  jaeger:
-    container_name: jaeger
-    environment:
-      - SPAN_STORAGE_TYPE=memory
-      - METRICS_STORAGE_TYPE=prometheus
-      - COLLECTOR_OTLP_ENABLED=true
-      - COLLECTOR_OTLP_HTTP_HOST_PORT=0.0.0.0:4318
-      - COLLECTOR_OTLP_GRPC_HOST_PORT=0.0.0.0:4317
-    image: jaegertracing/all-in-one:1.72.0
-    ports:
-      - 5778:5778
-      - 16686:16686
-      - 14317:4317
-      - 14318:4318
-      - 14250:14250
-      - 14268:14268
-      - 9411:9411
-    extra_hosts:
-      - "localhost:host-gateway"
-
-  otel:
-    container_name: otel
-    image: otel/opentelemetry-collector-contrib
-    depends_on:
-      jaeger:
-        condition: service_started
-      grafana:
-        condition: service_started
-      prometheus:
-        condition: service_started
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
-      - ./sda/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./sda/tempo.yaml:/etc/tempo.yaml
     ports:
-      - 1888:1888 # pprof extension
-      - 8810:8888 # Prometheus metrics exposed by the Collector
-      - 8889:8889 # Prometheus exporter metrics
-      - 13133:13133 # health_check extension
-      - 4317:4317 # OTLP gRPC receiver
-      - 4318:4318 # OTLP http receiver
-      - 55679:55679 # zpages extension
-    extra_hosts:
-      - "localhost:host-gateway"
+      - "3200:3200" # Tempo API
+      - "4317:4317" # OTLP gRPC ingest
+      - "4318:4318" # OTLP HTTP ingest
 
   prometheus:
     container_name: prometheus
@@ -73,14 +40,16 @@ services:
   grafana:
     image: grafana/grafana-enterprise
     depends_on:
-      jaeger:
+      tempo:
+        condition: service_started
+      prometheus:
         condition: service_started
     container_name: grafana
-    restart: unless-stopped
     ports:
       - '3000:3000'
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ./sda/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     extra_hosts:
       - "localhost:host-gateway"
 
@@ -165,7 +134,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      otel:
+      grafana:
         condition: service_started
     environment:
       - BROKER_PASSWORD=inbox

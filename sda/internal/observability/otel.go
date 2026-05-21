@@ -59,7 +59,7 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	)
 	otel.SetTextMapPropagator(prop)
 
-	traceExporter, err := otlptrace.New(ctx, otlptracehttp.NewClient(otlptracehttp.WithEndpoint("localhost:4318")))
+	traceExporter, err := otlptrace.New(ctx, otlptracehttp.NewClient())
 	if err != nil {
 		return nil, err
 	}
