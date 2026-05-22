@@ -21,7 +21,7 @@ BEGIN
 
 
     -- Grant permissions to the rotatekey role
-    GRANT INSERT, SELECT ON sda.file_headers_backup TO rotatekey;
+    GRANT INSERT, SELECT, UPDATE ON sda.file_headers_backup TO rotatekey;
 
     RAISE NOTICE 'Migration to version % completed successfully.', sourcever+1;
 
