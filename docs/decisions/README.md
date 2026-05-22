@@ -85,12 +85,12 @@ rationale and the full promotion procedure.
 
 ## Status lifecycle
 
-| Status | Meaning |
-| --- | --- |
-| `proposed` | Under discussion in a PR |
-| `accepted` | Merged and in effect |
-| `rejected` | Considered but not adopted |
-| `deprecated` | No longer applies (but kept for history) |
+| Status       | Meaning                                                              |
+|--------------|----------------------------------------------------------------------|
+| `proposed`   | Under discussion in a PR                                             |
+| `accepted`   | Merged and in effect                                                 |
+| `rejected`   | Considered but not adopted                                           |
+| `deprecated` | No longer applies (but kept for history)                             |
 | `superseded` | Replaced by a newer decision record (link to it in the front matter) |
 
 Numbers are never reused. Superseded and rejected records stay in the directory
@@ -106,12 +106,13 @@ superseded-by: "0005-use-new-approach.md"
 
 ## Index
 
-| # | Decision | Status |
-| --- | --- | --- |
-| [0000](0000-use-markdown-architectural-decision-records.md) | Use Markdown Architectural Decision Records | accepted |
-| [0002](0002-merge-dependabot-package-managers.md) | Merge Dependabot package managers | accepted |
+| #                                                             | Decision                                                      | Status   |
+|---------------------------------------------------------------|---------------------------------------------------------------|----------|
+| [0000](0000-use-markdown-architectural-decision-records.md)   | Use Markdown Architectural Decision Records                   | accepted |
+| [0002](0002-merge-dependabot-package-managers.md)             | Merge Dependabot package managers                             | accepted |
 | [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
-| [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md) | Introduce RFCs as an upstream exploration phase for ADRs | proposed |
+| [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md)  | Introduce RFCs as an upstream exploration phase for ADRs      | proposed |
+| [0006](0006-metrics-and-tracing.md)                           | Specify Metrics and Tracing technologies                      | proposed |
 
 Numbers `0001` and `0004` were proposed in PRs
 [#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263) and
