@@ -1,9 +1,9 @@
 ---
 # These are optional metadata elements. Feel free to remove any of them.
-status: proposed # proposed | accepted | rejected | deprecated | superseded
+status: proposed
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
-date: "2026-05-20" # when the decision was last updated
+date: "2026-05-20" 
 ---
 
 # Metrics and tracing in the sensitive-data-archive applications
@@ -13,6 +13,7 @@ date: "2026-05-20" # when the decision was last updated
 Tracing and metrics are helpful tools to be able to monitor and debug a system.
 
 With metrics and tracing the ability to inspect message and request handling is enhanced, this helps support:
+
 * Finding where and why requests / message handling fails.
 * Finding where and why requests / message handling is unexpectedly slow.
 * How the system performance changes depending on load, over time, when new changes are deployed, etc
@@ -26,17 +27,17 @@ The aim of this ADR is to detail which technologies will be used to instrument t
 
 ## Decision Outcome
 
-The idea is to implement metrics and tracing collection and exporting through [OpenTelemetry](https://opentelemetry.io/)(otel) which 
-is an open source observability framework. 
+The idea is to implement metrics and tracing collection and exporting through [OpenTelemetry](https://opentelemetry.io/) (OTel) which is an open source observability framework.
 
 [OpenTelemetry](https://opentelemetry.io/) is the chosen observability instrumentation, as it's comprehensive, and vendor-neutral.
 It supports exporting traces in different protocols, eg: [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/), [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/).
 
-[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, as it's a standard and easily integrated in kubernetes and tools such as grafana to visualise metrics.
+[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, as it's a standard and easily integrated in Kubernetes and tools such as Grafana to visualise metrics.
 
-[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otel/protocol/) is the chosen tracing protocol, as it's natively supported by the chosen observability instrumentation([otel](https://opentelemetry.io/))
+[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) is the chosen tracing protocol, as it's natively supported by the chosen observability instrumentation([OTel](https://opentelemetry.io/))
 
-The following diagram show an example setup where the otel sdk will export traces to a Grafana Tempo, and expose metrics through a Prometheus endpoint
+The following diagram shows an example setup where the OTel sdk will export traces to a Grafana Tempo, and expose metrics through a Prometheus endpoint
+
 ```mermaid
 graph LR
 
@@ -61,7 +62,8 @@ graph LR
     gd -->|Query metrics| pc
     gd -->|Query traces| gt
 ```
-The Observability parts in the above diagram is the suggested infrastructure setup, but could be modified by the operator.
+
+The Observability parts in the above diagram are the suggested infrastructure setup, but could be modified by the operator.
 
 ### Consequences
 
@@ -70,7 +72,7 @@ The Observability parts in the above diagram is the suggested infrastructure set
   * Time spent in each service
   * Failed spans
   * Slow database queries
-  * External API latency 
+  * External API latency
 * Good, because with metrics we can monitor
   * Request rate
   * Error rate
@@ -85,16 +87,18 @@ The Observability parts in the above diagram is the suggested infrastructure set
 
 There is a [POC branch](https://github.com/neicnordic/sensitive-data-archive/tree/poc/otel_tracing_and_metrics)(based on quite old version of the sda-stack: v2.1.34) with the described setup.
 To test you can run:
+
 1. `make build-all`
 2. `make integrationtest-sda-s3-run`
-3. You can now go to http://localhost:3000 and login with admin:admin
-4. On the http://localhost:3000/explore you should be able to select Tempo, or Prometheus as source
+3. You can now go to [locally hosted Grafana](http://localhost:3000) and login with admin:admin
+4. On the [Grafana/Explore](http://localhost:3000/explore) you should be able to select Tempo, or Prometheus as source
 5. You should now be able to see Prometheus metrics and traces in grafana.
- 
+
 In short the application level setup is as follows:
-1. Application starts 
-2. An [otel client](https://github.com/open-telemetry/opentelemetry-go) is initialized 
-  * Otel client starts Prometheus exposing through an HTTP server
-3. Application startup complete (after starting additional needed resources, etc)
-4. Application reports span to otel client
-5. otel client exports traces to based on exporter configuration
+
+1. Application starts
+2. An [OTel client](https://github.com/open-telemetry/opentelemetry-go) is initialized.
+3. OTel client starts Prometheus exposing through an HTTP server
+4. Application startup complete (after starting additional needed resources, etc)
+5. Application reports span to OTel client
+6. OTel client exports traces based on exporter configuration
