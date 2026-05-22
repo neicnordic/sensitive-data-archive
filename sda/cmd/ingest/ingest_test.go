@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	log "github.com/sirupsen/logrus"
 
@@ -37,8 +38,9 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-var DBport, MQport int
-var BrokerAPI string
+var mqPort int
+var dbPort uint16
+var brokerAPI string
 
 func TestMain(m *testing.M) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -60,7 +62,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// pulls an image, creates a container based on it and runs it
-	postgres, err := pool.RunWithOptions(&dockertest.RunOptions{
+	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
 		Tag:        "15.2-alpine3.17",
 		Env: []string{
@@ -81,8 +83,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	dbHostAndPort := postgres.GetHostPort("5432/tcp")
-	DBport, _ = strconv.Atoi(postgres.GetPort("5432/tcp"))
+	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
+	dbPortUint64, _ := strconv.ParseUint(postgresContainer.GetPort("5432/tcp"), 10, 16)
+	dbPort = uint16(dbPortUint64)
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
@@ -114,17 +117,17 @@ func TestMain(m *testing.M) {
 		}
 	})
 	if err != nil {
-		if err := pool.Purge(postgres); err != nil {
+		if err := pool.Purge(postgresContainer); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	MQport, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	BrokerAPI = rabbitmq.GetHostPort("15672/tcp")
+	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
+	brokerAPI = rabbitmq.GetHostPort("15672/tcp")
 
 	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+BrokerAPI+"/api/queues/sda/", http.NoBody)
+	req, err := http.NewRequest(http.MethodGet, "http://"+brokerAPI+"/api/queues/sda/", http.NoBody)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -140,7 +143,7 @@ func TestMain(m *testing.M) {
 
 		return nil
 	}); err != nil {
-		if err := pool.Purge(postgres); err != nil {
+		if err := pool.Purge(postgresContainer); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
 		if err := pool.Purge(rabbitmq); err != nil {
@@ -153,7 +156,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	log.Println("tests completed")
-	if err := pool.Purge(postgres); err != nil {
+	if err := pool.Purge(postgresContainer); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 	if err := pool.Purge(rabbitmq); err != nil {
@@ -177,6 +180,8 @@ type TestSuite struct {
 
 	archiveDir string
 	inboxDir   string
+
+	verificationDB *sql.DB
 }
 
 func (ts *TestSuite) SetupSuite() {
@@ -205,28 +210,39 @@ func (ts *TestSuite) SetupSuite() {
 	viper.Set("archive.type", "posix")
 	viper.Set("archive.location", "/tmp/")
 	viper.Set("broker.host", "localhost")
-	viper.Set("broker.port", MQport)
+	viper.Set("broker.port", mqPort)
 	viper.Set("broker.user", "guest")
 	viper.Set("broker.password", "guest")
 	viper.Set("broker.queue", "ingest")
 	viper.Set("broker.routingkey", "verify")
 	viper.Set("broker.vhost", "sda")
-	viper.Set("db.host", "localhost")
-	viper.Set("db.port", DBport)
-	viper.Set("db.user", "postgres")
-	viper.Set("db.password", "rootpasswd")
-	viper.Set("db.database", "sda")
-	viper.Set("db.sslMode", "disable")
 	viper.Set("schema.path", "../../schemas/isolated/")
 
 	ingestConf, err := config.NewConfig("ingest")
 	if err != nil {
 		ts.FailNowf("failed to init config: %s", err.Error())
 	}
-	ts.ingest.DB, err = database.NewSDAdb(ingestConf.Database)
+	ts.ingest.db, err = postgres.NewPostgresSQLDatabase(
+		postgres.Host("127.0.0.1"),
+		postgres.Port(dbPort),
+		postgres.User("postgres"),
+		postgres.Password("rootpasswd"),
+		postgres.DatabaseName("sda"),
+		postgres.Schema("sda"),
+		postgres.CACert(""),
+		postgres.SslMode("disable"),
+		postgres.ClientCert(""),
+		postgres.ClientKey(""),
+	)
 	if err != nil {
-		ts.FailNowf("failed to setup database connection: %s", err.Error())
+		ts.FailNow("failed to connect to database", err)
 	}
+
+	ts.verificationDB, err = sql.Open("postgres", fmt.Sprintf("host=127.0.0.1 port=%d user=postgres password=rootpasswd dbname=sda sslmode=disable search_path=sda", dbPort))
+	if err != nil {
+		ts.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
+	}
+
 	ts.ingest.MQ, err = broker.NewMQ(ingestConf.Broker)
 	if err != nil {
 		ts.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
@@ -236,11 +252,20 @@ func (ts *TestSuite) SetupSuite() {
 		ts.FailNow("no private keys configured")
 	}
 
-	if err := ts.ingest.DB.AddKeyHash(hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
+	if err := ts.ingest.db.AddKeyHash(context.Background(), hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
 		ts.FailNow("failed to register the public key")
 	}
 
 	ts.UserName = "test-ingest"
+}
+
+func (ts *TestSuite) TearDownSuite() {
+	if ts.verificationDB != nil {
+		ts.NoError(ts.verificationDB.Close())
+	}
+	if ts.ingest.db != nil {
+		ts.NoError(ts.ingest.db.Close())
+	}
 }
 
 func (ts *TestSuite) SetupTest() {
@@ -308,17 +333,17 @@ storage:
 		ts.FailNow(err.Error())
 	}
 
-	lb, err := locationbroker.NewLocationBroker(ts.ingest.DB)
+	lb, err := locationbroker.NewLocationBroker(ts.ingest.db)
 	ts.NoError(err)
-	ts.ingest.ArchiveWriter, err = storage.NewWriter(context.TODO(), "archive", lb)
+	ts.ingest.ArchiveWriter, err = storage.NewWriter(context.Background(), "archive", lb)
 	if err != nil {
 		ts.FailNow("failed to setup archive writer")
 	}
-	ts.ingest.ArchiveReader, err = storage.NewReader(context.TODO(), "archive")
+	ts.ingest.ArchiveReader, err = storage.NewReader(context.Background(), "archive")
 	if err != nil {
 		ts.FailNow("failed to setup archive reader")
 	}
-	ts.ingest.InboxReader, err = storage.NewReader(context.TODO(), "inbox")
+	ts.ingest.InboxReader, err = storage.NewReader(context.Background(), "inbox")
 	if err != nil {
 		ts.FailNow("failed to setup inbox reader")
 	}
@@ -397,10 +422,10 @@ func (ts *TestSuite) TestCancelFile_NotYetArchived() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -410,7 +435,7 @@ func (ts *TestSuite) TestCancelFile_NotYetArchived() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.Background(), fileID, message))
 }
 
 // messages of type `cancel`
@@ -418,15 +443,15 @@ func (ts *TestSuite) TestCancelFile() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.NoError(ts.T(), ts.ingest.DB.SetArchived(ts.archiveDir, database.FileInfo{
-		ArchiveChecksum:   "123",
+	assert.NoError(ts.T(), ts.ingest.db.SetArchived(context.Background(), ts.archiveDir, &database.FileInfo{
+		ArchivedChecksum:  "123",
 		Size:              500,
 		Path:              fileID,
 		DecryptedChecksum: "321",
@@ -442,17 +467,17 @@ func (ts *TestSuite) TestCancelFile() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(context.Background(), fileID, message))
 }
 
 func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 	// prepare the DB entries
 	userName := "test-cancel"
 	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", userName)
-	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", file1, userName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", userName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -462,16 +487,16 @@ func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
 		User:     userName,
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.TODO(), uuid.NewString(), message))
+	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.Background(), uuid.NewString(), message))
 }
 
 // messages of type `ingest`
 func (ts *TestSuite) TestIngestFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -481,15 +506,15 @@ func (ts *TestSuite) TestIngestFile() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 
 func (ts *TestSuite) TestNoSubmissionLocation() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, "/inbox", ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -499,15 +524,15 @@ func (ts *TestSuite) TestNoSubmissionLocation() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "nack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "nack", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 
 func (ts *TestSuite) TestIngestFile_secondTime() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -517,10 +542,10 @@ func (ts *TestSuite) TestIngestFile_secondTime() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	// file is already in `archived` state
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 func (ts *TestSuite) TestIngestFile_unknownInboxType() {
 	message := schema.IngestionTrigger{
@@ -529,14 +554,14 @@ func (ts *TestSuite) TestIngestFile_unknownInboxType() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), uuid.New().String(), message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), uuid.New().String(), message))
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -546,20 +571,20 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -569,9 +594,9 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -613,12 +638,12 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
 	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
+	if err := ts.verificationDB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
 		ts.FailNow("failed to get checksum from database")
 	}
 
@@ -626,10 +651,10 @@ func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -639,27 +664,27 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
-	var fi database.FileInfo
-	fi.ArchiveChecksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi := new(database.FileInfo)
+	fi.ArchivedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -669,31 +694,31 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	// fake file verification
 	sha256hash := sha256.New()
-	var fi database.FileInfo
-	fi.ArchiveChecksum = hex.EncodeToString(sha256hash.Sum(nil))
+	fi := new(database.FileInfo)
+	fi.ArchivedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 }
 func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	// prepare the DB entries
-	fileID, err := ts.ingest.DB.RegisterFile(nil, ts.inboxDir, ts.filePath, ts.UserName)
+	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -703,26 +728,26 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	var firstDbChecksum string
 	const q1 = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.ingest.DB.DB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
+	if err := ts.verificationDB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
 		ts.FailNow("failed to get checksum from database")
 	}
 
 	// fake file verification
 	verifiedSha256 := sha256.New()
-	var fi database.FileInfo
-	fi.ArchiveChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
+	fi := new(database.FileInfo)
+	fi.ArchivedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
 	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
 	fi.DecryptedSize = 10 * 1024 * 1024
 	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.DB.SetVerified(fi, fileID); err != nil {
+	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
 		ts.Fail("failed to mark file as verified")
 	}
 
-	if err = ts.ingest.DB.UpdateFileEventLog(fileID, "disabled", "ingest", "{}", "{}"); err != nil {
+	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
 		ts.Fail("failed to update file event log")
 	}
 
@@ -764,12 +789,12 @@ func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
 	crypt4GHWriter.Close()
 
 	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), fileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
 
 	// DB should have the new checksum
 	var dbChecksum string
 	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.ingest.DB.DB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
+	if err := ts.verificationDB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
 		ts.FailNow("failed to get checksum from database")
 	}
 
@@ -790,7 +815,7 @@ func (ts *TestSuite) TestIngestFile_missingFile() {
 		User:     ts.UserName,
 	}
 
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.TODO(), newFileID, message))
+	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), newFileID, message))
 }
 func (ts *TestSuite) TestDetectMisingC4GHKeys() {
 	viper.Set("c4gh.privateKeys", "")
@@ -800,16 +825,16 @@ func (ts *TestSuite) TestDetectMisingC4GHKeys() {
 }
 
 func (ts *TestSuite) TestRegisterC4ghKey_newDeployment() {
-	_, err := ts.ingest.DB.DB.Exec("TRUNCATE sda.encryption_keys CASCADE;")
+	_, err := ts.verificationDB.Exec("TRUNCATE sda.encryption_keys CASCADE;")
 	assert.NoError(ts.T(), err)
 
 	privateKeys, err := config.GetC4GHprivateKeys()
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(privateKeys))
 
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(context.Background()))
 
-	kh, err := ts.ingest.DB.ListKeyHashes()
+	kh, err := ts.ingest.db.ListKeyHashes(context.Background())
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(kh))
 }
@@ -819,9 +844,9 @@ func (ts *TestSuite) TestRegisterC4ghKey_existingEntry() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 2, len(privateKeys))
 
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey())
+	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(context.Background()))
 
-	kh, err := ts.ingest.DB.ListKeyHashes()
+	kh, err := ts.ingest.db.ListKeyHashes(context.Background())
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), 1, len(kh))
 }

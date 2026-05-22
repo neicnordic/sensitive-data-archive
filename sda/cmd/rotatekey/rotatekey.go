@@ -7,9 +7,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -19,20 +21,30 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
 type RotateKey struct {
 	Conf          *config.Config
 	MQ            *broker.AMQPBroker
-	DB            *database.SDAdb
+	db            database.Database
 	PubKeyEncoded string
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := configv2.Load(); err != nil {
+		panic(fmt.Errorf("failed to load config: %v", err))
+	}
+
 	app := RotateKey{}
 	var err error
 
@@ -46,8 +58,8 @@ func main() {
 				defer app.MQ.Channel.Close()
 				defer app.MQ.Connection.Close()
 			}
-			if app.DB != nil {
-				defer app.DB.Close()
+			if app.db != nil {
+				defer app.db.Close()
 			}
 			log.Fatal(err)
 		}
@@ -63,14 +75,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	app.DB, err = database.NewSDAdb(app.Conf.Database)
+	app.db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		panic(err)
 	}
-	if app.DB.Version < 22 {
-		log.Error("database schema v22 is required")
-		app.DB.Close()
-		panic("unsupported database schema version")
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		panic(errors.Join(errors.New("database schema v23 is required"), err))
 	}
 
 	go func() {
@@ -78,7 +88,7 @@ func main() {
 		_, _ = fmt.Println("Interrupt signal received. Shutting down.")
 		defer app.MQ.Channel.Close()
 		defer app.MQ.Connection.Close()
-		defer app.DB.Close()
+		defer app.db.Close()
 
 		os.Exit(0) // exit program
 	}()
@@ -91,7 +101,7 @@ func main() {
 	app.PubKeyEncoded = base64.StdEncoding.EncodeToString(tmp.Bytes())
 
 	// Check that key is registered in the db at startup
-	err = app.DB.CheckKeyHash(hex.EncodeToString(app.Conf.RotateKey.PublicKey[:]))
+	err = app.checkKeyHash(ctx, hex.EncodeToString(app.Conf.RotateKey.PublicKey[:]))
 	if err != nil {
 		panic(fmt.Errorf("database lookup of the rotation key failed, reason: %v", err))
 	}
@@ -109,7 +119,6 @@ func main() {
 	}()
 
 	log.Info("Starting rotatekey service")
-	var message schema.KeyRotation
 
 	go func() {
 		// Create a function to handle panic and exit gracefully
@@ -119,8 +128,8 @@ func main() {
 					defer app.MQ.Channel.Close()
 					defer app.MQ.Connection.Close()
 				}
-				if app.DB != nil {
-					defer app.DB.Close()
+				if app.db != nil {
+					defer app.db.Close()
 				}
 				log.Fatal(err)
 			}
@@ -130,81 +139,89 @@ func main() {
 			panic(err)
 		}
 		for delivered := range messages {
-			log.Debugf("Received a message (correlation-id: %s, message: %s)",
-				delivered.CorrelationId,
-				delivered.Body)
-
-			err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", app.Conf.Broker.SchemasPath), delivered.Body)
-			if err != nil {
-				msg := "validation of incoming message (rotate-key) failed"
-				log.Errorf("%s, reason: %v", msg, err)
-				// Ack message and send the payload to an error queue so it can be analyzed.
-				infoErrorMessage := broker.InfoError{
-					Error:           msg,
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-
-				continue
-			}
-
-			// Fetch rotate key hash before starting work so that we make sure the hash state
-			// has not changed since the application startup.
-			keyhash := hex.EncodeToString(app.Conf.RotateKey.PublicKey[:])
-			// exit app if target key was modified after app start-up, e.g. if key has been deprecated
-			if err = app.DB.CheckKeyHash(keyhash); err != nil {
-				panic(fmt.Errorf("check of target key failed, reason: %v", err))
-			}
-
-			// we unmarshal the message in the validation step so this is safe to do
-			_ = json.Unmarshal(delivered.Body, &message)
-
-			ackNack, msg, err := app.reEncryptHeader(message.FileID)
-
-			switch ackNack {
-			case "ack":
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to ack message, reason: %v", err)
-				}
-			case "ackSendToError":
-				infoErrorMessage := broker.InfoError{
-					Error:           msg,
-					Reason:          err.Error(),
-					OriginalMessage: string(delivered.Body),
-				}
-				body, _ := json.Marshal(infoErrorMessage)
-				if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
-					log.Errorf("failed to publish message, reason: (%s)", err.Error())
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to Ack message, reason: (%s)", err.Error())
-				}
-			case "nackRequeue":
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: %v", err)
-				}
-			default:
-				// will catch `reject`s, failures that should not be requeued.
-				if err := delivered.Reject(false); err != nil {
-					log.Errorf("failed to reject message, reason: %v", err)
-				}
-			}
+			app.handleMessage(delivered)
 		}
 	}()
 
 	<-forever
 }
 
-func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err error) {
+func (app *RotateKey) handleMessage(delivered amqp091.Delivery) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	log.Debugf("Received a message (correlation-id: %s, message: %s)",
+		delivered.CorrelationId,
+		delivered.Body)
+
+	err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", app.Conf.Broker.SchemasPath), delivered.Body)
+	if err != nil {
+		msg := "validation of incoming message (rotate-key) failed"
+		log.Errorf("%s, reason: %v", msg, err)
+		// Ack message and send the payload to an error queue so it can be analyzed.
+		infoErrorMessage := broker.InfoError{
+			Error:           msg,
+			Reason:          err.Error(),
+			OriginalMessage: string(delivered.Body),
+		}
+		body, _ := json.Marshal(infoErrorMessage)
+		if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: (%s)", err.Error())
+		}
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+
+		return
+	}
+
+	// Fetch rotate key hash before starting work so that we make sure the hash state
+	// has not changed since the application startup.
+	keyhash := hex.EncodeToString(app.Conf.RotateKey.PublicKey[:])
+	// exit app if target key was modified after app start-up, e.g. if key has been deprecated
+	if err = app.checkKeyHash(ctx, keyhash); err != nil {
+		panic(fmt.Errorf("check of target key failed, reason: %v", err))
+	}
+
+	var message schema.KeyRotation
+	// we unmarshal the message in the validation step so this is safe to do
+	_ = json.Unmarshal(delivered.Body, &message)
+
+	ackNack, msg, err := app.reEncryptHeader(ctx, message.FileID)
+
+	switch ackNack {
+	case "ack":
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to ack message, reason: %v", err)
+		}
+	case "ackSendToError":
+		infoErrorMessage := broker.InfoError{
+			Error:           msg,
+			Reason:          err.Error(),
+			OriginalMessage: string(delivered.Body),
+		}
+		body, _ := json.Marshal(infoErrorMessage)
+		if err := app.MQ.SendMessage(delivered.CorrelationId, app.Conf.Broker.Exchange, "error", body); err != nil {
+			log.Errorf("failed to publish message, reason: (%s)", err.Error())
+		}
+		if err := delivered.Ack(false); err != nil {
+			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+		}
+	case "nackRequeue":
+		if err := delivered.Nack(false, true); err != nil {
+			log.Errorf("failed to Nack message, reason: %v", err)
+		}
+	default:
+		// will catch `reject`s, failures that should not be requeued.
+		if err := delivered.Reject(false); err != nil {
+			log.Errorf("failed to reject message, reason: %v", err)
+		}
+	}
+}
+
+func (app *RotateKey) reEncryptHeader(ctx context.Context, fileID string) (ackNack, msg string, err error) {
 	// Get current keyhash for the file, send to error queue if this fails
-	oldKeyHash, err := app.DB.GetKeyHash(fileID)
+	oldKeyHash, err := app.db.GetKeyHash(ctx, fileID)
 	if err != nil {
 		msg := fmt.Sprintf("failed to get keyhash for file with file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
@@ -228,7 +245,7 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 	// reencrypt header
 	log.Debugf("rotating c4gh key for file with file-id: %s", fileID)
 
-	header, err := app.DB.GetHeader(fileID)
+	header, err := app.db.GetHeader(ctx, fileID)
 	if err != nil {
 		msg := fmt.Sprintf("GetHeader failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
@@ -243,7 +260,7 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 
 	// Backup old header before rotating
 	log.Debugf("Backing up old header for file-id: %s", fileID)
-	if err := app.DB.BackupHeader(fileID, header, oldKeyHash); err != nil {
+	if err := app.db.BackupHeader(ctx, fileID, header, oldKeyHash); err != nil {
 		msg := fmt.Sprintf("failed to backup encryption header for file %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 		// We Nack and requeue because if backup fails, rotation should not proceed
@@ -259,7 +276,7 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 	}
 
 	// Rotate header and keyhash in database
-	if err := app.DB.RotateHeaderKey(newHeader, keyhash, fileID); err != nil {
+	if err := app.db.RotateHeaderKey(ctx, newHeader, keyhash, fileID); err != nil {
 		msg := fmt.Sprintf("RotateHeaderKey failed for file-id: %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
 
@@ -267,7 +284,7 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 	}
 
 	// Send re-verify message
-	reVerify, err := app.DB.GetReVerificationDataFromFileID(fileID)
+	reverificationData, err := app.db.GetReVerificationDataFromFileID(ctx, fileID)
 	if err != nil {
 		msg := fmt.Sprintf("GetReVerificationData failed for file-id %s", fileID)
 		log.Errorf("%s, reason: %v", msg, err)
@@ -275,6 +292,17 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 		return "ackSendToError", msg, err
 	}
 
+	reVerify := schema.IngestionVerification{
+		User:        reverificationData.SubmissionUser,
+		FilePath:    reverificationData.SubmissionFilePath,
+		FileID:      reverificationData.FileID,
+		ArchivePath: reverificationData.ArchiveFilePath,
+		EncryptedChecksums: []schema.Checksums{{
+			Type:  reverificationData.ArchivedCheckSumType,
+			Value: reverificationData.ArchivedCheckSum,
+		}},
+		ReVerify: true,
+	}
 	reVerifyMsg, _ := json.Marshal(&reVerify)
 	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.Conf.Broker.SchemasPath), reVerifyMsg)
 	if err != nil {
@@ -292,4 +320,24 @@ func (app *RotateKey) reEncryptHeader(fileID string) (ackNack, msg string, err e
 	}
 
 	return "ack", "", nil
+}
+
+// Check that a key hash exists in the database
+func (app *RotateKey) checkKeyHash(ctx context.Context, keyhash string) error {
+	hashes, err := app.db.ListKeyHashes(ctx)
+	if err != nil {
+		return err
+	}
+
+	for n := range hashes {
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt == "" {
+			return nil
+		}
+
+		if hashes[n].Hash == keyhash && hashes[n].DeprecatedAt != "" {
+			return errors.New("the c4gh key hash has been deprecated")
+		}
+	}
+
+	return errors.New("the c4gh key hash is not registered")
 }

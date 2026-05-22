@@ -20,11 +20,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 
 	log "github.com/sirupsen/logrus"
@@ -38,6 +39,11 @@ func main() {
 func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
 	conf, err := config.NewConfig("s3inbox")
 	if err != nil {
 		return fmt.Errorf("failed to load config due to: %v", err)
@@ -48,16 +54,15 @@ func run() error {
 		return fmt.Errorf("failed to setup tls config due to: %v", err)
 	}
 
-	sdaDB, err := database.NewSDAdb(conf.Database)
+	db, err := postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
-	defer sdaDB.Close()
-	if sdaDB.Version < 23 {
-		return errors.New("database schema v23 is required")
+	defer db.Close()
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
-	log.Debugf("Connected to sda-db (v%v)", sdaDB.Version)
 	s3Client, err := newS3Client(ctx, conf.S3Inbox)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
@@ -100,7 +105,7 @@ func run() error {
 		}
 	}
 	router := mux.NewRouter()
-	proxy := NewProxy(conf.S3Inbox, s3Client, auth, mqBroker, sdaDB, tlsProxy)
+	proxy := NewProxy(conf.S3Inbox, s3Client, auth, mqBroker, db, tlsProxy)
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)

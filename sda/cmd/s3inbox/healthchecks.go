@@ -10,8 +10,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CheckHealth checks and tries to repair the connections to MQ, DB and S3
-func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
+// CheckHealth does a health check of the connections to the DB, S3, and MQ
+func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 	// try to connect to mq, check connection and channel
 	var err error
 	if p.messenger == nil {
@@ -41,15 +41,12 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	// Ping database, reconnect if there was a connection problem
-	err = p.database.DB.Ping()
+	err = p.database.Ping(r.Context())
 	if err != nil {
 		log.Errorf("Database connection problem: %v", err)
-		err = p.database.Connect()
-		if err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
+		w.WriteHeader(http.StatusServiceUnavailable)
 
-			return
-		}
+		return
 	}
 
 	// Check that s3 backend responds
