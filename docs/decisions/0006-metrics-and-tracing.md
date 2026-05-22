@@ -10,7 +10,7 @@ date: "2026-05-20" # when the decision was last updated
 
 ## Context and Problem Statement
 
-Tracing and metrics are helpful tools to be able to monitor(and debug) a system if configured and implemented in a reasonable manner in relation to the system.
+Tracing and metrics are helpful tools to be able to monitor and debug a system.
 
 With metrics and tracing the ability to inspect message and request handling is enhanced, this helps support:
 * Finding where and why requests / message handling fails.
@@ -18,7 +18,7 @@ With metrics and tracing the ability to inspect message and request handling is 
 * How the system performance changes depending on load, over time, when new changes are deployed, etc
 
 The sensitive-data-archive applications do not currently collect or export any tracing nor metrics.
-The aim of this ADR is to detail how tracing and metrics collection and exposing could be implemented in the sensitive-data-archive.
+The aim of this ADR is to detail which technologies will be used to instrument the collection and exposing/exporting of tracing and metrics in the sensitive-data-archive.
 
 ## Decision Drivers
 
@@ -29,9 +29,12 @@ The aim of this ADR is to detail how tracing and metrics collection and exposing
 The idea is to implement metrics and tracing collection and exporting through [OpenTelemetry](https://opentelemetry.io/)(otel) which 
 is an open source observability framework. 
 
-An otel client will be setup in the application through the [go otel sdk](https://github.com/open-telemetry/opentelemetry-go).
-This will allow applications to report traces and metrics to the otel client. And then the otel client will be responsible for exporting/exposing them.
-Metrics will be exported 
+[OpenTelemetry](https://opentelemetry.io/) is the chosen observability instrumentation, as it's comprehensive, and vendor-neutral.
+It supports exporting traces in different protocols, eg: [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/), [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/).
+
+[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, as it's a standard and easily integrated in kubernetes and tools such as grafana to visualise metrics.
+
+[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otel/protocol/) is the chosen tracing protocol, as it's natively supported by the chosen observability instrumentation([otel](https://opentelemetry.io/))
 
 The following diagram show an example setup where the otel sdk will export traces to a Grafana Tempo, and expose metrics through a Prometheus endpoint
 ```mermaid
@@ -59,14 +62,6 @@ graph LR
     gd -->|Query traces| gt
 ```
 The Observability parts in the above diagram is the suggested infrastructure setup, but could be modified by the operator.
-
-[OpenTelemetry](https://opentelemetry.io/) is the chosen observability instrumentation, as it's comprehensive, and vendor-neutral. 
-It supports exporting traces in different protocols, eg: [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/), [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/).
-
-[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, as it's a standard and easily integrated in kubernetes and tools such as grafana to visualise metrics.
-
-[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otel/protocol/) is the chosen tracing protocol, as it's natively supported by the chosen observability instrumentation([otel](https://opentelemetry.io/))  
-
 
 ### Consequences
 
@@ -96,3 +91,10 @@ To test you can run:
 4. On the http://localhost:3000/explore you should be able to select Tempo, or Prometheus as source
 5. You should now be able to see Prometheus metrics and traces in grafana.
  
+In short the application level setup is as follows:
+1. Application starts 
+2. An [otel client](https://github.com/open-telemetry/opentelemetry-go) is initialized 
+  * Otel client starts Prometheus exposing through an HTTP server
+3. Application startup complete (after starting additional needed resources, etc)
+4. Application reports span to otel client
+5. otel client exports traces to based on exporter configuration
