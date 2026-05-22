@@ -648,7 +648,7 @@ downloadV2:
     httpGet:
       path: /health/live
       port: download-v2
-      scheme: HTTP
+      scheme: HTTPS
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
@@ -656,7 +656,7 @@ downloadV2:
     httpGet:
       path: /health/ready
       port: download-v2
-      scheme: HTTP
+      scheme: HTTPS
     periodSeconds: 10
     timeoutSeconds: 9
   resources:
