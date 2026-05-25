@@ -4,9 +4,13 @@ package visa
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	log "github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,6 +97,72 @@ func TestGetVisaDatasets_SuffixExtraction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, []string{"EGAD005"}, result.Datasets)
+}
+
+func TestGetVisaDatasets_AlgMismatchDiagnostics(t *testing.T) {
+	origLevel := log.GetLevel()
+	log.SetLevel(log.DebugLevel)
+	t.Cleanup(func() { log.SetLevel(origLevel) })
+
+	hook := logtest.NewGlobal()
+	t.Cleanup(func() { hook.Reset() })
+
+	priv, pub, kid := newRSAKeyPair(t)
+	require.NoError(t, pub.Set(jwk.AlgorithmKey, "RSA-OAEP-256"))
+
+	jwksServer := newJWKSServer(t, pub)
+	t.Cleanup(jwksServer.Close)
+
+	issuer := "https://visa-issuer.example"
+	jku := jwksServer.URL
+	visaClaim := baseVisaClaim("EGAD999")
+	visaJWT := signVisaJWT(t, priv, jku, kid, issuer, "user-123", visaClaim, time.Now().Add(1*time.Hour))
+
+	userinfoServer := newUserinfoServer(t, []string{visaJWT})
+	t.Cleanup(userinfoServer.Close)
+
+	cfg := ValidatorConfig{
+		Source:             "userinfo",
+		UserinfoURL:        userinfoServer.URL,
+		DatasetIDMode:      "raw",
+		ValidateAsserted:   true,
+		IdentityMode:       "broker-bound",
+		ClockSkew:          0,
+		MaxVisas:           200,
+		MaxJWKSPerReq:      10,
+		MaxVisaSize:        16 * 1024,
+		JWKCacheTTL:        5 * time.Minute,
+		ValidationCacheTTL: 2 * time.Minute,
+		UserinfoCacheTTL:   1 * time.Minute,
+	}
+
+	checker := &fakeDatasetChecker{existing: map[string]bool{"EGAD999": true}}
+	trustedIssuers := []TrustedIssuer{{ISS: issuer, JKU: jku}}
+
+	validator, err := NewValidator(cfg, trustedIssuers, checker)
+	require.NoError(t, err)
+
+	identity := Identity{Issuer: "https://broker.example", Subject: "user-123"}
+
+	result, err := validator.GetVisaDatasets(context.Background(), identity, "opaque-token", "userinfo")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Datasets, "visa with mismatched JWK alg should be rejected")
+
+	var rejectionLog string
+	for _, entry := range hook.Entries {
+		if strings.Contains(entry.Message, "rejected") {
+			rejectionLog = entry.Message
+
+			break
+		}
+	}
+	require.NotEmpty(t, rejectionLog, "expected a rejection log entry")
+	assert.Contains(t, rejectionLog, "jwt_alg=RS256")
+	assert.Contains(t, rejectionLog, "jwk_alg=[RSA-OAEP-256]")
+	assert.Contains(t, rejectionLog, "kid="+kid)
+	assert.Contains(t, rejectionLog, "iss="+issuer)
+	assert.Contains(t, rejectionLog, "jku="+jku)
 }
 
 func baseVisaClaim(value string) map[string]any {
