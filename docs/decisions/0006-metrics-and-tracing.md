@@ -1,5 +1,4 @@
 ---
-# These are optional metadata elements. Feel free to remove any of them.
 status: proposed
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
