@@ -32,14 +32,13 @@ For tracing and metrics no other major affecting options were considered as any 
 
 ## Decision Outcome
 
-The idea is to implement metrics and tracing collection and exporting through [OpenTelemetry](https://opentelemetry.io/) (OTel) which is an open source observability framework.
+Chosen option: Use [OpenTelemetry](https://opentelemetry.io/) for instrumentation, [Prometheus](https://prometheus.io/) for the metrics export, and [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) for trace export.
 
-[OpenTelemetry](https://opentelemetry.io/) is the chosen observability instrumentation, as it's comprehensive, and vendor-neutral.
-It supports exporting traces in different protocols, eg: [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/), [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/).
+[OpenTelemetry](https://opentelemetry.io/) is the chosen observability instrumentation, because it's open source, comprehensive, vendor-neutral, and it supports exporting traces in different protocols, eg: [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/), [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/).
 
-[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, as it's a standard and easily integrated in Kubernetes and tools such as Grafana to visualise metrics.
+[Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, because it's a standard and easily integrated in Kubernetes and tools such as Grafana to visualise metrics.
 
-[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) is the chosen tracing protocol, as it's natively supported by the chosen observability instrumentation([OTel](https://opentelemetry.io/))
+[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) is the chosen tracing protocol, because it's natively supported by the chosen observability instrumentation([OTel](https://opentelemetry.io/))
 
 The following diagram shows an example setup where the OTel sdk will export traces to a Grafana Tempo, and expose metrics through a Prometheus endpoint
 
