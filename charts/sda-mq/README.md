@@ -1,5 +1,8 @@
 # SDA Message broker
 
+> [!CAUTION]
+> The SDA Message broker Helm Chart has been deprecated and is no longer maintained.
+
 Source repository: [https://github.com/neicnordic/sensitive-data-archive](https://github.com/neicnordic/sensitive-data-archive)
 
 ## Installing the Chart

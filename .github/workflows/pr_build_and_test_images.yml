@@ -203,7 +203,7 @@ jobs:
           docker compose -f .github/integration/sda-validator-orchestrator-integration.yml run integration_test
 
 
-  sda-download_integration_test: # TODO this tests is rebuilding all images, shouldnt be needed
+  sda-download_integration_test: # TODO this test rebuilds the sftp-inbox image, shouldn't be needed
     needs:
       - build_images
     name: sda-download-integration ${{ matrix.storagetype }} integration tests
@@ -265,7 +265,7 @@ jobs:
       - name: Test sda-doa ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
 
-  sftp-inbox_integration_test: # TODO this tests is rebuilding stfp-inbox image, shouldnt be needed
+  sftp-inbox_integration_test: # TODO this tests is rebuilding sftp-inbox image, shouldnt be needed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

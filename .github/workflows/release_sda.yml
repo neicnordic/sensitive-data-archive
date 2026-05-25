@@ -1,16 +1,153 @@
-name: Build versioned images
-on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+name: Release Sensitive Data Archive
 
-env:
-  VERSION_TAG: ${{ github.ref_name }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.3)"
+        required: true
+        type: string
 
 jobs:
+  prepare_release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  build_images:
+      - name: Ensure main or hotfix branch
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+
+          echo "Branch: $BRANCH"
+          
+          if [[ "$BRANCH" != "main" && ! "$BRANCH" =~ ^hotfix/ ]]; then
+            echo "Workflow may only run on:"
+            echo "  - main"
+            echo "  - hotfix/*"
+            exit 1
+          fi
+
+      - name: Validate target version
+        env:
+          TARGET_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Validate target version format
+          if ! [[ "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ]]; then
+            echo "$TARGET_VERSION: Version must match MAJOR.MINOR.PATCH[-suffix]"
+            exit 1
+          fi
+
+          # Extract previous version from changelog
+          PREVIOUS_VERSION=$(
+            grep -E '^## \[[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?\]' sda/CHANGELOG.md \
+            | head -n1 \
+            | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?)\].*/\1/'
+          )
+
+          if [ -z "$PREVIOUS_VERSION" ]; then
+            echo "Could not determine previous version from the sda/CHANGELOG.md"
+            exit 1
+          fi
+
+          echo "Previous version: $PREVIOUS_VERSION"
+          echo "Target version:   $TARGET_VERSION"
+
+          # Compare versions
+          LOWEST=$(printf '%s\n%s\n' "$PREVIOUS_VERSION" "$TARGET_VERSION" | sort -V | head -n1)
+
+          if [ "$LOWEST" = "$TARGET_VERSION" ] && [ "$TARGET_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Target version must be greater than previous version"
+            exit 1
+          fi
+
+          if [ "$TARGET_VERSION" = "$PREVIOUS_VERSION" ]; then
+            echo "Target version equals previous version"
+            exit 1
+          fi
+          
+          UNRELEASED_CONTENT=$(
+            awk '
+            /^## \[Unreleased\]/ { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+            ' sda/CHANGELOG.md
+          )
+      
+          # Remove blank lines and whitespace
+          UNRELEASED_CONTENT_CLEAN=$(echo "$UNRELEASED_CONTENT" | sed '/^[[:space:]]*$/d')
+      
+          if [ -z "$UNRELEASED_CONTENT_CLEAN" ]; then
+          echo "Unreleased section is empty"
+          exit 1
+          fi
+
+      - name: Update CHANGELOG.md
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          sed -i "0,/## \\[Unreleased\\]/s//## [Unreleased]\n\n## [${VERSION}] - ${TODAY}/" sda/CHANGELOG.md
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Commit changelog
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git add sda/CHANGELOG.md
+
+          # Skip commit if nothing changed
+          git diff --cached --quiet && exit 0
+
+          git commit -m "chore(sda): SDA Release ${VERSION}"
+
+      - name: Create tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git tag "v${VERSION}"
+
+      - name: Push commit and tag
+        env:
+          VERSION: ${{ inputs.version }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          git push origin "HEAD:${BRANCH_NAME}"
+          git push origin "v${VERSION}"
+
+      - name: Extract release notes
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          awk "
+            /^## \\[${VERSION}\\]/ { in_section=1; next }
+            /^## \\[/ && in_section { exit }
+            in_section { print }
+          " sda/CHANGELOG.md > RELEASE_NOTES.md
+
+      - name: Draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: "v${{ inputs.version }}"
+          tag_name: "v${{ inputs.version }}"
+          draft: true
+          make_latest: false
+          generate_release_notes: false
+          body_path: RELEASE_NOTES.md
+
+  package:
     name: Build ${{ matrix.name }} Docker Image
+    needs: [prepare_release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,13 +180,16 @@ jobs:
             path: "rabbitmq"
             image-tag-suffix: "-rabbitmq"
 
-          - name: "STFP inbox"
+          - name: "SFTP inbox"
             path: "sda-sftp-inbox"
             image-tag-suffix: "-sftp-inbox"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+          fetch-depth: 0
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v4
@@ -58,21 +198,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract git sha
+        run: |
+          GIT_SHA=$(git rev-parse HEAD)
+          echo "GIT_SHA=$GIT_SHA" >> $GITHUB_ENV
+
       - name: Build ${{ matrix.name }} container
         uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.path }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+            ghcr.io/${{ github.repository }}:v${{ inputs.version }}${{ matrix.image-tag-suffix }}
           labels: |
             org.opencontainers.image.title=${{ github.repository }}
             org.opencontainers.image.description=Sensitive Data Archive - ${{ matrix.name }}
             org.opencontainers.image.authors=NeIC System Developers
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}/tree/${{ env.VERSION_TAG }}/${{ matrix.path }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ env.VERSION_TAG }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}/tree/v${{ inputs.version }}/${{ matrix.path }}
+            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.revision=${{ env.GIT_SHA }}
+            org.opencontainers.image.version=v${{ inputs.version }}
 
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }}
@@ -81,7 +226,7 @@ jobs:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+          image-ref: ghcr.io/${{ github.repository }}:v${{ inputs.version }}${{ matrix.image-tag-suffix }}
           format: "sarif"
           hide-progress: true
           ignore-unfixed: true
@@ -91,25 +236,54 @@ jobs:
       # We do this step such that the report in the Github code scanning is more clear for which image a vulnerability originates from
       - name: Append image info to sarif file
         run: |
-          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}/" + .' \
+          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:v${{ inputs.version }}${{ matrix.image-tag-suffix }}/" + .' \
             results.sarif > annotated_results.sarif 
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: annotated_results.sarif
-          category: ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}${{ matrix.image-tag-suffix }}
+          category: ghcr.io/${{ github.repository }}:v${{ inputs.version }}${{ matrix.image-tag-suffix }}
+
+  publish_release:
+    name: Publish release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: "v${{ inputs.version }}"
+          tag_name: "v${{ inputs.version }}"
+          make_latest: true
+          generate_release_notes: false
+          append_body: true
+          body: |
+            # Docker images:
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-download
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-doa
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-validator-orchestrator
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-sftp-inbox
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-postgres
+            - ghcr.io/${{ github.repository }}:v${{ inputs.version }}-rabbitmq
 
   code_ql:
     name: Run CodeQL
+    needs: package
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         language: [ 'java', 'go' ]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+          fetch-depth: 0
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
@@ -148,26 +322,3 @@ jobs:
         with:
           category: "/language:${{matrix.language}}"
 
-
-  create_release:
-    needs:
-      - build_images
-    name: Create SDA release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Release
-        uses: softprops/action-gh-release@v3
-        with:
-          generate_release_notes: "true"
-          tag_name: "${{ env.VERSION_TAG }}"
-          body: |
-            # Docker images:
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-download
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-doa
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-validator-orchestrator
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-stfp-inbox
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-postgres
-            - ghcr.io/${{ github.repository }}:${{ env.VERSION_TAG }}-rabbitmq
