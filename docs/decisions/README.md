@@ -106,13 +106,13 @@ superseded-by: "0005-use-new-approach.md"
 
 ## Index
 
-| #                                                             | Decision                                                      | Status   |
-|---------------------------------------------------------------|---------------------------------------------------------------|----------|
-| [0000](0000-use-markdown-architectural-decision-records.md)   | Use Markdown Architectural Decision Records                   | accepted |
-| [0002](0002-merge-dependabot-package-managers.md)             | Merge Dependabot package managers                             | accepted |
-| [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups | proposed |
-| [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md)  | Introduce RFCs as an upstream exploration phase for ADRs      | proposed |
-| [0006](0006-metrics-and-tracing.md)                           | Specify Metrics and Tracing technologies                      | proposed |
+| #                                                             | Decision                                                       | Status   |
+|---------------------------------------------------------------|----------------------------------------------------------------|----------|
+| [0000](0000-use-markdown-architectural-decision-records.md)   | Use Markdown Architectural Decision Records                    | accepted |
+| [0002](0002-merge-dependabot-package-managers.md)             | Merge Dependabot package managers                              | accepted |
+| [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups  | proposed |
+| [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md)  | Introduce RFCs as an upstream exploration phase for ADRs       | proposed |
+| [0006](0006-metrics-and-tracing.md)                           | Metrics and Tracing in the sensitive-data-archive applications | proposed |
 
 Numbers `0001` and `0004` were proposed in PRs
 [#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263) and
