@@ -3,7 +3,7 @@
 status: proposed
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
-date: "2026-05-20" 
+date: "2026-05-20"
 ---
 
 # Metrics and tracing in the sensitive-data-archive applications
@@ -24,6 +24,12 @@ The aim of this ADR is to detail which technologies will be used to instrument t
 ## Decision Drivers
 
 * We want to improve the detection of issues or potential problems in the applications.
+
+## Considered Options
+
+* Use [OpenTelemetry](https://opentelemetry.io/) for instrumentation, [Prometheus](https://prometheus.io/) for the metrics export, and [OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) for trace export.
+
+For tracing and metrics no other major affecting options were considered as any other option would be less desirable and most likely require more work.
 
 ## Decision Outcome
 
@@ -85,7 +91,7 @@ The Observability parts in the above diagram are the suggested infrastructure se
 
 ## More Information
 
-There is a [POC branch](https://github.com/neicnordic/sensitive-data-archive/tree/poc/otel_tracing_and_metrics)(based on quite old version of the sda-stack: v2.1.34) with the described setup.
+There is a [POC branch](https://github.com/neicnordic/sensitive-data-archive/tree/poc/otel_tracing_and_metrics) (based on quite old version of the sda-stack: v2.1.34) with the described setup.
 To test you can run:
 
 1. `make build-all`
