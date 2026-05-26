@@ -434,7 +434,7 @@ global:
   reencrypt:
     host: ""
     port: 50051
-    timeout: 5
+    timeout: 15
 
   sync:
     api:
