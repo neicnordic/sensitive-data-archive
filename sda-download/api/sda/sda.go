@@ -436,7 +436,7 @@ func Download(c *gin.Context) {
 		fileStream = c4ghfileStream
 	}
 
-	err = sendStream(fileStream, c.Writer, start, end)
+	err = sendStream(c.Request.Context(), fileStream, c.Writer, start, end)
 	if err != nil {
 		log.Errorf("error occurred while sending stream: %v", err)
 		c.String(http.StatusInternalServerError, "an error occurred")
@@ -459,14 +459,22 @@ func adjustToStartPosition(fileStream io.Reader, start, end int64) (int64, int64
 }
 
 // used from: https://github.com/neicnordic/crypt4gh/blob/master/examples/reader/main.go#L48C1-L113C1
-var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end int64) error {
+var sendStream = func(ctx context.Context, reader io.Reader, writer http.ResponseWriter, start, end int64) error {
 	// Calculate how much we should read (if given)
 	togo := end - start
+	consecutiveEmptyReads := 0
+	const maxConsecutiveEmptyReads = 10
+
+	flusher, canFlush := writer.(http.Flusher)
 
 	buf := make([]byte, 4096)
 
 	// Loop until we've read what we should (if no/faulty end given, that's EOF)
 	for end == 0 || togo > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		rbuf := buf
 
 		if end != 0 && togo < 4096 {
@@ -475,6 +483,16 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 		}
 		r, err := reader.Read(rbuf)
 		togo -= int64(r)
+
+		if r == 0 && err == nil {
+			consecutiveEmptyReads++
+			if consecutiveEmptyReads >= maxConsecutiveEmptyReads {
+				return io.ErrNoProgress
+			}
+
+			continue
+		}
+		consecutiveEmptyReads = 0
 
 		// Nothing more to read?
 		if err == io.EOF && r == 0 {
@@ -490,6 +508,10 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 
 		wbuf := rbuf[:r]
 		for len(wbuf) > 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
 			// Loop until we've written all that we could read,
 			// fall out on error
 			w, err := writer.Write(wbuf)
@@ -497,7 +519,14 @@ var sendStream = func(reader io.Reader, writer http.ResponseWriter, start, end i
 			if err != nil {
 				return err
 			}
+			if w == 0 {
+				return io.ErrShortWrite
+			}
 			wbuf = wbuf[w:]
+		}
+
+		if canFlush {
+			flusher.Flush()
 		}
 	}
 
