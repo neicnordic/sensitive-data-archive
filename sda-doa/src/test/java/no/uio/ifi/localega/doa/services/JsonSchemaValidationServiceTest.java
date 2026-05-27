@@ -20,7 +20,7 @@ class JsonSchemaValidationServiceTest {
 
     @BeforeAll
     void setUp() {
-        service = new JsonSchemaValidationService();
+        service = new JsonSchemaValidationService("classpath:export-request.json");
     }
 
     @Test
