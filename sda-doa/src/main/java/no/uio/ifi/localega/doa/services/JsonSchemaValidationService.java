@@ -9,6 +9,7 @@ import com.networknt.schema.SchemaRegistryConfig;
 import com.networknt.schema.SpecificationVersion;
 import com.networknt.schema.regex.GraalJSRegularExpressionFactory;
 import no.uio.ifi.localega.doa.exception.JsonSchemaValidationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.stream.Collectors;
@@ -18,7 +19,8 @@ public class JsonSchemaValidationService {
 
     private final Schema schema;
 
-    public JsonSchemaValidationService() {
+    public JsonSchemaValidationService(
+            @Value("${json.schema.export-request.location:classpath:export-request.json}") String schemaLocation) {
         try {
             SchemaRegistryConfig schemaRegistryConfig = SchemaRegistryConfig.builder()
                     .regularExpressionFactory(GraalJSRegularExpressionFactory.getInstance()).build();
@@ -26,9 +28,9 @@ public class JsonSchemaValidationService {
             SchemaRegistry schemaRegistry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_7,
                     builder -> builder.schemaRegistryConfig(schemaRegistryConfig));
 
-            this.schema = schemaRegistry.getSchema(SchemaLocation.of("classpath:export-request.json"));
+            this.schema = schemaRegistry.getSchema(SchemaLocation.of(schemaLocation));
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to load JSON schema 'export-request.json' from classpath", e);
+            throw new IllegalStateException("Failed to load JSON schema from location '" + schemaLocation + "'", e);
         }
     }
 
