@@ -59,3 +59,4 @@ Environment variables used:
 | VISA_PUBLIC_KEY_PATH                   | /etc/ega/jwt/visa.pem                                                | Path to the public key for visas JWT validation    |
 | CRYPT4GH_PRIVATE_KEY_PATH              | /etc/ega/crypt4gh/key.pem                                            | Path to the Crypt4GH private key                   |
 | CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH     | /etc/ega/crypt4gh/key.pass                                           | Path to the Crypt4GH private key passphrase        |
+| JSON_SCHEMA_EXPORT_REQUEST_LOCATION    | classpath:export-request.json                                        | Path to the JSON schema for export requests        |
