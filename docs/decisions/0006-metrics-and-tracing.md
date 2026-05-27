@@ -38,7 +38,7 @@ Chosen option: Use [OpenTelemetry](https://opentelemetry.io/) for instrumentatio
 
 [Prometheus](https://prometheus.io/) is the chosen metrics exporting protocol, because it's a standard and easily integrated in Kubernetes and tools such as Grafana to visualise metrics.
 
-[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) is the chosen tracing protocol, because it's natively supported by the chosen observability instrumentation([OTel](https://opentelemetry.io/))
+[OpenTelemetry Protocol](https://opentelemetry.io/docs/specs/otlp/) (OTLP) is the chosen tracing protocol over [Jaeger](https://www.jaegertracing.io/), or [Zipkin](https://zipkin.io/), because it's natively supported by the chosen observability instrumentation ([OTel](https://opentelemetry.io/))
 
 The following diagram shows an example setup where the OTel sdk will export traces to a Grafana Tempo, and expose metrics through a Prometheus endpoint
 
@@ -96,7 +96,7 @@ To test you can run:
 2. `make integrationtest-sda-s3-run`
 3. You can now go to [locally hosted Grafana](http://localhost:3000) and login with admin:admin
 4. On the [Grafana/Explore](http://localhost:3000/explore) you should be able to select Tempo, or Prometheus as source
-5. You should now be able to see Prometheus metrics and traces in grafana.
+5. You should now be able to see Prometheus metrics and traces in Grafana.
 
 In short the application level setup is as follows:
 
