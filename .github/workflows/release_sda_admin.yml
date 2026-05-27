@@ -62,16 +62,11 @@ jobs:
           # Compare versions
           LOWEST=$(printf '%s\n%s\n' "$PREVIOUS_VERSION" "$TARGET_VERSION" | sort -V | head -n1)
 
-          if [ "$LOWEST" = "$TARGET_VERSION" ] && [ "$TARGET_VERSION" != "$PREVIOUS_VERSION" ]; then
+          if [ "$LOWEST" != "$PREVIOUS_VERSION" ] || [ "$TARGET_VERSION" = "$PREVIOUS_VERSION" ]; then
             echo "Target version must be greater than previous version"
             exit 1
           fi
-
-          if [ "$TARGET_VERSION" = "$PREVIOUS_VERSION" ]; then
-            echo "Target version equals previous version"
-            exit 1
-          fi
-          
+              
           UNRELEASED_CONTENT=$(
             awk '
             /^## \[Unreleased\]/ { in_section=1; next }
