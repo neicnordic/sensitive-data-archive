@@ -7,6 +7,7 @@ on:
       - "sda-download/**"
       - "sda-validator/orchestrator/**"
       - "sda-admin/**"
+      - ".github/workflows/pr_code_tests.yml"
 
 env:
   go-version: '1.25'
@@ -86,17 +87,33 @@ jobs:
         run: |
           cd sda
           go get -v -t ./...
+          go get -v -t -tags=visas ./cmd/download/...
       - name: Test
         run: |
           cd sda
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
+      - name: Test download v2 visa unit tests
+        run: |
+          cd sda
+          go test -v -tags=visas -coverprofile=coverage-visas.txt -covermode=atomic ./cmd/download/...
+
       - name: Codecov
         uses: codecov/codecov-action@v6.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./sda/coverage.txt
+          files: ./sda/coverage.txt
+          disable_search: true
           flags: unittests
+          fail_ci_if_error: false
+
+      - name: Codecov (download v2 visa)
+        uses: codecov/codecov-action@v6.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./sda/coverage-visas.txt
+          disable_search: true
+          flags: download-v2-visas
           fail_ci_if_error: false
 
   test_sda_admin:
