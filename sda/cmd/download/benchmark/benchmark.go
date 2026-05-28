@@ -168,7 +168,7 @@ func main() {
 	cfg := parseFlags()
 
 	if err := autoDiscoverIfNeeded(&cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "[auto-config] %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "[auto-config] %v\n", err)
 		// If we still don't have required values, fail early so the root cause is visible.
 		needNew := !cfg.SkipNew && cfg.FileID == ""
 		needOld := !cfg.SkipOld && (cfg.DatasetID == "" || cfg.S3Path == "")
@@ -178,7 +178,7 @@ func main() {
 	}
 
 	if err := validateConfig(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -211,41 +211,41 @@ func main() {
 		},
 	}
 
-	fmt.Println("=" + strings.Repeat("=", 70))
-	fmt.Printf(" Download Service Benchmark (%s)\n", cfg.Mode)
-	fmt.Println("=" + strings.Repeat("=", 70))
-	fmt.Println("\nConfiguration:")
-	fmt.Printf("  Mode:          %s\n", cfg.Mode)
-	fmt.Printf("  Iterations:    %d\n", cfg.Iterations)
-	fmt.Printf("  Requests:      %d per iteration\n", cfg.Requests)
-	fmt.Printf("  Concurrency:   %d\n", cfg.Concurrency)
-	fmt.Printf("  File ID:       %s\n", cfg.FileID)
-	fmt.Printf("  Dataset ID:    %s\n", cfg.DatasetID)
-	fmt.Printf("  OLD S3 Path:   %s\n", cfg.S3Path)
+	_, _ = fmt.Println("=" + strings.Repeat("=", 70))
+	_, _ = fmt.Printf(" Download Service Benchmark (%s)\n", cfg.Mode)
+	_, _ = fmt.Println("=" + strings.Repeat("=", 70))
+	_, _ = fmt.Println("\nConfiguration:")
+	_, _ = fmt.Printf("  Mode:          %s\n", cfg.Mode)
+	_, _ = fmt.Printf("  Iterations:    %d\n", cfg.Iterations)
+	_, _ = fmt.Printf("  Requests:      %d per iteration\n", cfg.Requests)
+	_, _ = fmt.Printf("  Concurrency:   %d\n", cfg.Concurrency)
+	_, _ = fmt.Printf("  File ID:       %s\n", cfg.FileID)
+	_, _ = fmt.Printf("  Dataset ID:    %s\n", cfg.DatasetID)
+	_, _ = fmt.Printf("  OLD S3 Path:   %s\n", cfg.S3Path)
 	if !cfg.SkipOld {
-		fmt.Printf("  Old URL:       %s\n", cfg.OldURL)
+		_, _ = fmt.Printf("  Old URL:       %s\n", cfg.OldURL)
 	}
 	if !cfg.SkipNew {
-		fmt.Printf("  New URL:       %s\n", cfg.NewURL)
+		_, _ = fmt.Printf("  New URL:       %s\n", cfg.NewURL)
 	}
-	fmt.Println()
+	_, _ = fmt.Println()
 
 	client, err := newHTTPClient(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Client setup error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Client setup error: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Preflight (fail fast)
 	if !cfg.SkipOld {
 		if err := preflight(client, oldTarget, cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Preflight OLD failed: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Preflight OLD failed: %v\n", err)
 			os.Exit(1)
 		}
 	}
 	if !cfg.SkipNew {
 		if err := preflight(client, newTarget, cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Preflight NEW failed: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Preflight NEW failed: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -253,10 +253,10 @@ func main() {
 	if cfg.Mode == ModeValidatedPayload {
 		validation, err := validatePayloadEquivalence(client, cfg, oldTarget, newTarget)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Payload validation failed: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Payload validation failed: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr,
+		_, _ = fmt.Fprintf(os.Stderr,
 			"[validation] plaintext match OK (bytes=%d, sha256=%s, encrypted-bytes old=%d new=%d)\n",
 			validation.Old.PlaintextBytes,
 			validation.Old.PlaintextSHA256,
@@ -350,7 +350,7 @@ func loadEnvironmentDefaults() Config {
 	// Try to read token from /shared/token (container mode)
 	if token, err := os.ReadFile("/shared/token"); err == nil {
 		cfg.Token = "Bearer " + strings.TrimSpace(string(token))
-		fmt.Fprintln(os.Stderr, "[auto-config] Loaded token from /shared/token")
+		_, _ = fmt.Fprintln(os.Stderr, "[auto-config] Loaded token from /shared/token")
 	} else if envToken := os.Getenv("TOKEN"); envToken != "" {
 		cfg.Token = envToken
 	}
@@ -358,7 +358,7 @@ func loadEnvironmentDefaults() Config {
 	// Try to read public key from /shared/c4gh.pub.pem (container mode)
 	if pubkey, err := os.ReadFile("/shared/c4gh.pub.pem"); err == nil {
 		cfg.PublicKey = base64.StdEncoding.EncodeToString(pubkey)
-		fmt.Fprintln(os.Stderr, "[auto-config] Loaded public key from /shared/c4gh.pub.pem")
+		_, _ = fmt.Fprintln(os.Stderr, "[auto-config] Loaded public key from /shared/c4gh.pub.pem")
 	} else if envPubKey := os.Getenv("PUBKEY"); envPubKey != "" {
 		cfg.PublicKey = envPubKey
 	}
@@ -450,15 +450,15 @@ func autoDiscoverIfNeeded(cfg *Config) error {
 
 	if cfg.FileID == "" {
 		cfg.FileID = caseInfo.FileID
-		fmt.Fprintf(os.Stderr, "[auto-config] Discovered file ID via new service: %s\n", cfg.FileID)
+		_, _ = fmt.Fprintf(os.Stderr, "[auto-config] Discovered file ID via new service: %s\n", cfg.FileID)
 	}
 	if cfg.DatasetID == "" {
 		cfg.DatasetID = caseInfo.DatasetID
-		fmt.Fprintf(os.Stderr, "[auto-config] Discovered dataset ID via new service: %s\n", cfg.DatasetID)
+		_, _ = fmt.Fprintf(os.Stderr, "[auto-config] Discovered dataset ID via new service: %s\n", cfg.DatasetID)
 	}
 	if cfg.S3Path == "" {
 		cfg.S3Path = caseInfo.S3Path
-		fmt.Fprintf(os.Stderr, "[auto-config] Derived old S3 path from submission path: %s\n", cfg.S3Path)
+		_, _ = fmt.Fprintf(os.Stderr, "[auto-config] Derived old S3 path from submission path: %s\n", cfg.S3Path)
 	}
 
 	return nil
@@ -725,9 +725,9 @@ func preflight(client *http.Client, target Target, cfg Config) error {
 	}
 	if res.Bytes <= 0 {
 		// not necessarily fatal, but almost always indicates we’re not benchmarking a real file
-		fmt.Fprintf(os.Stderr, "[warn] %s preflight read %d bytes\n", target.Name, res.Bytes)
+		_, _ = fmt.Fprintf(os.Stderr, "[warn] %s preflight read %d bytes\n", target.Name, res.Bytes)
 	}
-	fmt.Fprintf(os.Stderr, "[preflight] %s OK (status=%d, bytes=%d)\n", strings.ToUpper(target.Name), res.StatusCode, res.Bytes)
+	_, _ = fmt.Fprintf(os.Stderr, "[preflight] %s OK (status=%d, bytes=%d)\n", strings.ToUpper(target.Name), res.StatusCode, res.Bytes)
 
 	return nil
 }
@@ -918,13 +918,13 @@ func calculateSummary(name string, results []BenchmarkResult) SummaryStats {
 
 func printIterationResult(r BenchmarkResult) {
 	stats := calculateStats(r.Latencies)
-	fmt.Printf("    Requests:  %d successful, %d failed\n", r.Successful, r.Failed)
+	_, _ = fmt.Printf("    Requests:  %d successful, %d failed\n", r.Successful, r.Failed)
 	if r.Failed > 0 {
-		fmt.Printf("    Failures:  %s\n", formatStatusCounts(r.StatusCounts))
+		_, _ = fmt.Printf("    Failures:  %s\n", formatStatusCounts(r.StatusCounts))
 	}
-	fmt.Printf("    RPS:       %.2f req/s\n", r.RequestsPerS)
-	fmt.Printf("    Latency:   mean=%v, p95=%v, p99=%v\n", stats.Mean.Round(time.Millisecond), stats.P95.Round(time.Millisecond), stats.P99.Round(time.Millisecond))
-	fmt.Printf("    Throughput: %.2f MB/s\n", r.Throughput)
+	_, _ = fmt.Printf("    RPS:       %.2f req/s\n", r.RequestsPerS)
+	_, _ = fmt.Printf("    Latency:   mean=%v, p95=%v, p99=%v\n", stats.Mean.Round(time.Millisecond), stats.P95.Round(time.Millisecond), stats.P99.Round(time.Millisecond))
+	_, _ = fmt.Printf("    Throughput: %.2f MB/s\n", r.Throughput)
 }
 
 func formatStatusCounts(m map[int]int) string {
@@ -958,18 +958,18 @@ func runBenchmarks(client *http.Client, cfg Config, oldTarget, newTarget Target)
 
 	switch {
 	case !cfg.SkipOld && !cfg.SkipNew:
-		fmt.Println("-" + strings.Repeat("-", 70))
-		fmt.Printf(" Benchmarking paired endpoint runs (%s)\n", cfg.Mode)
-		fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Printf(" Benchmarking paired endpoint runs (%s)\n", cfg.Mode)
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
 
 		for i := 1; i <= cfg.Iterations; i++ {
 			order := pairedIterationTargets(i, oldTarget, newTarget)
-			fmt.Printf("\n  Paired iteration %d/%d (%s -> %s)\n",
+			_, _ = fmt.Printf("\n  Paired iteration %d/%d (%s -> %s)\n",
 				i, cfg.Iterations, strings.ToUpper(order[0].Name), strings.ToUpper(order[1].Name))
 			for _, target := range order {
 				res := runBenchmark(client, target, cfg)
 				appendBenchmarkResult(result, target.Name, res)
-				fmt.Printf("  %s:\n", strings.ToUpper(target.Name))
+				_, _ = fmt.Printf("  %s:\n", strings.ToUpper(target.Name))
 				printIterationResult(res)
 			}
 
@@ -978,11 +978,11 @@ func runBenchmarks(client *http.Client, cfg Config, oldTarget, newTarget Target)
 			}
 		}
 	case !cfg.SkipOld:
-		fmt.Println("-" + strings.Repeat("-", 70))
-		fmt.Println(" Benchmarking OLD endpoint")
-		fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println(" Benchmarking OLD endpoint")
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
 		for i := 1; i <= cfg.Iterations; i++ {
-			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
+			_, _ = fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
 			res := runBenchmark(client, oldTarget, cfg)
 			result.Old = append(result.Old, res)
 			printIterationResult(res)
@@ -991,11 +991,11 @@ func runBenchmarks(client *http.Client, cfg Config, oldTarget, newTarget Target)
 			}
 		}
 	case !cfg.SkipNew:
-		fmt.Println("-" + strings.Repeat("-", 70))
-		fmt.Println(" Benchmarking NEW endpoint")
-		fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println(" Benchmarking NEW endpoint")
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
 		for i := 1; i <= cfg.Iterations; i++ {
-			fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
+			_, _ = fmt.Printf("\n  Iteration %d/%d...\n", i, cfg.Iterations)
 			res := runBenchmark(client, newTarget, cfg)
 			result.New = append(result.New, res)
 			printIterationResult(res)
@@ -1159,9 +1159,9 @@ func (r *countingReader) Read(p []byte) (int, error) {
 }
 
 func printSummary(result *ComparisonResult, cfg Config) {
-	fmt.Println("\n" + "=" + strings.Repeat("=", 70))
-	fmt.Printf(" SUMMARY (%s)\n", cfg.Mode)
-	fmt.Println("=" + strings.Repeat("=", 70))
+	_, _ = fmt.Println("\n" + "=" + strings.Repeat("=", 70))
+	_, _ = fmt.Printf(" SUMMARY (%s)\n", cfg.Mode)
+	_, _ = fmt.Println("=" + strings.Repeat("=", 70))
 
 	if !cfg.SkipOld {
 		printSummaryStats(result.OldSummary)
@@ -1173,54 +1173,54 @@ func printSummary(result *ComparisonResult, cfg Config) {
 
 	// Print comparison if both were run
 	if !cfg.SkipOld && !cfg.SkipNew {
-		fmt.Println("\n" + "-" + strings.Repeat("-", 70))
-		fmt.Println(" COMPARISON (NEW vs OLD)")
-		fmt.Println("-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println("\n" + "-" + strings.Repeat("-", 70))
+		_, _ = fmt.Println(" COMPARISON (NEW vs OLD)")
+		_, _ = fmt.Println("-" + strings.Repeat("-", 70))
 
 		rpsChange := percentChange(result.NewSummary.AvgRequestsPerS, result.OldSummary.AvgRequestsPerS)
 		latencyChange := percentChange(float64(result.NewSummary.AvgLatency.Mean), float64(result.OldSummary.AvgLatency.Mean))
 		throughputChange := percentChange(result.NewSummary.AvgThroughput, result.OldSummary.AvgThroughput)
 
-		fmt.Printf("\n  Requests/sec:  %+.1f%% ", rpsChange)
+		_, _ = fmt.Printf("\n  Requests/sec:  %+.1f%% ", rpsChange)
 		printChangeIndicator(rpsChange, true)
 
-		fmt.Printf("  Mean Latency:  %+.1f%% ", latencyChange)
+		_, _ = fmt.Printf("  Mean Latency:  %+.1f%% ", latencyChange)
 		printChangeIndicator(latencyChange, false)
 
-		fmt.Printf("  Throughput:    %+.1f%% ", throughputChange)
+		_, _ = fmt.Printf("  Throughput:    %+.1f%% ", throughputChange)
 		printChangeIndicator(throughputChange, true)
 
-		fmt.Println()
+		_, _ = fmt.Println()
 
 		// Verdict
-		fmt.Println("\n  Verdict:")
+		_, _ = fmt.Println("\n  Verdict:")
 		switch {
 		case rpsChange > 5:
-			fmt.Println("    NEW endpoint is FASTER")
+			_, _ = fmt.Println("    NEW endpoint is FASTER")
 		case rpsChange < -5:
-			fmt.Println("    OLD endpoint is FASTER")
+			_, _ = fmt.Println("    OLD endpoint is FASTER")
 		default:
-			fmt.Println("    Performance is SIMILAR (within 5%)")
+			_, _ = fmt.Println("    Performance is SIMILAR (within 5%)")
 		}
 	}
 
-	fmt.Println()
+	_, _ = fmt.Println()
 }
 
 func printSummaryStats(s SummaryStats) {
-	fmt.Printf("\n  %s Endpoint (%d iterations):\n", s.Name, s.Iterations)
-	fmt.Printf("    Requests/sec:   %.2f (+/- %.2f)\n", s.AvgRequestsPerS, s.StdDevRequestsPerS)
-	fmt.Printf("    Success rate:   %.1f%%\n", s.SuccessRate)
-	fmt.Printf("    Throughput:     %.2f MB/s\n", s.AvgThroughput)
-	fmt.Println("    Latency:")
-	fmt.Printf("      Mean:   %v\n", s.AvgLatency.Mean.Round(time.Millisecond))
-	fmt.Printf("      StdDev: %v\n", s.AvgLatency.StdDev.Round(time.Millisecond))
-	fmt.Printf("      Min:    %v\n", s.AvgLatency.Min.Round(time.Millisecond))
-	fmt.Printf("      P50:    %v\n", s.AvgLatency.P50.Round(time.Millisecond))
-	fmt.Printf("      P90:    %v\n", s.AvgLatency.P90.Round(time.Millisecond))
-	fmt.Printf("      P95:    %v\n", s.AvgLatency.P95.Round(time.Millisecond))
-	fmt.Printf("      P99:    %v\n", s.AvgLatency.P99.Round(time.Millisecond))
-	fmt.Printf("      Max:    %v\n", s.AvgLatency.Max.Round(time.Millisecond))
+	_, _ = fmt.Printf("\n  %s Endpoint (%d iterations):\n", s.Name, s.Iterations)
+	_, _ = fmt.Printf("    Requests/sec:   %.2f (+/- %.2f)\n", s.AvgRequestsPerS, s.StdDevRequestsPerS)
+	_, _ = fmt.Printf("    Success rate:   %.1f%%\n", s.SuccessRate)
+	_, _ = fmt.Printf("    Throughput:     %.2f MB/s\n", s.AvgThroughput)
+	_, _ = fmt.Println("    Latency:")
+	_, _ = fmt.Printf("      Mean:   %v\n", s.AvgLatency.Mean.Round(time.Millisecond))
+	_, _ = fmt.Printf("      StdDev: %v\n", s.AvgLatency.StdDev.Round(time.Millisecond))
+	_, _ = fmt.Printf("      Min:    %v\n", s.AvgLatency.Min.Round(time.Millisecond))
+	_, _ = fmt.Printf("      P50:    %v\n", s.AvgLatency.P50.Round(time.Millisecond))
+	_, _ = fmt.Printf("      P90:    %v\n", s.AvgLatency.P90.Round(time.Millisecond))
+	_, _ = fmt.Printf("      P95:    %v\n", s.AvgLatency.P95.Round(time.Millisecond))
+	_, _ = fmt.Printf("      P99:    %v\n", s.AvgLatency.P99.Round(time.Millisecond))
+	_, _ = fmt.Printf("      Max:    %v\n", s.AvgLatency.Max.Round(time.Millisecond))
 }
 
 func printChangeIndicator(change float64, higherIsBetter bool) {
@@ -1228,19 +1228,19 @@ func printChangeIndicator(change float64, higherIsBetter bool) {
 
 	switch {
 	case math.Abs(change) < 5:
-		fmt.Println("(~)")
+		_, _ = fmt.Println("(~)")
 	case good:
-		fmt.Println("(better)")
+		_, _ = fmt.Println("(better)")
 	default:
-		fmt.Println("(worse)")
+		_, _ = fmt.Println("(worse)")
 	}
 }
 
 func printJSONOutput(result *ComparisonResult) {
-	fmt.Println("\n" + "-" + strings.Repeat("-", 70))
-	fmt.Println(" JSON Output")
-	fmt.Println("-" + strings.Repeat("-", 70))
+	_, _ = fmt.Println("\n" + "-" + strings.Repeat("-", 70))
+	_, _ = fmt.Println(" JSON Output")
+	_, _ = fmt.Println("-" + strings.Repeat("-", 70))
 
 	output, _ := json.MarshalIndent(result, "", "  ")
-	fmt.Println(string(output))
+	_, _ = fmt.Println(string(output))
 }

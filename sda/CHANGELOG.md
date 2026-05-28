@@ -7,5 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Unhandled error linter issues in sda/download
+
 ## [3.1.71] - 2026-05-25
 - Started keeping a changelog after this version.
