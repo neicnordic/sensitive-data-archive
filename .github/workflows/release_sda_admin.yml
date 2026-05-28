@@ -37,36 +37,29 @@ jobs:
           TARGET_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-
+          
           # Validate target version format
           if ! [[ "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ]]; then
             echo "$TARGET_VERSION: Version must match MAJOR.MINOR.PATCH[-suffix]"
             exit 1
           fi
-
-          # Extract previous version from changelog
-          PREVIOUS_VERSION=$(
+          
+          CHANGELOG_VERSION=$(
             grep -E '^## \[[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?\]' sda-admin/CHANGELOG.md \
             | head -n1 \
             | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?)\].*/\1/'
           )
-
-          if [ -z "$PREVIOUS_VERSION" ]; then
-            echo "Could not determine previous version from the sda-admin/CHANGELOG.md"
+          
+          if [ -z "$CHANGELOG_VERSION" ]; then
+            echo "Could not determine current version from the sda-admin/CHANGELOG.md"
             exit 1
           fi
-
-          echo "Previous version: $PREVIOUS_VERSION"
-          echo "Target version:   $TARGET_VERSION"
-
-          # Compare versions
-          LOWEST=$(printf '%s\n%s\n' "$PREVIOUS_VERSION" "$TARGET_VERSION" | sort -V | head -n1)
-
-          if [ "$LOWEST" != "$PREVIOUS_VERSION" ] || [ "$TARGET_VERSION" = "$PREVIOUS_VERSION" ]; then
-            echo "Target version must be greater than previous version"
+          
+          if [ "$CHANGELOG_VERSION" != "${TARGET_VERSION}" ]; then
+            echo "Latest version in changelog is $CHANGELOG_VERSION, target version is ${TARGET_VERSION}"
             exit 1
           fi
-              
+          
           UNRELEASED_CONTENT=$(
             awk '
             /^## \[Unreleased\]/ { in_section=1; next }
@@ -74,58 +67,45 @@ jobs:
             in_section { print }
             ' sda-admin/CHANGELOG.md
           )
-      
+          
           # Remove blank lines and whitespace
           UNRELEASED_CONTENT_CLEAN=$(echo "$UNRELEASED_CONTENT" | sed '/^[[:space:]]*$/d')
-      
-          if [ -z "$UNRELEASED_CONTENT_CLEAN" ]; then
-          echo "Unreleased section is empty"
-          exit 1
+          
+          if [ -n "$UNRELEASED_CONTENT_CLEAN" ]; then
+            echo "Unreleased section is not empty"
+            exit 1
+          fi
+          
+          CONTENT_TO_BE_RELEASED=$(
+            awk "
+            /^## \[${TARGET_VERSION}\]/ { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+            " sda-admin/CHANGELOG.md
+          )
+          
+          # Remove blank lines and whitespace
+          CONTENT_TO_BE_RELEASED_CLEAN=$(echo "$CONTENT_TO_BE_RELEASED" | sed '/^[[:space:]]*$/d')
+          
+          if [ -z "$CONTENT_TO_BE_RELEASED_CLEAN" ]; then
+            echo "Changelog entry for ${TARGET_VERSION} is empty"
+            exit 1
           fi
 
-      - name: Update CHANGELOG.md
+      - name: Create and push tag
         env:
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_VERSION: ${{ inputs.version }}
         run: |
-          TODAY=$(date +%Y-%m-%d)
-          sed -i "0,/## \\[Unreleased\\]/s//## [Unreleased]\n\n## [${VERSION}] - ${TODAY}/" sda-admin/CHANGELOG.md
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Commit changelog
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          git add sda-admin/CHANGELOG.md
-
-          # Skip commit if nothing changed
-          git diff --cached --quiet && exit 0
-
-          git commit -m "chore(sda-admin): SDA Admin Release ${VERSION}"
-
-      - name: Create tag
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          git tag "sda-admin-${VERSION}"
-
-      - name: Push commit and tag
-        env:
-          VERSION: ${{ inputs.version }}
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          git push origin "HEAD:${BRANCH_NAME}"
-          git push origin "sda-admin-${VERSION}"
+          git tag "sda-admin-${TARGET_VERSION}"
+          git push origin "sda-admin-${TARGET_VERSION}"
 
       - name: Extract release notes
         env:
-          VERSION: ${{ inputs.version }}
+          TARGET_VERSION: ${{ inputs.version }}
         run: |
           awk "
-            /^## \\[${VERSION}\\]/ { in_section=1; next }
+            /^## \\[${TARGET_VERSION}\\]/ { in_section=1; next }
             /^## \\[/ && in_section { exit }
             in_section { print }
           " sda-admin/CHANGELOG.md > RELEASE_NOTES.md
@@ -133,27 +113,27 @@ jobs:
       - name: Draft release
         uses: softprops/action-gh-release@v3
         with:
+          name: sda-admin-${{ inputs.version }}
           tag_name: "sda-admin-${{ inputs.version }}"
           make_latest: false
           generate_release_notes: false
-          name: sda-admin-${{ inputs.version }}
           body_path: RELEASE_NOTES.md
           draft: true
 
   package:
-    needs: [prepare_release]
+    needs: [ prepare_release ]
     permissions:
       contents: write
       packages: write
     runs-on: ubuntu-latest
     strategy:
-        matrix:
-          # List of GOOS and GOARCH pairs from `go tool dist list`
-          goosarch:
-            - "linux/amd64"
-            - "windows/amd64"
-            - "darwin/amd64"
-            - "darwin/arm64"
+      matrix:
+        # List of GOOS and GOARCH pairs from `go tool dist list`
+        goosarch:
+          - "linux/amd64"
+          - "windows/amd64"
+          - "darwin/amd64"
+          - "darwin/arm64"
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v6
@@ -164,7 +144,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version:  '>=1.22'
+          go-version: '>=1.22'
         id: go
 
       - name: Get dependencies
@@ -180,13 +160,13 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-            GOOSARCH=${{ matrix.goosarch }}
-            GOOS=${GOOSARCH%/*}
-            GOARCH=${GOOSARCH#*/}
-            BINARY_NAME=sda-admin_${VERSION}_${GOOS}_${GOARCH}
-            echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
-            echo "GOOS=$GOOS" >> $GITHUB_ENV
-            echo "GOARCH=$GOARCH" >> $GITHUB_ENV
+          GOOSARCH=${{ matrix.goosarch }}
+          GOOS=${GOOSARCH%/*}
+          GOARCH=${GOOSARCH#*/}
+          BINARY_NAME=sda-admin_${VERSION}_${GOOS}_${GOARCH}
+          echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
+          echo "GOOS=$GOOS" >> $GITHUB_ENV
+          echo "GOARCH=$GOARCH" >> $GITHUB_ENV
 
       - name: Build
         if: ${{ matrix.goosarch != 'windows/amd64' }}
@@ -194,7 +174,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           cd sda-admin
-          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=$VERSION'"
+          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=${VERSION}'"
           tar -czf "$BINARY_NAME.tgz" "$BINARY_NAME" ../LICENSE
           echo "ARTIFACT"="$BINARY_NAME.tgz" >> $GITHUB_ENV
 
@@ -204,7 +184,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           cd sda-admin
-          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=$VERSION'"
+          go build -o "$BINARY_NAME" -v -ldflags="-s -w -X 'main.version=${VERSION}'"
           zip "$BINARY_NAME.zip" "$BINARY_NAME" ../LICENSE
           echo "ARTIFACT"="$BINARY_NAME.zip" >> $GITHUB_ENV
 
