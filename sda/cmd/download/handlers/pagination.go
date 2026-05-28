@@ -106,9 +106,9 @@ func queryFingerprint(parts ...string) string {
 	h := sha256.New()
 	for i, p := range parts {
 		if i > 0 {
-			h.Write([]byte{0x00})
+			_, _ = h.Write([]byte{0x00})
 		}
-		h.Write([]byte(p))
+		_, _ = h.Write([]byte(p))
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
@@ -117,7 +117,7 @@ func queryFingerprint(parts ...string) string {
 // computeHMAC returns the HMAC-SHA256 of data using paginationSecret.
 func computeHMAC(data []byte) []byte {
 	mac := hmac.New(sha256.New, paginationSecret)
-	mac.Write(data)
+	_, _ = mac.Write(data)
 
 	return mac.Sum(nil)
 }
