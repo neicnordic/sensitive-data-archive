@@ -74,7 +74,7 @@ func List(apiURI, token string) error {
 		return err
 	}
 
-	fmt.Print(string(pretty.Pretty(response)))
+	_, _ = fmt.Print(string(pretty.Pretty(response)))
 
 	return nil
 }

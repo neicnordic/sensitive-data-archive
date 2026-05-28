@@ -184,7 +184,7 @@ var c4ghHashListUsage = `Usage: sda-admin c4gh-hash list
 Lists all key hashes in the system.`
 
 func printVersion() {
-	fmt.Printf("sda-admin %s\n", version)
+	_, _ = fmt.Printf("sda-admin %s\n", version)
 }
 
 func init() {
@@ -194,7 +194,7 @@ func init() {
 
 	// Custom usage message
 	flag.Usage = func() {
-		fmt.Println(usage)
+		_, _ = fmt.Println(usage)
 	}
 }
 
@@ -228,7 +228,7 @@ func validateFlagsAndEnv() error {
 
 func handleHelpCommand() error {
 	if flag.NArg() == 1 {
-		fmt.Println(usage)
+		_, _ = fmt.Println(usage)
 
 		return nil
 	}
@@ -260,9 +260,9 @@ func handleHelpCommand() error {
 func handleHelpUser() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(userUsage)
+		_, _ = fmt.Println(userUsage)
 	case flag.Arg(2) == "list":
-		fmt.Println(userListUsage)
+		_, _ = fmt.Println(userListUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
@@ -273,15 +273,15 @@ func handleHelpUser() error {
 func handleHelpFile() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(fileUsage)
+		_, _ = fmt.Println(fileUsage)
 	case flag.Arg(2) == "list":
-		fmt.Println(fileListUsage)
+		_, _ = fmt.Println(fileListUsage)
 	case flag.Arg(2) == "ingest":
-		fmt.Println(fileIngestUsage)
+		_, _ = fmt.Println(fileIngestUsage)
 	case flag.Arg(2) == "set-accession":
-		fmt.Println(fileAccessionUsage)
+		_, _ = fmt.Println(fileAccessionUsage)
 	case flag.Arg(2) == "rotatekey":
-		fmt.Println(fileRotateKeyUsage)
+		_, _ = fmt.Println(fileRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -292,13 +292,13 @@ func handleHelpFile() error {
 func handleHelpDataset() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(datasetUsage)
+		_, _ = fmt.Println(datasetUsage)
 	case flag.Arg(2) == "create":
-		fmt.Println(datasetCreateUsage)
+		_, _ = fmt.Println(datasetCreateUsage)
 	case flag.Arg(2) == "release":
-		fmt.Println(datasetReleaseUsage)
+		_, _ = fmt.Println(datasetReleaseUsage)
 	case flag.Arg(2) == "rotatekey":
-		fmt.Println(datasetRotateKeyUsage)
+		_, _ = fmt.Println(datasetRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
@@ -656,19 +656,19 @@ func main() {
 	flag.Parse()
 
 	if err := validateFlagsAndEnv(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	switch flag.Arg(0) {
 	case "help", "-h", "-help":
 		if err := handleHelpCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "user":
 		if err := handleUserCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "file":
@@ -676,23 +676,23 @@ func main() {
 			if errors.Is(err, file.ErrAborted) {
 				os.Exit(0)
 			}
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "dataset":
 		if err := handleDatasetCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "version":
 		printVersion()
 	case "c4gh-hash":
 		if err := handleC4ghKeyHashCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command '%s'.\n%s\n", flag.Arg(0), usage)
+		_, _ = fmt.Fprintf(os.Stderr, "unknown command '%s'.\n%s\n", flag.Arg(0), usage)
 		os.Exit(1)
 	}
 

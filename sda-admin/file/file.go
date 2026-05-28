@@ -80,7 +80,7 @@ func List(apiURI, token, username string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Print(string(pretty.Pretty(out)))
+		_, _ = fmt.Print(string(pretty.Pretty(out)))
 	}
 
 	return nil
@@ -88,15 +88,15 @@ func List(apiURI, token, username string) error {
 
 func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawMessage) ([]json.RawMessage, error) {
 	if isTTY {
-		fmt.Print(string(pretty.Pretty(body)))
+		_, _ = fmt.Print(string(pretty.Pretty(body)))
 		if cursor == "" {
 			return allItems, nil
 		}
-		fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
+		_, _ = fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
 		if err := waitForContinue(); err != nil {
 			return nil, err
 		}
-		fmt.Fprintln(os.Stderr)
+		_, _ = fmt.Fprintln(os.Stderr)
 
 		return allItems, nil
 	}
@@ -141,7 +141,7 @@ func waitForUserContinue() error {
 		case '\r', '\n', ' ':
 			return nil
 		case 3: // Ctrl+C
-			fmt.Fprintln(os.Stderr)
+			_, _ = fmt.Fprintln(os.Stderr)
 
 			return ErrAborted
 		}
