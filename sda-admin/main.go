@@ -529,7 +529,7 @@ func handleFileUpdateEvent() error {
 
 	_, err := file.PostEvent(apiURI, token, fileID, event, reason)
 	if err != nil {
-		return fmt.Errorf("could not get event for file %s, reason: %v", fileID, err)
+		return fmt.Errorf("could not set event for file %s, reason: %v", fileID, err)
 	}
 
 	fmt.Printf("appended event '%s' for file '%s'", event, fileID)
