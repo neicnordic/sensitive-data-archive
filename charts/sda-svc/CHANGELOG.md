@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Bump default appVersion -> v3.1.71
+- Bump default appVersion -> v3.1.72
 
 ## [3.4.2] - 2026-05-25
 - Started keeping a changelog after this version.
