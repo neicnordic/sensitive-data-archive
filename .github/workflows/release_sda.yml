@@ -94,7 +94,6 @@ jobs:
 
       - name: Create and push tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_VERSION: ${{ inputs.version }}
         run: |
           git tag "v${TARGET_VERSION}"
