@@ -128,7 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          
+          set -euo pipefail
           VERSION=$(yq '.version' charts/sda-svc/Chart.yaml)
           
           awk "

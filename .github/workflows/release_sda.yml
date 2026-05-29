@@ -96,6 +96,8 @@ jobs:
         env:
           TARGET_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
+          
           git tag "v${TARGET_VERSION}"
           git push origin "v${TARGET_VERSION}"
 
@@ -104,6 +106,7 @@ jobs:
         env:
           TARGET_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           awk "
             /^## \\[${TARGET_VERSION}\\]/ { in_section=1; next }
             /^## \\[/ && in_section { exit }
