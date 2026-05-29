@@ -7,7 +7,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 )
 
-const getFileStatusHistoryQuery = "getFileStatus"
+const getFileStatusHistoryQuery = "getFileStatusHistory"
 
 func init() {
 	queries[getFileStatusHistoryQuery] = `
