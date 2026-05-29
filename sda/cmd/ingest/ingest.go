@@ -40,6 +40,7 @@ type Ingest struct {
 	DB             *database.SDAdb
 	InboxReader    storage.Reader
 	MQ             *broker.AMQPBroker
+	InboxConf      helper.InboxConfig
 }
 
 func main() {
@@ -56,6 +57,9 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
+	app.InboxConf = helper.InboxConfig{ProjectCode: ingestConf.Inbox.ProjectCode,
+		ProjectCodeDelimiter: ingestConf.Inbox.ProjectCodeDelimiter,
+		NormalizeUsername:    ingestConf.Inbox.NormalizeUsername}
 	app.MQ, err = broker.NewMQ(ingestConf.Broker)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
@@ -324,7 +328,9 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		// Catch all for implementations inbox uploading that does not register the file in the DB, e.g. for those not using S3inbox or sftpInbox
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
 		var findFileErr, registerErr error
-		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.FilePath)
+		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, helper.BuildUserPrefixedFilepath(message.FilePath, message.User, app.InboxConf))
+
+		log.Infof("submission location: %s", submissionLocation)
 		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
 		fileID, registerErr = app.DB.RegisterFile(&fileID, submissionLocation, message.FilePath, message.User)
 		if registerErr != nil {
@@ -354,7 +360,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		return "reject"
 	}
 
-	file, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(message.FilePath, message.User))
+	file, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.BuildUserPrefixedFilepath(message.FilePath, message.User, app.InboxConf))
 	if err != nil {
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
 			log.Errorf("Failed to open file to ingest reason: (%s)", err.Error())
@@ -377,7 +383,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 		_ = file.Close()
 	}()
 
-	fileSize, err := app.InboxReader.GetFileSize(ctx, submissionLocation, helper.UnanonymizeFilepath(message.FilePath, message.User))
+	fileSize, err := app.InboxReader.GetFileSize(ctx, submissionLocation, helper.BuildUserPrefixedFilepath(message.FilePath, message.User, app.InboxConf))
 	if err != nil {
 		log.Errorf("Failed to get file size of file to ingest, file-id: %s, filepath: %s, reason: (%s)", fileID, message.FilePath, err.Error())
 		// Since reading the file worked, this should eventually succeed so it is ok to requeue.
@@ -633,27 +639,48 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID string, message schema
 // tryDecrypt tries to decrypt the start of buf.
 func tryDecrypt(key *[32]byte, buf []byte) ([]byte, error) {
 	log.Debugln("Try decrypting the first data block")
+	log.Debugf("tryDecrypt: buf size=%d bytes", len(buf))
+	if len(buf) >= 8 {
+		log.Debugf("tryDecrypt: first 8 bytes=%q (should be 'crypt4gh')", string(buf[:8]))
+	}
+
+	publicKey := keys.DerivePublicKey(*key)
+	log.Debugf("tryDecrypt: attempting with public key (hex)=%x", publicKey)
+
+	if err := os.WriteFile("/tmp/c4gh_buf_debug.bin", buf, 0600); err != nil {
+		log.Errorf("tryDecrypt: failed to write debug buf: %v", err)
+	} else {
+		log.Debugf("tryDecrypt: wrote buffer to /tmp/c4gh_buf_debug.bin")
+	}
+	if err := os.WriteFile("/tmp/c4gh_key_debug.bin", key[:], 0600); err != nil {
+		log.Errorf("tryDecrypt: failed to write debug key: %v", err)
+	} else {
+		log.Debugf("tryDecrypt: wrote key to /tmp/c4gh_key_debug.bin")
+	}
+
 	a := bytes.NewReader(buf)
 	b, err := streaming.NewCrypt4GHReader(a, *key, nil)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("tryDecrypt: NewCrypt4GHReader failed: %v", err)
 
 		return nil, err
 	}
 	_, err = b.ReadByte()
 	if err != nil {
-		log.Error(err)
+		log.Errorf("tryDecrypt: ReadByte failed: %v", err)
 
 		return nil, err
 	}
+	log.Debugln("tryDecrypt: decryption succeeded, reading header")
 
 	f := bytes.NewReader(buf)
 	header, err := headers.ReadHeader(f)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("tryDecrypt: ReadHeader failed: %v", err)
 
 		return nil, err
 	}
+	log.Debugf("tryDecrypt: header read successfully, header size=%d bytes", len(header))
 
 	return header, nil
 }

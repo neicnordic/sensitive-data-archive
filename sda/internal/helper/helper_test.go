@@ -179,3 +179,19 @@ func (ts *HelperTest) TestUnanonymizeFilepath_oldMessage() {
 	newPath := UnanonymizeFilepath(filePath, userName)
 	assert.Equal(ts.T(), filePath, newPath)
 }
+
+func (ts *HelperTest) TestUnanonymizeFilepath_projectCode_noNormalize_noPrefix() {
+	userName := "dummy@elixir-europe.org"
+	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-", NormalizeUsername: false}
+	filePath := "/files/file.raw"
+	newPath := BuildUserPrefixedFilepath(filePath, userName, cfg)
+	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/file.raw", newPath)
+}
+
+func (ts *HelperTest) TestUnanonymizeFilepath_projectCode_noNormalize_alreadyPrefixed() {
+	userName := "dummy@elixir-europe.org"
+	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-", NormalizeUsername: false}
+	filePath := "p11-dummy@elixir-europe.org/files/file.raw"
+	newPath := BuildUserPrefixedFilepath(filePath, userName, cfg)
+	assert.Equal(ts.T(), filePath, newPath)
+}

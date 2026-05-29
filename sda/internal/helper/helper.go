@@ -453,10 +453,33 @@ func CreatePrivateKeyFile(keyFile string, passphrase string) ([32]byte, error) {
 	return publicKey, nil
 }
 
+type InboxConfig struct {
+	ProjectCode          string
+	ProjectCodeDelimiter string
+	NormalizeUsername    bool
+}
+
 func AnonymizeFilepath(fp string, username string) string {
 	return strings.ReplaceAll(fp, strings.Replace(username, "@", "_", 1)+"/", "")
 }
 
+func BuildUserPrefixedFilepath(fp string, username string, cfg InboxConfig) string {
+	normalizedUser := username
+	if cfg.NormalizeUsername {
+		normalizedUser = strings.Replace(username, "@", "_", 1)
+	}
+
+	expectedUserDir := normalizedUser
+	if cfg.ProjectCode != "" {
+		expectedUserDir = cfg.ProjectCode + cfg.ProjectCodeDelimiter + normalizedUser
+	}
+
+	if strings.HasPrefix(fp, expectedUserDir) {
+		return fp
+	}
+
+	return filepath.Join(expectedUserDir, fp)
+}
 func UnanonymizeFilepath(fp string, username string) string {
 	if strings.HasPrefix(fp, strings.Replace(username, "@", "_", 1)) {
 		return fp

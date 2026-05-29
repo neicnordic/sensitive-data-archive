@@ -42,6 +42,13 @@ type Config struct {
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
 	RotateKey    RotateKeyConf
+	Inbox        InboxConf
+}
+
+type InboxConf struct {
+	ProjectCode          string
+	ProjectCodeDelimiter string
+	NormalizeUsername    bool
 }
 
 type Grpc struct {
@@ -502,6 +509,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+		c.configInbox()
 	case "intercept":
 		err := c.configBroker()
 		if err != nil {
@@ -509,6 +517,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+		c.configInbox()
 	case "notify":
 		c.configSMTP()
 
@@ -930,6 +939,22 @@ func (c *Config) configSyncAPI() {
 	}
 	if viper.IsSet("sync.api.MappingRouting") {
 		c.SyncAPI.MappingRouting = viper.GetString("sync.api.MappingRouting")
+	}
+}
+
+func (c *Config) configInbox() {
+	viper.SetDefault("storage.inbox.projectCode", "")
+	viper.SetDefault("storage.inbox.projectCodeDelimiter", "_")
+	viper.SetDefault("storage.inbox.normalizeUsername", true)
+
+	if viper.IsSet("storage.inbox.projectCode") {
+		c.Inbox.ProjectCode = viper.GetString("storage.inbox.projectCode")
+	}
+	if viper.IsSet("storage.inbox.projectCodeDelimiter") {
+		c.Inbox.ProjectCodeDelimiter = viper.GetString("storage.inbox.projectCodeDelimiter")
+	}
+	if viper.IsSet("storage.inbox.normalizeUsername") {
+		c.Inbox.NormalizeUsername = viper.GetBool("storage.inbox.normalizeUsername")
 	}
 }
 
