@@ -68,6 +68,7 @@ until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/verified/ |
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
         echo "::error::Time out while waiting for verify to complete"
+        docker logs ingest
         exit 1
     fi
     sleep 2
