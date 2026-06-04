@@ -2,7 +2,7 @@ log:
   format: "json"
   level: "debug"
 api:
-  rbacFile: ../.github/integration/sda/rbac.json 
+  rbac_file: ../.github/integration/sda/rbac.json 
   port: 8090
 
 grpc:

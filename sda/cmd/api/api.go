@@ -1,84 +1,66 @@
+// The api service exposes a set of http(s) endpoints to interface towards the sensitive-data-archive
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"database/sql"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"math"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
-	"slices"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/neicnordic/crypt4gh/keys"
-	"github.com/neicnordic/crypt4gh/model/headers"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
-	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
-	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-type datasetCreateRequest struct {
+type dataset struct {
 	AccessionIDs []string `json:"accession_ids"`
 	DatasetID    string   `json:"dataset_id"`
 }
 
-var (
-	Conf        *config.Config
-	err         error
+type API struct {
+	grpcClient  *grpc.ClientConn
 	auth        *userauth.ValidateFromToken
+	enforcer    *casbin.Enforcer
+	server      *http.Server
 	inboxReader storage.Reader
 	inboxWriter storage.Writer
 	db          database.Database
-)
+	mq          broker.Broker
+}
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("api service failed", "err", err)
+		os.Exit(1)
 	}
 }
+
 func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := configv2.Load(); err != nil {
+	if err := config.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	Conf, err = config.NewConfig("api")
-	if err != nil {
-		return fmt.Errorf("failed to load config, due to: %v", err)
-	}
-
-	db, err = postgres.NewPostgresSQLDatabase()
+	db, err := postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
@@ -87,65 +69,103 @@ func run() error {
 		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
-	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
+	mq, err := rabbitmq.NewRabbitMQBroker(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
-	defer func() {
-		if Conf.API.MQ == nil {
-			return
-		}
-		if Conf.API.MQ.Channel != nil {
-			if err := Conf.API.MQ.Channel.Close(); err != nil {
-				log.Errorf("failed to close mq broker channel due to: %v", err)
-			}
-		}
-		if Conf.API.MQ.Connection != nil {
-			if err := Conf.API.MQ.Connection.Close(); err != nil {
-				log.Errorf("failed to close mq broker connection due to: %v", err)
-			}
-		}
-	}()
+	defer mq.Close()
 
 	lb, err := locationbroker.NewLocationBroker(db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new location broker, due to: %v", err)
 	}
-	inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
+	inboxWriter, err := storage.NewWriter(ctx, "inbox", lb)
 	if err != nil {
 		return fmt.Errorf("failed to initialize inbox writer, due to: %v", err)
 	}
-	inboxReader, err = storage.NewReader(ctx, "inbox")
+	inboxReader, err := storage.NewReader(ctx, "inbox")
 	if err != nil {
 		return fmt.Errorf("failed to initialize inbox reader, reason: %v", err)
 	}
 
-	if err := setupJwtAuth(); err != nil {
-		return fmt.Errorf("error when setting up JWT auth, reason %s", err.Error())
+	jwtPubKeyURL := apiconfig.JwtPubKeyURL()
+	jwtPubKeyPath := apiconfig.JwtPubKeyPath()
+	auth := userauth.NewValidateFromToken(jwk.NewSet())
+
+	if jwtPubKeyURL != "" {
+		if err := auth.FetchJwtPubKeyURL(jwtPubKeyURL); err != nil {
+			return fmt.Errorf("failed to read JWT public key URL, reason: %v", err)
+		}
 	}
 
-	serverErr := make(chan error, 1)
-	srv, err := setup(Conf)
-	if err != nil {
-		return fmt.Errorf("failed to setup http/https server, due to: %v", err)
+	if jwtPubKeyPath != "" {
+		if err := auth.ReadJwtPubKeyPath(jwtPubKeyPath); err != nil {
+			return fmt.Errorf("failed to read JWT public key path, reason: %v", err)
+		}
 	}
+
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		return errors.New("failed to create json adapter model")
+	}
+
+	rbacFile, err := os.ReadFile(apiconfig.RbacFile())
+	if err != nil {
+		return fmt.Errorf("faield to read RBAC file, reason: %v", err)
+	}
+
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&rbacFile))
+	if err != nil {
+		return fmt.Errorf("failed to create new casbin enforcer instance, reason: %v", err)
+	}
+
+	creds, err := apiconfig.GrpcCreds()
+	if err != nil {
+		return err
+	}
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithTransportCredentials(creds))
+
+	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), opts...)
+	if err != nil {
+		slog.Error("failed to connect to reencrypt service", "err", err)
+
+		return err
+	}
+	defer conn.Close()
+
+	app := API{grpcClient: conn, auth: auth, enforcer: e, inboxReader: inboxReader, inboxWriter: inboxWriter, db: db, mq: mq}
+
+	serverErr := make(chan error, 1)
+	addr := apiconfig.APIAddr()
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	app.server = &http.Server{
+		Addr:              addr,
+		Handler:           app.routes(),
+		TLSConfig:         cfg,
+		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+		ReadHeaderTimeout: 20 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      2 * time.Minute,
+	}
+
 	go func() {
-		if Conf.API.ServerCert != "" && Conf.API.ServerKey != "" {
-			log.Infof("Starting web server at https://%s:%d", Conf.API.Host, Conf.API.Port)
-			if err := srv.ListenAndServeTLS(Conf.API.ServerCert, Conf.API.ServerKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Info("starting", "addr", addr)
+		if apiconfig.ExternalTLS() {
+			if err := app.server.ListenAndServeTLS(apiconfig.ClientCert(), apiconfig.ClientKey()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
 			}
 		} else {
-			log.Infof("Starting web server at http://%s:%d", Conf.API.Host, Conf.API.Port)
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := app.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
 			}
 		}
 	}()
 	defer func() {
 		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
-		if err := srv.Shutdown(serverShutdownCtx); err != nil {
-			log.Errorf("failed to close http/https server due to: %v", err)
+		if err := app.server.Shutdown(serverShutdownCtx); err != nil {
+			slog.Error("failed to shutdown", "err", err)
 		}
 		serverShutdownCancel()
 	}()
@@ -159,1287 +179,4 @@ func run() error {
 	case err := <-serverErr:
 		return err
 	}
-}
-
-func setup(conf *config.Config) (*http.Server, error) {
-	m, _ := model.NewModelFromString(jsonadapter.Model)
-	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&Conf.API.RBACpolicy))
-	if err != nil {
-		return nil, err
-	}
-
-	r := gin.New()
-	r.Use(gin.Recovery())
-
-	// Enable default Gin logger in debug mode for detailed request logging during development
-	if log.GetLevel() == log.DebugLevel {
-		r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-			SkipPaths: []string{"/ready"},
-		}))
-	}
-
-	// Enable structured JSON logging in info mode for clean, parseable logs in production
-	if log.GetLevel() == log.InfoLevel {
-		r.Use(gin.LoggerWithConfig(
-			gin.LoggerConfig{
-				Formatter: func(params gin.LogFormatterParams) string {
-					s, _ := json.Marshal(map[string]any{
-						"level":       "info",
-						"method":      params.Method,
-						"path":        params.Path,
-						"remote_addr": params.ClientIP,
-						"status_code": params.StatusCode,
-						"time":        params.TimeStamp.Format(time.RFC3339),
-					})
-
-					return string(s) + "\n"
-				},
-
-				Output:    gin.DefaultWriter,
-				SkipPaths: []string{"/ready"},
-			},
-		))
-	}
-
-	r.GET("/ready", readinessResponse)
-	r.GET("/files", rbac(e), getFiles)
-	r.GET("/datasets", rbac(e), listDatasets)
-	// admin endpoints below here
-	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
-	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
-	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
-	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
-	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                      // start ingestion of a file
-	r.GET("/file/events/:fileid", rbac(e), getFileEvents)            // get file events associated with a file
-	r.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)  // append a file_event to the file_event_log for a given fileid
-	r.POST("/file/accession", rbac(e), setAccession)                 // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)          // trigger reverification of a file
-	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
-	r.POST("/dataset/create", rbac(e), createDataset)                // maps a set of files to a dataset
-	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateKeyDataset) // trigger key rotation for all files in a dataset
-	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)     // Releases a dataset to be accessible
-	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)      // Re-verify all files in the dataset
-	r.GET("/datasets/list", rbac(e), listAllDatasets)                // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)     // Lists datasets with their status for a specific user
-	r.GET("/users", rbac(e), listActiveUsers)                        // Lists all users
-	r.GET("/users/:username/files", rbac(e), listUserFiles)          // Lists all unmapped files for a user
-	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)    // Download a file from a users inbox
-
-	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
-
-	srv := &http.Server{
-		Addr:              conf.API.Host + ":" + fmt.Sprint(conf.API.Port),
-		Handler:           r,
-		TLSConfig:         cfg,
-		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
-		ReadHeaderTimeout: 20 * time.Second,
-		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      2 * time.Minute,
-	}
-
-	return srv, nil
-}
-
-func setupJwtAuth() error {
-	auth = userauth.NewValidateFromToken(jwk.NewSet())
-	if Conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.FetchJwtPubKeyURL(Conf.Server.Jwtpubkeyurl); err != nil {
-			return err
-		}
-	}
-	if Conf.Server.Jwtpubkeypath != "" {
-		if err := auth.ReadJwtPubKeyPath(Conf.Server.Jwtpubkeypath); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func readinessResponse(c *gin.Context) {
-	statusCode := http.StatusOK
-
-	if Conf.API.MQ.Connection.IsClosed() {
-		statusCode = http.StatusServiceUnavailable
-		newConn, err := broker.NewMQ(Conf.Broker)
-		if err != nil {
-			log.Errorf("failed to reconnect to MQ, reason: %v", err)
-		} else {
-			Conf.API.MQ = newConn
-		}
-	}
-
-	if Conf.API.MQ.Channel.IsClosed() {
-		statusCode = http.StatusServiceUnavailable
-		Conf.API.MQ.Connection.Close()
-		newConn, err := broker.NewMQ(Conf.Broker)
-		if err != nil {
-			log.Errorf("failed to reconnect to MQ, reason: %v", err)
-		} else {
-			Conf.API.MQ = newConn
-		}
-	}
-
-	if dbRes := checkDB(c, db, 5*time.Millisecond); dbRes != nil {
-		log.Debugf("DB connection error :%v", dbRes)
-		statusCode = http.StatusServiceUnavailable
-	}
-
-	c.JSON(statusCode, "")
-}
-
-func checkDB(ctx context.Context, db database.Database, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if db == nil {
-		return errors.New("database is nil")
-	}
-
-	return db.Ping(ctx)
-}
-
-func auditLog(auditFields log.Fields) {
-	auditFields["audit"] = true
-	Conf.API.AuditLogger.WithFields(auditFields).Info("incoming audit event")
-}
-
-func rbac(e *casbin.Enforcer) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token, err := auth.Authenticate(c.Request)
-		if err != nil {
-			if Conf.API.AuditLogger != nil {
-				auditLog(log.Fields{
-					"authentication error": err.Error(),
-					"path":                 c.Request.URL.Path,
-				})
-			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-
-			return
-		}
-
-		ok, err := e.Enforce(token.Subject(), c.Request.URL.Path, c.Request.Method)
-		if err != nil {
-			if Conf.API.AuditLogger != nil {
-				auditLog(log.Fields{
-					"authorization": "error (err.Error())",
-					"user":          token.Subject(),
-					"path":          c.Request.URL.Path,
-				})
-			}
-			log.Debugf("rbac enforcement failed, reason: %s\n", err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-
-			return
-		}
-		if !ok {
-			if Conf.API.AuditLogger != nil {
-				auditLog(log.Fields{
-					"authorization": "failed",
-					"user":          token.Subject(),
-					"path":          c.Request.URL.Path,
-				})
-			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
-
-			return
-		}
-
-		if Conf.API.AuditLogger != nil {
-			auditLog(log.Fields{
-				"user": token.Subject(),
-				"path": c.Request.URL.Path,
-			})
-		}
-		log.Debugln("authorized")
-	}
-}
-
-const defaultPageLimit = 1000
-const maxPageLimit = 10000
-
-// parseLimitParam parses and validates the optional "limit" query parameter.
-// It returns defaultPageLimit when the parameter is omitted or empty.
-// It returns an error if the value is not a valid positive integer or exceeds maxPageLimit.
-func parseLimitParam(limitStr string) (int, error) {
-	if limitStr == "" {
-		return defaultPageLimit, nil
-	}
-	li, err := strconv.Atoi(limitStr)
-	if err != nil || li < 1 {
-		return 0, errors.New("invalid limit parameter: must be a positive integer")
-	}
-	if li > maxPageLimit {
-		return 0, fmt.Errorf("invalid limit parameter: must not exceed %d", maxPageLimit)
-	}
-
-	return li, nil
-}
-
-// getFiles returns the files from the database for a specific user
-func getFiles(c *gin.Context) {
-	c.Writer.Header().Set("Content-Type", "application/json")
-	// Get user ID to extract all files
-	token, err := auth.Authenticate(c.Request)
-	if err != nil {
-		// something went wrong with user token
-		c.JSON(401, err.Error())
-
-		return
-	}
-
-	// parse optional pagination params
-	limit, err := parseLimitParam(c.Query("limit"))
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-	cursor := c.DefaultQuery("cursor", "")
-
-	files, nextCursor, err := db.GetUserFiles(c, token.Subject(), c.Query("path_prefix"), false, limit, cursor)
-	if err != nil {
-		if errors.Is(err, database.ErrInvalidCursor) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
-
-			return
-		}
-		// something went wrong with querying or parsing rows
-		c.JSON(502, err.Error())
-
-		return
-	}
-
-	if nextCursor != "" {
-		c.Header("X-Next-Cursor", nextCursor)
-	}
-
-	rsp := make([]*submissionFileInfo, len(files))
-
-	for i, f := range files {
-		rsp[i] = &submissionFileInfo{
-			AccessionID:        f.AccessionID,
-			FileID:             f.FileID,
-			InboxPath:          f.InboxPath,
-			Status:             f.Status,
-			SubmissionFileSize: f.SubmissionFileSize,
-			CreatedAt:          f.CreatedAt,
-		}
-	}
-
-	// Return response
-	c.JSON(200, rsp)
-}
-
-/*
-ingestFile handles requests to initiate ingestion of a file.
-This endpoint supports two input modes:
-1. By file ID (via the "fileid" query parameter): Looks up the user and file path from the database.
-2. By JSON payload: Expects a JSON body with user and file path.
-The function constructs an ingest message, validates it
-and sends it to the broker with the appropriate file ID.
-*/
-func ingestFile(c *gin.Context) {
-	var (
-		ingest schema.IngestionTrigger
-		fileID string
-	)
-	switch {
-	case c.Query("fileid") != "" && c.Request.ContentLength > 0:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "both file ID parameter and payload provided.")
-
-		return
-	case c.Query("fileid") != "":
-		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
-
-			return
-		}
-		// Get the user and the inbox filepath
-		fileDetails, err := db.GetFileDetails(c, c.Query("fileid"), "uploaded")
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "file information not found")
-
-			return
-		}
-		// Add file info in the message payload
-		ingest.User = fileDetails.User
-		ingest.FilePath = fileDetails.Path
-		fileID = c.Query("fileid")
-
-	case c.Request.ContentLength > 0:
-		// Bind ingest and payload
-		if err = c.BindJSON(&ingest); err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusBadRequest,
-				gin.H{
-					"error":  "json decoding : " + err.Error(),
-					"status": http.StatusBadRequest,
-				},
-			)
-
-			return
-		}
-		fileID, err = db.GetFileIDByUserPathAndStatus(c, ingest.User, ingest.FilePath, "uploaded")
-		if err != nil {
-			if fileID == "" {
-				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-			}
-
-			return
-		}
-	default:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
-
-		return
-	}
-	// Add type in message payload
-	ingest.Type = "ingest"
-
-	marshaledMsg, _ := json.Marshal(&ingest)
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-
-	err = Conf.API.MQ.SendMessage(fileID, Conf.Broker.Exchange, "ingest", marshaledMsg)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-// The deleteFile function deletes files from the inbox and marks them as
-// discarded in the db. Files are identified by their ids and the user id.
-func deleteFile(c *gin.Context) {
-	submissionUser := c.Param("username")
-	log.Debug("submission user:", submissionUser)
-
-	fileID := c.Param("fileid")
-	fileID = strings.TrimPrefix(fileID, "/")
-	log.Debug("submission file:", fileID)
-	if fileID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
-
-		return
-	}
-
-	// Get the file path from the fileID and submission user
-	filePath, location, err := db.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
-	if err != nil {
-		log.Errorf("getting file from fileID failed, reason: (%v)", err)
-		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
-
-		return
-	}
-
-	if location == "" {
-		log.Errorf("fileID: %s has no known submission location", fileID)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
-
-		return
-	}
-
-	filePath = helper.ResolveInboxPath(filePath, submissionUser, Conf.Inbox)
-	for count := 1; count <= 5; count++ {
-		err = inboxWriter.RemoveFile(c, location, filePath)
-		if err == nil {
-			break
-		}
-		log.Errorf("Remove file from inbox failed, reason: %v", err)
-		if count == 5 {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, ("remove file from inbox failed"))
-
-			return
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
-	}
-
-	if err := db.UpdateFileEventLog(c, fileID, "disabled", "api", "{}", "{}"); err != nil {
-		log.Errorf("set status deleted failed, reason: (%v)", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-// reencryptHeader re-encrypts the header of a file using the public key
-// provided in the request header and returns the new header. The function uses
-// gRPC to communicate with the re-encrypt service and handles TLS configuration
-// if needed. The function also handles the case where the CA certificate is
-// provided for secure communication.
-func reencryptHeader(ctx context.Context, oldHeader []byte, c4ghPubKey string) ([]byte, error) {
-	var opts []grpc.DialOption
-	switch {
-	case Conf.API.Grpc.ClientCreds != nil:
-		opts = append(opts, grpc.WithTransportCredentials(Conf.API.Grpc.ClientCreds))
-	default:
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-
-	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", Conf.API.Grpc.Host, Conf.API.Grpc.Port), opts...)
-	if err != nil {
-		log.Errorf("failed to connect to the reencrypt service, reason: %s", err)
-
-		return nil, err
-	}
-	defer conn.Close()
-
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(Conf.API.Grpc.Timeout)*time.Second)
-	defer cancel()
-
-	c := reencrypt.NewReencryptClient(conn)
-	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
-	if err != nil {
-		return nil, err
-	}
-
-	return res.Header, nil
-}
-
-// The downloadFile function download a file re-encrypted with the public key
-// provided in the request header from the inbox. It retrieves the file path
-// from the database using the file ID and user ID.
-func downloadFile(c *gin.Context) {
-	// Get the public key from the request header.
-	c4ghPubKey := c.GetHeader("C4GH-Public-Key")
-
-	pubKey, err := base64.StdEncoding.DecodeString(c4ghPubKey)
-	if err != nil || len(pubKey) == 0 {
-		log.Errorf("bad public key, error: %v", err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, "bad public key")
-
-		return
-	}
-
-	// Retrieve the actual file path for the user's file.
-	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	filePath, location, err := db.GetUploadedSubmissionFilePathAndLocation(c,
-		strings.TrimPrefix(c.Param("username"), "/"),
-		fileID,
-	)
-	if err != nil {
-		log.Errorf("getting file path from fileID (%s) failed, reason: %v", fileID, err)
-		c.AbortWithStatusJSON(http.StatusNotFound, "failed to retrieve inbox file path")
-
-		return
-	}
-	if location == "" {
-		log.Errorf("fileID: %s has no known submission location", fileID)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
-
-		return
-	}
-
-	// Get inbox file handle #noqa
-	file, err := inboxReader.NewFileReader(c, location,
-		helper.ResolveInboxPath(
-			filePath,
-			strings.TrimPrefix(c.Param("username"), "/"),
-			Conf.Inbox,
-		),
-	)
-	if err != nil {
-		log.Errorf("inbox file %s not found or failed to read, %s", filePath, err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read inbox file")
-
-		return
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	// get the header of the crypt4gh file
-	header, err := headers.ReadHeader(file)
-	if err != nil {
-		log.Errorf("failed to read header for fileID %s, reason: %v", fileID, err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to read the start of the file")
-
-		return
-	}
-
-	newHeader, err := reencryptHeader(c, header, c4ghPubKey)
-	if err != nil {
-		log.Errorf("failed to reencrypt header, reason: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to reencrypt header")
-
-		return
-	}
-
-	// Set the headers for the response.
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", path.Base(filePath)))
-
-	reader := io.MultiReader(bytes.NewReader(newHeader), file)
-	_, err = io.Copy(c.Writer, reader)
-	if err != nil {
-		log.Errorf("error occurred while sending stream, reason: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to stream data to client")
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-/*
-setAccession handles requests to assign an accession ID to a file.
-This endpoint supports two input modes:
-1. By query parameters ("fileid" and "accessionid"): Retrieves user, file path, and decrypted checksum from the database using the file ID.
-2. By JSON payload: Expects a JSON body with user and file path, then looks up the file ID and decrypted checksum.
-If both query parameters and a JSON payload are provided, the request is rejected with a 400 Bad Request.
-The function constructs an accession message, validates it and sends it to the message broker.
-*/
-func setAccession(c *gin.Context) {
-	var (
-		accession schema.IngestionAccession
-		fileID    string
-	)
-	hasQuery := c.Query("fileid") != "" || c.Query("accessionid") != ""
-	missingAccession := c.Query("fileid") != "" && c.Query("accessionid") == ""
-	hasBody := c.Request.ContentLength > 0
-	switch {
-	case hasQuery && hasBody:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "both parameters and json payload provided. Choose one")
-
-		return
-	case missingAccession:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "accessionid is not provided")
-
-		return
-	case c.Query("fileid") != "" && c.Query("accessionid") != "":
-		if _, err := uuid.Parse(c.Query("fileid")); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "fileid param is invalid, not a uuid")
-
-			return
-		}
-		// Get the user and the inbox filepath
-		fileDetails, err := db.GetFileDetails(c, c.Query("fileid"), "verified")
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "file details not found")
-
-			return
-		}
-		// Get the decrypted checksum
-		fileDecrChecksum, err := db.GetDecryptedChecksum(c, c.Query("fileid"))
-		if err != nil {
-			log.Debugln(err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, "required data missing")
-
-			return
-		}
-		// Add info in message payload
-		accession.AccessionID = c.Query("accessionid")
-		accession.User = fileDetails.User
-		accession.FilePath = fileDetails.Path
-		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
-		fileID = c.Query("fileid")
-
-	case c.Request.ContentLength > 0:
-		if err = c.BindJSON(&accession); err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusBadRequest,
-				gin.H{
-					"error":  "json decoding : " + err.Error(),
-					"status": http.StatusBadRequest,
-				},
-			)
-
-			return
-		}
-		fileID, err = db.GetFileIDByUserPathAndStatus(c, accession.User, accession.FilePath, "verified")
-		if err != nil {
-			if fileID == "" {
-				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-			}
-
-			return
-		}
-		// Get decrypted checksum
-		fileDecrChecksum, err := db.GetDecryptedChecksum(c, fileID)
-		if err != nil {
-			log.Debugln(err.Error())
-			c.AbortWithStatusJSON(http.StatusNotFound, "decrypted checksum not found")
-
-			return
-		}
-		// Add decrypted checksum in message payload
-		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
-	default:
-		c.AbortWithStatusJSON(http.StatusBadRequest, "missing parameter or payload")
-
-		return
-	}
-	// Add type in the message payload
-	accession.Type = "accession"
-
-	marshaledMsg, _ := json.Marshal(&accession)
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-
-	err = Conf.API.MQ.SendMessage(fileID, Conf.Broker.Exchange, "accession", marshaledMsg)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func createDataset(c *gin.Context) {
-	var dataset datasetCreateRequest
-	if err := c.BindJSON(&dataset); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		return
-	}
-
-	if len(dataset.AccessionIDs) == 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, "at least one accessionID is required")
-
-		return
-	}
-
-	// Check that the files the accession ids are linked to exist
-	for _, accessionID := range dataset.AccessionIDs {
-		md, err := db.GetMappingData(c, accessionID)
-		if err != nil {
-			log.Errorln(err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-			return
-		}
-		if md == nil {
-			log.Infof("rejecting create dataset request including non-existing accession id: %s", accessionID)
-			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("no file exists with accession: %s", accessionID))
-
-			return
-		}
-	}
-
-	mapping := schema.DatasetMapping{
-		Type:         "mapping",
-		AccessionIDs: dataset.AccessionIDs,
-		DatasetID:    dataset.DatasetID,
-	}
-	marshaledMsg, _ := json.Marshal(&mapping)
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-
-	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func releaseDataset(c *gin.Context) {
-	datasetID := strings.TrimPrefix(c.Param("dataset"), "/")
-	ok, err := db.CheckIfDatasetExists(c, datasetID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-	if !ok {
-		c.AbortWithStatusJSON(http.StatusNotFound, "dataset not found")
-
-		return
-	}
-
-	status, err := db.GetDatasetStatus(c, datasetID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-	if status != "registered" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("dataset already %s", status))
-
-		return
-	}
-
-	datasetMsg := schema.DatasetRelease{
-		Type:      "release",
-		DatasetID: datasetID,
-	}
-	marshaledMsg, _ := json.Marshal(&datasetMsg)
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-
-	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "mappings", marshaledMsg)
-	if err != nil {
-		log.Debugln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-// rotateKeyFile triggers key rotation for a specific file
-func rotateKeyFile(c *gin.Context) {
-	fileID := c.Param("fileid")
-
-	if fileID == "" {
-		c.JSON(http.StatusBadRequest, "file ID is required")
-
-		return
-	}
-
-	// Create rotation message
-	rotateMsg := schema.KeyRotation{
-		Type:   "key_rotation",
-		FileID: fileID,
-	}
-
-	marshaledMsg, err := json.Marshal(&rotateMsg)
-	if err != nil {
-		log.Errorf("failed to marshal rotation message, reason: %v", err)
-		c.JSON(http.StatusInternalServerError, "failed to marshal rotation message")
-
-		return
-	}
-
-	// Validate the message against schema
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		log.Errorf("rotation message validation failed, reason: %v", err)
-		c.JSON(http.StatusBadRequest, "file ID not a proper UUID")
-
-		return
-	}
-
-	// Send message to rotatekey queue
-	err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "rotatekey", marshaledMsg)
-	if err != nil {
-		log.Errorf("failed to send rotation message to queue, reason: %v", err)
-		c.JSON(http.StatusInternalServerError, "failed to send message")
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-// rotateKeyDataset triggers key rotation for all files in a dataset
-func rotateKeyDataset(c *gin.Context) {
-	datasetID := c.Param("dataset")
-
-	if datasetID == "" {
-		c.JSON(http.StatusBadRequest, "dataset ID is required")
-
-		return
-	}
-
-	// Check if dataset exists
-	exists, err := db.CheckIfDatasetExists(c, datasetID)
-	if err != nil {
-		log.Errorf("failed to check if dataset %s exists, reason: %v", datasetID, err)
-		c.JSON(http.StatusInternalServerError, "failed to check dataset existence")
-
-		return
-	}
-	if !exists {
-		log.Warnf("dataset %s not found", datasetID)
-		c.JSON(http.StatusNotFound, fmt.Sprintf("dataset %s not found", datasetID))
-
-		return
-	}
-
-	// Get all files in the dataset
-	files, err := db.GetDatasetFileIDs(c, datasetID)
-	if err != nil {
-		log.Errorf("failed to get dataset files for dataset %s, reason: %v", datasetID, err)
-		c.JSON(http.StatusInternalServerError, "failed to get dataset files")
-
-		return
-	}
-
-	if len(files) == 0 {
-		log.Warnf("no files found for dataset %s", datasetID)
-		c.AbortWithStatusJSON(http.StatusBadRequest, "dataset not found")
-
-		return
-	}
-
-	// Send rotation message for each file in the dataset
-	for _, fileID := range files {
-		// Create rotation message
-		rotateMsg := schema.KeyRotation{
-			Type:   "key_rotation",
-			FileID: fileID,
-		}
-
-		marshaledMsg, err := json.Marshal(&rotateMsg)
-		if err != nil {
-			log.Errorf("failed to marshal rotation message for file %s, reason: %v", fileID, err)
-			c.JSON(http.StatusInternalServerError, "failed to marshal rotation message")
-
-			return
-		}
-
-		// Validate the message against schema
-		if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-			log.Errorf("rotation message validation failed for file %s, reason: %v", fileID, err)
-			c.JSON(http.StatusInternalServerError, "rotation message validation failed")
-
-			return
-		}
-
-		// Send message to rotatekey queue
-		err = Conf.API.MQ.SendMessage("", Conf.Broker.Exchange, "rotatekey", marshaledMsg)
-		if err != nil {
-			log.Errorf("failed to send rotation message for file %s to queue, reason: %v", fileID, err)
-			c.JSON(http.StatusInternalServerError, "failed to send rotation message")
-
-			return
-		}
-	}
-
-	log.Infof("rotation messages sent for %d files in dataset %s", len(files), datasetID)
-	c.Status(http.StatusOK)
-}
-
-func listActiveUsers(c *gin.Context) {
-	users, err := db.ListActiveUsers(c)
-	if err != nil {
-		log.Debugln("ListActiveUsers failed")
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-	c.JSON(http.StatusOK, users)
-}
-
-// listUserFiles returns a list of files for a specific user
-// If the file has status disabled, the file will be skipped
-func listUserFiles(c *gin.Context) {
-	username := c.Param("username")
-	username = strings.TrimPrefix(username, "/")
-	username = strings.TrimSuffix(username, "/files")
-	log.Debugln(username)
-
-	// parse optional pagination params
-	limit, err := parseLimitParam(c.Query("limit"))
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-	cursor := c.DefaultQuery("cursor", "")
-	files, nextCursor, err := db.GetUserFiles(c, username, c.Query("path_prefix"), true, limit, cursor)
-	if err != nil {
-		if errors.Is(err, database.ErrInvalidCursor) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid cursor parameter")
-
-			return
-		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	if nextCursor != "" {
-		c.Header("X-Next-Cursor", nextCursor)
-	}
-
-	rsp := make([]*submissionFileInfo, len(files))
-
-	for i, f := range files {
-		rsp[i] = &submissionFileInfo{
-			AccessionID:        f.AccessionID,
-			FileID:             f.FileID,
-			InboxPath:          f.InboxPath,
-			Status:             f.Status,
-			SubmissionFileSize: f.SubmissionFileSize,
-			CreatedAt:          f.CreatedAt,
-		}
-	}
-
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.JSON(200, rsp)
-}
-
-// addC4ghHash handles the addition of a hashed public key to the database.
-// It expects a JSON payload containing the base64 encoded public key and its description.
-// If the JSON payload is invalid, it responds with a 400 Bad Request status.
-// If the hash is already in the database, it responds with a 409 Conflict status
-// If the database insertion fails, it responds with a 500 Internal Server Error status.
-// On success, it responds with a 200 OK status.
-func addC4ghHash(c *gin.Context) {
-	var c4gh schema.C4ghPubKey
-	if err := c.BindJSON(&c4gh); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		log.Errorf("Invalid JSON payload: %v", err)
-
-		return
-	}
-
-	b64d, err := base64.StdEncoding.DecodeString(c4gh.PubKey)
-	if err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "base64 decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		log.Errorf("Invalid JSON payload: %v", err)
-
-		return
-	}
-
-	pubKey, err := keys.ReadPublicKey(bytes.NewReader(b64d))
-	if err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "not a public key : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-
-		log.Errorf("Invalid JSON payload: %v", err)
-
-		return
-	}
-
-	err = db.AddKeyHash(c, hex.EncodeToString(pubKey[:]), c4gh.Description)
-	if err != nil {
-		if strings.Contains(err.Error(), "key hash already exists") {
-			c.AbortWithStatusJSON(
-				http.StatusConflict,
-				gin.H{
-					"error":  err.Error(),
-					"status": http.StatusConflict,
-				},
-			)
-			log.Error("Key hash already exists")
-		} else {
-			c.AbortWithStatusJSON(
-				http.StatusInternalServerError,
-				gin.H{
-					"error":  err.Error(),
-					"status": http.StatusInternalServerError,
-				},
-			)
-			log.Errorf("Database insertion failed: %v", err)
-		}
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func listC4ghHashes(c *gin.Context) {
-	hashes, err := db.ListKeyHashes(c)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	for n, h := range hashes {
-		ct, _ := time.Parse(time.RFC3339, h.CreatedAt)
-		hashes[n].CreatedAt = ct.Format(time.DateTime)
-
-		if h.DeprecatedAt != "" {
-			dt, _ := time.Parse(time.RFC3339, h.DeprecatedAt)
-			hashes[n].DeprecatedAt = dt.Format(time.DateTime)
-		}
-	}
-	c.Writer.Header().Set("Content-Type", "application/json")
-
-	rsp := make([]*c4ghKeyHash, len(hashes))
-
-	for i, hash := range hashes {
-		rsp[i] = &c4ghKeyHash{
-			Hash:         hash.Hash,
-			Description:  hash.Description,
-			CreatedAt:    hash.CreatedAt,
-			DeprecatedAt: hash.DeprecatedAt,
-		}
-	}
-
-	c.JSON(200, rsp)
-}
-
-func deprecateC4ghHash(c *gin.Context) {
-	keyHash := strings.TrimPrefix(c.Param("keyHash"), "/")
-	err = db.DeprecateKeyHash(c, keyHash)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
-
-		return
-	}
-}
-
-func listAllDatasets(c *gin.Context) {
-	datasets, err := db.ListDatasets(c)
-	if err != nil {
-		log.Errorf("ListAllDatasets failed, reason: %s", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	rsp := make([]*datasetInfo, len(datasets))
-
-	for i, d := range datasets {
-		rsp[i] = &datasetInfo{
-			DatasetID: d.DatasetID,
-			Status:    d.Status,
-			Timestamp: d.Timestamp,
-		}
-	}
-
-	c.JSON(http.StatusOK, rsp)
-}
-
-func listUserDatasets(c *gin.Context) {
-	username := strings.TrimPrefix(c.Param("username"), "/")
-	datasets, err := db.ListUserDatasets(c, username)
-	if err != nil {
-		log.Errorf("ListUserDatasets failed, reason: %s", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	rsp := make([]*datasetInfo, len(datasets))
-
-	for i, d := range datasets {
-		rsp[i] = &datasetInfo{
-			DatasetID: d.DatasetID,
-			Status:    d.Status,
-			Timestamp: d.Timestamp,
-		}
-	}
-
-	c.JSON(http.StatusOK, rsp)
-}
-
-func listDatasets(c *gin.Context) {
-	token, err := auth.Authenticate(c.Request)
-	if err != nil {
-		c.JSON(401, err.Error())
-
-		return
-	}
-	datasets, err := db.ListUserDatasets(c, token.Subject())
-	if err != nil {
-		log.Errorf("ListDatasets failed, reason: %s", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	rsp := make([]*datasetInfo, len(datasets))
-
-	for i, d := range datasets {
-		rsp[i] = &datasetInfo{
-			DatasetID: d.DatasetID,
-			Status:    d.Status,
-			Timestamp: d.Timestamp,
-		}
-	}
-
-	c.JSON(http.StatusOK, rsp)
-}
-
-func reVerify(c *gin.Context, accessionID string) (*gin.Context, error) {
-	reverificationData, err := db.GetReVerificationData(c, accessionID)
-	if err != nil {
-		if strings.Contains(err.Error(), "sql: no rows in result set") {
-			c.AbortWithStatusJSON(http.StatusNotFound, "accession ID not found")
-		} else {
-			log.Errorln("failed to get file data")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-		}
-
-		return c, err
-	}
-	reVerifyMsg := schema.IngestionVerification{
-		User:        reverificationData.SubmissionUser,
-		FilePath:    reverificationData.SubmissionFilePath,
-		FileID:      reverificationData.FileID,
-		ArchivePath: reverificationData.ArchiveFilePath,
-		EncryptedChecksums: []schema.Checksums{{
-			Type:  reverificationData.ArchivedCheckSumType,
-			Value: reverificationData.ArchivedCheckSum,
-		}},
-		ReVerify: true,
-	}
-	marshaledMsg, _ := json.Marshal(&reVerifyMsg)
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
-		log.Errorln(err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return c, err
-	}
-
-	err = Conf.API.MQ.SendMessage(reVerifyMsg.FileID, Conf.Broker.Exchange, "archived", marshaledMsg)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return c, err
-	}
-
-	return c, nil
-}
-
-func updateFileEvent(c *gin.Context) {
-	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-	event := strings.TrimPrefix(c.Param("event"), "/")
-
-	token, err := auth.Authenticate(c.Request)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, err.Error())
-
-		return
-	}
-
-	type updateFileEventBody struct {
-		Reason string `json:"reason"`
-	}
-	updateEvent := &updateFileEventBody{}
-	if err := c.BindJSON(&updateEvent); err != nil {
-		c.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error":  "json decoding : " + err.Error(),
-				"status": http.StatusBadRequest,
-			},
-		)
-	}
-
-	if updateEvent.Reason == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "no reason recieved", "status": http.StatusBadRequest})
-	}
-
-	details, err := json.Marshal(updateEvent)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to encode reason"})
-
-		return
-	}
-
-	fileEvents, err := db.GetFileEvents(c)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	if !slices.Contains(fileEvents, event) {
-		c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("event: '%s' not allowed", event))
-
-		return
-	}
-
-	err = db.UpdateFileEventLog(c, fileID, event, token.Subject(), string(details), "{}")
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.AbortWithStatusJSON(http.StatusNotFound, fmt.Sprintf("file: '%s' not found", fileID))
-
-			return
-		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func getFileEvents(c *gin.Context) {
-	fileID := strings.TrimPrefix(c.Param("fileid"), "/")
-
-	statusHistory, err := db.GetFileStatusHistory(c, fileID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-
-	c.JSON(http.StatusOK, statusHistory)
-}
-
-func reVerifyFile(c *gin.Context) {
-	accessionID := strings.TrimPrefix(c.Param("accession"), "/")
-	c, err = reVerify(c, accessionID)
-	if err != nil {
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func reVerifyDataset(c *gin.Context) {
-	dataset := strings.TrimPrefix(c.Param("dataset"), "/")
-	files, err := db.GetDatasetFiles(c, dataset)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
-
-		return
-	}
-	if files == nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, "dataset not found")
-
-		return
-	}
-
-	for _, accession := range files {
-		c, err = reVerify(c, accession)
-		if err != nil {
-			return
-		}
-	}
-
-	c.Status(http.StatusOK)
 }
