@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.75] - 2026-07-08
+
+### Added
+
+- Standalone config package: `/cmd/api/config/config.go` to handle configuration for the `api` service 
+- Shared mock packages `/mocks` that hold mock implementations of `database.go` and `broker.go` to be used for unit testing
+
+### Changed
+
+- `api.go` to use `v2/broker` package
+- `api.go` to use `net/http` instead of `gin-gonic/gin` for routing
+- `api_test.go` to make use of interfaces for `broker.go` and `database.go` to be able to run tests in isolation without docker instances of those services
+- `api_test.go` to run table-driven test cases for each handler / endpoint
+
+## [3.1.74] - 2026-06-22
+
 ### Changed
 
 - Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users.
