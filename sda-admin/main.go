@@ -32,7 +32,7 @@ Commands:
                                 Assign accession ID to a file.
   file rotatekey -file-id FILEUUID
                                 Rotate encryption key for a specific file.
-  file get-event -file-id FILEUUID
+  file get-events -file-id FILEUUID
                                 Retrieve the event / status for a given file
   file update-event -file-id FILEUUID -event EVENT
                                 Update the event / status for a given file
@@ -110,8 +110,8 @@ Options:
   -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
 
-var getFileEventUsage = `Usage with file path and user: sda-admin file get-event -fileid <FILE_ID>
-Usage with file ID: sda-admin file get-event -fileid <FILE_ID>
+var getFileEventUsage = `Usage with file path and user: sda-admin file get-events -fileid <FILE_ID>
+Usage with file ID: sda-admin file get-events -fileid <FILE_ID>
 
 	Get the latest event associated with a file by providing the file id
 
@@ -303,7 +303,7 @@ func handleHelpFile() error {
 		_, _ = fmt.Println(fileAccessionUsage)
 	case flag.Arg(2) == "rotatekey":
 		_, _ = fmt.Println(fileRotateKeyUsage)
-	case flag.Arg(2) == "get-event":
+	case flag.Arg(2) == "get-events":
 		_, _ = fmt.Println(getFileEventUsage)
 	case flag.Arg(2) == "update-event":
 		_, _ = fmt.Println(updateFileEventUsage)
@@ -394,7 +394,7 @@ func handleFileCommand() error {
 		if err := handleFileRotateKeyCommand(); err != nil {
 			return err
 		}
-	case "get-event":
+	case "get-events":
 		if err := handleFileGetEvent(); err != nil {
 			return err
 		}
@@ -499,7 +499,7 @@ func handleFileRotateKeyCommand() error {
 
 func handleFileGetEvent() error {
 	var fileID string
-	fileGetEventCmd := flag.NewFlagSet("get-event", flag.ExitOnError)
+	fileGetEventCmd := flag.NewFlagSet("get-events", flag.ExitOnError)
 	fileGetEventCmd.StringVar(&fileID, "file-id", "", "File ID (UUID) to rotate key for")
 
 	if err := fileGetEventCmd.Parse(flag.Args()[2:]); err != nil {
