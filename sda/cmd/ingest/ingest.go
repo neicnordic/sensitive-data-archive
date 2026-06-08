@@ -43,6 +43,7 @@ type Ingest struct {
 	ArchiveKeyList []*[32]byte
 	db             database.Database
 	InboxReader    storage.Reader
+	InboxConfig    helper.InboxConfig
 	Broker         brokerv2.Broker
 }
 
@@ -69,6 +70,7 @@ func run() error {
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+	app.InboxConfig = config.LoadInboxConfig()
 
 	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
 	if err != nil {
@@ -297,7 +299,8 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// Catch all for implementations inbox uploading that does not register the file in the DB, e.g. for those not using S3inbox or sftpInbox
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
 		var findFileErr, registerErr error
-		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.Key)
+		// Resolve the anonymized submission path to its physical inbox path before locating it.
+		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(message.Key, user, app.InboxConfig))
 
 		// Ideally this transaction should span the whole message processing, but for now just spans the RegisterFile
 		tx, err := app.db.BeginTransaction(ctx)
@@ -336,7 +339,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, fmt.Errorf("cannot ingest file with status: %s", status)
 	}
 
-	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(filePath, user))
+	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxConfig))
 	if err != nil {
 		log.Errorf("failed to read file, due to: %v", err)
 
