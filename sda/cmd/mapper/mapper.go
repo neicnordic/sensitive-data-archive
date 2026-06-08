@@ -27,6 +27,7 @@ import (
 var db database.Database
 var inboxWriter storage.Writer
 var mqBroker *broker.AMQPBroker
+var inboxConfig helper.InboxConfig
 
 func main() {
 	if err := run(); err != nil {
@@ -46,6 +47,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
+	inboxConfig = conf.Inbox
 
 	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
@@ -264,9 +266,9 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	for _, fileMappingData := range filesToCleanFromInbox {
-		unanonymizedSubmissionFilePath := helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)
-		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath); err != nil {
-			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath, err)
+		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, inboxConfig)
+		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
+			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, resolvedSubmissionPath, err)
 		}
 	}
 
