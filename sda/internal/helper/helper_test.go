@@ -179,3 +179,31 @@ func (ts *HelperTest) TestUnanonymizeFilepath_oldMessage() {
 	newPath := UnanonymizeFilepath(filePath, userName)
 	assert.Equal(ts.T(), filePath, newPath)
 }
+
+func (ts *HelperTest) TestResolveInboxPath_stockDefault_prependsNormalizedUser() {
+	// With no project code ResolveInboxPath defers to the stock UnanonymizeFilepath: the first
+	// "@" becomes "_" and the username directory is prepended unless the path already starts with
+	// it. These assertions keep existing deployments pinned.
+	stockDefault := InboxConfig{}
+	user := "test.user@demo.org"
+	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
+		ResolveInboxPath("files/x.raw.enc", user, stockDefault))
+	// Already-prefixed path is returned unchanged.
+	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
+		ResolveInboxPath("test.user_demo.org/files/x.raw.enc", user, stockDefault))
+}
+
+func (ts *HelperTest) TestResolveInboxPath_projectCode_reconstructsRawUserDir() {
+	// FEGA-Norway: anonymized "/files/x" is rebuilt under the project-code-prefixed RAW username
+	// (the "@" is not normalized to "_" when a project code is configured).
+	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	got := ResolveInboxPath("/files/x.raw.enc", "dummy@elixir-europe.org", cfg)
+	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/x.raw.enc", got)
+}
+
+func (ts *HelperTest) TestResolveInboxPath_projectCode_alreadyPrefixed_unchanged() {
+	// An already-resolved path (e.g. on reprocessing) is returned as-is, not double-prefixed.
+	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	fp := "p11-dummy@elixir-europe.org/files/x.raw.enc"
+	assert.Equal(ts.T(), fp, ResolveInboxPath(fp, "dummy@elixir-europe.org", cfg))
+}

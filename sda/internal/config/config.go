@@ -10,6 +10,7 @@ import (
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -40,6 +41,7 @@ type Config struct {
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
 	RotateKey    RotateKeyConf
+	Inbox        helper.InboxConfig
 }
 
 type Grpc struct {
@@ -376,6 +378,7 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
+		c.configInbox()
 
 		c.API.Grpc, err = configReEncryptClient()
 		if err != nil {
@@ -451,6 +454,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+		c.configInbox()
 	case "notify":
 		c.configSMTP()
 
@@ -766,6 +770,24 @@ func (c *Config) configReEncryptServer() (err error) {
 	}
 
 	return nil
+}
+
+// LoadInboxConfig reads the per-user inbox directory layout from the shared viper instance. An
+// empty (absent) project code yields stock SDA behavior, so deployments that omit the section are
+// unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
+// (mapper, api) and directly by the ingest service, which loads through config/v2 but populates
+// the same viper instance.
+func LoadInboxConfig() helper.InboxConfig {
+	return helper.InboxConfig{
+		ProjectCode:          viper.GetString("storage.inbox.projectCode"),
+		ProjectCodeDelimiter: viper.GetString("storage.inbox.projectCodeDelimiter"),
+	}
+}
+
+// configInbox populates the inbox layout config for services that resolve anonymized submission
+// paths back to their physical inbox path (mapper, api).
+func (c *Config) configInbox() {
+	c.Inbox = LoadInboxConfig()
 }
 
 // configSchemas configures the schemas to load depending on

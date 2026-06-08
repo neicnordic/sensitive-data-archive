@@ -464,3 +464,39 @@ func UnanonymizeFilepath(fp string, username string) string {
 
 	return filepath.Join(strings.Replace(username, "@", "_", 1), fp)
 }
+
+// InboxConfig describes how a deployment names its per-user inbox directories, so an
+// anonymized submission path (the user prefix stripped) can be resolved back to the physical
+// inbox-relative path. An empty ProjectCode selects stock SDA behavior.
+type InboxConfig struct {
+	// ProjectCode optionally prefixes the per-user inbox directory (e.g. "p11"). Empty keeps the
+	// stock layout where the directory is the normalized username (see UnanonymizeFilepath).
+	ProjectCode string
+	// ProjectCodeDelimiter separates ProjectCode from the username (e.g. "-"). Unused when
+	// ProjectCode is empty.
+	ProjectCodeDelimiter string
+}
+
+// ResolveInboxPath reconstructs the physical inbox-relative path for an anonymized submission
+// filePath. An already-resolved path (e.g. on reprocessing) is returned unchanged.
+//
+// With no ProjectCode it is the stock round-trip, deferring to UnanonymizeFilepath (normalize the
+// username — first "@"->"_" — and prepend "<user>/"), so existing deployments are unaffected.
+//
+// With a ProjectCode it rebuilds "<ProjectCode><delimiter><username>/<filePath>" using the RAW
+// username. Whether to normalize is derived from the project code rather than configured
+// separately: a project code denotes a TSD-style inbox namespaced by project (e.g. FEGA-Norway's
+// "p11-dummy@elixir-europe.org/files/..."), which stores the username verbatim. No current
+// deployment needs a project code together with normalization; add an explicit toggle if one does.
+func ResolveInboxPath(filePath, username string, cfg InboxConfig) string {
+	if cfg.ProjectCode == "" {
+		return UnanonymizeFilepath(filePath, username)
+	}
+
+	userDir := cfg.ProjectCode + cfg.ProjectCodeDelimiter + username
+	if strings.HasPrefix(filePath, userDir) {
+		return filePath
+	}
+
+	return filepath.Join(userDir, filePath)
+}
