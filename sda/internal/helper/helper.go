@@ -478,7 +478,8 @@ type InboxConfig struct {
 }
 
 // ResolveInboxPath reconstructs the physical inbox-relative path for an anonymized submission
-// filePath. An already-resolved path (e.g. on reprocessing) is returned unchanged.
+// filePath. An already-resolved path (e.g. on reprocessing) is returned as-is, with any leading
+// separator normalized away.
 //
 // With no ProjectCode it is the stock round-trip, deferring to UnanonymizeFilepath (normalize the
 // username — first "@"->"_" — and prepend "<user>/"), so existing deployments are unaffected.
@@ -494,9 +495,14 @@ func ResolveInboxPath(filePath, username string, cfg InboxConfig) string {
 	}
 
 	userDir := cfg.ProjectCode + cfg.ProjectCodeDelimiter + username
-	if strings.HasPrefix(filePath, userDir) {
-		return filePath
+	// Tolerate a leading separator from older proxy formats (e.g. "/p11-user/files/..."); without
+	// stripping it the prefix check below misses and userDir gets prepended a second time.
+	relPath := strings.TrimPrefix(filePath, "/")
+	// Treat as already-resolved only on a path-segment boundary, so "p11-user2/..." is not mistaken
+	// for the "p11-user" directory.
+	if relPath == userDir || strings.HasPrefix(relPath, userDir+"/") {
+		return relPath
 	}
 
-	return filepath.Join(userDir, filePath)
+	return filepath.Join(userDir, relPath)
 }
