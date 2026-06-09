@@ -184,7 +184,7 @@ func (ts *HelperTest) TestResolveInboxPath_stockDefault_prependsNormalizedUser()
 	// With no project code ResolveInboxPath defers to the stock UnanonymizeFilepath: the first
 	// "@" becomes "_" and the username directory is prepended unless the path already starts with
 	// it. These assertions keep existing deployments pinned.
-	stockDefault := InboxConfig{}
+	stockDefault := InboxProjectConfig{}
 	user := "test.user@demo.org"
 	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
 		ResolveInboxPath("files/x.raw.enc", user, stockDefault))
@@ -196,14 +196,14 @@ func (ts *HelperTest) TestResolveInboxPath_stockDefault_prependsNormalizedUser()
 func (ts *HelperTest) TestResolveInboxPath_projectCode_reconstructsRawUserDir() {
 	// FEGA-Norway: anonymized "/files/x" is rebuilt under the project-code-prefixed RAW username
 	// (the "@" is not normalized to "_" when a project code is configured).
-	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	cfg := InboxProjectConfig{Code: "p11", Delimiter: "-"}
 	got := ResolveInboxPath("/files/x.raw.enc", "dummy@elixir-europe.org", cfg)
 	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/x.raw.enc", got)
 }
 
 func (ts *HelperTest) TestResolveInboxPath_projectCode_alreadyPrefixed_unchanged() {
 	// An already-resolved path (e.g. on reprocessing) is returned as-is, not double-prefixed.
-	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	cfg := InboxProjectConfig{Code: "p11", Delimiter: "-"}
 	fp := "p11-dummy@elixir-europe.org/files/x.raw.enc"
 	assert.Equal(ts.T(), fp, ResolveInboxPath(fp, "dummy@elixir-europe.org", cfg))
 }
@@ -212,7 +212,7 @@ func (ts *HelperTest) TestResolveInboxPath_projectCode_leadingSeparator_notDoubl
 	// Older proxy formats can send an already-resolved path with a leading "/". The leading
 	// separator must be normalized away, not cause the user directory to be prepended a second time
 	// ("/p11-user/files/x" -> "p11-user/p11-user/files/x").
-	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	cfg := InboxProjectConfig{Code: "p11", Delimiter: "-"}
 	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/x.raw.enc",
 		ResolveInboxPath("/p11-dummy@elixir-europe.org/files/x.raw.enc", "dummy@elixir-europe.org", cfg))
 }
@@ -220,7 +220,7 @@ func (ts *HelperTest) TestResolveInboxPath_projectCode_leadingSeparator_notDoubl
 func (ts *HelperTest) TestResolveInboxPath_projectCode_segmentBoundary() {
 	// The already-resolved check holds on a path-segment boundary: "p11-user2/..." belongs to a
 	// different user and must not be treated as already under the "p11-user" directory.
-	cfg := InboxConfig{ProjectCode: "p11", ProjectCodeDelimiter: "-"}
+	cfg := InboxProjectConfig{Code: "p11", Delimiter: "-"}
 	assert.Equal(ts.T(), "p11-user/p11-user2/files/x.raw.enc",
 		ResolveInboxPath("p11-user2/files/x.raw.enc", "user", cfg))
 }

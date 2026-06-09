@@ -41,7 +41,7 @@ type Config struct {
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
 	RotateKey    RotateKeyConf
-	Inbox        helper.InboxConfig
+	Inbox        helper.InboxProjectConfig
 }
 
 type Grpc struct {
@@ -378,7 +378,7 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
-		c.configInbox()
+		c.configInboxProject()
 
 		c.API.Grpc, err = configReEncryptClient()
 		if err != nil {
@@ -454,7 +454,7 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
-		c.configInbox()
+		c.configInboxProject()
 	case "notify":
 		c.configSMTP()
 
@@ -772,22 +772,22 @@ func (c *Config) configReEncryptServer() (err error) {
 	return nil
 }
 
-// LoadInboxConfig reads the per-user inbox directory layout from the shared viper instance. An
+// LoadInboxProjectConfig reads the per-user inbox directory layout from the shared viper instance. An
 // empty (absent) project code yields stock SDA behavior, so deployments that omit the section are
 // unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
 // (mapper, api) and directly by the ingest service, which loads through config/v2 but populates
 // the same viper instance.
-func LoadInboxConfig() helper.InboxConfig {
-	return helper.InboxConfig{
-		ProjectCode:          viper.GetString("storage.inbox.projectCode"),
-		ProjectCodeDelimiter: viper.GetString("storage.inbox.projectCodeDelimiter"),
+func LoadInboxProjectConfig() helper.InboxProjectConfig {
+	return helper.InboxProjectConfig{
+		Code:      viper.GetString("storage.inbox.projectCode"),
+		Delimiter: viper.GetString("storage.inbox.projectCodeDelimiter"),
 	}
 }
 
-// configInbox populates the inbox layout config for services that resolve anonymized submission
+// configInboxProject populates the inbox layout config for services that resolve anonymized submission
 // paths back to their physical inbox path (mapper, api).
-func (c *Config) configInbox() {
-	c.Inbox = LoadInboxConfig()
+func (c *Config) configInboxProject() {
+	c.Inbox = LoadInboxProjectConfig()
 }
 
 // configSchemas configures the schemas to load depending on
