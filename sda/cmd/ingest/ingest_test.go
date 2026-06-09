@@ -420,6 +420,21 @@ func (ts *TestSuite) TestIngestFile_BaseCase() {
 	assert.NoError(ts.T(), err, "unexpected error when ingesting file")
 }
 
+func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
+	// Non-s3inbox flow (e.g. FEGA-Norway via TSD): nothing pre-registers the file, so ingest's
+	// catch-all (status "") is the first registration point. It must register AND archive in one
+	// pass; an early return after RegisterFile would park the file at "registered" and verify would
+	// never run. Guards the v3.1.72 catch-all regression.
+	correlationID := uuid.New().String()
+	message := createMessage("ingest", ts.filePath, ts.UserName, correlationID)
+	_, err := ts.ingest.handleMessage(context.Background(), message)
+	assert.NoError(ts.T(), err, "unexpected error ingesting a non-registered file")
+
+	fileID, err := ts.ingest.db.GetFileIDByUserPathAndStatus(context.Background(), ts.UserName, ts.filePath, "archived")
+	assert.NoError(ts.T(), err, "non-registered file should reach 'archived' in one pass, not park at 'registered'")
+	assert.NotEmpty(ts.T(), fileID, "expected an archived file for the non-registered upload")
+}
+
 func (ts *TestSuite) TestIngestFile_NoSubmissionLocation() {
 	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", ts.filePath, ts.UserName)
 	assert.NoError(ts.T(), err, "failed to register file in database")
