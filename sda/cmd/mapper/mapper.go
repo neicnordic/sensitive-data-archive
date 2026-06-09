@@ -27,7 +27,7 @@ import (
 var db database.Database
 var inboxWriter storage.Writer
 var mqBroker *broker.AMQPBroker
-var inboxConfig helper.InboxConfig
+var inboxConfig helper.InboxProjectConfig
 
 func main() {
 	if err := run(); err != nil {

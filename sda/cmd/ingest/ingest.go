@@ -37,14 +37,14 @@ import (
 )
 
 type Ingest struct {
-	ArchiveWriter  storage.Writer
-	BackupWriter   storage.Writer
-	ArchiveReader  storage.Reader
-	ArchiveKeyList []*[32]byte
-	db             database.Database
-	InboxReader    storage.Reader
-	InboxConfig    helper.InboxConfig
-	Broker         brokerv2.Broker
+	ArchiveWriter      storage.Writer
+	BackupWriter       storage.Writer
+	ArchiveReader      storage.Reader
+	ArchiveKeyList     []*[32]byte
+	db                 database.Database
+	InboxReader        storage.Reader
+	InboxProjectConfig helper.InboxProjectConfig
+	Broker             brokerv2.Broker
 }
 
 type decryptResult struct {
@@ -70,7 +70,7 @@ func run() error {
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
-	app.InboxConfig = config.LoadInboxConfig()
+	app.InboxProjectConfig = config.LoadInboxProjectConfig()
 
 	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
 	if err != nil {
@@ -301,7 +301,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		var findFileErr, registerErr error
 		// message.Key is the broker correlation-id, not the submission path; use the trigger's
 		// filePath and resolve it to the physical inbox path before locating it.
-		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.InboxConfig))
+		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 
 		// Ideally this transaction should span the whole message processing, but for now just spans the RegisterFile
 		tx, err := app.db.BeginTransaction(ctx)
@@ -343,7 +343,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, fmt.Errorf("cannot ingest file with status: %s", status)
 	}
 
-	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxConfig))
+	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 	if err != nil {
 		log.Errorf("failed to read file, due to: %v", err)
 

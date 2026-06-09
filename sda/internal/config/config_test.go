@@ -614,26 +614,26 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	assert.NoError(ts.T(), err, "unexpected failure")
 }
 
-func (ts *ConfigTestSuite) TestLoadInboxConfig_readsNestedStorageInboxKeys() {
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_readsNestedStorageInboxKeys() {
 	// Each service loads its config.yaml into the shared global viper (mapper/api via NewConfig,
-	// ingest via config/v2). LoadInboxConfig then reads it. Prove the nested storage.inbox.* block
+	// ingest via config/v2). LoadInboxProjectConfig then reads it. Prove the nested storage.inbox.* block
 	// flattens to the dotted keys it reads — the seam the projectCode resolver depends on.
 	viper.Reset()
 	viper.SetConfigType("yaml")
 	cfg := "storage:\n  inbox:\n    projectCode: p11\n    projectCodeDelimiter: \"-\"\n"
 	assert.NoError(ts.T(), viper.ReadConfig(bytes.NewBufferString(cfg)))
 
-	got := LoadInboxConfig()
-	assert.Equal(ts.T(), "p11", got.ProjectCode)
-	assert.Equal(ts.T(), "-", got.ProjectCodeDelimiter)
+	got := LoadInboxProjectConfig()
+	assert.Equal(ts.T(), "p11", got.Code)
+	assert.Equal(ts.T(), "-", got.Delimiter)
 }
 
-func (ts *ConfigTestSuite) TestLoadInboxConfig_absentSectionIsStock() {
-	// With no storage.inbox section LoadInboxConfig yields the zero value, which ResolveInboxPath
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_absentSectionIsStock() {
+	// With no storage.inbox section LoadInboxProjectConfig yields the zero value, which ResolveInboxPath
 	// treats as stock SDA behavior — so deployments that omit it (e.g. the Swedish node) are
 	// unaffected.
 	viper.Reset()
-	got := LoadInboxConfig()
-	assert.Equal(ts.T(), "", got.ProjectCode)
-	assert.Equal(ts.T(), "", got.ProjectCodeDelimiter)
+	got := LoadInboxProjectConfig()
+	assert.Equal(ts.T(), "", got.Code)
+	assert.Equal(ts.T(), "", got.Delimiter)
 }
