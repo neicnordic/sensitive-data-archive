@@ -499,8 +499,9 @@ func ResolveInboxPath(filePath, username string, cfg InboxProjectConfig) string 
 	// stripping it the prefix check below misses and userDir gets prepended a second time.
 	relPath := strings.TrimPrefix(filePath, "/")
 	// Treat as already-resolved only on a path-segment boundary, so "p11-user2/..." is not mistaken
-	// for the "p11-user" directory.
-	if relPath == userDir || strings.HasPrefix(relPath, userDir+"/") {
+	// for the "p11-user" directory. A submission path always has a file component, so relPath is
+	// never the bare userDir.
+	if strings.HasPrefix(relPath, userDir+"/") {
 		return relPath
 	}
 
