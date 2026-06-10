@@ -180,6 +180,15 @@ func (ts *HelperTest) TestUnanonymizeFilepath_oldMessage() {
 	assert.Equal(ts.T(), filePath, newPath)
 }
 
+func (ts *HelperTest) TestUnanonymizeFilepath_leadingSeparator() {
+	// A leading "/" must not drop the username directory: Go's filepath.Join concatenates and
+	// cleans, it does not treat a leading "/" in a later element as an absolute path. So an
+	// anonymized "/files/x" still resolves under the user directory.
+	userName := "test.user@demo.org"
+	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
+		UnanonymizeFilepath("/files/x.raw.enc", userName))
+}
+
 func (ts *HelperTest) TestResolveInboxPath_stockDefault_prependsNormalizedUser() {
 	// With no project code ResolveInboxPath defers to the stock UnanonymizeFilepath: the first
 	// "@" becomes "_" and the username directory is prepended unless the path already starts with
@@ -191,6 +200,16 @@ func (ts *HelperTest) TestResolveInboxPath_stockDefault_prependsNormalizedUser()
 	// Already-prefixed path is returned unchanged.
 	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
 		ResolveInboxPath("test.user_demo.org/files/x.raw.enc", user, stockDefault))
+}
+
+func (ts *HelperTest) TestResolveInboxPath_stockDefault_leadingSeparator() {
+	// Stock branch (no project code): a leading "/" on the anonymized path is harmless. The userDir
+	// prefix is still applied, refuting the assumption that filepath.Join treats a leading "/" as
+	// absolute and drops the prefix.
+	stockDefault := InboxProjectConfig{}
+	user := "test.user@demo.org"
+	assert.Equal(ts.T(), "test.user_demo.org/files/x.raw.enc",
+		ResolveInboxPath("/files/x.raw.enc", user, stockDefault))
 }
 
 func (ts *HelperTest) TestResolveInboxPath_projectCode_reconstructsRawUserDir() {
