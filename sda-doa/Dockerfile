@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-21-alpine AS builder
+FROM maven:3-eclipse-temurin-26-alpine AS builder
 
 COPY pom.xml .
 
@@ -11,7 +11,7 @@ COPY src/ /src/
 
 RUN mvn clean install -DskipTests --no-transfer-progress
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 RUN apk add --no-cache --upgrade ca-certificates openssl 
 
