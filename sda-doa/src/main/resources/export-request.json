@@ -16,7 +16,7 @@
   "properties": {
     "jwtToken": {
       "type": "string",
-      "description": "The JWT bearer token for authorization.",
+      "description": " A signedd GA4GH VISA token for the resource to be exported (JWT).",
       "pattern": "^[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*$"
     },
     "datasetId": {
