@@ -234,6 +234,10 @@ func (ts *HelperTest) TestResolveInboxPath_projectCode_leadingSeparator_notDoubl
 	cfg := InboxProjectConfig{Code: "p11", Delimiter: "-"}
 	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/x.raw.enc",
 		ResolveInboxPath("/p11-dummy@elixir-europe.org/files/x.raw.enc", "dummy@elixir-europe.org", cfg))
+	// All leading separators are stripped, so repeated slashes cannot sneak past the
+	// already-resolved check either.
+	assert.Equal(ts.T(), "p11-dummy@elixir-europe.org/files/x.raw.enc",
+		ResolveInboxPath("//p11-dummy@elixir-europe.org/files/x.raw.enc", "dummy@elixir-europe.org", cfg))
 }
 
 func (ts *HelperTest) TestResolveInboxPath_projectCode_segmentBoundary() {
