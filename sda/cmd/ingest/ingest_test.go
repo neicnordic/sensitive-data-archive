@@ -432,7 +432,7 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 
 	fileID, err := ts.ingest.db.GetFileIDByUserPathAndStatus(context.Background(), ts.UserName, ts.filePath, "archived")
 	assert.NoError(ts.T(), err, "non-registered file should reach 'archived' in one pass, not park at 'registered'")
-	assert.NotEmpty(ts.T(), fileID, "expected an archived file for the non-registered upload")
+	assert.Equal(ts.T(), correlationID, fileID, "catch-all must register the file under the message correlation-id, finalize looks the file up by it")
 }
 
 func (ts *TestSuite) TestIngestFile_NoSubmissionLocation() {
