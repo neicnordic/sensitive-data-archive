@@ -13,22 +13,21 @@ import (
 )
 
 var (
-	apiHost string
-	apiPort int
-	apiProtocol string
-	RBACpath string
-	RBACfile []byte
-	jwtPubKeyUrl string
-	jwtPubKeyPath string
-	serverCert   string
-	serverKey   string
-	schemaPath string
-	grpcHost string
-	grpcPort int
-	grpcTimeout int
-	grpcCaCert string
+	apiHost        string
+	apiPort        int
+	apiProtocol    string
+	rbacFile       string
+	jwtPubKeyUrl   string
+	jwtPubKeyPath  string
+	serverCert     string
+	serverKey      string
+	schemaPath     string
+	grpcHost       string
+	grpcPort       int
+	grpcTimeout    int
+	grpcCaCert     string
 	grpcClientCert string
-	grpcClientKey string
+	grpcClientKey  string
 )
 
 type Grpc struct {
@@ -48,7 +47,7 @@ func init() {
 		&config.Flag{
 			Name: "apiHost",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Hostname for the api server")
+				flagSet.String(flagName, "0.0.0.0", "Hostname for the api server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -58,7 +57,7 @@ func init() {
 		&config.Flag{
 			Name: "apiPort",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Int(flagName, 0, "Port for the api server")
+				flagSet.Int(flagName, 8080, "Port for the api server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -68,7 +67,7 @@ func init() {
 		&config.Flag{
 			Name: "apiProtocol",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Protocol for the api server")
+				flagSet.String(flagName, "http", "Protocol for the api server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -98,22 +97,17 @@ func init() {
 		&config.Flag{
 			Name: "rbacFile",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "File path to the defining Role Based Access Policies (RBAC) to the api server")
+				flagSet.String(flagName, "/rbac.json", "File path to the defining Role Based Access Policies (RBAC) to the api server")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				RBACpath = viper.GetString(flagName)
-				file, err := os.ReadFile(RBACpath)
-				if err != nil {
-					panic(fmt.Sprintf("cannot read RBAC file at %s, reason: %v", RBACpath, err))
-				}
-				RBACfile = file
+				rbacFile = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
 			Name: "jwtpubkeyurl",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "JWT public key URL")
+				flagSet.String(flagName, "http://localhost:8080/oidc/jwk", "JWT public key URL")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -224,7 +218,7 @@ func ApiProtocl() string {
 }
 
 func ApiAddr() string {
-	return fmt.Sprintf("%s://:%s:%d", apiProtocol, apiHost, apiPort)
+	return fmt.Sprintf("%s:%d", apiHost, apiPort)
 }
 
 func ServerCert() string {
@@ -239,12 +233,8 @@ func SchemaPath() string {
 	return schemaPath
 }
 
-func RBACPath() string {
-	return RBACpath
-}
-
-func RBACFile() []byte {
-	return RBACfile
+func RbacFile() string {
+	return rbacFile
 }
 
 func JwtPubKeyURL() string {
@@ -288,18 +278,18 @@ func GrpcClient() (Grpc, error) {
 			)
 		}
 	} else {
-			certs, err := tls.LoadX509KeyPair(viper.GetString("grpc.clientcert"), viper.GetString("grpc.clientkey"))
-			if err != nil {
-				return Grpc{}, fmt.Errorf("Failed to load client key pair for reencrypt")
-			}
-
-			grpc.ClientCreds = credentials.NewTLS(
-				&tls.Config{
-					Certificates: []tls.Certificate{certs},
-					MinVersion:   tls.VersionTLS13,
-				},
-			)
+		certs, err := tls.LoadX509KeyPair(viper.GetString("grpc.clientcert"), viper.GetString("grpc.clientkey"))
+		if err != nil {
+			return Grpc{}, fmt.Errorf("Failed to load client key pair for reencrypt")
 		}
+
+		grpc.ClientCreds = credentials.NewTLS(
+			&tls.Config{
+				Certificates: []tls.Certificate{certs},
+				MinVersion:   tls.VersionTLS13,
+			},
+		)
+	}
 	return grpc, nil
 }
 

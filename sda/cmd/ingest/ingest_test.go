@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/neicnordic/crypt4gh/keys"
@@ -111,61 +111,11 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to postgres: %s", err)
 	}
 
-	// pulls an image, creates a container based on it and runs it
-	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
-		Tag:        "v0.3.89-rabbitmq",
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-	if err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	brokerAPI = rabbitmq.GetHostPort("15672/tcp")
-
-	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+brokerAPI+"/api/queues/sda/", http.NoBody)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.SetBasicAuth("guest", "guest")
-
-	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
-		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
-		if err != nil || res.StatusCode != 200 {
-			return err
-		}
-		_ = res.Body.Close()
-
-		return nil
-	}); err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		if err := pool.Purge(rabbitmq); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not connect to rabbitmq: %s", err)
-	}
-
 	log.Println("starting tests")
 	code := m.Run()
 
 	log.Println("tests completed")
 	if err := pool.Purge(postgresContainer); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-	if err := pool.Purge(rabbitmq); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
 
@@ -244,7 +194,7 @@ func (ts *TestSuite) SetupSuite() {
 		ts.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
 	}
 
-	ts.ingest.Broker = &MockBroker{}
+	ts.ingest.Broker = &mocks.MockBroker{}
 	if err != nil {
 		ts.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
 	}
@@ -501,7 +451,7 @@ func (ts *TestSuite) TestIngestFile_IngestDisabledFileNewChecksum() {
 
 	// swap inbox reader to serve the new file from memory
 	originalReader := ts.ingest.InboxReader
-	ts.ingest.InboxReader = &MockReader{data: buf.Bytes()}
+	ts.ingest.InboxReader = &mocks.MockReader{Data: buf.Bytes()}
 	defer func() { ts.ingest.InboxReader = originalReader }()
 
 	// reingestion should work

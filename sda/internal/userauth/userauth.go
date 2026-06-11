@@ -120,6 +120,23 @@ func (u *ValidateFromToken) ReadJwtPubKeyPath(jwtpubkeypath string) error {
 	return nil
 }
 
+func (u *ValidateFromToken) ReadJwtPubKeyBytes(pubKeyBytes []byte) error {
+	key, err := jwk.ParseKey(pubKeyBytes, jwk.WithPEM(true))
+	if err != nil {
+		return err
+	}
+
+	if err := jwk.AssignKeyID(key); err != nil {
+		return err
+	}
+
+	if err := u.Keyset.AddKey(key); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Function for fetching the elixir key from the JWK and transform it to []byte
 func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 	jwkURL, err := url.ParseRequestURI(jwtpubkeyurl)
