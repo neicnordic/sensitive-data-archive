@@ -31,7 +31,7 @@
     },
     "publicKey": {
       "type": "string",
-      "description": "The encryption public key in Crypt4GH or PEM format.",
+      "description": "The requester's encryption public key in Crypt4GH or PEM format.",
       "minLength": 20
     },
     "startCoordinate": {
