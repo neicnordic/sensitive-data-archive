@@ -495,9 +495,9 @@ func ResolveInboxPath(filePath, username string, cfg InboxProjectConfig) string 
 	}
 
 	userDir := cfg.Code + cfg.Delimiter + username
-	// Tolerate a leading separator from older proxy formats (e.g. "/p11-user/files/..."); without
-	// stripping it the prefix check below misses and userDir gets prepended a second time.
-	relPath := strings.TrimPrefix(filePath, "/")
+	// Tolerate leading separators from older proxy formats (e.g. "/p11-user/files/..."); without
+	// stripping them the prefix check below misses and userDir gets prepended a second time.
+	relPath := strings.TrimLeft(filePath, "/")
 	// Treat as already-resolved only on a path-segment boundary, so "p11-user2/..." is not mistaken
 	// for the "p11-user" directory. A submission path always has a file component, so relPath is
 	// never the bare userDir.
