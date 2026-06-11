@@ -66,6 +66,10 @@ func (m *mockDatabase) GetFileStatus(_ context.Context, _ string) (string, error
 	panic("function not expected to be called in unit tests")
 }
 
+func (m *mockDatabase) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	panic("function not expected to be called in unit tests")
+}
+
 func (m *mockDatabase) GetHeader(_ context.Context, _ string) ([]byte, error) {
 	panic("function not expected to be called in unit tests")
 }
@@ -207,6 +211,10 @@ func (m *mockDatabase) GetDatasetFileIDs(_ context.Context, _ string) ([]string,
 }
 
 func (m *mockDatabase) GetFileDetails(_ context.Context, fileUUID, event string) (*database.FileDetails, error) {
+	panic("function not expected to be called in unit tests")
+}
+
+func (m *mockDatabase) GetFileEvents(_ context.Context) ([]string, error) {
 	panic("function not expected to be called in unit tests")
 }
 

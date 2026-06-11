@@ -185,6 +185,7 @@ CREATE ROLE api;
 GRANT USAGE ON SCHEMA sda TO api;
 GRANT SELECT ON sda.files TO api;
 GRANT SELECT ON sda.file_dataset TO api;
+GRANT SELECT ON sda.file_events TO api;
 GRANT SELECT ON sda.checksums TO api;
 GRANT SELECT, INSERT ON sda.file_event_log TO api;
 GRANT SELECT ON sda.encryption_keys TO api;

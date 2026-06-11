@@ -26,6 +26,16 @@
           "action": "POST"
        },
        {
+          "role": "admin",
+          "path": "/file/events/:fileid",
+          "action": "GET"
+       },
+       {
+          "role": "admin",
+          "path": "/file/events/:fileid/:event",
+          "action": "POST"
+       },
+       {
           "role": "submission",
           "path": "/file/accession",
           "action": "POST"

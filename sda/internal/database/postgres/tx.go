@@ -70,6 +70,10 @@ func (tx *pgTx) GetFileStatus(ctx context.Context, fileID string) (string, error
 	return tx.getFileStatus(ctx, tx.tx, fileID)
 }
 
+func (tx *pgTx) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	return tx.getFileStatusHistory(ctx, tx.tx, fileID)
+}
+
 func (tx *pgTx) GetHeader(ctx context.Context, fileID string) ([]byte, error) {
 	return tx.getHeader(ctx, tx.tx, fileID)
 }
