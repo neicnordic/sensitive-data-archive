@@ -24,38 +24,36 @@ type TestSuite struct {
 	suite.Suite
 	token  string
 	mockDb mocks.MockDatabase
-	api API
+	api    API
 }
 
 func (ts *TestSuite) SetupSuite() {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	assert.NoError(ts.T(), err)
-
-	jwkKey, err := jwk.FromRaw(privateKey)
-	assert.NoError(ts.T(), err)
-
-	// Needs to be set for config.Load() but will not be used in the unit test
+	// Needs to be set for config.Load() but will not be used in testing
 	viper.Set("database.host", "")
 	viper.Set("database.user", "")
 	viper.Set("database.password", "")
 	viper.Set("rbac.path", "")
 	assert.NoError(ts.T(), config.Load())
 
+	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(ts.T(), err)
+
+	jwkKey, err := jwk.FromRaw(privatekey)
+	assert.NoError(ts.T(), err)
+
 	token, err := helper.CreateRSAToken(jwkKey, "RS256", helper.DefaultTokenClaims)
 	assert.NoError(ts.T(), err)
 	ts.token = token
 
-	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
-	assert.NoError(ts.T(), err)
-	publickey := &privatekey.PublicKey
-
-	publicKeyBytes, err := jwk.EncodePEM(publickey)
+	publicKeyBytes, err := jwk.EncodePEM(&privatekey.PublicKey)
 	assert.NoError(ts.T(), err)
 
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 	err = auth.ReadJwtPubKeyBytes(publicKeyBytes)
 	assert.NoError(ts.T(), err)
 	ts.api.auth = auth
+
+	ts.api.db = &mocks.MockDatabase{}
 }
 
 func (ts *TestSuite) TearDownSuite() {}

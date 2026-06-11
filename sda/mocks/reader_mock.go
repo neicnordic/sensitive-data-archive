@@ -24,4 +24,3 @@ func (r *MockReader) GetFileSize(_ context.Context, _, _ string) (int64, error) 
 	return int64(len(r.Data)), nil
 }
 func (r *MockReader) Ping(_ context.Context) error { return nil }
-

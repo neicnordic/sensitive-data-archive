@@ -147,7 +147,6 @@ func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 
 		return fmt.Errorf("jwtpubkeyurl is not a proper URL (%s)", jwkURL)
 	}
-	log.Info("jwkURL: ", jwtpubkeyurl)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

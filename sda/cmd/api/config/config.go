@@ -107,7 +107,7 @@ func init() {
 		&config.Flag{
 			Name: "jwtpubkeyurl",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "http://localhost:8080/oidc/jwk", "JWT public key URL")
+				flagSet.String(flagName, "http://localhost:8800/oidc/jwk", "JWT public key URL")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {

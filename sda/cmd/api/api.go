@@ -92,14 +92,12 @@ func run() error {
 	jwtPubKeyPath := apiconfig.JwtPubKeyPath()
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 
-	slog.Info("jwt", "public_key_url", jwtPubKeyURL)
 	if jwtPubKeyURL != "" {
 		if err := auth.FetchJwtPubKeyURL(jwtPubKeyURL); err != nil {
 			return fmt.Errorf("failed to read JWT public key URL, reason: %v", err)
 		}
 	}
 
-	slog.Info("jwt", "public_key_path", jwtPubKeyPath)
 	if jwtPubKeyPath != "" {
 		if err := auth.ReadJwtPubKeyPath(jwtPubKeyPath); err != nil {
 			return fmt.Errorf("failed to read JWT public key path, reason: %v", err)

@@ -18,7 +18,7 @@ type MockDatabase struct {
 	RegisterFileFunc                             func(ctx context.Context, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error)
 	GetUploadedSubmissionFilePathAndLocationFunc func(ctx context.Context, submissionUser, fileID string) (string, string, error)
 	GetFileIDByUserPathAndStatusFunc             func(ctx context.Context, submissionUser, filePath, status string) (string, error)
-	CheckAccessionIDOwnedByUserFunc             func(ctx context.Context, accessionID, user string) (bool, error)
+	CheckAccessionIDOwnedByUserFunc              func(ctx context.Context, accessionID, user string) (bool, error)
 	UpdateFileEventLogFunc                       func(ctx context.Context, fileID, event, user, details, message string) error
 	StoreHeaderFunc                              func(ctx context.Context, header []byte, id string) error
 	RotateHeaderKeyFunc                          func(ctx context.Context, header []byte, keyHash, fileID string) error
@@ -47,6 +47,94 @@ type MockDatabase struct {
 	GetArchiveLocationFunc                       func(ctx context.Context, fileID string) (string, error)
 	SetSubmissionFileSizeFunc                    func(ctx context.Context, fileID string, size int64) error
 	GetUserFilesFunc                             func(ctx context.Context, userID, pathPrefix string, allData bool, limit int, cursor string) ([]*database.SubmissionFileInfo, string, error)
+	AddKeyHashFunc                               func(ctx context.Context, keyHash, keyDescription string) error
+	DeprecateKeyHashFunc                         func(ctx context.Context, keyHash string) error
+	GetDatasetFilesFunc                          func(ctx context.Context, datasetID string) ([]string, error)
+	GetDatasetFileIDsFunc                        func(ctx context.Context, datasetID string) ([]string, error)
+	GetDatasetStatusFunc                         func(ctx context.Context, datasetID string) (string, error)
+	GetDecryptedChecksumFunc                     func(ctx context.Context, fileID string) (string, error)
+	GetReVerificationDataFunc                    func(ctx context.Context, accessionID string) (*database.ReVerificationData, error)
+	GetFileDetailsFunc                           func(ctx context.Context, fileID, event string) (*database.FileDetails, error)
+	GetKeyHashFunc                               func(ctx context.Context, fileID string) (string, error)
+	GetReVerificationDataFromFileIDFunc          func(ctx context.Context, fileID string) (*database.ReVerificationData, error)
+	GetSizeAndObjectCountOfLocationFunc          func(ctx context.Context, location string) (uint64, uint64, error)
+	ListActiveUsersFunc                          func(ctx context.Context) ([]string, error)
+	SetBackedUpFunc                              func(ctx context.Context, location, path, fileID string) error
+	ListDatasetsFunc                             func(ctx context.Context) ([]*database.DatasetInfo, error)
+	ListKeyHashesFunc                            func(ctx context.Context) ([]*database.C4ghKeyHash, error)
+	ListUserDatasetsFunc                         func(ctx context.Context, submissionUser string) ([]*database.DatasetInfo, error)
+	SetKeyHashFunc                               func(ctx context.Context, keyHash, fileID string) error
+	UpdateUserInfoFunc                           func(ctx context.Context, userID, name, email string, groups []string) error
+}
+
+func (m *MockDatabase) UpdateUserInfo(ctx context.Context, userID, name, email string, groups []string) error {
+	return nil
+}
+
+func (m *MockDatabase) SetKeyHash(ctx context.Context, keyHash, fileID string) error {
+	return nil
+}
+
+func (m *MockDatabase) SetBackedUp(ctx context.Context, location, path, fileID string) error {
+	return nil
+}
+
+func (m *MockDatabase) ListUserDatasets(ctx context.Context, submissionUser string) ([]*database.DatasetInfo, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) ListKeyHashes(ctx context.Context) ([]*database.C4ghKeyHash, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) ListDatasets(ctx context.Context) ([]*database.DatasetInfo, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) ListActiveUsers(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error) {
+	return 0, 0, nil
+}
+
+func (m *MockDatabase) GetReVerificationData(ctx context.Context, accessionID string) (*database.ReVerificationData, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) GetReVerificationDataFromFileID(ctx context.Context, fileID string) (*database.ReVerificationData, error) {
+	return nil, nil
+}
+func (m *MockDatabase) GetKeyHash(ctx context.Context, fileID string) (string, error) {
+	return "", nil
+}
+
+func (m *MockDatabase) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {
+	return nil, nil
+}
+func (m *MockDatabase) GetDecryptedChecksum(ctx context.Context, fileID string) (string, error) {
+	return "", nil
+}
+
+func (m *MockDatabase) GetDatasetStatus(ctx context.Context, datasetID string) (string, error) {
+	return "", nil
+}
+
+func (m *MockDatabase) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) GetDatasetFiles(ctx context.Context, datasetID string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockDatabase) AddKeyHash(ctx context.Context, keyHash, keyDescription string) error {
+	return nil
+}
+
+func (m *MockDatabase) DeprecateKeyHash(ctx context.Context, keyHash string) error {
+	return nil
 }
 
 func (m *MockDatabase) BeginTransaction(ctx context.Context) (database.Transaction, error) {
