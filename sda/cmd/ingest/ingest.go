@@ -37,13 +37,14 @@ import (
 )
 
 type Ingest struct {
-	ArchiveWriter  storage.Writer
-	BackupWriter   storage.Writer
-	ArchiveReader  storage.Reader
-	ArchiveKeyList []*[32]byte
-	db             database.Database
-	InboxReader    storage.Reader
-	Broker         brokerv2.Broker
+	ArchiveWriter      storage.Writer
+	BackupWriter       storage.Writer
+	ArchiveReader      storage.Reader
+	ArchiveKeyList     []*[32]byte
+	db                 database.Database
+	InboxReader        storage.Reader
+	InboxProjectConfig helper.InboxProjectConfig
+	Broker             brokerv2.Broker
 }
 
 type decryptResult struct {
@@ -68,6 +69,10 @@ func run() error {
 
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
+	}
+	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
 
 	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
@@ -297,7 +302,9 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// Catch all for implementations inbox uploading that does not register the file in the DB, e.g. for those not using S3inbox or sftpInbox
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
 		var findFileErr, registerErr error
-		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, message.Key)
+		// message.Key is the broker correlation-id, not the submission path; use the trigger's
+		// filePath and resolve it to the physical inbox path before locating it.
+		submissionLocation, findFileErr = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 
 		// Ideally this transaction should span the whole message processing, but for now just spans the RegisterFile
 		tx, err := app.db.BeginTransaction(ctx)
@@ -308,7 +315,8 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		}
 
 		// Register file even if FindFile didnt succeed with submissionLocation == "", as we will add an error file event log to it in that case
-		fileID, registerErr = tx.RegisterFile(ctx, &fileID, submissionLocation, message.Key, user)
+		// Store the anonymized submission path (filePath), not the correlation-id, so the mapper can resolve it back on cleanup.
+		fileID, registerErr = tx.RegisterFile(ctx, &fileID, submissionLocation, filePath, user)
 		if registerErr != nil {
 			log.Errorf("failed to register file, fileID: %s, reason: (%s)", fileID, registerErr.Error())
 			if err := tx.Rollback(); err != nil {
@@ -328,15 +336,17 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 			return []func(){app.errorQueue(message), app.setErrorEvent(findFileErr.Error(), message)}, nil
 		}
 
-		return nil, nil
+		// File is now registered; fall through to read + decrypt + archive in a single pass, the same
+		// way a pre-registered "uploaded" file is handled. Returning here would leave a non-s3inbox
+		// upload stuck at "registered", so verify never runs.
 
 	default:
-		log.Warnf("file: %s recieved ingestion trigger with status: %s", fileID, status)
+		log.Warnf("file: %s received ingestion trigger with status: %s", fileID, status)
 
 		return nil, fmt.Errorf("cannot ingest file with status: %s", status)
 	}
 
-	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.UnanonymizeFilepath(filePath, user))
+	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 	if err != nil {
 		log.Errorf("failed to read file, due to: %v", err)
 

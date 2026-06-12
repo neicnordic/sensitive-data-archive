@@ -544,7 +544,7 @@ func deleteFile(c *gin.Context) {
 		return
 	}
 
-	filePath = helper.UnanonymizeFilepath(filePath, submissionUser)
+	filePath = helper.ResolveInboxPath(filePath, submissionUser, Conf.Inbox)
 	for count := 1; count <= 5; count++ {
 		err = inboxWriter.RemoveFile(c, location, filePath)
 		if err == nil {
@@ -639,9 +639,10 @@ func downloadFile(c *gin.Context) {
 
 	// Get inbox file handle #noqa
 	file, err := inboxReader.NewFileReader(c, location,
-		helper.UnanonymizeFilepath(
+		helper.ResolveInboxPath(
 			filePath,
 			strings.TrimPrefix(c.Param("username"), "/"),
+			Conf.Inbox,
 		),
 	)
 	if err != nil {

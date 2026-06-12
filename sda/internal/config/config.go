@@ -7,9 +7,11 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -40,6 +42,7 @@ type Config struct {
 	ReEncrypt    ReEncConfig
 	Auth         AuthConf
 	RotateKey    RotateKeyConf
+	Inbox        helper.InboxProjectConfig
 }
 
 type Grpc struct {
@@ -376,6 +379,10 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
+		c.Inbox, err = LoadInboxProjectConfig()
+		if err != nil {
+			return nil, err
+		}
 
 		c.API.Grpc, err = configReEncryptClient()
 		if err != nil {
@@ -451,6 +458,10 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
+		c.Inbox, err = LoadInboxProjectConfig()
+		if err != nil {
+			return nil, err
+		}
 	case "notify":
 		c.configSMTP()
 
@@ -766,6 +777,41 @@ func (c *Config) configReEncryptServer() (err error) {
 	}
 
 	return nil
+}
+
+// LoadInboxProjectConfig reads the per-user inbox directory layout from the shared viper instance.
+// An absent section yields the zero value, which is stock SDA behavior, so deployments that omit it
+// are unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
+// (mapper, api) and directly by the ingest service, which loads through config/v2 but populates
+// the same viper instance. Setting only one of the two keys is an error. Code and delimiter join
+// with the username into ONE inbox directory name, so the delimiter is restricted to "-", "_" or
+// "." and the code must not contain path separators, whitespace or control characters: anything
+// else would corrupt or split the layout.
+func LoadInboxProjectConfig() (helper.InboxProjectConfig, error) {
+	cfg := helper.InboxProjectConfig{
+		Code:      viper.GetString("storage.inbox.projectCode"),
+		Delimiter: viper.GetString("storage.inbox.projectCodeDelimiter"),
+	}
+	switch {
+	case cfg.Code == "" && cfg.Delimiter == "":
+		return cfg, nil
+	case cfg.Code == "" || cfg.Delimiter == "":
+		return helper.InboxProjectConfig{}, errors.New("storage.inbox.projectCode and storage.inbox.projectCodeDelimiter must be set together")
+	}
+
+	switch cfg.Delimiter {
+	case "-", "_", ".":
+	default:
+		return helper.InboxProjectConfig{}, fmt.Errorf("storage.inbox.projectCodeDelimiter %q is not a delimiter character (use \"-\", \"_\" or \".\")", cfg.Delimiter)
+	}
+
+	for _, r := range cfg.Code {
+		if r == '/' || r == '\\' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return helper.InboxProjectConfig{}, fmt.Errorf("storage.inbox.projectCode %q must not contain path separators or whitespace", cfg.Code)
+		}
+	}
+
+	return cfg, nil
 }
 
 // configSchemas configures the schemas to load depending on

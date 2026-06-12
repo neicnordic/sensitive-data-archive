@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -611,4 +612,100 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
 	_, err = NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_readsNestedStorageInboxKeys() {
+	// Each service loads its config.yaml into the shared global viper (mapper/api via NewConfig,
+	// ingest via config/v2). LoadInboxProjectConfig then reads it. Prove the nested storage.inbox.*
+	// block flattens to the dotted keys it reads: the seam the projectCode resolver depends on.
+	viper.Reset()
+	viper.SetConfigType("yaml")
+	cfg := "storage:\n  inbox:\n    projectCode: p11\n    projectCodeDelimiter: \"-\"\n"
+	assert.NoError(ts.T(), viper.ReadConfig(bytes.NewBufferString(cfg)))
+
+	got, err := LoadInboxProjectConfig()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "p11", got.Code)
+	assert.Equal(ts.T(), "-", got.Delimiter)
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_absentSectionIsStock() {
+	// With no storage.inbox section LoadInboxProjectConfig yields the zero value, which
+	// ResolveInboxPath treats as stock SDA behavior, so deployments that omit it (e.g. the Swedish
+	// node) are unaffected.
+	viper.Reset()
+	got, err := LoadInboxProjectConfig()
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "", got.Code)
+	assert.Equal(ts.T(), "", got.Delimiter)
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_halfConfigured_errors() {
+	// A project code without a delimiter would silently glue code and username together
+	// ("p11username"); a delimiter without a code would be silently ignored. Both are
+	// misconfigurations that must fail at startup, not produce garbage paths at runtime.
+	viper.Reset()
+	viper.Set("storage.inbox.projectCode", "p11")
+	_, err := LoadInboxProjectConfig()
+	assert.ErrorContains(ts.T(), err, "must be set together")
+
+	viper.Reset()
+	viper.Set("storage.inbox.projectCodeDelimiter", "-")
+	_, err = LoadInboxProjectConfig()
+	assert.ErrorContains(ts.T(), err, "must be set together")
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_projectCodeMustBeSingleSegment() {
+	// The code prefixes ONE per-user directory name. Path separators would silently split it into
+	// multiple segments ("p11/" -> "p11/-user/..."), and whitespace or control characters produce
+	// directory names no deployment intends. Free text otherwise: codes are deployment-specific.
+	load := func(code string) error {
+		viper.Reset()
+		viper.Set("storage.inbox.projectCode", code)
+		viper.Set("storage.inbox.projectCodeDelimiter", "-")
+		_, err := LoadInboxProjectConfig()
+
+		return err
+	}
+
+	for _, bad := range []string{"p11/", "/p11", "p\\11", "p 11", "p\t11", "p\n11"} {
+		assert.ErrorContains(ts.T(), load(bad), "must not contain",
+			"project code %q should be rejected", bad)
+	}
+	for _, good := range []string{"p11", "fega-no", "P11.x"} {
+		assert.NoError(ts.T(), load(good), "project code %q should be accepted", good)
+	}
+}
+
+func (ts *ConfigTestSuite) TestNewConfig_inboxProjectMisconfig_failsStartup() {
+	// The loader's validation must propagate out of NewConfig: a half-configured inbox project
+	// section stops the service at startup instead of producing garbage paths at runtime.
+	viper.Set("storage.inbox.projectCode", "p11")
+	defer viper.Reset()
+
+	_, err := NewConfig("mapper")
+	assert.ErrorContains(ts.T(), err, "must be set together")
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_delimiterMustBeSeparatorCharacter() {
+	// The delimiter joins code and username into ONE inbox directory name ("p11-user"), so only the
+	// whitelisted separators "-", "_" and "." are accepted. Letters and digits would blur the
+	// code/username boundary, "/" would split the directory across two path segments, and
+	// whitespace or control characters would produce miserable directory names.
+	load := func(delimiter string) error {
+		viper.Reset()
+		viper.Set("storage.inbox.projectCode", "p11")
+		viper.Set("storage.inbox.projectCodeDelimiter", delimiter)
+		_, err := LoadInboxProjectConfig()
+
+		return err
+	}
+
+	for _, bad := range []string{"x", "Q", "1", "/", "\\", " ", "\t", "\n", "+", "★", "--", "p11"} {
+		assert.ErrorContains(ts.T(), load(bad), "not a delimiter character",
+			"delimiter %q should be rejected", bad)
+	}
+	for _, good := range []string{"-", "_", "."} {
+		assert.NoError(ts.T(), load(good), "delimiter %q should be accepted", good)
+	}
 }
