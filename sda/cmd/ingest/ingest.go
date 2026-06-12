@@ -341,7 +341,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// upload stuck at "registered", so verify never runs.
 
 	default:
-		log.Warnf("file: %s recieved ingestion trigger with status: %s", fileID, status)
+		log.Warnf("file: %s received ingestion trigger with status: %s", fileID, status)
 
 		return nil, fmt.Errorf("cannot ingest file with status: %s", status)
 	}
