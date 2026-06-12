@@ -270,7 +270,7 @@ func (c *Map) configureOIDC() error {
 func (c *Map) configReencrypt() error {
 	c.Reencrypt.Host = viper.GetString("grpc.host")
 	viper.SetDefault("grpc.port", 50051)
-	viper.SetDefault("grpc.timeout", 5) // set default to 5 seconds
+	viper.SetDefault("grpc.timeout", 15) // set default to 15 seconds
 	if viper.IsSet("grpc.port") {
 		c.Reencrypt.Port = viper.GetInt("grpc.port")
 	}

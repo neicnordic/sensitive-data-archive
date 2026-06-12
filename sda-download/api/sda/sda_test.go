@@ -1401,6 +1401,54 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 	ArchiveReader = nil
 }
 
+func TestSendStream_ReadNoProgress(t *testing.T) {
+	w := httptest.NewRecorder()
+	err := sendStream(context.Background(), zeroProgressReader{}, w, 0, 1)
+	assert.ErrorIs(t, err, io.ErrNoProgress)
+}
+
+func TestSendStream_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	w := httptest.NewRecorder()
+	err := sendStream(ctx, bytes.NewReader([]byte("abc")), w, 0, 3)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestSendStream_WriteNoProgress(t *testing.T) {
+	w := &zeroProgressWriter{header: make(http.Header)}
+	err := sendStream(context.Background(), bytes.NewReader([]byte("abc")), w, 0, 3)
+	assert.ErrorIs(t, err, io.ErrShortWrite)
+}
+
+func TestSendStream_FlushesWhenSupported(t *testing.T) {
+	w := httptest.NewRecorder()
+	err := sendStream(context.Background(), bytes.NewReader([]byte("abcdef")), w, 0, 6)
+	assert.NoError(t, err)
+	assert.True(t, w.Flushed)
+}
+
+type zeroProgressReader struct{}
+
+func (zeroProgressReader) Read(_ []byte) (int, error) {
+	return 0, nil
+}
+
+type zeroProgressWriter struct {
+	header http.Header
+}
+
+func (w *zeroProgressWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *zeroProgressWriter) Write(_ []byte) (int, error) {
+	return 0, nil
+}
+
+func (w *zeroProgressWriter) WriteHeader(_ int) {}
+
 type mockBackend struct {
 	file []byte
 }
