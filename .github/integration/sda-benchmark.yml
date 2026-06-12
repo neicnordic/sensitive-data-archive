@@ -159,3 +159,9 @@ services:
         condition: service_started
       download-old:
         condition: service_started
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
