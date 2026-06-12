@@ -666,9 +666,10 @@ func (ts *ConfigTestSuite) TestNewConfig_inboxProjectMisconfig_failsStartup() {
 }
 
 func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_delimiterMustBeSeparatorCharacter() {
-	// The delimiter joins code and username into ONE inbox directory name ("p11-user"), so it must
-	// be a single character that is not a letter, not a digit, and not "/" (a slash would split the
-	// user directory across two path segments and break the on-disk layout assumption).
+	// The delimiter joins code and username into ONE inbox directory name ("p11-user"), so only the
+	// whitelisted separators "-", "_" and "." are accepted. Letters and digits would blur the
+	// code/username boundary, "/" would split the directory across two path segments, and
+	// whitespace or control characters would produce miserable directory names.
 	load := func(delimiter string) error {
 		viper.Reset()
 		viper.Set("storage.inbox.projectCode", "p11")
@@ -678,7 +679,7 @@ func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_delimiterMustBeSeparatorCh
 		return err
 	}
 
-	for _, bad := range []string{"x", "Q", "1", "/", "--", "p11"} {
+	for _, bad := range []string{"x", "Q", "1", "/", "\\", " ", "\t", "\n", "+", "★", "--", "p11"} {
 		assert.ErrorContains(ts.T(), load(bad), "not a delimiter character",
 			"delimiter %q should be rejected", bad)
 	}
