@@ -131,6 +131,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
-
-*(empty at the time this folder is introduced; entries added as RFCs are
-written)*
+| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere? | exploring | — |
