@@ -90,7 +90,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/accession`
   - accepts `POST` requests with either:
-    - A JSON playload: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+    - A JSON payload: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
     - OR query parameters: `/file/accession?fileid=<FILE_UUID>&accessionid=<ACCESSION_ID>`
   - assigns accession ID to the file.
 
@@ -352,13 +352,13 @@ The path to the JSON file containing the RBAC policies needs to be passed throug
 
 The `policy` section will configure access to the defined endpoints. Unless specific rules are set, an endpoint will not be accessible.
 
-- `action`: can be single string value i,e `GET` or a regex string with `|` as separator i.e. `(GET)|(POST)|(PUT)`. In the later case all actions in the list are allowed.
+- `action`: can be single string value i.e. `GET` or a regex string with `|` as separator i.e. `(GET)|(POST)|(PUT)`. In the latter case all actions in the list are allowed.
 - `path`: the endpoint. Should be a string value with two different wildcard notations: `*`, matches any value and `:` that matches a specific named value
 - `role`: the role that will be able to access the path, `"*"` will match any role or user.
 
 The `roles` section defines the available roles
 
-- `role`: rolename or username from the accesstoken
+- `role`: rolename or username from the access token
 - `roleBinding`: maps a user/role to another role, this makes roles work as groups which simplifies the policy definitions.
 
 ```json
