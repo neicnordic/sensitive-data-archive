@@ -478,17 +478,19 @@ type InboxProjectConfig struct {
 }
 
 // ResolveInboxPath reconstructs the physical inbox-relative path for an anonymized submission
-// filePath. An already-resolved path (e.g. on reprocessing) is returned as-is, with any leading
-// separator normalized away.
+// filePath.
 //
-// With no Code it is the stock round-trip, deferring to UnanonymizeFilepath (normalize the
-// username — first "@"->"_" — and prepend "<user>/"), so existing deployments are unaffected.
+// With no Code it is the stock round-trip, deferring to UnanonymizeFilepath unchanged (normalize
+// the username, first "@" -> "_", and prepend "<user>/"), so existing deployments are unaffected,
+// edge inputs included.
 //
-// With a Code it rebuilds "<Code><delimiter><username>/<filePath>" using the RAW
-// username. Whether to normalize is derived from the project code rather than configured
-// separately: a project code denotes a TSD-style inbox namespaced by project (e.g. FEGA-Norway's
-// "p11-dummy@elixir-europe.org/files/..."), which stores the username verbatim. No current
-// deployment needs a project code together with normalization; add an explicit toggle if one does.
+// With a Code it rebuilds "<Code><delimiter><username>/<filePath>" using the RAW username. In
+// this branch an already-resolved path (e.g. on reprocessing) is returned as-is, with any leading
+// separator normalized away. Whether to normalize is derived from the project code rather than
+// configured separately: a project code denotes a TSD-style inbox namespaced by project (e.g.
+// FEGA-Norway's "p11-dummy@elixir-europe.org/files/..."), which stores the username verbatim. No
+// current deployment needs a project code together with normalization; add an explicit toggle if
+// one does.
 func ResolveInboxPath(filePath, username string, cfg InboxProjectConfig) string {
 	if cfg.Code == "" {
 		return UnanonymizeFilepath(filePath, username)
