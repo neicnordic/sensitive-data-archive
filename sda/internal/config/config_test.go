@@ -655,6 +655,28 @@ func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_halfConfigured_errors() {
 	assert.ErrorContains(ts.T(), err, "must be set together")
 }
 
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_projectCodeMustBeSingleSegment() {
+	// The code prefixes ONE per-user directory name. Path separators would silently split it into
+	// multiple segments ("p11/" -> "p11/-user/..."), and whitespace or control characters produce
+	// directory names no deployment intends. Free text otherwise: codes are deployment-specific.
+	load := func(code string) error {
+		viper.Reset()
+		viper.Set("storage.inbox.projectCode", code)
+		viper.Set("storage.inbox.projectCodeDelimiter", "-")
+		_, err := LoadInboxProjectConfig()
+
+		return err
+	}
+
+	for _, bad := range []string{"p11/", "/p11", "p\\11", "p 11", "p\t11", "p\n11"} {
+		assert.ErrorContains(ts.T(), load(bad), "must not contain",
+			"project code %q should be rejected", bad)
+	}
+	for _, good := range []string{"p11", "fega-no", "P11.x"} {
+		assert.NoError(ts.T(), load(good), "project code %q should be accepted", good)
+	}
+}
+
 func (ts *ConfigTestSuite) TestNewConfig_inboxProjectMisconfig_failsStartup() {
 	// The loader's validation must propagate out of NewConfig: a half-configured inbox project
 	// section stops the service at startup instead of producing garbage paths at runtime.

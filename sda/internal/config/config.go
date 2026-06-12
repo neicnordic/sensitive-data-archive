@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -782,9 +783,10 @@ func (c *Config) configReEncryptServer() (err error) {
 // An absent section yields the zero value, which is stock SDA behavior, so deployments that omit it
 // are unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
 // (mapper, api) and directly by the ingest service, which loads through config/v2 but populates
-// the same viper instance. Setting only one of the two keys is an error. The delimiter joins code
-// and username into one inbox directory name, so only "-", "_" and "." are accepted: anything else
-// (letters, digits, "/", whitespace) would corrupt or split the layout.
+// the same viper instance. Setting only one of the two keys is an error. Code and delimiter join
+// with the username into ONE inbox directory name, so the delimiter is restricted to "-", "_" or
+// "." and the code must not contain path separators, whitespace or control characters: anything
+// else would corrupt or split the layout.
 func LoadInboxProjectConfig() (helper.InboxProjectConfig, error) {
 	cfg := helper.InboxProjectConfig{
 		Code:      viper.GetString("storage.inbox.projectCode"),
@@ -801,6 +803,12 @@ func LoadInboxProjectConfig() (helper.InboxProjectConfig, error) {
 	case "-", "_", ".":
 	default:
 		return helper.InboxProjectConfig{}, fmt.Errorf("storage.inbox.projectCodeDelimiter %q is not a delimiter character (use \"-\", \"_\" or \".\")", cfg.Delimiter)
+	}
+
+	for _, r := range cfg.Code {
+		if r == '/' || r == '\\' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return helper.InboxProjectConfig{}, fmt.Errorf("storage.inbox.projectCode %q must not contain path separators or whitespace", cfg.Code)
+		}
 	}
 
 	return cfg, nil
