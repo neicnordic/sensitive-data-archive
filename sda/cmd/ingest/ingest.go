@@ -70,7 +70,10 @@ func run() error {
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
-	app.InboxProjectConfig = config.LoadInboxProjectConfig()
+	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load inbox project config: %v", err)
+	}
 
 	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
 	if err != nil {
