@@ -1,5 +1,5 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
-{{- if and (eq "posix" .Values.global.inbox.storageType) .Values.global.tls.enabled }}
+{{- if and (not (empty .Values.global.inbox.posix)) .Values.global.tls.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -149,6 +149,10 @@ spec:
           value: "PKCS12"
         - name: USE_SSL
           value: "true"
+        {{- if .Values.global.inbox.posix }}
+        - name: INBOX_LOCATION
+          value: {{ (index .Values.global.inbox.posix 0).path | quote }}
+        {{- end }}
         ports:
         - name: inbox
           containerPort: 2222
@@ -158,8 +162,14 @@ spec:
         readinessProbe:
 {{ toYaml .Values.sftpInbox.readinessProbe | trim | indent 10 }}
         volumeMounts:
+      {{- if .Values.global.inbox.posix }}
+        {{- include "sda.posixVolumeMounts" (dict
+            "config" .Values.global.inbox
+            "name" "inbox") | nindent 8 }}
+      {{- else }}
         - name: inbox
           mountPath: "/ega/inbox"
+      {{- end }}
         - name: tmp
           mountPath: "/etc/ssl/certs/java"
         - name: tmp
@@ -168,15 +178,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: inbox
-      {{- if .Values.global.inbox.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.inbox.existingClaim }}
-      {{- else }}
-          nfs:
-            server: {{ required "An inbox NFS server is required" .Values.global.inbox.nfsServer | quote }}
-            path: {{ if .Values.global.inbox.nfsPath }}{{ .Values.global.inbox.nfsPath | quote}}{{ else }}{{ "/" }}{{ end }}
-      {{- end }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.inbox
+            "name" "inbox") | nindent 8 }}
         - name: tls-certs
           projected:
             sources:

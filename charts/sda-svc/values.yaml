@@ -117,42 +117,64 @@ global:
     jwtSecret:
     rbacFileSecret: ""
   archive:
-    storageType: "" # s3 or posix
-    maxObjects: null
-    maxSize: ""
     locationBrokerCacheTTL: ""
-    # The lines below are only used when storageType is "S3"
-    s3Url: ""
-    s3BucketPrefix: "archive"
-    s3Region: "us-east-1"
-    s3ChunkSize: ""
-    s3AccessKey: null
-    s3SecretKey: null
-    s3Port: 443
-    maxBuckets: 1
-    # The lines below are only used when storageType is "posix"
-    volumePath: "/archive"
-    nfsServer: ""
-    nfsPath: ""
+
+    # Multi-endpoint list shape (chart 4.0.0+).
+    # At least one of s3 or posix must be non-empty for a backend that
+    # needs storage.
+    s3: []
+    # Example entry:
+    # - endpoint: https://storage1.example.com
+    #   port: 443
+    #   bucketPrefix: archive
+    #   region: us-east-1
+    #   accessKey: ""
+    #   secretKey: ""
+    #   chunkSize: ""
+    #   maxBuckets: 1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    posix: []
+    # Example entry:
+    # - path: /archive_1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    #   volume:
+    #     existingClaim: ""
+    #     nfsServer: ""
+    #     nfsPath: ""
 
   backupArchive:
-    storageType: "" # s3 or posix, leave empty for no backup
-    maxObjects: null
-    maxSize: ""
     locationBrokerCacheTTL: ""
-    # The lines below are only used when storageType is "S3"
-    s3Url: ""
-    s3BucketPrefix: "backup"
-    s3Region: "us-east-1"
-    s3ChunkSize: ""
-    s3AccessKey: null
-    s3SecretKey: null
-    s3Port: 443
-    maxBuckets: 1
-    # The lines below are only used when storageType is "posix"
-    volumePath: "/backup"
-    nfsServer: ""
-    nfsPath: ""
+
+    # Multi-endpoint list shape (chart 4.0.0+).
+    # At least one of s3 or posix must be non-empty for a backend that
+    # needs storage.
+    s3: []
+    # Example entry:
+    # - endpoint: https://storage1.example.com
+    #   port: 443
+    #   bucketPrefix: backup
+    #   region: us-east-1
+    #   accessKey: ""
+    #   secretKey: ""
+    #   chunkSize: ""
+    #   maxBuckets: 1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    posix: []
+    # Example entry:
+    # - path: /backup_1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    #   volume:
+    #     existingClaim: ""
+    #     nfsServer: ""
+    #     nfsPath: ""
 
   auth:
     # @param jwtSecret, name of the secret holding the jwt signing key
@@ -380,19 +402,34 @@ global:
     readyPath: ""
 
   inbox:
-    storageType: ""
-  # These lines below are only used with posix
-    volumePath: "/inbox"
-    nfsServer: ""
-    nfsPath: ""
-    existingClaim: ""
-  # These lines below are only used with s3
-    s3Url: ""
-    s3BucketPrefix: "inbox"
-    s3AccessKey: null
-    s3SecretKey: null
-    s3Port: 443
-    s3Region: ""
+    locationBrokerCacheTTL: ""
+
+    # Multi-endpoint list shape (chart 4.0.0+).
+    # At least one of s3 or posix must be non-empty for a backend that
+    # needs storage.
+    s3: []
+    # Example entry:
+    # - endpoint: https://storage1.example.com
+    #   port: 443
+    #   bucketPrefix: inbox
+    #   region: us-east-1
+    #   accessKey: ""
+    #   secretKey: ""
+    #   chunkSize: ""
+    #   maxBuckets: 1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    posix: []
+    # Example entry:
+    # - path: /inbox_1
+    #   maxObjects: 0
+    #   maxSize: ""
+    #   writerDisabled: false
+    #   volume:
+    #     existingClaim: ""
+    #     nfsServer: ""
+    #     nfsPath: ""
 
   reencrypt:
     host: ""
@@ -406,17 +443,34 @@ global:
     brokerQueue: ""
     centerPrefix: ""
     destination:
-      s3Url: ""
-      s3Port: 443
-      s3AccessKey: ""
-      s3SecretKey: ""
-      s3BucketPrefix: "sync"
-      s3Region: "us-east-1"
-      s3ChunkSize: ""
       locationBrokerCacheTTL: ""
-      maxBuckets: 1
-      maxObjects: null
-      maxSize: ""
+
+      # Multi-endpoint list shape (chart 4.0.0+).
+      # At least one of s3 or posix must be non-empty for a backend that
+      # needs storage.
+      s3: []
+      # Example entry:
+      # - endpoint: https://storage1.example.com
+      #   port: 443
+      #   bucketPrefix: sync
+      #   region: us-east-1
+      #   accessKey: ""
+      #   secretKey: ""
+      #   chunkSize: ""
+      #   maxBuckets: 1
+      #   maxObjects: 0
+      #   maxSize: ""
+      #   writerDisabled: false
+      posix: []
+      # Example entry:
+      # - path: /sync_1
+      #   maxObjects: 0
+      #   maxSize: ""
+      #   writerDisabled: false
+      #   volume:
+      #     existingClaim: ""
+      #     nfsServer: ""
+      #     nfsPath: ""
     remote:
       host: ""
       port: ""

@@ -1,5 +1,5 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
-{{- if eq "s3" .Values.global.inbox.storageType }}
+{{- if not (empty .Values.global.inbox.s3) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

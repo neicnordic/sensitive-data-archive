@@ -70,12 +70,11 @@ render_matrix() {
 
     local base=(
         --set global.deploymentType=external
+        --set global.schemaType=isolated
         --set global.download.enabled=false
         --set global.doa.enabled=false
         --set global.db.host=db --set global.db.user=u --set global.db.password=p
         --set global.broker.host=mq --set global.broker.username=u --set global.broker.password=p
-        --set global.archive.s3Url=http://s3
-        --set global.archive.s3AccessKey=a --set global.archive.s3SecretKey=s
         --set global.reencrypt.host=r
         --set global.api.jwtSecret=s --set global.api.rbacFileSecret=r
         --set global.oidc.id=id --set global.oidc.secret=s --set global.oidc.provider=http://oidc
@@ -88,10 +87,19 @@ render_matrix() {
         --set global.ingress.hostName.download=download.t
         --set global.ingress.hostName.syncapi=syncapi.t
         --set global.ingress.hostName.downloadV2=dl-v2.t
+        --set global.ingress.hostName.s3Inbox=s3-inbox.t
         --set global.downloadV2.enabled=true
         --set global.downloadV2.service.orgName=TestOrg
         --set global.downloadV2.service.orgURL=http://t
         --set downloadV2.replicaCount=1
+        --set 'global.inbox.s3[0].endpoint=http://s3-inbox'
+        --set 'global.inbox.s3[0].accessKey=a'
+        --set 'global.inbox.s3[0].secretKey=s'
+        --set 'global.inbox.s3[0].bucketPrefix=inbox'
+        --set global.s3Inbox.url=http://s3-inbox
+        --set global.s3Inbox.accessKey=a
+        --set global.s3Inbox.secretKey=s
+        --set global.s3Inbox.bucket=inbox
     )
 
     for tls in false true; do
@@ -101,15 +109,20 @@ render_matrix() {
                     local desc="tls=$tls storage=$storage ingress=$ingress netpol=$netpol"
                     local args=("${base[@]}"
                         --set "global.tls.enabled=$tls"
-                        --set "global.archive.storageType=$storage"
                         --set "global.ingress.deploy=$ingress"
                         --set "global.networkPolicy.create=$netpol"
                     )
                     if [ "$tls" = "true" ]; then
                         args+=(--set global.tls.issuer=test-issuer)
                     fi
-                    if [ "$storage" = "posix" ]; then
-                        args+=(--set global.archive.existingClaim=archive-pvc)
+                    if [ "$storage" = "s3" ]; then
+                        args+=(--set 'global.archive.s3[0].endpoint=http://s3'
+                               --set 'global.archive.s3[0].accessKey=a'
+                               --set 'global.archive.s3[0].secretKey=s'
+                               --set 'global.archive.s3[0].bucketPrefix=archive')
+                    else
+                        args+=(--set 'global.archive.posix[0].path=/archive'
+                               --set 'global.archive.posix[0].volume.existingClaim=archive-pvc')
                     fi
                     if helm template test charts/sda-svc "${args[@]}" >/dev/null 2>&1; then
                         echo "  PASS  $desc"
@@ -129,11 +142,27 @@ render_matrix() {
         echo "  Failing combinations:"
         for c in "${failed[@]}"; do
             echo "    - $c"
-            helm template test charts/sda-svc "${base[@]}" \
-                --set "global.tls.enabled=$(echo "$c" | sed -n 's/.*tls=\([^ ]*\).*/\1/p')" \
-                --set "global.archive.storageType=$(echo "$c" | sed -n 's/.*storage=\([^ ]*\).*/\1/p')" \
-                --set "global.ingress.deploy=$(echo "$c" | sed -n 's/.*ingress=\([^ ]*\).*/\1/p')" \
-                --set "global.networkPolicy.create=$(echo "$c" | sed -n 's/.*netpol=\([^ ]*\).*/\1/p')" \
+            local c_tls c_storage c_ingress c_netpol repro=()
+            c_tls=$(echo "$c" | sed -n 's/.*tls=\([^ ]*\).*/\1/p')
+            c_storage=$(echo "$c" | sed -n 's/.*storage=\([^ ]*\).*/\1/p')
+            c_ingress=$(echo "$c" | sed -n 's/.*ingress=\([^ ]*\).*/\1/p')
+            c_netpol=$(echo "$c" | sed -n 's/.*netpol=\([^ ]*\).*/\1/p')
+            repro=(--set "global.tls.enabled=$c_tls"
+                   --set "global.ingress.deploy=$c_ingress"
+                   --set "global.networkPolicy.create=$c_netpol")
+            if [ "$c_tls" = "true" ]; then
+                repro+=(--set global.tls.issuer=test-issuer)
+            fi
+            if [ "$c_storage" = "s3" ]; then
+                repro+=(--set 'global.archive.s3[0].endpoint=http://s3'
+                        --set 'global.archive.s3[0].accessKey=a'
+                        --set 'global.archive.s3[0].secretKey=s'
+                        --set 'global.archive.s3[0].bucketPrefix=archive')
+            else
+                repro+=(--set 'global.archive.posix[0].path=/archive'
+                        --set 'global.archive.posix[0].volume.existingClaim=archive-pvc')
+            fi
+            helm template test charts/sda-svc "${base[@]}" "${repro[@]}" \
                 2>&1 | tail -2 | sed 's/^/      /'
         done
         return 1
