@@ -616,24 +616,73 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 
 func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_readsNestedStorageInboxKeys() {
 	// Each service loads its config.yaml into the shared global viper (mapper/api via NewConfig,
-	// ingest via config/v2). LoadInboxProjectConfig then reads it. Prove the nested storage.inbox.* block
-	// flattens to the dotted keys it reads — the seam the projectCode resolver depends on.
+	// ingest via config/v2). LoadInboxProjectConfig then reads it. Prove the nested storage.inbox.*
+	// block flattens to the dotted keys it reads: the seam the projectCode resolver depends on.
 	viper.Reset()
 	viper.SetConfigType("yaml")
 	cfg := "storage:\n  inbox:\n    projectCode: p11\n    projectCodeDelimiter: \"-\"\n"
 	assert.NoError(ts.T(), viper.ReadConfig(bytes.NewBufferString(cfg)))
 
-	got := LoadInboxProjectConfig()
+	got, err := LoadInboxProjectConfig()
+	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "p11", got.Code)
 	assert.Equal(ts.T(), "-", got.Delimiter)
 }
 
 func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_absentSectionIsStock() {
-	// With no storage.inbox section LoadInboxProjectConfig yields the zero value, which ResolveInboxPath
-	// treats as stock SDA behavior — so deployments that omit it (e.g. the Swedish node) are
-	// unaffected.
+	// With no storage.inbox section LoadInboxProjectConfig yields the zero value, which
+	// ResolveInboxPath treats as stock SDA behavior, so deployments that omit it (e.g. the Swedish
+	// node) are unaffected.
 	viper.Reset()
-	got := LoadInboxProjectConfig()
+	got, err := LoadInboxProjectConfig()
+	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "", got.Code)
 	assert.Equal(ts.T(), "", got.Delimiter)
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_halfConfigured_errors() {
+	// A project code without a delimiter would silently glue code and username together
+	// ("p11username"); a delimiter without a code would be silently ignored. Both are
+	// misconfigurations that must fail at startup, not produce garbage paths at runtime.
+	viper.Reset()
+	viper.Set("storage.inbox.projectCode", "p11")
+	_, err := LoadInboxProjectConfig()
+	assert.ErrorContains(ts.T(), err, "must be set together")
+
+	viper.Reset()
+	viper.Set("storage.inbox.projectCodeDelimiter", "-")
+	_, err = LoadInboxProjectConfig()
+	assert.ErrorContains(ts.T(), err, "must be set together")
+}
+
+func (ts *ConfigTestSuite) TestNewConfig_inboxProjectMisconfig_failsStartup() {
+	// The loader's validation must propagate out of NewConfig: a half-configured inbox project
+	// section stops the service at startup instead of producing garbage paths at runtime.
+	viper.Set("storage.inbox.projectCode", "p11")
+	defer viper.Reset()
+
+	_, err := NewConfig("mapper")
+	assert.ErrorContains(ts.T(), err, "must be set together")
+}
+
+func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_delimiterMustBeSeparatorCharacter() {
+	// The delimiter joins code and username into ONE inbox directory name ("p11-user"), so it must
+	// be a single character that is not a letter, not a digit, and not "/" (a slash would split the
+	// user directory across two path segments and break the on-disk layout assumption).
+	load := func(delimiter string) error {
+		viper.Reset()
+		viper.Set("storage.inbox.projectCode", "p11")
+		viper.Set("storage.inbox.projectCodeDelimiter", delimiter)
+		_, err := LoadInboxProjectConfig()
+
+		return err
+	}
+
+	for _, bad := range []string{"x", "Q", "1", "/", "--", "p11"} {
+		assert.ErrorContains(ts.T(), load(bad), "not a delimiter character",
+			"delimiter %q should be rejected", bad)
+	}
+	for _, good := range []string{"-", "_", "."} {
+		assert.NoError(ts.T(), load(good), "delimiter %q should be accepted", good)
+	}
 }

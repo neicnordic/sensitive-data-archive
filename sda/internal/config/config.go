@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -378,7 +379,10 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 		c.configSchemas()
-		c.configInboxProject()
+		c.Inbox, err = LoadInboxProjectConfig()
+		if err != nil {
+			return nil, err
+		}
 
 		c.API.Grpc, err = configReEncryptClient()
 		if err != nil {
@@ -454,7 +458,10 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.configSchemas()
-		c.configInboxProject()
+		c.Inbox, err = LoadInboxProjectConfig()
+		if err != nil {
+			return nil, err
+		}
 	case "notify":
 		c.configSMTP()
 
@@ -772,22 +779,31 @@ func (c *Config) configReEncryptServer() (err error) {
 	return nil
 }
 
-// LoadInboxProjectConfig reads the per-user inbox directory layout from the shared viper instance. An
-// empty (absent) project code yields stock SDA behavior, so deployments that omit the section are
-// unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
+// LoadInboxProjectConfig reads the per-user inbox directory layout from the shared viper instance.
+// An absent section yields the zero value, which is stock SDA behavior, so deployments that omit it
+// are unaffected. This is the single source of the storage.inbox.* keys, read both by NewConfig
 // (mapper, api) and directly by the ingest service, which loads through config/v2 but populates
-// the same viper instance.
-func LoadInboxProjectConfig() helper.InboxProjectConfig {
-	return helper.InboxProjectConfig{
+// the same viper instance. Setting only one of the two keys is an error, as is a delimiter that is
+// not a single separator character: it joins code and username into one directory name, so letters,
+// digits and "/" would corrupt the layout.
+func LoadInboxProjectConfig() (helper.InboxProjectConfig, error) {
+	cfg := helper.InboxProjectConfig{
 		Code:      viper.GetString("storage.inbox.projectCode"),
 		Delimiter: viper.GetString("storage.inbox.projectCodeDelimiter"),
 	}
-}
+	switch {
+	case cfg.Code == "" && cfg.Delimiter == "":
+		return cfg, nil
+	case cfg.Code == "" || cfg.Delimiter == "":
+		return helper.InboxProjectConfig{}, errors.New("storage.inbox.projectCode and storage.inbox.projectCodeDelimiter must be set together")
+	}
 
-// configInboxProject populates the inbox layout config for services that resolve anonymized submission
-// paths back to their physical inbox path (mapper, api).
-func (c *Config) configInboxProject() {
-	c.Inbox = LoadInboxProjectConfig()
+	r := []rune(cfg.Delimiter)
+	if len(r) != 1 || unicode.IsLetter(r[0]) || unicode.IsDigit(r[0]) || r[0] == '/' {
+		return helper.InboxProjectConfig{}, fmt.Errorf("storage.inbox.projectCodeDelimiter %q is not a delimiter character", cfg.Delimiter)
+	}
+
+	return cfg, nil
 }
 
 // configSchemas configures the schemas to load depending on
