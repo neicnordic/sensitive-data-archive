@@ -131,6 +131,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
-
-*(empty at the time this folder is introduced; entries added as RFCs are
-written)*
+| [0002](0002-separate-visa-authorization-service.md) | Separate Visa Authorization Service? | exploring | — |
