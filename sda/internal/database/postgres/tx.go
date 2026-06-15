@@ -38,10 +38,6 @@ func (tx *pgTx) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return tx.getFileIDByUserPathAndStatus(ctx, tx.tx, submissionUser, filePath, status)
 }
 
-func (tx *pgTx) CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error) {
-	return tx.checkAccessionIDOwnedByUser(ctx, tx.tx, accessionID, user)
-}
-
 func (tx *pgTx) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return tx.updateFileEventLog(ctx, tx.tx, fileID, event, user, details, message)
 }

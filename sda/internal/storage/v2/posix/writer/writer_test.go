@@ -377,10 +377,6 @@ func (m *notImplementedDatabase) GetFileIDByUserPathAndStatus(_ context.Context,
 	panic("function not expected to be called in unit tests")
 }
 
-func (m *notImplementedDatabase) CheckAccessionIDOwnedByUser(_ context.Context, _, _ string) (bool, error) {
-	panic("function not expected to be called in unit tests")
-}
-
 func (m *notImplementedDatabase) UpdateFileEventLog(_ context.Context, _, _, _, _, _ string) error {
 	panic("function not expected to be called in unit tests")
 }

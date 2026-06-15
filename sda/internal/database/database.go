@@ -41,10 +41,6 @@ type functions interface {
 	// and returns its fileID for the latest specified status
 	GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser, filePath, status string) (string, error)
 
-	// CheckAccessionIDOwnedByUser checks if the file a accessionID links to belongs to the user
-	// Returns true if a file is found by the accessionID and user, false if not found
-	CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error)
-
 	// UpdateFileEventLog updates the status in of the file in the files table
 	// The message parameter is the rabbitmq message sent on file upload.
 	UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error

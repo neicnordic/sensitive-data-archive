@@ -155,10 +155,6 @@ func (db *pgDb) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return db.getFileIDByUserPathAndStatus(ctx, nil, submissionUser, filePath, status)
 }
 
-func (db *pgDb) CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error) {
-	return db.checkAccessionIDOwnedByUser(ctx, nil, accessionID, user)
-}
-
 func (db *pgDb) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return db.updateFileEventLog(ctx, nil, fileID, event, user, details, message)
 }
