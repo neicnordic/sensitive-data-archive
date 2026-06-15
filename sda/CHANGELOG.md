@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written to the database but never archived. Restored reading the submission file path (not the
   broker correlation id) and the fall-through to archive after registration.
 
+### Changed
+
+- Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users
+
 ## [3.1.72] - 2026-05-29
 
 ### Fixed
