@@ -80,10 +80,10 @@ sda-admin file update-event -file-id <FILE_UUID> -event disabled -reason "file s
 
 ## Create a dataset from a list of accession IDs and a dataset ID
 
-Use the following command to create a dataset `dataset001` from accession IDs `my-accession-id-1` and `my-accession-id-2` for files that belongs to the user `test-user@example.org`
+Use the following command to create a dataset `dataset001` from accession IDs `my-accession-id-1` and `my-accession-id-2`
 
 ```sh
-sda-admin dataset create  -user test-user@example.org -dataset-id dataset001 my-accession-id-1 my-accession-id-2 
+sda-admin dataset create  -dataset-id dataset001 my-accession-id-1 my-accession-id-2 
 ```
 
 ## Release a dataset for downloading
