@@ -820,7 +820,7 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
-	// Check that the files the accession ids are linked to exists
+	// Check that the files the accession ids are linked to exist
 	for _, accessionID := range dataset.AccessionIDs {
 		md, err := db.GetMappingData(c, accessionID)
 		if err != nil {

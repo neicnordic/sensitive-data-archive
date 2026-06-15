@@ -2139,8 +2139,6 @@ func (s *TestSuite) TestCreateDataset_MultipleUsers() {
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
-
-	assert.NoError(s.T(), err)
 	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusOK, response.StatusCode)
