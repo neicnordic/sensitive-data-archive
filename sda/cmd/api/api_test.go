@@ -2215,10 +2215,10 @@ func (s *TestSuite) TestCreateDataset_WrongIDs() {
 	_ = response.Body.Close()
 
 	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
-	assert.Contains(s.T(), string(body), "accession ID: API:accession-id-11 not found or owned by other user")
+	assert.Contains(s.T(), string(body), "no file exists with accession: API:accession-id-11")
 }
 
-func (s *TestSuite) TestCreateDataset_WrongUser() {
+func (s *TestSuite) TestCreateDataset_MultipleUsers() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
@@ -2269,12 +2269,27 @@ func (s *TestSuite) TestCreateDataset_WrongUser() {
 
 	router.ServeHTTP(w, r)
 	response := w.Result()
-	body, err := io.ReadAll(response.Body)
+
 	assert.NoError(s.T(), err)
 	_ = response.Body.Close()
 
-	assert.Equal(s.T(), http.StatusBadRequest, response.StatusCode)
-	assert.Contains(s.T(), string(body), "accession ID: API:accession-id-11 not found or owned by other user")
+	assert.Equal(s.T(), http.StatusOK, response.StatusCode)
+
+	// verify that the message shows up in the queue
+	time.Sleep(3 * time.Second) // this is needed to ensure we don't get any false negatives
+	client := http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+brokerAPI+"/api/queues/sda/mappings", http.NoBody)
+	req.SetBasicAuth("guest", "guest")
+	res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
+	assert.NoError(s.T(), err, "failed to query broker")
+	var data struct {
+		MessagesReady int `json:"messages_ready"`
+	}
+	body, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	assert.NoError(s.T(), err, "failed to read response from broker")
+	assert.NoError(s.T(), json.Unmarshal(body, &data), "failed to unmarshal response")
+	assert.Equal(s.T(), 1, data.MessagesReady)
 }
 
 func (s *TestSuite) TestReleaseDataset() {
