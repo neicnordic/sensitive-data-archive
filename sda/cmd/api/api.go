@@ -834,8 +834,8 @@ func createDataset(c *gin.Context) {
 			return
 		}
 		if md == nil {
-			log.Infof("rejecting create dataset request including not existing accession id: %s", accessionID)
-			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("not file with accession: %s exists", accessionID))
+			log.Infof("rejecting create dataset request including non-existing accession id: %s", accessionID)
+			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("no file exists with accession: %s", accessionID))
 
 			return
 		}
