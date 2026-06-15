@@ -2065,7 +2065,7 @@ func (s *TestSuite) TestCreateDataset() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
+	accessionMsg, _ := json.Marshal(datasetCreateRequest{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -2150,7 +2150,7 @@ func (s *TestSuite) TestCreateDataset_BadFormat() {
 		s.FailNow("failed to setup RBAC enforcer")
 	}
 
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
+	accessionMsg, _ := json.Marshal(datasetCreateRequest{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -2175,7 +2175,7 @@ func (s *TestSuite) TestCreateDataset_MissingAccessionIDs() {
 
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{}, DatasetID: "failure", User: "dummy"})
+	accessionMsg, _ := json.Marshal(datasetCreateRequest{AccessionIDs: []string{}, DatasetID: "failure"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -2199,7 +2199,7 @@ func (s *TestSuite) TestCreateDataset_WrongIDs() {
 	assert.NoError(s.T(), setupJwtAuth())
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "dummy"})
+	accessionMsg, _ := json.Marshal(datasetCreateRequest{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
@@ -2258,7 +2258,7 @@ func (s *TestSuite) TestCreateDataset_MultipleUsers() {
 	assert.NoError(s.T(), setupJwtAuth())
 	Conf.Broker.SchemasPath = "../../schemas/isolated"
 
-	accessionMsg, _ := json.Marshal(dataset{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01", User: "tester"})
+	accessionMsg, _ := json.Marshal(datasetCreateRequest{AccessionIDs: []string{"API:accession-id-11"}, DatasetID: "API:dataset-01"})
 	// Mock request and response holders
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/dataset/create", bytes.NewBuffer(accessionMsg))
