@@ -42,10 +42,6 @@ func (m *mockDatabase) GetFileIDByUserPathAndStatus(_ context.Context, _, _, _ s
 	panic("function not expected to be called in unit tests")
 }
 
-func (m *mockDatabase) CheckAccessionIDOwnedByUser(_ context.Context, _, _ string) (bool, error) {
-	panic("function not expected to be called in unit tests")
-}
-
 func (m *mockDatabase) UpdateFileEventLog(_ context.Context, _, _, _, _, _ string) error {
 	panic("function not expected to be called in unit tests")
 }
