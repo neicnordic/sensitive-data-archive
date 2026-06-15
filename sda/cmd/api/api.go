@@ -824,17 +824,18 @@ func createDataset(c *gin.Context) {
 		return
 	}
 
-	// Check that the files the accession ids are linked to belong to the user of the dataset
+	// Check that the files the accession ids are linked to exists
 	for _, accessionID := range dataset.AccessionIDs {
-		belongsToUser, err := db.CheckAccessionIDOwnedByUser(c, accessionID, dataset.User)
+		md, err := db.GetMappingData(c, accessionID)
 		if err != nil {
 			log.Errorln(err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
 			return
 		}
-		if !belongsToUser {
-			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("accession ID: %s not found or owned by other user", accessionID))
+		if md == nil {
+			log.Infof("rejecting create dataset request including not existing accession id: %s", accessionID)
+			c.AbortWithStatusJSON(http.StatusBadRequest, fmt.Sprintf("not file with accession: %s exists", accessionID))
 
 			return
 		}
