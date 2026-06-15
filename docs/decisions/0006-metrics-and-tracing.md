@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 date: "2026-05-20"
