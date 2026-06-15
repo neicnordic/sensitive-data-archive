@@ -466,9 +466,6 @@ components:
         dataset_id:
           type: string
           example: zz-dataset-123456-asdfgh
-        user:
-          type: string
-          example: test.user@dummy.org
     DatasetInfo:
       type: object
       properties:

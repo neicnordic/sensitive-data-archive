@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users
+- Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users.
+- Updated [sda api swagger_v1.yml](cmd/api/swagger_v1.yml) to not specify user in the DatasetCreate as it is no longer needed.  
 
 ## [3.1.72] - 2026-05-29
 

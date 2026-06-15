@@ -44,10 +44,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type dataset struct {
+type datasetCreateRequest struct {
 	AccessionIDs []string `json:"accession_ids"`
 	DatasetID    string   `json:"dataset_id"`
-	User         string   `json:"user"`
 }
 
 var (
@@ -801,7 +800,7 @@ func setAccession(c *gin.Context) {
 }
 
 func createDataset(c *gin.Context) {
-	var dataset dataset
+	var dataset datasetCreateRequest
 	if err := c.BindJSON(&dataset); err != nil {
 		c.AbortWithStatusJSON(
 			http.StatusBadRequest,
