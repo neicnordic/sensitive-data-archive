@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Configurable project-code inbox paths: `storage.inbox.projectCode` and
+  `storage.inbox.projectCodeDelimiter` reconstruct the physical per-user inbox directory
+  (`<projectCode><delimiter><username>/...`) from an anonymized submission path. Defaults are
+  empty, so the stock inbox layout is unchanged.
+
+### Fixed
+
+- Ingest: a file first registered by the ingest service (the non-s3inbox `status ""` path) was
+  written to the database but never archived. Restored reading the submission file path (not the
+  broker correlation id) and the fall-through to archive after registration.
+
 ## [3.1.72] - 2026-05-29
 
 ### Fixed
