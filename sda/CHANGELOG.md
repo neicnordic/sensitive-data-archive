@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.73] - 2026-06-16
+
 ### Added
 
 - Configurable project-code inbox paths: `storage.inbox.projectCode` and
