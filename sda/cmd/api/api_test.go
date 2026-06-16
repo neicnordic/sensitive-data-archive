@@ -2218,7 +2218,7 @@ func (s *TestSuite) TestCreateDataset_WrongIDs() {
 	assert.Contains(s.T(), string(body), "no file exists with accession: API:accession-id-11")
 }
 
-func (s *TestSuite) TestCreateDataset_MultipleUsers() {
+func (s *TestSuite) TestCreateDataset_DifferentDatasetCreationUser() {
 	user := "dummy"
 	filePath := "/inbox/dummy/file12.c4gh"
 
