@@ -23,7 +23,6 @@ func (db *pgDb) getFileEvents(ctx context.Context, tx *sql.Tx) ([]string, error)
 	}
 	defer rows.Close()
 
-
 	var fileEvents []string
 	for rows.Next() {
 		var title string
