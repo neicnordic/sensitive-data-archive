@@ -27,6 +27,7 @@ func (db *pgDb) getFileStatusHistory(ctx context.Context, tx *sql.Tx, fileID str
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var fileInfo []database.FileStatus
 	for rows.Next() {

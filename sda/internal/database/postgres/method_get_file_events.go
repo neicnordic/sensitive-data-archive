@@ -21,10 +21,8 @@ func (db *pgDb) getFileEvents(ctx context.Context, tx *sql.Tx) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
 
 	var fileEvents []string
 	for rows.Next() {
@@ -33,6 +31,10 @@ func (db *pgDb) getFileEvents(ctx context.Context, tx *sql.Tx) ([]string, error)
 			return nil, err
 		}
 		fileEvents = append(fileEvents, title)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return fileEvents, nil
