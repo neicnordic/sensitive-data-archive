@@ -51,6 +51,16 @@
           "action": "GET"
        },
        {
+          "role": "submission",
+          "path": "/file/rotatekey/:fileid",
+          "action": "POST"
+       },
+       {
+          "role": "submission",
+          "path": "/dataset/rotatekey/:dataset",
+          "action": "POST"
+       },
+       {
           "role": "*",
           "path": "/datasets",
           "action": "GET"
