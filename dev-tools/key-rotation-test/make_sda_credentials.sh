@@ -24,7 +24,7 @@ until curl -s -k -u guest:guest "$URI/api/vhosts" > /dev/null; do
 done
 
 # Provision user profiles in DB and register matching service roles in MQ broker
-for n in api auth download finalize inbox ingest mapper rotatekey sync verify s3inbox; do
+for n in api auth download finalize inbox ingest mapper rotatekey verify s3inbox; do
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';" || true
     psql -U postgres -h postgres -d sda -c "GRANT base TO $n;" || true
@@ -123,26 +123,24 @@ if [ ! -f "/shared/client.sec.pem" ]; then
     /shared/crypt4gh generate -n /shared/client -p c4ghpass
 fi
 
-if [ ! -f "/shared/sync.sec.pem" ]; then
-    echo "creating sync crypth4gh key"
-    /shared/crypt4gh generate -n /shared/sync -p syncPass
-fi
-
 if [ ! -f "/shared/rotatekey.sec.pem" ]; then
     echo "creating rotatekey crypth4gh key"
     /shared/crypt4gh generate -n /shared/rotatekey -p rotatekeyPass
 fi
 
-# register the rotation key in the db (idempotent)
-rotateKeyHash=$(cat /shared/rotatekey.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256)
-resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$rotateKeyHash', 'this is the new key to rotate to') ON CONFLICT (key_hash) DO UPDATE SET description = EXCLUDED.description;")
-case "$(echo "$resp" | tr -d '\n')" in
-    "INSERT 0 1"|"INSERT 0 0") : ;;
-    *)
-        echo "insert/upsert keyhash failed"
-        exit 1
-        ;;
-esac
+# register the crypt4gh keys in the db (idempotent)
+for keyfile in c4gh rotatekey; do
+    keyHash=$(cat /shared/${keyfile}.pub.pem | awk 'NR==2 ' | base64 -d | xxd -p -c256)
+    resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$keyHash', 'this is the $keyfile key') ON CONFLICT (key_hash) DO UPDATE SET description = EXCLUDED.description;")
+    case "$(echo "$resp" | tr -d '\n')" in
+        "INSERT 0 1"|"INSERT 0 0") : ;;
+        *)
+            echo "insert/upsert keyhash failed for $keyfile"
+            exit 1
+            ;;
+    esac
+done
+
 
 if [ ! -f "/shared/keys/ssh" ]; then
     ssh-keygen -o -a 256 -t ed25519 -f /shared/keys/ssh -N ""
