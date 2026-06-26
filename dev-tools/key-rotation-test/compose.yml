@@ -87,17 +87,12 @@ services:
       - shared:/shared
 
   seed:
+    container_name: pipeline-seed-automation
+    image: python:3.14-slim-trixie
     command:
       - /bin/sh
       - -c
-      - |
-        apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
-        apt-get -o DPkg::Lock::Timeout=60 install -y curl postgresql-client > /dev/null
-        pip install --upgrade pip > /dev/null
-        pip install crypt4gh > /dev/null
-        curl -sL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-        chmod +x /usr/local/bin/mc
-        sh /seed.sh
+      - "sh /seed.sh"
     depends_on:
       credentials:
         condition: service_completed_successfully
@@ -105,9 +100,14 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      api:
+        condition: service_started
+      ingest:
+        condition: service_started
+      verify:
+        condition: service_started
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.14-slim-trixie
     volumes:
       - ./seed.sh:/seed.sh:ro
       - shared:/shared
