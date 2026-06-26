@@ -17,15 +17,16 @@ apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl post
 python -m pip install --upgrade pip > /dev/null
 python -m pip install aiohttp Authlib joserfc requests > /dev/null
 
-# === CRITICAL ADDITION: Wait for RabbitMQ API to be healthy ===
 echo "Waiting for RabbitMQ Management API to start..."
 until curl -s -k -u guest:guest "$URI/api/vhosts" > /dev/null; do
   sleep 2
 done
 
 # Provision user profiles in DB and register matching service roles in MQ broker
-for n in api auth download finalize inbox ingest mapper rotatekey verify s3inbox; do
+for n in api auth download finalize inbox ingest mapper rotatekey sync verify s3inbox; do
     echo "creating credentials for: $n"
+    # Ensure the role actually exists before modifying it
+    psql -U postgres -h postgres -d sda -c "CREATE ROLE $n;" || true
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';" || true
     psql -U postgres -h postgres -d sda -c "GRANT base TO $n;" || true
 
@@ -34,6 +35,12 @@ for n in api auth download finalize inbox ingest mapper rotatekey verify s3inbox
     curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/users/$n" -H "content-type:application/json" -d "${body_data}"
     curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":".*","write":".*","read":".*"}'
 done
+
+# === FIX: Grant database schema and table permissions to s3inbox ===
+echo "Granting schema and table clearance permissions to s3inbox role..."
+psql -U postgres -h postgres -d sda -c "GRANT USAGE ON SCHEMA sda TO s3inbox;"
+psql -U postgres -h postgres -d sda -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sda TO s3inbox;"
+psql -U postgres -h postgres -d sda -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sda TO s3inbox;"
 
 # Create signing keys
 mkdir -p /shared/keys/pub
@@ -83,7 +90,54 @@ EOF
     chmod 644 /shared/keys/pub/jwt.pub /shared/keys/jwt.key
 fi
 
-# === CRITICAL ADDITION: Create validation mapping files for visas ===
+echo "creating credentials tokens"
+# Parse key with jwk.import_key before feeding it into the encoder
+TOKEN=$(python3 -c "
+import time
+from joserfc import jwk, jwt
+header = {'alg': 'RS256', 'typ': 'JWT', 'kid': 'rsa1'}
+payload = {
+    'iss': 'http://mockauth:8000',
+    'sub': 'test@dummy.org',
+    'aud': 'XC56EL11xx',
+    'iat': int(time.time()),
+    'exp': int(time.time()) + 360000,
+    'jti': 'dev-token-generation'
+}
+with open('/shared/keys/jwt.key', 'r') as f:
+    raw_pem = f.read()
+
+# Import the string raw key format into a joserfc key object
+key = jwk.import_key(raw_pem)
+
+# Generate token string payload
+token_bytes = jwt.encode(header, payload, key)
+print(token_bytes.decode('utf-8') if isinstance(token_bytes, bytes) else token_bytes)
+")
+
+echo "$TOKEN" > /shared/token
+
+# Create the requested s3cfg config file
+cat >/shared/s3cfg <<EOD
+[default]
+access_key=test@dummy.org
+secret_key=test@dummy.org
+access_token=${TOKEN}
+check_ssl_certificate = False
+check_ssl_hostname = False
+encoding = UTF-8
+encrypt = False
+guess_mime_type = True
+host_base = s3inbox:8000
+host_bucket = s3inbox:8000
+bucket_location = us-east-1
+human_readable_sizes = true
+multipart_chunk_size_mb = 50
+use_https = False
+socket_timeout = 30
+EOD
+
+# === Generate Trust Store parameters for Validation ===
 cat > "/shared/trusted-issuers.json" <<'ISSUERS'
 [
   {
@@ -148,7 +202,7 @@ if [ ! -f "/shared/keys/ssh" ]; then
     cat >/shared/users.json <<EOD
 [
     {
-        "username": "dummy@example.com",
+        "username": "test@dummy.org",
         "uid": 1,
         "passwordHash": "\$2b\$12\$1gyKIjBc9/cT0MYkXX24xe1LjEUjNwgL4rEk8fDoO.vDQZzWkqrn.",
         "gecos": "dummy user",
