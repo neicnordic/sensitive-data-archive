@@ -83,7 +83,7 @@ def generate_visa(dataset: str, sub: str) -> str:
         "jku": "http://mockauth:8000/jwks",
     }
     payload = {
-        "iss": "https://demo.example",
+        "iss": "http://mockauth:8000",
         "sub": sub,
         "ga4gh_visa_v1": {
             "type": "ControlledAccessGrants",
@@ -144,6 +144,7 @@ async def tokens(request: web.Request) -> web.Response:
     """
     print("[mockoidc] GET /tokens — generating dev token")
     data = [
+        generate_token("test@dummy.org"),
         generate_token("testu@lifescience-ri.eu"),
         generate_token("requester@demo.org"),
         generate_token("integration_test@example.org"),

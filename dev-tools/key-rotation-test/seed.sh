@@ -8,7 +8,7 @@ API_URL="http://api:8080"
 USER_ID="test@dummy.org"
 BUCKET_TARGET="test_dummy.org"
 DATASET_FOLDER="dataset_folder"
-DATASET_ID="EGAD000001"
+DATASET_ID="EGAD00000000001"
 
 # Arrays to keep track of the files we are processing
 FILES="file1.txt file2.txt file3.txt"
