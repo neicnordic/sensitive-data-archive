@@ -143,11 +143,11 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - BROKER_PASSWORD=s3inbox
-      - BROKER_USER=s3inbox
+      - BROKER_PASSWORD=inbox
+      - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
-      - DATABASE_PASSWORD=s3inbox
-      - DATABASE_USER=s3inbox
+      - DATABASE_PASSWORD=inbox
+      - DATABASE_USER=inbox
     ports:
       - "18000:8000"
     restart: always

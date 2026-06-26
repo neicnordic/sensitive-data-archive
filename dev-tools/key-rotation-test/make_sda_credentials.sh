@@ -23,7 +23,7 @@ until curl -s -k -u guest:guest "$URI/api/vhosts" > /dev/null; do
 done
 
 # Provision user profiles in DB and register matching service roles in MQ broker
-for n in api auth download finalize inbox ingest mapper rotatekey sync verify s3inbox; do
+for n in api auth download finalize inbox ingest mapper rotatekey sync verify inbox; do
     echo "creating credentials for: $n"
     # Ensure the role actually exists before modifying it
     psql -U postgres -h postgres -d sda -c "CREATE ROLE $n;" || true
@@ -35,12 +35,6 @@ for n in api auth download finalize inbox ingest mapper rotatekey sync verify s3
     curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/users/$n" -H "content-type:application/json" -d "${body_data}"
     curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":".*","write":".*","read":".*"}'
 done
-
-# === FIX: Grant database schema and table permissions to s3inbox ===
-echo "Granting schema and table clearance permissions to s3inbox role..."
-psql -U postgres -h postgres -d sda -c "GRANT USAGE ON SCHEMA sda TO s3inbox;"
-psql -U postgres -h postgres -d sda -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA sda TO s3inbox;"
-psql -U postgres -h postgres -d sda -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA sda TO s3inbox;"
 
 # Create signing keys
 mkdir -p /shared/keys/pub
