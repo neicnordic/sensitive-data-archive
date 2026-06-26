@@ -83,6 +83,10 @@
        {
         "role": "requester@demo.org",
         "rolebinding": "admin"
+      },
+      {
+        "role": "test@dummy.org",
+        "rolebinding": "admin"
       }
     ]
  }

@@ -135,7 +135,7 @@ EOD
 cat > "/shared/trusted-issuers.json" <<'ISSUERS'
 [
   {
-    "iss": "https://demo.example",
+    "iss": "http://mockauth:8000",
     "jku": "http://mockauth:8000/jwks"
   }
 ]
