@@ -2,7 +2,7 @@
 # Includes full pipeline (ingest, verify, finalize, mapper) and download/api services.
 #
 # Usage:
-#   docker compose -f dev-key-rotation.yml up -d
+#   docker compose -f compose.yml up -d
 
 name: key-rotation-test-full
 
@@ -87,7 +87,7 @@ services:
       - shared:/shared
 
   seed:
-    container_name: pipeline-seed-automation
+    container_name: seed
     image: python:3.14-slim-trixie
     command:
       - /bin/sh
