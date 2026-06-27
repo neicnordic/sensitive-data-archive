@@ -1,6 +1,33 @@
 #!/bin/sh
 set -e
 
+# Helper function to fast-poll until the file is verified and decrypted by background workers
+wait_to_ready() {
+    _FILE_UUID=$1
+    echo "Waiting for background workers to verify file $_FILE_UUID..."
+
+    # Poll up to 50 times with a 0.1-second sleep (total 5 seconds max)
+    for i in $(seq 1 50); do
+        # Verify the current event milestone on the file
+        LAST_EVENT=$(PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda -At -c \
+            "SELECT last_event FROM sda.files WHERE id='$_FILE_UUID';" 2>/dev/null | tr -d '\r\n')
+
+        # Verify the unencrypted verification checksum is registered
+        HAS_CHECKSUM=$(PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda -At -c \
+            "SELECT 1 FROM sda.checksums WHERE file_id='$_FILE_UUID' AND source='UNENCRYPTED' LIMIT 1;" 2>/dev/null | tr -d '\r\n')
+
+        if [ "$LAST_EVENT" = "verified" ] || [ "$LAST_EVENT" = "ready" ]; then
+            if [ "$HAS_CHECKSUM" = "1" ]; then
+                return 0
+            fi
+        fi
+        sleep 0.1
+    done
+
+    echo "❌ Error: Timeout waiting for file $_FILE_UUID to finish background verification."
+    exit 1
+}
+
 echo "=== Starting Automated Multi-File S3cmd & Admin-API Ingestion Pipeline ==="
 
 # Define core configuration variables
@@ -21,7 +48,7 @@ if [ ! -f "/shared/token" ]; then
 fi
 TOKEN=$(cat /shared/token | tr -d '\n')
 
-# 2. Install dependencies inside runtime environment
+# Install dependencies inside runtime environment
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
 apt-get -o DPkg::Lock::Timeout=60 install -y s3cmd curl jq postgresql-client > /dev/null
 
@@ -30,7 +57,8 @@ mkdir -p /tmp/test-data
 rm -f /tmp/test-data/*
 
 
-# 3. Process, encrypt, and upload each file individually
+# Process, encrypt, and upload each file individually
+COUNTER=101
 for filename in $FILES; do
     echo "--------------------------------------------------"
     echo "Processing local file: $filename"
@@ -38,93 +66,73 @@ for filename in $FILES; do
     # Write unique dummy content inside each file
     echo "Confidential genomic sequencing data block for $filename - 2026" > "/tmp/test-data/$filename"
     
-    # Secure payload via crypt4gh
-    /shared/crypt4gh encrypt \
-      --sk /shared/client.sec.pem \
-      --pk /shared/c4gh.pub.pem \
-      -p c4ghpass \
-      < "/tmp/test-data/$filename" > "/tmp/test-data/$filename.c4gh"
+    yes | /shared/crypt4gh encrypt \
+      -p /shared/c4gh.pub.pem \
+      -f "/tmp/test-data/$filename"
       
     # Construct exact target bucket structural destination path
-    # s3cmd targets: s3://inbox/USER_ID/dataset_folder/filename.c4gh
     S3_TARGET_URI="s3://$BUCKET_TARGET/$DATASET_FOLDER/$filename.c4gh"
-    API_INBOX_PATH="/$DATASET_FOLDER/$filename.c4gh"
+    API_INBOX_PATH="$DATASET_FOLDER/$filename.c4gh"
     
     echo "Uploading via s3cmd to: $S3_TARGET_URI"
     s3cmd -c /shared/s3cfg put "/tmp/test-data/$filename.c4gh" "$S3_TARGET_URI"
-    
-    # 4. Trigger ingestion via Admin API
-    echo "Triggering API ingestion entrypoint for $filename.c4gh..."
-    curl -fsS -H "Authorization: Bearer $TOKEN" \
-         -H "Content-Type: application/json" \
-         -X POST \
-         -d "{\"filepath\": \"$API_INBOX_PATH\", \"user\": \"$USER_ID\"}" \
-         "$API_URL/file/ingest"
-         
-    # 5. Extract unique database file UUID assigned by the database engine
+
+    # Extract file UUID
     FILE_UUID=""
     for i in $(seq 1 10); do
         FILE_UUID=$(PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda -At -c \
-            "SELECT id FROM sda.files WHERE filepath='$API_INBOX_PATH' ORDER BY created_at DESC LIMIT 1;")
+            "SELECT id FROM sda.files WHERE submission_file_path='$API_INBOX_PATH' ORDER BY created_at DESC LIMIT 1;")
+        FILE_UUID=$(echo "$FILE_UUID" | tr -d '\r\n[:space:]')
         if [ -n "$FILE_UUID" ]; then
             break
         fi
         sleep 1
     done
-    
+
     if [ -z "$FILE_UUID" ]; then
-        echo "❌ Error tracing database configuration metadata map for $filename.c4gh"
+        echo "❌ Error: Unable to retrieve UUID for $filename.c4gh after 10 attempts."
         exit 1
     fi
     
-    # Generate an explicit random Accession Identifier string for the target file instance
-    # Example format: EGAF00000000101, EGAF00000000102...
-    RAND_SUFFIX=$(od -An -N3 -tu4 /dev/urandom | tr -d ' ')
-    FILE_ACCESSION="EGAF${RAND_SUFFIX}"
-    echo "Assigning Accession string ID: [$FILE_ACCESSION] to UUID: $FILE_UUID"
+    echo "Triggering ingestion for $filename.c4gh..."
+    curl -fsS -H "Authorization: Bearer $TOKEN" -X POST "$API_URL/file/ingest?fileid=$FILE_UUID"
+
+    # Wait for background workers to verify and decrypt the file
+    wait_to_ready "$FILE_UUID"
     
-    # 6. Apply Accession registration metadata via Admin API
-    curl -fsS -H "Authorization: Bearer $TOKEN" \
-         -H "Content-Type: application/json" \
-         -X POST \
-         -d "{\"accession_id\": \"$FILE_ACCESSION\", \"filepath\": \"$API_INBOX_PATH\", \"user\": \"$USER_ID\"}" \
-         "$API_URL/file/accession"
+    RAND_SUFFIX=$(printf "%011d" $COUNTER)
+    FILE_ACCESSION_ID="EGAF${RAND_SUFFIX}"
+    echo "Assigning Accession ID: $FILE_ACCESSION_ID to UUID: $FILE_UUID"
+    
+    curl -fsS -H "Authorization: Bearer $TOKEN" -X POST "$API_URL/file/accession?fileid=$FILE_UUID&accessionid=$FILE_ACCESSION_ID"
          
     # Track assigned accession references in our runner loop string space for dataset bundling
     if [ -z "$ACCESSION_IDS" ]; then
-        ACCESSION_IDS="\"$FILE_ACCESSION\""
+        ACCESSION_IDS="\"$FILE_ACCESSION_ID\""
     else
-        ACCESSION_IDS="$ACCESSION_IDS, \"$FILE_ACCESSION\""
+        ACCESSION_IDS="$ACCESSION_IDS, \"$FILE_ACCESSION_ID\""
     fi
+    COUNTER=$((COUNTER+1))
 done
 
 echo "--------------------------------------------------"
 echo "All files uploaded. Waiting briefly for messaging brokers to process tasks..."
 
-# 7. Verification Loop Monitoring
+# Verification Loop Monitoring
 # Confirm files reach structural completion stability state across tables
 MAX_ATTEMPTS=30
 ATTEMPT=1
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     # Fetch user file list status from endpoint
-    STATUS_RESP=$(curl -sS -H "Authorization: Bearer $TOKEN" "$API_URL/files?path_prefix=$USER_ID/$DATASET_FOLDER")
+    STATUS_RESP=$(curl -sS -H "Authorization: Bearer $TOKEN" "$API_URL/users/$USER_ID/files?path_prefix=$DATASET_FOLDER")
     
-    # Parse total completed status elements vs total target count (3)
-    COMPLETED_COUNT=$(echo "$STATUS_RESP" | jq -r '[.[] | select(.fileStatus == "completed" or .fileStatus == "COMPLETED")] | length')
-    ERROR_COUNT=$(echo "$STATUS_RESP" | jq -r '[.[] | select(.fileStatus == "error" or .fileStatus == "disabled")] | length')
-    
-    if [ "$ERROR_COUNT" -gt 0 ]; then
-        echo "❌ Ingestion pipelines stopped: One or more workers threw system failure codes."
-        exit 1
-    fi
-    
-    echo "System Status Check (Attempt $ATTEMPT/$MAX_ATTEMPTS): $COMPLETED_COUNT / 3 files verified as completed."
+    COMPLETED_COUNT=$(echo "$STATUS_RESP" | jq -r '[.[] | select(.fileStatus == "ready" )] | length')
     
     if [ "$COMPLETED_COUNT" -eq 3 ]; then
         break
     fi
     
-    sleep 3
+    sleep 1
     ATTEMPT=$((ATTEMPT+1))
 done
 
@@ -133,8 +141,7 @@ if [ "$COMPLETED_COUNT" -ne 3 ]; then
     exit 1
 fi
 
-# 8. Create the Unified Target Dataset Group
-echo "Bundling generated file list matrix into Dataset collection [$DATASET_ID]..."
+echo "Create dataset $DATASET_ID..."
 JSON_PAYLOAD="{\"accession_ids\": [$ACCESSION_IDS], \"dataset_id\": \"$DATASET_ID\", \"user\": \"$USER_ID\"}"
 
 curl -fsS -H "Authorization: Bearer $TOKEN" \
@@ -143,12 +150,8 @@ curl -fsS -H "Authorization: Bearer $TOKEN" \
      -d "$JSON_PAYLOAD" \
      "$API_URL/dataset/create"
 
-# 9. Release the collection to the active access pool
-echo "Releasing tracking collection dataset state for validation..."
-curl -fsS -H "Authorization: Bearer $TOKEN" -X POST "$API_URL/dataset/release/$DATASET_ID"
-
 # debug 
 echo "=== Debug: Listing contents of S3 bucket after creation ==="
-s3cmd -c /shared/s3cfg ls s3://
+s3cmd -c /shared/s3cfg ls s3://$BUCKET_TARGET/$DATASET_FOLDER/
 
 echo "=== 🎉 Success! Dataset '$DATASET_ID' is initialized with 3 clean targets, structured correctly, and ready for rotation! ==="
