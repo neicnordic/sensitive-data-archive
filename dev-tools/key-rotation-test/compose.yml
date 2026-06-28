@@ -292,7 +292,7 @@ services:
       - "50051:50051"
     restart: always
     volumes:
-      - ./reencrypt-config.yaml:/config.yaml
+      - ./config.yaml:/config.yaml
       - shared:/shared
 
   downloadold:
