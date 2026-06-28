@@ -1,0 +1,9 @@
+services:
+  reencrypt:
+    depends_on: !reset []
+    volumes:
+      - ./config-keyremoved.yaml:/config.yaml
+  download:
+    depends_on: !reset []
+    volumes:
+      - ./config-keyremoved.yaml:/config.yaml
