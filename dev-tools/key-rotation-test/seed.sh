@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+# This script is used to seed the database with test data for the key rotation test.
+
 # Helper function to fast-poll until the file is verified and decrypted by background workers
 wait_to_ready() {
     _FILE_UUID=$1
@@ -64,7 +66,7 @@ for filename in $FILES; do
     echo "Processing local file: $filename"
     
     # Write unique dummy content inside each file
-    echo "Confidential genomic sequencing data block for $filename - 2026" > "/tmp/test-data/$filename"
+    echo "Confidential genomic sequencing data block for $filename" > "/tmp/test-data/$filename"
     
     yes | /shared/crypt4gh encrypt \
       -p /shared/c4gh.pub.pem \
