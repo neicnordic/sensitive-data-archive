@@ -10,7 +10,7 @@ services:
   postgres:
     build:
       context: ../../postgresql
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}-postgres
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     environment:
       - POSTGRES_PASSWORD=rootpasswd
     healthcheck:
@@ -27,7 +27,8 @@ services:
   rabbitmq:
     build:
       context: ../../rabbitmq
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}-rabbitmq
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    container_name: rabbitmq
     healthcheck:
       test:
         [
@@ -70,8 +71,8 @@ services:
 
   # Generates keys and handles bulk DB configuration for all pipeline roles
   credentials:
-    container_name: credentials
     image: python:3.13-slim-trixie
+    container_name: credentials
     command:
       - "/bin/sh"
       - "/make_sda_credentials.sh"
@@ -87,8 +88,8 @@ services:
       - shared:/shared
 
   seed:
-    container_name: seed
     image: python:3.14-slim-trixie
+    container_name: seed
     command:
       - /bin/sh
       - -c
@@ -130,7 +131,7 @@ services:
   # --- INGESTION PIPELINE SERVICES ---
 
   s3inbox:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-s3inbox]
     container_name: s3inbox
     depends_on:
@@ -156,7 +157,7 @@ services:
       - shared:/shared
 
   ingest:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-ingest]
     container_name: ingest
     depends_on:
@@ -181,7 +182,7 @@ services:
       - shared:/shared
 
   verify:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-verify]
     container_name: verify
     depends_on:
@@ -206,7 +207,7 @@ services:
       - shared:/shared
 
   finalize:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-finalize]
     container_name: finalize
     depends_on:
@@ -231,7 +232,7 @@ services:
       - shared:/shared
 
   mapper:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-mapper]
     container_name: mapper
     depends_on:
@@ -257,7 +258,7 @@ services:
   # --- EGRESS & CORE CONTROL SERVICES ---
 
   api:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-api]
     container_name: api
     depends_on:
@@ -281,7 +282,8 @@ services:
       - shared:/shared
 
   reencrypt:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    container_name: reencrypt
     command: [sda-reencrypt]
     depends_on:
       credentials:
@@ -293,8 +295,49 @@ services:
       - ./reencrypt-config.yaml:/config.yaml
       - shared:/shared
 
+  downloadold:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
+    container_name: downloadold
+    command: sda-download
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mockauth:
+        condition: service_started
+    environment:
+      - CONFIG_FILE=/config.yaml
+      # Match the dot-to-underscore substitution expected by Viper for the legacy engine
+      - ARCHIVE_TYPE=S3
+      - ARCHIVE_URL=http://s3:9000
+      - ARCHIVE_ACCESSKEY=access
+      - ARCHIVE_SECRETKEY=secretKey
+      - ARCHIVE_BUCKET=archive1
+      - ARCHIVE_REGION=us-east-1
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=rootpasswd
+      - DB_DATABASE=sda
+      - DB_SSLMODE=disable
+      - GRPC_HOST=reencrypt
+      - GRPC_PORT=50051
+      - OIDC_CONFIGURATION_URL=http://mockauth:8000/.well-known/openid-configuration
+    ports:
+      - "8084:8080"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
   download:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    container_name: download
     command:
       - sda-download
       - "--config-file=/config.yaml"
@@ -319,7 +362,7 @@ services:
       - shared:/shared
 
   rotatekey:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER:-dev}
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-rotatekey]
     container_name: rotatekey
     depends_on:
