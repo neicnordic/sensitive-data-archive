@@ -148,6 +148,54 @@ case_2_mixed_key_dataset() {
     echo -e "\n\033[1;32mSUCCESS: Mixed-key dataset handles both active cryptographic keys simultaneously!\033[0m"
 }
 
+case_3_invalid_rotation_target() {
+    # ========================================================================
+    # CASE 3: Try to rotate key without configuring a new target key
+    # ========================================================================
+    log_header "CASE 3: Rotation Without Valid Target Key Array"
+
+    echo "Step 3.1: Rolling back database mutations to fresh baseline..."
+    restore_database
+
+    echo -e "\nStep 3.2: Applying config-norotatetarget via override to block target validation keys..."
+    docker compose -f compose.yml -f override-norotatetarget.yaml up -d --no-deps rotatekey
+    docker compose -f compose.yml -f override-norotatetarget.yaml restart rotatekey
+
+    echo -e "\nStep 3.3: Capturing baseline key_hash BEFORE rotation attempt..."
+    # Fetch the stable_id, ID, and the cryptographic key_hash before we do anything
+    BEFORE_DATA=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    BEFORE_HASH=$(echo "$BEFORE_DATA" | cut -d'|' -f3)
+    echo "Target File: EGAF00000000101"
+    echo "Current Key Hash: $BEFORE_HASH"
+
+    echo -e "\nStep 3.4: Triggering rotation via API..."
+    FILE_ID=$(echo "$BEFORE_DATA" | cut -d'|' -f1)
+    API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE_ID")
+    echo "API accepted request with status: $API_STATUS (Message queued in RabbitMQ)"
+
+    echo -e "\nStep 3.5: Verifying key_hash remains UNCHANGED after failed processing..."
+    sleep 2 # Give any potential phantom queues time to settle
+
+    # Fetch the hash again to check for mutation
+    AFTER_HASH=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+
+    echo "Database state dump:"
+    docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';"
+
+    if [ "$BEFORE_HASH" == "$AFTER_HASH" ]; then
+        echo -e "\n\033[1;32mSUCCESS: The key_hash did not change ($AFTER_HASH).\033[0m"
+        echo -e "\033[1;32mThe database state is pristine because the rotatekey service safely stopped processing!\033[0m"
+    else
+        echo -e "\n\033[1;31mFAILED: The key_hash mutated from $BEFORE_HASH to $AFTER_HASH unexpectedly!\033[0m"
+        exit 1
+    fi
+
+    # Clean up by removing the override for future tests
+    echo -e "\nResetting rotatekey service back to standard configuration..."
+    docker compose -f compose.yml up -d --no-deps rotatekey
+    docker compose -f compose.yml restart rotatekey
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -168,3 +216,5 @@ pause_step
 case_2_mixed_key_dataset
 
 pause_step
+
+case_3_invalid_rotation_target
