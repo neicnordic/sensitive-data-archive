@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users.
+- Updated [sda api swagger_v1.yml](cmd/api/swagger_v1.yml) to not specify user in the DatasetCreate as it is no longer needed.
+
 ## [3.1.73] - 2026-06-16
 
 ### Added
@@ -21,11 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ingest: a file first registered by the ingest service (the non-s3inbox `status ""` path) was
   written to the database but never archived. Restored reading the submission file path (not the
   broker correlation id) and the fall-through to archive after registration.
-
-### Changed
-
-- Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users.
-- Updated [sda api swagger_v1.yml](cmd/api/swagger_v1.yml) to not specify user in the DatasetCreate as it is no longer needed.  
 
 ## [3.1.72] - 2026-05-29
 
