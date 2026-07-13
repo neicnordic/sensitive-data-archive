@@ -238,13 +238,13 @@ func Download(c *gin.Context) {
 	datasetsAccessions, err := database.GetDatasetsContainingFile(fileID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Debugf("user requested to view file: %s, but file is not found or not present in any dataset", fileID)
+			log.Debugf("user requested to view file: %s, but file is not found or not present in any dataset", sanitizeString(fileID))
 			c.String(http.StatusNotFound, "file not found")
 
 			return
 		}
 
-		log.Debugf("database error when checking datasets containing file: %s, error: %v", fileID, err)
+		log.Debugf("database error when checking datasets containing file: %s, error: %v", sanitizeString(fileID), err)
 		c.String(http.StatusInternalServerError, "database error")
 
 		return
@@ -268,7 +268,7 @@ func Download(c *gin.Context) {
 		}
 	}
 	if !permission {
-		log.Debugf("user requested to view file: %s, but does not have permissions for any dataset which contains file", fileID)
+		log.Debugf("user requested to view file: %s, but does not have permissions for any dataset which contains file", sanitizeString(fileID))
 		c.String(http.StatusUnauthorized, "unauthorised")
 
 		return
