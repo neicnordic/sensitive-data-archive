@@ -360,16 +360,16 @@ FROM sda.files
 	return fileStableID, nil
 }
 
-// CheckFilePermission checks if user has permissions to access the dataset the file is a part of
-var CheckFilePermission = func(fileID string) (string, error) {
+// GetDatasetsContainingFile returns the accession ids of all datasets which contains the file
+var GetDatasetsContainingFile = func(fileID string) ([]string, error) {
 	var (
-		r           = ""
+		r     []string
 		err   error = nil
 		count       = 0
 	)
 
 	for count < dbRetryTimes {
-		r, err = DB.checkFilePermission(fileID)
+		r, err = DB.getDatasetsContainingFile(fileID)
 		if err != nil {
 			count++
 
@@ -382,8 +382,8 @@ var CheckFilePermission = func(fileID string) (string, error) {
 	return r, err
 }
 
-// checkFilePermission is the actual function performing work for CheckFilePermission
-func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
+// getDatasetsContainingFile is the actual function performing work for GetDatasetsContainingFile
+func (dbs *SQLdb) getDatasetsContainingFile(fileID string) ([]string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	log.Debugf("check permissions for file with %s", sanitizeString(fileID))
@@ -396,14 +396,36 @@ func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
 		WHERE files.stable_id = $1;
 	`
 
-	var datasetName string
-	if err := db.QueryRow(query, fileID).Scan(&datasetName); err != nil {
-		log.Errorf("requested file with %s does not exist", sanitizeString(fileID))
+	var datasetAccessions []string
 
-		return "", err
+	rows, err := db.Query(query, fileID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var datasetAccession string
+
+		if err := rows.Scan(&datasetAccession); err != nil {
+			log.Errorf("requested file with %s does not exist", sanitizeString(fileID))
+
+			return nil, err
+		}
+
+		datasetAccessions = append(datasetAccessions, datasetAccession)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	return datasetName, nil
+	if len(datasetAccessions) == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return datasetAccessions, nil
 }
 
 // FileDownload details are used for downloading a file
