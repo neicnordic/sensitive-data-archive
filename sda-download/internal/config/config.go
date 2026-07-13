@@ -16,7 +16,6 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"golang.org/x/exp/slices"
 )
 
 const POSIX = "posix"
@@ -349,10 +348,16 @@ func (c *Map) appConfig() error {
 		log.Infoln("Internal c4gh key-pair loaded")
 	}
 
-	if !slices.Contains(availableMiddlewares, c.App.Middleware) {
-		err := fmt.Errorf("app.middleware value=%v is not one of allowed values=%v", c.App.Middleware, availableMiddlewares)
+	validMiddleware := false
+	for _, availableMiddleware := range availableMiddlewares {
+		if c.App.Middleware == availableMiddleware {
+			validMiddleware = true
 
-		return err
+			break
+		}
+	}
+	if !validMiddleware {
+		return fmt.Errorf("app.middleware value=%v is not one of allowed values=%v", c.App.Middleware, availableMiddlewares)
 	}
 
 	return nil
