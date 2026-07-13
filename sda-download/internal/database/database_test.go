@@ -193,7 +193,7 @@ func TestClose(t *testing.T) {
 	assert.Nil(t, r, "Close failed unexpectedly")
 }
 
-func TestCheckFilePermission(t *testing.T) {
+func TestGetDatasetsContainingFile(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
 		expected := []string{"dataset1"}
 		query := `
@@ -208,7 +208,7 @@ func TestCheckFilePermission(t *testing.T) {
 
 		x, err := testDb.getDatasetsContainingFile("file1")
 
-		assert.Equal(t, expected, x, "did not get expected permission")
+		assert.Equal(t, expected, x, "did not get expected datasets")
 
 		return err
 	})

@@ -736,6 +736,289 @@ func (f *fakeGRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Grpc-status", "0")
 }
 
+func TestDownload_FileInMultipleDatasets_NoPermission(t *testing.T) {
+	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	assert.NoError(t, err)
+
+	// Save original to-be-mocked functions
+	originalCheckFilePermission := database.GetDatasetsContainingFile
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
+	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
+
+	// Substitute mock functions
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset2", "dataset3", "dataset4"}, nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+
+	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
+	viper.Set("c4gh.transientPassphrase", "password")
+	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()
+	assert.NoError(t, err, "Could not load c4gh keys")
+
+	// Mock request and response holders
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET"}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{""}}
+
+	// Test the outcomes of the handler
+	Download(c)
+	response := w.Result()
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	expectedStatusCode := 401
+	expectedBody := []byte("unauthorised")
+
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("TestDownload_Fail_NoPermissions failed, got %d expected %d", response.StatusCode, expectedStatusCode)
+	}
+	if !bytes.Equal(body, []byte(expectedBody)) {
+		// visual byte comparison in terminal (easier to find string differences)
+		t.Error(body)
+		t.Error([]byte(expectedBody))
+		t.Errorf("TestDownload_Fail_NoPermissions failed, got %s expected %s", string(body), string(expectedBody))
+	}
+
+	// Return mock functions to originals
+	database.GetDatasetsContainingFile = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
+	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
+	viper.Set("c4gh.transientKeyPath", "")
+	viper.Set("c4gh.transientPassphrase", "")
+}
+
+func TestDownload_FileInMultipleDatasets(t *testing.T) {
+	privateKeyFilePath, err := GenerateTestC4ghKey(t)
+	assert.NoError(t, err)
+
+	// Save original to-be-mocked functions
+	originalCheckFilePermission := database.GetDatasetsContainingFile
+	originalGetCacheFromContext := middleware.GetCacheFromContext
+	originalGetFile := database.GetFile
+	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
+	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
+
+	tempDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+storage:
+  archive:
+    posix:
+    - path: %s
+`, tempDir)), 0600); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filepath.Join(tempDir, "config.yaml"))
+
+	if err := viper.ReadInConfig(); err != nil {
+		assert.FailNow(t, err.Error())
+	}
+
+	ArchiveReader, _ = storage.NewReader(context.TODO(), "archive")
+
+	// Fix to run fake GRPC server
+	faker := fakeGRPC{t: t}
+	server := httptest.NewUnstartedServer(&faker)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	// Figure out IP, port
+	serverdetails := strings.Split(server.Listener.Addr().String(), ":")
+
+	// Set up TLS for fake server
+	keyfile, err := os.CreateTemp("", "key")
+	assert.NoError(t, err, "Could not create temp file for key")
+	defer os.Remove(keyfile.Name())
+	privdata, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
+	assert.NoError(t, err, "Could not marshal private key")
+
+	privPEM := "-----BEGIN PRIVATE KEY-----\n" + base64.StdEncoding.EncodeToString(privdata) + "\n-----END PRIVATE KEY-----\n"
+	_, err = keyfile.Write([]byte(privPEM))
+	assert.NoError(t, err, "Could not write private key")
+	_ = keyfile.Close()
+
+	certfile, err := os.CreateTemp("", "cert")
+	assert.NoError(t, err, "Could not create temp file for cert")
+	defer os.Remove(certfile.Name())
+	pubPEM := "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(server.Certificate().Raw) + "\n-----END CERTIFICATE-----\n"
+	_, err = certfile.Write([]byte(pubPEM))
+	assert.NoError(t, err, "Could not write public key")
+	_ = certfile.Close()
+
+	// Configure Reencrypt to use fake server
+	config.Config.Reencrypt.Host = serverdetails[0]
+	port, _ := strconv.ParseInt(serverdetails[1], 10, 32)
+	config.Config.Reencrypt.Port = int(port)
+	config.Config.Reencrypt.CACert = certfile.Name()
+	config.Config.Reencrypt.ClientCert = certfile.Name()
+	config.Config.Reencrypt.ClientKey = keyfile.Name()
+	config.Config.Reencrypt.Timeout = 10
+
+	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
+	viper.Set("c4gh.transientPassphrase", "password")
+	config.Config.C4GH.PrivateKey, config.Config.C4GH.PublicKeyB64, err = config.GetC4GHKeys()
+	assert.NoError(t, err, "Could not load c4gh keys")
+
+	// Make a file to hold the archive file
+	datafile, err := os.Create(filepath.Join(tempDir, "datafile.txt"))
+	assert.NoError(t, err, "Could not create datafile for test")
+	datafileName := datafile.Name()
+	defer os.Remove(datafileName)
+
+	tempKey, err := base64.StdEncoding.DecodeString(config.Config.C4GH.PublicKeyB64)
+	assert.NoError(t, err, "Could not decode public key envelope")
+
+	// Decode public key
+	pubKeyReader := bytes.NewReader(tempKey)
+	publicKey, err := keys.ReadPublicKey(pubKeyReader)
+	assert.NoError(t, err, "Could not decode public key")
+
+	// Reader list for archive file
+	readerPublicKeyList := [][chacha20poly1305.KeySize]byte{}
+	readerPublicKeyList = append(readerPublicKeyList, [32]byte(publicKey))
+	faker.pubkey = [32]byte(publicKey)
+
+	bufferWriter := bytes.Buffer{}
+	dataWriter, err := streaming.NewCrypt4GHWriter(&bufferWriter, config.Config.C4GH.PrivateKey, readerPublicKeyList, nil)
+	assert.NoError(t, err, "Could not make crypt4gh writer for test")
+
+	// Write some data to the file
+	for i := 0; i < 1000; i++ {
+		_, err = dataWriter.Write([]byte("data"))
+		assert.NoError(t, err, "Could not write to crypt4gh writer for test")
+	}
+	dataWriter.Close()
+
+	// We have now written a crypt4gh to our buffer, prepare it for use
+	// by separating out the header and write the rest to the file
+
+	headerBytes, err := headers.ReadHeader(&bufferWriter)
+	assert.NoError(t, err, "Could not get header")
+
+	_, err = io.Copy(datafile, &bufferWriter)
+	assert.NoError(t, err, "Could not write temporary file")
+	_ = datafile.Close()
+
+	// Substitute mock functions
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset2", "dataset3", "dataset1"}, nil
+	}
+	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
+		return session.Cache{
+			Datasets: []string{"dataset1"},
+		}
+	}
+	database.GetFile = func(_ string) (*database.FileDownload, error) {
+		fileDetails := &database.FileDownload{
+			ArchivePath:     strings.TrimPrefix(datafileName, tempDir+"/"),
+			ArchiveSize:     0,
+			ArchiveLocation: tempDir,
+			Header:          headerBytes,
+		}
+
+		return fileDetails, nil
+	}
+
+	// Test download, should work and return the whole file
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{}}
+
+	Download(c)
+	response := w.Result()
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	// We only check
+	assert.Equal(t, []byte(strings.Repeat("data", 1000)), body, "Unexpected body from download")
+
+	// Test download with specified coordinates, should return a small bit of the file
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/somepath", RawQuery: "startCoordinate=5&endCoordinate=10"}}
+	// Test the outcomes of the handler
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("atada"), body, "Unexpected body from download")
+
+	// Test encrypted download, should work and give output that is crypt4gh
+	// encrypted
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=0-10"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+
+	// Test encrypted download, should work even when AllowedUnencryptedDownload is false
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Request.Header = http.Header{"Client-Public-Key": []string{config.Config.C4GH.PublicKeyB64},
+		"Range": []string{"bytes=0-10"}}
+
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 200, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("crypt4gh"), body[:8], "Unexpected body from download")
+
+	// Test encrypted download without passing the key, should fail
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = &http.Request{Method: "GET", URL: &url.URL{Path: "/mocks3/somepath", RawQuery: "filename=somepath"}}
+	c.Params = make(gin.Params, 1)
+	c.Params[0] = gin.Param{Key: "type", Value: "encrypted"}
+
+	Download(c)
+	response = w.Result()
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+
+	assert.Equal(t, 400, response.StatusCode, "Unexpected status code from download")
+	assert.Equal(t, []byte("c4gh pub"), body[:8], "Unexpected body from download")
+
+	// Return mock functions to originals
+	database.GetDatasetsContainingFile = originalCheckFilePermission
+	middleware.GetCacheFromContext = originalGetCacheFromContext
+	database.GetFile = originalGetFile
+	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
+	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
+	viper.Set("c4gh.transientKeyPath", "")
+	viper.Set("c4gh.transientPassphrase", "")
+}
+
 func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	privateKeyFilePath, err := GenerateTestC4ghKey(t)
 	assert.NoError(t, err)
