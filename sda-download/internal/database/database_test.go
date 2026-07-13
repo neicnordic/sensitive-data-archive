@@ -195,7 +195,7 @@ func TestClose(t *testing.T) {
 
 func TestCheckFilePermission(t *testing.T) {
 	r := sqlTesterHelper(t, func(mock sqlmock.Sqlmock, testDb *SQLdb) error {
-		expected := "dataset1"
+		expected := []string{"dataset1"}
 		query := `
 			SELECT datasets.stable_id FROM sda.file_dataset
 			JOIN sda.datasets ON dataset_id = datasets.id
@@ -206,7 +206,7 @@ func TestCheckFilePermission(t *testing.T) {
 			WithArgs("file1").
 			WillReturnRows(sqlmock.NewRows([]string{"dataset_id"}).AddRow("dataset1"))
 
-		x, err := testDb.checkFilePermission("file1")
+		x, err := testDb.getDatasetsContainingFile("file1")
 
 		assert.Equal(t, expected, x, "did not get expected permission")
 

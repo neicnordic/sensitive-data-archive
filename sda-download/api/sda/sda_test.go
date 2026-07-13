@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -380,13 +381,13 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Save original to-be-mocked functions and config
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "", errors.New("file not found")
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return nil, sql.ErrNoRows
 	}
 
 	viper.Set("c4gh.transientKeyPath", privateKeyFilePath)
@@ -419,7 +420,7 @@ func TestDownload_Fail_FileNotFound(t *testing.T) {
 	}
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
 	viper.Set("c4gh.transientKeyPath", "")
@@ -431,15 +432,15 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Save original to-be-mocked functions
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
 		// nolint:goconst
-		return "dataset1", nil
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{}
@@ -475,7 +476,7 @@ func TestDownload_Fail_NoPermissions(t *testing.T) {
 	}
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
 	config.Config.C4GH.PrivateKey = originalC4ghPrivateKeyFilepath
@@ -488,15 +489,15 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Save original to-be-mocked functions
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -537,7 +538,7 @@ func TestDownload_Fail_GetFile(t *testing.T) {
 	}
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
@@ -551,7 +552,7 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Save original to-be-mocked functions
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
@@ -579,8 +580,8 @@ storage:
 	ArchiveReader, _ = storage.NewReader(context.Background(), "archive")
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -631,7 +632,7 @@ storage:
 	}
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
@@ -740,7 +741,7 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Save original to-be-mocked functions
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
@@ -852,8 +853,8 @@ storage:
 	_ = datafile.Close()
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -951,7 +952,7 @@ storage:
 	assert.Equal(t, []byte("c4gh pub"), body[:8], "Unexpected body from download")
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
@@ -983,13 +984,13 @@ func GenerateTestC4ghKey(t *testing.T) (string, error) {
 }
 
 func TestDownload_InvalidRange_NoEnd(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1028,18 +1029,18 @@ func TestDownload_InvalidRange_NoEnd(t *testing.T) {
 	assert.Contains(t, string(body), "Range header byte coordinates invalid")
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 }
 func TestDownload_InvalidRange_NoStart(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1078,19 +1079,19 @@ func TestDownload_InvalidRange_NoStart(t *testing.T) {
 	assert.Contains(t, string(body), "Range header byte coordinates invalid")
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 }
 
 func TestDownload_ArchiveLocationUnset(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1126,19 +1127,19 @@ func TestDownload_ArchiveLocationUnset(t *testing.T) {
 	assert.Contains(t, string(body), "archive location not known")
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 }
 
 func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1176,21 +1177,21 @@ func TestDownload_InvalidRange_NegativeStart(t *testing.T) {
 	assert.Contains(t, string(body), "Range header byte coordinates invalid")
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 }
 
 func TestDownload_Range_FromStartOfFile(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1281,7 +1282,7 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 	assert.Equal(t, "mock header;this", string(body))
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
@@ -1292,15 +1293,15 @@ func TestDownload_Range_FromStartOfFile(t *testing.T) {
 }
 
 func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
-	originalCheckFilePermission := database.CheckFilePermission
+	originalCheckFilePermission := database.GetDatasetsContainingFile
 	originalGetCacheFromContext := middleware.GetCacheFromContext
 	originalGetFile := database.GetFile
 	originalServeUnencryptedDataTrigger := config.Config.C4GH.PublicKeyB64
 	originalC4ghPrivateKeyFilepath := config.Config.C4GH.PrivateKey
 
 	// Substitute mock functions
-	database.CheckFilePermission = func(_ string) (string, error) {
-		return "dataset1", nil
+	database.GetDatasetsContainingFile = func(_ string) ([]string, error) {
+		return []string{"dataset1"}, nil
 	}
 	middleware.GetCacheFromContext = func(_ *gin.Context) session.Cache {
 		return session.Cache{
@@ -1391,7 +1392,7 @@ func TestDownload_Range_FromMiddleOfFile(t *testing.T) {
 	assert.Equal(t, "this is a mock", string(body))
 
 	// Return mock functions to originals
-	database.CheckFilePermission = originalCheckFilePermission
+	database.GetDatasetsContainingFile = originalCheckFilePermission
 	middleware.GetCacheFromContext = originalGetCacheFromContext
 	database.GetFile = originalGetFile
 	config.Config.C4GH.PublicKeyB64 = originalServeUnencryptedDataTrigger
