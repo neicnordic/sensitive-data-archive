@@ -235,7 +235,9 @@ func TestTokenMiddleware_Success_FromCache(t *testing.T) {
 
 	r.AddCookie(&http.Cookie{
 		Name:  "sda_session_key",
-		Value: "key",
+		Value: "key", Secure: true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	// Now that we are modifying the request context, we need to place the context test inside the handler
