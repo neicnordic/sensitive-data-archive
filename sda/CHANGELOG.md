@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated the sda-api `dataset/create` API to not reject requests if the requested files belong to different users.
 - Updated [sda api swagger_v1.yml](cmd/api/swagger_v1.yml) to not specify user in the DatasetCreate as it is no longer needed.
-- Updated sda-download to handle file downloads when a file exists in multiple datasets, allows file download if user has a visa for at least one dataset the file is present in
+- Updated sda-download to handle file downloads when a file exists in multiple datasets. Allows file download if user has a visa for at least one dataset the file is present in.
 
 ## [3.1.73] - 2026-06-16
 
