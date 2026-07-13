@@ -370,7 +370,7 @@ var GetDatasetsContainingFile = func(fileID string) ([]string, error) {
 
 	for count < dbRetryTimes {
 		r, err = DB.getDatasetsContainingFile(fileID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			count++
 
 			continue
@@ -410,8 +410,6 @@ func (dbs *SQLdb) getDatasetsContainingFile(fileID string) ([]string, error) {
 		var datasetAccession string
 
 		if err := rows.Scan(&datasetAccession); err != nil {
-			log.Errorf("requested file with %s does not exist", sanitizeString(fileID))
-
 			return nil, err
 		}
 
