@@ -689,6 +689,11 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	err = ts.db.SetAccessionID(context.Background(), "stableID-disabled", disabledFileID)
 	assert.NoError(ts.T(), err, "failed to set accession id for disabled file")
 
+	removedFileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", fmt.Sprintf("%v/submission_b/TestGetUserFiles-removed.c4gh", testUser), testUser)
+	assert.NoError(ts.T(), err, "failed to register removed file in database")
+	err = ts.db.UpdateFileEventLog(context.Background(), removedFileID, "removed", testUser, "{}", "{}")
+	assert.NoError(ts.T(), err, "failed to set file as removed in database")
+
 	filelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), "unknownuser", "", true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(ts.T(), filelist, "file list of unknown user is not empty")
@@ -702,6 +707,7 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 		assert.Equal(ts.T(), "ready", fileInfo.Status, "incorrect file status")
 		assert.Contains(ts.T(), fileInfo.AccessionID, "accessionID-00", "incorrect file accession ID")
 		assert.NotEqual(ts.T(), disabledFileID, fileInfo.FileID, "disabled files should not be returned")
+		assert.NotEqual(ts.T(), removedFileID, fileInfo.FileID, "removed files should not be returned")
 	}
 
 	filteredFilelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
@@ -1833,6 +1839,12 @@ func (ts *DatabaseTests) TestGetFileIDInInbox() {
 	fileIDFromDB, err = ts.db.GetFileIDInInbox(context.Background(), "testuser", "TestGetFileIDInInbox.c4gh")
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), fileID, fileIDFromDB)
+
+	assert.NoError(ts.T(), ts.db.UpdateFileEventLog(context.Background(), fileID, "removed", "testuser", "{}", "{}"))
+
+	fileIDFromDB, err = ts.db.GetFileIDInInbox(context.Background(), "testuser", "TestGetFileIDInInbox.c4gh")
+	assert.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "", fileIDFromDB)
 }
 
 func (ts *DatabaseTests) TestGetFileIDInInbox_NotFound() {

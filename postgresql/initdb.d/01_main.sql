@@ -69,6 +69,7 @@ CREATE TABLE file_events (
 INSERT INTO file_events(id,title,description)
 VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
        (10, 'uploaded'    , 'Upload to the inbox has finished'),
+    ( 3, 'removed'     , 'File has been removed from the inbox'),
        (20, 'submitted'   , 'User has submitted the file to the archive'),
        (30, 'ingested'    , 'File information has been added to the database'),
        (40, 'archived'    , 'File has been moved to the archive'),

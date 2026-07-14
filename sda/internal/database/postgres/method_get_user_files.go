@@ -20,7 +20,7 @@ FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
  WHERE f.submission_user = $1 
     AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
-	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') != 'disabled'
+	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
 	AND ($4::UUID IS NULL OR f.id > $4::UUID)
 ORDER BY f.id ASC LIMIT $5;
 `
