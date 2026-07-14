@@ -133,7 +133,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/:username/:fileid`
   - accepts `DELETE` requests
-  - marks the file as `disabled` in the database, and deletes it from the inbox.
+  - admin endpoint that marks the file as `removed` in the database and deletes it from the inbox.
   - The file is identified by its id, returned by `users/:username/:files`
 
   - Response codes
@@ -147,6 +147,24 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
     ```bash
     curl -H "Authorization: Bearer $token" -X DELETE https://HOSTNAME/file/user@demo.org/123abc
+    ```
+
+- `/users/:username/file/:fileid`
+  - accepts `DELETE` requests
+  - marks the file as `removed` in the database, deletes it from the inbox, and sends an inbox remove message.
+  - The `:username` path segment must match the authenticated user.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `401` Token user is not authorized.
+    - `403` File does not belong to the authenticated user.
+    - `404` File not found.
+    - `500` Internal error due to Inbox, DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X DELETE https://HOSTNAME/users/user@demo.org/file/123abc
     ```
 
 - `/dataset/create`

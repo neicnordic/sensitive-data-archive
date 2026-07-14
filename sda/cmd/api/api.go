@@ -208,23 +208,24 @@ func setup(conf *config.Config) (*http.Server, error) {
 	r.POST("/c4gh-keys/add", rbac(e), addC4ghHash)                      // Adds a key hash to the database
 	r.GET("/c4gh-keys/list", rbac(e), listC4ghHashes)                   // Lists key hashes in the database
 	r.POST("/c4gh-keys/deprecate/*keyHash", rbac(e), deprecateC4ghHash) // Deprecate a given key hash
-	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Delete a file from inbox
+	r.DELETE("/file/:username/:fileid", rbac(e), deleteFile)            // Admin delete a file from inbox
 	// submission endpoints below here
-	r.POST("/file/ingest", rbac(e), ingestFile)                      // start ingestion of a file
-	r.GET("/file/events/:fileid", rbac(e), getFileEvents)            // get file events associated with a file
-	r.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)  // append a file_event to the file_event_log for a given fileid
-	r.POST("/file/accession", rbac(e), setAccession)                 // assign accession ID to a file
-	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)          // trigger reverification of a file
-	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)        // trigger key rotation for a file
-	r.POST("/dataset/create", rbac(e), createDataset)                // maps a set of files to a dataset
-	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateKeyDataset) // trigger key rotation for all files in a dataset
-	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)     // Releases a dataset to be accessible
-	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)      // Re-verify all files in the dataset
-	r.GET("/datasets/list", rbac(e), listAllDatasets)                // Lists all datasets with their status
-	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)     // Lists datasets with their status for a specific user
-	r.GET("/users", rbac(e), listActiveUsers)                        // Lists all users
-	r.GET("/users/:username/files", rbac(e), listUserFiles)          // Lists all unmapped files for a user
-	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)    // Download a file from a users inbox
+	r.POST("/file/ingest", rbac(e), ingestFile)                         // start ingestion of a file
+	r.GET("/file/events/:fileid", rbac(e), getFileEvents)               // get file events associated with a file
+	r.POST("/file/events/:fileid/:event", rbac(e), updateFileEvent)     // append a file_event to the file_event_log for a given fileid
+	r.POST("/file/accession", rbac(e), setAccession)                    // assign accession ID to a file
+	r.PUT("/file/verify/:accession", rbac(e), reVerifyFile)             // trigger reverification of a file
+	r.POST("/file/rotatekey/:fileid", rbac(e), rotateKeyFile)           // trigger key rotation for a file
+	r.DELETE("/users/:username/file/:fileid", rbac(e), deleteInboxFile) // User delete their own file from inbox
+	r.POST("/dataset/create", rbac(e), createDataset)                   // maps a set of files to a dataset
+	r.POST("/dataset/rotatekey/:dataset", rbac(e), rotateKeyDataset)    // trigger key rotation for all files in a dataset
+	r.POST("/dataset/release/*dataset", rbac(e), releaseDataset)        // Releases a dataset to be accessible
+	r.PUT("/dataset/verify/*dataset", rbac(e), reVerifyDataset)         // Re-verify all files in the dataset
+	r.GET("/datasets/list", rbac(e), listAllDatasets)                   // Lists all datasets with their status
+	r.GET("/datasets/list/:username", rbac(e), listUserDatasets)        // Lists datasets with their status for a specific user
+	r.GET("/users", rbac(e), listActiveUsers)                           // Lists all users
+	r.GET("/users/:username/files", rbac(e), listUserFiles)             // Lists all unmapped files for a user
+	r.GET("/users/:username/file/:fileid", rbac(e), downloadFile)       // Download a file from a users inbox
 
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
@@ -516,8 +517,6 @@ func ingestFile(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// The deleteFile function deletes files from the inbox and marks them as
-// discarded in the db. Files are identified by their ids and the user id.
 func deleteFile(c *gin.Context) {
 	submissionUser := c.Param("username")
 	log.Debug("submission user:", submissionUser)
@@ -562,7 +561,7 @@ func deleteFile(c *gin.Context) {
 		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
 	}
 
-	if err := db.UpdateFileEventLog(c, fileID, "disabled", "api", "{}", "{}"); err != nil {
+	if err := db.UpdateFileEventLog(c, fileID, "removed", "api", "{}", "{}"); err != nil {
 		log.Errorf("set status deleted failed, reason: (%v)", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
 
@@ -570,6 +569,108 @@ func deleteFile(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func deleteInboxFile(c *gin.Context) {
+	token, err := auth.Authenticate(c.Request)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, err.Error())
+
+		return
+	}
+
+	submissionUser := c.Param("username")
+	log.Debug("submission user:", submissionUser)
+	if submissionUser != token.Subject() {
+		c.AbortWithStatusJSON(http.StatusForbidden, "file does not belong to user")
+
+		return
+	}
+
+	fileID := c.Param("fileid")
+	fileID = strings.TrimPrefix(fileID, "/")
+	log.Debug("submission file:", fileID)
+	if fileID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, "file ID is required")
+
+		return
+	}
+
+	// Get the file path from the fileID and submission user
+	filePath, location, err := db.GetUploadedSubmissionFilePathAndLocation(c, submissionUser, fileID)
+	if err != nil {
+		log.Errorf("getting file from fileID failed, reason: (%v)", err)
+		c.AbortWithStatusJSON(http.StatusNotFound, "File could not be found in inbox")
+
+		return
+	}
+
+	if location == "" {
+		log.Errorf("fileID: %s has no known submission location", fileID)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to find file location")
+
+		return
+	}
+
+	filePath = helper.ResolveInboxPath(filePath, submissionUser, Conf.Inbox)
+	for count := 1; count <= 5; count++ {
+		err = inboxWriter.RemoveFile(c, location, filePath)
+		if err == nil {
+			break
+		}
+		log.Errorf("Remove file from inbox failed, reason: %v", err)
+		if count == 5 {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, ("remove file from inbox failed"))
+
+			return
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+	}
+
+	removeMessage := schema.InboxRemove{
+		User:      submissionUser,
+		FilePath:  filePath,
+		Operation: "remove",
+	}
+
+	marshaledMsg, err := json.Marshal(removeMessage)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, "failed to encode remove message")
+
+		return
+	}
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/inbox-remove.json", Conf.Broker.SchemasPath), marshaledMsg); err != nil {
+		log.Debugln(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	routingKey := Conf.Broker.RoutingKey
+	if routingKey == "" {
+		routingKey = "inbox"
+	}
+
+	if err := Conf.API.MQ.SendMessage(fileID, Conf.Broker.Exchange, routingKey, marshaledMsg); err != nil {
+		log.Errorf("sending remove message failed, reason: (%v)", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	if err := db.UpdateFileEventLog(c, fileID, "removed", token.Subject(), "{\"reason\": \"file removed\"}", string(marshaledMsg)); err != nil {
+		log.Errorf("set status removed failed, reason: (%v)", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func deleteUserFile(c *gin.Context) {
+	deleteInboxFile(c)
 }
 
 // reencryptHeader re-encrypts the header of a file using the public key

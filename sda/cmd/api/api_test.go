@@ -489,6 +489,8 @@ func (s *TestSuite) SetupSuite() {
 	{"role":"submission","path":"/dataset/release/*dataset","action":"POST"},
 	{"role":"submission","path":"/file/ingest","action":"POST"},
 	{"role":"submission","path":"/file/accession","action":"POST"},
+	{"role":"submission","path":"/users/:username/file/:fileid","action":"DELETE"},
+	{"role":"admin","path":"/file/:username/:fileid","action":"DELETE"},
 	{"role":"admin","path":"/file/events/:fileid/:event","action":"POST"},
 	{"role":"submission","path":"/users","action":"GET"},
 	{"role":"submission","path":"/users/:username/files","action":"GET"},
@@ -884,6 +886,142 @@ func (s *TestSuite) TestAPIUpdateEvent_NoMessage() {
 	okResponse := w.Result()
 	defer okResponse.Body.Close()
 	assert.Equal(s.T(), http.StatusBadRequest, okResponse.StatusCode)
+}
+
+func prepareDeleteFileTestData(s *TestSuite, user, filePath string) (string, string) {
+	physicalPath := filepath.Join(s.inboxDir, helper.ResolveInboxPath(filePath, user, Conf.Inbox))
+	assert.NoError(s.T(), os.MkdirAll(filepath.Dir(physicalPath), 0o750))
+	assert.NoError(s.T(), os.WriteFile(physicalPath, []byte("delete me"), 0o600))
+
+	fileID, err := db.RegisterFile(context.Background(), nil, s.inboxDir, filePath, user)
+	assert.NoError(s.T(), err, "failed to register file in database")
+	err = db.UpdateFileEventLog(context.Background(), fileID, "uploaded", user, "{}", "{}")
+	assert.NoError(s.T(), err, "failed to update status of file in database")
+
+	return fileID, physicalPath
+}
+
+func (s *TestSuite) TestDeleteUserInboxFile_NoError() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	filePath := "submission_b/TestDeleteUserInboxFile.c4gh"
+	fileID, physicalPath := prepareDeleteFileTestData(s, s.User, filePath)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s:%d/users/%s/file/%s", Conf.API.Host, Conf.API.Port, s.User, fileID), http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.DELETE("/users/:username/file/:fileid", rbac(e), deleteUserFile)
+
+	router.ServeHTTP(w, r)
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
+
+	_, err = os.Stat(physicalPath)
+	assert.ErrorIs(s.T(), err, os.ErrNotExist)
+
+	status, err := db.GetFileStatus(context.Background(), fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), "removed", status)
+
+	files, _, err := db.GetUserFiles(context.Background(), s.User, "", true, 0, "")
+	assert.NoError(s.T(), err)
+	for _, fileInfo := range files {
+		assert.NotEqual(s.T(), fileID, fileInfo.FileID)
+	}
+}
+
+func (s *TestSuite) TestDeleteUserInboxFile_ForbiddenForDifferentUser() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	owner := "other-user"
+	fileID, physicalPath := prepareDeleteFileTestData(s, owner, "submission_b/TestDeleteUserInboxFileForbidden.c4gh")
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s:%d/users/%s/file/%s", Conf.API.Host, Conf.API.Port, owner, fileID), http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.DELETE("/users/:username/file/:fileid", rbac(e), deleteUserFile)
+
+	router.ServeHTTP(w, r)
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusForbidden, resp.StatusCode)
+
+	_, err = os.Stat(physicalPath)
+	assert.NoError(s.T(), err)
+
+	status, err := db.GetFileStatus(context.Background(), fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), "uploaded", status)
+}
+
+func (s *TestSuite) TestDeleteAdminInboxFile_NoError() {
+	gin.SetMode(gin.ReleaseMode)
+	assert.NoError(s.T(), setupJwtAuth())
+	Conf.Broker.SchemasPath = "../../schemas/isolated"
+
+	m, err := model.NewModelFromString(jsonadapter.Model)
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC model")
+	}
+	e, err := casbin.NewEnforcer(m, jsonadapter.NewAdapter(&s.RBAC))
+	if err != nil {
+		s.T().Logf("failure: %v", err)
+		s.FailNow("failed to setup RBAC enforcer")
+	}
+
+	owner := "other-user"
+	fileID, physicalPath := prepareDeleteFileTestData(s, owner, "submission_b/TestDeleteAdminInboxFile.c4gh")
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s:%d/file/%s/%s", Conf.API.Host, Conf.API.Port, owner, fileID), http.NoBody)
+	r.Header.Add("Authorization", "Bearer "+s.Token)
+
+	_, router := gin.CreateTestContext(w)
+	router.DELETE("/file/:username/:fileid", rbac(e), deleteFile)
+
+	router.ServeHTTP(w, r)
+	resp := w.Result()
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusOK, resp.StatusCode)
+
+	_, err = os.Stat(physicalPath)
+	assert.ErrorIs(s.T(), err, os.ErrNotExist)
+
+	status, err := db.GetFileStatus(context.Background(), fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), "removed", status)
 }
 
 func (s *TestSuite) TestAPIGetFiles_SubmissionFileSize() {

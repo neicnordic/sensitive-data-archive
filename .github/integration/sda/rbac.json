@@ -42,7 +42,12 @@
        },
        {
           "role": "submission",
-          "path": "/file/*",
+          "path": "/users/:username/file/:fileid",
+          "action": "DELETE"
+       },
+       {
+          "role": "admin",
+          "path": "/file/:username/:fileid",
           "action": "DELETE"
        },
        {
