@@ -9,6 +9,40 @@ if [ "$response" != "uploaded" ]; then
 	exit 1
 fi
 
+# Test user-owned inbox file delete via file ID.
+# Delete the duplicate file created in upload tests so later ingest tests remain stable.
+delete_target_path="NB12878.bam.c4gh"
+delete_file_id="$(curl -s -k -L "http://api:8080/users/test@dummy.org/files" -H "Authorization: Bearer $token" | jq -r --arg p "$delete_target_path" '.[] | select(.inboxPath == $p and .fileStatus == "uploaded") | .fileId' | head -n 1)"
+if [ -z "$delete_file_id" ] || [ "$delete_file_id" = "null" ]; then
+	echo "Failed to find uploaded file ID for delete target: $delete_target_path"
+	exit 1
+fi
+
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/users/test@dummy.org/file/$delete_file_id")"
+if [ "$resp" != "200" ]; then
+	echo "Error when deleting user inbox file, expected 200 got: $resp"
+	exit 1
+fi
+
+# User path segment must match authenticated user.
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/users/requester@demo.org/file/$delete_file_id")"
+if [ "$resp" != "403" ]; then
+	echo "Delete with mismatched username should fail, expected 403 got: $resp"
+	exit 1
+fi
+
+latest_status="$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id = '$delete_file_id' ORDER BY id DESC LIMIT 1;")"
+if [ "$latest_status" != "removed" ]; then
+	echo "Delete endpoint should set latest file event to removed, got: $latest_status"
+	exit 1
+fi
+
+listed_after_delete="$(curl -s -k -L "http://api:8080/users/test@dummy.org/files" -H "Authorization: Bearer $token" | jq -r --arg p "$delete_target_path" '[.[] | select(.inboxPath == $p)] | length')"
+if [ "$listed_after_delete" -ne 0 ]; then
+	echo "Deleted file should not be listed for user, found: $listed_after_delete"
+	exit 1
+fi
+
 # test inserting a c4gh public key hash
 payload=$(
 	jq -c -n \
