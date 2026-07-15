@@ -164,7 +164,8 @@ CREATE TABLE file_dataset (
     file_id             UUID REFERENCES files(id) NOT NULL,
     dataset_id          INT REFERENCES datasets(id) NOT NULL,
     download_path       TEXT,
-    CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id)
+    CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id),
+    CONSTRAINT file_dataset_unique_download_path_dataset_idx UNIQUE (dataset_id, download_path)
 );
 
 -- Keeps track of all events for the files, with timestamps and user_ids.

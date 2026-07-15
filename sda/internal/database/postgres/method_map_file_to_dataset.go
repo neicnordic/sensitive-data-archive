@@ -11,7 +11,7 @@ const mapFileToDatasetInsertDatasetQuery = "mapFileToDatasetInsertDataset"
 func init() {
 	queries[mapFileToDatasetQuery] = `
 INSERT INTO sda.file_dataset (file_id, dataset_id, download_path)
-VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;
+VALUES ($1, $2, $3) ON CONFLICT ON CONSTRAINT unique_file_dataset DO NOTHING;
 `
 
 	// Here we do the UPDATE SET stable_id = EXCLUDED.stable_id to make the RETURNING id return the id

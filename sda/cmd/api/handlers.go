@@ -658,7 +658,12 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that the files to have overridden download paths are added to the dataset in the same request
-	for accessionToSetDownloadPath := range dataset.FileDownloadPaths {
+	for accessionToSetDownloadPath, downloadPath := range dataset.FileDownloadPaths {
+		if downloadPath == "" {
+			writeJSON(w, http.StatusBadRequest, "download path for a file can not be empty")
+
+			return
+		}
 		found := false
 		for _, accessionToAddToDataset := range dataset.AccessionIDs {
 			if accessionToSetDownloadPath == accessionToAddToDataset {

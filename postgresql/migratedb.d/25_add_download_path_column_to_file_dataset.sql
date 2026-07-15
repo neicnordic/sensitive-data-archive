@@ -12,7 +12,9 @@ BEGIN
     RAISE NOTICE 'Changes: %', changes;
     INSERT INTO sda.dbschema_version VALUES(sourcever+1, now(), changes);
 
-    ALTER TABLE sda.file_dataset ADD COLUMN download_path TEXT;
+    ALTER TABLE sda.file_dataset
+      ADD COLUMN download_path TEXT,
+      ADD CONSTRAINT file_dataset_unique_download_path_dataset_idx UNIQUE (dataset_id, download_path);
 
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;

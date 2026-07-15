@@ -55,8 +55,14 @@
                     "any_identifier_2": "download_path_2"
                 }
             ],
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^\\S+$"
+            },
             "additionalProperties": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S+$"
             }
         }
     }
