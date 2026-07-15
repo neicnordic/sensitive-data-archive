@@ -1548,7 +1548,7 @@ func (ts *DatabaseTests) TestMapFileToDataset_WithDownloadPath() {
 	var rowsWithoutDownloadPath bool
 	err := ts.verificationDB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE download_path IS NULL)").Scan(&rowsWithoutDownloadPath)
 	if err != nil {
-		ts.FailNow("failed to get submission file size from DB", err)
+		ts.FailNow("failed to get query verification db to check if download path is null", err)
 	}
 
 	assert.Equal(ts.T(), false, rowsWithoutDownloadPath)
