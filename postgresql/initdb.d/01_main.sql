@@ -38,7 +38,8 @@ VALUES (0, now(), 'Created with version'),
        (21, now(), 'Drop functions set_verified, and set_archived'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
        (23, now(), 'Expand files table with storage locations'),
-       (24, now(), 'Add last_event column to files to avoid join on file_event_log');
+       (24, now(), 'Add last_event column to files to avoid join on file_event_log'),
+       (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -162,6 +163,7 @@ CREATE TABLE file_dataset (
     id                  SERIAL PRIMARY KEY,
     file_id             UUID REFERENCES files(id) NOT NULL,
     dataset_id          INT REFERENCES datasets(id) NOT NULL,
+    download_path       TEXT,
     CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id)
 );
 

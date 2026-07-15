@@ -110,22 +110,26 @@ func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 func (api *API) readinessResponse(w http.ResponseWriter, r *http.Request) {
 	if !api.mq.Alive() {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("unable to reach rabbitmq"))
+		_, _ = w.Write([]byte("unable to reach rabbitmq"))
+
+		return
 	}
 
 	if err := api.db.Ping(context.Background()); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("unable to reach database"))
+		_, _ = w.Write([]byte("unable to reach database"))
+
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // parseLimitParam parses and validates the optional "limit" query parameter.
@@ -202,7 +206,7 @@ func (api *API) getFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
@@ -289,7 +293,7 @@ func (api *API) getFileEvents(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string][]database.FileStatus{"events": statusHistory})
+	_ = json.NewEncoder(w).Encode(map[string][]database.FileStatus{"events": statusHistory})
 }
 
 /*
@@ -653,6 +657,24 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate that the files to have overridden download paths are added to the dataset in the same request
+	for accessionToSetDownloadPath := range dataset.FileDownloadPaths {
+		found := false
+		for _, accessionToAddToDataset := range dataset.AccessionIDs {
+			if accessionToSetDownloadPath == accessionToAddToDataset {
+				found = true
+
+				break
+			}
+		}
+		if !found {
+			slog.Error("attempted to set file download path for a file not being added to the dataset")
+			writeJSON(w, http.StatusBadRequest, "attempted to set file download path for a file not being added to the dataset")
+
+			return
+		}
+	}
+
 	// Check that the files the accession ids are linked to belong to the user of the dataset
 	for _, accessionID := range dataset.AccessionIDs {
 		md, err := api.db.GetMappingData(r.Context(), accessionID)
@@ -665,13 +687,16 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 		if md == nil {
 			slog.Info("rejecting create dataset request including non-existing id", "accession_id", accessionID)
 			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("no file exists with accession: %s", accessionID))
+
+			return
 		}
 	}
 
 	mapping := schema.DatasetMapping{
-		Type:         "mapping",
-		AccessionIDs: dataset.AccessionIDs,
-		DatasetID:    dataset.DatasetID,
+		Type:              "mapping",
+		AccessionIDs:      dataset.AccessionIDs,
+		DatasetID:         dataset.DatasetID,
+		FileDownloadPaths: dataset.FileDownloadPaths,
 	}
 	marshaledMsg, _ := json.Marshal(&mapping)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
@@ -866,7 +891,7 @@ func (api *API) listActiveUsers(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string][]string{"users": users})
+	_ = json.NewEncoder(w).Encode(map[string][]string{"users": users})
 }
 
 func (api *API) listUserFiles(w http.ResponseWriter, r *http.Request) {
@@ -914,7 +939,7 @@ func (api *API) listUserFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 // addC4ghHash handles the addition of a hashed public key to the database.
@@ -998,7 +1023,7 @@ func (api *API) listC4ghHashes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 func (api *API) deprecateC4ghHash(w http.ResponseWriter, r *http.Request) {
@@ -1033,7 +1058,7 @@ func (api *API) listAllDatasets(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 func (api *API) listUserDatasets(w http.ResponseWriter, r *http.Request) {
@@ -1058,7 +1083,7 @@ func (api *API) listUserDatasets(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
@@ -1090,7 +1115,7 @@ func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rsp)
+	_ = json.NewEncoder(w).Encode(rsp)
 }
 
 func (api *API) verifyFile(w http.ResponseWriter, r *http.Request) {

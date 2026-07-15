@@ -252,8 +252,8 @@ func (m *MockDatabase) GetAccessionID(_ context.Context, fileID string) (string,
 	return args.Get(0).(string), args.Error(1)
 }
 
-func (m *MockDatabase) MapFileToDataset(_ context.Context, datasetID, fileID string) error {
-	args := m.Called(datasetID, fileID)
+func (m *MockDatabase) MapFileToDataset(_ context.Context, datasetID, fileID string, downloadPath *string) error {
+	args := m.Called(datasetID, fileID, downloadPath)
 
 	return args.Error(0)
 }

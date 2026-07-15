@@ -496,14 +496,14 @@ func (ts *DatabaseTests) TestMapFilesToDataset() {
 
 	for di, fIDs := range diSet {
 		for _, fileID := range fIDs {
-			err := ts.db.MapFileToDataset(context.Background(), di, fileID)
+			err := ts.db.MapFileToDataset(context.Background(), di, fileID, nil)
 			assert.NoError(ts.T(), err, "failed to map file to dataset")
 		}
 	}
 
 	// Append files to an existing dataset
 	for _, fileID := range fileIDs[9:11] {
-		err := ts.db.MapFileToDataset(context.Background(), "dataset1", fileID)
+		err := ts.db.MapFileToDataset(context.Background(), "dataset1", fileID, nil)
 		assert.NoError(ts.T(), err, "failed to append file to dataset")
 	}
 
@@ -550,7 +550,7 @@ func (ts *DatabaseTests) TestUpdateDatasetEvent() {
 
 	for di, fIDs := range diSet {
 		for _, fileID := range fIDs {
-			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileID), "failed to map file to dataset")
+			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileID, nil), "failed to map file to dataset")
 		}
 	}
 
@@ -624,7 +624,7 @@ func (ts *DatabaseTests) TestCheckIfDatasetExists() {
 
 	for di, fIDs := range diSet {
 		for _, fileIDs := range fIDs {
-			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileIDs), "failed to map file to dataset")
+			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileIDs, nil), "failed to map file to dataset")
 		}
 	}
 
@@ -826,15 +826,15 @@ func (ts *DatabaseTests) TestListActiveUsers() {
 		}
 	}
 
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_00"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_01"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_02"]))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_00"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_01"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-A_02"], nil))
 
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_00"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_01"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_02"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_03"]))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_04"]))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_00"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_01"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_02"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_03"], nil))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "test-dataset-01", accessionToFileID["accession_User-C_04"], nil))
 
 	userList, err := ts.db.ListActiveUsers(context.Background())
 	assert.NoError(ts.T(), err, "failed to list users from DB")
@@ -881,7 +881,7 @@ func (ts *DatabaseTests) TestGetDatasetStatus() {
 			ts.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), accessionID, fileID)
 		}
 
-		if err := ts.db.MapFileToDataset(context.Background(), dID, fileID); err != nil {
+		if err := ts.db.MapFileToDataset(context.Background(), dID, fileID, nil); err != nil {
 			ts.FailNow("failed to map files to dataset")
 		}
 	}
@@ -1076,7 +1076,7 @@ func (ts *DatabaseTests) TestListDatasets() {
 		default:
 			continue
 		}
-		if err := ts.db.MapFileToDataset(context.Background(), dID, fileID); err != nil {
+		if err := ts.db.MapFileToDataset(context.Background(), dID, fileID, nil); err != nil {
 			ts.FailNow("failed to map files to dataset")
 		}
 	}
@@ -1147,13 +1147,13 @@ func (ts *DatabaseTests) TestListUserDatasets() {
 		}
 
 		if i >= 3 {
-			if err := ts.db.MapFileToDataset(context.Background(), "test-user-dataset-02", fileID); err != nil {
+			if err := ts.db.MapFileToDataset(context.Background(), "test-user-dataset-02", fileID, nil); err != nil {
 				ts.FailNow("failed to map files to dataset")
 			}
 
 			continue
 		}
-		if err := ts.db.MapFileToDataset(context.Background(), "test-user-dataset-01", fileID); err != nil {
+		if err := ts.db.MapFileToDataset(context.Background(), "test-user-dataset-01", fileID, nil); err != nil {
 			ts.FailNow("failed to map files to dataset")
 		}
 	}
@@ -1178,7 +1178,7 @@ func (ts *DatabaseTests) TestListUserDatasets() {
 		ts.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), "accessionID", fileID)
 	}
 
-	if err := ts.db.MapFileToDataset(context.Background(), "test-wrong-user-dataset", fileID); err != nil {
+	if err := ts.db.MapFileToDataset(context.Background(), "test-wrong-user-dataset", fileID, nil); err != nil {
 		ts.FailNow("failed to map files to dataset")
 	}
 	if err := ts.db.UpdateDatasetEvent(context.Background(), "test-wrong-user-dataset", "registered", "{\"type\": \"mapping\"}"); err != nil {
@@ -1441,7 +1441,7 @@ func (ts *DatabaseTests) TestGetDatasetFiles() {
 		if err != nil {
 			ts.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), accessionID, fileID)
 		}
-		assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), dID, fileID))
+		assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), dID, fileID, nil))
 	}
 
 	files, err := ts.db.GetDatasetFiles(context.Background(), dID)
@@ -1492,7 +1492,7 @@ func (ts *DatabaseTests) TestGetDatasetFileIDs() {
 		if err != nil {
 			ts.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), accessionID, fileID)
 		}
-		assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), dID, fileID))
+		assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), dID, fileID, nil))
 	}
 
 	files, err := ts.db.GetDatasetFileIDs(context.Background(), dID)
@@ -1500,6 +1500,58 @@ func (ts *DatabaseTests) TestGetDatasetFileIDs() {
 	assert.Equal(ts.T(), 3, len(files))
 
 	assert.ElementsMatch(ts.T(), createdFileIDs, files)
+}
+
+func (ts *DatabaseTests) TestMapFileToDataset_WithDownloadPath() {
+	testCases := 3
+	dID := "test-get-dataset-fileids-01"
+
+	for i := 0; i < testCases; i++ {
+		filePath := fmt.Sprintf("/%v/TestGetDatasetFileIDs-00%d.c4gh", "User-Q", i)
+		fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", filePath, "User-Q")
+		if err != nil {
+			ts.FailNow("Failed to register file")
+		}
+		if err = ts.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", "User-Q", "{}", "{}"); err != nil {
+			ts.FailNow("Failed to update file event log")
+		}
+
+		fileInfo := &database.FileInfo{
+			Size:              1234,
+			Path:              filePath,
+			ArchivedChecksum:  fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			DecryptedChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)),
+			DecryptedSize:     999,
+			UploadedChecksum:  fmt.Sprintf("%x", sha256.New().Sum(nil)),
+		}
+
+		err = ts.db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
+		if err != nil {
+			ts.FailNow("failed to mark file as Archived")
+		}
+
+		err = ts.db.SetVerified(context.Background(), fileInfo, fileID)
+		if err != nil {
+			ts.FailNow("failed to mark file as Verified")
+		}
+
+		accessionID := fmt.Sprintf("accession_ids_%s_0%d", "User-Q", i)
+		err = ts.db.SetAccessionID(context.Background(), accessionID, fileID)
+		if err != nil {
+			ts.FailNowf("got (%s) when setting stable ID: %s, %s", err.Error(), accessionID, fileID)
+		}
+		downloadPath := fmt.Sprintf("download_path/%d", i)
+
+		assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), dID, fileID, &downloadPath))
+	}
+
+	var rowsWithoutDownloadPath bool
+	err := ts.verificationDB.QueryRow("SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE download_path IS NULL)").Scan(&rowsWithoutDownloadPath)
+	if err != nil {
+		ts.FailNow("failed to get submission file size from DB", err)
+	}
+
+	assert.Equal(ts.T(), false, rowsWithoutDownloadPath)
 }
 
 func (ts *DatabaseTests) TestGetSubmissionPathAndLocation() {
@@ -1705,7 +1757,7 @@ func (ts *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 			if len(test.filesToDataset) > 0 {
 				for fileID, accessionID := range test.filesToDataset {
 					assert.NoError(t, ts.db.SetAccessionID(context.Background(), accessionID, fileID))
-					assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "unit-test-dataset-id", fileID))
+					assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "unit-test-dataset-id", fileID, nil))
 				}
 			}
 
@@ -1766,7 +1818,7 @@ func (ts *DatabaseTests) TestIsFileInDataset_Yes() {
 	}, fileID))
 
 	assert.NoError(ts.T(), ts.db.SetAccessionID(context.Background(), "accessionID-1", fileID))
-	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "unit-test-dataset-id", fileID))
+	assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), "unit-test-dataset-id", fileID, nil))
 
 	inDataset, err := ts.db.IsFileInDataset(context.Background(), fileID)
 	assert.NoError(ts.T(), err)

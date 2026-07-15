@@ -31,8 +31,8 @@
         "accession_ids": {
             "$id": "#/properties/accession_ids",
             "type": "array",
-            "title": "The file stable ids in that dataset",
-            "description": "The file stable ids in that dataset",
+            "title": "The file accession ids to be added to the dataset",
+            "description": "The file accession ids to be added to the dataset",
             "examples": [
                 [
                     "anyidentifier"
@@ -42,6 +42,21 @@
             "items": {
                 "type": "string",
                 "pattern": "^\\S+$"
+            }
+        },
+        "file_download_paths": {
+            "$id": "#/properties/file_download_paths",
+            "type": "object",
+            "title": "The download path that files should be exposed with for this dataset",
+            "description": "The download path that files should be exposed with for this dataset, provided per file by file accession. If not provided for a file the download path will default to the submission path",
+            "examples": [
+                {
+                    "any_identifier": "download_path",
+                    "any_identifier_2": "download_path_2"
+                }
+            ],
+            "additionalProperties": {
+                "type": "string"
             }
         }
     }

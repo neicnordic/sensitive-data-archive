@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.76] - 2026-07-15
+
+### Added
+
+- Added functionality to override the exposed download path for a file within a dataset
+  - The file download path for a file in a dataset is set during the dataset creation(ie when a file is added to a dataset)
+  - The download and download-v2 services will default to the submission file path if file download path is not set for a dataset
+  - Updated [sda api swagger_v1.yml](cmd/api/swagger_v1.yml) DatasetCreate to allow caller to override the file download path in a dataset by the file accession
+  - Updated [dataset-mapping schema](schemas/isolated/dataset-mapping.json) to allow propagation of the file download path per file accession
+  - Added [new column to file_dataset table and bumped schema version to 25](../postgresql/migratedb.d/25_add_download_path_column_to_file_dataset.sql)
+
 ## [3.1.75] - 2026-07-08
 
 ### Added

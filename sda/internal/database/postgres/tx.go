@@ -98,8 +98,8 @@ func (tx *pgTx) GetAccessionID(ctx context.Context, fileID string) (string, erro
 	return tx.getAccessionID(ctx, tx.tx, fileID)
 }
 
-func (tx *pgTx) MapFileToDataset(ctx context.Context, datasetID, fileID string) error {
-	return tx.mapFileToDataset(ctx, tx.tx, datasetID, fileID)
+func (tx *pgTx) MapFileToDataset(ctx context.Context, datasetID, fileID string, downloadPath *string) error {
+	return tx.mapFileToDataset(ctx, tx.tx, datasetID, fileID, downloadPath)
 }
 
 func (tx *pgTx) GetInboxPath(ctx context.Context, accessionID string) (string, error) {

@@ -190,7 +190,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 SELECT files.stable_id AS id,
 	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
 	files.submission_user AS user_id,
-	files.submission_file_path AS file_path,
+	COALESCE(file_dataset.download_path, files.submission_file_path) AS file_path,
 	files.decrypted_file_size,
 	sha_unenc.checksum AS decrypted_file_checksum,
 	sha_unenc.type AS decrypted_file_checksum_type

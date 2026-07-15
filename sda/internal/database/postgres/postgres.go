@@ -215,8 +215,8 @@ func (db *pgDb) GetAccessionID(ctx context.Context, fileID string) (string, erro
 	return db.getAccessionID(ctx, nil, fileID)
 }
 
-func (db *pgDb) MapFileToDataset(ctx context.Context, datasetID, fileID string) error {
-	return db.mapFileToDataset(ctx, nil, datasetID, fileID)
+func (db *pgDb) MapFileToDataset(ctx context.Context, datasetID, fileID string, downloadPath *string) error {
+	return db.mapFileToDataset(ctx, nil, datasetID, fileID, downloadPath)
 }
 
 func (db *pgDb) GetInboxPath(ctx context.Context, accessionID string) (string, error) {

@@ -89,8 +89,8 @@ type functions interface {
 	// GetAccessionID returns the stable id of a file identified by its file_id
 	GetAccessionID(ctx context.Context, fileID string) (string, error)
 
-	// MapFileToDataset maps a file to a dataset in the database
-	MapFileToDataset(ctx context.Context, datasetID, fileID string) error
+	// MapFileToDataset maps a file to a dataset in the database, provide a fileDownloadPathOverride to override the file submission path as the exposed download path
+	MapFileToDataset(ctx context.Context, datasetID, fileID string, fileDownloadPathOverride *string) error
 
 	// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
 	GetInboxPath(ctx context.Context, accessionID string) (string, error)

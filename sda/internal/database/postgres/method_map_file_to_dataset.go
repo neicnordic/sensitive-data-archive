@@ -10,8 +10,8 @@ const mapFileToDatasetInsertDatasetQuery = "mapFileToDatasetInsertDataset"
 
 func init() {
 	queries[mapFileToDatasetQuery] = `
-INSERT INTO sda.file_dataset (file_id, dataset_id)
-VALUES ($1, $2) ON CONFLICT DO NOTHING;
+INSERT INTO sda.file_dataset (file_id, dataset_id, download_path)
+VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;
 `
 
 	// Here we do the UPDATE SET stable_id = EXCLUDED.stable_id to make the RETURNING id return the id
@@ -26,7 +26,7 @@ RETURNING id;
 `
 }
 
-func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fileID string) error {
+func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fileID string, downloadPath *string) error {
 	stmt, err := db.getPreparedStmt(tx, mapFileToDatasetQuery)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fil
 		return err
 	}
 
-	if _, err := stmt.ExecContext(ctx, fileID, dbDatasetID); err != nil {
+	if _, err := stmt.ExecContext(ctx, fileID, dbDatasetID, downloadPath); err != nil {
 		return err
 	}
 
