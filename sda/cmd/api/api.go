@@ -30,8 +30,9 @@ import (
 )
 
 type dataset struct {
-	AccessionIDs []string `json:"accession_ids"`
-	DatasetID    string   `json:"dataset_id"`
+	AccessionIDs      []string          `json:"accession_ids"`
+	DatasetID         string            `json:"dataset_id"`
+	FileDownloadPaths map[string]string `json:"file_download_paths,omitempty"`
 }
 
 type API struct {

@@ -32,8 +32,8 @@ func init() {
 	if err != nil {
 		log.Panicf("database connection failed, reason: %v", err)
 	}
-	if db.Version < 23 {
-		log.Panic("database schema v23 is required")
+	if db.Version < 25 {
+		log.Panic("database schema v25 is required")
 	}
 	database.DB = db
 

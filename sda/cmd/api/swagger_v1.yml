@@ -526,6 +526,11 @@ components:
         dataset_id:
           type: string
           example: zz-dataset-123456-asdfgh
+        file_download_paths:
+          type: object
+          additionalProperties:
+            type: string
+          example: {"zz-file-123456-asdfgh": "dataset1/files/zz-file-123456-asdfgh_file.c4gh", "zz-file-123456-qwerty": "dataset1/files/zz-file-123456-qwerty_file.c4gh"}
     DatasetInfo:
       type: object
       properties:

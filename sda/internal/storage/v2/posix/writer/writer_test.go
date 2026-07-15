@@ -429,7 +429,7 @@ func (m *notImplementedDatabase) GetAccessionID(_ context.Context, _ string) (st
 	panic("function not expected to be called in unit tests")
 }
 
-func (m *notImplementedDatabase) MapFileToDataset(_ context.Context, _, _ string) error {
+func (m *notImplementedDatabase) MapFileToDataset(_ context.Context, _, _ string, _ *string) error {
 	panic("function not expected to be called in unit tests")
 }
 

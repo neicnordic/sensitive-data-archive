@@ -35,7 +35,7 @@ const (
 // paginatedFileBase is the shared SELECT+JOIN+LATERAL block for keyset-paginated
 // dataset file queries. Each variant appends its own WHERE filter and LIMIT clause.
 const paginatedFileBase = `
-		SELECT f.stable_id, f.submission_file_path, f.archive_file_size,
+		SELECT f.stable_id, COALESCE(fd.download_path, f.submission_file_path), f.archive_file_size,
 		       f.decrypted_file_size, cs.checksums
 		FROM sda.files f
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
@@ -90,7 +90,7 @@ var queries = map[string]string{
 		SELECT
 			f.stable_id,
 			d.stable_id as dataset_id,
-			f.submission_file_path,
+			COALESCE(fd.download_path, f.submission_file_path),
 			f.archive_file_path,
 			f.archive_location,
 			f.archive_file_size,
@@ -109,7 +109,7 @@ var queries = map[string]string{
 		SELECT
 			f.stable_id,
 			d.stable_id as dataset_id,
-			f.submission_file_path,
+			COALESCE(fd.download_path, f.submission_file_path),
 			f.archive_file_path,
 			f.archive_location,
 			f.archive_file_size,
@@ -122,7 +122,7 @@ var queries = map[string]string{
 		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
 		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
 		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
-		WHERE d.stable_id = $1 AND f.submission_file_path = $2`,
+		WHERE d.stable_id = $1 AND COALESCE(fd.download_path, f.submission_file_path) = $2`,
 
 	// checkFilePermission verifies user has access to the file's dataset
 	// by checking if the dataset stable_id is in the user's visas
@@ -153,23 +153,23 @@ var queries = map[string]string{
 	// Keyset-paginated file queries compose from paginatedFileBase (defined below).
 
 	// getDatasetFilesPage returns paginated files in a dataset (no path filter).
-	// Keyset cursor on (submission_file_path, stable_id). $2='' means first page.
+	// Keyset cursor on (COALESCE(fd.download_path, f.submission_file_path), stable_id). $2='' means first page.
 	getDatasetFilesPageQuery: paginatedFileBase + `
-		  AND ($2 = '' OR (f.submission_file_path, f.stable_id) > ($2, $3))
-		ORDER BY f.submission_file_path, f.stable_id
+		  AND ($2 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($2, $3))
+		ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
 		LIMIT $4`,
 
 	// getDatasetFilesPageByPath returns a file by exact path (at most 1 result).
 	getDatasetFilesPageByPathQuery: paginatedFileBase + `
-		  AND f.submission_file_path = $2
+		  AND COALESCE(fd.download_path, f.submission_file_path) = $2
 		LIMIT $3`,
 
 	// getDatasetFilesPageByPrefix returns paginated files matching a path prefix.
-	// Keyset cursor on (submission_file_path, stable_id). $3='' means first page.
+	// Keyset cursor on (COALESCE(fd.download_path, f.submission_file_path), stable_id). $3='' means first page.
 	getDatasetFilesPageByPrefixQuery: paginatedFileBase + `
-		  AND f.submission_file_path LIKE $2 ESCAPE '\'
-		  AND ($3 = '' OR (f.submission_file_path, f.stable_id) > ($3, $4))
-		ORDER BY f.submission_file_path, f.stable_id
+		  AND COALESCE(fd.download_path, f.submission_file_path) LIKE $2 ESCAPE '\'
+		  AND ($3 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($3, $4))
+		ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
 		LIMIT $5`,
 }
 
@@ -184,7 +184,7 @@ type FileListOptions struct {
 	FilePath   string // exact match (mutually exclusive with PathPrefix)
 	PathPrefix string // prefix match
 	Limit      int    // pageSize + 1 (fetch one extra to detect next page)
-	CursorPath string // last-seen submission_file_path ("" for first page)
+	CursorPath string // last-seen submission_file_path(or file_dataset.download_path is populated) ("" for first page)
 	CursorID   string // tie-breaker: last-seen stable_id ("" for first page)
 }
 
