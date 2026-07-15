@@ -207,7 +207,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 				log.Errorf("failed to map file: %s to dataset-id: %s, reason: %v", fileMappingData.FileID, mappings.DatasetID, err)
 
 				// Nack message so the server gets notified that something is wrong and requeue the message
-				if err := delivered.Nack(false, true); err != nil {
+				if err := delivered.Nack(false, false); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
 				}
 
