@@ -188,7 +188,7 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 
 	const query = `
 SELECT files.stable_id AS id,
-	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+	reverse(split_part(reverse(COALESCE(file_dataset.download_path, files.submission_file_path)::text), '/'::text, 1)) AS display_file_name,
 	files.submission_user AS user_id,
 	COALESCE(file_dataset.download_path, files.submission_file_path) AS file_path,
 	files.decrypted_file_size,
