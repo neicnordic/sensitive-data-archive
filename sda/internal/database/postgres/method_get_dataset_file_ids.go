@@ -8,12 +8,10 @@ import (
 const getDatasetFileIDsQuery = "getDatasetFileIDs"
 
 func init() {
-	queries[getDatasetFileIDsQuery] = `
-SELECT fd.file_id 
+	queries[getDatasetFileIDsQuery] = `SELECT fd.file_id 
 FROM sda.datasets AS d 
 INNER JOIN sda.file_dataset AS fd ON d.id = fd.dataset_id 
-WHERE d.stable_id = $1;
-`
+WHERE d.stable_id = $1;`
 }
 
 func (db *pgDb) getDatasetFileIDs(ctx context.Context, tx *sql.Tx, datasetID string) ([]string, error) {

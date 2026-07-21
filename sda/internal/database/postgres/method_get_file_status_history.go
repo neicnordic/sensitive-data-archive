@@ -10,11 +10,9 @@ import (
 const getFileStatusHistoryQuery = "getFileStatusHistory"
 
 func init() {
-	queries[getFileStatusHistoryQuery] = `
-SELECT event, user_id, details, message, started_at
+	queries[getFileStatusHistoryQuery] = `SELECT event, user_id, details, message, started_at
 FROM sda.file_event_log 
-WHERE file_id = $1 
-`
+WHERE file_id = $1`
 }
 
 func (db *pgDb) getFileStatusHistory(ctx context.Context, tx *sql.Tx, fileID string) ([]database.FileStatus, error) {

@@ -8,11 +8,9 @@ import (
 const getInboxPathQuery = "getInboxPath"
 
 func init() {
-	queries[getInboxPathQuery] = `
-SELECT submission_file_path 
+	queries[getInboxPathQuery] = `SELECT submission_file_path 
 FROM sda.files 
-WHERE stable_id = $1;
-`
+WHERE stable_id = $1;`
 }
 
 func (db *pgDb) getInboxPath(ctx context.Context, tx *sql.Tx, accessionID string) (string, error) {

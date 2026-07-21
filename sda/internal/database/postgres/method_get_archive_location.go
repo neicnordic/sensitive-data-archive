@@ -9,11 +9,9 @@ import (
 const getArchiveLocationQuery = "getArchiveLocation"
 
 func init() {
-	queries[getArchiveLocationQuery] = `
-SELECT archive_location 
+	queries[getArchiveLocationQuery] = `SELECT archive_location 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getArchiveLocation(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {

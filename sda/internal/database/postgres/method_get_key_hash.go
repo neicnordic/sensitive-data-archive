@@ -8,11 +8,9 @@ import (
 const getKeyHashQuery = "getKeyHash"
 
 func init() {
-	queries[getKeyHashQuery] = `
-SELECT key_hash 
+	queries[getKeyHashQuery] = `SELECT key_hash 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getKeyHash(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {

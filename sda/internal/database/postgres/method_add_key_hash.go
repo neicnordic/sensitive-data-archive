@@ -9,10 +9,8 @@ import (
 const addKeyHashQuery = "addKeyHash"
 
 func init() {
-	queries[addKeyHashQuery] = `
-INSERT INTO sda.encryption_keys(key_hash, description) 
-VALUES($1, $2) ON CONFLICT DO NOTHING;
-`
+	queries[addKeyHashQuery] = `INSERT INTO sda.encryption_keys(key_hash, description) 
+VALUES($1, $2) ON CONFLICT DO NOTHING;`
 }
 
 func (db *pgDb) addKeyHash(ctx context.Context, tx *sql.Tx, keyHash, keyDescription string) error {

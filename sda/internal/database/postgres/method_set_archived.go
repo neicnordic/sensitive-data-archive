@@ -14,16 +14,13 @@ const (
 )
 
 func init() {
-	queries[setArchivedQuery] = `
-UPDATE sda.files 
+	queries[setArchivedQuery] = `UPDATE sda.files 
 SET archive_location = $1, archive_file_path = $2, archive_file_size = $3 
-WHERE id = $4;
-`
-	queries[setArchivedAddCheckSumQuery] = `
-INSERT INTO sda.checksums(file_id, checksum, type, source)
+WHERE id = $4;`
+
+	queries[setArchivedAddCheckSumQuery] = `INSERT INTO sda.checksums(file_id, checksum, type, source)
 VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source)
-ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;
-`
+ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;`
 }
 
 func (db *pgDb) setArchived(ctx context.Context, tx *sql.Tx, location string, file *database.FileInfo, fileID string) error {

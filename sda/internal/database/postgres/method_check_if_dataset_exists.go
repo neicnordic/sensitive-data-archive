@@ -8,12 +8,10 @@ import (
 const checkIfDatasetExistsQuery = "checkIfDatasetExists"
 
 func init() {
-	queries[checkIfDatasetExistsQuery] = `
-SELECT EXISTS(
+	queries[checkIfDatasetExistsQuery] = `SELECT EXISTS(
 	SELECT id from sda.datasets 
 	WHERE stable_id = $1
-);
-`
+);`
 }
 
 func (db *pgDb) checkIfDatasetExists(ctx context.Context, tx *sql.Tx, datasetID string) (bool, error) {

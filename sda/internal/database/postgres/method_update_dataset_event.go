@@ -9,10 +9,8 @@ import (
 const updateDatasetEventQuery = "updateDatasetEvent"
 
 func init() {
-	queries[updateDatasetEventQuery] = `
-INSERT INTO sda.dataset_event_log(dataset_id, event, message) 
-VALUES($1, $2, $3);
-`
+	queries[updateDatasetEventQuery] = `INSERT INTO sda.dataset_event_log(dataset_id, event, message) 
+VALUES($1, $2, $3);`
 }
 func (db *pgDb) updateDatasetEvent(ctx context.Context, tx *sql.Tx, datasetID, status, message string) error {
 	stmt, err := db.getPreparedStmt(tx, updateDatasetEventQuery)

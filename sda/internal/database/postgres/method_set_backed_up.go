@@ -9,11 +9,9 @@ import (
 const setBackedUpQuery = "setBackedUp"
 
 func init() {
-	queries[setBackedUpQuery] = `
-UPDATE sda.files 
+	queries[setBackedUpQuery] = `UPDATE sda.files 
 SET backup_location = $1, backup_path = $2 
-WHERE id = $3;
-`
+WHERE id = $3;`
 }
 
 func (db *pgDb) setBackedUp(ctx context.Context, tx *sql.Tx, location, path, fileID string) error {
