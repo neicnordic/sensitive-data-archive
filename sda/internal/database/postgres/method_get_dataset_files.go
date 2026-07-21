@@ -8,8 +8,7 @@ import (
 const getDatasetFilesQuery = "getDatasetFiles"
 
 func init() {
-	queries[getDatasetFilesQuery] = `
-SELECT stable_id 
+	queries[getDatasetFilesQuery] = `SELECT stable_id 
 FROM sda.files 
 WHERE id IN (
 	SELECT file_id 
@@ -19,8 +18,7 @@ WHERE id IN (
 		FROM sda.datasets 
 		WHERE stable_id = $1
 		)
-	);
-`
+	);`
 }
 
 func (db *pgDb) getDatasetFiles(ctx context.Context, tx *sql.Tx, datasetID string) ([]string, error) {

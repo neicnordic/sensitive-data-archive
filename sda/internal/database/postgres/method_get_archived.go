@@ -11,11 +11,9 @@ import (
 const getArchivedQuery = "getArchived"
 
 func init() {
-	queries[getArchivedQuery] = `
-SELECT archive_file_path, archive_file_size, archive_location, backup_path, backup_location 
+	queries[getArchivedQuery] = `SELECT archive_file_path, archive_file_size, archive_location, backup_path, backup_location 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getArchived(ctx context.Context, tx *sql.Tx, fileID string) (*database.ArchiveData, error) {

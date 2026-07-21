@@ -9,11 +9,9 @@ import (
 const setKeyHashQuery = "setKeyHash"
 
 func init() {
-	queries[setKeyHashQuery] = `
-UPDATE sda.files 
+	queries[setKeyHashQuery] = `UPDATE sda.files 
 SET key_hash = $1 
-WHERE id = $2;
-`
+WHERE id = $2;`
 }
 func (db *pgDb) setKeyHash(ctx context.Context, tx *sql.Tx, keyHash, fileID string) error {
 	stmt, err := db.getPreparedStmt(tx, setKeyHashQuery)

@@ -9,8 +9,7 @@ import (
 const getFileIDInInboxQuery = "getFileIDInInbox"
 
 func init() {
-	queries[getFileIDInInboxQuery] = `
-SELECT id_and_event.id
+	queries[getFileIDInInboxQuery] = `SELECT id_and_event.id
 FROM (
     SELECT DISTINCT ON (f.id) f.id, fel.event FROM sda.files AS f
         LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id

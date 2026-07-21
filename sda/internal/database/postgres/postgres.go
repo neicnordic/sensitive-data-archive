@@ -23,10 +23,8 @@ const getSchemaVersionQuery = "getSchemaVersion"
 var queries = make(map[string]string)
 
 func init() {
-	queries[getSchemaVersionQuery] = `
-SELECT MAX(version) 
-FROM sda.dbschema_version;
-`
+	queries[getSchemaVersionQuery] = `SELECT MAX(version) 
+FROM sda.dbschema_version;`
 }
 
 func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Database, error) {

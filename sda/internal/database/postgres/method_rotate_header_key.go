@@ -10,11 +10,9 @@ import (
 const rotateHeaderKeyQuery = "rotateHeaderKey"
 
 func init() {
-	queries[rotateHeaderKeyQuery] = `
-UPDATE sda.files 
+	queries[rotateHeaderKeyQuery] = `UPDATE sda.files 
 SET header = $1, key_hash = $2 
-WHERE id = $3;
-`
+WHERE id = $3;`
 }
 
 func (db *pgDb) rotateHeaderKey(ctx context.Context, tx *sql.Tx, header []byte, keyHash, fileID string) error {

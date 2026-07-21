@@ -51,126 +51,117 @@ const paginatedFileBase = `
 // These are prepared at startup to verify correctness and improve performance.
 var queries = map[string]string{
 	// getAllDatasets returns all datasets (for allow-all-data mode)
-	getAllDatasetsQuery: `
-		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
-		FROM sda.datasets d
-		ORDER BY d.created_at DESC`,
+	getAllDatasetsQuery: `SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
+FROM sda.datasets d
+ORDER BY d.created_at DESC`,
 
 	// getDatasetIDsByUser returns dataset stable_ids where the user is the submission_user
 	// This follows the data ownership model used by the API service
-	getDatasetIDsByUserQuery: `
-		SELECT DISTINCT d.stable_id
-		FROM sda.datasets d
-		INNER JOIN sda.file_dataset fd ON d.id = fd.dataset_id
-		INNER JOIN sda.files f ON fd.file_id = f.id
-		WHERE f.submission_user = $1 AND f.stable_id IS NOT NULL`,
+	getDatasetIDsByUserQuery: `SELECT DISTINCT d.stable_id
+FROM sda.datasets d
+INNER JOIN sda.file_dataset fd ON d.id = fd.dataset_id
+INNER JOIN sda.files f ON fd.file_id = f.id
+WHERE f.submission_user = $1 AND f.stable_id IS NOT NULL`,
 
 	// getUserDatasets returns datasets where the stable_id matches any of the allowed dataset IDs
-	getUserDatasetsQuery: `
-		SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
-		FROM sda.datasets d
-		WHERE d.stable_id = ANY($1)
-		ORDER BY d.created_at DESC`,
+	getUserDatasetsQuery: `SELECT DISTINCT d.stable_id, d.title, d.description, d.created_at
+FROM sda.datasets d
+WHERE d.stable_id = ANY($1)
+ORDER BY d.created_at DESC`,
 
-	getDatasetInfoQuery: `
-		SELECT
-			d.stable_id,
-			d.title,
-			d.description,
-			d.created_at,
-			COUNT(f.id) as file_count,
-			COALESCE(SUM(f.decrypted_file_size), 0) as total_size
-		FROM sda.datasets d
-		LEFT JOIN sda.file_dataset fd ON d.id = fd.dataset_id
-		LEFT JOIN sda.files f ON fd.file_id = f.id
-		WHERE d.stable_id = $1
-		GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at`,
+	getDatasetInfoQuery: `SELECT
+	d.stable_id,
+	d.title,
+	d.description,
+	d.created_at,
+	COUNT(f.id) as file_count,
+	COALESCE(SUM(f.decrypted_file_size), 0) as total_size
+FROM sda.datasets d
+LEFT JOIN sda.file_dataset fd ON d.id = fd.dataset_id
+LEFT JOIN sda.files f ON fd.file_id = f.id
+WHERE d.stable_id = $1
+GROUP BY d.id, d.stable_id, d.title, d.description, d.created_at`,
 
-	getFileByIDQuery: `
-		SELECT
-			f.stable_id,
-			d.stable_id as dataset_id,
-			COALESCE(fd.download_path, f.submission_file_path),
-			f.archive_file_path,
-			f.archive_location,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			c.checksum as decrypted_checksum,
-			c.type as decrypted_checksum_type,
-			f.header,
-			f.created_at
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
-		WHERE f.stable_id = $1`,
+	getFileByIDQuery: `SELECT
+	f.stable_id,
+	d.stable_id as dataset_id,
+	COALESCE(fd.download_path, f.submission_file_path),
+	f.archive_file_path,
+	f.archive_location,
+	f.archive_file_size,
+	f.decrypted_file_size,
+	c.checksum as decrypted_checksum,
+	c.type as decrypted_checksum_type,
+	f.header,
+	f.created_at
+FROM sda.files f
+INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
+WHERE f.stable_id = $1`,
 
-	getFileByPathQuery: `
-		SELECT
-			f.stable_id,
-			d.stable_id as dataset_id,
-			COALESCE(fd.download_path, f.submission_file_path),
-			f.archive_file_path,
-			f.archive_location,
-			f.archive_file_size,
-			f.decrypted_file_size,
-			c.checksum as decrypted_checksum,
-			c.type as decrypted_checksum_type,
-			f.header,
-			f.created_at
-		FROM sda.files f
-		INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-		INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-		LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
-		WHERE d.stable_id = $1 AND COALESCE(fd.download_path, f.submission_file_path) = $2`,
+	getFileByPathQuery: `SELECT
+	f.stable_id,
+	d.stable_id as dataset_id,
+	COALESCE(fd.download_path, f.submission_file_path),
+	f.archive_file_path,
+	f.archive_location,
+	f.archive_file_size,
+	f.decrypted_file_size,
+	c.checksum as decrypted_checksum,
+	c.type as decrypted_checksum_type,
+	f.header,
+	f.created_at
+FROM sda.files f
+INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+LEFT JOIN sda.checksums c ON f.id = c.file_id AND c.source = 'UNENCRYPTED'
+WHERE d.stable_id = $1 AND COALESCE(fd.download_path, f.submission_file_path) = $2`,
 
 	// checkFilePermission verifies user has access to the file's dataset
 	// by checking if the dataset stable_id is in the user's visas
-	checkFilePermissionQuery: `
-		SELECT EXISTS(
-			SELECT 1
-			FROM sda.files f
-			INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
-			INNER JOIN sda.datasets d ON fd.dataset_id = d.id
-			WHERE f.stable_id = $1 AND d.stable_id = ANY($2)
-		)`,
+	checkFilePermissionQuery: `SELECT EXISTS(
+	SELECT 1
+	FROM sda.files f
+	INNER JOIN sda.file_dataset fd ON f.id = fd.file_id
+	INNER JOIN sda.datasets d ON fd.dataset_id = d.id
+	WHERE f.stable_id = $1 AND d.stable_id = ANY($2)
+)`,
 
 	// checkDatasetExists checks if a dataset with the given stable_id exists
-	checkDatasetExistsQuery: `
-		SELECT EXISTS(
-			SELECT 1
-			FROM sda.datasets d
-			WHERE d.stable_id = $1
-		)`,
+	checkDatasetExistsQuery: `SELECT EXISTS(
+	SELECT 1
+	FROM sda.datasets d
+	WHERE d.stable_id = $1
+)`,
 
 	// getFileChecksums returns checksums for a file filtered by source (e.g., "ARCHIVED", "UNENCRYPTED").
-	getFileChecksumsQuery: `
-		SELECT c.checksum, c.type
-		FROM sda.checksums c
-		INNER JOIN sda.files f ON c.file_id = f.id
-		WHERE f.stable_id = $1 AND c.source = $2`,
+	getFileChecksumsQuery: `SELECT c.checksum, c.type
+FROM sda.checksums c
+INNER JOIN sda.files f ON c.file_id = f.id
+WHERE f.stable_id = $1 AND c.source = $2`,
 
 	// Keyset-paginated file queries compose from paginatedFileBase (defined below).
 
 	// getDatasetFilesPage returns paginated files in a dataset (no path filter).
 	// Keyset cursor on (COALESCE(fd.download_path, f.submission_file_path), stable_id). $2='' means first page.
 	getDatasetFilesPageQuery: paginatedFileBase + `
-		  AND ($2 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($2, $3))
-		ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
-		LIMIT $4`,
+  AND ($2 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($2, $3))
+ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
+LIMIT $4`,
 
 	// getDatasetFilesPageByPath returns a file by exact path (at most 1 result).
 	getDatasetFilesPageByPathQuery: paginatedFileBase + `
-		  AND COALESCE(fd.download_path, f.submission_file_path) = $2
-		LIMIT $3`,
+  AND COALESCE(fd.download_path, f.submission_file_path) = $2
+LIMIT $3`,
 
 	// getDatasetFilesPageByPrefix returns paginated files matching a path prefix.
 	// Keyset cursor on (COALESCE(fd.download_path, f.submission_file_path), stable_id). $3='' means first page.
 	getDatasetFilesPageByPrefixQuery: paginatedFileBase + `
-		  AND COALESCE(fd.download_path, f.submission_file_path) LIKE $2 ESCAPE '\'
-		  AND ($3 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($3, $4))
-		ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
-		LIMIT $5`,
+  AND COALESCE(fd.download_path, f.submission_file_path) LIKE $2 ESCAPE '\'
+  AND ($3 = '' OR (COALESCE(fd.download_path, f.submission_file_path), f.stable_id) > ($3, $4))
+ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
+LIMIT $5`,
 }
 
 // Checksum represents a file checksum with its algorithm type.

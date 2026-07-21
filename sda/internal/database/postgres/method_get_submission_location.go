@@ -9,11 +9,9 @@ import (
 const getSubmissionLocationQuery = "getSubmissionLocation"
 
 func init() {
-	queries[getSubmissionLocationQuery] = `
-SELECT submission_location 
+	queries[getSubmissionLocationQuery] = `SELECT submission_location 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getSubmissionLocation(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {
