@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.4] - 2026-06-22
+
+### Changed
+
+- Update api secret template to populate expected configs as per sda v3.1.75 using broker/v2, etc
+
 ## [3.4.3] - 2026-05-29
 
 ### Changed
