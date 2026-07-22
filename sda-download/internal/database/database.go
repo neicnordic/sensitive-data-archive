@@ -342,7 +342,8 @@ SELECT files.stable_id
 FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
-	WHERE datasets.stable_id = $1 AND files.submission_file_path ~ ('^[^/]*/?' || $2);`
+	WHERE datasets.stable_id = $1 
+	  AND COALESCE(file_dataset.download_path, files.submission_file_path) ~ ('^[^/]*/?' || $2);`
 	// regexp matching in the submission file path in order to disregard the
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.

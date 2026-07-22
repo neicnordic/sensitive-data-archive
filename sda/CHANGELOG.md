@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
+
 ## [3.1.76] - 2026-07-15
 
 ### Added
