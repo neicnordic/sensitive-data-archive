@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update api secret template to populate expected configs as per sda v3.1.75 using broker/v2, etc
+- Bump default sda appVersion -> v3.1.76
 
 ## [3.4.3] - 2026-05-29
 
