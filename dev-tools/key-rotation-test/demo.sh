@@ -199,7 +199,7 @@ case_3_invalid_rotation_target() {
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
-docker cp verify:/shared/ $SHARED_DIR/ 
+docker cp verify:/shared/. "$SHARED_DIR/"
 
 TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
 CLIENT_PUB_KEY=$(base64 -w0 "$SHARED_DIR"/client.pub.pem)
