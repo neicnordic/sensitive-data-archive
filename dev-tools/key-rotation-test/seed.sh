@@ -40,7 +40,7 @@ DATASET_FOLDER="dataset_folder"
 DATASET_ID="EGAD00000000001"
 
 # Arrays to keep track of the files we are processing
-FILES="file1.txt file2.txt file3.txt"
+FILES="file1.txt file2.txt file3.txt file4.txt"
 ACCESSION_IDS=""
 
 # 1. Fetch the pre-generated integration token
@@ -130,7 +130,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     
     COMPLETED_COUNT=$(echo "$STATUS_RESP" | jq -r '[.[] | select(.fileStatus == "ready" )] | length')
     
-    if [ "$COMPLETED_COUNT" -eq 3 ]; then
+    if [ "$COMPLETED_COUNT" -eq 4 ]; then
         break
     fi
     
@@ -138,8 +138,8 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT+1))
 done
 
-if [ "$COMPLETED_COUNT" -ne 3 ]; then
-    echo "❌ Timeout waiting for pipeline background workers to finalize all 3 file segments."
+if [ "$COMPLETED_COUNT" -ne 4 ]; then
+    echo "❌ Timeout waiting for pipeline background workers to finalize all 4 file segments."
     exit 1
 fi
 
@@ -156,4 +156,4 @@ curl -fsS -H "Authorization: Bearer $TOKEN" \
 echo "=== Debug: Listing contents of S3 bucket after creation ==="
 s3cmd -c /shared/s3cfg ls s3://$BUCKET_TARGET/$DATASET_FOLDER/
 
-echo "=== 🎉 Success! Dataset '$DATASET_ID' is initialized with 3 clean targets, structured correctly, and ready for rotation! ==="
+echo "=== 🎉 Success! Dataset '$DATASET_ID' is initialized with 4 clean targets, structured correctly, and ready for rotation! ==="
