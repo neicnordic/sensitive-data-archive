@@ -12,7 +12,7 @@ OUTDIR="/tmp/sda/test-data"
 mkdir -p "$OUTDIR"
 
 # delete any existing files in the output directory to ensure a clean slate for the demo
-rm -f "$OUTDIR"/*
+rm -rf "$OUTDIR"/*
 
 # ======================================================================
 # Helper function to pause between phases
@@ -210,6 +210,75 @@ case_3_invalid_rotation_target() {
     docker compose -f compose.yml restart rotatekey
 }
 
+case_4_concurrent_race_condition() {
+    # ========================================================================
+    # CASE 4: Have files in archive, start key rotation, download a file while
+    # the rotation is in progress, and verify that the download is successful
+    # This case is tested by creating 10 parallel download workers that
+    # continuously request the file while key rotation is in progress.
+    # ========================================================================
+    log_header "CASE 4: Concurrent Operations (Simultaneous Header Rotation vs. Active Downloads)"
+
+    echo "Step 4.1: Restoring database baseline..."
+    restore_database
+
+    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+
+    echo -e "\nStep 4.2: Launching background download flood (10 parallel workers)..."
+
+    # Spawn 10 parallel background download workers continuously requesting the file
+    FLOOD_DIR="$OUTDIR/c4_flood"
+    mkdir -p "$FLOOD_DIR"
+
+    for i in {1..10}; do
+        (
+            for j in {1..5}; do
+                curl -s -H "Authorization: Bearer $TOKEN" \
+                        -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
+                        http://localhost:8085/files/EGAF00000000101 \
+                        -o "$FLOOD_DIR/download_${i}_${j}.c4gh"
+            done
+        ) &
+    done
+
+    echo "Download workers active. Step 4.3: Triggering key rotation during active traffic..."
+    curl -s -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE_ID" > /dev/null
+
+    # Wait for all background download workers to finish
+    wait
+    echo "All concurrent download tasks completed."
+
+    echo -e "\nStep 4.4: Validating integrity of downloaded files..."
+
+    CORRUPTED_COUNT=0
+    SUCCESS_COUNT=0
+
+    # Test every single downloaded header file
+    for file in "$FLOOD_DIR"/*.c4gh; do
+        if C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR"/client.sec.pem "$file" > /dev/null 2>&1; then
+            ((SUCCESS_COUNT++)) || true
+        else
+            ((CORRUPTED_COUNT++)) || true
+            echo "❌ Corrupted download detected: $file"
+        fi
+    done
+
+    echo "Decryption Audit Results:"
+    echo " - Successfully decrypted payloads: $SUCCESS_COUNT"
+    echo " - Corrupted/Failed payloads: $CORRUPTED_COUNT"
+
+    if [ "$CORRUPTED_COUNT" -eq 0 ]; then
+        echo -e "\n\033[1;32mSUCCESS: Zero payload/header corruptions under concurrent load!\033[0m"
+        echo -e "\033[1;32mThe database/service handled atomic lock transitions correctly.\033[0m"
+    else
+        echo -e "\n\033[1;31mFAILED: $CORRUPTED_COUNT downloads were corrupted due to race conditions during rotation!\033[0m"
+        exit 1
+    fi
+
+    # Clean up temporary flood files
+    rm -rf "$FLOOD_DIR"
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -232,3 +301,7 @@ case_2_mixed_key_dataset
 pause_step
 
 case_3_invalid_rotation_target
+
+pause_step
+
+case_4_concurrent_race_condition
