@@ -462,7 +462,7 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
 //
 // * ListMultiPartUploads == GET /${bucket}?uploads
-// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html//
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html
 //
 // * HeadObject == HEAD /${bucket}/${object}
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html
