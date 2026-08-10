@@ -76,6 +76,7 @@ const (
 	ListParts
 	AbortMultiPartUpload
 	GetBucketLocation
+	HeadObject
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
@@ -106,7 +107,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch s3RequestType {
 	// These actions we just forward to the s3 backend after ensuring that requests have been made user specific by
 	// prepareForwardPathAndQuery
-	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUploads, AbortMultiPartUpload, ListParts:
+	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUploads, AbortMultiPartUpload, ListParts, HeadObject:
 		p.forwardRequest(s3RequestType, w, r, token)
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
 		p.handleUpload(s3RequestType, w, r, token)
@@ -457,11 +458,14 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
 //
-// * ListParts == Get /${bucket}/${object}?uploadId
+// * ListParts == GET /${bucket}/${object}?uploadId
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
 //
-// * ListMultiPartUploads == Get /${bucket}?uploads
-// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html
+// * ListMultiPartUploads == GET /${bucket}?uploads
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListMultipartUploads.html//
+//
+// * HeadObject == HEAD /${bucket}/${object}
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html
 func detectS3RequestType(r *http.Request) S3RequestType {
 	query := r.URL.Query()
 
@@ -489,6 +493,8 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		return GetBucketLocation
 	case r.Method == http.MethodGet && isBucketPath:
 		return ListObjects
+	case r.Method == http.MethodHead && isObjectPath:
+		return HeadObject
 	case r.Method == http.MethodPut && isObjectPath && !query.Has("partNumber") && !query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
 		return PutObject
 	case r.Method == http.MethodPut && isObjectPath && query.Has("partNumber") && query.Has("uploadId") && r.Header.Get("x-amz-copy-source") == "":
