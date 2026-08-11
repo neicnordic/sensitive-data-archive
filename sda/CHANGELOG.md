@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html) 
 
+### Changed
+
+- ingest:
+  - Use db transactions during cancel and ingest actions and rollback if encounter error.
+  - Requeue messages which could be expected to succeed on a retry.
+  - Add a "error-queue-reason" header when sending messages to the error queue which can not be retried to record reason.
+  - Update unit tests to use mocks of the db, and storage reader, writer instead of docker / temp directory.
+    - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
+  - Use log/slog for logging instead of logrus.
+- Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+
 ### Fixed
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
