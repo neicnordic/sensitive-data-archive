@@ -11,6 +11,18 @@ type MockDatabase struct {
 	mock.Mock
 }
 
+func (m *MockDatabase) Commit() error {
+	args := m.Called()
+
+	return args.Error(0)
+}
+
+func (m *MockDatabase) Rollback() error {
+	args := m.Called()
+
+	return args.Error(0)
+}
+
 func (m *MockDatabase) UpdateUserInfo(_ context.Context, userID, name, email string, groups []string) error {
 	args := m.Called(userID, name, email, groups)
 
@@ -131,11 +143,19 @@ func (m *MockDatabase) DeprecateKeyHash(_ context.Context, keyHash string) error
 }
 
 func (m *MockDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
-	panic("function not expected to be called in unit tests")
+	args := m.Called()
+
+	if err := args.Error(0); err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
 func (m *MockDatabase) Close() error {
-	panic("function not expected to be called in unit tests")
+	args := m.Called()
+
+	return args.Error(0)
 }
 
 func (m *MockDatabase) SchemaVersion() (int, error) {
@@ -187,7 +207,7 @@ func (m *MockDatabase) RotateHeaderKey(_ context.Context, header []byte, keyHash
 }
 
 func (m *MockDatabase) SetArchived(_ context.Context, location string, file *database.FileInfo, fileID string) error {
-	args := m.Called(location, file, fileID)
+	args := m.Called(location, *file, fileID)
 
 	return args.Error(0)
 }
@@ -223,15 +243,20 @@ func (m *MockDatabase) BackupHeader(_ context.Context, fileID string, header []b
 }
 
 func (m *MockDatabase) SetVerified(_ context.Context, file *database.FileInfo, fileID string) error {
-	args := m.Called(file, fileID)
+	args := m.Called(*file, fileID)
 
 	return args.Error(0)
 }
 
 func (m *MockDatabase) GetArchived(_ context.Context, fileID string) (*database.ArchiveData, error) {
 	args := m.Called(fileID)
+	ad, err := args.Get(0), args.Error(1)
 
-	return args.Get(0).(*database.ArchiveData), args.Error(1)
+	if ad != nil {
+		return ad.(*database.ArchiveData), err
+	}
+
+	return nil, err
 }
 
 func (m *MockDatabase) CheckAccessionIDExists(_ context.Context, accessionID, fileID string) (string, error) {
@@ -272,8 +297,12 @@ func (m *MockDatabase) UpdateDatasetEvent(_ context.Context, datasetID, status, 
 
 func (m *MockDatabase) GetFileInfo(_ context.Context, id string) (*database.FileInfo, error) {
 	args := m.Called(id)
+	fi, err := args.Get(0), args.Error(1)
+	if fi != nil {
+		return fi.(*database.FileInfo), err
+	}
 
-	return args.Get(0).(*database.FileInfo), args.Error(1)
+	return nil, err
 }
 
 func (m *MockDatabase) GetSubmissionLocation(_ context.Context, fileID string) (string, error) {
@@ -290,14 +319,22 @@ func (m *MockDatabase) GetHeaderByAccessionID(_ context.Context, accessionID str
 
 func (m *MockDatabase) GetMappingData(_ context.Context, accessionID string) (*database.MappingData, error) {
 	args := m.Called(accessionID)
+	md, err := args.Get(0), args.Error(1)
+	if md != nil {
+		return md.(*database.MappingData), err
+	}
 
-	return args.Get(0).(*database.MappingData), args.Error(1)
+	return nil, err
 }
 
 func (m *MockDatabase) GetSyncData(_ context.Context, accessionID string) (*database.SyncData, error) {
 	args := m.Called(accessionID)
+	sd, err := args.Get(0), args.Error(1)
+	if sd != nil {
+		return sd.(*database.SyncData), err
+	}
 
-	return args.Get(0).(*database.SyncData), args.Error(1)
+	return nil, err
 }
 
 func (m *MockDatabase) GetFileIDInInbox(_ context.Context, submissionUser, filePath string) (string, error) {

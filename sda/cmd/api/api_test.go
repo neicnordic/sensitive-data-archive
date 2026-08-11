@@ -114,9 +114,17 @@ func setup() error {
 	var buf bytes.Buffer
 	sha256hash := sha256.New()
 	_ = io.MultiWriter(&buf, sha256hash)
+	content := buf.Bytes()
 
-	api.inboxReader = &mocks.MockReader{Data: buf.Bytes()}
-	api.inboxWriter = &mocks.MockWriter{}
+	mockReader := &mocks.MockReader{}
+	mockReader.On("NewFileReader", mock.Anything, mock.Anything).Return(content, nil)
+	mockReader.On("GetFileSize", mock.Anything, mock.Anything).Return(int64(len(content)), nil)
+
+	api.inboxReader = mockReader
+
+	mockWriter := &mocks.MockWriter{}
+	mockWriter.On("RemoveFile", mock.Anything, mock.Anything).Return(nil)
+	api.inboxWriter = mockWriter
 
 	rbac := []byte(
 		`{"policy":[{"role":"admin","path":"/c4gh-keys/*","action":"(GET)|(POST)|(PUT)"},
@@ -174,7 +182,10 @@ func setup() error {
 	mockDB.On("UpdateFileEventLog", fileID, "disabled", "api", "{}", "{}").Return(nil)
 
 	api.db = mockDB
-	api.mq = &mocks.MockBroker{}
+	mockBroker := &mocks.MockBroker{}
+	mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	mockBroker.On("Alive").Return(true)
+	api.mq = mockBroker
 
 	return nil
 }
