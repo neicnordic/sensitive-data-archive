@@ -40,8 +40,8 @@ func NewReader(backendName string) (*Reader, error) {
 }
 
 // Ping verifies all configured POSIX paths are accessible directories.
-func (r *Reader) Ping(_ context.Context) error {
-	for _, e := range r.configuredEndpoints {
+func (reader *Reader) Ping(_ context.Context) error {
+	for _, e := range reader.configuredEndpoints {
 		fileInfo, err := os.Stat(e.Path)
 		if err != nil {
 			return fmt.Errorf("failed to ping POSIX path: %s, due to: %v", e.Path, err)

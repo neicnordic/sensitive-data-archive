@@ -7,11 +7,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func (writer *Writer) RemoveFile(_ context.Context, location, filePath string) error {
+func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string) error {
+	ctx, span := observability.StartSpan(ctx, "storage.posix.writer.RemoveFile",
+		attribute.String("location", location),
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	// We need lock for whole RemoveFile so no write occurs while deleting
 	writer.Lock()
 	defer writer.Unlock()

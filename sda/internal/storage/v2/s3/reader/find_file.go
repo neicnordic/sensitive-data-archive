@@ -8,10 +8,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.s3.reader.FindFile",
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	for _, endpointConf := range reader.endpoints {
 		client, _, err := reader.getS3ClientForEndpoint(ctx, endpointConf.Endpoint)
 		if err != nil {

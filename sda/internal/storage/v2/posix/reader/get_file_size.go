@@ -8,11 +8,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // GetFileSize returns the size of a specific object
-func (reader *Reader) GetFileSize(_ context.Context, location, filePath string) (int64, error) {
+func (reader *Reader) GetFileSize(ctx context.Context, location, filePath string) (int64, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.posix.reader.GetFileSize",
+		attribute.String("location", location),
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	var locationConfigured bool
 	for _, endpoint := range reader.configuredEndpoints {
 		if endpoint.Path == location {
