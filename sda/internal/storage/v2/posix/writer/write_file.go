@@ -8,16 +8,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (location string, err error) {
+func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.posix.writer.WriteFile",
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	// Find first location that is still usable
 	// We need lock for whole WriteFile so no delete occurs while writing
 	writer.Lock()
 	defer writer.Unlock()
 
+	var location string
 	for {
 		if len(writer.activeEndpoints) == 0 {
 			return "", storageerrors.ErrorNoValidLocations
@@ -36,12 +44,11 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	}
 
 	// Ensure a directory is created for temporary write files
-	if err = os.MkdirAll(filepath.Join(location, "tmp"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(location, "tmp"), 0700); err != nil {
 		return "", fmt.Errorf("failed to create tmp directory at location: %s, due to %v", location, err)
 	}
 
-	var tempFile *os.File
-	tempFile, err = os.CreateTemp(filepath.Join(location, "tmp"), filepath.Base(filePath))
+	tempFile, err := os.CreateTemp(filepath.Join(location, "tmp"), filepath.Base(filePath))
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file for writing due to: %v", err)
 	}

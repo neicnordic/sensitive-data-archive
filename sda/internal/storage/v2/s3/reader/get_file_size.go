@@ -9,7 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // GetFileSize returns the size of a specific object
@@ -32,6 +34,12 @@ func (reader *Reader) GetFileSize(ctx context.Context, location, filePath string
 	return size, nil
 }
 func (reader *Reader) getFileSize(ctx context.Context, client *s3.Client, bucket, filePath string) (int64, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.s3.reader.getFileSize",
+		attribute.String("bucket", bucket),
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	r, err := client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(filePath),
