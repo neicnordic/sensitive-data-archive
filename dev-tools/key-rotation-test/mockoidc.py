@@ -108,6 +108,7 @@ def get_visas_for_user(sub: str) -> list:
     if sub not in VISAS:
         VISAS[sub] = [
             generate_visa("EGAD00000000001", sub),
+            generate_visa("EGAD00000000099", sub),
         ]
     return VISAS[sub]
 
