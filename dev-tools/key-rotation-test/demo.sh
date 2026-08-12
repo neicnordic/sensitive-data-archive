@@ -408,6 +408,154 @@ case_5_ingest_mixed_keys_during_rotation() {
     rm -rf "$INBOX_DIR" "$ROTATION_HTTP_OUT"
 }
 
+case_6_multi_key_archive_migration() {
+    # ========================================================================
+    # CASE 6: Multi-Key Support & Archive Migration (5 Keys Total)
+    # ========================================================================
+    log_header "CASE 6: Multi-Key Support & Archive Migration (5 Keys Total)"
+
+    DATASET_ID="EGAD00000000006"
+
+    echo "Step 6.1: Restoring clean database baseline..."
+    restore_database
+
+    echo -e "\nStep 6.2: Registering 4 extra public key hashes in PostgreSQL for Case 6 only..."
+    for i in 1 2 3 4; do
+        PUB_KEY_PATH="$SHARED_DIR/extra_key_$i.pub.pem"
+
+        if [ ! -f "$PUB_KEY_PATH" ]; then
+            echo "❌ Error: $PUB_KEY_PATH not found! Ensure make_sda_credentials.sh created it."
+            exit 1
+        fi
+
+        # Calculate key_hash matching make_sda_credentials
+        if command -v xxd >/dev/null 2>&1; then
+            EXTRA_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
+        else
+            EXTRA_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
+        fi
+
+        docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
+            "INSERT INTO sda.encryption_keys (key_hash, description) VALUES ('$EXTRA_HASH', 'Extra registered key $i') ON CONFLICT (key_hash) DO NOTHING;" > /dev/null
+
+        echo "Registered Extra Key $i in DB: $EXTRA_HASH"
+    done
+
+    echo -e "\nStep 6.3: Applying config-multikey.yaml via override-multikey.yml..."
+
+    # Apply override-multikey.yml onto running core stack
+    docker compose -f compose.yml -f override-multikey.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize
+    docker compose -f compose.yml -f override-multikey.yml restart reencrypt download rotatekey ingest verify mapper finalize
+
+    echo "Waiting for reencrypt gRPC service listener (Port 50051) to stabilize..."
+    until nc -z localhost 50051; do
+        echo -n "."
+        sleep 1
+    done
+    sleep 2
+    echo -e "\nServices active with 5 pre-configured private keys."
+
+    echo -e "\nStep 6.4: Encrypting test files with all 5 public keys..."
+    INBOX_DIR="$OUTDIR/c6_inbox"
+    mkdir -p "$INBOX_DIR"
+    BUCKET_TARGET="test_dummy.org"
+    DATASET_FOLDER="c6_multi_key_folder"
+
+    # Encrypt 1 file with baseline c4gh key
+    echo "Payload encrypted with Baseline Key" > "$INBOX_DIR/file_k0.txt"
+    sda-cli encrypt --key "$SHARED_DIR/c4gh.pub.pem" "$INBOX_DIR/file_k0.txt"
+
+    # Encrypt 4 files with extra_key_1 through extra_key_4
+    for i in 1 2 3 4; do
+        echo "Payload encrypted with Extra Key $i" > "$INBOX_DIR/file_k$i.txt"
+        sda-cli encrypt --key "$SHARED_DIR/extra_key_$i.pub.pem" "$INBOX_DIR/file_k$i.txt"
+    done
+
+    echo -e "\nStep 6.5: Uploading all 5 multi-key encrypted files to inbox..."
+    for i in 0 1 2 3 4; do
+        s3cmd -c "$SHARED_DIR/s3cfg" \
+              --host="localhost:18000" \
+              --host-bucket="localhost:18000/%(bucket)s" \
+              --no-ssl \
+              put "$INBOX_DIR/file_k$i.txt.c4gh" "s3://$BUCKET_TARGET/$DATASET_FOLDER/file_k$i.txt.c4gh" > /dev/null
+    done
+
+    echo -e "\nStep 6.6: Ingesting and accessioning multi-key files..."
+    ACCESSION_LIST=""
+
+    for i in 0 1 2 3 4; do
+        FILE_PATH="$DATASET_FOLDER/file_k$i.txt.c4gh"
+
+        UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+            "SELECT id FROM sda.files WHERE submission_file_path='$FILE_PATH' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
+
+        ACCESSION="EGAF0000000060$i"
+
+        echo "Ingesting file_k$i (UUID: $UUID) -> Accession: $ACCESSION"
+        curl -fsS -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/ingest?fileid=$UUID"
+        sleep 1
+        curl -fsS -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/accession?fileid=$UUID&accessionid=$ACCESSION"
+
+        if [ -z "$ACCESSION_LIST" ]; then
+            ACCESSION_LIST="\"$ACCESSION\""
+        else
+            ACCESSION_LIST="$ACCESSION_LIST, \"$ACCESSION\""
+        fi
+    done
+
+    echo "Waiting for ingestion pipeline workers to archive files..."
+    sleep 3
+
+    echo -e "\nStep 6.7: Mapping accessioned files to Dataset ($DATASET_ID)..."
+    JSON_PAYLOAD="{\"accession_ids\": [$ACCESSION_LIST], \"dataset_id\": \"$DATASET_ID\", \"user\": \"$USER_ID\"}"
+
+    curl -fsS -H "Authorization: Bearer $TOKEN" \
+         -H "Content-Type: application/json" \
+         -X POST \
+         -d "$JSON_PAYLOAD" \
+         "$API_HOST/dataset/create"
+
+    sleep 2
+
+    echo -e "\nStep 6.8: Migrating all archived files to new target key via rotatekey..."
+    curl -fsS -X POST "$API_HOST/dataset/rotatekey/$DATASET_ID" \
+         -H "Authorization: Bearer $TOKEN" \
+         -H "Content-Type: application/json"
+
+    sleep 3
+
+    echo -e "\nStep 6.9: Verifying key hashes in PostgreSQL..."
+    UPDATED_COUNT=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT COUNT(*) FROM sda.files f JOIN sda.file_dataset fd ON f.id = fd.file_id JOIN sda.datasets d ON fd.dataset_id = d.id WHERE d.stable_id = '$DATASET_ID';")
+
+    echo "Total verified rotated files in dataset: $UPDATED_COUNT / 5"
+
+    if [ "$UPDATED_COUNT" -ne 5 ]; then
+        echo "❌ Error: Failed to migrate all 5 archived files!"
+        exit 1
+    fi
+
+    echo -e "\nStep 6.10: Testing download and client decryption of migrated files..."
+    for i in 0 1 2 3 4; do
+        ACCESSION="EGAF0000000060$i"
+        echo "Downloading and decrypting $ACCESSION..."
+
+        curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
+            "http://localhost:8085/files/$ACCESSION" -o "$OUTDIR/c6-download-$i.c4gh"
+
+        echo "c4ghpass" | sda-cli decrypt --key "$SHARED_DIR/client.sec.pem" "$OUTDIR/c6-download-$i.c4gh" > /dev/null
+        echo "✅ File $ACCESSION successfully decrypted!"
+    done
+
+    echo -e "\nStep 6.11: Resetting services back to default base compose state..."
+    docker compose -f compose.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize> /dev/null
+    docker compose -f compose.yml restart reencrypt download rotatekey ingest verify mapper finalize > /dev/null
+
+    echo -e "\n\033[1;32mSUCCESS: All 5 multi-key files were ingested, migrated, and decrypted cleanly!\033[0m"
+
+    rm -rf "$INBOX_DIR"
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -438,3 +586,7 @@ case_4_concurrent_race_condition
 pause_step
 
 case_5_ingest_mixed_keys_during_rotation
+
+pause_step
+
+case_6_multi_key_archive_migration

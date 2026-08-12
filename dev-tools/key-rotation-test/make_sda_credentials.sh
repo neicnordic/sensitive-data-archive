@@ -166,7 +166,7 @@ if [ ! -f "/shared/c4gh.sec.pem" ]; then
     /shared/crypt4gh generate -n /shared/c4gh -p c4ghpass
 fi
 
-if [ ! -f "/shared/client.sec.pem" ]; then 
+if [ ! -f "/shared/client.sec.pem" ]; then
     echo "creating client crypth4gh key"
     /shared/crypt4gh generate -n /shared/client -p c4ghpass
 fi
@@ -175,6 +175,12 @@ if [ ! -f "/shared/rotatekey.sec.pem" ]; then
     echo "creating rotatekey crypth4gh key"
     /shared/crypt4gh generate -n /shared/rotatekey -p rotatekeyPass
 fi
+
+# Generate 4 Extra Crypt4GH keys
+for i in 1 2 3 4; do
+    echo "creating extra crypth4gh key $i"
+    /shared/crypt4gh generate -n "/shared/extra_key_$i" -p "pass$i"
+done
 
 # register the crypt4gh keys in the db (idempotent)
 for keyfile in c4gh rotatekey; do
