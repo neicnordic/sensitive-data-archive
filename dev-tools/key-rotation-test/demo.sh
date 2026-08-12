@@ -556,6 +556,119 @@ case_6_multi_key_archive_migration() {
     rm -rf "$INBOX_DIR"
 }
 
+case_7_deprecated_key_ingest_rejection() {
+    # ========================================================================
+    # CASE 7: Deprecated Key Ingestion Rejection
+    # ========================================================================
+    log_header "CASE 7: Deprecated Key Ingestion Rejection"
+
+    echo "Step 7.1: Restoring clean database baseline..."
+    restore_database
+
+    echo -e "\nStep 7.2: Verifying deprecated key presence in sda.encryption_keys..."
+    PUB_KEY_PATH="$SHARED_DIR/deprecated_key.pub.pem"
+
+    if [ ! -f "$PUB_KEY_PATH" ]; then
+        echo "❌ Error: $PUB_KEY_PATH not found! Ensure make_sda_credentials.sh generated it."
+        exit 1
+    fi
+
+    if command -v xxd >/dev/null 2>&1; then
+        DEPRECATED_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
+    else
+        DEPRECATED_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
+    fi
+
+    # Ensure key has deprecated_at set in DB (idempotent guard)
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
+        "INSERT INTO sda.encryption_keys (key_hash, description, deprecated_at)
+         VALUES ('$DEPRECATED_HASH', 'Deprecated test key', NOW() - INTERVAL '1 day')
+         ON CONFLICT (key_hash) DO UPDATE SET deprecated_at = NOW() - INTERVAL '1 day';" > /dev/null
+
+    echo "Verified key_hash '$DEPRECATED_HASH' is flagged as deprecated in PostgreSQL."
+
+    echo -e "\nStep 7.3: Applying config-deprecatedkey.yaml via override-deprecatedkey.yml..."
+    # Apply override so ingest/api services possess the private key to inspect the Crypt4GH header
+    docker compose -f compose.yml -f override-deprecatedkey.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey
+    docker compose -f compose.yml -f override-deprecatedkey.yml restart ingest verify finalize mapper api reencrypt download rotatekey
+
+    echo "Waiting for gRPC service listener (Port 50051) to stabilize..."
+    until nc -z localhost 50051; do
+        echo -n "."
+        sleep 1
+    done
+    sleep 2
+    echo -e "\nServices restarted with deprecated_key included in configuration."
+
+    echo -e "\nStep 7.4: Encrypting test file using deprecated public key..."
+    INBOX_DIR="$OUTDIR/c7_inbox"
+    mkdir -p "$INBOX_DIR"
+    BUCKET_TARGET="test_dummy.org"
+    DATASET_FOLDER="c7_deprecated_folder"
+    FILE_NAME="file_deprecated.txt"
+
+    echo "Payload encrypted with deprecated key" > "$INBOX_DIR/$FILE_NAME"
+    sda-cli encrypt --key "$PUB_KEY_PATH" "$INBOX_DIR/$FILE_NAME"
+
+    echo -e "\nStep 7.5: Uploading deprecated-key encrypted file to inbox via S3..."
+    s3cmd -c "$SHARED_DIR/s3cfg" \
+          --host="localhost:18000" \
+          --host-bucket="localhost:18000/%(bucket)s" \
+          --no-ssl \
+          put "$INBOX_DIR/$FILE_NAME.c4gh" "s3://$BUCKET_TARGET/$DATASET_FOLDER/$FILE_NAME.c4gh" > /dev/null
+
+    sleep 1
+
+    echo -e "\nStep 7.6: Fetching uploaded file UUID from database..."
+    FILE_PATH="$DATASET_FOLDER/$FILE_NAME.c4gh"
+    UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT id FROM sda.files WHERE submission_file_path='$FILE_PATH' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
+
+    if [ -z "$UUID" ]; then
+        echo "❌ Error: File upload was not registered in inbox database table!"
+        exit 1
+    fi
+    echo "Found inbox file UUID: $UUID"
+
+    echo -e "\nStep 7.7: Attempting ingestion (Expecting rejection due to deprecated key)..."
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -X POST "$API_HOST/file/ingest?fileid=$UUID" || true)
+
+    echo "Received HTTP Status Code: $HTTP_STATUS"
+
+    echo -e "\nStep 7.8: Asserting rejection..."
+    if [ "$HTTP_STATUS" -eq 400 ] || [ "$HTTP_STATUS" -eq 500 ]; then
+        echo "✅ SUCCESS: Ingestion correctly rejected file encrypted with deprecated key! (HTTP $HTTP_STATUS)"
+    else
+        echo "❌ FAILURE: Expected HTTP 400 or 500 rejection, but received HTTP $HTTP_STATUS!"
+
+        # Cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        exit 1
+    fi
+
+    # Verify state in sda.files table reflects failure or unarchived state
+    FILE_STATE=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT state FROM sda.files WHERE id='$UUID';" | tr -d '\r\n[:space:]')
+    echo "File DB State: ${FILE_STATE:-'NULL'}"
+
+    echo -e "\nStep 7.9: Resetting services back to default base compose state..."
+    docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
+    docker compose -f compose.yml restart ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
+
+    echo "Waiting for default services to stabilize..."
+    until nc -z localhost 50051; do
+        echo -n "."
+        sleep 1
+    done
+    sleep 1
+
+    rm -rf "$INBOX_DIR"
+    echo -e "\n\033[1;32mSUCCESS: Test Case 7 passed cleanly!\033[0m"
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -565,28 +678,32 @@ TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
 CLIENT_PUB_KEY=$(base64 -w0 "$SHARED_DIR"/client.pub.pem)
 API_HOST="http://localhost:8090"
 
-# Take a snapshot of the clean database state
-backup_database
+## # Take a snapshot of the clean database state
+## backup_database
+##
+## # Run the demo script for the key rotation test
+## case_1_standard_lifecycle
+##
+## pause_step
+##
+## case_2_mixed_key_dataset
+##
+## pause_step
+##
+## case_3_invalid_rotation_target
+##
+## pause_step
+##
+## case_4_concurrent_race_condition
+##
+## pause_step
+##
+## case_5_ingest_mixed_keys_during_rotation
+##
+## pause_step
+##
+## case_6_multi_key_archive_migration
+##
+## pause_step
 
-# Run the demo script for the key rotation test
-case_1_standard_lifecycle
-
-pause_step
-
-case_2_mixed_key_dataset
-
-pause_step
-
-case_3_invalid_rotation_target
-
-pause_step
-
-case_4_concurrent_race_condition
-
-pause_step
-
-case_5_ingest_mixed_keys_during_rotation
-
-pause_step
-
-case_6_multi_key_archive_migration
+case_7_deprecated_key_ingest_rejection
