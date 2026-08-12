@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/XSAM/otelsql"
 	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
 type pgDb struct {
@@ -16,6 +19,8 @@ type pgDb struct {
 	config             *dbConfig
 	schemaVersion      int
 	preparedStatements map[string]*sql.Stmt
+
+	metricsReg metric.Registration
 }
 
 const getSchemaVersionQuery = "getSchemaVersion"
@@ -41,9 +46,18 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 		return nil, fmt.Errorf("failed to setup postgres connect config: %w", err)
 	}
 
-	pg.db = sql.OpenDB(pqConnectConfig)
+	pg.db = otelsql.OpenDB(pqConnectConfig)
 	if err := pg.db.Ping(); err != nil {
-		_ = pg.db.Close()
+		_ = pg.Close()
+
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	pg.metricsReg, err = otelsql.RegisterDBStatsMetrics(pg.db, otelsql.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+	))
+	if err != nil {
+		_ = pg.Close()
 
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
