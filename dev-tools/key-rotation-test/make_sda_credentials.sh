@@ -182,8 +182,13 @@ for i in 1 2 3 4; do
     /shared/crypt4gh generate -n "/shared/extra_key_$i" -p "pass$i"
 done
 
+# Generate Deprecated Crypt4GH key pair
+if [ ! -f "/shared/deprecated_key.sec.pem" ]; then
+    /shared/crypt4gh generate -n "/shared/deprecated_key" -p "deprecatedpass"
+fi
+
 # register the crypt4gh keys in the db (idempotent)
-for keyfile in c4gh rotatekey; do
+for keyfile in c4gh rotatekey deprecated_key; do
     keyHash=$(cat /shared/${keyfile}.pub.pem | awk 'NR==2 ' | base64 -d | xxd -p -c256)
     resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$keyHash', 'this is the $keyfile key') ON CONFLICT (key_hash) DO UPDATE SET description = EXCLUDED.description;")
     case "$(echo "$resp" | tr -d '\n')" in
@@ -193,8 +198,18 @@ for keyfile in c4gh rotatekey; do
             exit 1
             ;;
     esac
+    # Handle deprecated_key timestamp setting
+    if [ "$keyfile" = "deprecated_key" ]; then
+        dep_resp=$(psql -U postgres -h postgres -d sda -At -c "UPDATE sda.encryption_keys SET deprecated_at = NOW() - INTERVAL '1 day' WHERE key_hash = '$keyHash';")
+        case "$(echo "$dep_resp" | tr -d '\n')" in
+            "UPDATE 1"|"UPDATE 0") : ;;
+            *)
+                echo "setting deprecated_at failed for $keyfile: $dep_resp"
+                exit 1
+                ;;
+        esac
+    fi
 done
-
 
 if [ ! -f "/shared/keys/ssh" ]; then
     ssh-keygen -o -a 256 -t ed25519 -f /shared/keys/ssh -N ""
