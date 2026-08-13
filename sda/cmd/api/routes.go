@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func (api *API) routes() http.Handler {
@@ -45,6 +47,7 @@ func (api *API) routes() http.Handler {
 	var handler http.Handler = mux
 	handler = api.recoveryMiddleware(handler)
 	handler = api.loggingMiddleware(handler)
+	handler = otelhttp.NewMiddleware("sda-api")(handler)
 
 	return handler
 }

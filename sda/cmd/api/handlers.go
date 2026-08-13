@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
 	"path"
 	"slices"
@@ -26,16 +25,23 @@ import (
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 )
 
+var errorBadRequest = errors.New("bad request")
+
 func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := observability.StartSpan(r.Context(), "rbac")
+		defer span.End()
+		r = r.WithContext(ctx)
+
 		token, err := api.auth.Authenticate(r)
 		if err != nil {
-			slog.Error("failed to authorize request", "err", err)
-			writeJSON(w, http.StatusUnauthorized, "failed to authorize request")
+			slog.Error("failed to authorize request", err)
+			writeJSON(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 
 			return
 		}
@@ -46,16 +52,22 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 
 		ok, err := api.enforcer.Enforce(subject, urlPath, method)
 		if err != nil {
-			// #nosec G706 -- slog safely escapes structured attributes natively
-			slog.Error("failed to enforce subject for the request url", "subject", subject, "method", method, "url_path", urlPath, "err", err)
-			writeJSON(w, http.StatusInternalServerError, "failed to enforce subject for the requested url")
+			span.Error("failed to enforce subject for the request url", err,
+				slog.String("subject", subject),
+				slog.String("method", method),
+				slog.String("url_path", urlPath),
+			)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 		if !ok {
-			// #nosec G706 -- slog safely escapes structured attributes natively
-			slog.Warn("unathorized request", "subject", subject, "method", method, "url_path", urlPath)
+			span.Warn("unauthorized request",
+				slog.String("subject", subject),
+				slog.String("method", method),
+				slog.String("url_path", urlPath),
+			)
 			writeJSON(w, http.StatusUnauthorized, "not authorized")
 
 			return
@@ -69,7 +81,7 @@ func (api *API) recoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("panic recovered", "err", err)
+				slog.Error("panic recovered", "error", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			}
 		}()
@@ -115,7 +127,7 @@ func (api *API) readinessResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.db.Ping(context.Background()); err != nil {
+	if err := api.db.Ping(r.Context()); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("unable to reach database"))
 
@@ -155,34 +167,41 @@ func parseLimitParam(limitStr string) (int, error) {
 }
 
 func (api *API) getFiles(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "getFiles")
+	defer span.End()
+
 	token, err := api.auth.Authenticate(r)
 	if err != nil {
-		slog.Error("failed to authenticate user", "err", err)
-		writeJSON(w, http.StatusUnauthorized, "failed to authenticate user")
+		// This is internal error as rbac middleware should have authenticated it already
+		span.Error("failed to authenticate user", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	limit, err := parseLimitParam(r.URL.Query().Get("limit"))
 	if err != nil {
-		slog.Error("failed to parse pagination limit", "err", err)
-		writeJSON(w, http.StatusBadRequest, err.Error())
+		span.Warn("failed to parse pagination limit")
+		writeJSON(w, http.StatusBadRequest, "invalid limit")
 
 		return
 	}
 
 	cursor := r.URL.Query().Get("cursor")
 	pathPrefix := r.URL.Query().Get("path_prefix")
-	files, nextCursor, err := api.db.GetUserFiles(r.Context(), token.Subject(), pathPrefix, false, limit, cursor)
+	files, nextCursor, err := api.db.GetUserFiles(ctx, token.Subject(), pathPrefix, false, limit, cursor)
 	if err != nil {
 		if errors.Is(err, database.ErrInvalidCursor) {
-			// #nosec G706 -- slog safely escapes structured attributes natively
-			slog.Error("invalid cursor parameter", "cursor", cursor, "limig", limit, "path_prefix", pathPrefix, "err", err)
+			span.Error("invalid cursor parameter", err,
+				slog.String("cursor", cursor),
+				slog.Int("limit", limit),
+				slog.String("path_prefix", pathPrefix),
+			)
 			writeJSON(w, http.StatusBadRequest, "invalid cursor parameter")
 
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -210,13 +229,17 @@ func (api *API) getFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "updateFileEvent")
+	defer span.End()
+
 	fileID := r.PathValue("fileid")
 	event := r.PathValue("event")
 
 	token, err := api.auth.Authenticate(r)
 	if err != nil {
-		slog.Error("could not authenticate request", "err", err)
-		writeJSON(w, http.StatusUnauthorized, "could not authenticate request")
+		// This is internal error as rbac middleware should have authenticated it already
+		span.Error("failed to authenticate user", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -226,8 +249,8 @@ func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	updateEvent := &updateFileEventBody{}
 	if err := json.NewDecoder(r.Body).Decode(&updateEvent); err != nil {
-		slog.Error("could not decode request body", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+		span.Warn("could not decode request body", slog.Any("error", err))
+		writeJSON(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 
 		return
 	}
@@ -240,16 +263,16 @@ func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
 
 	details, err := json.Marshal(updateEvent)
 	if err != nil {
-		slog.Error("failed to marshal updateEvent", "err", err)
-		writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("failed to marshal JSON encoding, reason: %v", err))
+		span.Error("failed to marshal updateEvent", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	fileEvents, err := api.db.GetFileEvents(r.Context())
+	fileEvents, err := api.db.GetFileEvents(ctx)
 	if err != nil {
-		slog.Error("failed to get file events", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to get file events")
+		span.Error("failed to get file events", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -263,16 +286,15 @@ func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = api.db.UpdateFileEventLog(r.Context(), fileID, event, token.Subject(), string(details), "{}")
-	if err != nil {
+	if err := api.db.UpdateFileEventLog(ctx, fileID, event, token.Subject(), string(details), "{}"); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			slog.Error("file not found", "file", fileID) // #nosec G706
-			writeJSON(w, http.StatusNotFound, fmt.Sprintf("file %q not found", fileID))
+			span.Error("file not found", err, slog.String("file", fileID))
+			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 			return
 		}
-		slog.Error("failed to update file event log", "file_id", fileID, "event", event, "err", err) // #nosec G706
-		writeJSON(w, http.StatusInternalServerError, "failed to update file event")
+		span.Error("failed to update file event log", err, slog.String("file_id", fileID), slog.String("event", event))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -281,12 +303,15 @@ func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getFileEvents(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "getFileEvents")
+	defer span.End()
+
 	fileID := r.PathValue("fileid")
 
-	statusHistory, err := api.db.GetFileStatusHistory(r.Context(), fileID)
+	statusHistory, err := api.db.GetFileStatusHistory(ctx, fileID)
 	if err != nil {
-		slog.Error("failed to get file status history", "file_id", fileID, "err", err) // #nosec G706
-		writeJSON(w, http.StatusInternalServerError, "failed to get file status history")
+		span.Error("failed to get file status history", err, slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -305,6 +330,9 @@ The function constructs an ingest message, validates it
 and sends it to the broker with the appropriate file ID.
 */
 func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "ingestFile")
+	defer span.End()
+
 	var (
 		ingest schema.IngestionTrigger
 		err    error
@@ -314,22 +342,29 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case fileID != "" && r.ContentLength > 0:
-		slog.Error("recieved both file ID and payload")
-		writeJSON(w, http.StatusBadRequest, "recieved both file ID and payload")
+		span.Warn("received both file ID and payload")
+		writeJSON(w, http.StatusBadRequest, "received both file ID and payload")
 
 		return
 
 	case fileID != "":
 		if _, err := uuid.Parse(fileID); err != nil {
-			slog.Error("could not parse fileID as uuid", "file_id", fileID, "err", err) // #nosec G706
+			span.Warn("could not parse fileID as uuid", slog.String("file_id", fileID))
 			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not parse %s as uuid, reason: %v", fileID, err))
 
 			return
 		}
 
-		fileDetails, err := api.db.GetFileDetails(r.Context(), fileID, "uploaded")
+		fileDetails, err := api.db.GetFileDetails(ctx, fileID, "uploaded")
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not find details for %s, reason: %v", fileID, err))
+			if errors.Is(err, sql.ErrNoRows) {
+				span.Warn("file details not found", slog.String("file_id", fileID))
+				writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+				return
+			}
+			span.Error("failed to get file details", err, slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
@@ -339,47 +374,48 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 	case r.ContentLength > 0:
 		if err := json.NewDecoder(r.Body).Decode(&ingest); err != nil {
-			slog.Error("could not decode request body", "err", err)
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+			span.Error("could not decode request body", err)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 		fileID, err = api.db.GetFileIDByUserPathAndStatus(context.TODO(), ingest.User, ingest.FilePath, "uploaded")
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, err.Error())
+			if errors.Is(err, sql.ErrNoRows) {
+				span.Warn("uploaded file not found", slog.String("user", ingest.User), slog.String("file_path", ingest.FilePath))
+				writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
-			return
-		}
+				return
+			}
 
-		if fileID == "" {
-			slog.Error("could not find fileID for user and filepath", "submission_user", ingest.User, "file_path", ingest.FilePath) // #nosec G706
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not find fileID for %s", ingest.FilePath))
+			span.Error("failed to get file id by user, path, and status", err, slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 	default:
-		slog.Error("missing parameter in payload")
+		span.Warn("missing parameter in payload")
 		writeJSON(w, http.StatusBadRequest, "missing parameter in payload")
 
 		return
 	}
 
-	slog.Info("ingesting file", "file_id", fileID) // #nosec G706
+	span.Info("ingesting file", slog.String("file_id", fileID))
 	ingest.Type = "ingest"
 	marshaledMsg, _ := json.Marshal(&ingest)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Error("could not validate ingestion message", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate ingestion message, reason: %v", err))
+		span.Error("could not validate ingestion message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	ingestMessage := broker.Message{Key: fileID, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "ingest", ingestMessage); err != nil {
-		slog.Debug("failed to publish ingest message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "ingest", ingestMessage); err != nil {
+		span.Error("failed to publish ingest message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -388,54 +424,54 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "deleteFile")
+	defer span.End()
+
 	username := r.PathValue("username")
 	fileID := r.PathValue("fileid")
-	// #nosec G706 -- slog safely escapes structured attributes natively
-	slog.Info("handling request to delete file", "username", username, "file_id", fileID)
+
+	span.Info("handling request to delete file", slog.String("username", username), slog.String("file_id", fileID))
 	if fileID == "" {
-		slog.Error("file ID is requiered")
-		writeJSON(w, http.StatusBadRequest, "file ID is requiered")
+		span.Error("file ID is required", nil)
+		writeJSON(w, http.StatusBadRequest, "file ID is required")
 
 		return
 	}
 
 	// Get the file path from the fileID and submission user
-	filePath, location, err := api.db.GetUploadedSubmissionFilePathAndLocation(r.Context(), username, fileID)
+	filePath, location, err := api.db.GetUploadedSubmissionFilePathAndLocation(ctx, username, fileID)
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("file could not be found in inbox", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusNotFound, "file could not be found in inbox")
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Warn("file not found", slog.String("file_id", fileID), slog.String("user", username))
+			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+			return
+		}
+		span.Error("failed to get file submission path", err, slog.String("file_id", fileID), slog.String("user", username))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	if location == "" {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("no known submission location found", "file_id", fileID)
-		writeJSON(w, http.StatusInternalServerError, "failed to find file in location")
+		span.Error("no known submission location found", errors.New("file has no submission location"), slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	filePath = helper.UnanonymizeFilepath(filePath, username)
-	for count := 1; count <= 5; count++ {
-		err = api.inboxWriter.RemoveFile(r.Context(), location, filePath)
-		if err == nil {
-			break
-		}
 
-		slog.Error("failed to remove file from inbox", "err", err)
-		if count == 5 {
-			writeJSON(w, http.StatusInternalServerError, "failed to remove file from inbox")
+	if err := api.inboxWriter.RemoveFile(ctx, location, filePath); err != nil {
+		span.Error("failed to remove file from inbox", err, slog.String("location", location), slog.String("file_path", filePath))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
-			return
-		}
-		time.Sleep(time.Duration(math.Pow(2, float64(count))) * time.Second)
+		return
 	}
 
-	if err := api.db.UpdateFileEventLog(r.Context(), fileID, "disabled", "api", "{}", "{}"); err != nil {
-		slog.Error("set status deleted failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.db.UpdateFileEventLog(ctx, fileID, "disabled", "api", "{}", "{}"); err != nil {
+		span.Error("failed to set file status disabled", err, slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -449,6 +485,9 @@ func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 // if needed. The function also handles the case where the CA certificate is
 // provided for secure communication.
 func (api *API) reencryptHeader(ctx context.Context, oldHeader []byte, c4ghPubKey string) ([]byte, error) {
+	ctx, span := observability.StartSpan(ctx, "reencryptHeader")
+	defer span.End()
+
 	c := reencrypt.NewReencryptClient(api.grpcClient)
 	res, err := c.ReencryptHeader(ctx, &reencrypt.ReencryptRequest{Oldheader: oldHeader, Publickey: c4ghPubKey})
 	if err != nil {
@@ -461,12 +500,14 @@ func (api *API) reencryptHeader(ctx context.Context, oldHeader []byte, c4ghPubKe
 // Download a file re-encrypted with the public key provided in the request header from the inbox and retrieves the file path
 // from the database using the file ID and user ID.
 func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "downloadFile")
+	defer span.End()
+
 	c4ghPubKey := r.Header.Get("C4GH-Public-Key")
 
 	pubKey, err := base64.StdEncoding.DecodeString(c4ghPubKey)
 	if err != nil || len(pubKey) == 0 {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("could not decode c4gh public key", "public_key", pubKey, "err", err)
+		span.Warn("could not decode c4gh callers public key")
 		writeJSON(w, http.StatusBadRequest, "bad public key")
 
 		return
@@ -474,27 +515,30 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	fileID := r.PathValue("fileid")
 	submissionUser := r.PathValue("username")
-	filePath, location, err := api.db.GetUploadedSubmissionFilePathAndLocation(r.Context(), submissionUser, fileID)
+	filePath, location, err := api.db.GetUploadedSubmissionFilePathAndLocation(ctx, submissionUser, fileID)
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("failed to get filepath from fileID", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusNotFound, "failed to retrieve inbox file path")
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Warn("file not found", slog.String("file_id", fileID), slog.String("user", submissionUser))
+			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+			return
+		}
+		span.Error("failed to get file submission path", err, slog.String("file_id", fileID), slog.String("user", submissionUser))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if location == "" {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("fileID has no known submission location", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to find file location")
+		span.Error("fileID has no known submission location", errors.New("file has no submission location"), slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	file, err := api.inboxReader.NewFileReader(r.Context(), location, helper.UnanonymizeFilepath(filePath, submissionUser))
+	file, err := api.inboxReader.NewFileReader(ctx, location, helper.UnanonymizeFilepath(filePath, submissionUser))
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("inbox file not found or failed to read", "file_path", filePath, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to read inbox file")
+		span.Error("inbox file not found or failed to read", err, slog.String("file_path", filePath))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -504,18 +548,16 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	header, err := headers.ReadHeader(file)
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("failed to read file header", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to read file header")
+		span.Error("failed to read file header", err, slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	newHeader, err := api.reencryptHeader(r.Context(), header, c4ghPubKey)
+	newHeader, err := api.reencryptHeader(ctx, header, c4ghPubKey)
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("failed to reencrypt header", "file_id", fileID, "c4gh_public_key", c4ghPubKey, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to reencrypt header")
+		span.Error("failed to reencrypt header", err, slog.String("file_id", fileID), slog.String("c4gh_public_key", c4ghPubKey))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -526,9 +568,8 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 	reader := io.MultiReader(bytes.NewReader(newHeader), file)
 	_, err = io.Copy(w, reader)
 	if err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("error occurred while sending stream", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to stream data to client")
+		span.Error("error occurred while sending stream", err, slog.String("file_id", fileID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -543,6 +584,9 @@ If both query parameters and a JSON payload are provided, the request is rejecte
 The function constructs an accession message, validates it and sends it to the message broker.
 */
 func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "setAccession")
+	defer span.End()
+
 	var accession schema.IngestionAccession
 	var fileDetails *database.FileDetails
 	var err error
@@ -555,24 +599,30 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case hasQuery:
 		if _, err := uuid.Parse(fileID); err != nil {
-			slog.Error("provided fileid could not be parsed as valid uuid", "file_id", fileID, "err", err) // #nosec G706
-			writeJSON(w, http.StatusBadRequest, "provided fileid could not be parsed as valid uuid")
+			span.Warn("provided fileid could not be parsed as valid uuid", slog.String("file_id", fileID))
+			writeJSON(w, http.StatusBadRequest, "invalid fileid")
 
 			return
 		}
 
-		fileDetails, err = api.db.GetFileDetails(r.Context(), fileID, "verified")
+		fileDetails, err = api.db.GetFileDetails(ctx, fileID, "verified")
 		if err != nil {
-			slog.Error("file details not found", "file_id", fileID, "err", err) // #nosec G706
-			writeJSON(w, http.StatusBadRequest, "file details not found")
+			if errors.Is(err, sql.ErrNoRows) {
+				span.Warn("file details not found", slog.String("file_id", fileID))
+				writeJSON(w, http.StatusBadRequest, "file details not found")
+
+				return
+			}
+			span.Error("failed to get file details", err, slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
-		fileDecrChecksum, err := api.db.GetDecryptedChecksum(r.Context(), fileID)
+		fileDecrChecksum, err := api.db.GetDecryptedChecksum(ctx, fileID)
 		if err != nil {
-			slog.Debug("failed to decrypt checksum from database", "err", err)
-			writeJSON(w, http.StatusInternalServerError, "failed to get decrypted checksum from database")
+			span.Error("failed to get decrypted checksum", err, slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
@@ -584,30 +634,31 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 
 	case hasBody:
 		if err := json.NewDecoder(r.Body).Decode(&accession); err != nil {
-			slog.Error("could not decode request body", "err", err)
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+			span.Warn("could not decode request body", slog.Any("error", err))
+			writeJSON(w, http.StatusBadRequest, "invalid request body")
 
 			return
 		}
 
 		var err error
-		fileID, err = api.db.GetFileIDByUserPathAndStatus(r.Context(), accession.User, accession.FilePath, "verified")
+		fileID, err = api.db.GetFileIDByUserPathAndStatus(ctx, accession.User, accession.FilePath, "verified")
 		if err != nil {
-			if fileID == "" {
-				slog.Error("failed to get fileid for user", "user", accession.User, "file_path", accession.FilePath, "err", err) // #nosec G706
-				writeJSON(w, http.StatusBadRequest, err.Error())
-			} else {
-				slog.Error("unexpected error occurred", "err", err)
-				writeJSON(w, http.StatusInternalServerError, err.Error())
+			if errors.Is(err, sql.ErrNoRows) {
+				span.Warn("file not found", slog.String("user", accession.User), slog.String("file_path", accession.FilePath))
+				writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+				return
 			}
+			span.Error("failed to get file id by user, path, and status", err, slog.String("user", accession.User), slog.String("file_path", accession.FilePath))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
-		fileDecrChecksum, err := api.db.GetDecryptedChecksum(r.Context(), fileID)
+		fileDecrChecksum, err := api.db.GetDecryptedChecksum(ctx, fileID)
 		if err != nil {
-			slog.Error("error when getting decrypted checksums", "err", err)
-			writeJSON(w, http.StatusNotFound, "decrypted checksum not found")
+			span.Error("failed to get decrypted checksums", err, slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
@@ -615,8 +666,8 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 		accession.DecryptedChecksums = []schema.Checksums{{Type: "sha256", Value: fileDecrChecksum}}
 
 	default:
-		slog.Error("requiered parameters not found")
-		writeJSON(w, http.StatusBadRequest, "requiered parameters not found, need either query parameters (fileid, accessionid) or httpbody (filepath & accession_id)")
+		span.Warn("required parameters not found")
+		writeJSON(w, http.StatusBadRequest, "required parameters not found, need either query parameters (fileid, accessionid) or httpbody (filepath & accession_id)")
 
 		return
 	}
@@ -624,16 +675,15 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	accession.Type = "accession"
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Error("could not validate accession message", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate accession message, reason: %v", err))
+		span.Error("could not validate accession message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	slog.Info("sending accession message", "file_id", fileID, "accession_id", accession.AccessionID) // #nosec G706
-	if err := api.mq.Publish(context.Background(), "accession", broker.Message{Key: fileID, Body: marshaledMsg}); err != nil {
-		slog.Debug("failed to publish accession message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "accession", broker.Message{Key: fileID, Body: marshaledMsg}); err != nil {
+		span.Error("failed to publish accession message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -684,17 +734,20 @@ func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 	})
 }
 func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "createDataset")
+	defer span.End()
+
 	var dataset dataset
 	if err := json.NewDecoder(r.Body).Decode(&dataset); err != nil {
-		slog.Error("could not decode request body", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+		span.Warn("could not decode request body", slog.Any("error", err))
+		writeJSON(w, http.StatusBadRequest, "invalid request body")
 
 		return
 	}
 
 	if len(dataset.AccessionIDs) == 0 {
-		slog.Error("no accession IDs recieved")
-		writeJSON(w, http.StatusBadRequest, "no accession IDs recieved")
+		span.Warn("no accession IDs received")
+		writeJSON(w, http.StatusBadRequest, "no accession IDs received")
 
 		return
 	}
@@ -702,6 +755,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 	// Validate that the files to have overridden download paths are added to the dataset in the same request
 	for accessionToSetDownloadPath, downloadPath := range dataset.FileDownloadPaths {
 		if downloadPath == "" {
+			span.Warn("empty download path for file", slog.String("accession", accessionToSetDownloadPath))
 			writeJSON(w, http.StatusBadRequest, "download path for a file can not be empty")
 
 			return
@@ -715,7 +769,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			slog.Error("attempted to set file download path for a file not being added to the dataset")
+			span.Warn("attempted to set file download path for a file not being added to the dataset")
 			writeJSON(w, http.StatusBadRequest, "attempted to set file download path for a file not being added to the dataset")
 
 			return
@@ -724,16 +778,16 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 
 	// Check that the files the accession ids are linked to belong to the user of the dataset
 	for _, accessionID := range dataset.AccessionIDs {
-		md, err := api.db.GetMappingData(r.Context(), accessionID)
+		md, err := api.db.GetMappingData(ctx, accessionID)
 		if err != nil {
-			slog.Error("encountered error during database query", "err", err)
-			writeJSON(w, http.StatusInternalServerError, "failed to query database")
+			span.Error("failed to get mapping data", err, slog.String("accession", accessionID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 		if md == nil {
-			slog.Info("rejecting create dataset request including non-existing id", "accession_id", accessionID)
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("no file exists with accession: %s", accessionID))
+			span.Warn("rejecting create dataset request including non-existing id", slog.String("accession", accessionID))
+			writeJSON(w, http.StatusBadRequest, "request contains non existing file")
 
 			return
 		}
@@ -747,16 +801,16 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 	}
 	marshaledMsg, _ := json.Marshal(&mapping)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Debug(err.Error())
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate mappings message, reason: %v", err))
+		span.Error("failed to validate dataset mapping message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	mappingsMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "mappings", mappingsMessage); err != nil {
-		slog.Debug("failed to publish mappings message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "mappings", mappingsMessage); err != nil {
+		span.Error("failed to publish mappings message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -765,30 +819,34 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "releaseDataset")
+	defer span.End()
+
 	datasetID := r.PathValue("datasetid")
-	ok, err := api.db.CheckIfDatasetExists(r.Context(), datasetID)
+	ok, err := api.db.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+		span.Error("failed to check if dataset exists", err, slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if !ok {
-		slog.Error("dataset not found", "dataset_id", datasetID) // #nosec G706
-		writeJSON(w, http.StatusBadRequest, "dataset not found")
+		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
 
-	status, err := api.db.GetDatasetStatus(r.Context(), datasetID)
+	status, err := api.db.GetDatasetStatus(ctx, datasetID)
 	if err != nil {
-		slog.Error("failed to get dataset status", "dataset_id", datasetID, "err", err) // #nosec G706
-		writeJSON(w, http.StatusBadRequest, err.Error())
+		span.Error("failed to get dataset status", err, slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if status != "registered" {
-		slog.Error("dataset not registered", "dataset_id", datasetID, "status", status) // #nosec G706
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("dataset not registered, status is %s", status))
+		span.Warn("dataset not registered", slog.String("dataset_id", datasetID), slog.String("status", status))
+		writeJSON(w, http.StatusBadRequest, "dataset not ready for release")
 
 		return
 	}
@@ -799,16 +857,16 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 	}
 	marshaledMsg, _ := json.Marshal(&datasetMsg)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Error("could not validate release message", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate release message, reason: %v", err))
+		span.Error("could not validate dataset release message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	releaseMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "mappings", releaseMessage); err != nil {
-		slog.Debug("failed to publish dataset release message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "mappings", releaseMessage); err != nil {
+		span.Error("failed to publish dataset release message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -817,10 +875,13 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) rotateKeyFile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "rotateKeyFile")
+	defer span.End()
+
 	fileID := r.PathValue("fileid")
 
 	if fileID == "" {
-		slog.Error("file ID missing")
+		span.Warn("file ID missing from request")
 		writeJSON(w, http.StatusBadRequest, "file ID missing")
 
 		return
@@ -833,23 +894,23 @@ func (api *API) rotateKeyFile(w http.ResponseWriter, r *http.Request) {
 
 	marshaledMsg, err := json.Marshal(&rotateMsg)
 	if err != nil {
-		slog.Error("could not marshal message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("could not marshal message, reason: %v", err))
+		span.Error("could not marshal rotate key message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Error("could not validate rotatekey message", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate rotatekey message, reason: %v", err))
+		span.Error("could not validate rotate key message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	rotateMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "rotatekey", rotateMessage); err != nil {
-		slog.Debug("failed to publish rotatekey message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "rotatekey", rotateMessage); err != nil {
+		span.Error("failed to publish rotate key message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -858,38 +919,41 @@ func (api *API) rotateKeyFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) rotateKeyDataset(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "rotateKeyDataset")
+	defer span.End()
+
 	datasetID := r.PathValue("datasetid")
 	if datasetID == "" {
-		slog.Error("no dataset id found", "dataset_id", datasetID) // #nosec G706
-		writeJSON(w, http.StatusBadRequest, "no dataset id found")
+		span.Warn("dataset id missing from request")
+		writeJSON(w, http.StatusBadRequest, "dataset id missing")
 
 		return
 	}
 
-	exists, err := api.db.CheckIfDatasetExists(r.Context(), datasetID)
+	exists, err := api.db.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
-		slog.Error("encountered error during database query", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to check dataset existence")
+		span.Error("failed to check if dataset exists", err, slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if !exists {
-		slog.Warn("dataset not found", "dataset_id", datasetID) // #nosec G706
-		writeJSON(w, http.StatusNotFound, "dataset not found")
+		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
 
-	files, err := api.db.GetDatasetFileIDs(r.Context(), datasetID)
+	files, err := api.db.GetDatasetFileIDs(ctx, datasetID)
 	if err != nil {
-		slog.Error("failed to get dataset files for dataset", "dataset_id", datasetID, "err", err) // #nosec G706
-		writeJSON(w, http.StatusInternalServerError, "failed to get dataset files")
+		span.Error("failed to get dataset files for dataset", err, slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	if len(files) == 0 {
-		slog.Warn("no files found", "dataset_id", datasetID) // #nosec G706
+		span.Warn("no files found for dataset", slog.String("dataset_id", datasetID))
 		writeJSON(w, http.StatusBadRequest, "no files found for dataset")
 
 		return
@@ -901,37 +965,40 @@ func (api *API) rotateKeyDataset(w http.ResponseWriter, r *http.Request) {
 		}
 		marshaledMsg, err := json.Marshal(&rotateMsg)
 		if err != nil {
-			slog.Error("failed to marshal rotatekey message", "dataset_id", datasetID, "file_id", fileID, "err", err) // #nosec G706
-			writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("failed to marshal rotation message for file %s, reason: %v", fileID, err))
+			span.Error("failed to marshal rotate key message", err, slog.String("dataset_id", datasetID), slog.String("file_id", fileID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 		if err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-			slog.Error("could not validate rotatekey message", "err", err)
-			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate rotatekey message, reason: %v", err))
+			span.Error("could not validate rotate key message", err)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 		rotateKeyMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-		if err := api.mq.Publish(context.Background(), "rotatekey", rotateKeyMessage); err != nil {
-			slog.Error("failed to publish rotatekey message", "err", err)
-			writeJSON(w, http.StatusInternalServerError, err.Error())
+		if err := api.mq.Publish(ctx, "rotatekey", rotateKeyMessage); err != nil {
+			span.Error("failed to publish rotate key message", err)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 	}
 
-	slog.Info("rotation messages sent", "nr_files", len(files), "dataset_id", datasetID) // #nosec G706
+	span.Info("rotation messages sent", slog.Int("nr_files", len(files)), slog.String("dataset_id", datasetID))
 	w.WriteHeader(http.StatusOK)
 }
 
 func (api *API) listActiveUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := api.db.ListActiveUsers(r.Context())
+	ctx, span := observability.StartSpan(r.Context(), "listActiveUsers")
+	defer span.End()
+
+	users, err := api.db.ListActiveUsers(ctx)
 	if err != nil {
-		slog.Debug("failed to list active users", "err", err)
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+		span.Error("failed to list active users", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -942,27 +1009,41 @@ func (api *API) listActiveUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listUserFiles(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "listUserFiles")
+	defer span.End()
+
 	username := r.PathValue("username")
+	if username == "" {
+		writeJSON(w, http.StatusBadRequest, "missing username")
+
+		return
+	}
 
 	// parse optional pagination params
 	limit, err := parseLimitParam(r.URL.Query().Get("limit"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, err.Error())
+		writeJSON(w, http.StatusBadRequest, "invalid limit")
 
 		return
 	}
 
 	cursor := r.URL.Query().Get("cursor")
 	pathPrefix := r.URL.Query().Get("path_prefix")
-	slog.Info("getting files", "username", username, "pathPrefix", pathPrefix, "limit", limit, "cursor", cursor) // #nosec G706
-	files, nextCursor, err := api.db.GetUserFiles(r.Context(), username, pathPrefix, true, limit, cursor)
+	span.Info("getting files",
+		slog.String("username", username),
+		slog.String("pathPrefix", pathPrefix),
+		slog.Int("limit", limit),
+		slog.String("cursor", cursor),
+	)
+	files, nextCursor, err := api.db.GetUserFiles(ctx, username, pathPrefix, true, limit, cursor)
 	if err != nil {
 		if errors.Is(err, database.ErrInvalidCursor) {
 			writeJSON(w, http.StatusBadRequest, "invalid cursor parameter")
 
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+		span.Error("failed to get user files", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -996,40 +1077,44 @@ func (api *API) listUserFiles(w http.ResponseWriter, r *http.Request) {
 // If the database insertion fails, it responds with a 500 Internal Server Error status.
 // On success, it responds with a 200 OK status.
 func (api *API) addC4ghHash(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "addC4ghHash")
+	defer span.End()
+
 	var c4gh schema.C4ghPubKey
 	if err := json.NewDecoder(r.Body).Decode(&c4gh); err != nil {
-		slog.Error("could not decode request body", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+		span.Warn("could not decode request body", slog.Any("error", err))
+		writeJSON(w, http.StatusBadRequest, "invalid request body")
 
 		return
 	}
 
 	b64d, err := base64.StdEncoding.DecodeString(c4gh.PubKey)
 	if err != nil {
-		slog.Error("could not base64 decode public key", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode public key, reason: %v", err))
+		span.Warn("could not base64 decode public key", slog.Any("error", err))
+		writeJSON(w, http.StatusBadRequest, "invalid public key")
 
 		return
 	}
 
 	pubKey, err := keys.ReadPublicKey(bytes.NewReader(b64d))
 	if err != nil {
-		slog.Error("could not read public key", "base64_encoding", b64d, "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not read public key, reason: %v", err))
+		span.Warn("could not read public key", slog.Any("error", err))
+		writeJSON(w, http.StatusBadRequest, "invalid public key")
 
 		return
 	}
 
 	keyHash := hex.EncodeToString(pubKey[:])
-	err = api.db.AddKeyHash(r.Context(), keyHash, c4gh.Description)
+	err = api.db.AddKeyHash(ctx, keyHash, c4gh.Description)
 	if err != nil {
-		if strings.Contains(err.Error(), "key hash already exists") {
-			slog.Error("key hash already exists", "key_hash", keyHash, "err", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Warn("key hash already exists", slog.String("key_hash", keyHash))
 			writeJSON(w, http.StatusConflict, "key hash already exists")
-		} else {
-			slog.Error("failed to insert key hash to database", "key_hash", keyHash, "err", err)
-			writeJSON(w, http.StatusInternalServerError, "failed to insert key hash to database")
+
+			return
 		}
+		span.Error("failed to insert key hash to database", err, slog.String("key_hash", keyHash))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1038,10 +1123,13 @@ func (api *API) addC4ghHash(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listC4ghHashes(w http.ResponseWriter, r *http.Request) {
-	hashes, err := api.db.ListKeyHashes(r.Context())
+	ctx, span := observability.StartSpan(r.Context(), "listC4ghHashes")
+	defer span.End()
+
+	hashes, err := api.db.ListKeyHashes(ctx)
 	if err != nil {
-		slog.Error("failed to list c4gh key hashes", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to list c4gh key hashes")
+		span.Error("failed to list c4gh key hashes", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1074,21 +1162,33 @@ func (api *API) listC4ghHashes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) deprecateC4ghHash(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "deprecateC4ghHash")
+	defer span.End()
+
 	keyHash := r.PathValue("keyhash")
-	err := api.db.DeprecateKeyHash(r.Context(), keyHash)
+	err := api.db.DeprecateKeyHash(ctx, keyHash)
 	if err != nil {
-		slog.Error("failed to deprecate key hash", "key_hash", keyHash, "err", err) // #nosec G706
-		writeJSON(w, http.StatusBadRequest, "failed to deprecate key hash")
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Warn("key hash not found or already deprecated", slog.String("key_hash", keyHash))
+			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+			return
+		}
+		span.Error("failed to deprecate key hash", err, slog.String("key_hash", keyHash))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 }
 
 func (api *API) listAllDatasets(w http.ResponseWriter, r *http.Request) {
-	datasets, err := api.db.ListDatasets(r.Context())
+	ctx, span := observability.StartSpan(r.Context(), "listAllDatasets")
+	defer span.End()
+
+	datasets, err := api.db.ListDatasets(ctx)
 	if err != nil {
-		slog.Error("failed to list datasets", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to list datasets")
+		span.Error("failed to list datasets", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1109,11 +1209,14 @@ func (api *API) listAllDatasets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listUserDatasets(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "listUserDatasets")
+	defer span.End()
+
 	username := r.PathValue("username")
-	datasets, err := api.db.ListUserDatasets(r.Context(), username)
+	datasets, err := api.db.ListUserDatasets(ctx, username)
 	if err != nil {
-		slog.Error("failed to list users datasets", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to list users datasets")
+		span.Error("failed to list users datasets", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1134,18 +1237,22 @@ func (api *API) listUserDatasets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "listDatasets")
+	defer span.End()
+
 	token, err := api.auth.Authenticate(r)
 	if err != nil {
-		slog.Error("could not authenticate user")
-		writeJSON(w, http.StatusInternalServerError, "could not authenticate user")
+		// This is internal error as rbac middleware should have authenticated it already
+		span.Error("failed to authenticate user", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	datasets, err := api.db.ListUserDatasets(r.Context(), token.Subject())
+	datasets, err := api.db.ListUserDatasets(ctx, token.Subject())
 	if err != nil {
-		slog.Error("could not list users datasets", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "could not list users datasets")
+		span.Error("could not list users datasets", err, slog.String("user", token.Subject()))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1166,17 +1273,20 @@ func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) verifyFile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "verifyFile")
+	defer span.End()
+
 	accessionID := r.PathValue("accession")
-	reverificationData, err := api.db.GetReVerificationData(r.Context(), accessionID)
+	reverificationData, err := api.db.GetReVerificationData(ctx, accessionID)
 	if err != nil {
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
-			slog.Error("accession ID not found", "err", err)
-			writeJSON(w, http.StatusNotFound, "accession ID not found")
+			span.Error("accession ID not found", err)
+			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 			return
 		}
-		slog.Error("could not retrieve reverification data", "err", err)
-		writeJSON(w, http.StatusNotFound, "could not retrieve reverification data")
+		span.Error("could not retrieve reverification data", err)
+		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
@@ -1194,15 +1304,15 @@ func (api *API) verifyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	marshaledMsg, _ := json.Marshal(&verifyMsg)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		slog.Error("could not validate verification message", "err", err)
-		writeJSON(w, http.StatusInternalServerError, "could not validate verification message")
+		span.Error("could not validate verification message", err)
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	verifyMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "archived", verifyMessage); err != nil {
-		writeJSON(w, http.StatusInternalServerError, err.Error())
+	if err := api.mq.Publish(ctx, "archived", verifyMessage); err != nil {
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
@@ -1211,27 +1321,30 @@ func (api *API) verifyFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) verifyDataset(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "verifyDataset")
+	defer span.End()
+
 	datasetID := r.PathValue("dataset")
-	files, err := api.db.GetDatasetFiles(r.Context(), datasetID)
+	files, err := api.db.GetDatasetFiles(ctx, datasetID)
 	if err != nil {
-		slog.Error("could not get files for dataset", "dataset_id", datasetID, "err", err) // #nosec G706
-		writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("could not get files for dataset: %s", datasetID))
+		span.Error("failed to get dataset files", err, slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
-	if files == nil {
-		slog.Error("no files found for dataset", "dataset_id", datasetID) // #nosec G706
-		writeJSON(w, http.StatusNotFound, fmt.Sprintf("no files found for dataset %s", datasetID))
+	if len(files) == 0 {
+		span.Warn("no files found for dataset", slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
 
 	for _, accessionID := range files {
-		reverificationData, err := api.db.GetReVerificationData(r.Context(), accessionID)
+		reverificationData, err := api.db.GetReVerificationData(ctx, accessionID)
 		if err != nil {
-			slog.Error("could not get reverification data from database", "accession_id", accessionID, "err", err) // #nosec G706
-			writeJSON(w, http.StatusInternalServerError, "could not get reverification data from database")
+			span.Error("could not get reverification data from database", err, slog.String("accession_id", accessionID))
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
@@ -1248,16 +1361,16 @@ func (api *API) verifyDataset(w http.ResponseWriter, r *http.Request) {
 		}
 		marshaledMsg, _ := json.Marshal(&verifyMsg)
 		if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-			slog.Error("could not validate verification message", "err", err)
-			writeJSON(w, http.StatusInternalServerError, "could not validate verification message")
+			span.Error("could not validate verification message", err)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
 
 		verifyMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-		if err := api.mq.Publish(context.Background(), "archived", verifyMessage); err != nil {
-			slog.Debug("failed to publish verification message", "err", err)
-			writeJSON(w, http.StatusInternalServerError, err.Error())
+		if err := api.mq.Publish(ctx, "archived", verifyMessage); err != nil {
+			span.Error("failed to publish verification message", err)
+			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
 		}
