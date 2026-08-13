@@ -673,6 +673,110 @@ case_7_deprecated_key_ingest_rejection() {
     echo -e "\n\033[1;32mSUCCESS: Test Case 7 passed cleanly!\033[0m"
 }
 
+case_8_rotate_to_deprecated_key_rejection() {
+    # ========================================================================
+    # CASE 8: Key Rotation to Deprecated Target Key Rejection
+    # ========================================================================
+    log_header "CASE 8: Key Rotation to Deprecated Target Key Rejection"
+
+    echo "Step 8.1: Restoring clean database baseline..."
+    restore_database
+
+    echo -e "\nStep 8.2: Ensuring target key is marked as deprecated in DB..."
+    DEPRECAT_PUB_KEY="$SHARED_DIR/deprecated_key.pub.pem"
+
+    if [ ! -f "$DEPRECAT_PUB_KEY" ]; then
+        echo "❌ Error: $DEPRECAT_PUB_KEY not found! Ensure make_sda_credentials.sh generated it."
+        exit 1
+    fi
+
+    if command -v xxd >/dev/null 2>&1; then
+        DEPRECATED_HASH=$(cat "$DEPRECAT_PUB_KEY" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
+    else
+        DEPRECATED_HASH=$(cat "$DEPRECAT_PUB_KEY" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
+    fi
+
+    # Ensure key has deprecated_at set in DB
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
+        "INSERT INTO sda.encryption_keys (key_hash, description, deprecated_at)
+         VALUES ('$DEPRECATED_HASH', 'Deprecated target key', NOW() - INTERVAL '1 day')
+         ON CONFLICT (key_hash) DO UPDATE SET deprecated_at = NOW() - INTERVAL '1 day';" > /dev/null
+
+    echo "Verified target key_hash '$DEPRECATED_HASH' is flagged as deprecated in PostgreSQL."
+
+    echo -e "\nStep 8.3: Applying config-rotate_to_deprecatedkey.yaml via override-rotate_to_deprecatedkey.yml..."
+    docker compose -f compose.yml -f override-rotate_to_deprecatedkey.yml up -d --no-deps api reencrypt download rotatekey
+    docker compose -f compose.yml -f override-rotate_to_deprecatedkey.yml restart api reencrypt download rotatekey
+
+    echo "Waiting for gRPC service listener (Port 50051) to stabilize..."
+    until nc -z localhost 50051; do echo -n "."; sleep 1; done
+    sleep 2
+
+    echo -e "\nStep 8.4: Fetching UUID for pre-seeded file EGAF00000000101..."
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
+
+    if [ -z "$FILE_ID" ]; then
+        echo "❌ Error: Pre-seeded file EGAF00000000101 not found in database!"
+        exit 1
+    fi
+    echo "Found pre-seeded file UUID: $FILE_ID"
+
+    # Fetch original key hash to verify it doesn't change on failure
+    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
+
+    echo -e "\nStep 8.5: Attempting key rotation targeting the deprecated key..."
+
+    # Send rotation request targeting the deprecated key
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -X POST "$API_HOST/file/rotatekey/$FILE_ID" || true)
+
+    echo "Received HTTP Status Code: $HTTP_STATUS"
+
+    if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 202 ]; then
+        echo "❌ Error: API endpoint failed to queue the rotation job (HTTP $HTTP_STATUS)"
+        exit 1
+    fi
+
+    echo -e "\nStep 8.6: Waiting for rotatekey worker to process RabbitMQ job..."
+    sleep 3
+
+    echo -e "\nStep 8.7: Verifying background rejection in rotatekey container logs..."
+    ROTATE_LOGS=$(docker compose logs --tail=50 rotatekey 2>&1)
+
+    if echo "$ROTATE_LOGS" | grep -q "the c4gh key hash has been deprecated"; then
+        echo "✅ SUCCESS: rotatekey service logged fatal rejection: 'the c4gh key hash has been deprecated'"
+    else
+        echo "❌ FAILURE: Expected log message 'the c4gh key hash has been deprecated' was not found in rotatekey logs!"
+        echo "--- Recent rotatekey logs ---"
+        echo "$ROTATE_LOGS"
+        echo "-----------------------------"
+        exit 1
+    fi
+
+    echo -e "\nStep 8.8: Verifying file key state in database was NOT altered..."
+    CURRENT_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
+
+    if [ "$CURRENT_KEY_HASH" = "$DEPRECATED_HASH" ]; then
+        echo "❌ Error: File encryption key was wrongly updated to the deprecated key in the DB!"
+        exit 1
+    fi
+    echo "Confirmed file encryption key remained unchanged ($ORIGINAL_KEY_HASH)."
+
+    echo -e "\nStep 8.9: Resetting services back to default base compose state..."
+    docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+    docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+
+    echo "Waiting for default services to stabilize..."
+    until nc -z localhost 50051; do echo -n "."; sleep 1; done
+    sleep 1
+
+    echo -e "\n\033[1;32mSUCCESS: Test Case 8 passed cleanly!\033[0m"
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -711,3 +815,7 @@ case_6_multi_key_archive_migration
 pause_step
 
 case_7_deprecated_key_ingest_rejection
+
+pause_step
+
+case_8_rotate_to_deprecated_key_rejection
