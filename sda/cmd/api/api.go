@@ -23,9 +23,11 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -60,6 +62,16 @@ func run() error {
 	if err := config.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-api")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	db, err := postgres.NewPostgresSQLDatabase()
 	if err != nil {
@@ -128,7 +140,7 @@ func run() error {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(creds))
 
-	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), opts...)
+	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))...)
 	if err != nil {
 		slog.Error("failed to connect to reencrypt service", "err", err)
 
