@@ -587,10 +587,10 @@ case_7_deprecated_key_ingest_rejection() {
 
     echo "Verified key_hash '$DEPRECATED_HASH' is flagged as deprecated in PostgreSQL."
 
-    echo -e "\nStep 7.3: Applying config-deprecatedkey.yaml via override-deprecatedkey.yml..."
+    echo -e "\nStep 7.3: Applying config-ingest_with_deprecatedkey.yaml via override-ingest_with_deprecatedkey.yml..."
     # Apply override so ingest/api services possess the private key to inspect the Crypt4GH header
-    docker compose -f compose.yml -f override-deprecatedkey.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey
-    docker compose -f compose.yml -f override-deprecatedkey.yml restart ingest verify finalize mapper api reencrypt download rotatekey
+    docker compose -f compose.yml -f override-ingest_with_deprecatedkey.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey
+    docker compose -f compose.yml -f override-ingest_with_deprecatedkey.yml restart ingest verify finalize mapper api reencrypt download rotatekey
 
     echo "Waiting for gRPC service listener (Port 50051) to stabilize..."
     until nc -z localhost 50051; do
@@ -642,11 +642,15 @@ case_7_deprecated_key_ingest_rejection() {
         echo "✅ SUCCESS: Ingestion correctly rejected file encrypted with deprecated key! (HTTP $HTTP_STATUS)"
     else
         echo "❌ FAILURE: Expected HTTP 400 or 500 rejection, but received HTTP $HTTP_STATUS!"
+        echo "For the current setup, ingest does not reject files encrypted with deprecated keys, which is a known limitation."
+        pause_step "Press Enter to continue and reset services back to default state..."
 
         # Cleanup override before exiting on error
         docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
         docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
-        exit 1
+        rm -rf "$INBOX_DIR"
+
+        return 1
     fi
 
     # Verify state in sda.files table reflects failure or unarchived state
@@ -678,32 +682,32 @@ TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
 CLIENT_PUB_KEY=$(base64 -w0 "$SHARED_DIR"/client.pub.pem)
 API_HOST="http://localhost:8090"
 
-## # Take a snapshot of the clean database state
-## backup_database
-##
-## # Run the demo script for the key rotation test
-## case_1_standard_lifecycle
-##
-## pause_step
-##
-## case_2_mixed_key_dataset
-##
-## pause_step
-##
-## case_3_invalid_rotation_target
-##
-## pause_step
-##
-## case_4_concurrent_race_condition
-##
-## pause_step
-##
-## case_5_ingest_mixed_keys_during_rotation
-##
-## pause_step
-##
-## case_6_multi_key_archive_migration
-##
-## pause_step
+# Take a snapshot of the clean database state
+backup_database
+
+# Run the demo script for the key rotation test
+case_1_standard_lifecycle
+
+pause_step
+
+case_2_mixed_key_dataset
+
+pause_step
+
+case_3_invalid_rotation_target
+
+pause_step
+
+case_4_concurrent_race_condition
+
+pause_step
+
+case_5_ingest_mixed_keys_during_rotation
+
+pause_step
+
+case_6_multi_key_archive_migration
+
+pause_step
 
 case_7_deprecated_key_ingest_rejection
