@@ -273,6 +273,7 @@ services:
       - BROKER_USER=api
       - DATABASE_PASSWORD=api
       - DATABASE_USER=api
+      - JWT_PUB_KEY_URL=http://mockauth:8000/jwks
     ports:
       - "8090:8080"
     restart: always
