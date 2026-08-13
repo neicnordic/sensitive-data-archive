@@ -777,6 +777,84 @@ case_8_rotate_to_deprecated_key_rejection() {
     echo -e "\n\033[1;32mSUCCESS: Test Case 8 passed cleanly!\033[0m"
 }
 
+case_9_rotate_from_deprecated_source_key() {
+    # ========================================================================
+    # CASE 9: Key Rotation with a Deprecated Source Key (Migration Success)
+    # ========================================================================
+    log_header "CASE 9: Key Rotation from Deprecated Source Key"
+
+    echo "Step 9.1: Restoring clean database baseline..."
+    restore_database
+
+    echo -e "\nStep 9.2: Fetching UUID and initial key hash for pre-seeded file EGAF00000000101..."
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
+
+    if [ -z "$FILE_ID" ]; then
+        echo "❌ Error: Pre-seeded file EGAF00000000101 not found in database!"
+        exit 1
+    fi
+
+    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
+
+    echo "Found File UUID: $FILE_ID | Original Key Hash (c4gh): $ORIGINAL_KEY_HASH"
+
+    echo -e "\nStep 9.3: Deprecating the file's current source key (c4gh) in PostgreSQL..."
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
+        "UPDATE sda.encryption_keys SET deprecated_at = NOW() - INTERVAL '1 day' WHERE key_hash = '$ORIGINAL_KEY_HASH';" > /dev/null
+
+    # Confirm key is marked as deprecated
+    IS_DEPRECATED=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT deprecated_at FROM sda.encryption_keys WHERE key_hash = '$ORIGINAL_KEY_HASH';" | tr -d '\r\n[:space:]')
+
+    if [ -z "$IS_DEPRECATED" ]; then
+        echo "❌ Error: Failed to mark source key as deprecated in database!"
+        exit 1
+    fi
+    echo "Confirmed source key ($ORIGINAL_KEY_HASH) is now flagged as deprecated."
+
+    echo -e "\nStep 9.4: Executing key rotation from deprecated source key (c4gh -> rotatekey)..."
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -X POST "$API_HOST/file/rotatekey/$FILE_ID" || true)
+
+    echo "API Accepted Job with HTTP Status Code: $HTTP_STATUS"
+
+    if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 202 ]; then
+        echo "❌ Error: API endpoint failed to initiate rotation job (HTTP $HTTP_STATUS)"
+        exit 1
+    fi
+
+    echo -e "\nStep 9.5: Waiting for rotatekey worker pipeline to process re-encryption..."
+    sleep 3
+
+    echo -e "\nStep 9.6: Verifying key hash was updated in PostgreSQL..."
+    NEW_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+        "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
+
+    echo "New File Encryption Key Hash: $NEW_KEY_HASH"
+
+    if [ "$NEW_KEY_HASH" = "$ORIGINAL_KEY_HASH" ]; then
+        echo "❌ Error: Key hash was not updated in the database after rotation!"
+        echo "--- rotatekey worker logs ---"
+        docker compose logs --tail=30 rotatekey
+        echo "-----------------------------"
+        exit 1
+    fi
+
+    echo "✅ Key hash successfully migrated in DB from deprecated source key ($ORIGINAL_KEY_HASH) to new key ($NEW_KEY_HASH)!"
+
+    echo -e "\nStep 9.7: Verifying download and client decryption after migrating off deprecated key..."
+    curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
+        "http://localhost:8085/files/EGAF00000000101" -o "$OUTDIR/c9-after-deprecated-rotation.c4gh"
+
+    C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR/client.sec.pem" "$OUTDIR/c9-after-deprecated-rotation.c4gh" > /dev/null
+    echo "✅ SUCCESS: User successfully downloaded and decrypted file migrated off a deprecated source key!"
+
+    echo -e "\n\033[1;32mSUCCESS: Test Case 9 passed cleanly!\033[0m"
+}
+
 # =================================================================================
 mkdir -p "$SHARED_DIR"
 # Copy shared folder from the container to the local shared directory for use in the demo
@@ -819,3 +897,7 @@ case_7_deprecated_key_ingest_rejection
 pause_step
 
 case_8_rotate_to_deprecated_key_rejection
+
+pause_step
+
+case_9_rotate_from_deprecated_source_key
