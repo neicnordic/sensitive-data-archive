@@ -57,8 +57,6 @@ func (s *server) ReencryptHeader(ctx context.Context, in *re.ReencryptRequest) (
 	_, span := observability.StartSpan(ctx, "ReencryptHeader")
 	defer span.End()
 
-	span.Debug("reencrypt header", slog.String("public-key", in.GetPublickey()), slog.String("old-header", string(in.GetOldheader())))
-
 	// working with the base64 encoded key as it can be sent in both HTTP headers and HTTP body
 	publicKey, err := base64.StdEncoding.DecodeString(in.GetPublickey())
 	if err != nil {

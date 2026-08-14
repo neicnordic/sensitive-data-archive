@@ -43,6 +43,8 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		writer.activeEndpoints = writer.activeEndpoints[1:]
 	}
 
+	span.SetAttributes(attribute.String("activeLocation", location))
+
 	// Ensure a directory is created for temporary write files
 	if err := os.MkdirAll(filepath.Join(location, "tmp"), 0700); err != nil {
 		return "", fmt.Errorf("failed to create tmp directory at location: %s, due to %v", location, err)

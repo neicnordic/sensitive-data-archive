@@ -74,7 +74,7 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	shutdown, err := observability.SetupOTelSDK(ctx, "sda-reencrypt")
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-ingest")
 	if err != nil {
 		return fmt.Errorf("failed to setup OTel SDK: %v", err)
 	}
