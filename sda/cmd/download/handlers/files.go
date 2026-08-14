@@ -17,6 +17,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/streaming"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,6 +40,11 @@ type resolvedFile struct {
 // and storage resolution common to both full-download and content-only endpoints.
 // Returns (nil, false) if an error response was already sent.
 func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileBase")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	fileID := c.Param("fileId")
 
 	// Get auth context
@@ -124,6 +130,11 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 // resolveFileForDownload wraps resolveFileBase, extracts a public key,
 // and invokes gRPC re-encryption.
 func (h *Handlers) resolveFileForDownload(c *gin.Context) (*resolvedFile, bool) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForDownload")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	// Extract public key from headers
 	publicKey, errorCode, detail := extractPublicKey(c)
 	if errorCode != "" {
@@ -187,6 +198,11 @@ func contentDisposition(submittedPath string) string {
 // DownloadFile handles file download by stable ID.
 // GET /files/:fileId
 func (h *Handlers) DownloadFile(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "DownloadFile")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
 		return
@@ -278,6 +294,11 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 // HeadFile handles HEAD requests for file metadata.
 // HEAD /files/:fileId
 func (h *Handlers) HeadFile(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFile")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
 		return
@@ -315,6 +336,11 @@ func contentETag(fileID string, archiveSize int64) string {
 
 // resolveFileForContent wraps resolveFileBase and computes the basic content ETag.
 func (h *Handlers) resolveFileForContent(c *gin.Context) (*resolvedContentFile, bool) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForContent")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	base, ok := h.resolveFileBase(c)
 	if !ok {
 		return nil, false
@@ -331,6 +357,11 @@ func (h *Handlers) resolveFileForContent(c *gin.Context) (*resolvedContentFile, 
 // GetFileHeader handles requests for the re-encrypted file header only.
 // GET /files/:fileId/header
 func (h *Handlers) GetFileHeader(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileHeader")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
 		return
@@ -360,6 +391,11 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 // HeadFileHeader handles HEAD requests for the file header metadata.
 // HEAD /files/:fileId/header
 func (h *Handlers) HeadFileHeader(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileHeader")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
 		return
@@ -377,6 +413,11 @@ func (h *Handlers) HeadFileHeader(c *gin.Context) {
 // GetFileContent handles requests for the file body (archive data without header).
 // GET /files/:fileId/content
 func (h *Handlers) GetFileContent(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileContent")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForContent(c)
 	if !ok {
 		return
@@ -461,6 +502,11 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 // HeadFileContent handles HEAD requests for the file content metadata.
 // HEAD /files/:fileId/content
 func (h *Handlers) HeadFileContent(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileContent")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	resolved, ok := h.resolveFileForContent(c)
 	if !ok {
 		return
