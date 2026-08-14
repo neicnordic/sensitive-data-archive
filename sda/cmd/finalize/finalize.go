@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,10 +18,12 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
@@ -50,6 +53,17 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-finalize")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
 	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
@@ -135,6 +149,8 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	defer span.End()
 
 	log.Debugf("Received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", mqBroker.Conf.SchemasPath), delivered.Body); err != nil {
@@ -280,6 +296,9 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 }
 
 func backupFile(ctx context.Context, delivered amqp.Delivery) error {
+	ctx, span := observability.StartSpan(ctx, "backupFile")
+	defer span.End()
+
 	log.Debug("Backup initiated")
 	fileID := delivered.CorrelationId
 
