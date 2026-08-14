@@ -20,10 +20,12 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type mapper struct {
@@ -46,6 +48,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-mapper")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	app := &mapper{
 		db:          nil,
@@ -97,7 +109,7 @@ func run() error {
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, mapperconf.SourceQueue(), app.handleMessage)
 	}()
-	log.Info("mapper service started")
+	slog.Info("mapper service started")
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -114,16 +126,16 @@ func run() error {
 		select {
 		case err := <-consumeErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("consumer failure during shutdown", "error", err)
+				slog.Error("consumer failure during shutdown", slog.Any("error", err))
 			}
 		case sig := <-sigc:
-			slog.Warn("received a second signal, not waiting for the running handler", "signal", sig)
+			slog.Warn("received a second signal, not waiting for the running handler", slog.String("signal", sig.String()))
 		}
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
-			slog.Error("consumer failure", "error", err, "source-queue", mapperconf.SourceQueue())
+			slog.Error("consumer failure", slog.Any("error", err), slog.String("source-queue", mapperconf.SourceQueue()))
 			cancel()
 
 			return err
@@ -136,47 +148,44 @@ func run() error {
 func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
 	schemaType, err := schemaFromDatasetOperation(message.Body)
 	if err != nil {
-		slog.Error("could not derive schema from message", "error", err, "message-key", message.Key)
+		span.Error("could not derive schema from message", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "could not derive schema from message")}, nil
+		return []func(){app.errorQueue(ctx, message, "could not derive schema from message")}, nil
 	}
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/%s.json", app.schemaPath, schemaType), message.Body); err != nil {
-		slog.Error("incoming message validation failed", "error", err, "message-key", message.Key)
+		span.Error("incoming message validation failed", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "incoming message validation failed")}, nil
+		return []func(){app.errorQueue(ctx, message, "incoming message validation failed")}, nil
 	}
 
 	var mappings schema.DatasetMapping
-	// we unmarshal the message in the validation step so this is safe to do
 	if err := json.Unmarshal(message.Body, &mappings); err != nil {
-		slog.Error("failed to unmarshal incoming message", "error", err, "message-key", message.Key)
+		span.Error("failed to unmarshal incoming message", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "failed to unmarshal incoming message")}, nil
+		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
 	}
+	span.SetAttributes(attribute.String("dataset-id", mappings.DatasetID), attribute.String("mapping-operation", mappings.Type))
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "dataset-id", mappings.DatasetID)
+		span.Warn("failed to begin transaction", slog.Any("error", err))
 
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", "error", err, "dataset-id", mappings.DatasetID)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
-
-	slog.Info("received mapping operation",
-		slog.String("dataset-id", mappings.DatasetID),
-		slog.String("operation", mappings.Type),
-	)
 
 	var filesToCleanFromInbox []*database.MappingData
 
@@ -191,14 +200,14 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 				}
 			}
 
-			slog.Debug("mapping file to dataset",
+			span.Debug("mapping file to dataset",
 				slog.String("dataset-id", mappings.DatasetID),
 				slog.String("file-accession", fileAccession),
 				slog.Bool("overridden-download-path", fileDownloadPath != nil),
 			)
 			fileMappingData, err := tx.GetMappingData(ctx, fileAccession)
 			if err != nil {
-				slog.Error("failed to get mapping data of file",
+				span.Warn("failed to get mapping data of file",
 					slog.String("file-accession", fileAccession),
 					slog.String("dataset-id", mappings.DatasetID),
 					slog.Any("error", err),
@@ -208,30 +217,29 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 			}
 
 			if fileMappingData == nil {
-				slog.Error("mapping data for file not found",
+				span.Error("mapping data for file not found",
+					nil,
 					slog.String("file-accession", fileAccession),
-					slog.String("dataset-id", mappings.DatasetID),
 				)
 
 				// send message to error queue and do not requeue
-				return []func(){app.errorQueue(message, "mapping data for file not found")}, nil
+				return []func(){app.errorQueue(ctx, message, "mapping data for file not found")}, nil
 			}
 			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID, fileDownloadPath); err != nil {
-				slog.Error("failed to map file to dataset-id",
+				span.Error("failed to map file to dataset-id",
+					err,
 					slog.String("file-accession", fileAccession),
-					slog.String("dataset-id", mappings.DatasetID),
-					slog.Any("error", err),
 				)
 
 				if errors.Is(err, database.ErrUniqueViolation) {
-					return []func(){app.errorQueue(message, "mapping violates unique constraint")}, nil
+					return []func(){app.errorQueue(ctx, message, "mapping violates unique constraint")}, nil
 				}
 
 				return nil, err
 			}
 
 			if fileMappingData.SubmissionLocation == "" {
-				slog.Warn("file does not have a known submission location, can not remove file from inbox",
+				span.Warn("file does not have a known submission location, can not remove file from inbox",
 					slog.String("file-id", fileMappingData.FileID),
 				)
 
@@ -242,52 +250,43 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 		}
 
 		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(message.Body)); err != nil {
-			slog.Error("failed to update dataset status to registered",
-				slog.String("dataset-id", mappings.DatasetID),
-				slog.Any("error", err),
-			)
+			span.Error("failed to update dataset status to registered", err)
 
 			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
 			}
 
 			return nil, err
 		}
 	case "release":
 		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "released", string(message.Body)); err != nil {
-			slog.Error("failed to update dataset status",
-				slog.String("dataset-id", mappings.DatasetID),
-				slog.Any("error", err),
-			)
+			span.Error("failed to update dataset status", err)
 
 			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
 			}
 
 			return nil, err
 		}
 	case "deprecate":
 		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "deprecated", string(message.Body)); err != nil {
-			slog.Error("failed to update dataset status",
-				slog.String("dataset-id", mappings.DatasetID),
-				slog.Any("error", err),
-			)
+			span.Error("failed to update dataset status", err)
 
 			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
 			}
 
 			return nil, err
 		}
 	default:
-		slog.Error("unknown mapping operation", slog.String("operation", mappings.Type))
+		span.Error("unknown mapping operation", nil)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "unknown mapping type")}, nil
+		return []func(){app.errorQueue(ctx, message, "unknown mapping operation")}, nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction", "error", err, "dataset-id", mappings.DatasetID)
+		span.Error("failed to commit transaction", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -295,7 +294,7 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 	for _, fileMappingData := range filesToCleanFromInbox {
 		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, app.inboxConfig)
 		if err := app.inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
-			slog.Warn("failed to remove file from inbox",
+			span.Warn("failed to remove file from inbox",
 				slog.String("file-id", fileMappingData.FileID),
 				slog.String("submission-path", fileMappingData.SubmissionFilePath),
 				slog.String("submission-location", fileMappingData.SubmissionLocation),
@@ -337,17 +336,18 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 	}
 }
 
-func (app *mapper) errorQueue(originMessage *broker.Message, errorQueueReason string) func() {
+func (app *mapper) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
 	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
-
-			return
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
 		}
-		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }
