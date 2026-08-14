@@ -34,7 +34,9 @@ type RequestBodyUpdateReason struct {
 
 // List fetches and prints all files for username, auto-paginating.
 //
-// If status is given, only files whith this specific status printed.
+// If pathPrefix is given, only files with this specific prefix printed.
+//
+// If status is given, only files with this specific status are printed.
 // Filtering happens client-side after each page is fetched.
 //
 // When stdout is a TTY (interactive session), each page is printed as it
@@ -44,12 +46,17 @@ type RequestBodyUpdateReason struct {
 // When stdout is not a TTY (e.g. piped to jq or another program), all pages
 // are collected and emitted as a single JSON array so that consumers always
 // receive valid JSON.
-func List(apiURI, token, username, status string) error {
+func List(apiURI, token, username, status, pathPrefix string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
 		return err
 	}
 	parsedURL.Path = path.Join(parsedURL.Path, "users", username, "files")
+	if pathPrefix != "" {
+		q := parsedURL.Query()
+		q.Set("path_prefix", pathPrefix)
+		parsedURL.RawQuery = q.Encode()
+	}
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec
 
