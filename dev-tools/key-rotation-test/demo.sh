@@ -914,8 +914,13 @@ TOKEN=$(curl -s http://localhost:8000/tokens | jq -r '.[0]')
 CLIENT_PUB_KEY=$(base64 -w0 "$SHARED_DIR"/client.pub.pem)
 API_HOST="http://localhost:8090"
 
-# Take a snapshot of the clean database state
-backup_database
+# Take a snapshot of the clean database state ONLY if it doesn't exist inside the postgres container
+if ! docker compose exec -T postgres test -f /var/lib/postgresql/data/clean_db.dump; then
+    echo "Creating clean database baseline snapshot in container..."
+    backup_database
+else
+    echo "Using existing clean_db.dump baseline snapshot in container."
+fi
 
 # Run the demo script for the key rotation test
 if [ "$TARGET_CASE" = "all" ] || [ -z "$TARGET_CASE" ]; then
