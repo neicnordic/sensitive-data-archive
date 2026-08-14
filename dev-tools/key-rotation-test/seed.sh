@@ -1,9 +1,8 @@
 #!/bin/sh
 set -e
 # This script is used to seed the database with test data for the key rotation test.
-# shellcheck source=/dev/null
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPT_DIR/helpers.sh"
+# shellcheck disable=SC1091
+. /helpers.sh
 
 # Helper function to fast-poll until the file is verified and decrypted by background workers
 wait_to_ready() {
