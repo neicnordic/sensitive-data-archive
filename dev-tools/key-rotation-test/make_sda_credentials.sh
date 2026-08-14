@@ -230,14 +230,4 @@ if [ ! -f "/shared/keys/ssh" ]; then
 EOD
 fi
 
-## download grpcurl
-if [ ! -f "/shared/grpcurl" ]; then
-    echo "downloading grpcurl"
-    latest_grpcurl=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
-      https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.tag_name' | sed -e 's/v//')
-    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
-      "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpcurl}/grpcurl_${latest_grpcurl}_linux_x86_64.tar.gz" \
-      | tar -xz -C /shared/ && chmod +x /shared/grpcurl
-fi
-
 echo "Credentials script setup completed successfully!"
