@@ -118,14 +118,21 @@ services:
       - shared:/shared
 
   mockauth:
+    container_name: mockauth
     command:
       - /bin/sh
       - -c
       - |
         pip install --upgrade pip > /dev/null
-        pip install aiohttp Authlib joserfc > /dev/null
+        pip install aiohttp Authlib > /dev/null
         python -u /mockoidc.py
     image: python:3.14-slim-trixie
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/jwks')\" || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     volumes:
       - ./mockoidc.py:/mockoidc.py:ro
       - shared:/shared
@@ -147,6 +154,8 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      mockauth:
         condition: service_healthy
     environment:
       - BROKER_PASSWORD=inbox
@@ -272,6 +281,8 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      mockauth:
         condition: service_healthy
     environment:
       - BROKER_PASSWORD=api
