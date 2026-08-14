@@ -162,21 +162,18 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
 
-	shutdown, err := observability.SetupOTelSDK(ctx, "sda-reencrypt")
+	shutdown, err := observability.SetupOTelSDK(context.Background(), "sda-reencrypt")
 	if err != nil {
 		log.Errorf("failed to setup OTel SDK: %v", err)
 		os.Exit(1)
 	}
 	defer func() {
-		if err := shutdown(ctx); err != nil {
+		if err := shutdown(context.Background()); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
 	}()

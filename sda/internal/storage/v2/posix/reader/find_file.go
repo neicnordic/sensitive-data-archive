@@ -15,7 +15,7 @@ import (
 )
 
 func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, error) {
-	ctx, span := observability.StartSpan(ctx, "storage.posix.reader.FindFile",
+	_, span := observability.StartSpan(ctx, "storage.posix.reader.FindFile",
 		attribute.String("filePath", filePath),
 	)
 	defer span.End()
