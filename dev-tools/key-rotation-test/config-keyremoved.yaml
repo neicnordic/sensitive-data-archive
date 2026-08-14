@@ -112,7 +112,7 @@ c4gh:
   passphrase: "rotatekeyPass"
   syncPubKeyPath: /shared/sync.pub.pem
   rotatePubKeyPath: /shared/rotatekey.pub.pem
-  
+
   privateKeys:
     # Original c4gh.sec.pem is removed from this list
     - filePath: /shared/rotatekey.sec.pem
@@ -157,7 +157,7 @@ session:
   name: "sda_session"
 
 cache:
-  enabled: true
+  enabled: false
   file-ttl: 300
   permission-ttl: 120
   dataset-ttl: 300
