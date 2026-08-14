@@ -185,13 +185,12 @@ dev-download-v2-up: build-all
 dev-download-v2-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/download-v2-dev/compose.yml down -v --remove-orphans
 
-# Lightweight dev stack for testing key-rotation (webapp development)
+# Dev stack for end-to-end key rotation tests (pipeline + download)
 dev-key-rotation-up: build-all
 	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/key-rotation-test/compose.yml up -d
 	@echo ""
-	@echo "Download API v2 ready at http://localhost:8085"
+	@echo "Key rotation test stack ready."
 	@echo "Get a token:  TOKEN=\$$(curl -s http://localhost:8000/tokens | jq -r '.[0]')"
-	@echo "Try it:       curl -H \"Authorization: Bearer \$$TOKEN\" http://localhost:8085/datasets"
 
 dev-key-rotation-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/key-rotation-test/compose.yml down -v --remove-orphans
