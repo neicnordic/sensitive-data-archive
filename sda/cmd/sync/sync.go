@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,11 +24,14 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -58,6 +62,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-sync")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
@@ -143,9 +157,8 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	log.Debugf("Received a message (correlation-id: %s, message: %s)",
-		delivered.CorrelationId,
-		delivered.Body)
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	defer span.End()
 
 	err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", mqBroker.Conf.SchemasPath), delivered.Body)
 	if err != nil {
@@ -183,7 +196,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 	var syncFilesErr error
 	for _, aID := range message.AccessionIDs {
-		if err := syncFiles(ctx, aID); err != nil {
+		if err := syncFile(ctx, aID); err != nil {
 			log.Errorf("failed to sync archived file: accession-id: %s, reason: (%s)", aID, err.Error())
 			syncFilesErr = err
 
@@ -217,9 +230,12 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 }
 
-func syncFiles(ctx context.Context, accessionID string) error {
+func syncFile(ctx context.Context, accessionID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "syncFile", attribute.String("accession", accessionID))
+	defer span.End()
+
 	log.Debugf("syncing file %s", accessionID)
 	inboxPath, err := db.GetInboxPath(ctx, accessionID)
 	if err != nil {
@@ -313,7 +329,8 @@ func buildSyncDatasetJSON(ctx context.Context, b []byte) ([]byte, error) {
 
 func sendPOST(payload []byte) error {
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 
 	uri, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
