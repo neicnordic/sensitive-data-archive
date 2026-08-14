@@ -272,7 +272,14 @@ case_4_concurrent_race_condition() {
     done
 
     echo "Download workers active. Step 4.3: Triggering key rotation during active traffic..."
-    curl -s -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE_ID" > /dev/null
+    ROTATION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE_ID")
+
+    if [ "$ROTATION_STATUS" -ne 200 ] && [ "$ROTATION_STATUS" -ne 202 ]; then
+        echo -e "\033[1;31m❌ FAILED: API rejected rotation request with HTTP status $ROTATION_STATUS\033[0m"
+        exit 1
+    fi
+
+    echo "✅ Rotation task queued successfully (HTTP $ROTATION_STATUS)."
 
     # Wait for all background download workers to finish
     wait
