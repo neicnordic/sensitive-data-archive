@@ -15,13 +15,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type tracedReadCloser struct {
-	io.ReadCloser
+type tracedReadSeekCloser struct {
+	io.ReadSeekCloser
 	span trace.Span
 }
 
-func (r *tracedReadCloser) Close() error {
-	err := r.ReadCloser.Close()
+func (r *tracedReadSeekCloser) Close() error {
+	err := r.ReadSeekCloser.Close()
 	r.span.End()
 
 	return err
@@ -84,8 +84,8 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 		return nil, fmt.Errorf("failed to open file: %s, at location: %s, due to: %v", filePath, location, err)
 	}
 
-	return &tracedReadCloser{
-		ReadCloser: file,
-		span:       span,
+	return &tracedReadSeekCloser{
+		ReadSeekCloser: file,
+		span:           span,
 	}, nil
 }
