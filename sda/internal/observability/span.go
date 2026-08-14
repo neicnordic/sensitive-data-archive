@@ -98,9 +98,6 @@ func (s span) log(msg string, level slog.Level, args ...slog.Attr) {
 
 func slogAttrToOTel(attr slog.Attr) attribute.KeyValue {
 	switch attr.Value.Kind() {
-	// otel has no Uint64 so converting to string to avoid potential overflow
-	case slog.KindString, slog.KindUint64:
-		return attribute.String(attr.Key, attr.Value.String())
 	case slog.KindBool:
 		return attribute.Bool(attr.Key, attr.Value.Bool())
 	case slog.KindInt64:
@@ -112,6 +109,8 @@ func slogAttrToOTel(attr slog.Attr) attribute.KeyValue {
 	case slog.KindDuration:
 		return attribute.Int64(attr.Key, attr.Value.Duration().Nanoseconds())
 	default:
+		// handling slog.KindString, slog.KindUint64, and others the same
+		// otel has no Uint64 so converting to string to avoid potential overflow
 		return attribute.String(attr.Key, attr.Value.String())
 	}
 }

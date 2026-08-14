@@ -374,8 +374,8 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 	case r.ContentLength > 0:
 		if err := json.NewDecoder(r.Body).Decode(&ingest); err != nil {
-			span.Error("could not decode request body", err)
-			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+			span.Warn("could not decode request body", slog.Any("error", err))
+			writeJSON(w, http.StatusBadRequest, "invalid request body")
 
 			return
 		}

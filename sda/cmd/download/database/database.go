@@ -372,14 +372,23 @@ func (p *PostgresDB) Ping(ctx context.Context) error {
 
 // Close closes the PostgreSQL database connection and all prepared statements.
 func (p *PostgresDB) Close() error {
+	var err error
 	// Close all prepared statements first
-	for name, stmt := range p.preparedStatements {
-		if err := stmt.Close(); err != nil {
-			log.Warnf("failed to close prepared statement %s: %v", name, err)
+	for queryName, stmt := range p.preparedStatements {
+		if stmtErr := stmt.Close(); stmtErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close %s stmt, due to: %w", queryName, stmtErr))
 		}
 	}
 
-	return p.db.Close()
+	if p.db != nil {
+		err = errors.Join(err, p.db.Close())
+	}
+
+	if p.metricsReg != nil {
+		err = errors.Join(err, p.metricsReg.Unregister())
+	}
+
+	return err
 }
 
 // GetAllDatasets returns all datasets (for allow-all-data mode).

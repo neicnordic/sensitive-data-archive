@@ -53,11 +53,12 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 	})
 
 	if err != nil {
+		span.End()
+
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
 			return nil, storageerrors.ErrorFileNotFoundInLocation
 		}
-		span.End()
 
 		return nil, fmt.Errorf("failed to get object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, bucket, endpoint, err)
 	}
