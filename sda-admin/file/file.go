@@ -34,6 +34,9 @@ type RequestBodyUpdateReason struct {
 
 // List fetches and prints all files for username, auto-paginating.
 //
+// If status is given, only files whith this specific status printed.
+// Filtering happens client-side after each page is fetched.
+//
 // When stdout is a TTY (interactive session), each page is printed as it
 // arrives and the user is prompted to press Enter or Space for the next page,
 // or Ctrl+C to abort.
@@ -41,7 +44,7 @@ type RequestBodyUpdateReason struct {
 // When stdout is not a TTY (e.g. piped to jq or another program), all pages
 // are collected and emitted as a single JSON array so that consumers always
 // receive valid JSON.
-func List(apiURI, token, username string) error {
+func List(apiURI, token, username, status string) error {
 	parsedURL, err := url.Parse(apiURI)
 	if err != nil {
 		return err
@@ -67,7 +70,7 @@ func List(apiURI, token, username string) error {
 
 		cursor = headers.Get("X-Next-Cursor")
 
-		allItems, err = handleListPage(body, cursor, isTTY, allItems)
+		allItems, err = handleListPage(body, cursor, isTTY, allItems, status)
 		if err != nil {
 			return err
 		}
@@ -90,9 +93,22 @@ func List(apiURI, token, username string) error {
 	return nil
 }
 
-func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawMessage) ([]json.RawMessage, error) {
+func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawMessage, status string) ([]json.RawMessage, error) {
+	var page []json.RawMessage
+	if err := json.Unmarshal(body, &page); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if status != "" {
+		page = filterByStatus(page, status)
+	}
+
 	if isTTY {
-		_, _ = fmt.Print(string(pretty.Pretty(body)))
+		out, err := json.Marshal(page)
+		if err != nil {
+			return nil, err
+		}
+		_, _ = fmt.Print(string(pretty.Pretty(out)))
 		if cursor == "" {
 			return allItems, nil
 		}
@@ -105,12 +121,27 @@ func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawM
 		return allItems, nil
 	}
 
-	var page []json.RawMessage
-	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	return append(allItems, page...), nil
+}
+
+type fileStatusOnly struct {
+	Status string `json:"fileStatus"`
+}
+
+// filterByStatus keeps only the items whose fileStatus matches status.
+func filterByStatus(items []json.RawMessage, status string) []json.RawMessage {
+	filtered := make([]json.RawMessage, 0, len(items))
+	for _, item := range items {
+		var f fileStatusOnly
+		if err := json.Unmarshal(item, &f); err != nil {
+			continue
+		}
+		if f.Status == status {
+			filtered = append(filtered, item)
+		}
 	}
 
-	return append(allItems, page...), nil
+	return filtered
 }
 
 // waitForContinue is a variable so it can be replaced in tests.
