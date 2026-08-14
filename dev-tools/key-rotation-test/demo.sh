@@ -14,7 +14,7 @@ export POSTGRES_IMAGE="postgres"
 export DB_OPTS="-U postgres -d sda"
 USER_ID="test@dummy.org"
 
-PR_NUMBER=$(docker compose -f compose.yml 2>/dev/null ps --format "{{.Image}}" | grep -oE "PR[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -n 1 | sed 's/PR//')
+PR_NUMBER=$(docker compose -f compose.yml 2>/dev/null ps --format "{{.Image}}" | grep -oE "PR[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -n 1 | sed 's/PR//') || true
 if [ -z "$PR_NUMBER" ]; then
     echo "❌ Error: Could not determine PR_NUMBER from running compose stack containers." >&2
     exit 1
