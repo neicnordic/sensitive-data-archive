@@ -504,15 +504,29 @@ case_6_multi_key_archive_migration() {
     sleep 3
 
     echo -e "\nStep 6.9: Verifying key hashes in PostgreSQL..."
+    TARGET_KEY_HASH=$(compute_key_hash "$SHARED_DIR/rotatekey.pub.pem")
     UPDATED_COUNT=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
-        "SELECT COUNT(*) FROM sda.files f JOIN sda.file_dataset fd ON f.id = fd.file_id JOIN sda.datasets d ON fd.dataset_id = d.id WHERE d.stable_id = '$DATASET_ID';")
+    "SELECT COUNT(*) \
+    FROM sda.files f \
+    JOIN sda.file_dataset fd ON f.id = fd.file_id \
+    JOIN sda.datasets d ON fd.dataset_id = d.id \
+    WHERE d.stable_id = '$DATASET_ID' \
+        AND f.key_hash = '$TARGET_KEY_HASH';")
 
-    echo "Total verified rotated files in dataset: $UPDATED_COUNT / 5"
-
+    echo "Total verified rotated files with target key hash ($TARGET_KEY_HASH): $UPDATED_COUNT / 5"
     if [ "$UPDATED_COUNT" -ne 5 ]; then
-        echo "❌ Error: Failed to migrate all 5 archived files!"
+        echo "❌ Error: Failed to migrate all 5 archived files! Only $UPDATED_COUNT / 5 have the new key hash."
+
+        docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
+        "SELECT f.id, f.stable_id, f.key_hash \
+        FROM sda.files f \
+        JOIN sda.file_dataset fd ON f.id = fd.file_id \
+        JOIN sda.datasets d ON fd.dataset_id = d.id \
+        WHERE d.stable_id = '$DATASET_ID';"
+
         exit 1
     fi
+
 
     echo -e "\nStep 6.10: Testing download and client decryption of migrated files..."
     for i in 0 1 2 3 4; do
