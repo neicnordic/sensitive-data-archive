@@ -8,6 +8,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,6 +41,11 @@ type fileInfo struct {
 // ListDatasets returns a paginated list of dataset IDs the user has access to.
 // GET /datasets
 func (h *Handlers) ListDatasets(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasets")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	authCtx, ok := middleware.GetAuthContext(c)
 	if !ok {
 		problemJSON(c, http.StatusUnauthorized, "authentication required")
@@ -136,6 +142,11 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 // GetDataset returns metadata for a specific dataset.
 // GET /datasets/:datasetId
 func (h *Handlers) GetDataset(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetDataset")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	datasetID := c.Param("datasetId")
 
 	authCtx, ok := middleware.GetAuthContext(c)
@@ -179,6 +190,11 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 // ListDatasetFiles returns a paginated list of files in a dataset.
 // GET /datasets/:datasetId/files
 func (h *Handlers) ListDatasetFiles(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasetFiles")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	datasetID := c.Param("datasetId")
 
 	authCtx, ok := middleware.GetAuthContext(c)
