@@ -44,7 +44,7 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasets")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	authCtx, ok := middleware.GetAuthContext(c)
 	if !ok {
@@ -145,7 +145,7 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetDataset")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	datasetID := c.Param("datasetId")
 
@@ -193,7 +193,7 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasetFiles")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	datasetID := c.Param("datasetId")
 

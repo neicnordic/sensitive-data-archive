@@ -15,7 +15,7 @@ import (
 
 // GetFileSize returns the size of a specific object
 func (reader *Reader) GetFileSize(ctx context.Context, location, filePath string) (int64, error) {
-	ctx, span := observability.StartSpan(ctx, "storage.posix.reader.GetFileSize",
+	_, span := observability.StartSpan(ctx, "storage.posix.reader.GetFileSize",
 		attribute.String("location", location),
 		attribute.String("filePath", filePath),
 	)
