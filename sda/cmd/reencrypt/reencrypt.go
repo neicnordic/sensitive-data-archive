@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"os"
@@ -17,8 +18,10 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/crypto/chacha20poly1305"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -50,9 +53,11 @@ type hServer struct {
 // but encrypted with the new public key. If a dataeditlist is provided and contains at
 // least one entry it is added to the new header, replacing any existing dataeditlist. If
 // no dataeditlist is passed and one exists already, it is kept in the new header.
-func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
-	log.Debugf("Received Public key: %v", in.GetPublickey())
-	log.Debugf("Received previous crypt4gh header: %v", in.GetOldheader())
+func (s *server) ReencryptHeader(ctx context.Context, in *re.ReencryptRequest) (*re.ReencryptResponse, error) {
+	_, span := observability.StartSpan(ctx, "ReencryptHeader")
+	defer span.End()
+
+	span.Debug("reencrypt header", slog.String("public-key", in.GetPublickey()), slog.String("old-header", string(in.GetOldheader())))
 
 	// working with the base64 encoded key as it can be sent in both HTTP headers and HTTP body
 	publicKey, err := base64.StdEncoding.DecodeString(in.GetPublickey())
@@ -157,10 +162,24 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-reencrypt")
+	if err != nil {
+		log.Errorf("failed to setup OTel SDK: %v", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -224,6 +243,8 @@ func main() {
 			opts = []grpc.ServerOption{grpc.Creds(creds)}
 		}
 	}
+
+	opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 
 	s := grpc.NewServer(opts...)
 	re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: conf.ReEncrypt.C4ghPrivateKeyList})
