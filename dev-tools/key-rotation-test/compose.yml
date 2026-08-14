@@ -298,46 +298,6 @@ services:
       - ./config.yaml:/config.yaml
       - shared:/shared
 
-  downloadold:
-    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-download
-    container_name: downloadold
-    command: sda-download
-    depends_on:
-      credentials:
-        condition: service_completed_successfully
-      seed:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      reencrypt:
-        condition: service_started
-      mockauth:
-        condition: service_started
-    environment:
-      - CONFIG_FILE=/config.yaml
-      # Match the dot-to-underscore substitution expected by Viper for the legacy engine
-      - ARCHIVE_TYPE=S3
-      - ARCHIVE_URL=http://s3:9000
-      - ARCHIVE_ACCESSKEY=access
-      - ARCHIVE_SECRETKEY=secretKey
-      - ARCHIVE_BUCKET=archive1
-      - ARCHIVE_REGION=us-east-1
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=rootpasswd
-      - DB_DATABASE=sda
-      - DB_SSLMODE=disable
-      - GRPC_HOST=reencrypt
-      - GRPC_PORT=50051
-      - OIDC_CONFIGURATION_URL=http://mockauth:8000/.well-known/openid-configuration
-    ports:
-      - "8084:8080"
-    restart: always
-    volumes:
-      - ./config.yaml:/config.yaml
-      - shared:/shared
-
   download:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     container_name: download
