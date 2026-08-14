@@ -120,21 +120,47 @@ case_2_mixed_key_dataset() {
     echo -e "\nStep 2.2: Extracting file IDs for our test files..."
     # Rotate half of the files in the dataset to simulate a mixed-key scenario
     # File 1 and 2 to be rotated, File 3 and 4 to remain with the original key
-    FILE1_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
-    FILE2_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';")
-    FILE3_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';")
-    FILE4_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';")
+    FILE1_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
+    FILE2_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';" | tr -d '\r\n[:space:]')
+    FILE3_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';" | tr -d '\r\n[:space:]')
+    FILE4_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';" | tr -d '\r\n[:space:]')
 
     echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, StableID=EGAF00000000101; ID=$FILE2_ID, StableID=EGAF00000000102"
     echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, StableID=EGAF00000000103; ID=$FILE4_ID, StableID=EGAF00000000104"
 
     echo -e "\nStep 2.3: Executing key rotation ONLY on File 1 and 2..."
-    curl -s -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE1_ID"
+    curl -s -f -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE1_ID"
     echo "Rotation command issued for File 1."
-    curl -s -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE2_ID"
+    curl -s -f -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE2_ID"
     echo "Rotation command issued for File 2."
 
-    echo -e "\nStep 2.4: Attempting download and decryption of the ROTATED file (File 1 and 2)..."
+    echo "Waiting for rotation tasks to process in background..."
+    sleep 3
+
+    echo -e "\nStep 2.4: Verifying database key_hash values for mixed-key distribution..."
+
+    ORIGINAL_HASH=$(compute_key_hash "$SHARED_DIR"/c4gh.pub.pem)
+    ROTATED_HASH=$(compute_key_hash "$SHARED_DIR"/rotatekey.pub.pem)
+
+    F1_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
+    F2_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000102';" | tr -d '\r\n[:space:]')
+    F3_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000103';" | tr -d '\r\n[:space:]')
+    F4_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000104';" | tr -d '\r\n[:space:]')
+
+    echo "File 1 Hash: $F1_HASH (Expected Rotated:  $ROTATED_HASH)"
+    echo "File 2 Hash: $F2_HASH (Expected Rotated:  $ROTATED_HASH)"
+    echo "File 3 Hash: $F3_HASH (Expected Original: $ORIGINAL_HASH)"
+    echo "File 4 Hash: $F4_HASH (Expected Original: $ORIGINAL_HASH)"
+
+    if [ "$F1_HASH" = "$ROTATED_HASH" ] && [ "$F2_HASH" = "$ROTATED_HASH" ] && \
+       [ "$F3_HASH" = "$ORIGINAL_HASH" ] && [ "$F4_HASH" = "$ORIGINAL_HASH" ]; then
+        echo -e "\033[1;32m✅ Database Check Passed: Key hashes match expected mixed-key state.\033[0m"
+    else
+        echo -e "\033[1;31m❌ Database Check Failed: Key hashes do not reflect expected rotation state!\033[0m"
+        exit 1
+    fi
+
+    echo -e "\nStep 2.5: Attempting download and decryption of the ROTATED files (File 1 and 2)..."
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000101 -o "$OUTDIR"/c2-file1-rotated.c4gh
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
@@ -145,7 +171,7 @@ case_2_mixed_key_dataset() {
     C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR"/client.sec.pem "$OUTDIR"/c2-file2-rotated.c4gh
     echo "SUCCESS: File 2 (new key) downloaded and decrypted perfectly!"
 
-    echo -e "\nStep 2.5: Attempting download and decryption of the UNROTATED file (File 3 and 4)..."
+    echo -e "\nStep 2.6: Attempting download and decryption of the UNROTATED files (File 3 and 4)..."
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000103 -o "$OUTDIR"/c2-file3-legacy.c4gh
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
