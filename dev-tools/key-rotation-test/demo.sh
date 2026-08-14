@@ -261,10 +261,11 @@ case_4_concurrent_race_condition() {
     for i in {1..10}; do
         (
             for j in {1..5}; do
+                # Appended '|| true' so transient network errors under flood load don't kill the worker subshell prematurely
                 curl -s -H "Authorization: Bearer $TOKEN" \
                         -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
                         http://localhost:8085/files/EGAF00000000101 \
-                        -o "$FLOOD_DIR/download_${i}_${j}.c4gh"
+                        -o "$FLOOD_DIR/download_${i}_${j}.c4gh" || true
             done
         ) &
     done
@@ -284,6 +285,19 @@ case_4_concurrent_race_condition() {
     echo "All concurrent download tasks completed."
 
     echo -e "\nStep 4.4: Validating integrity of downloaded files..."
+
+    # Check that all 50 files (10 workers x 5 downloads) were created before running audit
+    TOTAL_DOWNLOADS=$(find "$FLOOD_DIR" -maxdepth 1 -name "*.c4gh" | wc -l)
+    EXPECTED_DOWNLOADS=50
+
+    echo "Download Count Verification: $TOTAL_DOWNLOADS / $EXPECTED_DOWNLOADS files retrieved"
+
+    if [ "$TOTAL_DOWNLOADS" -ne "$EXPECTED_DOWNLOADS" ]; then
+        echo -e "\n\033[1;31mFAILED: Expected $EXPECTED_DOWNLOADS downloaded files, but only got $TOTAL_DOWNLOADS!\033[0m"
+        echo -e "\033[1;31mWorkers failed or dropped connections before completing all iterations.\033[0m"
+        rm -rf "$FLOOD_DIR"
+        exit 1
+    fi
 
     CORRUPTED_COUNT=0
     SUCCESS_COUNT=0
@@ -307,6 +321,7 @@ case_4_concurrent_race_condition() {
         echo -e "\033[1;32mThe database/service handled atomic lock transitions correctly.\033[0m"
     else
         echo -e "\n\033[1;31mFAILED: $CORRUPTED_COUNT downloads were corrupted due to race conditions during rotation!\033[0m"
+        rm -rf "$FLOOD_DIR"
         exit 1
     fi
 
