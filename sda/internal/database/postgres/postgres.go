@@ -119,7 +119,15 @@ func (db *pgDb) Close() error {
 		}
 	}
 
-	return errors.Join(err, db.db.Close())
+	if db.db != nil {
+		err = errors.Join(err, db.db.Close())
+	}
+
+	if db.metricsReg != nil {
+		err = errors.Join(err, db.metricsReg.Unregister())
+	}
+
+	return err
 }
 
 func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, error) {
