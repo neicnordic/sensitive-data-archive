@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -19,7 +21,9 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 )
 
@@ -370,6 +374,9 @@ func addCSPheaders(ctx iris.Context) {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Initialise config
 	if err := configv2.Load(); err != nil {
 		log.Errorf("failed to load config: %v", err)
@@ -381,6 +388,17 @@ func main() {
 		log.Errorf("Failed to generate config, reason: %v", err)
 		os.Exit(1)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-auth")
+	if err != nil {
+		log.Errorf("failed to setup OTel SDK: %v", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
@@ -417,6 +435,7 @@ func main() {
 	}
 
 	app.Use(sess.Handler())
+	app.Use(iris.FromStd(otelhttp.NewMiddleware("auth")))
 
 	// Connect to DB
 	authHandler.db, err = postgres.NewPostgresSQLDatabase()
