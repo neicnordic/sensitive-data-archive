@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
@@ -24,7 +26,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
 	internalconfig "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
-	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
@@ -51,6 +54,16 @@ func run() error {
 	if err := internalconfig.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-download")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	// Validate permission model
 	if err := validatePermissionModel(config.PermissionModel(), config.VisaEnabled()); err != nil {
@@ -165,6 +178,7 @@ func run() error {
 	router.UseRawPath = true         // Route on raw URL-encoded path (supports %2F in dataset IDs)
 	router.UnescapePathValues = true // c.Param() still returns decoded value
 	router.Use(gin.Recovery())
+	router.Use(otelgin.Middleware("download"))
 
 	// Add request logging
 	if log.IsLevelEnabled(log.InfoLevel) {

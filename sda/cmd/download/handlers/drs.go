@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,6 +55,11 @@ func drsChecksumType(sdaType string) string {
 // GetDrsObject returns a GA4GH DRS object for a file identified by dataset and path.
 // GET /objects/{datasetId}/{filePath}
 func (h *Handlers) GetDrsObject(c *gin.Context) {
+	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetDrsObject")
+	defer span.End()
+
+	c.Request.WithContext(reqCtx)
+
 	rawPath := strings.TrimPrefix(c.Param("path"), "/")
 
 	idx := strings.Index(rawPath, "/")

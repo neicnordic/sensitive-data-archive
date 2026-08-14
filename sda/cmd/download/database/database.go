@@ -11,9 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // Query name constants
@@ -258,6 +261,7 @@ type File struct {
 type PostgresDB struct {
 	db                 *sql.DB
 	preparedStatements map[string]*sql.Stmt
+	metricsReg         metric.Registration
 }
 
 var db Database
@@ -299,9 +303,18 @@ func Init() error {
 		connStr += fmt.Sprintf(" sslcert=%s sslkey=%s", config.DBClientCert(), config.DBClientKey())
 	}
 
-	sqlDB, err := sql.Open("postgres", connStr)
+	sqlDB, err := otelsql.Open("postgres", connStr)
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
+	}
+
+	metricsReg, err := otelsql.RegisterDBStatsMetrics(sqlDB, otelsql.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+	))
+	if err != nil {
+		_ = sqlDB.Close()
+
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Configure connection pool
@@ -337,6 +350,7 @@ func Init() error {
 	RegisterDatabase(&PostgresDB{
 		db:                 sqlDB,
 		preparedStatements: preparedStatements,
+		metricsReg:         metricsReg,
 	})
 
 	return nil
