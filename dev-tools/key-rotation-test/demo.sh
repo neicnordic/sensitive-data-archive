@@ -51,22 +51,26 @@ case_1_standard_lifecycle() {
     # CASE 1: Standard Lifecycle (Download -> Rotate -> Remove old key -> Download)
     # ========================================================================
     log_header "CASE 1: Standard Key Lifecycle Transition"
-    echo "Step 1.1: Downloading file before rotation..."
+
+    echo "Step 1.1: Restoring database baseline..."
+    restore_database
+
+    echo "Step 1.2: Downloading file before rotation..."
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000101 -o "$OUTDIR"/c1-before.c4gh
     C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR"/client.sec.pem "$OUTDIR"/c1-before.c4gh
     echo "SUCCESS: File decrypted using current valid key state."
 
-    echo -e "\nStep 1.2: Executing key rotation..."
+    echo -e "\nStep 1.3: Executing key rotation..."
     FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
     echo "Rotating key for file ID: $FILE_ID"
     curl -H "Authorization: Bearer $TOKEN" -X POST  "$API_HOST/file/rotatekey/$FILE_ID"
+    sleep 2 # Allow background rotation to complete
 
-    echo -e "\nStep 1.3: Simulating old key removal (Applying config-keyremoved via override)..."
+    echo -e "\nStep 1.4: Simulating old key removal (Applying config-keyremoved via override)..."
 
     # Layer the keyremoved override onto the running core stack
     docker compose -f compose.yml -f override-keyremoved.yml up -d --no-deps reencrypt download
-
     # Explicitly restart the download and reencrypt microservices to force a configuration reload
     docker compose -f compose.yml -f override-keyremoved.yml restart reencrypt download
 
@@ -80,7 +84,7 @@ case_1_standard_lifecycle() {
     # Give the app layer one final second to finish its internal handshake initialization
     sleep 2
 
-    echo -e "\nStep 1.4: Downloading and decrypting after rotation..."
+    echo -e "\nStep 1.5: Downloading and decrypting after rotation..."
 
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000101 -o "$OUTDIR"/c1-after.c4gh
@@ -88,7 +92,7 @@ case_1_standard_lifecycle() {
     C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR"/client.sec.pem "$OUTDIR"/c1-after.c4gh
     echo "SUCCESS: User successfully decrypted the file generated after key rotation!"
 
-    echo -e "\nStep 1.5: Verifying key removal safety: Attempting to download an unrotated file..."
+    echo -e "\nStep 1.6: Verifying key removal safety: Attempting to download an unrotated file..."
     STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
     http://localhost:8085/files/EGAF00000000102 || true)
@@ -98,6 +102,10 @@ case_1_standard_lifecycle() {
     else
         echo "WARNING: Unexpected response code $STATUS_CODE"
     fi
+
+    echo -e "\nStep 1.7: Resetting services back to default base compose state..."
+    docker compose -f compose.yml up -d --no-deps reencrypt download > /dev/null
+    docker compose -f compose.yml restart reencrypt download > /dev/null
 }
 
 case_2_mixed_key_dataset() {
@@ -449,8 +457,8 @@ case_6_multi_key_archive_migration() {
     echo -e "\nStep 6.3: Applying config-multikey.yaml via override-multikey.yml..."
 
     # Apply override-multikey.yml onto running core stack
-    docker compose -f compose.yml -f override-multikey.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize
-    docker compose -f compose.yml -f override-multikey.yml restart reencrypt download rotatekey ingest verify mapper finalize
+    docker compose -f compose.yml -f override-multikey.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize api
+    docker compose -f compose.yml -f override-multikey.yml restart reencrypt download rotatekey ingest verify mapper finalize api
 
     echo "Waiting for reencrypt gRPC service listener (Port 50051) to stabilize..."
     until nc -z localhost 50051; do
@@ -567,8 +575,8 @@ case_6_multi_key_archive_migration() {
     done
 
     echo -e "\nStep 6.11: Resetting services back to default base compose state..."
-    docker compose -f compose.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize> /dev/null
-    docker compose -f compose.yml restart reencrypt download rotatekey ingest verify mapper finalize > /dev/null
+    docker compose -f compose.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize api > /dev/null
+    docker compose -f compose.yml restart reencrypt download rotatekey ingest verify mapper finalize api > /dev/null
 
     echo -e "\n\033[1;32mSUCCESS: All 5 multi-key files were ingested, migrated, and decrypted cleanly!\033[0m"
 
