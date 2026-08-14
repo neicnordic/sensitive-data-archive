@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,11 +18,13 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var db database.Database
@@ -42,7 +45,16 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	var err error
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-mapper")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
 	conf, err := config.NewConfig("mapper")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
@@ -124,6 +136,9 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	defer span.End()
+
 	log.Debugf("received a message: %s", delivered.Body)
 	schemaType, err := schemaFromDatasetOperation(delivered.Body)
 	if err != nil {
