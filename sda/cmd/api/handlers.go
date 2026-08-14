@@ -573,10 +573,9 @@ func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 	fileID := r.PathValue("fileid")
 
-	span.Info("handling request to delete file", slog.String("username", username), slog.String("file_id", fileID))
-	if fileID == "" {
-		span.Error("file ID is required", nil)
-		writeJSON(w, http.StatusBadRequest, "file ID is required")
+	if _, err := uuid.Parse(fileID); err != nil {
+		span.Warn("invalid file ID")
+		writeJSON(w, http.StatusBadRequest, "invalid file id")
 
 		return
 	}
@@ -657,6 +656,13 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := r.PathValue("fileid")
+	if _, err := uuid.Parse(fileID); err != nil {
+		span.Warn("invalid file ID")
+		writeJSON(w, http.StatusBadRequest, "invalid file id")
+
+		return
+	}
+
 	submissionUser := r.PathValue("username")
 	filePath, location, err := api.db.GetUploadedSubmissionFilePathAndLocation(ctx, submissionUser, fileID)
 	if err != nil {
