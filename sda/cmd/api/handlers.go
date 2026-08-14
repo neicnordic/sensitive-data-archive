@@ -880,9 +880,9 @@ func (api *API) rotateKeyFile(w http.ResponseWriter, r *http.Request) {
 
 	fileID := r.PathValue("fileid")
 
-	if fileID == "" {
-		span.Warn("file ID missing from request")
-		writeJSON(w, http.StatusBadRequest, "file ID missing")
+	if _, err := uuid.Parse(fileID); err != nil {
+		span.Warn("invalid file ID", slog.Any("error", err), slog.String("file_id", fileID))
+		writeJSON(w, http.StatusBadRequest, "invalid file id")
 
 		return
 	}
