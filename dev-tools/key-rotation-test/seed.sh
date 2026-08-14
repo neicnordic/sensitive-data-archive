@@ -8,8 +8,7 @@ wait_to_ready() {
     _FILE_UUID=$1
     echo "Waiting for background workers to verify file $_FILE_UUID..."
 
-    # Poll up to 50 times with a 0.1-second sleep (total 5 seconds max)
-    for i in $(seq 1 50); do
+    for _ in $(seq 1 50); do
         # Verify the current event milestone on the file
         LAST_EVENT=$(PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda -At -c \
             "SELECT last_event FROM sda.files WHERE id='$_FILE_UUID';" 2>/dev/null | tr -d '\r\n')
@@ -52,7 +51,7 @@ TOKEN=$(cat /shared/token | tr -d '\n')
 
 # Install dependencies inside runtime environment
 apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
-apt-get -o DPkg::Lock::Timeout=60 install -y s3cmd curl jq postgresql-client util-linux bsdmainutils > /dev/null
+apt-get -o DPkg::Lock::Timeout=60 install -y s3cmd curl jq postgresql-client util-linux bsdmainutils xxd > /dev/null
 
 # Clean and prepare a temporary storage playground
 TMP_DATA_DIR=/tmp/test-data
@@ -82,7 +81,7 @@ for filename in $FILES; do
 
     # Extract file UUID
     FILE_UUID=""
-    for i in $(seq 1 10); do
+    for _ in $(seq 1 10); do
         FILE_UUID=$(PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda -At -c \
             "SELECT id FROM sda.files WHERE submission_file_path='$API_INBOX_PATH' ORDER BY created_at DESC LIMIT 1;")
         FILE_UUID=$(echo "$FILE_UUID" | tr -d '\r\n[:space:]')
