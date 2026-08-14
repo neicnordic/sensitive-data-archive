@@ -23,7 +23,7 @@ until curl -s -k -u guest:guest "$URI/api/vhosts" > /dev/null; do
 done
 
 # Provision user profiles in DB and register matching service roles in MQ broker
-for n in api auth download finalize inbox ingest mapper rotatekey sync verify inbox; do
+for n in api auth download finalize inbox ingest mapper rotatekey sync verify; do
     echo "creating credentials for: $n"
     # Ensure the role actually exists before modifying it
     psql -U postgres -h postgres -d sda -c "CREATE ROLE $n;" || true
