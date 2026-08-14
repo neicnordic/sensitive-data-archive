@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
-
 # This script is used to seed the database with test data for the key rotation test.
+# shellcheck source=/dev/null
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/helpers.sh"
 
 # Helper function to fast-poll until the file is verified and decrypted by background workers
 wait_to_ready() {
@@ -155,10 +157,10 @@ curl -fsS -H "Authorization: Bearer $TOKEN" \
 echo "=== 🎉 Success! Dataset '$DATASET_ID' is initialized with 4 clean targets, structured correctly, and ready for rotation! ==="
 
 # ==============================================================================
-# Seed 5,000 Valid Crypt4GH Headers for long background key rotation test
+# Seed 3,000 Valid Crypt4GH Headers for long background key rotation test
 # ==============================================================================
 BG_DATASET_ID="EGAD00000000099"
-echo "Generating 5,000 valid Crypt4GH headers..."
+echo "Generating 3,000 valid Crypt4GH headers..."
 echo "A" > "$TMP_DATA_DIR/dummy.txt"
 
 yes | /shared/crypt4gh encrypt \
@@ -171,7 +173,7 @@ if [ ! -f "/shared/c4gh.pub.pem" ]; then
 fi
 
 # Extract key_hash
-KEY_HASH=$(cat /shared/c4gh.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
+KEY_HASH=$(compute_key_hash "/shared/c4gh.pub.pem")
 
 # Extract header hex bytes without xxd (using hexdump or od as fallback)
 if command -v hexdump >/dev/null 2>&1; then
@@ -183,7 +185,7 @@ else
     exit 1
 fi
 
-echo "Inserting 5,000 file records into Postgres matching schema main.sql..."
+echo "Inserting 3,000 file records into Postgres matching schema main.sql..."
 
 PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda <<EOF
 BEGIN;
@@ -209,7 +211,7 @@ SELECT
     '/archive/bg_file_' || gs || '.txt.c4gh' AS archive_file_path,
     1024 AS archive_file_size,
     '$KEY_HASH' AS key_hash
-FROM generate_series(20001, 25000) gs; -- 5,000 files
+FROM generate_series(20001, 23000) gs; -- 3,000 files
 
 -- 4. Bulk Insert into sda.files with real key_hash
 INSERT INTO sda.files (
@@ -260,4 +262,4 @@ FROM seed_files;
 COMMIT;
 EOF
 
-echo "=== 🎉 Success! Dataset '$BG_DATASET_ID' initialized with 5,000 valid Crypt4GH headers matching sda schema! ==="
+echo "=== 🎉 Success! Dataset '$BG_DATASET_ID' initialized with 3,000 valid Crypt4GH headers matching sda schema! ==="

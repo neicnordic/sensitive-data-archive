@@ -2,6 +2,10 @@
 set -euo pipefail
 
 # --- CONFIGURATION & ENV SETUP ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/helpers.sh"
+
 export SHARED_DIR="/tmp/sda/shared"
 export POSTGRES_IMAGE="postgres"
 export DB_OPTS="-U postgres -d sda"
@@ -17,19 +21,6 @@ mkdir -p "$OUTDIR"
 rm -rf "${OUTDIR:?}"/*
 
 # ======================================================================
-# Helper function to pause between phases
-pause_step() {
-    local msg="${1:-\">>> PRESS [ENTER] TO PROCEED TO THE NEXT TEST CASE...\"}"
-    echo -e "\n\033[1;33m${msg}\033[0m"
-    read -r
-}
-
-log_header() {
-    echo -e "\n\033[1;32m========================================================================\033[0m"
-    echo -e "\033[1;32m$1\033[0m"
-    echo -e "\033[1;32m========================================================================\033[0m"
-}
-
 # Creates a clean snapshot of the database state right after initialization
 backup_database() {
     echo "Creating clean snapshot of initialized database..."
@@ -64,7 +55,7 @@ case_1_standard_lifecycle() {
     echo "SUCCESS: File decrypted using current valid key state."
 
     echo -e "\nStep 1.2: Executing key rotation..."
-    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
     echo "Rotating key for file ID: $FILE_ID"
     curl -H "Authorization: Bearer $TOKEN" -X POST  "$API_HOST/file/rotatekey/$FILE_ID"
 
@@ -126,10 +117,10 @@ case_2_mixed_key_dataset() {
     echo -e "\nStep 2.2: Extracting file IDs for our test files..."
     # Rotate half of the files in the dataset to simulate a mixed-key scenario
     # File 1 and 2 to be rotated, File 3 and 4 to remain with the original key
-    FILE1_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
-    FILE2_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';")
-    FILE3_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';")
-    FILE4_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';")
+    FILE1_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE2_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';")
+    FILE3_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';")
+    FILE4_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';")
 
     echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, StableID=EGAF00000000101; ID=$FILE2_ID, StableID=EGAF00000000102"
     echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, StableID=EGAF00000000103; ID=$FILE4_ID, StableID=EGAF00000000104"
@@ -180,7 +171,7 @@ case_3_invalid_rotation_target() {
 
     echo -e "\nStep 3.3: Capturing baseline key_hash BEFORE rotation attempt..."
     # Fetch the stable_id, ID, and the cryptographic key_hash before we do anything
-    BEFORE_DATA=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    BEFORE_DATA=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
     BEFORE_HASH=$(echo "$BEFORE_DATA" | cut -d'|' -f3)
     echo "Target File: EGAF00000000101"
     echo "Current Key Hash: $BEFORE_HASH"
@@ -194,10 +185,10 @@ case_3_invalid_rotation_target() {
     sleep 2 # Give any potential phantom queues time to settle
 
     # Fetch the hash again to check for mutation
-    AFTER_HASH=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    AFTER_HASH=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
 
     echo "Database state dump:"
-    docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';"
+    docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';"
 
     if [ "$BEFORE_HASH" == "$AFTER_HASH" ]; then
         echo -e "\n\033[1;32mSUCCESS: The key_hash did not change ($AFTER_HASH).\033[0m"
@@ -225,7 +216,7 @@ case_4_concurrent_race_condition() {
     echo "Step 4.1: Restoring database baseline..."
     restore_database
 
-    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
 
     echo -e "\nStep 4.2: Launching background download flood (10 parallel workers)..."
 
@@ -349,10 +340,10 @@ case_5_ingest_mixed_keys_during_rotation() {
 
     echo -e "\nStep 5.6: Querying database for file UUIDs during active rotation..."
 
-    UUID_OLD=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    UUID_OLD=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT id FROM sda.files WHERE submission_file_path='$DATASET_FOLDER/file_old_key.txt.c4gh' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
 
-    UUID_NEW=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    UUID_NEW=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT id FROM sda.files WHERE submission_file_path='$DATASET_FOLDER/file_new_key.txt.c4gh' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
 
     echo "Found UUID (Old Key File): $UUID_OLD"
@@ -430,14 +421,9 @@ case_6_multi_key_archive_migration() {
             exit 1
         fi
 
-        # Calculate key_hash matching make_sda_credentials
-        if command -v xxd >/dev/null 2>&1; then
-            EXTRA_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
-        else
-            EXTRA_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
-        fi
+        EXTRA_HASH=$(compute_key_hash "$PUB_KEY_PATH")
 
-        docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -c \
+        docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
             "INSERT INTO sda.encryption_keys (key_hash, description) VALUES ('$EXTRA_HASH', 'Extra registered key $i') ON CONFLICT (key_hash) DO NOTHING;" > /dev/null
 
         echo "Registered Extra Key $i in DB: $EXTRA_HASH"
@@ -488,7 +474,7 @@ case_6_multi_key_archive_migration() {
     for i in 0 1 2 3 4; do
         FILE_PATH="$DATASET_FOLDER/file_k$i.txt.c4gh"
 
-        UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+        UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
             "SELECT id FROM sda.files WHERE submission_file_path='$FILE_PATH' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
 
         ACCESSION="EGAF0000000060$i"
@@ -527,7 +513,7 @@ case_6_multi_key_archive_migration() {
     sleep 3
 
     echo -e "\nStep 6.9: Verifying key hashes in PostgreSQL..."
-    UPDATED_COUNT=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    UPDATED_COUNT=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT COUNT(*) FROM sda.files f JOIN sda.file_dataset fd ON f.id = fd.file_id JOIN sda.datasets d ON fd.dataset_id = d.id WHERE d.stable_id = '$DATASET_ID';")
 
     echo "Total verified rotated files in dataset: $UPDATED_COUNT / 5"
@@ -575,14 +561,10 @@ case_7_deprecated_key_ingest_rejection() {
         exit 1
     fi
 
-    if command -v xxd >/dev/null 2>&1; then
-        DEPRECATED_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
-    else
-        DEPRECATED_HASH=$(cat "$PUB_KEY_PATH" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
-    fi
+    DEPRECATED_HASH=$(compute_key_hash "$PUB_KEY_PATH")
 
     # Ensure key has deprecated_at set in DB (idempotent guard)
-    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -c \
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
         "INSERT INTO sda.encryption_keys (key_hash, description, deprecated_at)
          VALUES ('$DEPRECATED_HASH', 'Deprecated test key', NOW() - INTERVAL '1 day')
          ON CONFLICT (key_hash) DO UPDATE SET deprecated_at = NOW() - INTERVAL '1 day';" > /dev/null
@@ -623,7 +605,7 @@ case_7_deprecated_key_ingest_rejection() {
 
     echo -e "\nStep 7.6: Fetching uploaded file UUID from database..."
     FILE_PATH="$DATASET_FOLDER/$FILE_NAME.c4gh"
-    UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    UUID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT id FROM sda.files WHERE submission_file_path='$FILE_PATH' ORDER BY created_at DESC LIMIT 1;" | tr -d '\r\n[:space:]')
 
     if [ -z "$UUID" ]; then
@@ -656,7 +638,7 @@ case_7_deprecated_key_ingest_rejection() {
     fi
 
     # Verify state in sda.files table reflects failure or unarchived state
-    FILE_STATE=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    FILE_STATE=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT state FROM sda.files WHERE id='$UUID';" | tr -d '\r\n[:space:]')
     echo "File DB State: ${FILE_STATE:-'NULL'}"
 
@@ -692,14 +674,10 @@ case_8_rotate_to_deprecated_key_rejection() {
         exit 1
     fi
 
-    if command -v xxd >/dev/null 2>&1; then
-        DEPRECATED_HASH=$(cat "$DEPRECAT_PUB_KEY" | awk 'NR==2' | base64 -d | xxd -p -c256 | tr -d '\r\n[:space:]')
-    else
-        DEPRECATED_HASH=$(cat "$DEPRECAT_PUB_KEY" | awk 'NR==2' | base64 -d | hexdump -v -e '/1 "%02x"' | tr -d '\r\n[:space:]')
-    fi
+    DEPRECATED_HASH=$(compute_key_hash "$DEPRECAT_PUB_KEY")
 
     # Ensure key has deprecated_at set in DB
-    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -c \
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
         "INSERT INTO sda.encryption_keys (key_hash, description, deprecated_at)
          VALUES ('$DEPRECATED_HASH', 'Deprecated target key', NOW() - INTERVAL '1 day')
          ON CONFLICT (key_hash) DO UPDATE SET deprecated_at = NOW() - INTERVAL '1 day';" > /dev/null
@@ -715,7 +693,7 @@ case_8_rotate_to_deprecated_key_rejection() {
     sleep 2
 
     echo -e "\nStep 8.4: Fetching UUID for pre-seeded file EGAF00000000101..."
-    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
 
     if [ -z "$FILE_ID" ]; then
@@ -725,7 +703,7 @@ case_8_rotate_to_deprecated_key_rejection() {
     echo "Found pre-seeded file UUID: $FILE_ID"
 
     # Fetch original key hash to verify it doesn't change on failure
-    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
 
     echo -e "\nStep 8.5: Attempting key rotation targeting the deprecated key..."
@@ -759,7 +737,7 @@ case_8_rotate_to_deprecated_key_rejection() {
     fi
 
     echo -e "\nStep 8.8: Verifying file key state in database was NOT altered..."
-    CURRENT_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    CURRENT_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
 
     if [ "$CURRENT_KEY_HASH" = "$DEPRECATED_HASH" ]; then
@@ -789,7 +767,7 @@ case_9_rotate_from_deprecated_source_key() {
     restore_database
 
     echo -e "\nStep 9.2: Fetching UUID and initial key hash for pre-seeded file EGAF00000000101..."
-    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
 
     if [ -z "$FILE_ID" ]; then
@@ -797,17 +775,17 @@ case_9_rotate_from_deprecated_source_key() {
         exit 1
     fi
 
-    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    ORIGINAL_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
 
     echo "Found File UUID: $FILE_ID | Original Key Hash (c4gh): $ORIGINAL_KEY_HASH"
 
     echo -e "\nStep 9.3: Deprecating the file's current source key (c4gh) in PostgreSQL..."
-    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -c \
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c \
         "UPDATE sda.encryption_keys SET deprecated_at = NOW() - INTERVAL '1 day' WHERE key_hash = '$ORIGINAL_KEY_HASH';" > /dev/null
 
     # Confirm key is marked as deprecated
-    IS_DEPRECATED=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    IS_DEPRECATED=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT deprecated_at FROM sda.encryption_keys WHERE key_hash = '$ORIGINAL_KEY_HASH';" | tr -d '\r\n[:space:]')
 
     if [ -z "$IS_DEPRECATED" ]; then
@@ -832,7 +810,7 @@ case_9_rotate_from_deprecated_source_key() {
     sleep 3
 
     echo -e "\nStep 9.6: Verifying key hash was updated in PostgreSQL..."
-    NEW_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql "$DB_OPTS" -tA -c \
+    NEW_KEY_HASH=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
         "SELECT key_hash FROM sda.files WHERE id='$FILE_ID';" | tr -d '\r\n[:space:]')
 
     echo "New File Encryption Key Hash: $NEW_KEY_HASH"

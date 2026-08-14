@@ -1,5 +1,8 @@
 #!/bin/sh
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/helpers.sh"
 
 URI=http://rabbitmq:15672
 
@@ -189,7 +192,7 @@ fi
 
 # register the crypt4gh keys in the db (idempotent)
 for keyfile in c4gh rotatekey deprecated_key; do
-    keyHash=$(cat /shared/${keyfile}.pub.pem | awk 'NR==2 ' | base64 -d | xxd -p -c256)
+    keyHash=$(compute_key_hash "/shared/${keyfile}.pub.pem")
     resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$keyHash', 'this is the $keyfile key') ON CONFLICT (key_hash) DO UPDATE SET description = EXCLUDED.description;")
     case "$(echo "$resp" | tr -d '\n')" in
         "INSERT 0 1"|"INSERT 0 0") : ;;
