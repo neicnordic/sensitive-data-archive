@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/helpers.sh"
 
+TARGET_CASE="${1:-}"
+
 export SHARED_DIR="/tmp/sda/shared"
 export POSTGRES_IMAGE="postgres"
 export DB_OPTS="-U postgres -d sda"
@@ -640,8 +642,8 @@ case_7_deprecated_key_ingest_rejection() {
 
     # Verify state in sda.files table reflects failure or unarchived state
     FILE_STATE=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
-        "SELECT state FROM sda.files WHERE id='$UUID';" | tr -d '\r\n[:space:]')
-    echo "File DB State: ${FILE_STATE:-'NULL'}"
+        "SELECT last_event FROM sda.files WHERE id='$UUID';" | tr -d '\r\n[:space:]')
+    echo "File DB last event: ${FILE_STATE:-'NULL'}"
 
     echo -e "\nStep 7.9: Resetting services back to default base compose state..."
     docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
@@ -849,36 +851,37 @@ API_HOST="http://localhost:8090"
 backup_database
 
 # Run the demo script for the key rotation test
-case_1_standard_lifecycle
-
-pause_step
-
-case_2_mixed_key_dataset
-
-pause_step
-
-case_3_invalid_rotation_target
-
-pause_step
-
-case_4_concurrent_race_condition
-
-pause_step
-
-case_5_ingest_mixed_keys_during_rotation
-
-pause_step
-
-case_6_multi_key_archive_migration
-
-pause_step
-
-case_7_deprecated_key_ingest_rejection
-
-pause_step
-
-case_8_rotate_to_deprecated_key_rejection
-
-pause_step
-
-case_9_rotate_from_deprecated_source_key
+if [ "$TARGET_CASE" = "all" ] || [ -z "$TARGET_CASE" ]; then
+    echo "Running all test cases sequentially with pause steps..."
+    case_1_standard_lifecycle
+    pause_step
+    case_2_mixed_key_dataset
+    pause_step
+    case_3_invalid_rotation_target
+    pause_step
+    case_4_concurrent_race_condition
+    pause_step
+    case_5_ingest_mixed_keys_during_rotation
+    pause_step
+    case_6_multi_key_archive_migration
+    pause_step
+    case_7_deprecated_key_ingest_rejection
+    pause_step
+    case_8_rotate_to_deprecated_key_rejection
+    pause_step
+    case_9_rotate_from_deprecated_source_key
+else
+    echo "Running test case $TARGET_CASE..."
+    case "$TARGET_CASE" in
+        1) case_1_standard_lifecycle ;;
+        2) case_2_mixed_key_dataset ;;
+        3) case_3_invalid_rotation_target ;;
+        4) case_4_concurrent_race_condition ;;
+        5) case_5_ingest_mixed_keys_during_rotation ;;
+        6) case_6_multi_key_archive_migration ;;
+        7) case_7_deprecated_key_ingest_rejection ;;
+        8) case_8_rotate_to_deprecated_key_rejection ;;
+        9) case_9_rotate_from_deprecated_source_key ;;
+        *) echo "❌ Error: Invalid TARGET_CASE specified: $TARGET_CASE. Valid options are 1-9 or 'all'."; exit 1 ;;
+    esac
+fi
