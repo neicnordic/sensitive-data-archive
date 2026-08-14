@@ -87,10 +87,17 @@ if [ -n "$output" ] ; then
     exit 1
 fi
 
-# Try to delete an unknown file
+# Try to delete with invalid file id
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/badfileid")"
+if [ "$resp" != "400" ]; then
+    echo "Error when deleting the file, expected 400 error got: $resp"
+    exit 1
+fi
+
+# Try to delete with unknown file id
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$(cat /proc/sys/kernel/random/uuid)")"
 if [ "$resp" != "404" ]; then
-    echo "Error when deleting the file, expected error got: $resp"
+    echo "Error when deleting the file, expected 404 error got: $resp"
     exit 1
 fi
 
