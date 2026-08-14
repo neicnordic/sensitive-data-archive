@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086 # ignore unquoted "$DB_OPTS" in psql commands to allow for multiple options
 set -euo pipefail
 
 # --- CONFIGURATION & ENV SETUP ---
