@@ -13,6 +13,7 @@ import (
 
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -80,10 +81,11 @@ func (c *Client) connect() error {
 		return err
 	}
 
+
 	address := fmt.Sprintf("%s:%d", c.host, c.port)
 	log.Debugf("connecting to reencrypt service at: %s", address)
 
-	conn, err := grpc.NewClient(address, opts...)
+	conn, err := grpc.NewClient(address, append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to reencrypt service: %w", err)
 	}
