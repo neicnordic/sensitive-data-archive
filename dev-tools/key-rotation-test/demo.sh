@@ -232,8 +232,6 @@ case_3_invalid_rotation_target() {
         exit 1
     fi
 
-    pause_step ">>> PRESS [ENTER] TO RESET SERVICES BACK TO STANDARD CONFIGURATION..."
-
     echo -e "\nStep 3.3: Resetting rotatekey service back to standard configuration..."
     # Stop the crash-looping service first to ensure a clean state transition
     docker compose stop rotatekey
@@ -692,7 +690,6 @@ case_7_deprecated_key_ingest_rejection() {
     else
         echo "❌ FAILURE: Expected HTTP 400 or 500 rejection, but received HTTP $HTTP_STATUS!"
         echo "For the current setup, ingest does not reject files encrypted with deprecated keys, which is a known limitation."
-        pause_step "Press Enter to continue and reset services back to default state..."
 
         # Cleanup override before exiting on error
         docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
