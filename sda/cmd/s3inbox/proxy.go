@@ -99,7 +99,7 @@ func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Auth
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, span := observability.StartSpan(r.Context(), "handleRequest")
 	defer span.End()
-	r.WithContext(ctx)
+	r = r.WithContext(ctx)
 
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
@@ -194,7 +194,7 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 		attribute.String("user", token.Subject()),
 	)
 	defer span.End()
-	r.WithContext(ctx)
+	r = r.WithContext(ctx)
 
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
@@ -222,7 +222,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	username := token.Subject()
 	ctx, span := observability.StartSpan(r.Context(), "handleUpload", attribute.String("user", username))
 	defer span.End()
-	r.WithContext(ctx)
+	r = r.WithContext(ctx)
 
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)

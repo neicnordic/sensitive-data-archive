@@ -374,9 +374,6 @@ func addCSPheaders(ctx iris.Context) {
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Initialise config
 	if err := configv2.Load(); err != nil {
 		log.Errorf("failed to load config: %v", err)
@@ -389,13 +386,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdown, err := observability.SetupOTelSDK(ctx, "sda-auth")
+	shutdown, err := observability.SetupOTelSDK(context.Background(), "sda-auth")
 	if err != nil {
 		log.Errorf("failed to setup OTel SDK: %v", err)
 		os.Exit(1)
 	}
 	defer func() {
-		if err := shutdown(ctx); err != nil {
+		if err := shutdown(context.Background()); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
 	}()

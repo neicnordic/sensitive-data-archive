@@ -553,6 +553,7 @@ func (app *Ingest) setErrorEvent(ctx context.Context, details string, message *b
 	// Ignore if ctx is cancelled as this callback func will execute after context have been cancelled
 	// But we want same context to spawn the spans under the parent span.
 	ctx = context.WithoutCancel(ctx)
+
 	return func() {
 		ctx, span := observability.StartSpan(ctx, "setErrorEvent", attribute.String("message-key", message.Key))
 		defer span.End()
@@ -576,6 +577,7 @@ func (app *Ingest) errorQueue(ctx context.Context, originMessage *brokerv2.Messa
 	// Ignore if ctx is cancelled as this callback func will execute after context have been cancelled
 	// But we want same context to spawn the spans under the parent span.
 	ctx = context.WithoutCancel(ctx)
+
 	return func() {
 		ctx, span := observability.StartSpan(ctx, "errorQueue", attribute.String("message-key", originMessage.Key), attribute.String("reason", errorQueueReason))
 		defer span.End()

@@ -40,7 +40,7 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 
 		token, err := api.auth.Authenticate(r)
 		if err != nil {
-			slog.Error("failed to authorize request", err)
+			span.Error("failed to authorize request", err)
 			writeJSON(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 
 			return

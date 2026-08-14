@@ -23,6 +23,7 @@ type tracedReadCloser struct {
 func (r *tracedReadCloser) Close() error {
 	err := r.ReadCloser.Close()
 	r.span.End()
+
 	return err
 }
 
@@ -35,12 +36,14 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
 		span.End()
+
 		return nil, err
 	}
 
 	client, _, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
 		span.End()
+
 		return nil, err
 	}
 
@@ -54,8 +57,8 @@ func (reader *Reader) NewFileReader(ctx context.Context, location, filePath stri
 		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
 			return nil, storageerrors.ErrorFileNotFoundInLocation
 		}
-
 		span.End()
+
 		return nil, fmt.Errorf("failed to get object: %s, bucket: %s, endpoint: %s, due to: %v", filePath, bucket, endpoint, err)
 	}
 

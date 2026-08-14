@@ -18,6 +18,7 @@ type tracedReadSeekCloser struct {
 func (r *tracedReadSeekCloser) Close() error {
 	err := r.ReadSeekCloser.Close()
 	r.span.End()
+
 	return err
 }
 

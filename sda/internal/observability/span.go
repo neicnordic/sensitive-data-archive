@@ -93,20 +93,18 @@ func (s span) log(msg string, level slog.Level, args ...slog.Attr) {
 		slog.String("trace-id", s.SpanContext().TraceID().String()),
 		slog.String("span-id", s.SpanContext().SpanID().String()),
 	)...)
-	s.Span.AddEvent(msg, oteltrace.WithAttributes(slogAttrsToOtel(args)...))
+	s.AddEvent(msg, oteltrace.WithAttributes(slogAttrsToOtel(args)...))
 }
 
 func slogAttrToOTel(attr slog.Attr) attribute.KeyValue {
 	switch attr.Value.Kind() {
-	case slog.KindString:
+	// otel has no Uint64 so converting to string to avoid potential overflow
+	case slog.KindString, slog.KindUint64:
 		return attribute.String(attr.Key, attr.Value.String())
 	case slog.KindBool:
 		return attribute.Bool(attr.Key, attr.Value.Bool())
 	case slog.KindInt64:
 		return attribute.Int64(attr.Key, attr.Value.Int64())
-	case slog.KindUint64:
-		// otel has no Uint64 so converting to string to avoid potential overflow
-		return attribute.String(attr.Key, attr.Value.String())
 	case slog.KindFloat64:
 		return attribute.Float64(attr.Key, attr.Value.Float64())
 	case slog.KindTime:
