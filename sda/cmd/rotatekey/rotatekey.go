@@ -30,9 +30,11 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -62,6 +64,16 @@ func run() error {
 	if err := configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-rotatekey")
+	if err != nil {
+		panic(fmt.Errorf("failed to setup OTel SDK: %v", err))
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	targetPublicKey, err := config.GetC4GHPublicKey(rotatekeyconfig.TargetPublicKey())
 	if err != nil {
@@ -125,7 +137,7 @@ func run() error {
 	}
 	defer func() {
 		if err := app.db.Close(); err != nil {
-			slog.Error("failed to close database", "error", err)
+			slog.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
 
@@ -139,7 +151,7 @@ func run() error {
 	}
 	defer func() {
 		if err := app.broker.Close(); err != nil {
-			slog.Error("could not close broker", "error", err)
+			slog.Error("could not close broker", slog.Any("error", err))
 		}
 	}()
 
@@ -156,7 +168,7 @@ func run() error {
 		return fmt.Errorf("failed to check that target rotation key can be used: %w", err)
 	}
 
-	log.Info("rotatekey service started")
+	slog.Info("rotatekey service started")
 	consumeErr := make(chan error, 1)
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, rotatekeyconfig.SourceQueue(), app.handleMessage)
@@ -172,7 +184,7 @@ func run() error {
 
 		return err
 	case sig := <-sigc:
-		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
 		cancel()
 
 		// Subscribe returns once the handler that was running has finished
@@ -182,16 +194,16 @@ func run() error {
 		select {
 		case err := <-consumeErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("consumer failure during shutdown", "error", err)
+				slog.Error("consumer failure during shutdown", slog.Any("error", err))
 			}
 		case sig := <-sigc:
-			slog.Warn("received a second signal, not waiting for the running handler", "signal", sig)
+			slog.Warn("received a second signal, not waiting for the running handler", slog.String("signal", sig.String()))
 		}
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
-			slog.Error("consumer failure", "error", err, "source-queue", rotatekeyconfig.SourceQueue())
+			slog.Error("consumer failure", slog.Any("error", err), slog.String("source-queue", rotatekeyconfig.SourceQueue()))
 			cancel()
 
 			return err
@@ -204,27 +216,28 @@ func run() error {
 func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
 	err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", app.schemaPath), message.Body)
 	if err != nil {
-		slog.Error("validation of incoming message failed", "error", err, "message-key", message.Key)
+		span.Error("validation of incoming message failed", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "validation of incoming message failed")}, nil
+		return []func(){app.errorQueue(ctx, message, "validation of incoming message failed")}, nil
 	}
 
 	var keyRotation schema.KeyRotation
 	// we unmarshal the message in the validation step so this is safe to do
 	if err := json.Unmarshal(message.Body, &keyRotation); err != nil {
-		slog.Error("failed to unmarshal incoming message", "error", err, "message-key", message.Key)
+		span.Error("failed to unmarshal incoming message", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "failed to unmarshal incoming message")}, nil
+		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
 	}
 
-	slog.Info(
+	span.Info(
 		"Received work",
-		slog.String("message-key", message.Key),
 		slog.String("file-id", keyRotation.FileID),
 		slog.String("type", keyRotation.Type),
 	)
@@ -234,9 +247,8 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 	keyHash := hex.EncodeToString(app.targetPublicKey[:])
 	// exit app if target key was modified after app start-up, e.g. if key has been deprecated
 	if err := app.checkKeyHash(ctx, keyHash); err != nil {
-		slog.Error("failed to check that target rotation key can be used",
-			slog.Any("error", err),
-		)
+		span.Error("failed to check that target rotation key can be used", err)
+
 		if errors.Is(err, ErrorKeyDeprecated) || errors.Is(err, ErrorKeyNotRegistered) {
 			app.targetKeyNotUsableChan <- err
 		}
@@ -247,37 +259,29 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 	// Get current keyhash for the file, send to error queue if this fails
 	oldKeyHash, err := app.db.GetKeyHash(ctx, keyRotation.FileID)
 	if err != nil {
-		slog.Error("failed to get file key hash",
-			slog.String("file-id", keyRotation.FileID),
-			slog.Any("error", err),
-		)
+		span.Error("failed to get file key hash", err)
 
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return []func(){app.errorQueue(message, "file key hash not found")}, nil
+			return []func(){app.errorQueue(ctx, message, "file key hash not found")}, nil
 		default:
 			return nil, err
 		}
 	}
 
 	if oldKeyHash == keyHash {
-		slog.Info("file already encrypted with the target c4gh key",
-			slog.String("file-id", keyRotation.FileID),
-		)
+		span.Info("file already encrypted with the target c4gh key")
 
 		return nil, nil
 	}
 
 	oldHeader, err := app.db.GetHeader(ctx, keyRotation.FileID)
 	if err != nil {
-		slog.Error("failed to get file header",
-			slog.String("file-id", keyRotation.FileID),
-			slog.Any("error", err),
-		)
+		span.Error("failed to get file header", err)
 
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return []func(){app.errorQueue(message, "file header not found")}, nil
+			return []func(){app.errorQueue(ctx, message, "file header not found")}, nil
 		default:
 			return nil, err
 		}
@@ -285,20 +289,20 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "file-id", keyRotation.FileID)
+		span.Error("failed to begin transaction", err)
 
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", slog.Any("error", err))
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
 	if err := tx.BackupHeader(ctx, keyRotation.FileID, oldHeader, oldKeyHash); err != nil {
-		slog.Error("failed to get back up header",
+		span.Error("failed to get back up header",
+			err,
 			slog.String("file-id", keyRotation.FileID),
-			slog.Any("error", err),
 		)
 		// We Nack and requeue because if backup fails, rotation should not proceed
 		return nil, err
@@ -306,21 +310,14 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 
 	newHeader, err := app.reencryptHeader(ctx, oldHeader)
 	if err != nil {
-		slog.Error("failed to reencrypt old header",
-			slog.Any("error", err),
-			slog.String("file-id", keyRotation.FileID),
-		)
+		span.Error("failed to reencrypt old header", err)
 
 		return nil, err
 	}
 
 	// Rotate header and keyhash in database
 	if err := tx.RotateHeaderKey(ctx, newHeader, keyHash, keyRotation.FileID); err != nil {
-		slog.Error("failed to rotate file header key",
-			slog.String("file-id", keyRotation.FileID),
-			slog.String("key-hash", keyHash),
-			slog.Any("error", err),
-		)
+		span.Error("failed to rotate file header key", err)
 
 		return nil, err
 	}
@@ -328,14 +325,11 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 	// Send re-verify message
 	reverificationData, err := tx.GetReVerificationDataFromFileID(ctx, keyRotation.FileID)
 	if err != nil {
-		slog.Error("failed to get reverification data for file",
-			slog.String("file-id", keyRotation.FileID),
-			slog.Any("error", err),
-		)
+		span.Error("failed to get reverification data for file", err)
 
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return []func(){app.errorQueue(message, "file reverification data not found")}, nil
+			return []func(){app.errorQueue(ctx, message, "file reverification data not found")}, nil
 		default:
 			return nil, err
 		}
@@ -353,15 +347,15 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 		ReVerify: true,
 	}
 	reVerifyMsg, _ := json.Marshal(&reVerify)
-	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.schemaPath), reVerifyMsg)
-	if err != nil {
-		slog.Error("validation of outgoing re-verify message failed", slog.Any("error", err))
 
-		return []func(){app.errorQueue(message, "validation of outgoing re-verify message failed")}, nil
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.schemaPath), reVerifyMsg); err != nil {
+		span.Error("validation of outgoing re-verify message failed", err)
+
+		return []func(){app.errorQueue(ctx, message, "validation of outgoing re-verify message failed")}, nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction", slog.Any("error", err))
+		span.Error("failed to commit transaction", err)
 
 		return nil, err
 	}
@@ -370,13 +364,12 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 		Key:  reverificationData.FileID,
 		Body: reVerifyMsg,
 	}); err != nil {
-		slog.Error("failed to publish re verify message after database transaction committed",
-			slog.String("file-id", reverificationData.FileID),
+		span.Error("failed to publish re verify message after database transaction committed",
+			err,
 			slog.String("routing-key", app.reverifyRoutingKey),
-			slog.Any("error", err),
 		)
 
-		return []func(){app.errorQueue(message, "failed to publish re verify message after database transaction committed")}, nil
+		return []func(){app.errorQueue(ctx, message, "failed to publish re verify message after database transaction committed")}, nil
 	}
 
 	return nil, nil
@@ -405,18 +398,19 @@ func (app *rotateKey) checkKeyHash(ctx context.Context, keyhash string) error {
 	return ErrorKeyNotRegistered
 }
 
-func (app *rotateKey) errorQueue(originMessage *broker.Message, errorQueueReason string) func() {
+func (app *rotateKey) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
 	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
-
-			return
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
 		}
-		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }
 
