@@ -85,6 +85,7 @@ services:
       - PGPASSWORD=rootpasswd
     volumes:
       - ./make_sda_credentials.sh:/make_sda_credentials.sh:ro
+      - ./helpers.sh:/helpers.sh:ro
       - shared:/shared
 
   seed:
@@ -111,6 +112,7 @@ services:
       - PGPASSWORD=rootpasswd
     volumes:
       - ./seed.sh:/seed.sh:ro
+      - ./helpers.sh:/helpers.sh:ro
       - shared:/shared
 
   mockauth:
