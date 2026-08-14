@@ -320,6 +320,7 @@ services:
         condition: service_started
     environment:
       - CONFIG_FILE=/config.yaml
+      - CACHE_FILE_TTL=1
     ports:
       - "8085:8080"
     restart: always

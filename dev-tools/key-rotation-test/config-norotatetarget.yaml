@@ -154,7 +154,7 @@ session:
   name: "sda_session"
 
 cache:
-  enabled: true
+  enabled: false
   file-ttl: 300
   permission-ttl: 120
   dataset-ttl: 300
