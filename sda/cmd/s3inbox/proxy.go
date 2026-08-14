@@ -23,9 +23,12 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Proxy represents the toplevel object in this application
@@ -53,9 +56,8 @@ type Checksum struct {
 	Value string `json:"value"`
 }
 
-// S3RequestType is the type of request that we are currently proxying to the
-// backend
-type S3RequestType int
+// S3RequestType is the type of request that we are currently proxying to the backend
+type S3RequestType string
 
 type ErrorResponse struct {
 	XMLName xml.Name `xml:"Error"`
@@ -65,36 +67,40 @@ type ErrorResponse struct {
 
 // The different types of requests
 const (
-	Unsupported S3RequestType = iota
-	ListObjectsV2
-	ListObjects
-	PutObject
-	UploadPart
-	CreateMultiPartUpload
-	CompleteMultiPartUpload
-	ListMultiPartUploads
-	ListParts
-	AbortMultiPartUpload
-	GetBucketLocation
-	HeadObject
+	Unsupported             = S3RequestType("Unsupported")
+	ListObjectsV2           = S3RequestType("ListObjectsV2")
+	ListObjects             = S3RequestType("ListObjects")
+	PutObject               = S3RequestType("PutObject")
+	UploadPart              = S3RequestType("UploadPart")
+	CreateMultiPartUpload   = S3RequestType("CreateMultiPartUpload")
+	CompleteMultiPartUpload = S3RequestType("CompleteMultiPartUpload")
+	ListMultiPartUploads    = S3RequestType("ListMultiPartUploads")
+	ListParts               = S3RequestType("ListParts")
+	AbortMultiPartUpload    = S3RequestType("AbortMultiPartUpload")
+	GetBucketLocation       = S3RequestType("GetBucketLocation")
+	HeadObject              = S3RequestType("HeadObject")
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
 func NewProxy(s3conf config.S3InboxConf, s3Client *s3.Client, auth userauth.Authenticator, messenger *broker.AMQPBroker, db database.Database, tlsConf *tls.Config) *Proxy {
-	tr := &http.Transport{TLSClientConfig: tlsConf}
-	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
-
 	return &Proxy{
 		s3Conf:    s3conf,
 		s3Client:  s3Client,
 		auth:      auth,
 		messenger: messenger,
 		database:  db,
-		client:    client,
+		client: &http.Client{
+			Transport: otelhttp.NewTransport(&http.Transport{TLSClientConfig: tlsConf}),
+			Timeout:   30 * time.Second,
+		},
 	}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "handleRequest")
+	defer span.End()
+	r.WithContext(ctx)
+
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
 		log.Warnf("unauthorized user attempted: method: %s, path: %s, query: %s", r.Method, r.URL.Path, r.URL.RawQuery)
@@ -183,6 +189,13 @@ func (p *Proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 
 // forwardRequest forwards the request to the s3 backend after making request user specific, then forwards response to client
 func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	ctx, span := observability.StartSpan(r.Context(), "forwardRequest",
+		attribute.String("s3RequestType", string(s3RequestType)),
+		attribute.String("user", token.Subject()),
+	)
+	defer span.End()
+	r.WithContext(ctx)
+
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
 	if err != nil {
@@ -207,6 +220,9 @@ func (p *Proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 }
 func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
+	ctx, span := observability.StartSpan(r.Context(), "handleUpload", attribute.String("user", username))
+	defer span.End()
+	r.WithContext(ctx)
 
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
