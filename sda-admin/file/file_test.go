@@ -44,7 +44,7 @@ func TestList(t *testing.T) {
 	defer func() { helpers.GetPagedResponseBody = originalFunc }()
 	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
 
-	err := List("http://example.com", "test-token", "testuser", "")
+	err := List("http://example.com", "test-token", "testuser", "", "")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -313,7 +313,7 @@ func TestListMultiPage(t *testing.T) {
 	mockHelpers.On("GetPagedResponseBody", page2URL.String(), "test-token").
 		Return([]byte(`["file2"]`), http.Header{}, nil)
 
-	err := List("http://example.com", "test-token", "testuser", "")
+	err := List("http://example.com", "test-token", "testuser", "", "")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -327,7 +327,21 @@ func TestListWithStatusFilter(t *testing.T) {
 	defer func() { helpers.GetPagedResponseBody = originalFunc }()
 	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
 
-	err := List("http://example.com", "test-token", "testuser", "uploaded")
+	err := List("http://example.com", "test-token", "testuser", "uploaded", "")
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestListWithPathPrefix(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	mockHelpers.On("GetPagedResponseBody", "http://example.com/users/testuser/files?path_prefix=some%2Fpath", "test-token").
+		Return([]byte(`["file1"]`), http.Header{}, nil)
+
+	originalFunc := helpers.GetPagedResponseBody
+	defer func() { helpers.GetPagedResponseBody = originalFunc }()
+	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
+
+	err := List("http://example.com", "test-token", "testuser", "", "some/path")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
