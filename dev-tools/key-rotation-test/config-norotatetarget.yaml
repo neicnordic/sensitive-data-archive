@@ -105,16 +105,12 @@ db:
 schema:
   type: "isolated"
 
-# --- MULTI-KEY / CRYPT4GH SETTINGS FOR ROTATION ---
 c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
   # rotatePubKeyPath is intentionally omitted here to simulate having no target key configuration
-  
-  # Crucial for test cases involving multi-key / deprecated decryption:
-  # Order and metadata setup here will govern how sda-rotatekey and sda-reencrypt 
-  # decrypt legacy archives before packing them into a newly requested key.
+
   privateKeys:
     - filePath: /shared/c4gh.sec.pem
       passphrase: "c4ghpass"

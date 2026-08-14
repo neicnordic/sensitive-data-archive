@@ -161,50 +161,38 @@ case_2_mixed_key_dataset() {
 
 case_3_invalid_rotation_target() {
     # ========================================================================
-    # CASE 3: Try to rotate key without configuring a new target key
+    # CASE 3: Try to start rotatekey without configuring a target key
     # ========================================================================
-    log_header "CASE 3: Rotation Without Valid Target Key Array"
+    log_header "CASE 3: Startup Configuration Validation (Missing Target Key)"
 
-    echo "Step 3.1: Rolling back database mutations to fresh baseline..."
-    restore_database
-
-    echo -e "\nStep 3.2: Applying config-norotatetarget via override to block target validation keys..."
+    echo "Step 3.1: Applying config-norotatetarget override to rotatekey service..."
     docker compose -f compose.yml -f override-norotatetarget.yaml up -d --no-deps rotatekey
-    docker compose -f compose.yml -f override-norotatetarget.yaml restart rotatekey
 
-    echo -e "\nStep 3.3: Capturing baseline key_hash BEFORE rotation attempt..."
-    # Fetch the stable_id, ID, and the cryptographic key_hash before we do anything
-    BEFORE_DATA=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
-    BEFORE_HASH=$(echo "$BEFORE_DATA" | cut -d'|' -f3)
-    echo "Target File: EGAF00000000101"
-    echo "Current Key Hash: $BEFORE_HASH"
+    # Allow time for the container to attempt initialization and fail
+    sleep 2
 
-    echo -e "\nStep 3.4: Triggering rotation via API..."
-    FILE_ID=$(echo "$BEFORE_DATA" | cut -d'|' -f1)
-    API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE_ID")
-    echo "API accepted request with status: $API_STATUS (Message queued in RabbitMQ)"
+    echo -e "\nStep 3.2: Verifying rotatekey service crashed on missing c4gh.rotatePubKeyPath..."
 
-    echo -e "\nStep 3.5: Verifying key_hash remains UNCHANGED after failed processing..."
-    sleep 2 # Give any potential phantom queues time to settle
+    # Capture stderr and stdout from the container logs
+    LOG_OUTPUT=$(docker compose logs rotatekey 2>&1)
 
-    # Fetch the hash again to check for mutation
-    AFTER_HASH=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';")
-
-    echo "Database state dump:"
-    docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -c "SELECT id, stable_id, key_hash FROM sda.files WHERE stable_id = 'EGAF00000000101';"
-
-    if [ "$BEFORE_HASH" == "$AFTER_HASH" ]; then
-        echo -e "\n\033[1;32mSUCCESS: The key_hash did not change ($AFTER_HASH).\033[0m"
-        echo -e "\033[1;32mThe database state is pristine because the rotatekey service safely stopped processing!\033[0m"
+    if echo "$LOG_OUTPUT" | grep -q "c4gh.rotatePubKeyPath not set"; then
+        echo -e "\033[1;32mSUCCESS: rotatekey correctly refused to start due to missing configuration.\033[0m"
+        echo "Observed fatal log output:"
+        echo "$LOG_OUTPUT" | grep "c4gh.rotatePubKeyPath not set" | head -n 5
     else
-        echo -e "\n\033[1;31mFAILED: The key_hash mutated from $BEFORE_HASH to $AFTER_HASH unexpectedly!\033[0m"
+        echo -e "\033[1;31mFAILED: rotatekey did not fail with the expected configuration error.\033[0m"
+        echo "Full log output:"
+        echo "$LOG_OUTPUT"
         exit 1
     fi
 
-    # Clean up by removing the override for future tests
-    echo -e "\nResetting rotatekey service back to standard configuration..."
+    pause_step ">>> PRESS [ENTER] TO RESET SERVICES BACK TO STANDARD CONFIGURATION..."
+
+    echo -e "\nStep 3.3: Resetting rotatekey service back to standard configuration..."
+    # Stop the crash-looping service first to ensure a clean state transition
+    docker compose stop rotatekey
     docker compose -f compose.yml up -d --no-deps rotatekey
-    docker compose -f compose.yml restart rotatekey
 }
 
 case_4_concurrent_race_condition() {
