@@ -26,8 +26,10 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 )
 
 func main() {
@@ -42,6 +44,16 @@ func run() error {
 	if err := configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-s3inbox")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	s3InboxConf := s3InboxConfig{
 		endpoint:  s3inboxconf.S3InboxEndpoint(),
@@ -233,6 +245,7 @@ func newS3Client(ctx context.Context, conf s3InboxConfig) (*s3.Client, error) {
 			o.UsePathStyle = true
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			otelaws.AppendMiddlewares(&o.APIOptions)
 		},
 	)
 

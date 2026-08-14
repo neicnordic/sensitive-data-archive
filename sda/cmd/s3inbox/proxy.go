@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -22,9 +23,12 @@ import (
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // proxy represents the toplevel object in this application
@@ -63,9 +67,8 @@ type Checksum struct {
 	Value string `json:"value"`
 }
 
-// S3RequestType is the type of request that we are currently proxying to the
-// backend
-type S3RequestType int
+// S3RequestType is the type of request that we are currently proxying to the backend
+type S3RequestType string
 
 type ErrorResponse struct {
 	XMLName xml.Name `xml:"Error"`
@@ -75,41 +78,48 @@ type ErrorResponse struct {
 
 // The different types of requests
 const (
-	Unsupported S3RequestType = iota
-	ListObjectsV2
-	ListObjects
-	PutObject
-	UploadPart
-	CreateMultiPartUpload
-	CompleteMultiPartUpload
-	ListMultiPartUploads
-	ListParts
-	AbortMultiPartUpload
-	GetBucketLocation
-	HeadObject
-	DeleteObject
+	Unsupported             = S3RequestType("Unsupported")
+	ListObjectsV2           = S3RequestType("ListObjectsV2")
+	ListObjects             = S3RequestType("ListObjects")
+	PutObject               = S3RequestType("PutObject")
+	UploadPart              = S3RequestType("UploadPart")
+	CreateMultiPartUpload   = S3RequestType("CreateMultiPartUpload")
+	CompleteMultiPartUpload = S3RequestType("CompleteMultiPartUpload")
+	ListMultiPartUploads    = S3RequestType("ListMultiPartUploads")
+	ListParts               = S3RequestType("ListParts")
+	AbortMultiPartUpload    = S3RequestType("AbortMultiPartUpload")
+	GetBucketLocation       = S3RequestType("GetBucketLocation")
+	HeadObject              = S3RequestType("HeadObject")
+	DeleteObject            = S3RequestType("DeleteObject")
 )
 
 // newProxy creates a new S3Proxy. This implements the ServerHTTP interface.
 func newProxy(s3conf s3InboxConfig, s3Client *s3.Client, auth userauth.Authenticator, b broker.Broker, db database.Database, tlsConf *tls.Config, routingKey string) *proxy {
-	tr := &http.Transport{TLSClientConfig: tlsConf}
-	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
-
 	return &proxy{
-		s3Conf:     s3conf,
-		s3Client:   s3Client,
-		auth:       auth,
-		broker:     b,
-		database:   db,
-		client:     client,
+		s3Conf:   s3conf,
+		s3Client: s3Client,
+		auth:     auth,
+		broker:   b,
+		database: db,
+		client: &http.Client{
+			Transport: otelhttp.NewTransport(&http.Transport{TLSClientConfig: tlsConf}),
+			Timeout:   30 * time.Second,
+		},
 		routingKey: routingKey,
 	}
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := observability.StartSpan(r.Context(), "handleRequest")
+	defer span.End()
+
 	token, err := p.auth.Authenticate(r)
 	if err != nil {
-		log.Warnf("unauthorized user attempted: method: %s, path: %s, query: %s", r.Method, r.URL.Path, r.URL.RawQuery)
+		span.Warn("unauthorized user attempted request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.String("query", r.URL.RawQuery),
+		)
 		reportErrorToClient(http.StatusUnauthorized, "Unauthorized", w)
 
 		return
@@ -120,20 +130,32 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// These actions we just forward to the s3 backend after ensuring that requests have been made user specific by
 	// prepareForwardPathAndQuery
 	case ListObjects, ListObjectsV2, GetBucketLocation, UploadPart, ListMultiPartUploads, AbortMultiPartUpload, ListParts, HeadObject:
-		p.forwardRequest(s3RequestType, w, r, token)
+		p.forwardRequest(ctx, s3RequestType, w, r, token)
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
-		p.handleUpload(s3RequestType, w, r, token)
+		p.handleUpload(ctx, s3RequestType, w, r, token)
 	case DeleteObject:
-		p.handleRemove(s3RequestType, w, r, token)
+		p.handleRemove(ctx, s3RequestType, w, r, token)
 	default:
-		log.Warnf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery)
+		span.Warn("attempted to do not allowed request",
+			slog.String("user", token.Subject()),
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.String("query", r.URL.RawQuery),
+		)
+
 		reportErrorToClient(http.StatusForbidden, "Forbidden", w)
 	}
 }
 
 // Report 500 to the user, log the original error
-func (p *proxy) internalServerError(w http.ResponseWriter, tokenSubject, httpMethod, path, query, err string) {
-	log.Errorf("user: %s, method: %s, path: %s, query: %s, encountered internal error: %s", tokenSubject, httpMethod, path, query, err)
+func (p *proxy) internalServerError(span observability.Span, w http.ResponseWriter, tokenSubject, httpMethod, path, query string, err error) {
+	span.Error("internal error",
+		err,
+		slog.String("user", tokenSubject),
+		slog.String("method", httpMethod),
+		slog.String("path", path),
+		slog.String("query", query),
+	)
 	reportErrorToClient(http.StatusInternalServerError, "Internal Error", w)
 }
 
@@ -196,11 +218,17 @@ func (p *proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 }
 
 // forwardRequest forwards the request to the s3 backend after making request user specific, then forwards response to client
-func (p *proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+func (p *proxy) forwardRequest(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	ctx, span := observability.StartSpan(ctx, "forwardRequest",
+		attribute.String("s3RequestType", string(s3RequestType)),
+		attribute.String("user", token.Subject()),
+	)
+	defer span.End()
+
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
 	if err != nil {
-		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
 		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
@@ -208,24 +236,26 @@ func (p *proxy) forwardRequest(s3RequestType S3RequestType, w http.ResponseWrite
 
 	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 
 		return
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to forward response to client: %v", err))
 	}
 
 	_ = s3Response.Body.Close()
 }
-func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
+	ctx, span := observability.StartSpan(ctx, "handleUpload", attribute.String("user", username))
+	defer span.End()
 
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
 	if err != nil {
-		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
 		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
@@ -234,15 +264,15 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	s3FilePath := strings.Replace(r.URL.Path, "/"+p.s3Conf.bucket+"/", "", 1)
 	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
 	if err != nil {
-		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
 		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
 
-	fileID, err := p.database.GetFileIDInInbox(r.Context(), username, filePath)
+	fileID, err := p.database.GetFileIDInInbox(ctx, username, filePath)
 	if err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to check/get existing file id from database: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to check/get existing file id from database: %v", err))
 
 		return
 	}
@@ -250,15 +280,15 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	// if this is an upload request
 	if fileID == "" { // nolint: nestif
 		// Ideally this transaction should span the whole request processing, but for now just spans the RegisterFile
-		tx, err := p.database.BeginTransaction(r.Context())
+		tx, err := p.database.BeginTransaction(ctx)
 		if err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to begin transaction, reason: %v", err))
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to begin transaction, reason: %v", err))
 
 			return
 		}
-		fileID, err = tx.RegisterFile(r.Context(), nil, p.s3Conf.endpoint+"/"+p.s3Conf.bucket, filePath, username)
+		fileID, err = tx.RegisterFile(ctx, nil, p.s3Conf.endpoint+"/"+p.s3Conf.bucket, filePath, username)
 		if err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to register file in database: %v", err))
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to register file in database: %v", err))
 			if err := tx.Rollback(); err != nil {
 				log.Errorf("failed to rollback RegisterFile transaction, reason: %v", err)
 			}
@@ -266,7 +296,7 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 		if err := tx.Commit(); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to commit RegisterFile transaction, reason: %v", err))
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to commit RegisterFile transaction, reason: %v", err))
 			_ = tx.Rollback()
 
 			return
@@ -277,9 +307,9 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	// check if the file already exists when an upload completes, in that case send an overwrite message when the s3 has responded with 200,
 	// so that the FEGA portal is informed that a new version
 	if s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload {
-		isReupload, err = p.checkFileExists(r.Context(), s3FilePath)
+		isReupload, err = p.checkFileExists(ctx, s3FilePath)
 		if err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err)
 
 			return
 		}
@@ -287,7 +317,7 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 
 		return
 	}
@@ -298,18 +328,18 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 	// Send message to upstream and set file as uploaded in the database when upload is complete(PutObject / CompleteMultipartUpload)
 	// nolint: nestif
 	if s3Response.StatusCode == 200 && (s3RequestType == PutObject || s3RequestType == CompleteMultiPartUpload) {
-		message, checksum, err := p.CreateMessageFromRequest(r.Context(), token.Subject(), s3FilePath)
+		message, checksum, err := p.CreateMessageFromRequest(ctx, token.Subject(), s3FilePath)
 		if err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err)
 
 			return
 		}
 
 		if isReupload {
 			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
-			pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+			pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			if err := p.sendInboxRemoveMessage(pubCtx, username, fileID, s3FilePath); err != nil {
-				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+				p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err)
 				pubCancel()
 
 				return
@@ -321,38 +351,38 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to marshal rabbitmq message to json: %v", err))
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to marshal rabbitmq message to json: %v", err))
 
 			return
 		}
 
-		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 		if err := p.broker.Publish(pubCtx, p.routingKey, broker.Message{
 			Key:  fileID,
 			Body: jsonMessage,
 		}); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("broker error: %v", err))
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("broker error: %v", err))
 			pubCancel()
 
 			return
 		}
 		pubCancel()
 
-		if err := p.storeObjectSizeInDB(r.Context(), s3FilePath, fileID); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("storeObjectSizeInDB failed because: %v", err))
+		if err := p.storeObjectSizeInDB(ctx, s3FilePath, fileID); err != nil {
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("storeObjectSizeInDB failed because: %v", err))
 
 			return
 		}
 
-		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
+		if err := p.database.UpdateFileEventLog(ctx, fileID, "uploaded", "inbox", "{}", string(jsonMessage)); err != nil {
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("could not connect to db: %v", err))
 
 			return
 		}
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to forward response to client: %v", err))
 	}
 }
 
@@ -494,7 +524,7 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		query.Has("legal-hold") || query.Has("annotation") || query.Has("annotations") ||
 		query.Has("retention") || query.Has("versions"):
 		return Unsupported
-	// ListObjectsV2
+		// ListObjectsV2
 	case r.Method == http.MethodGet && isBucketPath && query.Get("list-type") == "2":
 		return ListObjectsV2
 	case r.Method == http.MethodGet && isBucketPath && query.Has("uploads"):
@@ -587,8 +617,10 @@ func (p *proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 // disabled or previously removed, i.e. not yet ingested) can be removed this way. Unlike
 // "disabled" (used for cancellation, which leaves the object in storage), "removed" marks
 // that the object has actually been removed from the inbox storage backend.
-func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
+	ctx, span := observability.StartSpan(ctx, "handleRemove", attribute.String("user", username))
+	defer span.End()
 
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
@@ -608,9 +640,9 @@ func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter,
 		return
 	}
 
-	fileID, err := p.database.GetFileIDInInbox(r.Context(), username, filePath)
+	fileID, err := p.database.GetFileIDInInbox(ctx, username, filePath)
 	if err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to check existing file id from database: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to check existing file id from database: %v", err))
 
 		return
 	}
@@ -623,7 +655,7 @@ func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter,
 
 	s3Response, err := p.forwardRequestToBackend(r)
 	if err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 
 		return
 	}
@@ -632,26 +664,26 @@ func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter,
 	}()
 
 	if s3Response.StatusCode >= 200 && s3Response.StatusCode < 300 {
-		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 		if err := p.sendInboxRemoveMessage(pubCtx, username, fileID, s3FilePath); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err)
 			pubCancel()
 
 			return
 		}
 		pubCancel()
 
-		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "removed", username, "{}", "{}"); err != nil {
-			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
+		if err := p.database.UpdateFileEventLog(ctx, fileID, "removed", username, "{}", "{}"); err != nil {
+			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("could not connect to db: %v", err))
 
 			return
 		}
 
-		log.Infof("user: %s, removed file: %s, with id: %s", username, filePath, fileID)
+		span.Info("file removed", slog.String("file-id", fileID))
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
-		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
+		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to forward response to client: %v", err))
 	}
 }
 
