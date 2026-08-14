@@ -18,7 +18,9 @@ import (
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -66,7 +68,21 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 		return
 	}
 
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(traceExporter))
+	serviceResource, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tracerProvider := trace.NewTracerProvider(
+		trace.WithBatcher(traceExporter),
+		trace.WithResource(serviceResource),
+	)
 	if err != nil {
 		handleErr(err)
 
@@ -85,7 +101,10 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 		return
 	}
 
-	meterProvider := metric.NewMeterProvider(metric.WithReader(metricsExposer.Reader))
+	meterProvider := metric.NewMeterProvider(
+		metric.WithReader(metricsExposer.Reader),
+		metric.WithResource(serviceResource),
+	)
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
 
