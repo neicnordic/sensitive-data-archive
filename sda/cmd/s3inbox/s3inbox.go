@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,6 +23,8 @@ import (
 	"github.com/gorilla/mux"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -48,6 +51,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config due to: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-s3inbox")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
 
 	tlsProxy, err := configTLS(conf.S3Inbox)
 	if err != nil {
@@ -219,6 +232,7 @@ func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, erro
 			o.UsePathStyle = true
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			otelaws.AppendMiddlewares(&o.APIOptions)
 		},
 	)
 
