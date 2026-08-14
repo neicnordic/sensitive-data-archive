@@ -50,8 +50,8 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 		}
 	}
 
-	span.SetAttributes(attribute.String("activeBucket", writer.activeEndpoint.Endpoint))
-	span.SetAttributes(attribute.String("activeEndpoint", activeBucket))
+	span.SetAttributes(attribute.String("activeBucket", activeBucket))
+	span.SetAttributes(attribute.String("activeEndpoint", writer.activeEndpoint.Endpoint))
 
 	writer.Unlock()
 
