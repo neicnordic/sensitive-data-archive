@@ -186,7 +186,7 @@ fi
 
 echo "Inserting 3,000 file records into Postgres matching schema main.sql..."
 
-PGPASSWORD=rootpasswd psql -U postgres -h postgres -d sda <<EOF
+PGPASSWORD=rootpasswd psql -v ON_ERROR_STOP=1 -U postgres -h postgres -d sda <<EOF
 BEGIN;
 
 -- 1. Ensure the key_hash from c4gh.pub.pem exists in sda.encryption_keys
