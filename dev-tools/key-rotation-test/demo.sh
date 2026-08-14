@@ -635,8 +635,8 @@ case_7_deprecated_key_ingest_rejection() {
         pause_step "Press Enter to continue and reset services back to default state..."
 
         # Cleanup override before exiting on error
-        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
         rm -rf "$INBOX_DIR"
 
         return 0
