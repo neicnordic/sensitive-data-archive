@@ -58,7 +58,7 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetDrsObject")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	rawPath := strings.TrimPrefix(c.Param("path"), "/")
 
