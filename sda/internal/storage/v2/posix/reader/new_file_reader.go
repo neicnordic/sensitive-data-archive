@@ -23,12 +23,13 @@ type tracedReadCloser struct {
 func (r *tracedReadCloser) Close() error {
 	err := r.ReadCloser.Close()
 	r.span.End()
+
 	return err
 }
 
 // NewFileReader returns an io.Reader instance
 func (reader *Reader) NewFileReader(ctx context.Context, location, filePath string) (io.ReadCloser, error) {
-	ctx, span := observability.StartSpan(ctx, "storage.posix.reader.NewFileReader",
+	_, span := observability.StartSpan(ctx, "storage.posix.reader.NewFileReader",
 		attribute.String("location", location),
 		attribute.String("filePath", filePath),
 	)

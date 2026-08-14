@@ -43,7 +43,7 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileBase")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	fileID := c.Param("fileId")
 
@@ -133,7 +133,7 @@ func (h *Handlers) resolveFileForDownload(c *gin.Context) (*resolvedFile, bool) 
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForDownload")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	// Extract public key from headers
 	publicKey, errorCode, detail := extractPublicKey(c)
@@ -201,7 +201,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "DownloadFile")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
@@ -297,7 +297,7 @@ func (h *Handlers) HeadFile(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFile")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
@@ -339,7 +339,7 @@ func (h *Handlers) resolveFileForContent(c *gin.Context) (*resolvedContentFile, 
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForContent")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	base, ok := h.resolveFileBase(c)
 	if !ok {
@@ -360,7 +360,7 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileHeader")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
@@ -394,7 +394,7 @@ func (h *Handlers) HeadFileHeader(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileHeader")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForDownload(c)
 	if !ok {
@@ -416,7 +416,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileContent")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForContent(c)
 	if !ok {
@@ -505,7 +505,7 @@ func (h *Handlers) HeadFileContent(c *gin.Context) {
 	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileContent")
 	defer span.End()
 
-	c.Request.WithContext(reqCtx)
+	c.Request = c.Request.WithContext(reqCtx)
 
 	resolved, ok := h.resolveFileForContent(c)
 	if !ok {

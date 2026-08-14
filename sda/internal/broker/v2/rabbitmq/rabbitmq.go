@@ -85,6 +85,8 @@ func extractTraceContext(ctx context.Context, headers amqp.Table) context.Contex
 			carrier[k] = strconv.FormatInt(v, 10)
 		case []byte:
 			carrier[k] = string(v)
+		default:
+			carrier[k] = fmt.Sprintf("%v", v)
 		}
 	}
 

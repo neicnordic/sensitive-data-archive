@@ -14,7 +14,7 @@ import (
 )
 
 func (writer *Writer) RemoveFile(ctx context.Context, location, filePath string) error {
-	ctx, span := observability.StartSpan(ctx, "storage.posix.writer.RemoveFile",
+	_, span := observability.StartSpan(ctx, "storage.posix.writer.RemoveFile",
 		attribute.String("location", location),
 		attribute.String("filePath", filePath),
 	)

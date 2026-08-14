@@ -81,7 +81,6 @@ func (c *Client) connect() error {
 		return err
 	}
 
-
 	address := fmt.Sprintf("%s:%d", c.host, c.port)
 	log.Debugf("connecting to reencrypt service at: %s", address)
 
