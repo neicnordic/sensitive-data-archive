@@ -12,9 +12,15 @@ TARGET_CASE="${1:-}"
 export SHARED_DIR="/tmp/sda/shared"
 export POSTGRES_IMAGE="postgres"
 export DB_OPTS="-U postgres -d sda"
-PR_NUMBER=$(docker ps --format "{{.Image}}" | grep -oE "PR[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -n 1 | sed 's/PR//')
-export PR_NUMBER
 USER_ID="test@dummy.org"
+
+PR_NUMBER=$(docker compose -f compose.yml 2>/dev/null ps --format "{{.Image}}" | grep -oE "PR[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -n 1 | sed 's/PR//')
+if [ -z "$PR_NUMBER" ]; then
+    echo "❌ Error: Could not determine PR_NUMBER from running compose stack containers." >&2
+    exit 1
+fi
+export PR_NUMBER
+
 
 # all files should be stored in a local temp directory to avoid polluting the shared folder
 OUTDIR="/tmp/sda/test-data"
@@ -95,7 +101,7 @@ case_1_standard_lifecycle() {
     echo -e "\nStep 1.6: Verifying key removal safety: Attempting to download an unrotated file..."
     STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
-    http://localhost:8085/files/EGAF00000000102 || true)
+    http://localhost:8085/files/EGAF00000000103 || true)
 
     if [ "$STATUS_CODE" -eq 500 ]; then
         echo "SUCCESS: Unrotated files are securely blocked because the old key was removed!"
