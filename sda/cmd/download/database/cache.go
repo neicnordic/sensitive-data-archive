@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -84,6 +85,9 @@ func (c *CachedDB) Close() error {
 // GetAllDatasets returns all datasets (for allow-all-data mode).
 // Results are cached with DatasetTTL.
 func (c *CachedDB) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetAllDatasets")
+	defer span.End()
+
 	const key = "datasets:all"
 
 	if val, found := c.cache.Get(key); found {
@@ -108,6 +112,9 @@ func (c *CachedDB) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
 // GetDatasetIDsByUser returns dataset IDs where the user is the submission_user.
 // Results are cached per user with DatasetTTL.
 func (c *CachedDB) GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetDatasetIDsByUser")
+	defer span.End()
+
 	key := "datasets:user:" + user
 
 	if val, found := c.cache.Get(key); found {
@@ -132,6 +139,9 @@ func (c *CachedDB) GetDatasetIDsByUser(ctx context.Context, user string) ([]stri
 // GetUserDatasets returns datasets the user has access to.
 // Results are cached based on the hash of dataset IDs with DatasetTTL.
 func (c *CachedDB) GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetUserDatasets")
+	defer span.End()
+
 	key := "datasets:ids:" + hashStrings(datasetIDs)
 
 	if val, found := c.cache.Get(key); found {
@@ -156,6 +166,9 @@ func (c *CachedDB) GetUserDatasets(ctx context.Context, datasetIDs []string) ([]
 // GetDatasetInfo returns metadata for a specific dataset.
 // Results are cached with DatasetTTL.
 func (c *CachedDB) GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetDatasetInfo")
+	defer span.End()
+
 	key := "dataset:info:" + datasetID
 
 	if val, found := c.cache.Get(key); found {
@@ -184,6 +197,9 @@ func (c *CachedDB) GetDatasetInfo(ctx context.Context, datasetID string) (*Datas
 // for streaming use cases where the same file may be requested
 // multiple times (e.g., range requests).
 func (c *CachedDB) GetFileByID(ctx context.Context, fileID string) (*File, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetFileByID")
+	defer span.End()
+
 	key := "file:id:" + fileID
 
 	if val, found := c.cache.Get(key); found {
@@ -210,6 +226,9 @@ func (c *CachedDB) GetFileByID(ctx context.Context, fileID string) (*File, error
 // GetFileByPath returns file information by dataset and submitted path.
 // Results are cached with FileTTL.
 func (c *CachedDB) GetFileByPath(ctx context.Context, datasetID, filePath string) (*File, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetFileByPath")
+	defer span.End()
+
 	key := "file:path:" + datasetID + ":" + filePath
 
 	if val, found := c.cache.Get(key); found {
@@ -237,6 +256,9 @@ func (c *CachedDB) GetFileByPath(ctx context.Context, datasetID, filePath string
 // Results are cached with PermissionTTL. The cache key includes a hash
 // of the sorted datasetIDs to ensure user-scoped caching.
 func (c *CachedDB) CheckFilePermission(ctx context.Context, fileID string, datasetIDs []string) (bool, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.CheckFilePermission")
+	defer span.End()
+
 	key := "perm:" + fileID + ":" + hashStrings(datasetIDs)
 
 	if val, found := c.cache.Get(key); found {
@@ -261,6 +283,9 @@ func (c *CachedDB) CheckFilePermission(ctx context.Context, fileID string, datas
 // CheckDatasetExists checks if a dataset with the given stable_id exists.
 // Results are cached with DatasetTTL.
 func (c *CachedDB) CheckDatasetExists(ctx context.Context, datasetID string) (bool, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.CheckDatasetExists")
+	defer span.End()
+
 	key := "dataset:exists:" + datasetID
 
 	if val, found := c.cache.Get(key); found {
@@ -284,12 +309,18 @@ func (c *CachedDB) CheckDatasetExists(ctx context.Context, datasetID string) (bo
 
 // GetFileChecksums delegates to the underlying database without caching.
 func (c *CachedDB) GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetFileChecksums")
+	defer span.End()
+
 	return c.db.GetFileChecksums(ctx, fileID, source)
 }
 
 // GetDatasetFilesPaginated delegates to the underlying database without caching.
 // Paginated queries use ephemeral cursors, making caching impractical.
 func (c *CachedDB) GetDatasetFilesPaginated(ctx context.Context, datasetID string, opts FileListOptions) ([]File, error) {
+	ctx, span := observability.StartSpan(ctx, "cache.GetDatasetFilesPaginated")
+	defer span.End()
+
 	return c.db.GetDatasetFilesPaginated(ctx, datasetID, opts)
 }
 
