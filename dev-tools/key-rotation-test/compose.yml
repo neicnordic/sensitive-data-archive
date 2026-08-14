@@ -127,7 +127,8 @@ services:
         python -u /mockoidc.py
     image: python:3.14-slim-trixie
     volumes:
-      - ./mockoidc.py:/mockoidc.py
+      - ./mockoidc.py:/mockoidc.py:ro
+      - shared:/shared
     ports:
       - "8000:8000"
     restart: always
