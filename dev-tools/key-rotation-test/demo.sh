@@ -27,7 +27,7 @@ rm -rf "${OUTDIR:?}"/*
 # Creates a clean snapshot of the database state right after initialization
 backup_database() {
     echo "Creating clean snapshot of initialized database..."
-    docker compose exec -e PGPASSWORD=rootpasswd postgres pg_dump -U postgres -d sda -F c -b -v -f /var/lib/postgresql/data/clean_db.dump > /dev/null
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres pg_dump -U postgres -d sda -F c -b -v -f /var/lib/postgresql/data/clean_db.dump > /dev/null
     echo "Snapshot clean_db.dump successfully stored."
 }
 
@@ -35,13 +35,13 @@ backup_database() {
 restore_database() {
     echo "Restoring database to clean snapshot state..."
     # Terminate active backend connections to allow drop/restore operations
-    docker compose exec -e PGPASSWORD=rootpasswd postgres psql -U postgres -d sda -c \
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql -U postgres -d sda -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'sda' AND pid <> pg_backend_pid();" > /dev/null 2>&1
 
     # Clean and restore database structures
-    docker compose exec -e PGPASSWORD=rootpasswd postgres dropdb -U postgres --if-exists sda
-    docker compose exec -e PGPASSWORD=rootpasswd postgres createdb -U postgres sda
-    docker compose exec -e PGPASSWORD=rootpasswd postgres pg_restore -U postgres -d sda /var/lib/postgresql/data/clean_db.dump > /dev/null
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres dropdb -U postgres --if-exists sda
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres createdb -U postgres sda
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres pg_restore -U postgres -d sda /var/lib/postgresql/data/clean_db.dump > /dev/null
     echo "SUCCESS: Database state rolled back to clean baseline!"
 }
 
@@ -58,7 +58,7 @@ case_1_standard_lifecycle() {
     echo "SUCCESS: File decrypted using current valid key state."
 
     echo -e "\nStep 1.2: Executing key rotation..."
-    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
     echo "Rotating key for file ID: $FILE_ID"
     curl -H "Authorization: Bearer $TOKEN" -X POST  "$API_HOST/file/rotatekey/$FILE_ID"
 
@@ -120,10 +120,10 @@ case_2_mixed_key_dataset() {
     echo -e "\nStep 2.2: Extracting file IDs for our test files..."
     # Rotate half of the files in the dataset to simulate a mixed-key scenario
     # File 1 and 2 to be rotated, File 3 and 4 to remain with the original key
-    FILE1_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
-    FILE2_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';")
-    FILE3_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';")
-    FILE4_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';")
+    FILE1_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE2_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000102';")
+    FILE3_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';")
+    FILE4_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';")
 
     echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, StableID=EGAF00000000101; ID=$FILE2_ID, StableID=EGAF00000000102"
     echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, StableID=EGAF00000000103; ID=$FILE4_ID, StableID=EGAF00000000104"
@@ -207,7 +207,7 @@ case_4_concurrent_race_condition() {
     echo "Step 4.1: Restoring database baseline..."
     restore_database
 
-    FILE_ID=$(docker compose exec -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
+    FILE_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';")
 
     echo -e "\nStep 4.2: Launching background download flood (10 parallel workers)..."
 
