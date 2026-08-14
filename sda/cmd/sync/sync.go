@@ -25,10 +25,13 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -57,6 +60,16 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-sync")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
 	app := &sync{
 		schemaPath:            syncconf.SchemaPath(),
 		syncDatasetWithPrefix: syncconf.SyncDatasetWithPrefix(),
@@ -65,7 +78,6 @@ func run() error {
 		remotePassword:        syncconf.RemotePassword(),
 	}
 
-	var err error
 	app.syncC4ghPubKey, err = config.GetC4GHPublicKey(syncconf.SyncC4ghPubKeyPath())
 	if err != nil {
 		return fmt.Errorf("failed to get sync c4gh pub key from config, due to: %v", err)
@@ -158,14 +170,15 @@ func run() error {
 func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	slog.Debug("received message", slog.String("message-key", message.Key))
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
 	operationType, err := schemaFromDatasetOperation(message.Body)
 	if err != nil {
 		slog.Error("failed to parse dataset operation from incoming message", "error", err, "message-key", message.Key)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, fmt.Sprintf("failed to parse dataset operation from incoming message: %v", err))}, nil
+		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to parse dataset operation from incoming message: %v", err))}, nil
 	}
 
 	if operationType != "mapping" {
@@ -181,7 +194,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 		slog.Error("incoming message validation failed", "error", err, "message-key", message.Key)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, fmt.Sprintf("incoming message validation failed: %v", err))}, nil
+		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("incoming message validation failed: %v", err))}, nil
 	}
 
 	var datasetMapping schema.DatasetMapping
@@ -190,7 +203,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 		slog.Error("failed to unmarshal incoming message", "error", err, "message-key", message.Key)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, fmt.Sprintf("failed to unmarshal incoming message: %v", err))}, nil
+		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to unmarshal incoming message: %v", err))}, nil
 	}
 
 	if !strings.HasPrefix(datasetMapping.DatasetID, app.syncDatasetWithPrefix) {
@@ -204,7 +217,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 			// send message to error queue and do not requeue
 			// This error message should be handled manually to ensure all files that were not synced are synced once
 			// the cause of the failure has been fixed
-			return []func(){app.errorQueue(message, fmt.Sprintf("failed to sync file %s contained in message %s: %v", fileAccession, message.Key, err))}, nil
+			return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to sync file %s contained in message %s: %v", fileAccession, message.Key, err))}, nil
 		}
 	}
 
@@ -219,7 +232,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 		)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, fmt.Sprintf("failed to send http sync notification: %v", err))}, nil
+		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to send http sync notification: %v", err))}, nil
 	}
 
 	return nil, nil
@@ -228,6 +241,8 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 func (app *sync) syncFile(ctx context.Context, accessionID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "syncFile", attribute.String("accession", accessionID))
+	defer span.End()
 
 	inboxPath, err := app.db.GetInboxPath(ctx, accessionID)
 	if err != nil {
@@ -320,7 +335,8 @@ func (app *sync) buildSyncDatasetJSON(ctx context.Context, datasetMapping schema
 
 func (app *sync) sendHTTPNotification(ctx context.Context, datasetMapping schema.DatasetMapping) error {
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 
 	payload, err := app.buildSyncDatasetJSON(ctx, datasetMapping)
@@ -353,18 +369,19 @@ func (app *sync) sendHTTPNotification(ctx context.Context, datasetMapping schema
 	return nil
 }
 
-func (app *sync) errorQueue(originMessage *broker.Message, errorQueueReason string) func() {
+func (app *sync) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
 	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
-
-			return
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
 		}
-		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }
 
