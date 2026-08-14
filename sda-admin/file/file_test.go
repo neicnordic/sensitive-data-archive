@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func TestList(t *testing.T) {
 	defer func() { helpers.GetPagedResponseBody = originalFunc }()
 	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
 
-	err := List("http://example.com", "test-token", "testuser")
+	err := List("http://example.com", "test-token", "testuser", "")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
 }
@@ -312,9 +313,37 @@ func TestListMultiPage(t *testing.T) {
 	mockHelpers.On("GetPagedResponseBody", page2URL.String(), "test-token").
 		Return([]byte(`["file2"]`), http.Header{}, nil)
 
-	err := List("http://example.com", "test-token", "testuser")
+	err := List("http://example.com", "test-token", "testuser", "")
 	assert.NoError(t, err)
 	mockHelpers.AssertExpectations(t)
+}
+
+func TestListWithStatusFilter(t *testing.T) {
+	mockHelpers := new(MockHelpers)
+	mockHelpers.On("GetPagedResponseBody", "http://example.com/users/testuser/files", "test-token").
+		Return([]byte(`[{"fileID":"1","fileStatus":"uploaded"},{"fileID":"2","fileStatus":"ready"}]`), http.Header{}, nil)
+
+	originalFunc := helpers.GetPagedResponseBody
+	defer func() { helpers.GetPagedResponseBody = originalFunc }()
+	helpers.GetPagedResponseBody = mockHelpers.GetPagedResponseBody
+
+	err := List("http://example.com", "test-token", "testuser", "uploaded")
+	assert.NoError(t, err)
+	mockHelpers.AssertExpectations(t)
+}
+
+func TestFilterByStatus(t *testing.T) {
+	items := []json.RawMessage{
+		json.RawMessage(`{"fileID":"1","fileStatus":"uploaded"}`),
+		json.RawMessage(`{"fileID":"2","fileStatus":"ready"}`),
+		json.RawMessage(`{"fileID":"3","fileStatus":"uploaded"}`),
+	}
+
+	filtered := filterByStatus(items, "uploaded")
+
+	assert.Len(t, filtered, 2)
+	assert.JSONEq(t, `{"fileID":"1","fileStatus":"uploaded"}`, string(filtered[0]))
+	assert.JSONEq(t, `{"fileID":"3","fileStatus":"uploaded"}`, string(filtered[1]))
 }
 
 func TestWaitForUserContinue_NonTTYAutoContinues(t *testing.T) {
