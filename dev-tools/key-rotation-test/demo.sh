@@ -114,10 +114,10 @@ case_2_mixed_key_dataset() {
     # ========================================================================
     log_header "CASE 2: Partial Dataset Rotations (Mixed Key States)"
 
-    echo "Step 2.0: Rolling back runtime mutations..."
+    echo "Step 2.1: Rolling back runtime mutations..."
     restore_database
 
-    echo "Step 2.1: Ensuring base configuration is active with both keys..."
+    echo "Step 2.2: Ensuring base configuration is active with both keys..."
     docker compose -f compose.yml up -d --no-deps reencrypt download
     docker compose -f compose.yml restart reencrypt download
 
@@ -125,7 +125,7 @@ case_2_mixed_key_dataset() {
     until nc -z localhost 50051; do echo -n "."; sleep 1; done
     echo -e "\nServices are online."
 
-    echo -e "\nStep 2.2: Extracting file IDs for our test files..."
+    echo -e "\nStep 2.3: Extracting file IDs for our test files..."
     # Rotate half of the files in the dataset to simulate a mixed-key scenario
     # File 1 and 2 to be rotated, File 3 and 4 to remain with the original key
     FILE1_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000101';" | tr -d '\r\n[:space:]')
@@ -136,7 +136,7 @@ case_2_mixed_key_dataset() {
     echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, StableID=EGAF00000000101; ID=$FILE2_ID, StableID=EGAF00000000102"
     echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, StableID=EGAF00000000103; ID=$FILE4_ID, StableID=EGAF00000000104"
 
-    echo -e "\nStep 2.3: Executing key rotation ONLY on File 1 and 2..."
+    echo -e "\nStep 2.4: Executing key rotation ONLY on File 1 and 2..."
     curl -s -f -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE1_ID"
     echo "Rotation command issued for File 1."
     curl -s -f -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE2_ID"
@@ -145,7 +145,7 @@ case_2_mixed_key_dataset() {
     echo "Waiting for rotation tasks to process in background..."
     sleep 3
 
-    echo -e "\nStep 2.4: Verifying database key_hash values for mixed-key distribution..."
+    echo -e "\nStep 2.5: Verifying database key_hash values for mixed-key distribution..."
 
     ORIGINAL_HASH=$(compute_key_hash "$SHARED_DIR"/c4gh.pub.pem)
     ROTATED_HASH=$(compute_key_hash "$SHARED_DIR"/rotatekey.pub.pem)
@@ -168,7 +168,7 @@ case_2_mixed_key_dataset() {
         exit 1
     fi
 
-    echo -e "\nStep 2.5: Attempting download and decryption of the ROTATED files (File 1 and 2)..."
+    echo -e "\nStep 2.6: Attempting download and decryption of the ROTATED files (File 1 and 2)..."
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000101 -o "$OUTDIR"/c2-file1-rotated.c4gh
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
@@ -179,7 +179,7 @@ case_2_mixed_key_dataset() {
     C4GH_PASSWORD=c4ghpass sda-cli decrypt --key "$SHARED_DIR"/client.sec.pem "$OUTDIR"/c2-file2-rotated.c4gh
     echo "SUCCESS: File 2 (new key) downloaded and decrypted perfectly!"
 
-    echo -e "\nStep 2.6: Attempting download and decryption of the UNROTATED files (File 3 and 4)..."
+    echo -e "\nStep 2.7: Attempting download and decryption of the UNROTATED files (File 3 and 4)..."
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
         http://localhost:8085/files/EGAF00000000103 -o "$OUTDIR"/c2-file3-legacy.c4gh
     curl -s -H "Authorization: Bearer $TOKEN" -H "X-C4GH-Public-Key: $CLIENT_PUB_KEY" \
