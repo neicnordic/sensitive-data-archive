@@ -218,6 +218,11 @@ case_3_invalid_rotation_target() {
         echo -e "\033[1;31mFAILED: rotatekey did not fail with the expected configuration error.\033[0m"
         echo "Full log output:"
         echo "$LOG_OUTPUT"
+
+        echo "Resetting rotatekey service back to standard configuration before exiting..."
+        docker compose stop rotatekey
+        docker compose -f compose.yml up -d --no-deps rotatekey
+
         exit 1
     fi
 
@@ -558,6 +563,10 @@ case_6_multi_key_archive_migration() {
         JOIN sda.datasets d ON fd.dataset_id = d.id \
         WHERE d.stable_id = '$DATASET_ID';"
 
+        echo -e "Resetting services back to default base compose state before exiting..."
+        docker compose -f compose.yml up -d --no-deps reencrypt download rotatekey ingest verify mapper finalize api > /dev/null
+        docker compose -f compose.yml restart reencrypt download rotatekey ingest verify mapper finalize api > /dev/null
+
         exit 1
     fi
 
@@ -649,6 +658,10 @@ case_7_deprecated_key_ingest_rejection() {
 
     if [ -z "$UUID" ]; then
         echo "❌ Error: File upload was not registered in inbox database table!"
+        # cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
+
         exit 1
     fi
     echo "Found inbox file UUID: $UUID"
@@ -737,6 +750,9 @@ case_8_rotate_to_deprecated_key_rejection() {
 
     if [ -z "$FILE_ID" ]; then
         echo "❌ Error: Pre-seeded file EGAF00000000101 not found in database!"
+        # Cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
         exit 1
     fi
     echo "Found pre-seeded file UUID: $FILE_ID"
@@ -756,6 +772,9 @@ case_8_rotate_to_deprecated_key_rejection() {
 
     if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 202 ]; then
         echo "❌ Error: API endpoint failed to queue the rotation job (HTTP $HTTP_STATUS)"
+        # Cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
         exit 1
     fi
 
@@ -772,6 +791,9 @@ case_8_rotate_to_deprecated_key_rejection() {
         echo "--- Recent rotatekey logs ---"
         echo "$ROTATE_LOGS"
         echo "-----------------------------"
+        # Cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
         exit 1
     fi
 
@@ -781,6 +803,9 @@ case_8_rotate_to_deprecated_key_rejection() {
 
     if [ "$CURRENT_KEY_HASH" = "$DEPRECATED_HASH" ]; then
         echo "❌ Error: File encryption key was wrongly updated to the deprecated key in the DB!"
+        # Cleanup override before exiting on error
+        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
         exit 1
     fi
     echo "Confirmed file encryption key remained unchanged ($ORIGINAL_KEY_HASH)."
