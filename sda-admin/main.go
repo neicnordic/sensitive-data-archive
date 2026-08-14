@@ -26,8 +26,8 @@ const usage = `usage: sda-admin [-uri URI] [-token TOKEN] <command> [options]
 Commands:
   user list                     List all users.
   file list -user USERNAME      List all files for a specified user.
-  file list -user USERNAME [-status STATUS]
-                                List all files for a specified user and filtered by status.
+  file list -user USERNAME [-status STATUS] [-path-prefix PREFIX]
+                                List all files for a specified user, optionally filtered by status and/or inbox path prefix.
   file ingest -filepath FILEPATH -user USERNAME
                                 Trigger ingestion of a given file.
   file set-accession -filepath FILEPATH -user USERNAME -accession-id accessionID
@@ -62,8 +62,8 @@ var userListUsage = `Usage: sda-admin user list
   List all users in the system with ongoing submissions.`
 
 var fileUsage = `List all files for a user:
-  Usage: sda-admin file list -user USERNAME [-status STATUS]
-	List all files for a specified user, optionally filtered by status.
+  Usage: sda-admin file list -user USERNAME [-status STATUS] [-path-prefix PREFIX]
+	List all files for a specified user, optionally filtered by status and/or inbox path prefix.
 
 Ingest a file:
   Usage: sda-admin file ingest -filepath FILEPATH -user USERNAME
@@ -80,18 +80,20 @@ Rotate key for a file:
 Options:
   -user USERNAME       Specify the username associated with the file.
   -status STATUS       Optional, for list. Only list files with this status.
+  -path-prefix PREFIX  Optional, for list. Only list files whose inbox path starts with this prefix.
   -filepath FILEPATH   Specify the path of the file to ingest.
   -accession-id ID     Specify the accession ID to assign to the file.
   -file-id FILEUUID    Specify the file ID of the file to rotate key.
 
 Use 'sda-admin help file <command>' for information on a specific command.`
 
-var fileListUsage = `Usage: sda-admin file list -user USERNAME [-status STATUS]
+var fileListUsage = `Usage: sda-admin file list -user USERNAME [-status STATUS] [-path-prefix PREFIX]
   List all files for a specified user.
 
 Options:
   -user USERNAME 	Specify the username associated with the files.
-  -status STATUS 	Optional. Only list files with this status.`
+  -status STATUS 	Optional. Only list files with this status.
+  -path-prefix PREFIX 	Optional. Only list files whose inbox path starts with this prefix.`
 
 var fileIngestUsage = `Usage with file path and user: sda-admin file ingest -filepath FILEPATH -user USERNAME
 Usage with file ID: sda-admin file ingest -fileid FILEUUID
@@ -356,8 +358,10 @@ func handleFileListCommand() error {
 	listFilesCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	var username string
 	var status string
+	var pathPrefix string
 	listFilesCmd.StringVar(&username, "user", "", "Filter files by username")
 	listFilesCmd.StringVar(&status, "status", "", "Filter files by status")
+	listFilesCmd.StringVar(&pathPrefix, "path-prefix", "", "Filter files by inbox path prefix")
 
 	if err := listFilesCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
@@ -368,7 +372,7 @@ func handleFileListCommand() error {
 		return fmt.Errorf("error: the -user flag is required.\n%s", fileListUsage)
 	}
 
-	if err := file.List(apiURI, token, username, status); err != nil {
+	if err := file.List(apiURI, token, username, status, pathPrefix); err != nil {
 		if errors.Is(err, file.ErrAborted) {
 			return file.ErrAborted
 		}
