@@ -156,7 +156,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" \
 echo "=== 🎉 Success! Dataset '$DATASET_ID' is initialized with 4 clean targets, structured correctly, and ready for rotation! ==="
 
 # ==============================================================================
-# Seed 100,000 Valid Crypt4GH Headers for long background key rotation test
+# Seed 5,000 Valid Crypt4GH Headers for long background key rotation test
 # ==============================================================================
 BG_DATASET_ID="EGAD00000000099"
 echo "Generating 5,000 valid Crypt4GH headers..."
@@ -210,7 +210,7 @@ SELECT
     '/archive/bg_file_' || gs || '.txt.c4gh' AS archive_file_path,
     1024 AS archive_file_size,
     '$KEY_HASH' AS key_hash
-FROM generate_series(20001, 25000) gs;
+FROM generate_series(20001, 25000) gs; -- 5,000 files
 
 -- 4. Bulk Insert into sda.files with real key_hash
 INSERT INTO sda.files (
@@ -261,4 +261,4 @@ FROM seed_files;
 COMMIT;
 EOF
 
-echo "=== 🎉 Success! Dataset '$BG_DATASET_ID' initialized with 10,000 valid Crypt4GH headers matching sda schema! ==="
+echo "=== 🎉 Success! Dataset '$BG_DATASET_ID' initialized with 5,000 valid Crypt4GH headers matching sda schema! ==="
