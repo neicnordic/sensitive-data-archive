@@ -75,6 +75,9 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	targetPublicKey, err := config.GetC4GHPublicKey(rotatekeyconfig.TargetPublicKey())
 	if err != nil {
 		return fmt.Errorf("failed to load target public key: %v", err)
@@ -131,7 +134,7 @@ func run() error {
 
 	app.reencryptClient = reencrypt.NewReencryptClient(reencryptGrpcConn)
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
@@ -168,11 +171,13 @@ func run() error {
 		return fmt.Errorf("failed to check that target rotation key can be used: %w", err)
 	}
 
-	slog.Info("rotatekey service started")
 	consumeErr := make(chan error, 1)
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, rotatekeyconfig.SourceQueue(), app.handleMessage)
 	}()
+
+	slog.Info("rotatekey service started")
+	startupSpan.End()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
