@@ -432,7 +432,9 @@ func main() {
 	}
 
 	app.Use(sess.Handler())
-	app.Use(iris.FromStd(otelhttp.NewMiddleware("auth")))
+	app.WrapRouter(func(w http.ResponseWriter, r *http.Request, router http.HandlerFunc) {
+		otelhttp.NewMiddleware("auth")(router).ServeHTTP(w, r)
+	})
 
 	// Connect to DB
 	authHandler.db, err = postgres.NewPostgresSQLDatabase()
