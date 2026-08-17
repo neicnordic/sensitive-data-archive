@@ -41,6 +41,10 @@ Closes #2387.
 
 ## [3.4.4] - 2026-07-22
 
+### Added
+
+- Add observability configuration options
+
 ### Changed
 
 - Update api secret template to populate expected configs as per sda v3.1.75 using broker/v2, etc
