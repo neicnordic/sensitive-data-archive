@@ -88,12 +88,15 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
 
-	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
+	app.Broker, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker: %v", err)
 	}
@@ -107,7 +110,7 @@ func run() error {
 		}
 	}()
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db: %v", err)
 	}
@@ -159,6 +162,7 @@ func run() error {
 		consumeErr <- app.Broker.Subscribe(ctx, ingestconf.SourceQueue(), app.handleMessage)
 	}()
 	slog.Info("ingest service started")
+	startupSpan.End()
 
 	select {
 	case sig := <-sigc:
@@ -348,7 +352,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 	case "removed":
 		reason := "file is removed, cannot ingest"
-		slog.Error(reason, "file-id", fileID)
+		span.Error(reason, nil)
 
 		// Publish to error queue so the message can be analyzed and not silently dropped.
 		return []func(){app.errorQueue(ctx, message, "file is removed, cannot ingest")}, nil
@@ -432,7 +436,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 			// send message to error queue, set file event log, and do not requeue
 			return []func(){app.errorQueue(ctx, message, err.Error()), app.setErrorEvent(ctx, err.Error(), message)}, nil
 		default:
-			span.Error("failed to read file", err, slog.String("submission-location", submissionLocation))
+			span.Warn("failed to read file", slog.Any("error", err), slog.String("submission-location", submissionLocation))
 			// requeue message as inbox error is not expected and should succeed on retries
 			return nil, err
 		}
@@ -450,7 +454,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 	location, err := app.ArchiveWriter.WriteFile(ctx, fileID, dr.teedReader)
 	if err != nil {
-		slog.Error("failed to write file to the archive storage", slog.Any("error", err), slog.String("file-id", fileID))
+		span.Warn("failed to write file to the archive storage", slog.Any("error", err))
 
 		return nil, err
 	}
@@ -478,8 +482,8 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	// idle_in_transaction_session_timeout.
 	fileSize, err := app.ArchiveReader.GetFileSize(ctx, location, fileID)
 	if err != nil {
-		span.Error("failed to get archived file size", err)
-		// requeue message as archive error is not expected and should succeed on retries
+		span.Warn("failed to archive file", slog.Any("error", err))
+		// requeue message as db error is not expected and should succeed on retries
 
 		return nil, err
 	}
@@ -488,37 +492,37 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
+		span.Warn("failed to begin transaction", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
 	if err := tx.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(message.Body)); err != nil {
-		slog.Error("failed to update file event log", "error", err, "file-id", fileID)
+		span.Warn("failed to update file event log", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 
 		return nil, err
 	}
 
 	if err := tx.SetKeyHash(ctx, dr.keyHash, fileID); err != nil {
-		slog.Error("failed to set file key hash", "error", err, "file-id", fileID)
+		span.Warn("failed to set file key hash", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	if err := tx.StoreHeader(ctx, dr.header, fileID); err != nil {
-		slog.Error("failed to store header", "error", err, "file-id", fileID)
+		span.Warn("failed to store header", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	if err := app.finalizeDatabaseRecords(ctx, tx, fileID, location, fileSize, checksum, message); err != nil {
-		slog.Error("failed to finalize database records", "error", err, "file-id", fileID)
+		span.Warn("failed to finalize database records", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}

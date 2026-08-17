@@ -66,9 +66,12 @@ func run() error {
 	}
 	defer func() {
 		if err := shutdown(ctx); err != nil {
-			slog.Error("failed to shutdown OTel SDK", "err", err)
+			slog.Warn("failed to shutdown OTel SDK", "err", err)
 		}
 	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
 
 	app := &sync{
 		schemaPath:            syncconf.SchemaPath(),
@@ -78,17 +81,7 @@ func run() error {
 		remotePassword:        syncconf.RemotePassword(),
 	}
 
-	app.syncC4ghPubKey, err = config.GetC4GHPublicKey(syncconf.SyncC4ghPubKeyPath())
-	if err != nil {
-		return fmt.Errorf("failed to get sync c4gh pub key from config, due to: %v", err)
-	}
-
-	app.archiveC4ghPrivateKey, err = config.GetC4GHKey()
-	if err != nil {
-		return fmt.Errorf("failed to get c4gh key from config, due to: %v", err)
-	}
-
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
@@ -99,6 +92,16 @@ func run() error {
 	}()
 	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
+	}
+
+	app.syncC4ghPubKey, err = config.GetC4GHPublicKey(syncconf.SyncC4ghPubKeyPath())
+	if err != nil {
+		return fmt.Errorf("failed to get sync c4gh pub key from config, due to: %v", err)
+	}
+
+	app.archiveC4ghPrivateKey, err = config.GetC4GHKey()
+	if err != nil {
+		return fmt.Errorf("failed to get c4gh key from config, due to: %v", err)
 	}
 
 	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
@@ -132,13 +135,14 @@ func run() error {
 		consumeErr <- app.broker.Subscribe(ctx, syncconf.SourceQueue(), app.handleMessage)
 	}()
 	slog.Info("sync service started")
+	startupSpan.End()
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
 	case sig := <-sigc:
-		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
 		cancel()
 
 		// Subscribe returns once the handler that was running has finished
@@ -148,16 +152,16 @@ func run() error {
 		select {
 		case err := <-consumeErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("consumer failure during shutdown", "error", err)
+				slog.Error("consumer failure during shutdown", slog.Any("error", err))
 			}
 		case sig := <-sigc:
-			slog.Warn("received a second signal, not waiting for the running handler", "signal", sig)
+			slog.Warn("received a second signal, not waiting for the running handler", slog.String("signal", sig.String()))
 		}
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
-			slog.Error("consumer failure", "error", err, "source-queue", syncconf.SourceQueue())
+			slog.Error("consumer failure", slog.Any("error", err), slog.String("source-queue", syncconf.SourceQueue()))
 			cancel()
 
 			return err
@@ -175,15 +179,14 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 
 	operationType, err := schemaFromDatasetOperation(message.Body)
 	if err != nil {
-		slog.Error("failed to parse dataset operation from incoming message", "error", err, "message-key", message.Key)
+		span.Error("failed to parse dataset operation from incoming message", err)
 
 		// send message to error queue and do not requeue
 		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to parse dataset operation from incoming message: %v", err))}, nil
 	}
 
 	if operationType != "mapping" {
-		slog.Debug("skipping non dataset mapping operation",
-			slog.String("message-key", message.Key),
+		span.Debug("skipping non dataset mapping operation",
 			slog.String("operation", operationType),
 		)
 
@@ -191,7 +194,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 	}
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", app.schemaPath), message.Body); err != nil {
-		slog.Error("incoming message validation failed", "error", err, "message-key", message.Key)
+		span.Error("incoming message validation failed", err)
 
 		// send message to error queue and do not requeue
 		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("incoming message validation failed: %v", err))}, nil
@@ -200,14 +203,16 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 	var datasetMapping schema.DatasetMapping
 	// we unmarshal the message in the validation step so this is safe to do
 	if err := json.Unmarshal(message.Body, &datasetMapping); err != nil {
-		slog.Error("failed to unmarshal incoming message", "error", err, "message-key", message.Key)
+		span.Error("failed to unmarshal incoming message", err)
 
 		// send message to error queue and do not requeue
 		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to unmarshal incoming message: %v", err))}, nil
 	}
 
+	span.SetAttributes(attribute.String("dataset-id", datasetMapping.DatasetID))
+
 	if !strings.HasPrefix(datasetMapping.DatasetID, app.syncDatasetWithPrefix) {
-		slog.Info("external dataset", slog.String("dataset-id", datasetMapping.DatasetID))
+		span.Info("external dataset")
 
 		return nil, nil
 	}
@@ -226,10 +231,7 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 	}
 
 	if err := app.sendHTTPNotification(ctx, datasetMapping); err != nil {
-		slog.Error("failed to send http sync notification",
-			slog.Any("error", err),
-			slog.Any("message-key", message.Key),
-		)
+		span.Error("failed to send http sync notification", err)
 
 		// send message to error queue and do not requeue
 		return []func(){app.errorQueue(ctx, message, fmt.Sprintf("failed to send http sync notification: %v", err))}, nil
@@ -334,6 +336,9 @@ func (app *sync) buildSyncDatasetJSON(ctx context.Context, datasetMapping schema
 }
 
 func (app *sync) sendHTTPNotification(ctx context.Context, datasetMapping schema.DatasetMapping) error {
+	ctx, span := observability.StartSpan(ctx, "sendHTTPNotification")
+	defer span.End()
+
 	client := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -341,7 +346,7 @@ func (app *sync) sendHTTPNotification(ctx context.Context, datasetMapping schema
 
 	payload, err := app.buildSyncDatasetJSON(ctx, datasetMapping)
 	if err != nil {
-		slog.Error("failed to build SyncDatasetJSON", slog.Any("error", err))
+		span.Error("failed to build SyncDatasetJSON", err)
 
 		return err
 	}

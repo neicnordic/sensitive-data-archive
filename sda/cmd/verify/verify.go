@@ -67,18 +67,21 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app := &verify{
 		schemaPath: verifyconfig.SchemaPath(),
 		routingKey: verifyconfig.RoutingKey(),
 	}
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer func() {
 		if err := app.db.Close(); err != nil {
-			slog.Error("failed to close database", "error", err)
+			slog.Warn("failed to close database", slog.Any("error", err))
 		}
 	}()
 
@@ -96,7 +99,7 @@ func run() error {
 			return
 		}
 		if err := app.broker.Close(); err != nil {
-			slog.Error("could not close broker", "error", err)
+			slog.Warn("failed to close broker", slog.Any("error", err))
 		}
 	}()
 
@@ -117,10 +120,11 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case sig := <-sigc:
-		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
 		cancel()
 
 		// Subscribe returns once the handler that was running has finished

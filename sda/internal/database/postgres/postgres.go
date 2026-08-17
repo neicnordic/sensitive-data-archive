@@ -32,7 +32,7 @@ func init() {
 FROM sda.dbschema_version;`
 }
 
-func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Database, error) {
+func NewPostgresSQLDatabase(ctx context.Context, options ...func(config *dbConfig)) (database.Database, error) {
 	dbConf := globalConf.clone()
 
 	for _, o := range options {
@@ -46,8 +46,19 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 		return nil, fmt.Errorf("failed to setup postgres connect config: %w", err)
 	}
 
-	pg.db = otelsql.OpenDB(pqConnectConfig)
-	if err := pg.db.Ping(); err != nil {
+	pg.db = otelsql.OpenDB(pqConnectConfig,
+		otelsql.WithAttributes(
+			semconv.DBSystemPostgreSQL,
+		),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			OmitConnResetSession: true,
+			OmitConnectorConnect: true,
+			OmitConnPrepare:      true,
+			OmitRows:             true,
+			OmitConnQuery:        true,
+		}),
+	)
+	if err := pg.db.PingContext(ctx); err != nil {
 		_ = pg.Close()
 
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -65,7 +76,7 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 	// Prepare the statements from the queries
 	pg.preparedStatements = make(map[string]*sql.Stmt)
 	for queryName, query := range queries {
-		preparedStmt, err := pg.db.Prepare(query)
+		preparedStmt, err := pg.db.PrepareContext(ctx, query)
 		if err != nil {
 			log.Errorf("failed to prepare query: %s, due to: %v", queryName, err)
 			_ = pg.Close()
@@ -81,7 +92,7 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 	pg.db.SetConnMaxLifetime(pg.config.connectionMaxLifeTime)
 
 	stmt := pg.preparedStatements[getSchemaVersionQuery]
-	if err := stmt.QueryRow().Scan(&pg.schemaVersion); err != nil {
+	if err := stmt.QueryRowContext(ctx).Scan(&pg.schemaVersion); err != nil {
 		_ = pg.Close()
 
 		return nil, fmt.Errorf("failed to query schema version: %w", err)

@@ -234,7 +234,7 @@ func (p *proxy) forwardRequest(ctx context.Context, s3RequestType S3RequestType,
 		return
 	}
 
-	s3Response, err := p.forwardRequestToBackend(r)
+	s3Response, err := p.forwardRequestToBackend(ctx, r)
 	if err != nil {
 		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 
@@ -315,7 +315,7 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 		}
 	}
 
-	s3Response, err := p.forwardRequestToBackend(r)
+	s3Response, err := p.forwardRequestToBackend(ctx, r)
 	if err != nil {
 		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 
@@ -386,10 +386,10 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 	}
 }
 
-func (p *proxy) forwardRequestToBackend(r *http.Request) (*http.Response, error) {
+func (p *proxy) forwardRequestToBackend(ctx context.Context, r *http.Request) (*http.Response, error) {
 	p.resignHeader(r)
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3Conf.endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration
+	nr, err := http.NewRequestWithContext(ctx, r.Method, p.s3Conf.endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +653,7 @@ func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w
 		return
 	}
 
-	s3Response, err := p.forwardRequestToBackend(r)
+	s3Response, err := p.forwardRequestToBackend(ctx, r)
 	if err != nil {
 		p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("forwarding error: %v", err))
 

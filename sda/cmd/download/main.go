@@ -65,6 +65,9 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	// Validate permission model
 	if err := validatePermissionModel(config.PermissionModel(), config.VisaEnabled()); err != nil {
 		return err
@@ -178,7 +181,7 @@ func run() error {
 	router.UseRawPath = true         // Route on raw URL-encoded path (supports %2F in dataset IDs)
 	router.UnescapePathValues = true // c.Param() still returns decoded value
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware("download"))
+	router.Use(otelgin.Middleware("sda-download"))
 
 	// Add request logging
 	if log.IsLevelEnabled(log.InfoLevel) {
@@ -246,6 +249,7 @@ func run() error {
 		}
 	}()
 
+	startupSpan.End()
 	log.Info("service ready")
 
 	// Wait for shutdown signal

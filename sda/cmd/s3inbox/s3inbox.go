@@ -30,6 +30,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 func main() {
@@ -55,6 +56,9 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	s3InboxConf := s3InboxConfig{
 		endpoint:  s3inboxconf.S3InboxEndpoint(),
 		accessKey: s3inboxconf.S3InboxAccessKey(),
@@ -70,13 +74,13 @@ func run() error {
 		return fmt.Errorf("failed to setup tls config due to: %v", err)
 	}
 
-	db, err := postgres.NewPostgresSQLDatabase()
+	db, err := postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			slog.Error("failed to close database", "error", err)
+			slog.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
 	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 26 {
@@ -115,7 +119,7 @@ func run() error {
 		return errors.New("no JWT public key url or JWT public key path specified")
 	}
 	if jwtPubKeyURL != "" {
-		if err := auth.FetchJwtPubKeyURL(jwtPubKeyURL); err != nil {
+		if err := auth.FetchJwtPubKeyURL(ctx, jwtPubKeyURL); err != nil {
 			return fmt.Errorf("failed to read jwt pub key from url: %s, due to %v", jwtPubKeyURL, err)
 		}
 	}
@@ -130,6 +134,7 @@ func run() error {
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
+	router.Use(otelmux.Middleware("sda-s3inbox"))
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -167,6 +172,7 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case <-sigc:
