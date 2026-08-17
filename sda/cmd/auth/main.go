@@ -386,7 +386,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdown, err := observability.SetupOTelSDK(context.Background(), "sda-auth")
+	ctx := context.Background()
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-auth")
 	if err != nil {
 		log.Errorf("failed to setup OTel SDK: %v", err)
 		os.Exit(1)
@@ -396,6 +398,8 @@ func main() {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
 	}()
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
 
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
@@ -433,11 +437,11 @@ func main() {
 
 	app.Use(sess.Handler())
 	app.WrapRouter(func(w http.ResponseWriter, r *http.Request, router http.HandlerFunc) {
-		otelhttp.NewMiddleware("auth")(router).ServeHTTP(w, r)
+		otelhttp.NewMiddleware("http-server")(router).ServeHTTP(w, r)
 	})
 
 	// Connect to DB
-	authHandler.db, err = postgres.NewPostgresSQLDatabase()
+	authHandler.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		log.Error(err)
 		panic(err)
@@ -482,6 +486,7 @@ func main() {
 
 	app.UseGlobal(globalHeaders)
 
+	startupSpan.End()
 	if conf.Server.Cert != "" && conf.Server.Key != "" {
 		log.Infoln("Serving content using https")
 		err = app.Run(iris.TLS("0.0.0.0:8080", conf.Server.Cert, conf.Server.Key))

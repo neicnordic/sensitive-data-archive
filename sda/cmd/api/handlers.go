@@ -380,7 +380,7 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fileID, err = api.db.GetFileIDByUserPathAndStatus(context.TODO(), ingest.User, ingest.FilePath, "uploaded")
+		fileID, err = api.db.GetFileIDByUserPathAndStatus(ctx, ingest.User, ingest.FilePath, "uploaded")
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				span.Warn("uploaded file not found", slog.String("user", ingest.User), slog.String("file_path", ingest.FilePath))

@@ -150,7 +150,7 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	defer os.RemoveAll(s.keyPath)
 
 	var err error
-	db, err = postgres.NewPostgresSQLDatabase(
+	db, err = postgres.NewPostgresSQLDatabase(context.Background(),
 		postgres.Host("localhost"),
 		postgres.Port(dbPort),
 		postgres.User("postgres"),

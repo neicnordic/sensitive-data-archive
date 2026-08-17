@@ -184,7 +184,7 @@ func (ts *TestSuite) SetupSuite() {
 	ts.app.Conf = &config.Config{}
 	ts.app.Conf.Broker.SchemasPath = "../../schemas/isolated"
 	var err error
-	ts.app.db, err = postgres.NewPostgresSQLDatabase(
+	ts.app.db, err = postgres.NewPostgresSQLDatabase(context.Background(),
 		postgres.Host("localhost"),
 		postgres.Port(dbPort),
 		postgres.User("postgres"),

@@ -16,6 +16,43 @@ services:
       - ./scripts:/scripts
       - shared:/shared
 
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./sda/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200" # Tempo API
+      - "4317:4317" # OTLP gRPC ingest
+      - "4318:4318" # OTLP HTTP ingest
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    volumes:
+      - "./sda/prometheus.yml:/etc/prometheus/prometheus.yml"
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - 9090:9090
+
+  grafana:
+    image: grafana/grafana-enterprise
+    depends_on:
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    container_name: grafana
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./sda/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
+
   postgres:
     build:
       context: ../../postgresql
@@ -96,12 +133,17 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      grafana:
+        condition: service_started
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
       - BROKER_ROUTINGKEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -111,6 +153,7 @@ services:
     ports:
       - "18000:8000"
       - "18001:8001"
+      - "9092:9090"
 
   ingest:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -132,10 +175,17 @@ services:
       - BROKER_ROUTINGKEY=archived
       - DATABASE_PASSWORD=ingest
       - DATABASE_USER=ingest
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9093:9090"
 
   verify:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -157,10 +207,17 @@ services:
       - BROKER_ROUTINGKEY=verified
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9094:9090"
 
   finalize:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -182,10 +239,17 @@ services:
       - BROKER_ROUTINGKEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9095:9090"
 
   mapper:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -206,10 +270,17 @@ services:
       - BROKER_QUEUE=mappings
       - DATABASE_PASSWORD=mapper
       - DATABASE_USER=mapper
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9096:9090"
 
   api:
     command: [sda-api]
@@ -228,11 +299,15 @@ services:
       - BROKER_USER=api
       - DATABASE_PASSWORD=api
       - DATABASE_USER=api
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
+      - "9097:9090"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -243,12 +318,19 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-reencrypt]
     container_name: reencrypt
+    environment:
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     depends_on:
       credentials:
         condition: service_completed_successfully
     ports:
       - "50051:50051"
+      - "9098:9090"
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -273,10 +355,14 @@ services:
         condition: service_healthy
     environment:
       - CONFIG_FILE=/config.yaml
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     ports:
       - "8085:8080"
+      - "9100:9090"
     restart: always
     volumes:
       - ./sda/download-config-s3.yaml:/config.yaml
@@ -300,7 +386,14 @@ services:
       - BROKER_ROUTINGKEY=rotatekey
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    ports:
+      - "9099:9090"
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -339,6 +432,9 @@ services:
       - OIDC_SECRET=wHPVQaYXmdDHa
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -361,11 +457,15 @@ services:
       - AUTH_RESIGNJWT=false
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
+      - OBSERVABILITY_ENABLED=true
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8801:8080"
+      - "9101:9090"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -459,6 +559,7 @@ volumes:
   postgres_data:
   rabbitmq_data:
   shared:
+  grafana-storage:
 
 networks:
   default:

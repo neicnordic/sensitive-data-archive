@@ -21,17 +21,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
-
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 func main() {
@@ -62,16 +61,21 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	tlsProxy, err := configTLS(conf.S3Inbox)
 	if err != nil {
 		return fmt.Errorf("failed to setup tls config due to: %v", err)
 	}
 
-	db, err := postgres.NewPostgresSQLDatabase()
+	db, err := postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
@@ -108,7 +112,7 @@ func run() error {
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 	// Load keys for JWT verification
 	if conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.FetchJwtPubKeyURL(conf.Server.Jwtpubkeyurl); err != nil {
+		if err := auth.FetchJwtPubKeyURL(ctx, conf.Server.Jwtpubkeyurl); err != nil {
 			return fmt.Errorf("failed to read jwt pub key from url: %s, due to %v", conf.Server.Jwtpubkeyurl, err)
 		}
 	}
@@ -122,6 +126,7 @@ func run() error {
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
+	router.Use(otelmux.Middleware("sda-s3inbox"))
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -154,6 +159,7 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case <-sigc:
