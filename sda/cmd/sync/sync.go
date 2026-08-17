@@ -73,11 +73,16 @@ func run() error {
 		}
 	}()
 
-	db, err = postgres.NewPostgresSQLDatabase()
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
@@ -121,6 +126,7 @@ func run() error {
 	}
 
 	log.Info("Starting sync service")
+	startupSpan.End()
 
 	consumeErr := make(chan error, 1)
 	go func() {

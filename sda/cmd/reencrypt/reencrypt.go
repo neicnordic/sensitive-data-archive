@@ -165,16 +165,20 @@ func main() {
 		log.Fatalf("configuration loading failed, reason: %v", err)
 	}
 
-	shutdown, err := observability.SetupOTelSDK(context.Background(), "sda-reencrypt")
+	ctx := context.Background()
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-reencrypt")
 	if err != nil {
 		log.Errorf("failed to setup OTel SDK: %v", err)
 		os.Exit(1)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		if err := shutdown(ctx); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
 	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -272,6 +276,7 @@ func main() {
 
 	// Start reencrypt server
 	log.Printf("server listening at %v", lis.Addr())
+	startupSpan.End()
 	if err := s.Serve(lis); err != nil {
 		log.Errorf("failed to serve: %v", err)
 		sigc <- syscall.SIGINT

@@ -130,7 +130,7 @@ func (u *ValidateFromToken) ReadJwtPubKeyBytes(pubKeyBytes []byte) error {
 }
 
 // Function for fetching the elixir key from the JWK and transform it to []byte
-func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
+func (u *ValidateFromToken) FetchJwtPubKeyURL(ctx context.Context, jwtpubkeyurl string) error {
 	jwkURL, err := url.ParseRequestURI(jwtpubkeyurl)
 	if err != nil || jwkURL.Scheme == "" || jwkURL.Host == "" {
 		if err != nil {
@@ -140,7 +140,7 @@ func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 		return fmt.Errorf("jwtpubkeyurl is not a proper URL (%s)", jwkURL)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	u.Keyset, err = jwk.Fetch(ctx, jwtpubkeyurl)

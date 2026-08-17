@@ -55,13 +55,16 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	conf, err := config.NewConfig("mapper")
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
 	inboxConfig = conf.Inbox
 
-	db, err = postgres.NewPostgresSQLDatabase()
+	db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
@@ -107,6 +110,7 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case <-sigc:

@@ -98,7 +98,7 @@ func (s *ProxyTests) SetupTest() {
 	s.messenger = &broker.AMQPBroker{}
 
 	// Create a database configuration for the fake database
-	s.database, err = postgres.NewPostgresSQLDatabase(
+	s.database, err = postgres.NewPostgresSQLDatabase(context.Background(),
 		postgres.Host("127.0.0.1"),
 		postgres.Port(dbPort),
 		postgres.User("postgres"),
