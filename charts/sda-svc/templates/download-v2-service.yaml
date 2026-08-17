@@ -12,6 +12,12 @@ spec:
     port: 80
     targetPort: download-v2
     protocol: TCP
+  {{- if .Values.global.observability.enabled }}
+  - name: prometheus
+    port: 9090
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.fullname" . }}-download-v2
 {{- end }}
