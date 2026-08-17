@@ -55,11 +55,24 @@ spec:
           value: {{ include "confFile" . }}
         - name: CONFIG_FILE
           value: {{ include "confFile" . }}
+        - name: OBSERVABILITY_ENABLED
+          value: {{ .Values.global.observability.enabled | quote }}
+        {{- if .Values.global.observability.enabled }}
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: {{ .Values.global.observability.otelExporterOtlpInsecure | quote }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ required "Otel Exporter Otlp Endpoint must be set if observability is enabled" .Values.global.observability.otelExporterOtlpEndpoint }}
+        {{- end }}
         ports:
           - name: grpc
             containerPort: {{ ternary 50443 50051 ( .Values.global.tls.enabled ) }}
           - name: grpchealth
             containerPort: {{add ( ternary 50444 50052 ( .Values.global.tls.enabled ) ) 1 }}
+        {{- if .Values.global.observability.enabled }}
+          - name: prometheus
+            containerPort: 9090
+            protocol: TCP
+        {{- end }}
         readinessProbe:
 {{ toYaml .Values.reencrypt.readinessProbe | trim | indent 10 }}
         resources:
