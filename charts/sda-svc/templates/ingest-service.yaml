@@ -1,22 +1,18 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.observability.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ template "sda.fullname" . }}-api
+  name: {{ template "sda.fullname" . }}-ingest
   labels:
-    app: {{ template "sda.fullname" . }}-api
+    app: {{ template "sda.fullname" . }}-ingest
 spec:
   ports:
-  - name: api
-    port: 8080
-    targetPort: api
-    protocol: TCP
-  {{- if .Values.global.observability.enabled }}
   - name: prometheus
     port: 9090
     targetPort: prometheus
     protocol: TCP
-  {{- end }}
   selector:
-    app: {{ template "sda.fullname" . }}-api
+    app: {{ template "sda.fullname" . }}-ingest
+{{- end }}
 {{- end }}

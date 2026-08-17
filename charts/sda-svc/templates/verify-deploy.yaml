@@ -59,6 +59,18 @@ spec:
           value: {{ include "confFile" . }}
         - name: CONFIG_FILE
           value: {{ include "confFile" . }}
+        - name: OBSERVABILITY_ENABLED
+          value: {{ .Values.global.observability.enabled | quote }}
+        {{- if .Values.global.observability.enabled }}
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: {{ .Values.global.observability.otelExporterOtlpInsecure | quote }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ required "Otel Exporter Otlp Endpoint must be set if observability is enabled" .Values.global.observability.otelExporterOtlpEndpoint }}
+        ports:
+          - name: prometheus
+            containerPort: 9090
+            protocol: TCP
+        {{- end }}
         resources:
 {{ toYaml .Values.verify.resources | trim | indent 10 }}
         volumeMounts:
