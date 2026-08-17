@@ -12,6 +12,12 @@ spec:
     port: {{ template "inboxServicePort" . }}
     targetPort: inbox
     protocol: TCP
+  {{- if .Values.global.observability.enabled }}
+  - name: prometheus
+    port: 9090
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.fullname" . }}-inbox
 {{- end }}
