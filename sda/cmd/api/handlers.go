@@ -431,7 +431,7 @@ func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileid")
 
 	if _, err := uuid.Parse(fileID); err != nil {
-		span.Warn("invalid file ID")
+		span.Warn("invalid file ID", slog.Any("error", err), slog.String("file_id", fileID))
 		writeJSON(w, http.StatusBadRequest, "invalid file id")
 
 		return
@@ -514,7 +514,7 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	fileID := r.PathValue("fileid")
 	if _, err := uuid.Parse(fileID); err != nil {
-		span.Warn("invalid file ID")
+		span.Warn("invalid file ID", slog.String("file-id", fileID))
 		writeJSON(w, http.StatusBadRequest, "invalid file id")
 
 		return
