@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -125,7 +126,7 @@ func (ts *DatabaseTests) SetupTest() {
 	}
 	var err error
 	// test working database connection
-	ts.db, err = NewPostgresSQLDatabase(
+	ts.db, err = NewPostgresSQLDatabase(context.Background(),
 		Host(dbConf.host),
 		Port(dbConf.port),
 		User(dbConf.user),
@@ -167,7 +168,7 @@ func (ts *DatabaseTests) TearDownTest() {
 // TestWrongPassword tests creation of new database connections with the wrong password
 func (ts *DatabaseTests) TestWrongPassword() {
 	// test wrong credentials
-	_, err := NewPostgresSQLDatabase(
+	_, err := NewPostgresSQLDatabase(context.Background(),
 		Host("localhost"),
 		Port(dbPort),
 		User("hacker"),

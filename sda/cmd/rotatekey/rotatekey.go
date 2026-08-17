@@ -58,6 +58,9 @@ func main() {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app := RotateKey{}
 
 	sigc := make(chan os.Signal, 5)
@@ -87,7 +90,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -131,6 +134,7 @@ func main() {
 	}()
 
 	log.Info("Starting rotatekey service")
+	startupSpan.End()
 
 	go func() {
 		// Create a function to handle panic and exit gracefully

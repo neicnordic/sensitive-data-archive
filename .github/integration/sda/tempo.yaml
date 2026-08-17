@@ -1,0 +1,17 @@
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: "0.0.0.0:4318"  # Listen to OTLP HTTP on port 4318, on all interfaces.
+        grpc:
+          endpoint: "0.0.0.0:4317"  # This example repository only utilises the OTLP gRPC receiver on port 4317, on all interfaces.
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/traces

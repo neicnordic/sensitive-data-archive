@@ -380,7 +380,7 @@ func (p *Proxy) checkAndSendMessage(fileID string, jsonMessage []byte) error {
 func (p *Proxy) forwardRequestToBackend(r *http.Request) (*http.Response, error) {
 	p.resignHeader(r)
 	// Redirect request
-	nr, err := http.NewRequest(r.Method, p.s3Conf.Endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration
+	nr, err := http.NewRequestWithContext(r.Context(), r.Method, p.s3Conf.Endpoint+r.URL.String(), r.Body) // #nosec G704 -- endpoint and port controlled by configuration
 	if err != nil {
 		return nil, err
 	}

@@ -84,12 +84,15 @@ func run() error {
 		}
 	}()
 
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
 
-	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
+	app.Broker, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker: %v", err)
 	}
@@ -103,7 +106,7 @@ func run() error {
 		}
 	}()
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db: %v", err)
 	}
@@ -155,6 +158,7 @@ func run() error {
 		consumeErr <- app.Broker.Subscribe(ctx, ingestconf.SourceQueue(), app.handleMessage)
 	}()
 	slog.Info("ingest service started")
+	startupSpan.End()
 
 	select {
 	case sig := <-sigc:

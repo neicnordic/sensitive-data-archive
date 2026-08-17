@@ -255,13 +255,15 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, sourceQueue string, mes
 
 				return false
 			}
-			b.handleDelivery(ctx, sourceQueue, delivery, handleFunc)
+			b.handleDelivery(sourceQueue, delivery, handleFunc)
 		}
 	}
 }
 
-func (b *rmqBroker) handleDelivery(ctx context.Context, sourceQueue string, delivery amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) {
-	ctx = extractTraceContext(ctx, delivery.Headers)
+func (b *rmqBroker) handleDelivery(sourceQueue string, delivery amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) {
+	// We use a background context here so that each message consumptions is its own trace, and not linked to
+	// context which created the broker.
+	ctx := extractTraceContext(context.Background(), delivery.Headers)
 	ctx, span := observability.StartSpan(ctx, "rabbitmq.handle-message",
 		attribute.String("messaging.system", "rabbitmq"),
 		attribute.String("messaging.source.name", sourceQueue),
