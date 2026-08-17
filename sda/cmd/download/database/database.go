@@ -307,7 +307,18 @@ func Init() error {
 		connStr += fmt.Sprintf(" sslcert=%s sslkey=%s", config.DBClientCert(), config.DBClientKey())
 	}
 
-	sqlDB, err := otelsql.Open("postgres", connStr)
+	sqlDB, err := otelsql.Open("postgres", connStr,
+		otelsql.WithAttributes(
+			semconv.DBSystemPostgreSQL,
+		),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			OmitConnResetSession: true,
+			OmitConnectorConnect: true,
+			OmitConnPrepare:      true,
+			OmitRows:             true,
+			OmitConnQuery:        true,
+		}),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
 	}

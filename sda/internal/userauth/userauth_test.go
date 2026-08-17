@@ -1,6 +1,7 @@
 package userauth
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -154,7 +155,7 @@ func (ts *UserAuthTest) TestUserTokenAuthenticator_WrongURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "/dummy/"
 
-	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(context.Background(), jwtpubkeyurl)
 	assert.Equal(ts.T(), "jwtpubkeyurl is not a proper URL (/dummy/)", err.Error())
 }
 
@@ -162,7 +163,7 @@ func (ts *UserAuthTest) TestUserTokenAuthenticator_BadURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := "dummy.com/jwk"
 
-	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(context.Background(), jwtpubkeyurl)
 	assert.Equal(ts.T(), "parse \"dummy.com/jwk\": invalid URI for request", err.Error())
 }
 
@@ -170,7 +171,7 @@ func (ts *UserAuthTest) TestUserTokenAuthenticator_GoodURL() {
 	a := NewValidateFromToken(jwk.NewSet())
 	jwtpubkeyurl := fmt.Sprintf("http://localhost:%d/jwk", OIDCport)
 
-	err := a.FetchJwtPubKeyURL(jwtpubkeyurl)
+	err := a.FetchJwtPubKeyURL(context.Background(), jwtpubkeyurl)
 	assert.NoError(ts.T(), err, "failed to fetch remote JWK")
 	assert.Equal(ts.T(), 3, a.Keyset.Len())
 }
