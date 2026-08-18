@@ -784,8 +784,8 @@ case_8_rotate_to_deprecated_key_rejection() {
     if [ -z "$FILE_ID" ]; then
         echo "❌ Error: Pre-seeded file EGAF00000000101 not found in database!"
         # Cleanup override before exiting on error
-        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml up -d --no-deps api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart api reencrypt download rotatekey > /dev/null
         exit 1
     fi
     echo "Found pre-seeded file UUID: $FILE_ID"
@@ -806,8 +806,8 @@ case_8_rotate_to_deprecated_key_rejection() {
     if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 202 ]; then
         echo "❌ Error: API endpoint failed to queue the rotation job (HTTP $HTTP_STATUS)"
         # Cleanup override before exiting on error
-        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml up -d --no-deps api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart api reencrypt download rotatekey > /dev/null
         exit 1
     fi
 
@@ -825,8 +825,8 @@ case_8_rotate_to_deprecated_key_rejection() {
         echo "$ROTATE_LOGS"
         echo "-----------------------------"
         # Cleanup override before exiting on error
-        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml up -d --no-deps api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart api reencrypt download rotatekey > /dev/null
         exit 1
     fi
 
@@ -837,15 +837,15 @@ case_8_rotate_to_deprecated_key_rejection() {
     if [ "$CURRENT_KEY_HASH" = "$DEPRECATED_HASH" ]; then
         echo "❌ Error: File encryption key was wrongly updated to the deprecated key in the DB!"
         # Cleanup override before exiting on error
-        docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-        docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml up -d --no-deps api reencrypt download rotatekey > /dev/null
+        docker compose -f compose.yml restart api reencrypt download rotatekey > /dev/null
         exit 1
     fi
     echo "Confirmed file encryption key remained unchanged ($ORIGINAL_KEY_HASH)."
 
     echo -e "\nStep 8.9: Resetting services back to default base compose state..."
-    docker compose -f compose.yml up -d --no-deps ingest api reencrypt download rotatekey > /dev/null
-    docker compose -f compose.yml restart ingest api reencrypt download rotatekey > /dev/null
+    docker compose -f compose.yml up -d --no-deps api reencrypt download rotatekey > /dev/null
+    docker compose -f compose.yml restart api reencrypt download rotatekey > /dev/null
 
     echo "Waiting for default services to stabilize..."
     until nc -z localhost 50051; do echo -n "."; sleep 1; done
