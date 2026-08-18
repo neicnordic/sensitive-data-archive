@@ -15,7 +15,7 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-mapper
+      app: {{ template "sda.fullname" . }}-mapper
       release: {{ .Release.Name }}
   template:
     metadata:

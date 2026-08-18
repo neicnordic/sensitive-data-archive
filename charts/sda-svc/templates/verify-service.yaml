@@ -1,4 +1,4 @@
-{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 {{- if .Values.global.observability.enabled }}
 apiVersion: v1
 kind: Service
