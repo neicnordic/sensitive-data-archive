@@ -714,6 +714,11 @@ case_7_deprecated_key_ingest_rejection() {
         echo "❌ FAILURE: Expected HTTP 400 or 500 rejection, but received HTTP $HTTP_STATUS!"
         echo "For the current setup, ingest does not reject files encrypted with deprecated keys, which is a known limitation."
 
+        FILE_STATE=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c \
+            "SELECT last_event FROM sda.files WHERE id='$UUID';" | tr -d '\r\n[:space:]')
+        echo "File DB last event: ${FILE_STATE:-'NULL'}, should be 'error'"
+        echo
+
         # Cleanup override before exiting on error
         docker compose -f compose.yml up -d --no-deps ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
         docker compose -f compose.yml restart ingest verify finalize mapper api reencrypt download rotatekey > /dev/null
