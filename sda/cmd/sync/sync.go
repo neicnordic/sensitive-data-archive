@@ -222,7 +222,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	if err != nil {
 		log.Errorf("failed to build SyncDatasetJSON, Reason: %v", err)
 	}
-	if err := sendPOST(blob); err != nil {
+	if err := sendPOST(ctx, blob); err != nil {
 		log.Errorf("failed to send POST, Reason: %v", err)
 		if err := delivered.Nack(false, false); err != nil {
 			log.Errorf("failed to nack following sendPOST error message")
@@ -333,7 +333,7 @@ func buildSyncDatasetJSON(ctx context.Context, b []byte) ([]byte, error) {
 	return datasetJSON, nil
 }
 
-func sendPOST(payload []byte) error {
+func sendPOST(ctx context.Context, payload []byte) error {
 	client := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -344,7 +344,7 @@ func sendPOST(payload []byte) error {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, uri, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
