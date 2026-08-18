@@ -1,4 +1,6 @@
-{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if eq "isolated" .Values.global.schemaType }}
+{{- if ne "" .Values.global.sync.remote.host }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 {{- if .Values.global.observability.enabled }}
 apiVersion: v1
 kind: Service
@@ -14,5 +16,7 @@ spec:
     protocol: TCP
   selector:
     app: {{ template "sda.fullname" . }}-sync
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
