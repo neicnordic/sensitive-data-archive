@@ -15,3 +15,24 @@ storage:
     backend: local
     local:
       path: /tmp/tempo/traces
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+
+  processor:
+    span_metrics: {}
+    service_graphs: {}
+
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - span-metrics
+        - service-graphs
