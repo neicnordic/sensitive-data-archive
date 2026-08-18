@@ -28,6 +28,9 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 
 		return nil, errors.New("unexpected error: could not cast io.ReadCloser to io.ReadSeekCloser")
 	}
+	// end span from NewFileReader to avoid leaking span, and override with NewFileReadSeeker
+	seeker.span.End()
+	
 	seeker.span = span
 
 	return seeker, nil
