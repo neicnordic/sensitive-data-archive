@@ -16,17 +16,10 @@ Before running the test suite, ensure you have the following tools installed and
 
 ## Quick start
 
-### 1. Build the Docker images
+### 1. Build the Docker images and start the development environment
 
-From the root of the repository, build all required images:
-
-```bash
-make build-all
-```
-
-### 2. Start the development environment
-
-Start all services required for the key rotation tests:
+From the root of the repository, build required images and start all
+services for the key rotation tests:
 
 ```bash
 make dev-key-rotation-up
@@ -34,7 +27,7 @@ make dev-key-rotation-up
 
 Wait until all services are up and healthy before continuing.
 
-### 3. Run the key rotation demo
+### 2. Run the key rotation demo
 
 From the `dev-tools/key-rotation-test` directory, run:
 
