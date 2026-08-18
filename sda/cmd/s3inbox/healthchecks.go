@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	log "github.com/sirupsen/logrus"
@@ -69,13 +73,25 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
 func (p *Proxy) httpsGetCheck(uri string) error {
-	resp, e := p.client.Get(uri) // #nosec G704 uri originates from configuration
-	if e != nil {
-		return e
+	// Use a dedicated context timeout for readiness checks so s3inbox logs the timeout first
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create health check request: %w", err)
 	}
-	_ = resp.Body.Close() // ignoring error
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("returned status %d", resp.StatusCode)
+
+	resp, e := p.client.Do(req)
+	if e != nil {
+		return fmt.Errorf("S3 backend check failed for %s: %w", uri, e)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+
+		return fmt.Errorf("S3 check to %s returned status %d: %s", uri, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
 	return nil
