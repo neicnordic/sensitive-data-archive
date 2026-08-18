@@ -8,7 +8,7 @@ The test covers the key rotation scenarios described in [Issue #2039](https://gi
 
 Before running the test suite, ensure you have the following tools installed and available in your `PATH`:
 
-*   **`sda-cli`**: Sensitive Data Archive CLI tool ([Installation / Build instructions](../../README.md#building-sda-cli))
+*   **`sda-cli`**: Sensitive Data Archive CLI tool (https://github.com/NBISweden/sda-cli)
 *   **`s3cmd`**: S3 command-line client used for dataset upload/verification (`brew install s3cmd` or `apt install s3cmd`)
 *   **`jq`**: Command-line JSON processor (`brew install jq` or `apt install jq`)
 *   **`nc` (netcat)**: Networking utility used for service health checks (`apt install netcat-openbsd` or pre-installed on macOS)
