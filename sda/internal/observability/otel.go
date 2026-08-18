@@ -139,7 +139,7 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 }
 
 func StartSpan(ctx context.Context, spanName string, attrs ...attribute.KeyValue) (context.Context, Span) {
-	s := span{
+	s := &span{
 		name:  spanName,
 		start: time.Now(),
 	}
