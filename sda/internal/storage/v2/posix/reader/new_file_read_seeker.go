@@ -30,7 +30,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 	}
 	// end span from NewFileReader to avoid leaking span, and override with NewFileReadSeeker
 	seeker.span.End()
-	
+
 	seeker.span = span
 
 	return seeker, nil
