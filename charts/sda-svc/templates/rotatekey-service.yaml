@@ -1,4 +1,5 @@
-{{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.c4gh.rotatePubKeyData }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 {{- if .Values.global.observability.enabled }}
 apiVersion: v1
 kind: Service
@@ -14,5 +15,6 @@ spec:
     protocol: TCP
   selector:
     app: {{ template "sda.fullname" . }}-rotatekey
+{{- end }}
 {{- end }}
 {{- end }}
