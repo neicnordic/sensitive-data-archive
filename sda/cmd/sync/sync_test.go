@@ -218,7 +218,7 @@ func (s *SyncTest) TestSendPOST() {
 		RemotePassword: "test",
 	}
 	syncJSON := []byte(`{"user":"test.user@example.com", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": [{"filepath": "inbox/user/file1.c4gh","file_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "sha256": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}, {"filepath": "inbox/user/file2.c4gh","file_id": "ed6af454-d910-49e3-8cda-488a6f246e76", "sha256": "c967d96e56dec0f0cfee8f661846238b7f15771796ee1c345cae73cd812acc2b"}]}`)
-	err := sendPOST(syncJSON)
+	err := sendPOST(context.Background(), syncJSON)
 	assert.NoError(s.T(), err)
 
 	conf.Sync = config.Sync{
@@ -226,5 +226,5 @@ func (s *SyncTest) TestSendPOST() {
 		RemoteUser:     "foo",
 		RemotePassword: "bar",
 	}
-	assert.EqualError(s.T(), sendPOST(syncJSON), "401 Unauthorized")
+	assert.EqualError(s.T(), sendPOST(context.Background(), syncJSON), "401 Unauthorized")
 }
