@@ -40,14 +40,22 @@ backup_database() {
 # Flashes the database back to pristine, original status
 restore_database() {
     echo "Restoring database to clean snapshot state..."
-    # Terminate active backend connections to allow drop/restore operations
-    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql -U postgres -d sda -c \
+
+    # Connect to 'postgres' administrative DB to revoke access to 'sda'
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql -U postgres -d postgres -c \
+        "ALTER DATABASE sda WITH ALLOW_CONNECTIONS false;" > /dev/null 2>&1 || true
+
+    # Kill all active connections sitting on 'sda'
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql -U postgres -d postgres -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'sda' AND pid <> pg_backend_pid();" > /dev/null 2>&1
 
-    # Clean and restore database structures
+    # Drop and recreate 'sda' (sda passed as positional argument, no -d)
     docker compose exec -T -e PGPASSWORD=rootpasswd postgres dropdb -U postgres --if-exists sda
     docker compose exec -T -e PGPASSWORD=rootpasswd postgres createdb -U postgres sda
-    docker compose exec -T -e PGPASSWORD=rootpasswd postgres pg_restore -U postgres -d sda /var/lib/postgresql/data/clean_db.dump > /dev/null
+
+    # Restore the clean database baseline
+    docker compose exec -T -e PGPASSWORD=rootpasswd postgres pg_restore $DB_OPTS /var/lib/postgresql/data/clean_db.dump > /dev/null
+
     echo "SUCCESS: Database state rolled back to clean baseline!"
 }
 
