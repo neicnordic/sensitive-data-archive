@@ -20,7 +20,7 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-mapper
+        app: {{ template "sda.fullname" . }}-mapper
         role: mapper
         release: {{ .Release.Name }}
       annotations:

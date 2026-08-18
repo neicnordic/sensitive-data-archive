@@ -41,16 +41,21 @@ type span struct {
 	ctx   context.Context
 	name  string
 	start time.Time
+	ended bool
 }
 
-func (s span) EndWithAttributes(attrs ...attribute.KeyValue) {
+func (s *span) EndWithAttributes(attrs ...attribute.KeyValue) {
 	s.end(nil, attrs...)
 }
-func (s span) End(options ...oteltrace.SpanEndOption) {
+func (s *span) End(options ...oteltrace.SpanEndOption) {
 	s.end(options, nil...)
 }
 
-func (s span) end(options []oteltrace.SpanEndOption, attrs ...attribute.KeyValue) {
+func (s *span) end(options []oteltrace.SpanEndOption, attrs ...attribute.KeyValue) {
+	if s.ended {
+		return
+	}
+
 	if len(attrs) > 0 {
 		s.SetAttributes(attrs...)
 	}
@@ -65,21 +70,22 @@ func (s span) end(options []oteltrace.SpanEndOption, attrs ...attribute.KeyValue
 	)
 
 	s.Span.End(options...)
+	s.ended = true
 }
 
-func (s span) Debug(msg string, args ...slog.Attr) {
+func (s *span) Debug(msg string, args ...slog.Attr) {
 	s.log(msg, slog.LevelDebug, args...)
 }
 
-func (s span) Info(msg string, args ...slog.Attr) {
+func (s *span) Info(msg string, args ...slog.Attr) {
 	s.log(msg, slog.LevelInfo, args...)
 }
 
-func (s span) Warn(msg string, args ...slog.Attr) {
+func (s *span) Warn(msg string, args ...slog.Attr) {
 	s.log(msg, slog.LevelWarn, args...)
 }
 
-func (s span) Error(msg string, err error, args ...slog.Attr) {
+func (s *span) Error(msg string, err error, args ...slog.Attr) {
 	if err != nil {
 		s.RecordError(err)
 		args = append(args, slog.Any("error", err))
@@ -88,7 +94,7 @@ func (s span) Error(msg string, err error, args ...slog.Attr) {
 	s.SetStatus(codes.Error, msg)
 }
 
-func (s span) log(msg string, level slog.Level, args ...slog.Attr) {
+func (s *span) log(msg string, level slog.Level, args ...slog.Attr) {
 	slog.LogAttrs(s.ctx, level, msg, append(args,
 		slog.String("trace-id", s.SpanContext().TraceID().String()),
 		slog.String("span-id", s.SpanContext().SpanID().String()),
