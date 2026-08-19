@@ -126,3 +126,5 @@ sync:
 
 schema:
   type: "isolated"
+
+schema_type: "isolated"
