@@ -30,8 +30,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 )
 
-var errorBadRequest = errors.New("bad request")
-
 func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := observability.StartSpan(r.Context(), "rbac")
