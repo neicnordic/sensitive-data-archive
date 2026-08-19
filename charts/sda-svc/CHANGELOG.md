@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add observability configuration options
 
+### Fixed
+- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
 ## [5.0.1] - 2026-09-24
 
 ### Fixed
