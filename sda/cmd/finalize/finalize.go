@@ -153,7 +153,7 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.CorrelationId))
 	defer span.End()
 
 	log.Debugf("Received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)

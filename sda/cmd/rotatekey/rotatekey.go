@@ -165,7 +165,7 @@ func main() {
 func (app *RotateKey) handleMessage(delivered amqp091.Delivery) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.CorrelationId))
 	defer span.End()
 
 	err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", app.Conf.Broker.SchemasPath), delivered.Body)
