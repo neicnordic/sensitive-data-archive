@@ -285,6 +285,12 @@ func Init() error {
 		}
 	}
 
+	pg := &PostgresDB{
+		db:                 nil,
+		preparedStatements: make(map[string]*sql.Stmt),
+		metricsReg:         nil,
+	}
+
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		config.DBHost(),
@@ -302,8 +308,8 @@ func Init() error {
 	if config.DBClientCert() != "" && config.DBClientKey() != "" {
 		connStr += fmt.Sprintf(" sslcert=%s sslkey=%s", config.DBClientCert(), config.DBClientKey())
 	}
-
-	sqlDB, err := otelsql.Open("postgres", connStr,
+	var err error
+	pg.db, err = otelsql.Open("postgres", connStr,
 		otelsql.WithAttributes(
 			semconv.DBSystemPostgreSQL,
 		),
@@ -319,50 +325,43 @@ func Init() error {
 		return fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	metricsReg, err := otelsql.RegisterDBStatsMetrics(sqlDB, otelsql.WithAttributes(
+	pg.metricsReg, err = otelsql.RegisterDBStatsMetrics(pg.db, otelsql.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 	))
 	if err != nil {
-		_ = sqlDB.Close()
+		_ = pg.Close()
 
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Configure connection pool
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	pg.db.SetMaxOpenConns(10)
+	pg.db.SetMaxIdleConns(5)
+	pg.db.SetConnMaxLifetime(5 * time.Minute)
 
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := pg.db.PingContext(ctx); err != nil {
+		_ = pg.Close()
+
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Info("Database connection established")
-
 	// Prepare all statements to verify correctness and improve performance
-	preparedStatements := make(map[string]*sql.Stmt)
 	for queryName, query := range queries {
-		preparedStmt, err := sqlDB.PrepareContext(ctx, query)
+		preparedStmt, err := pg.db.PrepareContext(ctx, query)
 		if err != nil {
-			log.Errorf("failed to prepare query: %s, due to: %v", queryName, err)
+			_ = pg.Close()
 
 			return errors.Join(fmt.Errorf("failed to prepare query: %s", queryName), err)
 		}
-		preparedStatements[queryName] = preparedStmt
+		pg.preparedStatements[queryName] = preparedStmt
 		log.Debugf("Prepared query: %s", queryName)
 	}
 
-	log.Infof("Successfully prepared %d database queries", len(preparedStatements))
-
-	RegisterDatabase(&PostgresDB{
-		db:                 sqlDB,
-		preparedStatements: preparedStatements,
-		metricsReg:         metricsReg,
-	})
+	RegisterDatabase(pg)
 
 	return nil
 }
