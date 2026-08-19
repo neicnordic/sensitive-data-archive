@@ -45,6 +45,9 @@ Closes #2387.
 
 - Add observability configuration options
 
+### Fixed
+- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
 ### Changed
 
 - Update api secret template to populate expected configs as per sda v3.1.75 using broker/v2, etc
