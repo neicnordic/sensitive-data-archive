@@ -436,8 +436,9 @@ func main() {
 	}
 
 	app.Use(sess.Handler())
+	otelMiddleware := otelhttp.NewMiddleware("http-server")
 	app.WrapRouter(func(w http.ResponseWriter, r *http.Request, router http.HandlerFunc) {
-		otelhttp.NewMiddleware("http-server")(router).ServeHTTP(w, r)
+		otelMiddleware(router).ServeHTTP(w, r)
 	})
 
 	// Connect to DB
