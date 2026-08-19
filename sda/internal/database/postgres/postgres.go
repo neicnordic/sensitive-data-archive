@@ -39,7 +39,13 @@ func NewPostgresSQLDatabase(ctx context.Context, options ...func(config *dbConfi
 		o(dbConf)
 	}
 
-	pg := &pgDb{db: nil, config: dbConf}
+	pg := &pgDb{
+		db:                 nil,
+		config:             dbConf,
+		schemaVersion:      0,
+		preparedStatements: make(map[string]*sql.Stmt),
+		metricsReg:         nil,
+	}
 
 	pqConnectConfig, err := pq.NewConnectorConfig(pg.config.buildPostgresConfig())
 	if err != nil {
@@ -74,7 +80,6 @@ func NewPostgresSQLDatabase(ctx context.Context, options ...func(config *dbConfi
 	}
 
 	// Prepare the statements from the queries
-	pg.preparedStatements = make(map[string]*sql.Stmt)
 	for queryName, query := range queries {
 		preparedStmt, err := pg.db.PrepareContext(ctx, query)
 		if err != nil {
