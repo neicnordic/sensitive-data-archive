@@ -148,7 +148,7 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.MessageId))
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.CorrelationId))
 	defer span.End()
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", mqBroker.Conf.SchemasPath), delivered.Body); err != nil {
