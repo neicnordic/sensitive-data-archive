@@ -84,6 +84,10 @@ func run() error {
 		return fmt.Errorf("failed to initialize archive reader: %v", err)
 	}
 
+	if app.archiveReader == nil || app.backupWriter == nil {
+		log.Warn("archive or backup destination not configured, backup will not be performed.")
+	}
+
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
