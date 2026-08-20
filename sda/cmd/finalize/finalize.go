@@ -252,21 +252,21 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 	case "same":
 		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
 	default:
-		if app.archiveReader != nil && app.backupWriter != nil {
-			if callbacks, err := app.backupFile(ctx, tx, message); err != nil {
-				log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
-
-				if callbacks != nil {
-					// Send the message to an error queue  but don't requeue it
-					return callbacks, nil
-				}
-
-				return nil, err
-			}
-		}
-
 		if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
 			log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
+
+			return nil, err
+		}
+	}
+
+	if app.archiveReader != nil && app.backupWriter != nil {
+		if callbacks, err := app.backupFile(ctx, tx, message); err != nil {
+			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+
+			if callbacks != nil {
+				// Send the message to an error queue  but don't requeue it
+				return callbacks, nil
+			}
 
 			return nil, err
 		}
