@@ -322,6 +322,5 @@ func (app *Finalize) errorQueue(originMessage *brokerv2.Message, errorQueueReaso
 		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
 			log.Errorf("failed to publish to error queue, reason: %v", err)
 		}
-		log.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }
