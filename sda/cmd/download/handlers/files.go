@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -39,11 +40,9 @@ type resolvedFile struct {
 // resolveFileBase performs auth, permission check, file lookup,
 // and storage resolution common to both full-download and content-only endpoints.
 // Returns (nil, false) if an error response was already sent.
-func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileBase")
+func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolvedBase, bool) {
+	ctx, span := observability.StartSpan(ctx, "resolveFileBase")
 	defer span.End()
-
-	c.Request = c.Request.WithContext(reqCtx)
 
 	fileID := c.Param("fileId")
 
@@ -57,7 +56,7 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 
 	// Permission check: return 403 for both "no access" AND "not found" (no existence leakage)
 	if !config.JWTAllowAllData() {
-		hasPermission, err := h.db.CheckFilePermission(c.Request.Context(), fileID, authCtx.Datasets)
+		hasPermission, err := h.db.CheckFilePermission(ctx, fileID, authCtx.Datasets)
 		if err != nil {
 			log.Errorf("failed to check file permission: %v", err)
 			problemJSON(c, http.StatusInternalServerError, "failed to check file permission")
@@ -74,7 +73,7 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 	}
 
 	// Get file from DB
-	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
+	file, err := h.db.GetFileByID(ctx, fileID)
 	if err != nil {
 		log.Errorf("failed to retrieve file info: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve file info")
@@ -111,7 +110,7 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 
 		log.Warnf("file %s has no archive_location stored, falling back to FindFile search", file.ID)
 
-		location, err = h.storageReader.FindFile(c.Request.Context(), file.ArchivePath)
+		location, err = h.storageReader.FindFile(ctx, file.ArchivePath)
 		if err != nil {
 			log.Errorf("failed to find file in storage: %v", err)
 			problemJSON(c, http.StatusInternalServerError, "file not found in storage")
@@ -129,11 +128,9 @@ func (h *Handlers) resolveFileBase(c *gin.Context) (*resolvedBase, bool) {
 
 // resolveFileForDownload wraps resolveFileBase, extracts a public key,
 // and invokes gRPC re-encryption.
-func (h *Handlers) resolveFileForDownload(c *gin.Context) (*resolvedFile, bool) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForDownload")
+func (h *Handlers) resolveFileForDownload(ctx context.Context, c *gin.Context) (*resolvedFile, bool) {
+	ctx, span := observability.StartSpan(ctx, "resolveFileForDownload")
 	defer span.End()
-
-	c.Request = c.Request.WithContext(reqCtx)
 
 	// Extract public key from headers
 	publicKey, errorCode, detail := extractPublicKey(c)
@@ -143,7 +140,7 @@ func (h *Handlers) resolveFileForDownload(c *gin.Context) (*resolvedFile, bool) 
 		return nil, false
 	}
 
-	base, ok := h.resolveFileBase(c)
+	base, ok := h.resolveFileBase(ctx, c)
 	if !ok {
 		return nil, false
 	}
@@ -164,7 +161,7 @@ func (h *Handlers) resolveFileForDownload(c *gin.Context) (*resolvedFile, bool) 
 		return nil, false
 	}
 
-	newHeader, err := h.reencryptClient.ReencryptHeader(c.Request.Context(), base.file.Header, publicKey)
+	newHeader, err := h.reencryptClient.ReencryptHeader(ctx, base.file.Header, publicKey)
 	if err != nil {
 		log.Errorf("failed to reencrypt header: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to prepare file for download")
@@ -198,12 +195,10 @@ func contentDisposition(submittedPath string) string {
 // DownloadFile handles file download by stable ID.
 // GET /files/:fileId
 func (h *Handlers) DownloadFile(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "DownloadFile")
+	ctx, span := observability.StartSpan(c.Request.Context(), "DownloadFile")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForDownload(c)
+	resolved, ok := h.resolveFileForDownload(ctx, c)
 	if !ok {
 		return
 	}
@@ -219,7 +214,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	fileReader, err := h.storageReader.NewFileReadSeeker(c.Request.Context(), resolved.location, file.ArchivePath)
+	fileReader, err := h.storageReader.NewFileReadSeeker(ctx, resolved.location, file.ArchivePath)
 	if err != nil {
 		log.Errorf("failed to open file: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to open file")
@@ -280,7 +275,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 	}
 
 	// Audit event on completion
-	h.auditLogger.Log(c.Request.Context(), audit.Event{
+	h.auditLogger.Log(ctx, audit.Event{
 		Event:         audit.EventCompleted,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
@@ -294,12 +289,10 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 // HeadFile handles HEAD requests for file metadata.
 // HEAD /files/:fileId
 func (h *Handlers) HeadFile(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFile")
+	ctx, span := observability.StartSpan(c.Request.Context(), "HeadFile")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForDownload(c)
+	resolved, ok := h.resolveFileForDownload(ctx, c)
 	if !ok {
 		return
 	}
@@ -335,13 +328,11 @@ func contentETag(fileID string, archiveSize int64) string {
 }
 
 // resolveFileForContent wraps resolveFileBase and computes the basic content ETag.
-func (h *Handlers) resolveFileForContent(c *gin.Context) (*resolvedContentFile, bool) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "resolveFileForContent")
+func (h *Handlers) resolveFileForContent(ctx context.Context, c *gin.Context) (*resolvedContentFile, bool) {
+	ctx, span := observability.StartSpan(ctx, "resolveFileForContent")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	base, ok := h.resolveFileBase(c)
+	base, ok := h.resolveFileBase(ctx, c)
 	if !ok {
 		return nil, false
 	}
@@ -357,12 +348,10 @@ func (h *Handlers) resolveFileForContent(c *gin.Context) (*resolvedContentFile, 
 // GetFileHeader handles requests for the re-encrypted file header only.
 // GET /files/:fileId/header
 func (h *Handlers) GetFileHeader(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileHeader")
+	ctx, span := observability.StartSpan(c.Request.Context(), "GetFileHeader")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForDownload(c)
+	resolved, ok := h.resolveFileForDownload(ctx, c)
 	if !ok {
 		return
 	}
@@ -377,7 +366,7 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 	c.Header("SDA-Content-ETag", cETag)
 	c.Data(http.StatusOK, "application/octet-stream", resolved.newHeader)
 
-	h.auditLogger.Log(c.Request.Context(), audit.Event{
+	h.auditLogger.Log(ctx, audit.Event{
 		Event:         audit.EventHeader,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
@@ -391,12 +380,10 @@ func (h *Handlers) GetFileHeader(c *gin.Context) {
 // HeadFileHeader handles HEAD requests for the file header metadata.
 // HEAD /files/:fileId/header
 func (h *Handlers) HeadFileHeader(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileHeader")
+	ctx, span := observability.StartSpan(c.Request.Context(), "HeadFileHeader")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForDownload(c)
+	resolved, ok := h.resolveFileForDownload(ctx, c)
 	if !ok {
 		return
 	}
@@ -413,12 +400,10 @@ func (h *Handlers) HeadFileHeader(c *gin.Context) {
 // GetFileContent handles requests for the file body (archive data without header).
 // GET /files/:fileId/content
 func (h *Handlers) GetFileContent(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetFileContent")
+	ctx, span := observability.StartSpan(c.Request.Context(), "GetFileContent")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForContent(c)
+	resolved, ok := h.resolveFileForContent(ctx, c)
 	if !ok {
 		return
 	}
@@ -434,7 +419,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 		return
 	}
 
-	fileReader, err := h.storageReader.NewFileReadSeeker(c.Request.Context(), resolved.location, file.ArchivePath)
+	fileReader, err := h.storageReader.NewFileReadSeeker(ctx, resolved.location, file.ArchivePath)
 	if err != nil {
 		log.Errorf("failed to open file: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to open file")
@@ -488,7 +473,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 	}
 
 	// Audit event on completion
-	h.auditLogger.Log(c.Request.Context(), audit.Event{
+	h.auditLogger.Log(ctx, audit.Event{
 		Event:         audit.EventContent,
 		UserID:        resolved.authCtx.Subject,
 		FileID:        file.ID,
@@ -502,12 +487,10 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 // HeadFileContent handles HEAD requests for the file content metadata.
 // HEAD /files/:fileId/content
 func (h *Handlers) HeadFileContent(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "HeadFileContent")
+	ctx, span := observability.StartSpan(c.Request.Context(), "HeadFileContent")
 	defer span.End()
 
-	c.Request = c.Request.WithContext(reqCtx)
-
-	resolved, ok := h.resolveFileForContent(c)
+	resolved, ok := h.resolveFileForContent(ctx, c)
 	if !ok {
 		return
 	}
