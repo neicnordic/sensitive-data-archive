@@ -120,8 +120,8 @@ func (ts *TestSuite) TestBackupFile() {
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
 
 	tx, _ := ts.mockDB.BeginTransaction(context.Background())
-
-	assert.Equal(ts.T(), nil, ts.app.backupFile(context.Background(), tx, message))
+	_, err := ts.app.backupFile(context.Background(), tx, message)
+	assert.Equal(ts.T(), nil, err)
 
 	tx.Commit()
 }
@@ -158,11 +158,24 @@ func (ts *TestSuite) TestHandleMessage_other() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
 	assert.Equal(ts.T(), fmt.Sprintf("file with file-id: %s is not verified yet, aborting work", fileID), err.Error())
+}
+
+func (ts *TestSuite) TestHandleMessage_missing() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+
+	message := createMessage(filePath, userName, accession, fileID)
+	callback, _ := ts.app.handleMessage(context.Background(), message)
+	assert.NotNil(ts.T(), callback)
 }
 
 func (ts *TestSuite) TestSetAccession_duplicate() {
