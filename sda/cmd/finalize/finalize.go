@@ -154,7 +154,7 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	return callbacks, err
 }
 
-func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) error {
+func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, message *brokerv2.Message) error {
 	log.Debug("Backup initiated")
 
 	archiveData, err := app.db.GetArchived(ctx, message.Key)
@@ -205,18 +205,6 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 	_ = contentReader.Close()
 
-	tx, err := app.db.BeginTransaction(ctx)
-	if err != nil {
-		log.Errorf("failed to begin transaction, reason: %v", err)
-		// requeue message as db error is not expected and should succeed on retries
-		return err
-	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback transaction, reason: %v", err)
-		}
-	}()
-
 	// Mark file as "backed up" and populate backup path and location
 	if err := tx.SetBackedUp(ctx, backupLocation, archiveData.FilePath, message.Key); err != nil {
 		return fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
@@ -224,12 +212,6 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "backed up", "finalize", "{}", string(message.Body)); err != nil {
 		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		log.Errorf("failed to commit transaction, reason: %v", err)
-		// requeue message as broker error is not expected and should succeed on retries
-		return err
 	}
 
 	log.Debug("Backup completed")
@@ -266,7 +248,7 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
 	default:
 		if app.archiveReader != nil && app.backupWriter != nil {
-			if err = app.backupFile(ctx, message); err != nil {
+			if err = app.backupFile(ctx, tx, message); err != nil {
 				log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
 
 				return nil, err
