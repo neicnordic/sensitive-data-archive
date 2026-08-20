@@ -168,10 +168,6 @@ func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, me
 		return nil, fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
-	if archiveData == nil {
-		return nil, fmt.Errorf("file archive data not found in database, file-id: %s", message.Key)
-	}
-
 	// Get size on disk, will also give some time for the file to appear if it has not already
 	diskFileSize, err := app.archiveReader.GetFileSize(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
