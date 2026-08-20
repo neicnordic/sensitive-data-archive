@@ -119,8 +119,11 @@ func (ts *TestSuite) TestBackupFile() {
 	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil)
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
 
-	err := ts.app.backupFile(context.Background(), message)
-	assert.Equal(ts.T(), nil, err)
+	tx, _ := ts.mockDB.BeginTransaction(context.Background())
+
+	assert.Equal(ts.T(), nil, ts.app.backupFile(context.Background(), tx, message))
+
+	tx.Commit()
 }
 
 func (ts *TestSuite) TestHandleMessage_disabled() {
