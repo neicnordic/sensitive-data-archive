@@ -210,6 +210,10 @@ func (tx *pgTx) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]stri
 	return tx.getDatasetFileIDs(ctx, tx.tx, datasetID)
 }
 
+func (tx *pgTx) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
+	return tx.getDatasetDetails(ctx, tx.tx, datasetID)
+}
+
 func (tx *pgTx) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {
 	return tx.getFileDetails(ctx, tx.tx, fileID, event)
 }

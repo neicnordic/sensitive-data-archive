@@ -641,6 +641,48 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
+	datasetID := r.PathValue("datasetid")
+
+	if datasetID == "" {
+		slog.Error("missing dataset id in request")
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: http.StatusText(http.StatusBadRequest),
+		})
+
+		return
+	}
+
+	datasetDetails, err := api.db.GetDatasetDetails(r.Context(), datasetID)
+	if err != nil {
+		slog.Error("failed to get dataset details", "error", err, "dataset_id", datasetID)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error: http.StatusText(http.StatusInternalServerError),
+		})
+
+		return
+	}
+	if datasetDetails == nil {
+		slog.Error("dataset not found", "dataset_id", datasetID)
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error: http.StatusText(http.StatusNotFound),
+		})
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(&struct {
+		Status        string `json:"status"`
+		CreatedAt     string `json:"createdAt"`
+		NumberOfFiles uint64 `json:"numberOfFiles"`
+	}{
+		Status:        datasetDetails.Status,
+		CreatedAt:     datasetDetails.CreatedAt,
+		NumberOfFiles: datasetDetails.NumberOfFiles,
+	})
+}
 func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 	var dataset dataset
 	if err := json.NewDecoder(r.Body).Decode(&dataset); err != nil {

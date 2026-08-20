@@ -325,6 +325,10 @@ func (db *pgDb) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]stri
 	return db.getDatasetFileIDs(ctx, nil, datasetID)
 }
 
+func (db *pgDb) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
+	return db.getDatasetDetails(ctx, nil, datasetID)
+}
+
 func (db *pgDb) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {
 	return db.getFileDetails(ctx, nil, fileID, event)
 }

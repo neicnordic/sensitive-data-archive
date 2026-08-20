@@ -49,6 +49,11 @@ type SubmissionFileInfo struct {
 	CreatedAt          string
 }
 
+type DatasetDetails struct {
+	Status        string
+	CreatedAt     string
+	NumberOfFiles uint64
+}
 type DatasetInfo struct {
 	DatasetID string
 	Status    string

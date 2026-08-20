@@ -74,6 +74,40 @@ paths:
           description: Authentication failure
         "500":
           description: Internal application error
+  /dataset/{datasetID}:
+    get:
+      description: Get the state of a dataset
+      parameters:
+        - in: path
+          name: datasetID
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: registered
+                  createdAt:
+                    type: string
+                    example: 2025-03-30T09:10:11.321Z
+                  numberOfFiles:
+                    type: number
+                    example: 3214
+          description: Successful operation
+        "400":
+          description: Bad request
+        "401":
+          description: Authentication failure
+        "404":
+          description: Dataset not found
+        "500":
+          description: Internal application error
   /dataset/release/{datasetID}:
     post:
       description: Release a dataset, so that it is accessible for downloading
