@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Log in to the Github Container registry
         uses: docker/login-action@v4
@@ -145,7 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Test rabbitmq federation
         run: docker compose -f .github/integration/rabbitmq-federation.yml run federation_test
@@ -157,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Test postgres
         run: docker compose -f .github/integration/postgres.yml run tests
@@ -172,7 +172,7 @@ jobs:
         storage: ["posix", "s3"]
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Test sensitive-data-archive ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
@@ -184,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Test sda-sync
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
 
@@ -194,7 +194,7 @@ jobs:
       - build_images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test sda-validator-orchestrator
         # Given sda-validator-orchestrator needs to run apptainer we need to modify some apparmor restrictions to allow it
         run: |
@@ -217,12 +217,12 @@ jobs:
       fail-fast: false
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Run setup scripts
         run: |
@@ -246,7 +246,7 @@ jobs:
     name: download v2 integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Test download v2
         run: docker compose -f .github/integration/sda-download-v2-integration.yml run --rm integration_test
 
@@ -260,7 +260,7 @@ jobs:
         storage: [s3, posix]
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Test sda-doa ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
@@ -268,7 +268,7 @@ jobs:
   sftp-inbox_integration_test: # TODO this tests is rebuilding sftp-inbox image, shouldnt be needed
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Build image
         run: |
@@ -311,7 +311,7 @@ jobs:
             storage: "posix"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Helm
         uses: azure/setup-helm@v5
