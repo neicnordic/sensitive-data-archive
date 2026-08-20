@@ -139,6 +139,8 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 
 	var callbacks []func()
 	switch status {
+	case "":
+		return []func(){app.errorQueue(message, "file not recognized")}, nil
 	case "disabled":
 		log.Debugf("file with file-id: %s is disabled, aborting work", message.Key)
 
@@ -158,31 +160,31 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	return callbacks, err
 }
 
-func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, message *brokerv2.Message) error {
+func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, message *brokerv2.Message) ([]func(), error) {
 	log.Debug("Backup initiated")
 
 	archiveData, err := app.db.GetArchived(ctx, message.Key)
 	if err != nil {
-		return fmt.Errorf("failed to get file archive information, reason: %v", err)
+		return nil, fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
 
 	if archiveData == nil {
-		return fmt.Errorf("file archive data not found in database, file-id: %s", message.Key)
+		return nil, fmt.Errorf("file archive data not found in database, file-id: %s", message.Key)
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
 	diskFileSize, err := app.archiveReader.GetFileSize(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
-		return fmt.Errorf("failed to get size info for archived file, reason: %v", err)
+		return nil, fmt.Errorf("failed to get size info for archived file, reason: %v", err)
 	}
 
 	if diskFileSize != archiveData.FileSize {
-		return fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
+		return []func(){app.errorQueue(message, "archive file size does not match registered file size")}, fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
 	}
 
 	file, err := app.archiveReader.NewFileReader(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
-		return fmt.Errorf("failed to open archived file, reason: %v", err)
+		return nil, fmt.Errorf("failed to open archived file, reason: %v", err)
 	}
 	defer func() {
 		_ = file.Close()
@@ -205,22 +207,22 @@ func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, me
 	if err != nil {
 		_ = contentReader.Close()
 
-		return fmt.Errorf("failed to write file to backup storage, reason: %v", err)
+		return nil, fmt.Errorf("failed to write file to backup storage, reason: %v", err)
 	}
 	_ = contentReader.Close()
 
 	// Mark file as "backed up" and populate backup path and location
 	if err := tx.SetBackedUp(ctx, backupLocation, archiveData.FilePath, message.Key); err != nil {
-		return fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
+		return nil, fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "backed up", "finalize", "{}", string(message.Body)); err != nil {
-		return fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
+		return nil, fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
 	}
 
 	log.Debug("Backup completed")
 
-	return nil
+	return nil, nil
 }
 
 func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schema.IngestionAccession, message *brokerv2.Message) ([]func(), error) {
@@ -252,8 +254,13 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
 	default:
 		if app.archiveReader != nil && app.backupWriter != nil {
-			if err = app.backupFile(ctx, tx, message); err != nil {
+			if callbacks, err := app.backupFile(ctx, tx, message); err != nil {
 				log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+
+				if callbacks != nil {
+					// Send the message to an error queue  but don't requeue it
+					return callbacks, nil
+				}
 
 				return nil, err
 			}
