@@ -302,14 +302,11 @@ jobs:
     strategy:
       matrix:
         deployment: ["federated", "isolated"]
-        version: ["1.32", "1.33"]
+        version: ["1.36"]
         tls: ["true", "false"]
         storage: ["posix", "s3"]
         exclude:
-          - version: "1.32"
-            tls: "false"
-            storage: "posix"
-          - version: "1.33"
+          - version: "1.36"
             tls: "false"
             storage: "posix"
     steps:
