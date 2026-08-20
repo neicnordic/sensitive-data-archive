@@ -41,10 +41,8 @@ type fileInfo struct {
 // ListDatasets returns a paginated list of dataset IDs the user has access to.
 // GET /datasets
 func (h *Handlers) ListDatasets(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasets")
+	ctx, span := observability.StartSpan(c.Request.Context(), "ListDatasets")
 	defer span.End()
-
-	c.Request = c.Request.WithContext(reqCtx)
 
 	authCtx, ok := middleware.GetAuthContext(c)
 	if !ok {
@@ -57,9 +55,9 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 	var err error
 
 	if config.JWTAllowAllData() {
-		datasets, err = h.db.GetAllDatasets(c.Request.Context())
+		datasets, err = h.db.GetAllDatasets(ctx)
 	} else {
-		datasets, err = h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
+		datasets, err = h.db.GetUserDatasets(ctx, authCtx.Datasets)
 	}
 
 	if err != nil {
@@ -142,10 +140,8 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 // GetDataset returns metadata for a specific dataset.
 // GET /datasets/:datasetId
 func (h *Handlers) GetDataset(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "GetDataset")
+	ctx, span := observability.StartSpan(c.Request.Context(), "GetDataset")
 	defer span.End()
-
-	c.Request = c.Request.WithContext(reqCtx)
 
 	datasetID := c.Param("datasetId")
 
@@ -163,7 +159,7 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 		return
 	}
 
-	info, err := h.db.GetDatasetInfo(c.Request.Context(), datasetID)
+	info, err := h.db.GetDatasetInfo(ctx, datasetID)
 	if err != nil {
 		log.Errorf("failed to retrieve dataset info: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset info")
@@ -190,10 +186,8 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 // ListDatasetFiles returns a paginated list of files in a dataset.
 // GET /datasets/:datasetId/files
 func (h *Handlers) ListDatasetFiles(c *gin.Context) {
-	reqCtx, span := observability.StartSpan(c.Request.Context(), "ListDatasetFiles")
+	ctx, span := observability.StartSpan(c.Request.Context(), "ListDatasetFiles")
 	defer span.End()
-
-	c.Request = c.Request.WithContext(reqCtx)
 
 	datasetID := c.Param("datasetId")
 
@@ -212,7 +206,7 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 	}
 
 	// Check dataset exists (consistent with GetDataset — no existence leakage)
-	exists, err := h.db.CheckDatasetExists(c.Request.Context(), datasetID)
+	exists, err := h.db.CheckDatasetExists(ctx, datasetID)
 	if err != nil {
 		log.Errorf("failed to check dataset existence: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to check dataset")
@@ -279,7 +273,7 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 		opts.CursorID = tok.CursorID
 	}
 
-	files, err := h.db.GetDatasetFilesPaginated(c.Request.Context(), datasetID, opts)
+	files, err := h.db.GetDatasetFilesPaginated(ctx, datasetID, opts)
 	if err != nil {
 		log.Errorf("failed to retrieve dataset files: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset files")
