@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,6 +134,10 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	status, err := app.db.GetFileStatus(ctx, message.Key)
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
+
+		if err == sql.ErrNoRows {
+			return []func(){app.errorQueue(message, "file not recognized")}, nil
+		}
 
 		return nil, err
 	}
