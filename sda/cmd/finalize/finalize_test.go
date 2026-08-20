@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -171,10 +172,11 @@ func (ts *TestSuite) TestHandleMessage_missing() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+	ts.mockDB.On("GetFileStatus", fileID).Return("", sql.ErrNoRows)
 
 	message := createMessage(filePath, userName, accession, fileID)
-	callback, _ := ts.app.handleMessage(context.Background(), message)
+	callback, err := ts.app.handleMessage(context.Background(), message)
+	assert.NoError(ts.T(), err)
 	assert.NotNil(ts.T(), callback)
 }
 
