@@ -88,6 +88,16 @@ func (m *MockDatabase) GetKeyHash(_ context.Context, fileID string) (string, err
 	return args.Get(0).(string), args.Error(1)
 }
 
+func (m *MockDatabase) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
+	args := m.Called(datasetID)
+	rsp := args.Get(0)
+	if rsp == nil {
+		return nil, args.Error(1)
+	}
+
+	return rsp.(*database.DatasetDetails), args.Error(1)
+}
+
 func (m *MockDatabase) GetFileDetails(_ context.Context, fileID, event string) (*database.FileDetails, error) {
 	args := m.Called(fileID, event)
 

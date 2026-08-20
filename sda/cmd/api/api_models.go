@@ -2,6 +2,10 @@ package main
 
 // The structs defined here are what is exposed on the APIs
 
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
 type c4ghKeyHash struct {
 	Hash         string `json:"hash"`
 	Description  string `json:"description"`

@@ -182,6 +182,9 @@ type functions interface {
 	// GetDatasetFileIDs returns all file IDs in a dataset
 	GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error)
 
+	// GetDatasetDetails returns details of the details of the dataset based on the datasetID, if dataset not found, will return nil, nil
+	GetDatasetDetails(ctx context.Context, datasetID string) (*DatasetDetails, error)
+
 	// GetFileDetails retrieves user, path and correlation id by giving the file id
 	GetFileDetails(ctx context.Context, fileID, event string) (*FileDetails, error)
 

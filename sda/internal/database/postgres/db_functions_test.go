@@ -1892,3 +1892,103 @@ func (ts *DatabaseTests) TestGetFileIDInInbox_NotFound() {
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "", fileIDFromDB)
 }
+
+func (ts *DatabaseTests) TestGetDatasetDetails() {
+	for _, tc := range []struct {
+		name      string
+		datasetID string
+		setup     func(tests *DatabaseTests, t *testing.T)
+		assert    func(*database.DatasetDetails, error, *testing.T)
+	}{
+		{
+			name:      "not_found",
+			datasetID: "not_found",
+			setup:     func(_ *DatabaseTests, _ *testing.T) {},
+			assert: func(details *database.DatasetDetails, err error, t *testing.T) {
+				assert.NoError(t, err)
+				assert.Nil(t, details)
+			},
+		}, {
+			name:      "found_no_files_no_dataset_event",
+			datasetID: "dataset_123",
+			setup: func(ts *DatabaseTests, t *testing.T) {
+				// expect error as file_dataset insert will fail, but datasets will succeed
+				assert.Error(t, ts.db.MapFileToDataset(context.Background(), "dataset_123", "not_exist", nil))
+			},
+			assert: func(details *database.DatasetDetails, err error, t *testing.T) {
+				assert.NoError(t, err)
+				assert.NotNil(t, details)
+				assert.Equal(t, uint64(0), details.NumberOfFiles)
+				assert.Equal(t, "invalid", details.Status)
+			},
+		}, {
+			name:      "found_no_files",
+			datasetID: "dataset_123",
+			setup: func(ts *DatabaseTests, t *testing.T) {
+				// expect error as file_dataset insert will fail, but datasets will succeed
+				assert.Error(t, ts.db.MapFileToDataset(context.Background(), "dataset_123", "not_exist", nil))
+				assert.NoError(t, ts.db.UpdateDatasetEvent(context.Background(), "dataset_123", "registered", "{}"))
+			},
+			assert: func(details *database.DatasetDetails, err error, t *testing.T) {
+				assert.NoError(t, err)
+				assert.NotNil(t, details)
+				assert.Equal(t, uint64(0), details.NumberOfFiles)
+				assert.Equal(t, "registered", details.Status)
+			},
+		}, {
+			name:      "found",
+			datasetID: "dataset_1234",
+			setup: func(ts *DatabaseTests, t *testing.T) {
+				fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test_file.c4gh", "testuser")
+				assert.NoError(t, err, "failed to register file in database")
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), "file_accession-123", fileID), err)
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "dataset_1234", fileID, nil))
+				assert.NoError(t, ts.db.UpdateDatasetEvent(context.Background(), "dataset_1234", "registered", "{}"))
+			},
+			assert: func(details *database.DatasetDetails, err error, t *testing.T) {
+				assert.NoError(t, err)
+				assert.NotNil(t, details)
+				assert.Equal(t, uint64(1), details.NumberOfFiles)
+				assert.Equal(t, "registered", details.Status)
+			},
+		}, {
+			name:      "found_released",
+			datasetID: "dataset_1234",
+			setup: func(ts *DatabaseTests, t *testing.T) {
+				fileID1, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test_file_1.c4gh", "testuser")
+				assert.NoError(t, err, "failed to register file in database")
+				fileID2, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test_file_2.c4gh", "testuser")
+				assert.NoError(t, err, "failed to register file in database")
+				fileID3, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test_file_3.c4gh", "testuser")
+				assert.NoError(t, err, "failed to register file in database")
+				fileID4, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test_file_4.c4gh", "testuser")
+				assert.NoError(t, err, "failed to register file in database")
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), "file_accession-1", fileID1), err)
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), "file_accession-2", fileID2), err)
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), "file_accession-3", fileID3), err)
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), "file_accession-4", fileID4), err)
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "dataset_1234", fileID1, nil))
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "dataset_1234", fileID2, nil))
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "dataset_1234", fileID3, nil))
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "dataset_1234", fileID4, nil))
+				assert.NoError(t, ts.db.UpdateDatasetEvent(context.Background(), "dataset_1234", "registered", "{}"))
+				assert.NoError(t, ts.db.UpdateDatasetEvent(context.Background(), "dataset_1234", "released", "{}"))
+			},
+			assert: func(details *database.DatasetDetails, err error, t *testing.T) {
+				assert.NoError(t, err)
+				assert.NotNil(t, details)
+				assert.Equal(t, uint64(4), details.NumberOfFiles)
+				assert.Equal(t, "released", details.Status)
+			},
+		},
+	} {
+		ts.T().Run(tc.name, func(t *testing.T) {
+			tc.setup(ts, t)
+			dd, err := ts.db.GetDatasetDetails(context.Background(), tc.datasetID)
+			tc.assert(dd, err, t)
+
+			_, err = ts.verificationDB.Exec("TRUNCATE sda.datasets, sda.files, sda.encryption_keys CASCADE")
+			assert.NoError(t, err)
+		})
+	}
+}

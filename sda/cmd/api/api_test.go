@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -659,6 +660,86 @@ func TestDeprecateC4ghHash(t *testing.T) {
 			r, w := newRequest(t, http.MethodPost, "/c4gh-keys/deprecate/", tc.body, tc.token)
 			api.rbac(api.deprecateC4ghHash)(w, r)
 			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+}
+func TestGetDatasetDetails(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		datasetID          string
+		newMockDB          func() *mocks.MockDatabase
+		assertMockDB       func(*testing.T, *mocks.MockDatabase)
+		expectedStatusCode int
+		expectedBody       string
+	}{
+		{
+			name:      "not_found",
+			datasetID: "not_found",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDB := &mocks.MockDatabase{}
+				mockDB.On("GetDatasetDetails", "not_found").Return(nil, nil).Once()
+
+				return mockDB
+			},
+			assertMockDB: func(t *testing.T, mockDB *mocks.MockDatabase) {
+				mockDB.AssertExpectations(t)
+			},
+			expectedStatusCode: http.StatusNotFound,
+			expectedBody:       fmt.Sprintf(`{"error": "%s"}`, http.StatusText(http.StatusNotFound)),
+		},
+		{
+			name:      "internal_db_error",
+			datasetID: "internal_db_error",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDB := &mocks.MockDatabase{}
+				mockDB.On("GetDatasetDetails", "internal_db_error").Return(nil, errors.New("internal db error")).Once()
+
+				return mockDB
+			},
+			assertMockDB: func(t *testing.T, mockDB *mocks.MockDatabase) {
+				mockDB.AssertExpectations(t)
+			},
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedBody:       fmt.Sprintf(`{"error": "%s"}`, http.StatusText(http.StatusInternalServerError)),
+		}, {
+			name:      "found",
+			datasetID: "found",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDB := &mocks.MockDatabase{}
+				mockDB.On("GetDatasetDetails", "found").Return(&database.DatasetDetails{
+					Status:        "registered",
+					CreatedAt:     "2026-08-19 09:25:29.477540 +00:00",
+					NumberOfFiles: 1234,
+				}, nil).Once()
+
+				return mockDB
+			},
+			assertMockDB: func(t *testing.T, mockDB *mocks.MockDatabase) {
+				mockDB.AssertExpectations(t)
+			},
+			expectedStatusCode: http.StatusOK,
+			expectedBody:       "{\"status\":\"registered\",\"createdAt\":\"2026-08-19 09:25:29.477540 +00:00\",\"numberOfFiles\":1234}",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDB := tc.newMockDB()
+
+			apiImpl := &API{
+				db: mockDB,
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /dataset/{datasetid}", apiImpl.getDataset)
+
+			r, w := newRequest(t, http.MethodGet, "/dataset/"+tc.datasetID, nil, "")
+			mux.ServeHTTP(w, r)
+
+			body, err := io.ReadAll(w.Body)
+			assert.NoError(t, err)
+			assert.JSONEq(t, tc.expectedBody, string(body))
+			assert.Equal(t, tc.expectedStatusCode, w.Code)
+
+			tc.assertMockDB(t, mockDB)
 		})
 	}
 }
