@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker"
@@ -85,9 +87,38 @@ func (ts *HealthcheckTestSuite) TearDownTest() {
 func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
 	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
 
+	// Success path (200 OK)
 	url, _ := p.getS3ReadyPath()
 	assert.NoError(ts.T(), p.httpsGetCheck(url))
-	assert.Error(ts.T(), p.httpsGetCheck("http://127.0.0.1:8888/nonexistent"), "404 should fail")
+
+	// HTTP Non-200 Status Response (Server reachable, but path not found)
+	err := p.httpsGetCheck("http://127.0.0.1:8888/nonexistent")
+	assert.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "S3 check to http://127.0.0.1:8888/nonexistent returned status 404")
+
+	// HTTP Non-200 response with S3 error body extraction
+	mockS3ErrorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`<Error><Code>AccessDenied</Code><Message>Access Denied.</Message></Error>`))
+	}))
+	defer mockS3ErrorServer.Close()
+
+	err = p.httpsGetCheck(mockS3ErrorServer.URL)
+	assert.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), fmt.Sprintf("S3 check to %s returned status 403", mockS3ErrorServer.URL))
+	assert.Contains(ts.T(), err.Error(), "<Code>AccessDenied</Code>")
+
+	// Timeout / Context Deadline Exceeded (S3 hangs)
+	mockHangingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(6 * time.Second) // Exceeds the 5s context timeout
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockHangingServer.Close()
+
+	err = p.httpsGetCheck(mockHangingServer.URL)
+	assert.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), fmt.Sprintf("S3 backend check failed for %s", mockHangingServer.URL))
+	assert.Contains(ts.T(), err.Error(), "context deadline exceeded")
 }
 
 func (ts *HealthcheckTestSuite) TestS3URL() {
