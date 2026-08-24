@@ -92,9 +92,16 @@ func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
 	assert.NoError(ts.T(), p.httpsGetCheck(url))
 
 	// HTTP Non-200 Status Response (Server reachable, but path not found)
-	err := p.httpsGetCheck("http://127.0.0.1:8888/nonexistent")
+	mock404Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message></Error>`))
+	}))
+	defer mock404Server.Close()
+
+	err := p.httpsGetCheck(mock404Server.URL + "/nonexistent")
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "S3 check to http://127.0.0.1:8888/nonexistent returned status 404")
+	assert.Contains(ts.T(), err.Error(), fmt.Sprintf("S3 check to %s/nonexistent returned status 404", mock404Server.URL))
+	assert.Contains(ts.T(), err.Error(), "<Code>NoSuchKey</Code>")
 
 	// HTTP Non-200 response with S3 error body extraction
 	mockS3ErrorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
