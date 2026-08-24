@@ -135,7 +135,7 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	if err != nil {
 		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
 
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return []func(){app.errorQueue(message, "file not recognized")}, nil
 		}
 
