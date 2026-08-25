@@ -28,6 +28,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +155,23 @@ func Load() error {
 		logLevel = log.TraceLevel
 	}
 	log.SetLevel(logLevel)
+	_ = slog.SetLogLoggerLevel(slogLogLevelFromString(stringLevel))
 	log.Infof("Setting log level to '%s'", stringLevel)
 
 	return nil
+}
+
+func slogLogLevelFromString(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "error", "fatal", "panic":
+		return slog.LevelError
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "info":
+		return slog.LevelInfo
+	case "debug", "trace":
+		return slog.LevelDebug
+	default:
+		return slog.Level(100) // Custom level higher than any standard level, so silent by default
+	}
 }
