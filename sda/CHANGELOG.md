@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Close()` closes the connection with a deadline instead of closing each channel and waiting for the server's reply without one, so shutdown against a frozen server ends after a few seconds instead of the heartbeat timeout; a connection the server had already dropped is no longer reported as an error.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
+- Populate slog log level from LOG_LEVEL configuration
 
 ## [3.1.76] - 2026-07-15
 
