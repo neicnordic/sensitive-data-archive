@@ -360,14 +360,15 @@ spec:
       {{- end }}
       {{- if not (empty .Values.global.archive.posix) }}
       {{- $arc := index .Values.global.archive.posix 0 }}
+      {{- $vol := required "global.archive.posix[0].volume is required (set volume.existingClaim or volume.nfsServer+nfsPath)" $arc.volume }}
         - name: archive
-        {{- if $arc.volume.existingClaim }}
+        {{- if $vol.existingClaim }}
           persistentVolumeClaim:
-            claimName: {{ $arc.volume.existingClaim }}
+            claimName: {{ $vol.existingClaim }}
         {{- else }}
           nfs:
-            server: {{ required "An archive NFS server is required" $arc.volume.nfsServer | quote }}
-            path: {{ default "/" $arc.volume.nfsPath | quote }}
+            server: {{ required "global.archive.posix[0].volume.nfsServer is required (or set volume.existingClaim)" $vol.nfsServer | quote }}
+            path: {{ default "/" $vol.nfsPath | quote }}
         {{- end }}
       {{- end }}
 {{- end }}

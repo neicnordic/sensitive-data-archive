@@ -980,6 +980,73 @@ else
   fail=$((fail+1))
 fi
 
+echo "=== G12: sftp-inbox mounts inbox.posix[0] only ==="
+# sftp-inbox is the single POSIX writer; the pipeline services multi-read.
+# A second inbox.posix entry must not leak an unused volume/mount into the
+# legacy Java container (MIGRATION-4.0.md documents the [0]-only contract).
+g12=$(helm template test charts/sda-svc \
+  --set global.deploymentType=external \
+  --set global.tls.enabled=true --set global.tls.issuer=ti \
+  --set global.db.host=db --set global.db.user=u --set global.db.password=p \
+  --set global.broker.host=mq --set global.broker.username=u --set global.broker.password=p \
+  --set global.c4gh.secretName=c --set global.c4gh.publicKey=p \
+  --set 'global.c4gh.privateKeys[0].keyName=k' \
+  --set 'global.c4gh.privateKeys[0].passphrase=p' \
+  --set 'global.c4gh.privateKeys[0].keyData=d' \
+  --set 'global.inbox.s3=null' \
+  --set 'global.inbox.posix[0].path=/sftp_in' \
+  --set 'global.inbox.posix[0].volume.existingClaim=sftp-pvc' \
+  --set 'global.inbox.posix[1].path=/pipeline_only' \
+  --set 'global.inbox.posix[1].volume.existingClaim=pipeline-pvc' \
+  --set 'global.archive.s3[0].endpoint=http://a' --set 'global.archive.s3[0].accessKey=k' \
+  --set 'global.archive.s3[0].secretKey=s' --set 'global.archive.s3[0].bucketPrefix=a' \
+  --set global.cega.user=u --set global.cega.password=p \
+  --set global.ingress.hostName.api=api.t \
+  --set global.ingress.hostName.auth=auth.t \
+  --set global.ingress.hostName.s3Inbox=s3.t \
+  --set global.ingress.hostName.download=dl.t \
+  --set global.api.jwtSecret=j --set global.api.rbacFileSecret=r \
+  --set global.api.jwtPubKeyName=jwt \
+  --set global.reencrypt.host=r \
+  --set sftpInbox.tls.issuer=ti \
+  --show-only templates/sftp-inbox-deploy.yaml 2>/dev/null)
+check "G12 sftp inbox volume count (posix[0] only)" "1" \
+  "$(echo "$g12" | yq '[.spec.template.spec.volumes[] | select(.name | test("^inbox-"))] | length')"
+check "G12 sftp inbox mount count (posix[0] only)" "1" \
+  "$(echo "$g12" | yq '[.spec.template.spec.containers[] | select(.name=="inbox") | .volumeMounts[] | select(.name | test("^inbox-"))] | length')"
+check "G12 sftp mounts posix[0].path" "/sftp_in" \
+  "$(echo "$g12" | yq '.spec.template.spec.containers[] | select(.name=="inbox") | .volumeMounts[] | select(.name=="inbox-0") | .mountPath')"
+check "G12 pipeline-only claim absent from sftp-inbox" "null" \
+  "$(echo "$g12" | yq '[.spec.template.spec.volumes[] | select(.persistentVolumeClaim.claimName=="pipeline-pvc")] | .[0] // "null"')"
+
+echo "=== G13: DOA archive posix without volume fails self-locatingly ==="
+# doa-deploy reads archive.posix[0] directly instead of via sda.posixVolumes;
+# it must still emit the same friendly error rather than a nil-pointer.
+# download/downloadV2 are disabled so doa-deploy is the only consumer of
+# archive.posix — otherwise their sda.posixVolumes call raises first and the
+# assertion would pass without exercising doa-deploy at all.
+g13=$(helm template test charts/sda-svc "${MINIMAL[@]}" \
+  --set global.tls.enabled=true --set global.tls.issuer=ti \
+  --set global.deploymentType=external \
+  --set global.doa.enabled=true \
+  --set global.download.enabled=false --set global.downloadV2.enabled=false \
+  --set global.archive.s3=null \
+  --set 'global.archive.posix[0].path=/archive' \
+  --set global.ingress.hostName.api=api.t --set global.ingress.hostName.auth=auth.t \
+  --set global.ingress.hostName.s3Inbox=s3.t --set global.ingress.hostName.download=dl.t \
+  --set global.ingress.hostName.doa=doa.t \
+  --set global.api.jwtSecret=j --set global.api.rbacFileSecret=r \
+  --set global.api.jwtPubKeyName=jwt --set global.reencrypt.host=r \
+  --set global.oidc.id=id --set global.oidc.secret=s --set global.oidc.provider=http://o \
+  --show-only templates/doa-deploy.yaml 2>&1 || true)
+if echo "$g13" | grep -q "global.archive.posix\[0\].volume is required"; then
+  echo "  PASS  DOA missing-volume error names backend + index"; pass=$((pass+1))
+else
+  echo "  FAIL  DOA missing-volume error missing backend + index hint"
+  echo "    ${g13//$'\n'/$'\n    '}"
+  fail=$((fail+1))
+fi
+
 echo
 echo "Summary: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
