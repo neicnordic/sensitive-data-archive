@@ -766,8 +766,11 @@ fi
 
 echo "=== G7: mixed inbox.s3 + inbox.posix → fail-fast ==="
 # The chart deploys two distinct inbox services (s3-inbox and sftp-inbox)
-# under one Service selector. Populating both lists is unsupported.
+# under one Service selector. Populating both lists is unsupported where
+# those two Deployments render, which is external/all only (G15 covers the
+# internal case, where the inbox is read-only and a mix is valid).
 g7_out=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.deploymentType=external \
   --set 'global.inbox.posix[0].path=/inbox' \
   --set 'global.inbox.posix[0].volume.existingClaim=inbox-pvc' \
   --show-only templates/shared-secrets.yaml 2>&1 || true)
@@ -1108,6 +1111,66 @@ for scenario in doa writer; do
   else
     echo "  FAIL  G14 $scenario check did not fire for deploymentType=all"
     echo "    ${g14_all//$'\n'/$'\n    '}"
+    fail=$((fail+1))
+  fi
+done
+
+echo "=== G15: guards respect the render condition of what they protect ==="
+# Companion to G14. A fail-fast must not fire for a release that never
+# renders the resource it guards, otherwise a shared values file cannot be
+# split across releases.
+
+# sync only renders for schemaType=isolated with a remote host set, so a
+# federated release must tolerate a mixed sync.destination it never deploys.
+g15_fed=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.schemaType=federated \
+  --set 'global.sync.destination.s3[0].endpoint=http://d' \
+  --set 'global.sync.destination.s3[0].accessKey=k' \
+  --set 'global.sync.destination.s3[0].secretKey=s' \
+  --set 'global.sync.destination.s3[0].bucketPrefix=d' \
+  --set 'global.sync.destination.posix[0].path=/sd' \
+  --set 'global.sync.destination.posix[0].volume.existingClaim=pvc' \
+  2>&1 || true)
+if echo "$g15_fed" | grep -q "sync.destination has writer-enabled entries in both"; then
+  echo "  FAIL  G15 federated release fails on sync config it never deploys"
+  echo "    ${g15_fed//$'\n'/$'\n    '}"
+  fail=$((fail+1))
+else
+  echo "  PASS  G15 federated release ignores sync.destination writer conflict"; pass=$((pass+1))
+fi
+
+# The s3-inbox / sftp-inbox Service-selector collision only exists where both
+# Deployments render (external/all). An internal release reads the inbox, so
+# an s3 writer plus a writerDisabled posix reader is a valid migration setup.
+g15_inbox=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.deploymentType=internal \
+  --set 'global.inbox.posix[0].path=/legacy-inbox' \
+  --set 'global.inbox.posix[0].writerDisabled=true' \
+  --set 'global.inbox.posix[0].volume.existingClaim=pvc' \
+  2>&1 || true)
+if echo "$g15_inbox" | grep -q "global.inbox cannot have both s3 and posix"; then
+  echo "  FAIL  G15 internal release rejects a valid s3-writer + posix-reader inbox"
+  echo "    ${g15_inbox//$'\n'/$'\n    '}"
+  fail=$((fail+1))
+else
+  echo "  PASS  G15 internal release allows s3 writer + posix reader inbox"; pass=$((pass+1))
+fi
+
+# A null list ELEMENT must give the self-locating message, not a nil pointer.
+# G1 covers a null list; this covers `s3:` followed by an empty `-` entry.
+for backend_case in 'archive.s3:global.archive.s3[0] is empty' 'archive.posix:global.archive.posix[0] is empty'; do
+  key="${backend_case%%:*}"; needle="${backend_case##*:}"
+  g15_null=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+    --set "global.${key}[0]=null" 2>&1 || true)
+  if echo "$g15_null" | grep -qF "$needle"; then
+    echo "  PASS  G15 null ${key} entry gives self-locating error"; pass=$((pass+1))
+  elif echo "$g15_null" | grep -q "nil pointer"; then
+    echo "  FAIL  G15 null ${key} entry gives a nil pointer"
+    echo "    ${g15_null//$'\n'/$'\n    '}"
+    fail=$((fail+1))
+  else
+    echo "  FAIL  G15 null ${key} entry: unexpected output"
+    echo "    ${g15_null//$'\n'/$'\n    '}"
     fail=$((fail+1))
   fi
 done
