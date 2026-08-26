@@ -23,11 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use log/slog for logging instead of logrus.
   - Wait for the handler that is running to finish on shutdown before closing the broker; a second signal skips the wait.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- database: add ErrUniqueViolation, ErrNotNullViolation, ErrForeignKeyViolation errors,
+  - Add pq error code parsing for these in the Postgres implementation
 - mapper: 
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
-- database: add ErrUniqueViolation, ErrNotNullViolation, ErrForeignKeyViolation errors,
-  - Add pq error code parsing for these in the Postgres implementation
+- verify:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
 
 ### Fixed
 
