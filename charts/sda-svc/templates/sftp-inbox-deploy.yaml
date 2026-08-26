@@ -162,14 +162,12 @@ spec:
         readinessProbe:
 {{ toYaml .Values.sftpInbox.readinessProbe | trim | indent 10 }}
         volumeMounts:
-      {{- if .Values.global.inbox.posix }}
+      {{- /* sftp-inbox is the single POSIX writer and mounts inbox.posix[0]
+             only, matching INBOX_LOCATION above. The pipeline services read
+             every entry; see MIGRATION-4.0.md. */}}
         {{- include "sda.posixVolumeMounts" (dict
-            "config" .Values.global.inbox
+            "config" (dict "posix" (list (index .Values.global.inbox.posix 0)))
             "name" "inbox") | nindent 8 }}
-      {{- else }}
-        - name: inbox
-          mountPath: "/ega/inbox"
-      {{- end }}
         - name: tmp
           mountPath: "/etc/ssl/certs/java"
         - name: tmp
@@ -179,7 +177,7 @@ spec:
         - name: tmp
           emptyDir: {}
         {{- include "sda.posixVolumes" (dict
-            "config" .Values.global.inbox
+            "config" (dict "posix" (list (index .Values.global.inbox.posix 0)))
             "name" "inbox") | nindent 8 }}
         - name: tls-certs
           projected:
