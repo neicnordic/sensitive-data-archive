@@ -684,7 +684,14 @@ fi
 echo "=== G2: doa.enabled=true + tls.enabled=false → fail-fast ==="
 # Pre-fix the chart silently rendered no DOA deployment when TLS was off,
 # letting operators believe DOA was deployed. Chart-level helper catches it.
+# Asserted at deploymentType=external because that is where doa-deploy.yaml
+# renders; the internal-only counter-case is G14 below.
 g2_out=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.deploymentType=external \
+  --set global.ingress.hostName.api=a.t --set global.ingress.hostName.auth=b.t \
+  --set global.ingress.hostName.s3Inbox=c.t --set global.ingress.hostName.download=d.t \
+  --set global.api.jwtSecret=j --set global.api.rbacFileSecret=r \
+  --set global.api.jwtPubKeyName=jwt --set global.reencrypt.host=r \
   --set global.doa.enabled=true \
   --set 'global.archive.s3[0].endpoint=https://x' \
   --set 'global.archive.s3[0].accessKey=k' --set 'global.archive.s3[0].secretKey=s' \
@@ -1046,6 +1053,64 @@ else
   echo "    ${g13//$'\n'/$'\n    '}"
   fail=$((fail+1))
 fi
+
+echo "=== G14: chart-level fail-fasts respect deploymentType ==="
+# The chart documents splitting one values file across separate `external`
+# and `internal` releases (values.yaml). A check must not fire for a release
+# that never renders the thing it guards: DOA is external-only, and the
+# storage-v2 writers (ingest, finalize, sync) are internal-only.
+g14_int=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.deploymentType=internal \
+  --set global.doa.enabled=true \
+  2>&1 || true)
+if echo "$g14_int" | grep -q "doa.enabled=true requires global.tls.enabled=true"; then
+  echo "  FAIL  G14 internal-only release fails on DOA setting it never renders"
+  echo "    ${g14_int//$'\n'/$'\n    '}"
+  fail=$((fail+1))
+else
+  echo "  PASS  G14 internal-only release ignores doa.enabled"; pass=$((pass+1))
+fi
+
+# Readers on both s3 and posix are legitimate for an external-only release,
+# which deploys no writer of archive/backupArchive/sync.destination.
+g14_ext=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+  --set global.deploymentType=external \
+  --set global.ingress.hostName.api=a.t --set global.ingress.hostName.auth=b.t \
+  --set global.ingress.hostName.s3Inbox=c.t --set global.ingress.hostName.download=d.t \
+  --set global.api.jwtSecret=j --set global.api.rbacFileSecret=r \
+  --set global.api.jwtPubKeyName=jwt --set global.reencrypt.host=r \
+  --set 'global.archive.posix[0].path=/arc' \
+  --set 'global.archive.posix[0].volume.existingClaim=pvc' \
+  2>&1 || true)
+if echo "$g14_ext" | grep -q "writer-enabled entries in both"; then
+  echo "  FAIL  G14 external-only release fails on a writer conflict it never renders"
+  echo "    ${g14_ext//$'\n'/$'\n    '}"
+  fail=$((fail+1))
+else
+  echo "  PASS  G14 external-only release allows s3 + posix archive readers"; pass=$((pass+1))
+fi
+
+# Both checks must still fire for deploymentType=all.
+for scenario in doa writer; do
+  if [ "$scenario" = doa ]; then
+    g14_all=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+      --set global.deploymentType=all --set global.doa.enabled=true 2>&1 || true)
+    needle="doa.enabled=true requires global.tls.enabled=true"
+  else
+    g14_all=$(helm template t charts/sda-svc "${MINIMAL[@]}" \
+      --set global.deploymentType=all \
+      --set 'global.archive.posix[0].path=/arc' \
+      --set 'global.archive.posix[0].volume.existingClaim=pvc' 2>&1 || true)
+    needle="writer-enabled entries in both"
+  fi
+  if echo "$g14_all" | grep -q "$needle"; then
+    echo "  PASS  G14 $scenario check still fires for deploymentType=all"; pass=$((pass+1))
+  else
+    echo "  FAIL  G14 $scenario check did not fire for deploymentType=all"
+    echo "    ${g14_all//$'\n'/$'\n    '}"
+    fail=$((fail+1))
+  fi
+done
 
 echo
 echo "Summary: $pass passed, $fail failed"
