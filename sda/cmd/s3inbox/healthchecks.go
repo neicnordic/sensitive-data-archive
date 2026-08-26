@@ -61,7 +61,7 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	err = p.httpsGetCheck(s3url)
+	err = p.httpsGetCheck(r.Context(), s3url)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -72,9 +72,9 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
-func (p *Proxy) httpsGetCheck(uri string) error {
+func (p *Proxy) httpsGetCheck(ctx context.Context, uri string) error {
 	// Use a dedicated context timeout for readiness checks so s3inbox logs the timeout first
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
