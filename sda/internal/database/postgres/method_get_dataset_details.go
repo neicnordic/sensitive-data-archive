@@ -48,7 +48,7 @@ func (db *pgDb) getDatasetDetails(ctx context.Context, tx *sql.Tx, datasetID str
 			return nil, nil
 		}
 
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	if status.Valid {
