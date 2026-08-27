@@ -21,7 +21,7 @@ func (db *pgDb) getInboxPath(ctx context.Context, tx *sql.Tx, accessionID string
 
 	var inboxPath string
 	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&inboxPath); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return inboxPath, nil

@@ -23,7 +23,7 @@ func (db *pgDb) getArchivePathAndLocation(ctx context.Context, tx *sql.Tx, acces
 	var archiveLocation sql.NullString
 
 	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&archivePath, &archiveLocation); err != nil {
-		return "", "", err
+		return "", "", parsePQError(err)
 	}
 
 	return archivePath, archiveLocation.String, nil

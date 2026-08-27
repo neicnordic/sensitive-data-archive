@@ -23,7 +23,7 @@ func (db *pgDb) getDatasetFileIDs(ctx context.Context, tx *sql.Tx, datasetID str
 	var fileIDs []string
 	rows, err := stmt.QueryContext(ctx, datasetID)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -31,16 +31,16 @@ func (db *pgDb) getDatasetFileIDs(ctx context.Context, tx *sql.Tx, datasetID str
 
 	for rows.Next() {
 		var fileID string
-		err := rows.Scan(&fileID)
-		if err != nil {
-			return nil, err
+
+		if err := rows.Scan(&fileID); err != nil {
+			return nil, parsePQError(err)
 		}
 
 		fileIDs = append(fileIDs, fileID)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return fileIDs, nil

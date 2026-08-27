@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 )
 
 const setBackedUpQuery = "setBackedUp"
@@ -22,12 +21,12 @@ func (db *pgDb) setBackedUp(ctx context.Context, tx *sql.Tx, location, path, fil
 
 	r, err := stmt.ExecContext(ctx, location, path, fileID)
 	if err != nil {
-		return fmt.Errorf("setBackedUp error: %w", err)
+		return parsePQError(err)
 	}
 
 	rowsAffected, err := r.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("setBackedUp error: %w", err)
+		return parsePQError(err)
 	}
 
 	if rowsAffected == 0 {

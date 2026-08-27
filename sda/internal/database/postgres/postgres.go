@@ -141,6 +141,27 @@ func (db *pgDb) getPreparedStmt(tx *sql.Tx, queryName string) (*sql.Stmt, error)
 	return tx.Stmt(stmt), nil
 }
 
+// parsePQError parses the error to a pq.Error to check for specific pq error codes
+// and wraps a corresponding database level error for easier comparisons by caller.
+// List of pq error codes can be found at: https://www.postgresql.org/docs/current/errcodes-appendix.html
+func parsePQError(err error) error {
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		return err
+	}
+
+	switch pqErr.Code {
+	case "23505":
+		return fmt.Errorf("%w: %w", database.ErrUniqueViolation, err)
+	case "23502":
+		return fmt.Errorf("%w: %w", database.ErrNotNullViolation, err)
+	case "23503":
+		return fmt.Errorf("%w: %w", database.ErrForeignKeyViolation, err)
+	default:
+		return err
+	}
+}
+
 func (db *pgDb) RegisterFile(ctx context.Context, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {
 	return db.registerFile(ctx, nil, fileID, inboxLocation, uploadPath, uploadUser)
 }
