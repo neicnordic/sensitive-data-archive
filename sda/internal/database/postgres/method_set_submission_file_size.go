@@ -21,7 +21,7 @@ func (db *pgDb) setSubmissionFileSize(ctx context.Context, tx *sql.Tx, fileID st
 
 	r, err := stmt.ExecContext(ctx, submissionFileSize, fileID)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 
 	rows, err := r.RowsAffected()

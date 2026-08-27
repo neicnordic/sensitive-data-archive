@@ -37,11 +37,11 @@ func (db *pgDb) registerFile(ctx context.Context, tx *sql.Tx, fileID *string, in
 	}
 
 	if err := stmt.QueryRowContext(ctx, fileIDArg, inboxLocation, uploadPath, uploadUser).Scan(&createdFileID); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	if _, err := logFileEventStmt.ExecContext(ctx, createdFileID, "registered", uploadUser, nil, nil); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return createdFileID, nil

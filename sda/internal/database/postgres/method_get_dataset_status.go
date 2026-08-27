@@ -22,7 +22,7 @@ func (db *pgDb) getDatasetStatus(ctx context.Context, tx *sql.Tx, datasetID stri
 	var status string
 
 	if err := stmt.QueryRowContext(ctx, datasetID).Scan(&status); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return status, nil
