@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mapper: 
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
+- database: add ErrUniqueViolation, ErrNotNullViolation, ErrForeignKeyViolation errors,
+  - Add pq error code parsing for these in the Postgres implementation
 
 ### Fixed
 

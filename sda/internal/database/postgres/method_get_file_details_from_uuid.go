@@ -24,7 +24,7 @@ func (db *pgDb) getFileDetails(ctx context.Context, tx *sql.Tx, fileID, event st
 
 	info := new(database.FileDetails)
 	if err := stmt.QueryRowContext(ctx, fileID, event).Scan(&info.User, &info.Path); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return info, nil

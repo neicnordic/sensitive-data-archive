@@ -24,7 +24,7 @@ func (db *pgDb) getSyncData(ctx context.Context, tx *sql.Tx, accessionID string)
 
 	data := new(database.SyncData)
 	if err := stmt.QueryRowContext(ctx, accessionID).Scan(&data.User, &data.FilePath, &data.Checksum); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return data, nil
