@@ -29,7 +29,7 @@ func (db *pgDb) getMappingData(ctx context.Context, tx *sql.Tx, accessionID stri
 			return nil, nil
 		}
 
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	if submissionLocation.Valid {

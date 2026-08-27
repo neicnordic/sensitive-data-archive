@@ -22,7 +22,7 @@ func (db *pgDb) getFileStatus(ctx context.Context, tx *sql.Tx, fileID string) (s
 
 	var status string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&status); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return status, nil

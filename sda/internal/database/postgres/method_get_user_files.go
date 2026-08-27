@@ -64,7 +64,7 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 
 	rows, err := stmt.QueryContext(ctx, userID, pathPrefixArg, pathPrefixLen, cursorArg, fetchLim)
 	if err != nil {
-		return nil, "", err
+		return nil, "", parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -78,9 +78,9 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 		// Read rows into struct
 		fi := new(database.SubmissionFileInfo)
 		var submissionFileSize sql.NullInt64
-		err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreatedAt, &submissionFileSize)
-		if err != nil {
-			return nil, "", err
+
+		if err := rows.Scan(&fi.FileID, &fi.InboxPath, &accessionID, &fi.Status, &fi.CreatedAt, &submissionFileSize); err != nil {
+			return nil, "", parsePQError(err)
 		}
 
 		if submissionFileSize.Valid {
@@ -101,7 +101,7 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, "", err
+		return nil, "", parsePQError(err)
 	}
 
 	// Determine next cursor: present only when the extra probe row was returned.

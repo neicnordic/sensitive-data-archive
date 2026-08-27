@@ -35,7 +35,7 @@ func (db *pgDb) listUserDatasets(ctx context.Context, tx *sql.Tx, submissionUser
 
 	rows, err := stmt.QueryContext(ctx, submissionUser)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -45,14 +45,14 @@ func (db *pgDb) listUserDatasets(ctx context.Context, tx *sql.Tx, submissionUser
 	for rows.Next() {
 		di := new(database.DatasetInfo)
 		if err := rows.Scan(&di.DatasetID, &di.Status, &di.Timestamp); err != nil {
-			return nil, err
+			return nil, parsePQError(err)
 		}
 
 		datasets = append(datasets, di)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return datasets, nil

@@ -23,7 +23,7 @@ func (db *pgDb) storeHeader(ctx context.Context, tx *sql.Tx, header []byte, id s
 
 	result, err := stmt.ExecContext(ctx, hex.EncodeToString(header), id)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")

@@ -34,7 +34,7 @@ func (db *pgDb) getFileIDInInbox(ctx context.Context, tx *sql.Tx, submissionUser
 			return "", nil
 		}
 
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return fileID, nil

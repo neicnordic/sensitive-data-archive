@@ -19,7 +19,7 @@ func (db *pgDb) isFileInDataset(ctx context.Context, tx *sql.Tx, fileID string) 
 
 	var inDataset bool
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&inDataset); err != nil {
-		return false, err
+		return false, parsePQError(err)
 	}
 
 	return inDataset, nil

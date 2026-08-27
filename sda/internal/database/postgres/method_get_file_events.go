@@ -19,21 +19,23 @@ func (db *pgDb) getFileEvents(ctx context.Context, tx *sql.Tx) ([]string, error)
 
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var fileEvents []string
 	for rows.Next() {
 		var title string
 		if err := rows.Scan(&title); err != nil {
-			return nil, err
+			return nil, parsePQError(err)
 		}
 		fileEvents = append(fileEvents, title)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return fileEvents, nil

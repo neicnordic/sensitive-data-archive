@@ -22,7 +22,7 @@ func (db *pgDb) setAccessionID(ctx context.Context, tx *sql.Tx, accessionID, fil
 
 	result, err := stmt.ExecContext(ctx, accessionID, fileID)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

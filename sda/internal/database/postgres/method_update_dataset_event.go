@@ -20,7 +20,7 @@ func (db *pgDb) updateDatasetEvent(ctx context.Context, tx *sql.Tx, datasetID, s
 
 	result, err := stmt.ExecContext(ctx, datasetID, status, message)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
