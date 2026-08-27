@@ -210,6 +210,10 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 					slog.Any("error", err),
 				)
 
+				if errors.Is(err, database.ErrUniqueViolation) {
+					return []func(){app.errorQueue(message, "mapping violates unique constraint")}, nil
+				}
+
 				return nil, err
 			}
 
