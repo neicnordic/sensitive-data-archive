@@ -69,6 +69,20 @@ func NewWriter(ctx context.Context, backendName string, locationBroker locationb
 		return nil, storageerrors.ErrorNoValidLocations
 	}
 
+	// Every configured endpoint is full. Point the writer at the first one
+	// anyway so activeEndpoint is never nil once NewWriter has succeeded,
+	// which is the invariant WriteFile relies on when it dereferences it.
+	// WriteFile rolls over between the configured endpoints on every call, so
+	// writes resume on their own once a bucket frees up, and until then
+	// WriteFile reports ErrorNoFreeBucket. Failing here instead would stop the
+	// service from starting over a condition that is usually temporary, and
+	// storage.NewWriter reads ErrorNoValidLocations as "s3 has no writer
+	// configured" and would silently fall back to a posix writer.
+	if writer.activeEndpoint == nil {
+		log.Warningf("s3: no endpoint of backend %s has an available bucket, writes fail until one frees up", backendName)
+		writer.activeEndpoint = writer.configuredEndpoints[0]
+	}
+
 	return writer, nil
 }
 func getS3ClientForEndpoint(ctx context.Context, configuredEndpoints []*endpointConfig, endpoint string) (*s3.Client, error) {
