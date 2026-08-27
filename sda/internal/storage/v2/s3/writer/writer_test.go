@@ -364,3 +364,83 @@ func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstBucketFull() 
 	ts.Equal(ts.s3Mock1.buckets["bucket_in_1-2"]["test_file_1.txt"], content)
 	ts.Equal(fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL), location)
 }
+
+// fillAllEndpoints fills every configured endpoint to its limits: it puts
+// max_buckets (3) prefixed buckets on both mock endpoints and makes the
+// broker report each of them at more than max_objects (10 and 5), so
+// findActiveBucket returns ErrorNoFreeBucket for both endpoints. The
+// expectations are deliberately not `.Once()` — the same locations are
+// looked up both while constructing the writer and while writing.
+func (ts *WriterTestSuite) fillAllEndpoints(broker *mockLocationBroker) {
+	ts.s3Mock1.buckets = map[string]map[string]string{}
+	ts.s3Mock2.buckets = map[string]map[string]string{}
+
+	for i := 1; i <= 3; i++ {
+		bucket1 := fmt.Sprintf("bucket_in_1-%d", i)
+		bucket2 := fmt.Sprintf("bucket_in_2-%d", i)
+		ts.s3Mock1.buckets[bucket1] = make(map[string]string)
+		ts.s3Mock2.buckets[bucket2] = make(map[string]string)
+		broker.On("GetObjectCount", fmt.Sprintf("%s/%s", ts.s3Mock1.server.URL, bucket1)).Return(11, nil)
+		broker.On("GetObjectCount", fmt.Sprintf("%s/%s", ts.s3Mock2.server.URL, bucket2)).Return(11, nil)
+	}
+}
+
+// TestNewWriter_AllEndpointsFull_KeepsWriterUsable covers the first half of
+// #2546. When every endpoint reports ErrorNoFreeBucket the endpoints are
+// still appended to configuredEndpoints so WriteFile can roll over to them
+// once space frees up, but activeEndpoint was only assigned on the success
+// path. The `len(configuredEndpoints) == 0` guard then passed and NewWriter
+// returned a writer with a nil activeEndpoint, which the next WriteFile
+// dereferenced. NewWriter must keep the writer usable — a full backend is a
+// temporary condition and must not stop the service from starting — while
+// leaving activeEndpoint set so nothing dereferences nil.
+func (ts *WriterTestSuite) TestNewWriter_AllEndpointsFull_KeepsWriterUsable() {
+	broker := &mockLocationBroker{}
+	broker.On("RegisterSizeAndCountFinderFunc").Return().Once()
+	ts.fillAllEndpoints(broker)
+
+	writer, err := NewWriter(context.TODO(), "test", broker)
+	ts.NoError(err, "a full backend is temporary and must not stop the service from starting")
+	ts.Require().NotNil(writer)
+
+	ts.NotNil(writer.activeEndpoint, "activeEndpoint must be set even when every endpoint is full, WriteFile dereferences it")
+	ts.Len(writer.configuredEndpoints, 2, "full endpoints must stay configured so WriteFile can roll over once space frees up")
+}
+
+// TestWriteFile_AllEndpointsFull_FromStart is the write-time consequence of
+// the nil activeEndpoint above: the writer is built while every endpoint is
+// already full, and the first write panicked in getS3Client. It must return
+// ErrorNoFreeBucket instead.
+func (ts *WriterTestSuite) TestWriteFile_AllEndpointsFull_FromStart() {
+	broker := &mockLocationBroker{}
+	broker.On("RegisterSizeAndCountFinderFunc").Return().Once()
+	ts.fillAllEndpoints(broker)
+
+	writer, err := NewWriter(context.TODO(), "test", broker)
+	ts.Require().NoError(err)
+
+	var location string
+	ts.Require().NotPanics(func() {
+		location, err = writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte("test file 1")))
+	})
+
+	ts.ErrorIs(err, storageerrors.ErrorNoFreeBucket)
+	ts.Empty(location)
+}
+
+// TestWriteFile_AllEndpointsBecomeFull covers the second half of #2546: the
+// writer started with a free bucket, but by the time it writes every
+// endpoint is full. The rollover loop `continue`s past each endpoint on
+// ErrorNoFreeBucket and ends with activeBucket still empty, and nothing
+// checked it, so the upload ran with Bucket: aws.String("").
+func (ts *WriterTestSuite) TestWriteFile_AllEndpointsBecomeFull() {
+	ts.Require().NotNil(ts.writer.activeEndpoint, "writer starts out with an active endpoint")
+	ts.fillAllEndpoints(ts.locationBrokerMock)
+
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte("test file 1")))
+
+	ts.ErrorIs(err, storageerrors.ErrorNoFreeBucket)
+	ts.Empty(location)
+	ts.NotContains(ts.s3Mock1.buckets, "", "nothing may be uploaded to an empty bucket name")
+	ts.NotContains(ts.s3Mock2.buckets, "", "nothing may be uploaded to an empty bucket name")
+}
