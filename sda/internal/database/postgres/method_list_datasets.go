@@ -27,7 +27,7 @@ func (db *pgDb) listDatasets(ctx context.Context, tx *sql.Tx) ([]*database.Datas
 	var datasets []*database.DatasetInfo
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -37,13 +37,13 @@ func (db *pgDb) listDatasets(ctx context.Context, tx *sql.Tx) ([]*database.Datas
 		di := new(database.DatasetInfo)
 		err := rows.Scan(&di.DatasetID, &di.Status, &di.Timestamp)
 		if err != nil {
-			return nil, err
+			return nil, parsePQError(err)
 		}
 
 		datasets = append(datasets, di)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return datasets, nil

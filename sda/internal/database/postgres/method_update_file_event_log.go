@@ -29,7 +29,7 @@ func (db *pgDb) updateFileEventLog(ctx context.Context, tx *sql.Tx, fileUUID, ev
 			return sql.ErrNoRows
 		}
 
-		return err
+		return parsePQError(err)
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")

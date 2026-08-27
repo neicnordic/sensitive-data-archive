@@ -23,7 +23,7 @@ func (db *pgDb) deprecateKeyHash(ctx context.Context, tx *sql.Tx, keyHash string
 
 	result, err := stmt.ExecContext(ctx, keyHash)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

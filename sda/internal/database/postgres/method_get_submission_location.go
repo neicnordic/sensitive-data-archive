@@ -26,7 +26,7 @@ func (db *pgDb) getSubmissionLocation(ctx context.Context, tx *sql.Tx, fileID st
 			return "", nil
 		}
 
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return submissionLocation, nil
