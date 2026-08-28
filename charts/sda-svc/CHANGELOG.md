@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Populate broker_v2 config for verify
 - Populate broker_v2 config for rotatekey
 - Populate broker_v2 config for intercept
+- Populate broker_v2 config for s3inbox
 
 ## [4.0.0] - 2026-08-26
 
