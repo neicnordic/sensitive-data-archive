@@ -33,6 +33,7 @@ type ServerConfig struct {
 type Config struct {
 	Broker       broker.MQConf
 	Server       ServerConfig
+	S3Inbox      S3InboxConf
 	API          APIConf
 	Notify       SMTPConf
 	Orchestrator OrchestratorConf
@@ -84,6 +85,15 @@ type SyncAPIConf struct {
 	MappingRouting   string `default:"mappings"`
 }
 
+type S3InboxConf struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"` // #nosec G117 -- Export needed for configuration access
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	Region    string `mapstructure:"region"`
+	CaCert    string `mapstructure:"ca_cert"`
+	ReadyPath string `mapstructure:"ready_path"`
+}
 type APIConf struct {
 	RBACpolicy  []byte
 	CACert      string
@@ -298,6 +308,19 @@ func NewConfig(app string) (*Config, error) {
 			"c4gh.rotatePubKeyPath",
 			"grpc.host",
 		}
+	case "s3inbox":
+		requiredConfVars = []string{
+			"broker.host",
+			"broker.port",
+			"broker.user",
+			"broker.password",
+			"broker.routingkey",
+			"s3inbox.endpoint",
+			"s3inbox.access_key",
+			"s3inbox.secret_key",
+			"s3inbox.bucket",
+			"s3inbox.region",
+		}
 	case "sync":
 		requiredConfVars = []string{
 			"broker.host",
@@ -471,6 +494,20 @@ func NewConfig(app string) (*Config, error) {
 		}
 
 		c.RotateKey.PublicKey, err = GetC4GHPublicKey(viper.GetString("c4gh.rotatePubKeyPath"))
+		if err != nil {
+			return nil, err
+		}
+	case "s3inbox":
+		err := c.configBroker()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := viper.UnmarshalKey("s3inbox", &c.S3Inbox); err != nil {
+			return nil, fmt.Errorf("failed to parse key configurations: %v", err)
+		}
+
+		err = c.configServer()
 		if err != nil {
 			return nil, err
 		}
