@@ -19,7 +19,7 @@ func (p *proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.broker.Alive() {
-		log.Errorf("broker connection problem: %v", err)
+		log.Error("broker connection not alive")
 		w.WriteHeader(http.StatusServiceUnavailable)
 
 		return
