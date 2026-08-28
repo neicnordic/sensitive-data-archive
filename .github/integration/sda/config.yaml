@@ -112,6 +112,7 @@ server:
   key: ""
   # jwtpubkeypath: "/shared/keys/pub/"
   jwtpubkeyurl: "http://localhost:8800/oidc/jwk"
+  jwt_pub_key_url: "http://localhost:8800/oidc/jwk"
 
 sync:
   api:
