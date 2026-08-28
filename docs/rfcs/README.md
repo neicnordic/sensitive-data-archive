@@ -150,6 +150,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
-
-*(empty at the time this folder is introduced; entries added as RFCs are
-written)*
+| [0005](0005-cors-application-layer-or-edge.md) | Where to handle CORS for browser clients: application layer or edge | exploring | — |
