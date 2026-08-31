@@ -77,6 +77,7 @@ const (
 	AbortMultiPartUpload
 	GetBucketLocation
 	HeadObject
+	DeleteObject
 )
 
 // NewProxy creates a new S3Proxy. This implements the ServerHTTP interface.
@@ -111,6 +112,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.forwardRequest(s3RequestType, w, r, token)
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
 		p.handleUpload(s3RequestType, w, r, token)
+	case DeleteObject:
+		p.handleDelete(s3RequestType, w, r, token)
 	default:
 		log.Warnf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery)
 		reportErrorToClient(http.StatusForbidden, "Forbidden", w)
@@ -317,7 +320,7 @@ func (p *Proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 		if isReupload {
 			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
-			if err := p.sendMessageOnOverwrite(username, fileID, s3FilePath); err != nil {
+			if err := p.sendInboxRemoveMessage(username, fileID, s3FilePath); err != nil {
 				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 				return
@@ -458,6 +461,10 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 // * AbortMultiPartUpload == DELETE /${bucket}/${object}?uploadId
 // For aws docs see:  https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html
 //
+// * DeleteObject == DELETE /${bucket}/${object}
+// For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html
+// Only allowed for objects that are still eligible for inbox actions, i.e. not yet ingested
+//
 // * ListParts == GET /${bucket}/${object}?uploadId
 // For aws docs see: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html
 //
@@ -505,6 +512,8 @@ func detectS3RequestType(r *http.Request) S3RequestType {
 		return CompleteMultiPartUpload
 	case r.Method == http.MethodDelete && isObjectPath && query.Has("uploadId"):
 		return AbortMultiPartUpload
+	case r.Method == http.MethodDelete && isObjectPath:
+		return DeleteObject
 	default:
 		return Unsupported
 	}
@@ -568,7 +577,77 @@ func (p *Proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 	return result != nil, err
 }
 
-func (p *Proxy) sendMessageOnOverwrite(username, fileID, s3FilePath string) error {
+// handleDelete handles removal of an object from the inbox for the DeleteObject request type.
+// Only objects that are still eligible for inbox actions (registered, uploaded or already
+// disabled, i.e. not yet ingested) can be removed this way.
+func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+	username := token.Subject()
+
+	var err error
+	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
+	if err != nil {
+		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+
+		return
+	}
+
+	s3FilePath := strings.Replace(r.URL.Path, "/"+p.s3Conf.Bucket+"/", "", 1)
+	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
+	if err != nil {
+		log.Warnf("bad request from user %s: %v", token.Subject(), err)
+		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+
+		return
+	}
+
+	fileID, err := p.database.GetFileIDInInbox(r.Context(), username, filePath)
+	if err != nil {
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to check existing file id from database: %v", err))
+
+		return
+	}
+	if fileID == "" {
+		log.Warnf("user: %s, attempted to delete file not eligible for removal: %s", username, filePath)
+		reportErrorToClient(http.StatusNotFound, "Not Found", w)
+
+		return
+	}
+
+	s3Response, err := p.forwardRequestToBackend(r)
+	if err != nil {
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("forwarding error: %v", err))
+
+		return
+	}
+	defer func() {
+		_ = s3Response.Body.Close()
+	}()
+
+	if s3Response.StatusCode >= 200 && s3Response.StatusCode < 300 {
+		if err := p.sendInboxRemoveMessage(username, fileID, s3FilePath); err != nil {
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+
+			return
+		}
+
+		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "disabled", username, "{}", "{}"); err != nil {
+			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
+
+			return
+		}
+
+		log.Infof("user: %s, deleted file: %s, with id: %s", username, filePath, fileID)
+	}
+
+	if err := p.forwardResponseToClient(s3Response, w); err != nil {
+		p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("failed to forward response to client: %v", err))
+	}
+}
+
+// sendInboxRemoveMessage sends an inbox-remove message to the broker, used both when a
+// file is overwritten by a reupload and when a file is explicitly deleted by the user.
+func (p *Proxy) sendInboxRemoveMessage(username, fileID, s3FilePath string) error {
 	msg := schema.InboxRemove{
 		User:      username,
 		FilePath:  s3FilePath,

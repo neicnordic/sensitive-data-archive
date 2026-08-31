@@ -302,11 +302,12 @@ func (s *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(s.T(), 403, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
-	// Deletion of files are disallowed
+	// Deletion of another user's file is disallowed
+	w = httptest.NewRecorder()
 	r.Method = "DELETE"
 	r.URL, _ = url.Parse("/asdf/asdf")
 	proxy.ServeHTTP(w, r)
-	assert.Equal(s.T(), 403, w.Result().StatusCode)
+	assert.Equal(s.T(), 400, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
 	log.Warnf("getting to not allowed stuff")
@@ -452,6 +453,22 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+
+	// Delete of the uploaded object works and marks it disabled in the database
+	w = httptest.NewRecorder()
+	r.Method = "DELETE"
+	r.URL, _ = url.Parse("/dummy/file")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+
+	// Deleting a file that was never uploaded is not found
+	w = httptest.NewRecorder()
+	r.Method = "DELETE"
+	r.URL, _ = url.Parse("/dummy/never-uploaded")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 404, w.Result().StatusCode)
+	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
 	// Put with partnumber sends no message
 	w = httptest.NewRecorder()
