@@ -151,3 +151,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
 | [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere? | promoted | [ADR-0008](../decisions/0008-use-accessionid-in-application-code.md) |
+| 0003 | Rename the API app | exploring | |
