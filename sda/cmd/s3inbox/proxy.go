@@ -307,7 +307,7 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 		if isReupload {
 			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
-			if err := p.sendInboxRemoveMessage(r.Context(), username, fileID, s3FilePath); err != nil {
+			if err := p.sendInboxRemoveMessage(context.WithoutCancel(r.Context()), username, fileID, s3FilePath); err != nil {
 				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 				return
@@ -322,7 +322,8 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 			return
 		}
-		if err := p.broker.Publish(r.Context(), p.destinationQueue, broker.Message{
+
+		if err := p.broker.Publish(context.WithoutCancel(r.Context()), p.destinationQueue, broker.Message{
 			Key:  fileID,
 			Body: jsonMessage,
 		}); err != nil {
@@ -625,7 +626,7 @@ func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter,
 	}()
 
 	if s3Response.StatusCode >= 200 && s3Response.StatusCode < 300 {
-		if err := p.sendInboxRemoveMessage(r.Context(), username, fileID, s3FilePath); err != nil {
+		if err := p.sendInboxRemoveMessage(context.WithoutCancel(r.Context()), username, fileID, s3FilePath); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
 
 			return
