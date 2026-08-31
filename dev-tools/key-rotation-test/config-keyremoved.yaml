@@ -161,4 +161,5 @@ cache:
   file-ttl: 300
   permission-ttl: 120
   dataset-ttl: 300
-  location_broker.cache_ttl: 0
+
+location_broker.cache_ttl: 0
