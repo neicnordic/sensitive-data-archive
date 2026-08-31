@@ -39,13 +39,29 @@ you can write *"Chosen option: X, because Y"* in the initial PR.
 2. Fill in the sections. The `## Open Questions` section is the heart of an
    RFC — not a placeholder, it is the deliverable.
 
-3. Set `status: exploring` in the front matter.
+3. Set `status: exploring` in the front matter, and add a row for the RFC to
+   the [index](#index) at the bottom of this README.
 
-4. Open a pull request and label it `rfc`.
+4. Open a pull request and label it `rfc`. Once the PR exists, record its URL
+   in the `discussion` field of the front matter in a follow-up commit, so the
+   file points back at its own thread.
 
-5. The RFC is merged in its current state so the exploration can be versioned.
-   It does **not** have to reach a conclusion before merging. `exploring` is a
-   valid end state for a long time.
+5. The PR thread is where the discussion happens; the file is what the repo
+   keeps. Before the RFC merges, fold what the thread produced into the file:
+   a new option goes under `## Considered Options`, an objection to an option
+   goes into its `Pros and Cons`, and anything still unresolved goes into
+   `## Open Questions`. Push follow-up commits rather than force-pushing, so
+   reviewers can see what changed. Someone reading the file later should not
+   have to open the PR to learn which options and objections exist.
+
+6. The author merges the RFC once a reviewer has approved it and the thread's
+   substance is in the file. Merging publishes an editable exploration; it
+   does not mean the team agrees with the contents, and the RFC does **not**
+   have to reach a conclusion first. `exploring` is a valid end state for a
+   long time. An objection that is still live at merge time goes in as an
+   Open Question with the objector named, and is taken up at the next NeIC
+   SDA-Devs meet-up. Feedback that arrives after the merge goes into the file
+   the same way, through a follow-up PR.
 
 ## Status lifecycle
 
@@ -56,9 +72,11 @@ you can write *"Chosen option: X, because Y"* in the initial PR.
 | `promoted` | One or more ADRs have been created from this RFC. The RFC body is frozen; `promoted-to` lists the resulting ADR filenames. |
 | `withdrawn` | No longer pursued. Kept in place for history. |
 
-RFC numbers are never reused. Once an RFC has any status other than `exploring`,
-its body should not be edited further — only `status`, `date`, `promoted-to`,
-and index entries change.
+RFC numbers are never reused. While an RFC is `exploring` or
+`ready-for-decision`, its body is a living document: edit it in the original
+PR or in follow-up PRs as the exploration progresses. Once it is `promoted` or
+`withdrawn`, the body is frozen — only `status`, `date`, `promoted-to`, and
+index entries change.
 
 ## Promotion — RFC → ADR
 
@@ -122,7 +140,8 @@ still open. The review is a lightweight forcing function, not a deadline.
 | Typical question | *"Should we?"* | *"We did, because."* |
 | Status vocabulary | `exploring`, `ready-for-decision`, `promoted`, `withdrawn` | `proposed`, `accepted`, `rejected`, `deprecated`, `superseded` |
 | Template | MADR 4.0.0 structure, minus `## Decision Outcome` and `### Confirmation`, plus `## Open Questions` | Full MADR 4.0.0 |
-| Expected PR lifetime | Indefinite | Short — merges when the discussion has already happened |
+| Expected PR lifetime | Short — merges once review feedback is in the file | Short — merges when the discussion has already happened |
+| Time to a conclusion | Open-ended; `exploring` can last for months, in the repo rather than in a PR | One meet-up cycle; the PR records a decision the exploration has already converged on |
 
 ADR statuses only apply after a file lives in `docs/decisions/`. An RFC is not
 a `proposed` ADR; it is a separate artifact with its own lifecycle.
