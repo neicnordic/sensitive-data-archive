@@ -72,9 +72,10 @@ spec:
         - name: tls
           mountPath: {{ template "tlsPath" . }}
         {{- end }}
-        {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-          mountPath: {{ .Values.global.archive.volumePath | quote }}
+        {{- if .Values.global.archive.posix }}
+          {{- include "sda.posixVolumeMounts" (dict
+              "config" .Values.global.archive
+              "name" "archive") | nindent 8 }}
         {{- end }}
       enableServiceLinks: false
       volumes:
@@ -100,16 +101,10 @@ spec:
             defaultMode: 0440
             secretName: {{ required "A secret for the c4gh key is required" .Values.global.c4gh.secretName }}
       {{- end }}
-      {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-        {{- if .Values.global.archive.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.archive.existingClaim }}
-        {{- else }}
-          nfs:
-            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
-            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-        {{- end }}
+      {{- if .Values.global.archive.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.archive
+            "name" "archive") | nindent 8 }}
       {{- end }}
       restartPolicy: Always
 {{- end }}

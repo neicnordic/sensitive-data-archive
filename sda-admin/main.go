@@ -32,6 +32,10 @@ Commands:
                                 Assign accession ID to a file.
   file rotatekey -file-id FILEUUID
                                 Rotate encryption key for a specific file.
+  file get-events -file-id FILEUUID
+                                Retrieve the event / status for a given file
+  file update-event -file-id FILEUUID -event EVENT
+                                Update the event / status for a given file
   dataset create -user SUBMISSION_USER -dataset-id DATASET_ID accessionID [accessionID ...]
                                 Create a dataset from a list of accession IDs and a dataset ID.
   dataset release -dataset-id DATASET_ID
@@ -106,6 +110,23 @@ Options:
   -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.
   -accession-id ID     Specify the accession ID to assign to the file.`
 
+var getFileEventUsage = `Usage with file path and user: sda-admin file get-events -fileid <FILE_ID>
+Usage with file ID: sda-admin file get-events -fileid <FILE_ID>
+
+	Get the latest event associated with a file by providing the file id
+
+Options:
+  -fileid FILEUUID     Specify the file ID of the file to assign the accession ID.`
+
+var updateFileEventUsage = `Usage with fileid and event: sda-admin file update-event -fileid <FILE_ID> -event <EVENT>
+Usage with file ID: sda-admin file update-event -fileid <FILE_ID> -event <EVENT>
+
+	Append the file_event_log with a new event for the given fileid
+
+Options:
+  -fileid <FILE_ID>     Specify the file ID of the file to assign the accession ID.
+	-event <EVENT>        Specity the event to update the file with`
+
 var fileRotateKeyUsage = `Usage: sda-admin file rotatekey -file-id FILEUUID
   Rotate encryption key for a specific file.
 
@@ -130,8 +151,8 @@ Options:
 
 Use 'sda-admin help dataset <command>' for information on a specific command.`
 
-var datasetCreateUsage = `Usage: sda-admin dataset create -user SUBMISSION_USER -dataset-id DATASET_ID [ACCESSION_ID ...]
-  Create a dataset from a list of accession IDs and a dataset ID belonging to a given user.
+var datasetCreateUsage = `Usage: sda-admin dataset create -dataset-id DATASET_ID [ACCESSION_ID ...]
+  Create a dataset from a list of accession IDs and a dataset ID.
 
 Options:
   -dataset-id DATASET_ID    Specify the unique identifier for the dataset.
@@ -184,7 +205,7 @@ var c4ghHashListUsage = `Usage: sda-admin c4gh-hash list
 Lists all key hashes in the system.`
 
 func printVersion() {
-	fmt.Printf("sda-admin %s\n", version)
+	_, _ = fmt.Printf("sda-admin %s\n", version)
 }
 
 func init() {
@@ -194,7 +215,7 @@ func init() {
 
 	// Custom usage message
 	flag.Usage = func() {
-		fmt.Println(usage)
+		_, _ = fmt.Println(usage)
 	}
 }
 
@@ -228,7 +249,7 @@ func validateFlagsAndEnv() error {
 
 func handleHelpCommand() error {
 	if flag.NArg() == 1 {
-		fmt.Println(usage)
+		_, _ = fmt.Println(usage)
 
 		return nil
 	}
@@ -260,9 +281,9 @@ func handleHelpCommand() error {
 func handleHelpUser() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(userUsage)
+		_, _ = fmt.Println(userUsage)
 	case flag.Arg(2) == "list":
-		fmt.Println(userListUsage)
+		_, _ = fmt.Println(userListUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), userUsage)
 	}
@@ -273,15 +294,19 @@ func handleHelpUser() error {
 func handleHelpFile() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(fileUsage)
+		_, _ = fmt.Println(fileUsage)
 	case flag.Arg(2) == "list":
-		fmt.Println(fileListUsage)
+		_, _ = fmt.Println(fileListUsage)
 	case flag.Arg(2) == "ingest":
-		fmt.Println(fileIngestUsage)
+		_, _ = fmt.Println(fileIngestUsage)
 	case flag.Arg(2) == "set-accession":
-		fmt.Println(fileAccessionUsage)
+		_, _ = fmt.Println(fileAccessionUsage)
 	case flag.Arg(2) == "rotatekey":
-		fmt.Println(fileRotateKeyUsage)
+		_, _ = fmt.Println(fileRotateKeyUsage)
+	case flag.Arg(2) == "get-events":
+		_, _ = fmt.Println(getFileEventUsage)
+	case flag.Arg(2) == "update-event":
+		_, _ = fmt.Println(updateFileEventUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), fileUsage)
 	}
@@ -292,13 +317,13 @@ func handleHelpFile() error {
 func handleHelpDataset() error {
 	switch {
 	case flag.NArg() == 2:
-		fmt.Println(datasetUsage)
+		_, _ = fmt.Println(datasetUsage)
 	case flag.Arg(2) == "create":
-		fmt.Println(datasetCreateUsage)
+		_, _ = fmt.Println(datasetCreateUsage)
 	case flag.Arg(2) == "release":
-		fmt.Println(datasetReleaseUsage)
+		_, _ = fmt.Println(datasetReleaseUsage)
 	case flag.Arg(2) == "rotatekey":
-		fmt.Println(datasetRotateKeyUsage)
+		_, _ = fmt.Println(datasetRotateKeyUsage)
 	default:
 		return fmt.Errorf("unknown subcommand '%s' for '%s'.\n%s", flag.Arg(2), flag.Arg(1), datasetUsage)
 	}
@@ -367,6 +392,14 @@ func handleFileCommand() error {
 		}
 	case "rotatekey":
 		if err := handleFileRotateKeyCommand(); err != nil {
+			return err
+		}
+	case "get-events":
+		if err := handleFileGetEvent(); err != nil {
+			return err
+		}
+	case "update-event":
+		if err := handleFileUpdateEvent(); err != nil {
 			return err
 		}
 	default:
@@ -464,6 +497,46 @@ func handleFileRotateKeyCommand() error {
 	return nil
 }
 
+func handleFileGetEvent() error {
+	var fileID string
+	fileGetEventCmd := flag.NewFlagSet("get-events", flag.ExitOnError)
+	fileGetEventCmd.StringVar(&fileID, "file-id", "", "File ID (UUID) to rotate key for")
+
+	if err := fileGetEventCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	body, err := file.GetEvent(apiURI, token, fileID)
+	if err != nil {
+		return fmt.Errorf("could not get event for file %s, reason: %v", fileID, err)
+	}
+
+	fmt.Printf("response: %s", body)
+
+	return nil
+}
+
+func handleFileUpdateEvent() error {
+	var fileID, event, reason string
+	fileGetEventCmd := flag.NewFlagSet("update-event", flag.ExitOnError)
+	fileGetEventCmd.StringVar(&fileID, "file-id", "", "File ID (UUID) to append event to")
+	fileGetEventCmd.StringVar(&event, "event", "", "Event to append")
+	fileGetEventCmd.StringVar(&reason, "reason", "", "Reason for changing the event_log")
+
+	if err := fileGetEventCmd.Parse(flag.Args()[2:]); err != nil {
+		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
+	}
+
+	_, err := file.PostEvent(apiURI, token, fileID, event, reason)
+	if err != nil {
+		return fmt.Errorf("could not set event for file %s, reason: %v", fileID, err)
+	}
+
+	fmt.Printf("appended event '%s' for file '%s'", event, fileID)
+
+	return nil
+}
+
 func handleDatasetCommand() error {
 	if flag.NArg() < 2 {
 		return fmt.Errorf("error: 'dataset' requires a subcommand (create, release, rotatekey).\n%s", datasetUsage)
@@ -491,9 +564,8 @@ func handleDatasetCommand() error {
 
 func handleDatasetCreateCommand() error {
 	datasetCreateCmd := flag.NewFlagSet("create", flag.ExitOnError)
-	var datasetID, username string
+	var datasetID string
 	datasetCreateCmd.StringVar(&datasetID, "dataset-id", "", "ID of the dataset to create")
-	datasetCreateCmd.StringVar(&username, "user", "", "Username to associate with the file")
 
 	if err := datasetCreateCmd.Parse(flag.Args()[2:]); err != nil {
 		return fmt.Errorf("error: failed to parse command line arguments, reason: %v", err)
@@ -505,11 +577,7 @@ func handleDatasetCreateCommand() error {
 		return fmt.Errorf("error: -dataset-id and at least one accession ID are required.\n%s", datasetCreateUsage)
 	}
 
-	if username == "" {
-		return fmt.Errorf("error: -user is required.\n%s", datasetCreateUsage)
-	}
-
-	err := dataset.Create(apiURI, token, datasetID, username, accessionIDs)
+	err := dataset.Create(apiURI, token, datasetID, accessionIDs)
 	if err != nil {
 		return fmt.Errorf("error: failed to create dataset, reason: %v", err)
 	}
@@ -656,19 +724,19 @@ func main() {
 	flag.Parse()
 
 	if err := validateFlagsAndEnv(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	switch flag.Arg(0) {
 	case "help", "-h", "-help":
 		if err := handleHelpCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "user":
 		if err := handleUserCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "file":
@@ -676,23 +744,23 @@ func main() {
 			if errors.Is(err, file.ErrAborted) {
 				os.Exit(0)
 			}
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "dataset":
 		if err := handleDatasetCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "version":
 		printVersion()
 	case "c4gh-hash":
 		if err := handleC4ghKeyHashCommand(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command '%s'.\n%s\n", flag.Arg(0), usage)
+		_, _ = fmt.Fprintf(os.Stderr, "unknown command '%s'.\n%s\n", flag.Arg(0), usage)
 		os.Exit(1)
 	}
 

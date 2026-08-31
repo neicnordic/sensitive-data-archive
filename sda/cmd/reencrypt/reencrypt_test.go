@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -22,6 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -129,6 +131,76 @@ func (ts *ReEncryptTests) TestReencryptHeader() {
 	data, err := io.ReadAll(c4gh)
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "content", string(data))
+}
+
+// TestReencryptHeader_LengthStableBytesDiffer pins the invariant that download
+// clients rely on: re-encrypting the same header for the same recipient key
+// returns a header of identical length on every call, but the bytes differ
+// because a fresh ephemeral writer keypair and nonce are generated per call.
+// Clients (e.g. sda-download-ui) may trust Content-Length for /files/{id}/header
+// but must never assume the header bytes are stable across requests; resume
+// belongs on /files/{id}/content. See sda/cmd/download/swagger_v2.yml.
+func (ts *ReEncryptTests) TestReencryptHeader_LengthStableBytesDiffer() {
+	// Bind to an ephemeral port so the test is idempotent under -count and never
+	// collides with the other suite cases' fixed ports.
+	lis, err := net.Listen("tcp", "localhost:0")
+	require.NoError(ts.T(), err)
+
+	s := grpc.NewServer()
+	re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.PrivateKeyList})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- s.Serve(lis) }()
+	defer func() {
+		s.Stop()
+		// Serve returns once Stop() closes the listener; ErrServerStopped is the
+		// expected outcome, anything else is a real server failure.
+		if err := <-serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			ts.T().Errorf("grpc server Serve failed: %v", err)
+		}
+	}()
+
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	conn, err := grpc.NewClient(lis.Addr().String(), opts...)
+	require.NoError(ts.T(), err)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	c := re.NewReencryptClient(conn)
+
+	first, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	require.NoError(ts.T(), err)
+	second, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	require.NoError(ts.T(), err)
+
+	// Length is stable: same header + same recipient key always yields the same
+	// size, so clients can trust Content-Length.
+	assert.Equal(ts.T(), len(first.Header), len(second.Header), "re-encrypted header length must be stable for a given (header, recipient key)")
+
+	// Bytes are NOT stable: a fresh ephemeral writer keypair and nonce are drawn
+	// on every call, so the bytes differ. Clients must not cache or byte-compare
+	// the header across requests.
+	assert.NotEqual(ts.T(), first.Header, second.Header, "re-encrypted header bytes must differ between calls (fresh ephemeral key and nonce)")
+
+	// Both headers must be valid Crypt4GH, still decrypt the body, and neither
+	// may carry a DataEditList packet on the simple path (the packet structure
+	// that keeps the length stable).
+	for _, h := range [][]byte{first.Header, second.Header} {
+		require.GreaterOrEqual(ts.T(), len(h), 8)
+		assert.Equal(ts.T(), "crypt4gh", string(h[:8]))
+
+		stream := io.MultiReader(bytes.NewReader(h), bytes.NewReader(ts.FileData))
+		c4gh, err := streaming.NewCrypt4GHReader(stream, ts.UserPrivateKey, nil)
+		require.NoError(ts.T(), err)
+		data, err := io.ReadAll(c4gh)
+		require.NoError(ts.T(), err)
+		assert.Equal(ts.T(), "content", string(data))
+
+		header, err := headers.NewHeader(bytes.NewReader(h), ts.UserPrivateKey)
+		require.NoError(ts.T(), err)
+		assert.Nil(ts.T(), header.GetDataEditListHeaderPacket(), "unexpected DataEditList packet on simple re-encrypt")
+	}
 }
 
 func (ts *ReEncryptTests) TestReencryptHeader_DataEditList() {

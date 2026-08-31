@@ -83,3 +83,11 @@ ga4gh:
 crypt4gh:
   private-key-path: ${CRYPT4GH_PRIVATE_KEY_PATH:/etc/ega/crypt4gh/key.pem}
   private-key-password-path: ${CRYPT4GH_PRIVATE_KEY_PASSWORD_PATH:/etc/ega/crypt4gh/key.pass}
+
+json:
+  schema:
+    export-request:
+      # Location of the JSON schema used to validate export request messages.
+      # Supports Spring resource prefixes: classpath:, file:, http(s):, etc.
+      # In Docker/production, override with e.g. file:/etc/ega/schemas/export-request.json
+      location: ${JSON_SCHEMA_EXPORT_REQUEST_LOCATION:classpath:export-request.json}

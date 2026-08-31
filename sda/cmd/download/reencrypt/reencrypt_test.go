@@ -93,10 +93,12 @@ func TestHealthCheck_ServerDown(t *testing.T) {
 	lis, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	port := lis.Addr().(*net.TCPAddr).Port
-	lis.Close()
+	_ = lis.Close()
 
 	client := NewClient("localhost", port)
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()

@@ -71,7 +71,7 @@ func (ts *TestSuite) SetupSuite() {
 	}
 }
 func (ts *TestSuite) TearDownSuite() {
-	os.RemoveAll(ts.tempFolder)
+	_ = os.RemoveAll(ts.tempFolder)
 }
 
 func (ts *TestSuite) TestAdd() {

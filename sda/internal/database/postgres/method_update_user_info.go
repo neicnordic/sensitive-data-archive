@@ -11,13 +11,11 @@ import (
 const updateUserInfoQuery = "updateUserInfo"
 
 func init() {
-	queries[updateUserInfoQuery] = `
-INSERT INTO sda.userinfo(id, name, email, groups) VALUES($1, $2, $3, $4)
+	queries[updateUserInfoQuery] = `INSERT INTO sda.userinfo(id, name, email, groups) VALUES($1, $2, $3, $4)
 ON CONFLICT (id)
-DO UPDATE SET name = excluded.name, email = excluded.email, groups = excluded.groups;
-
-`
+DO UPDATE SET name = excluded.name, email = excluded.email, groups = excluded.groups;`
 }
+
 func (db *pgDb) updateUserInfo(ctx context.Context, tx *sql.Tx, userID, name, email string, groups []string) error {
 	stmt, err := db.getPreparedStmt(tx, updateUserInfoQuery)
 	if err != nil {

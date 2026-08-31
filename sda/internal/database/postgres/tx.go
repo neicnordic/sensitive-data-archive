@@ -38,10 +38,6 @@ func (tx *pgTx) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return tx.getFileIDByUserPathAndStatus(ctx, tx.tx, submissionUser, filePath, status)
 }
 
-func (tx *pgTx) CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error) {
-	return tx.checkAccessionIDOwnedByUser(ctx, tx.tx, accessionID, user)
-}
-
 func (tx *pgTx) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return tx.updateFileEventLog(ctx, tx.tx, fileID, event, user, details, message)
 }
@@ -68,6 +64,10 @@ func (tx *pgTx) IsFileInDataset(ctx context.Context, fileID string) (bool, error
 
 func (tx *pgTx) GetFileStatus(ctx context.Context, fileID string) (string, error) {
 	return tx.getFileStatus(ctx, tx.tx, fileID)
+}
+
+func (tx *pgTx) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	return tx.getFileStatusHistory(ctx, tx.tx, fileID)
 }
 
 func (tx *pgTx) GetHeader(ctx context.Context, fileID string) ([]byte, error) {
@@ -98,8 +98,8 @@ func (tx *pgTx) GetAccessionID(ctx context.Context, fileID string) (string, erro
 	return tx.getAccessionID(ctx, tx.tx, fileID)
 }
 
-func (tx *pgTx) MapFileToDataset(ctx context.Context, datasetID, fileID string) error {
-	return tx.mapFileToDataset(ctx, tx.tx, datasetID, fileID)
+func (tx *pgTx) MapFileToDataset(ctx context.Context, datasetID, fileID string, downloadPath *string) error {
+	return tx.mapFileToDataset(ctx, tx.tx, datasetID, fileID, downloadPath)
 }
 
 func (tx *pgTx) GetInboxPath(ctx context.Context, accessionID string) (string, error) {
@@ -208,6 +208,10 @@ func (tx *pgTx) GetDatasetFiles(ctx context.Context, datasetID string) ([]string
 
 func (tx *pgTx) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error) {
 	return tx.getDatasetFileIDs(ctx, tx.tx, datasetID)
+}
+
+func (tx *pgTx) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
+	return tx.getDatasetDetails(ctx, tx.tx, datasetID)
 }
 
 func (tx *pgTx) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {

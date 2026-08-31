@@ -27,6 +27,7 @@ import (
 var db database.Database
 var inboxWriter storage.Writer
 var mqBroker *broker.AMQPBroker
+var inboxConfig helper.InboxProjectConfig
 
 func main() {
 	if err := run(); err != nil {
@@ -46,14 +47,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
+	inboxConfig = conf.Inbox
 
 	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer db.Close()
-	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 25 {
+		return errors.Join(errors.New("database schema v25 is required"), err)
 	}
 
 	mqBroker, err = broker.NewMQ(conf.Broker)
@@ -172,7 +174,15 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	case "mapping":
 		log.Debug("mapping type operation, mapping files to dataset")
 		for _, aID := range mappings.AccessionIDs {
-			log.Debugf("Mapped file to dataset (correlation-id: %s, dataset-id: %s, accession-id: %s)", delivered.CorrelationId, mappings.DatasetID, aID)
+			var fileDownloadPath *string
+
+			if mappings.FileDownloadPaths != nil {
+				if v, ok := mappings.FileDownloadPaths[aID]; ok && v != "" {
+					fileDownloadPath = &v
+				}
+			}
+
+			log.Debugf("Mapping file to dataset (correlation-id: %s, dataset-id: %s, accession-id: %s, file-download-path overridden: %t)", delivered.CorrelationId, mappings.DatasetID, aID, fileDownloadPath != nil)
 			fileMappingData, err := tx.GetMappingData(ctx, aID)
 			if err != nil {
 				log.Errorf("failed to get file info for file with accession-id: %s, can not map file to dataset: %s, due to: %v", aID, mappings.DatasetID, err)
@@ -193,11 +203,11 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 				return
 			}
-			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID); err != nil {
+			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID, fileDownloadPath); err != nil {
 				log.Errorf("failed to map file: %s to dataset-id: %s, reason: %v", fileMappingData.FileID, mappings.DatasetID, err)
 
 				// Nack message so the server gets notified that something is wrong and requeue the message
-				if err := delivered.Nack(false, true); err != nil {
+				if err := delivered.Nack(false, false); err != nil {
 					log.Errorf("failed to Nack message, reason: (%v)", err)
 				}
 
@@ -264,9 +274,9 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	for _, fileMappingData := range filesToCleanFromInbox {
-		unanonymizedSubmissionFilePath := helper.UnanonymizeFilepath(fileMappingData.SubmissionFilePath, fileMappingData.User)
-		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath); err != nil {
-			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, unanonymizedSubmissionFilePath, err)
+		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, inboxConfig)
+		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
+			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, resolvedSubmissionPath, err)
 		}
 	}
 

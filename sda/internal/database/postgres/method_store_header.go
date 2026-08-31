@@ -10,11 +10,9 @@ import (
 const storeHeaderQuery = "storeHeader"
 
 func init() {
-	queries[storeHeaderQuery] = `
-UPDATE sda.files 
+	queries[storeHeaderQuery] = `UPDATE sda.files 
 SET header = $1 
-WHERE id = $2;
-`
+WHERE id = $2;`
 }
 
 func (db *pgDb) storeHeader(ctx context.Context, tx *sql.Tx, header []byte, id string) error {

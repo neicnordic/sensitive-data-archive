@@ -8,16 +8,14 @@ import (
 const registerFileQuery = "registerFile"
 
 func init() {
-	queries[registerFileQuery] = `
-INSERT INTO sda.files(id, submission_location, submission_file_path, submission_user, encryption_method)
+	queries[registerFileQuery] = `INSERT INTO sda.files(id, submission_location, submission_file_path, submission_user, encryption_method)
 VALUES(COALESCE(CAST(NULLIF($1, '') AS UUID), gen_random_uuid()), $2, $3, $4, 'CRYPT4GH' )
     ON CONFLICT ON CONSTRAINT unique_ingested
     DO UPDATE SET submission_location = EXCLUDED.submission_location,
            submission_file_path = EXCLUDED.submission_file_path,
            submission_user = EXCLUDED.submission_user,
            encryption_method = EXCLUDED.encryption_method
-	RETURNING id;
-`
+	RETURNING id;`
 }
 
 func (db *pgDb) registerFile(ctx context.Context, tx *sql.Tx, fileID *string, inboxLocation, uploadPath, uploadUser string) (string, error) {

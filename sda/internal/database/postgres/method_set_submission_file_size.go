@@ -8,11 +8,9 @@ import (
 const setSubmissionFileSizeQuery = "setSubmissionFileSize"
 
 func init() {
-	queries[setSubmissionFileSizeQuery] = `
-UPDATE sda.files 
+	queries[setSubmissionFileSizeQuery] = `UPDATE sda.files 
 SET submission_file_size = $1 
-WHERE id = $2;
-`
+WHERE id = $2;`
 }
 
 func (db *pgDb) setSubmissionFileSize(ctx context.Context, tx *sql.Tx, fileID string, submissionFileSize int64) error {

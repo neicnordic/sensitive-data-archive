@@ -1,170 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
-	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
 	"testing"
-	"time"
-
-	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
+	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
-
-var mqPort int
-var dbPort uint16
-var brokerAPI string
-
-func TestMain(m *testing.M) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		m.Run()
-	}
-	_, b, _, _ := runtime.Caller(0)
-	rootDir := path.Join(path.Dir(b), "../../../")
-
-	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("Could not construct pool: %s", err)
-	}
-
-	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
-	if err != nil {
-		log.Fatalf("Could not connect to Docker: %s", err)
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15.2-alpine3.17",
-		Env: []string{
-			"POSTGRES_PASSWORD=rootpasswd",
-			"POSTGRES_DB=sda",
-		},
-		Mounts: []string{
-			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
-		},
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
-	dbPortUint64, _ := strconv.ParseUint(postgresContainer.GetPort("5432/tcp"), 10, 16)
-	dbPort = uint16(dbPortUint64)
-	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
-
-	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
-		db, err := sql.Open("postgres", databaseURL)
-		if err != nil {
-			log.Println(err)
-
-			return err
-		}
-
-		query := "SELECT MAX(version) FROM sda.dbschema_version;"
-		var dbVersion int
-
-		return db.QueryRow(query).Scan(&dbVersion)
-	}); err != nil {
-		log.Fatalf("Could not connect to postgres: %s", err)
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
-		Tag:        "v0.3.89-rabbitmq",
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-	if err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	brokerAPI = rabbitmq.GetHostPort("15672/tcp")
-
-	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+brokerAPI+"/api/queues/sda/", http.NoBody)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.SetBasicAuth("guest", "guest")
-
-	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
-		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
-		if err != nil || res.StatusCode != 200 {
-			return err
-		}
-		_ = res.Body.Close()
-
-		return nil
-	}); err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		if err := pool.Purge(rabbitmq); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not connect to rabbitmq: %s", err)
-	}
-
-	log.Println("starting tests")
-	code := m.Run()
-
-	log.Println("tests completed")
-	if err := pool.Purge(postgresContainer); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-	if err := pool.Purge(rabbitmq); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-
-	os.Exit(code)
-}
 
 func TestIngestTestSuite(t *testing.T) {
 	suite.Run(t, new(TestSuite))
@@ -172,681 +32,310 @@ func TestIngestTestSuite(t *testing.T) {
 
 type TestSuite struct {
 	suite.Suite
-	filePath   string
-	pubKeyList [][32]byte
-	ingest     Ingest
-	tempDir    string
-	UserName   string
+	ingest   Ingest
+	userName string
 
-	archiveDir string
-	inboxDir   string
-
-	verificationDB *sql.DB
+	mockInboxReader       *mocks.MockReader
+	mockArchiveReader     *mocks.MockReader
+	mockArchiveWriter     *mocks.MockWriter
+	mockBackupWriter      *mocks.MockWriter
+	mockDB                *mocks.MockDatabase
+	mockBroker            *mocks.MockBroker
+	publicKey, privateKey [32]byte
 }
 
 func (ts *TestSuite) SetupSuite() {
 	var err error
-	viper.Set("log.level", "debug")
-	ts.tempDir = ts.T().TempDir()
-	keyFile1 := fmt.Sprintf("%s/c4gh1.key", ts.tempDir)
-	keyFile2 := fmt.Sprintf("%s/c4gh2.key", ts.tempDir)
-
-	publicKey, err := helper.CreatePrivateKeyFile(keyFile1, "test")
+	ts.publicKey, ts.privateKey, err = keys.GenerateKeyPair()
 	if err != nil {
-		ts.FailNow("Failed to create c4gh key")
-	}
-	// Add only the first public key to the list
-	ts.pubKeyList = append(ts.pubKeyList, publicKey)
-
-	_, err = helper.CreatePrivateKeyFile(keyFile2, "test")
-	if err != nil {
-		ts.FailNow("Failed to create c4gh key")
+		ts.FailNow("failed to create private c4gh key")
 	}
 
-	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
-		{FilePath: keyFile1, Passphrase: "test"},
-		{FilePath: keyFile2, Passphrase: "test"},
-	})
-	viper.Set("archive.type", "posix")
-	viper.Set("archive.location", "/tmp/")
-	viper.Set("broker.host", "localhost")
-	viper.Set("broker.port", mqPort)
-	viper.Set("broker.user", "guest")
-	viper.Set("broker.password", "guest")
-	viper.Set("broker.queue", "ingest")
-	viper.Set("broker.routingkey", "verify")
-	viper.Set("broker.vhost", "sda")
-	viper.Set("schema.path", "../../schemas/isolated/")
-
-	ingestConf, err := config.NewConfig("ingest")
-	if err != nil {
-		ts.FailNowf("failed to init config: %s", err.Error())
-	}
-	ts.ingest.db, err = postgres.NewPostgresSQLDatabase(
-		postgres.Host("127.0.0.1"),
-		postgres.Port(dbPort),
-		postgres.User("postgres"),
-		postgres.Password("rootpasswd"),
-		postgres.DatabaseName("sda"),
-		postgres.Schema("sda"),
-		postgres.CACert(""),
-		postgres.SslMode("disable"),
-		postgres.ClientCert(""),
-		postgres.ClientKey(""),
-	)
-	if err != nil {
-		ts.FailNow("failed to connect to database", err)
+	ts.ingest.ArchiveKeyList = []*[32]byte{
+		&ts.privateKey,
 	}
 
-	ts.verificationDB, err = sql.Open("postgres", fmt.Sprintf("host=127.0.0.1 port=%d user=postgres password=rootpasswd dbname=sda sslmode=disable search_path=sda", dbPort))
-	if err != nil {
-		ts.FailNow(fmt.Sprintf("failed to connect to database: %v", err))
-	}
+	ingestconf.SetSchemaPath("../../schemas/isolated/")
 
-	ts.ingest.MQ, err = broker.NewMQ(ingestConf.Broker)
-	if err != nil {
-		ts.FailNowf("failed to setup rabbitMQ connection: %s", err.Error())
-	}
-	ts.ingest.ArchiveKeyList, err = config.GetC4GHprivateKeys()
-	if err != nil {
-		ts.FailNow("no private keys configured")
-	}
-
-	if err := ts.ingest.db.AddKeyHash(context.Background(), hex.EncodeToString(publicKey[:]), "the test key"); err != nil {
-		ts.FailNow("failed to register the public key")
-	}
-
-	ts.UserName = "test-ingest"
-}
-
-func (ts *TestSuite) TearDownSuite() {
-	if ts.verificationDB != nil {
-		ts.NoError(ts.verificationDB.Close())
-	}
-	if ts.ingest.db != nil {
-		ts.NoError(ts.ingest.db.Close())
-	}
+	ts.userName = "test-ingest"
 }
 
 func (ts *TestSuite) SetupTest() {
-	ts.archiveDir = ts.T().TempDir()
-	ts.inboxDir = ts.T().TempDir()
+	ts.mockInboxReader = &mocks.MockReader{}
+	ts.mockArchiveReader = &mocks.MockReader{}
+	ts.mockArchiveWriter = &mocks.MockWriter{}
+	ts.mockBackupWriter = &mocks.MockWriter{}
+	ts.mockDB = &mocks.MockDatabase{}
+	ts.mockBroker = &mocks.MockBroker{}
 
-	// Ensure a folder with the user name exists
-	err := os.Mkdir(path.Join(ts.inboxDir, ts.UserName), 0750)
-	if err != nil {
-		ts.FailNow("failed to create user folder in inbox directory")
-	}
-
-	f, err := os.CreateTemp(path.Join(ts.inboxDir, ts.UserName), "")
-	if err != nil {
-		ts.FailNow("failed to create test file")
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to test file")
-	}
-
-	outFileName := f.Name() + ".c4gh"
-	outFile, err := os.Create(outFileName) // #nosec G703 -- file controlled by unit test
-	if err != nil {
-		ts.FailNow("failed to create encrypted test file")
-	}
-	defer outFile.Close()
-
-	_, privateKey, err := keys.GenerateKeyPair()
-	if err != nil {
-		ts.FailNow("failed to create private c4gh key")
-	}
-
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(outFile, privateKey, ts.pubKeyList, nil)
-	if err != nil {
-		ts.FailNow("failed to create c4gh writer")
-	}
-
-	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to encrypted test file")
-	}
-	crypt4GHWriter.Close()
-
-	ts.filePath = filepath.Base(outFileName)
-
-	if err := os.WriteFile(filepath.Join(ts.tempDir, "config.yaml"), []byte(fmt.Sprintf(`
-storage:
-  inbox:
-    posix:
-      - path: %s
-  archive:
-    posix:
-      - path: %s
-`, ts.inboxDir, ts.archiveDir)), 0600); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(filepath.Join(ts.tempDir, "config.yaml"))
-	if err := viper.ReadInConfig(); err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	lb, err := locationbroker.NewLocationBroker(ts.ingest.db)
-	ts.NoError(err)
-	ts.ingest.ArchiveWriter, err = storage.NewWriter(context.Background(), "archive", lb)
-	if err != nil {
-		ts.FailNow("failed to setup archive writer")
-	}
-	ts.ingest.ArchiveReader, err = storage.NewReader(context.Background(), "archive")
-	if err != nil {
-		ts.FailNow("failed to setup archive reader")
-	}
-	ts.ingest.InboxReader, err = storage.NewReader(context.Background(), "inbox")
-	if err != nil {
-		ts.FailNow("failed to setup inbox reader")
-	}
-
-	viper.Set("c4gh.privateKeys", []config.C4GHprivateKeyConf{
-		{FilePath: filepath.Join(ts.tempDir, "c4gh1.key"), Passphrase: "test"},
-		{FilePath: filepath.Join(ts.tempDir, "c4gh2.key"), Passphrase: "test"},
-	})
-}
-func (ts *TestSuite) TestTryDecrypt_wrongFile() {
-	tempDir := ts.T().TempDir()
-	err := os.WriteFile(fmt.Sprintf("%s/dummy.file", tempDir), []byte("hello\ngo\n"), 0600)
-	assert.NoError(ts.T(), err)
-
-	file, err := os.Open(fmt.Sprintf("%s/dummy.file", tempDir))
-	assert.NoError(ts.T(), err)
-	defer file.Close()
-	buf, err := io.ReadAll(file)
-	assert.NoError(ts.T(), err)
-
-	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(ts.T(), err)
-	assert.Len(ts.T(), privateKeys, 2)
-
-	header, err := tryDecrypt(privateKeys[0], buf)
-	assert.Nil(ts.T(), header)
-	assert.EqualError(ts.T(), err, "not a Crypt4GH file")
-}
-func (ts *TestSuite) TestTryDecrypt() {
-	_, signingKey, err := keys.GenerateKeyPair()
-	assert.NoError(ts.T(), err)
-
-	// encrypt test file
-	tempDir := ts.T().TempDir()
-	unencryptedFile, err := os.CreateTemp(tempDir, "unencryptedFile-")
-	assert.NoError(ts.T(), err)
-
-	err = os.WriteFile(unencryptedFile.Name(), []byte("content"), 0600) // #nosec G703 -- file controlled by unit test
-	assert.NoError(ts.T(), err)
-
-	encryptedFile, err := os.CreateTemp(tempDir, "encryptedFile-")
-	assert.NoError(ts.T(), err)
-
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(encryptedFile, signingKey, ts.pubKeyList, nil)
-	assert.NoError(ts.T(), err)
-
-	_, err = io.Copy(crypt4GHWriter, unencryptedFile)
-	assert.NoError(ts.T(), err)
-	crypt4GHWriter.Close()
-
-	file, err := os.Open(encryptedFile.Name()) // #nosec G703 -- file controlled by unit test
-	assert.NoError(ts.T(), err)
-	defer file.Close()
-	buf, err := io.ReadAll(file)
-	assert.NoError(ts.T(), err)
-
-	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 2, len(privateKeys))
-
-	for i, key := range privateKeys {
-		header, err := tryDecrypt(key, buf)
-		switch i {
-		case 0:
-			assert.NoError(ts.T(), err)
-			assert.NotNil(ts.T(), header)
-		default:
-			assert.Contains(ts.T(), err.Error(), "could not find matching public key header")
-			assert.Nil(ts.T(), header)
-		}
-	}
+	ts.ingest.InboxReader = ts.mockInboxReader
+	ts.ingest.ArchiveReader = ts.mockArchiveReader
+	ts.ingest.ArchiveWriter = ts.mockArchiveWriter
+	ts.ingest.BackupWriter = ts.mockBackupWriter
+	ts.ingest.db = ts.mockDB
+	ts.ingest.Broker = ts.mockBroker
 }
 
-// messages of type `cancel`
-func (ts *TestSuite) TestCancelFile_NotYetArchived() {
-	// prepare the DB entries
+func (ts *TestSuite) encryptBytes(in []byte) ([]byte, []byte) {
+	contentBuf := &bytes.Buffer{}
+
+	sha256hash := sha256.New()
+	mr := io.MultiWriter(contentBuf, sha256hash)
+
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, ts.privateKey, [][32]byte{ts.publicKey}, nil)
+	if err != nil {
+		ts.FailNow("failed to create crypt4gh writer")
+	}
+	defer func() {
+		_ = crypt4GHWriter.Close()
+	}()
+	if _, err := io.Copy(crypt4GHWriter, bytes.NewReader(in)); err != nil {
+		ts.FailNow("failed to write to crypt4gh writer")
+	}
+
+	return contentBuf.Bytes(), sha256hash.Sum(nil)
+}
+
+func (ts *TestSuite) TestCancelFile_BaseCase() {
+	fileID := uuid.NewString()
 	userName := "test-cancel"
-	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+	filePath := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
+	ts.mockDB.On("IsFileInDataset", fileID).Return(false, nil)
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath:       filePath,
+		Location:       "archive_unit_test_location",
+		FileSize:       1,
+		BackupFilePath: fileID,
+		BackupLocation: "backup_unit_test_location",
+	}, nil)
+	ts.mockArchiveWriter.On("RemoveFile", "archive_unit_test_location", filePath).Return(nil)
+	ts.mockBackupWriter.On("RemoveFile", "backup_unit_test_location", fileID).Return(nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Commit").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockDB.On("CancelFile", fileID, mock.Anything).Return(nil)
 
-	message := schema.IngestionTrigger{
-		Type:     "cancel",
-		FilePath: file1,
-		User:     userName,
-	}
-
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.Background(), fileID, message))
+	message := createMessage("cancel", filePath, userName, fileID)
+	_, err := ts.ingest.handleMessage(context.Background(), message)
+	assert.Equal(ts.T(), err, nil)
+	ts.mockArchiveWriter.AssertNumberOfCalls(ts.T(), "RemoveFile", 1)
+	ts.mockBackupWriter.AssertNumberOfCalls(ts.T(), "RemoveFile", 1)
+	ts.mockDB.AssertNumberOfCalls(ts.T(), "CancelFile", 1)
 }
 
-// messages of type `cancel`
-func (ts *TestSuite) TestCancelFile() {
-	// prepare the DB entries
+func (ts *TestSuite) TestCancelFile_NotArchived() {
+	fileID := uuid.NewString()
 	userName := "test-cancel"
-	file1 := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+	filePath := fmt.Sprintf("/%v/TestCancelMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
+	ts.mockDB.On("IsFileInDataset", fileID).Return(false, nil)
+	ts.mockDB.On("GetArchived", fileID).Return(nil, nil)
+
+	message := createMessage("cancel", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
 	}
-
-	assert.NoError(ts.T(), ts.ingest.db.SetArchived(context.Background(), ts.archiveDir, &database.FileInfo{
-		ArchivedChecksum:  "123",
-		Size:              500,
-		Path:              fileID,
-		DecryptedChecksum: "321",
-		DecryptedSize:     550,
-		UploadedChecksum:  "abc",
-	}, fileID))
-
-	ts.NoError(os.WriteFile(filepath.Join(ts.archiveDir, fileID), []byte("unit testing file"), 0600))
-
-	message := schema.IngestionTrigger{
-		Type:     "cancel",
-		FilePath: file1,
-		User:     userName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.cancelFile(context.Background(), fileID, message))
+	assert.NoError(ts.T(), err, "unexpected error when canceling file")
 }
 
-func (ts *TestSuite) TestCancelFile_wrongCorrelationID() {
-	// prepare the DB entries
-	userName := "test-cancel"
-	file1 := fmt.Sprintf("/%v/TestCancelMessage_wrongCorrelationID.c4gh", userName)
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", file1, userName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+func (ts *TestSuite) TestIngestFile_BaseCase() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", userName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
+	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Commit").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
+	ts.mockArchiveWriter.On("WriteFile", fileID).Return("archive_unit_test_location", nil)
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
 	}
-
-	message := schema.IngestionTrigger{
-		Type:     "cancel",
-		FilePath: file1,
-		User:     userName,
-	}
-
-	assert.Equal(ts.T(), "reject", ts.ingest.cancelFile(context.Background(), uuid.NewString(), message))
+	assert.NoError(ts.T(), err, "unexpected error when ingesting file")
+	ts.mockArchiveWriter.AssertNumberOfCalls(ts.T(), "WriteFile", 1)
+	ts.mockDB.AssertCalled(ts.T(), "SetArchived", "archive_unit_test_location", database.FileInfo{
+		Size:             1,
+		Path:             fileID,
+		UploadedChecksum: fmt.Sprintf("%x", encryptedChecksum),
+	}, fileID)
+	ts.mockDB.AssertNumberOfCalls(ts.T(), "UpdateFileEventLog", 2)
+	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Publish", 1)
 }
 
-// messages of type `ingest`
-func (ts *TestSuite) TestIngestFile() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+// Non-s3inbox flow (e.g. FEGA-Norway via TSD): nothing pre-registers the file, so ingest's
+// catch-all (status "") is the first registration point. It must register AND archive in one
+// pass; an early return after RegisterFile would park the file at "registered" and verify would
+// never run. Guards the v3.1.72 catch-all regression.
+func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
+	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Commit").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("submission_unit_test_location", nil)
+	ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
+	ts.mockArchiveWriter.On("WriteFile", fileID).Return("archive_unit_test_location", nil)
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
 	}
+	assert.NoError(ts.T(), err, "unexpected error ingesting a non-registered file")
 
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
+	ts.mockInboxReader.AssertNumberOfCalls(ts.T(), "FindFile", 1)
+	ts.mockDB.AssertNumberOfCalls(ts.T(), "RegisterFile", 1)
+	ts.mockArchiveWriter.AssertNumberOfCalls(ts.T(), "WriteFile", 1)
+	ts.mockDB.AssertCalled(ts.T(), "SetArchived", "archive_unit_test_location", database.FileInfo{
+		Size:             1,
+		Path:             fileID,
+		UploadedChecksum: fmt.Sprintf("%x", encryptedChecksum),
+	}, fileID)
+	ts.mockDB.AssertNumberOfCalls(ts.T(), "UpdateFileEventLog", 2)
+	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Publish", 1)
 }
 
-func (ts *TestSuite) TestNoSubmissionLocation() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, "/inbox", ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+func (ts *TestSuite) TestIngestFile_NotRegistered_NotFoundInInbox() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
+	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("", storageerrors.ErrorFileNotFoundInLocation)
+	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
 	}
+	assert.Equal(ts.T(), nil, err)
 
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "nack", ts.ingest.ingestFile(context.Background(), fileID, message))
+	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
 }
 
-func (ts *TestSuite) TestIngestFile_secondTime() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
+func (ts *TestSuite) TestIngestFile_NoSubmissionLocation() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "error", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
 	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	// file is already in `archived` state
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.Background(), fileID, message))
-}
-func (ts *TestSuite) TestIngestFile_unknownInboxType() {
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), uuid.New().String(), message))
-}
-func (ts *TestSuite) TestIngestFile_reingestCancelledFile() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-}
-func (ts *TestSuite) TestIngestFile_reingestCancelledFileNewChecksum() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	// over write the encrypted file to generate new checksum
-	f, err := os.CreateTemp(ts.inboxDir, "")
-	if err != nil {
-		ts.FailNow("failed to create test file")
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to test file")
-	}
-
-	_, privateKey, err := keys.GenerateKeyPair()
-	if err != nil {
-		ts.FailNow("failed to create private c4gh key")
-	}
-
-	outFile, err := os.Create(path.Join(ts.inboxDir, ts.UserName, ts.filePath))
-	if err != nil {
-		ts.FailNowf("failed to create encrypted test file: %s", err.Error())
-	}
-	defer outFile.Close()
-
-	sha256hash := sha256.New()
-	mr := io.MultiWriter(outFile, sha256hash)
-
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, ts.pubKeyList, nil)
-	if err != nil {
-		ts.FailNowf("failed to create c4gh writer: %s", err.Error())
-	}
-
-	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to encrypted test file")
-	}
-	crypt4GHWriter.Close()
-
-	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	// DB should have the new checksum
-	var dbChecksum string
-	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.verificationDB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
-		ts.FailNow("failed to get checksum from database")
-	}
-
-	assert.Equal(ts.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
-}
-func (ts *TestSuite) TestIngestFile_reingestVerifiedFile() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	// fake file verification
-	sha256hash := sha256.New()
-	fi := new(database.FileInfo)
-	fi.ArchivedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
-	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
-	fi.DecryptedSize = 10 * 1024 * 1024
-	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
-		ts.Fail("failed to mark file as verified")
-	}
-
-	assert.Equal(ts.T(), "reject", ts.ingest.ingestFile(context.Background(), fileID, message))
-}
-func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFile() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	// fake file verification
-	sha256hash := sha256.New()
-	fi := new(database.FileInfo)
-	fi.ArchivedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
-	fi.DecryptedChecksum = hex.EncodeToString(sha256hash.Sum(nil))
-	fi.DecryptedSize = 10 * 1024 * 1024
-	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
-		ts.Fail("failed to mark file as verified")
-	}
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-}
-func (ts *TestSuite) TestIngestFile_reingestVerifiedCancelledFileNewChecksum() {
-	// prepare the DB entries
-	fileID, err := ts.ingest.db.RegisterFile(context.Background(), nil, ts.inboxDir, ts.filePath, ts.UserName)
-	assert.NoError(ts.T(), err, "failed to register file in database")
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", ts.UserName, "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: ts.filePath,
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	var firstDbChecksum string
-	const q1 = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.verificationDB.QueryRow(q1, fileID).Scan(&firstDbChecksum); err != nil {
-		ts.FailNow("failed to get checksum from database")
-	}
-
-	// fake file verification
-	verifiedSha256 := sha256.New()
-	fi := new(database.FileInfo)
-	fi.ArchivedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
-	fi.DecryptedChecksum = hex.EncodeToString(verifiedSha256.Sum(nil))
-	fi.DecryptedSize = 10 * 1024 * 1024
-	fi.Size = (10 * 1024 * 1024) + 456
-	if err := ts.ingest.db.SetVerified(context.Background(), fi, fileID); err != nil {
-		ts.Fail("failed to mark file as verified")
-	}
-
-	if err = ts.ingest.db.UpdateFileEventLog(context.Background(), fileID, "disabled", "ingest", "{}", "{}"); err != nil {
-		ts.Fail("failed to update file event log")
-	}
-
-	// over write the encrypted file to generate new checksum
-	f, err := os.CreateTemp(ts.inboxDir, "")
-	if err != nil {
-		ts.FailNow("failed to create test file")
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to test file")
-	}
-
-	_, privateKey, err := keys.GenerateKeyPair()
-	if err != nil {
-		ts.FailNow("failed to create private c4gh key")
-	}
-
-	outFile, err := os.Create(path.Join(ts.inboxDir, ts.UserName, ts.filePath))
-	if err != nil {
-		ts.FailNowf("failed to create encrypted test file: %s", err.Error())
-	}
-	defer outFile.Close()
-
-	sha256hash := sha256.New()
-	mr := io.MultiWriter(outFile, sha256hash)
-
-	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(mr, privateKey, ts.pubKeyList, nil)
-	if err != nil {
-		ts.FailNowf("failed to create c4gh writer: %s", err.Error())
-	}
-
-	_, err = io.Copy(crypt4GHWriter, io.LimitReader(rand.Reader, 10*1024*1024))
-	if err != nil {
-		ts.FailNow("failed to write data to encrypted test file")
-	}
-	crypt4GHWriter.Close()
-
-	// reingestion should work
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), fileID, message))
-
-	// DB should have the new checksum
-	var dbChecksum string
-	const q = "SELECT checksum from sda.checksums WHERE source = 'UPLOADED' and file_id = $1;"
-	if err := ts.verificationDB.QueryRow(q, fileID).Scan(&dbChecksum); err != nil {
-		ts.FailNow("failed to get checksum from database")
-	}
-
-	assert.Equal(ts.T(), dbChecksum, hex.EncodeToString(sha256hash.Sum(nil)))
-
-	assert.NotEqual(ts.T(), dbChecksum, firstDbChecksum)
-}
-func (ts *TestSuite) TestIngestFile_missingFile() {
-	// prepare the DB entries
-
-	basepath := filepath.Dir(ts.filePath)
-
-	newFileID := uuid.NewString()
-
-	message := schema.IngestionTrigger{
-		Type:     "ingest",
-		FilePath: fmt.Sprintf("%s/missing.file.c4gh", basepath),
-		User:     ts.UserName,
-	}
-
-	assert.Equal(ts.T(), "ack", ts.ingest.ingestFile(context.Background(), newFileID, message))
-}
-func (ts *TestSuite) TestDetectMisingC4GHKeys() {
-	viper.Set("c4gh.privateKeys", "")
-	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 0, len(privateKeys))
-}
-
-func (ts *TestSuite) TestRegisterC4ghKey_newDeployment() {
-	_, err := ts.verificationDB.Exec("TRUNCATE sda.encryption_keys CASCADE;")
 	assert.NoError(ts.T(), err)
 
-	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 2, len(privateKeys))
-
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(context.Background()))
-
-	kh, err := ts.ingest.db.ListKeyHashes(context.Background())
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 2, len(kh))
+	ts.mockDB.AssertCalled(ts.T(), "UpdateFileEventLog", fileID, "error", "ingest", mock.Anything, mock.Anything)
+	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
 }
 
-func (ts *TestSuite) TestRegisterC4ghKey_existingEntry() {
-	privateKeys, err := config.GetC4GHprivateKeys()
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 2, len(privateKeys))
+func (ts *TestSuite) TestIngestFile_AlreadyIngested() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 
-	assert.NoError(ts.T(), ts.ingest.registerC4GHKey(context.Background()))
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
 
-	kh, err := ts.ingest.db.ListKeyHashes(context.Background())
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
 	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 1, len(kh))
+	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
+}
+
+func (ts *TestSuite) TestIngestFile_MissingFile() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(nil, storageerrors.ErrorFileNotFoundInLocation)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "error", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.NoError(ts.T(), err, "unexpected error ingesting a missing file")
+
+	ts.mockDB.AssertCalled(ts.T(), "UpdateFileEventLog", fileID, "error", "ingest", mock.Anything, mock.Anything)
+	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
+}
+
+func (ts *TestSuite) TestIngestFile_DatabaseError() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("", errors.New("some error"))
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.Error(ts.T(), err, "expected error when ingest has db issue")
+}
+
+func createMessage(triggerType, filePath, userID, messageKey string) *broker.Message {
+	body := schema.IngestionTrigger{
+		Type:     triggerType,
+		FilePath: filePath,
+		User:     userID,
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	return &broker.Message{Key: messageKey, Body: bodyJSON}
 }

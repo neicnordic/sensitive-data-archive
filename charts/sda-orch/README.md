@@ -1,5 +1,8 @@
 # SDA Orchestrate Service
 
+> [!CAUTION]
+> The SDA Orchestrate Service Helm Chart has been deprecated and is no longer maintained.
+
 Source repositories: [https://github.com/neicnordic/sda-orchestrator](https://github.com/neicnordic/sda-orchestrator)
 
 ## Installing the Chart

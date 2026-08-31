@@ -150,7 +150,7 @@ common v1 endpoints to their v2 equivalents.
 | `GET /s3/{datasetid}/{fileid}` (decrypted) | _Removed_                                    | Decrypted streaming is no longer offered. Clients decrypt locally with their c4gh key.  |
 | `GET /s3-encrypted/{datasetid}/{fileid}`   | `GET /files/:fileId`                         | v1 prepended a re-encrypted Crypt4GH header before the body, so the closest complete `.c4gh` equivalent is the combined endpoint. Clients that fetch the header and body separately can use `/files/:fileId/header` + `/files/:fileId/content` instead. |
 | _New in v2_                                | `GET /files/:fileId/header`                  | Re-encrypted Crypt4GH header only — useful for htsget-style clients that fetch the header once and stream content separately. |
-| _New in v2_                                | `GET /objects/:datasetId/:filePath`          | GA4GH DRS 1.5 object endpoint. Returns checksums of the **encrypted** blob (per DRS).   |
+| _New in v2_                                | `GET /objects/*path`                         | GA4GH DRS 1.5 object endpoint. `*path` is a catch-all (`{datasetId}/{filePath}`); the file path may contain `/`. Returns checksums of the **encrypted** blob (per DRS). |
 
 #### File listing response shape
 
@@ -267,13 +267,13 @@ or reuse them across different queries.
 
 #### `GET /health/ready`
 
-Returns readiness status with dependency checks for database, storage, gRPC, and OIDC.
+Returns readiness status with dependency checks for database, storage, and gRPC.
 
 Example:
 
 ```bash
 curl https://HOSTNAME/health/ready
-{"status":"ok","services":{"database":"ok","storage":"ok","grpc":"ok","oidc":"ok"}}
+{"status":"ok","services":{"database":"ok","storage":"ok","grpc":"ok"}}
 ```
 
 #### `GET /health/live`
@@ -392,7 +392,9 @@ Response:
 `checksums[]` are over the decrypted (plaintext) file content. This is the
 value to verify against after decrypting the downloaded `.c4gh` file. It
 replaces v1's `decryptedFileChecksum` / `decryptedFileChecksumType` fields,
-shaped as an array so a file can carry multiple algorithms.
+shaped as an array so a file can carry multiple algorithms. The schema allows
+MD5/SHA-256/SHA-384/SHA-512, but the ingest pipeline currently writes SHA-256
+only.
 
 See [Checksums](#checksums) for the differences between this endpoint and
 the DRS object endpoint.
@@ -501,7 +503,7 @@ that matches what your client is verifying:
 | Endpoint                          | Source        | Describes                                    | Use for                                       |
 |-----------------------------------|---------------|----------------------------------------------|-----------------------------------------------|
 | `GET /datasets/:ds/files`         | `UNENCRYPTED` | Decrypted (plaintext) file content           | End-user integrity check after decrypting     |
-| `GET /objects/:ds/:filePath` (DRS)| `ARCHIVED`    | Encrypted blob in archive (per DRS 1.5 spec) | DRS-aware tooling (htsget-rs, etc.)           |
+| `GET /objects/*path` (DRS)        | `ARCHIVED`    | Encrypted blob in archive (per DRS 1.5 spec) | DRS-aware tooling (htsget-rs, etc.)           |
 
 For users downloading a file and verifying it locally, the value to compare
 against is the `UNENCRYPTED` checksum returned by `/datasets/:ds/files`. The
@@ -529,15 +531,15 @@ against is the `UNENCRYPTED` checksum returned by `/datasets/:ds/files`. The
 
 ### DRS Object Endpoint
 
-#### `GET /objects/{datasetId}/{filePath}`
+#### `GET /objects/{path}`
 
 Returns a minimal [GA4GH DRS 1.5](https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.5.0/docs/)
 `DrsObject` with a pre-resolved `access_url` pointing to the file content endpoint.
 This enables DRS-aware clients (e.g. htsget-rs) to resolve a dataset + file path
 to a download URL without knowing the internal file ID.
 
-The path is composite: everything before the first `/` is the dataset ID, everything
-after is the file path within the dataset.
+The `{path}` parameter is composite: everything before the first `/` is the dataset ID,
+everything after is the file path within the dataset (which may itself contain `/`).
 
 > **Limitation with URL-like dataset IDs.** The handler splits the (decoded)
 > path at its first `/`. Dataset IDs that contain slashes after decoding
@@ -584,6 +586,11 @@ Response:
 
 The `size` and `checksums` describe the encrypted blob served by `access_url`,
 per the DRS 1.5 specification.
+
+> **Note:** `self_uri` is advisory. The service does not currently expose a
+> DRS resolve-by-id endpoint (`/ga4gh/drs/v1/objects/{id}`), so the `drs://`
+> URI is not directly dereferenceable yet — resolve files through
+> `/objects/{datasetId}/{filePath}` instead.
 
 ### Error Format
 
@@ -790,5 +797,5 @@ make integrationtest-sda-download-v2-down  # Tear down
 
 ### Local Development
 
-See [TESTING.md](TESTING.md) for detailed local testing instructions including
+See [TESTING.md](https://github.com/neicnordic/sensitive-data-archive/blob/main/sda/cmd/download/TESTING.md) for detailed local testing instructions including
 Docker Compose setup, database seeding, and example curl commands.

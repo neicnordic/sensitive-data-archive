@@ -10,8 +10,7 @@ import (
 const listUserDatasetsQuery = "listUserDatasets"
 
 func init() {
-	queries[listUserDatasetsQuery] = `
-SELECT dataset_id, event, event_date 
+	queries[listUserDatasetsQuery] = `SELECT dataset_id, event, event_date 
 FROM sda.dataset_event_log 
 WHERE (dataset_id, event_date) IN (
 	SELECT dataset_id,max(event_date) FROM sda.dataset_event_log WHERE
@@ -25,8 +24,7 @@ WHERE (dataset_id, event_date) IN (
 		)
 	)
 	GROUP BY dataset_id
-);
-`
+);`
 }
 
 func (db *pgDb) listUserDatasets(ctx context.Context, tx *sql.Tx, submissionUser string) ([]*database.DatasetInfo, error) {

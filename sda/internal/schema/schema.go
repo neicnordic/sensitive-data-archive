@@ -85,9 +85,10 @@ type DatasetDeprecate struct {
 }
 
 type DatasetMapping struct {
-	Type         string   `json:"type"`
-	DatasetID    string   `json:"dataset_id"`
-	AccessionIDs []string `json:"accession_ids"`
+	Type              string            `json:"type"`
+	DatasetID         string            `json:"dataset_id"`
+	AccessionIDs      []string          `json:"accession_ids"`
+	FileDownloadPaths map[string]string `json:"file_download_paths,omitempty"`
 }
 
 type DatasetRelease struct {

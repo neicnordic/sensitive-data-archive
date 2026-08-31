@@ -11,14 +11,15 @@ const getFileInfoQuery = "getFileInfo"
 const getFileInfoChecksumQuery = "getFileInfoChecksum"
 
 func init() {
-	queries[getFileInfoQuery] = `
-SELECT archive_file_path, archive_file_size from sda.files where id = $1;
-`
-	queries[getFileInfoChecksumQuery] = `
-SELECT MAX(checksum) FILTER(where source = 'ARCHIVED') as Archived,
-MAX(checksum) FILTER(where source = 'UNENCRYPTED') as Unencrypted,
-MAX(checksum) FILTER(where source = 'UPLOADED') as Uploaded from sda.checksums where file_id = $1;
-`
+	queries[getFileInfoQuery] = `SELECT archive_file_path, archive_file_size 
+FROM sda.files 
+WHERE id = $1;`
+
+	queries[getFileInfoChecksumQuery] = `SELECT MAX(checksum) FILTER(WHERE source = 'ARCHIVED') AS Archived,
+MAX(checksum) FILTER(WHERE source = 'UNENCRYPTED') AS Unencrypted,
+MAX(checksum) FILTER(WHERE source = 'UPLOADED') AS Uploaded 
+FROM sda.checksums 
+WHERE file_id = $1;`
 }
 
 func (db *pgDb) getFileInfo(ctx context.Context, tx *sql.Tx, id string) (*database.FileInfo, error) {

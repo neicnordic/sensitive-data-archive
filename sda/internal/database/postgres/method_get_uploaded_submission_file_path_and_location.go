@@ -8,8 +8,7 @@ import (
 const getUploadedSubmissionFilePathAndLocationQuery = "getUploadedSubmissionFilePathAndLocation"
 
 func init() {
-	queries[getUploadedSubmissionFilePathAndLocationQuery] = `
-SELECT submission_file_path, submission_location
+	queries[getUploadedSubmissionFilePathAndLocationQuery] = `SELECT submission_file_path, submission_location
 FROM sda.files
 WHERE
   submission_user = $1
@@ -23,8 +22,7 @@ WHERE
 	    ORDER BY started_at DESC limit 1
 	  ) AS subquery
 	  WHERE event = 'uploaded' OR event = 'disabled'
-    );
-`
+    );`
 }
 
 func (db *pgDb) getUploadedSubmissionFilePathAndLocation(ctx context.Context, tx *sql.Tx, submissionUser, fileID string) (string, string, error) {

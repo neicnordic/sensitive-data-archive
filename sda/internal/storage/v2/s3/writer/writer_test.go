@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -334,7 +334,7 @@ func (ts *WriterTestSuite) TestRemoveFile_InvalidLocation() {
 
 func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstBucketFull() {
 	content := "test file 2"
-	lb, err := locationbroker.NewLocationBroker(&notImplementedDatabase{}, locationbroker.CacheTTL(0))
+	lb, err := locationbroker.NewLocationBroker(&mocks.MockDatabase{}, locationbroker.CacheTTL(0))
 	ts.NoError(err)
 
 	ts.s3Mock1.buckets["bucket_in_1-1"] = map[string]string{
@@ -365,221 +365,82 @@ func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstBucketFull() 
 	ts.Equal(fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL), location)
 }
 
-type notImplementedDatabase struct {
+// fillAllEndpoints fills every configured endpoint to its limits: it puts
+// max_buckets (3) prefixed buckets on both mock endpoints and makes the
+// broker report each of them at more than max_objects (10 and 5), so
+// findActiveBucket returns ErrorNoFreeBucket for both endpoints. The
+// expectations are deliberately not `.Once()` — the same locations are
+// looked up both while constructing the writer and while writing.
+func (ts *WriterTestSuite) fillAllEndpoints(broker *mockLocationBroker) {
+	ts.s3Mock1.buckets = map[string]map[string]string{}
+	ts.s3Mock2.buckets = map[string]map[string]string{}
+
+	for i := 1; i <= 3; i++ {
+		bucket1 := fmt.Sprintf("bucket_in_1-%d", i)
+		bucket2 := fmt.Sprintf("bucket_in_2-%d", i)
+		ts.s3Mock1.buckets[bucket1] = make(map[string]string)
+		ts.s3Mock2.buckets[bucket2] = make(map[string]string)
+		broker.On("GetObjectCount", fmt.Sprintf("%s/%s", ts.s3Mock1.server.URL, bucket1)).Return(11, nil)
+		broker.On("GetObjectCount", fmt.Sprintf("%s/%s", ts.s3Mock2.server.URL, bucket2)).Return(11, nil)
+	}
 }
 
-func (m *notImplementedDatabase) BeginTransaction(_ context.Context) (database.Transaction, error) {
-	panic("function not expected to be called in unit tests")
+// TestNewWriter_AllEndpointsFull_KeepsWriterUsable covers the first half of
+// #2546. When every endpoint reports ErrorNoFreeBucket the endpoints are
+// still appended to configuredEndpoints so WriteFile can roll over to them
+// once space frees up, but activeEndpoint was only assigned on the success
+// path. The `len(configuredEndpoints) == 0` guard then passed and NewWriter
+// returned a writer with a nil activeEndpoint, which the next WriteFile
+// dereferenced. NewWriter must keep the writer usable — a full backend is a
+// temporary condition and must not stop the service from starting — while
+// leaving activeEndpoint set so nothing dereferences nil.
+func (ts *WriterTestSuite) TestNewWriter_AllEndpointsFull_KeepsWriterUsable() {
+	broker := &mockLocationBroker{}
+	broker.On("RegisterSizeAndCountFinderFunc").Return().Once()
+	ts.fillAllEndpoints(broker)
+
+	writer, err := NewWriter(context.TODO(), "test", broker)
+	ts.NoError(err, "a full backend is temporary and must not stop the service from starting")
+	ts.Require().NotNil(writer)
+
+	ts.NotNil(writer.activeEndpoint, "activeEndpoint must be set even when every endpoint is full, WriteFile dereferences it")
+	ts.Len(writer.configuredEndpoints, 2, "full endpoints must stay configured so WriteFile can roll over once space frees up")
 }
 
-func (m *notImplementedDatabase) Close() error {
-	panic("function not expected to be called in unit tests")
+// TestWriteFile_AllEndpointsFull_FromStart is the write-time consequence of
+// the nil activeEndpoint above: the writer is built while every endpoint is
+// already full, and the first write panicked in getS3Client. It must return
+// ErrorNoFreeBucket instead.
+func (ts *WriterTestSuite) TestWriteFile_AllEndpointsFull_FromStart() {
+	broker := &mockLocationBroker{}
+	broker.On("RegisterSizeAndCountFinderFunc").Return().Once()
+	ts.fillAllEndpoints(broker)
+
+	writer, err := NewWriter(context.TODO(), "test", broker)
+	ts.Require().NoError(err)
+
+	var location string
+	ts.Require().NotPanics(func() {
+		location, err = writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte("test file 1")))
+	})
+
+	ts.ErrorIs(err, storageerrors.ErrorNoFreeBucket)
+	ts.Empty(location)
 }
 
-func (m *notImplementedDatabase) SchemaVersion() (int, error) {
-	panic("function not expected to be called in unit tests")
-}
+// TestWriteFile_AllEndpointsBecomeFull covers the second half of #2546: the
+// writer started with a free bucket, but by the time it writes every
+// endpoint is full. The rollover loop `continue`s past each endpoint on
+// ErrorNoFreeBucket and ends with activeBucket still empty, and nothing
+// checked it, so the upload ran with Bucket: aws.String("").
+func (ts *WriterTestSuite) TestWriteFile_AllEndpointsBecomeFull() {
+	ts.Require().NotNil(ts.writer.activeEndpoint, "writer starts out with an active endpoint")
+	ts.fillAllEndpoints(ts.locationBrokerMock)
 
-func (m *notImplementedDatabase) Ping(_ context.Context) error {
-	panic("function not expected to be called in unit tests")
-}
+	location, err := ts.writer.WriteFile(context.TODO(), "test_file_1.txt", bytes.NewReader([]byte("test file 1")))
 
-func (m *notImplementedDatabase) RegisterFile(_ context.Context, _x *string, _, _, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetFileIDByUserPathAndStatus(_ context.Context, _, _, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) CheckAccessionIDOwnedByUser(_ context.Context, _, _ string) (bool, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) UpdateFileEventLog(_ context.Context, _, _, _, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) StoreHeader(_ context.Context, _ []byte, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) RotateHeaderKey(_ context.Context, _ []byte, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetArchived(_ context.Context, _ string, _ *database.FileInfo, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetFileStatus(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetHeader(_ context.Context, _ string) ([]byte, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) BackupHeader(_ context.Context, _ string, _ []byte, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetVerified(_ context.Context, _ *database.FileInfo, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetArchived(_ context.Context, _ string) (*database.ArchiveData, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) CheckAccessionIDExists(_ context.Context, _, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetAccessionID(_ context.Context, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetAccessionID(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) MapFileToDataset(_ context.Context, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetInboxPath(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) UpdateDatasetEvent(_ context.Context, _, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetFileInfo(_ context.Context, id string) (*database.FileInfo, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetHeaderByAccessionID(_ context.Context, _ string) ([]byte, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetMappingData(_ context.Context, _ string) (*database.MappingData, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetSyncData(_ context.Context, _ string) (*database.SyncData, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetFileIDInInbox(_ context.Context, _, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) CheckIfDatasetExists(_ context.Context, _ string) (bool, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetArchivePathAndLocation(_ context.Context, _ string) (string, string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetArchiveLocation(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetSubmissionFileSize(_ context.Context, _ string, _ int64) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetUserFiles(_ context.Context, _, _ string, _ bool, _ int, _ string) ([]*database.SubmissionFileInfo, string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) ListActiveUsers(_ context.Context) ([]string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetDatasetStatus(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) AddKeyHash(_ context.Context, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetKeyHash(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetKeyHash(_ context.Context, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) ListKeyHashes(_ context.Context) ([]*database.C4ghKeyHash, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) DeprecateKeyHash(_ context.Context, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) ListDatasets(_ context.Context) ([]*database.DatasetInfo, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) ListUserDatasets(_ context.Context, _ string) ([]*database.DatasetInfo, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) UpdateUserInfo(_ context.Context, _, _, _ string, _ []string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetReVerificationData(_ context.Context, _ string) (*database.ReVerificationData, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetReVerificationDataFromFileID(_ context.Context, _ string) (*database.ReVerificationData, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetDecryptedChecksum(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetDatasetFiles(_ context.Context, _ string) ([]string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetDatasetFileIDs(_ context.Context, _ string) ([]string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetFileDetails(_ context.Context, fileUUID, event string) (*database.FileDetails, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) SetBackedUp(_ context.Context, _, _, _ string) error {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, location string) (uint64, uint64, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetUploadedSubmissionFilePathAndLocation(_ context.Context, _, _ string) (string, string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) GetSubmissionLocation(_ context.Context, _ string) (string, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) IsFileInDataset(_ context.Context, _ string) (bool, error) {
-	panic("function not expected to be called in unit tests")
-}
-
-func (m *notImplementedDatabase) CancelFile(_ context.Context, _, _ string) error {
-	panic("function not expected to be called in unit tests")
+	ts.ErrorIs(err, storageerrors.ErrorNoFreeBucket)
+	ts.Empty(location)
+	ts.NotContains(ts.s3Mock1.buckets, "", "nothing may be uploaded to an empty bucket name")
+	ts.NotContains(ts.s3Mock2.buckets, "", "nothing may be uploaded to an empty bucket name")
 }

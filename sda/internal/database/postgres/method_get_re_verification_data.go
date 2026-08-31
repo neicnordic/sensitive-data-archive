@@ -11,12 +11,10 @@ import (
 const getReVerificationDataQuery = "getReVerificationData"
 
 func init() {
-	queries[getReVerificationDataQuery] = `
-SELECT f.id, f.archive_file_path, f.submission_file_path, f.submission_user, cs.type, cs.checksum 
+	queries[getReVerificationDataQuery] = `SELECT f.id, f.archive_file_path, f.submission_file_path, f.submission_user, cs.type, cs.checksum 
 FROM sda.files AS f 
 INNER JOIN sda.checksums AS cs ON f.id = cs.file_id
-WHERE f.stable_id = $1 AND cs.source = 'ARCHIVED';
-`
+WHERE f.stable_id = $1 AND cs.source = 'ARCHIVED';`
 }
 func (db *pgDb) getReVerificationData(ctx context.Context, tx *sql.Tx, accessionID string) (*database.ReVerificationData, error) {
 	stmt, err := db.getPreparedStmt(tx, getReVerificationDataQuery)

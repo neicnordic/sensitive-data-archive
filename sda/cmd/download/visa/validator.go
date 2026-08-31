@@ -298,7 +298,21 @@ func (v *Validator) validateSingleVisa(ctx context.Context, identity Identity, v
 		jwt.WithValidate(true),
 	)
 	if err != nil {
-		return nil, zeroTime, fmt.Errorf("visa signature/claims validation failed: %w", err)
+		jwtAlg := sigs[0].ProtectedHeaders().Algorithm()
+		kid := sigs[0].ProtectedHeaders().KeyID()
+
+		var jwkAlgs []string
+		for i := 0; i < keySet.Len(); i++ {
+			if k, ok := keySet.Key(i); ok {
+				if a := k.Algorithm(); a != nil && a.String() != "" {
+					jwkAlgs = append(jwkAlgs, a.String())
+				}
+			}
+		}
+
+		return nil, zeroTime, fmt.Errorf(
+			"visa signature/claims validation failed (jwt_alg=%s, jwk_alg=%v, kid=%s, iss=%s, jku=%s): %w",
+			jwtAlg, jwkAlgs, kid, visaIssuer, jkuURL, err)
 	}
 
 	// 5. Identity binding check

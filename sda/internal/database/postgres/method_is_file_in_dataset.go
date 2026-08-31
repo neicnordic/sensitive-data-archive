@@ -8,9 +8,7 @@ import (
 const isFileInDatasetQuery = "isFileInDataset"
 
 func init() {
-	queries[isFileInDatasetQuery] = `
-SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE file_id = $1);
-`
+	queries[isFileInDatasetQuery] = `SELECT EXISTS(SELECT 1 FROM sda.file_dataset WHERE file_id = $1);`
 }
 
 func (db *pgDb) isFileInDataset(ctx context.Context, tx *sql.Tx, fileID string) (bool, error) {

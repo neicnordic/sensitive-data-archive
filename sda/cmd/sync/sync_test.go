@@ -175,7 +175,7 @@ func (s *SyncTest) TestBuildSyncDatasetJSON() {
 	err = db.SetVerified(context.Background(), fileInfo, fileID)
 	assert.NoError(s.T(), err, "failed to mark file as Verified")
 
-	assert.NoError(s.T(), db.MapFileToDataset(context.Background(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID), "failed to map file to dataset")
+	assert.NoError(s.T(), db.MapFileToDataset(context.Background(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID, nil), "failed to map file to dataset")
 
 	m := []byte(`{"type":"mapping", "dataset_id": "cd532362-e06e-4461-8490-b9ce64b8d9e7", "accession_ids": ["ed6af454-d910-49e3-8cda-488a6f246e67"]}`)
 	jsonData, err := buildSyncDatasetJSON(context.Background(), m)

@@ -23,10 +23,8 @@ const getSchemaVersionQuery = "getSchemaVersion"
 var queries = make(map[string]string)
 
 func init() {
-	queries[getSchemaVersionQuery] = `
-SELECT MAX(version) 
-FROM sda.dbschema_version;
-`
+	queries[getSchemaVersionQuery] = `SELECT MAX(version) 
+FROM sda.dbschema_version;`
 }
 
 func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Database, error) {
@@ -155,10 +153,6 @@ func (db *pgDb) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return db.getFileIDByUserPathAndStatus(ctx, nil, submissionUser, filePath, status)
 }
 
-func (db *pgDb) CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error) {
-	return db.checkAccessionIDOwnedByUser(ctx, nil, accessionID, user)
-}
-
 func (db *pgDb) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return db.updateFileEventLog(ctx, nil, fileID, event, user, details, message)
 }
@@ -185,6 +179,10 @@ func (db *pgDb) IsFileInDataset(ctx context.Context, fileID string) (bool, error
 
 func (db *pgDb) GetFileStatus(ctx context.Context, fileID string) (string, error) {
 	return db.getFileStatus(ctx, nil, fileID)
+}
+
+func (db *pgDb) GetFileStatusHistory(ctx context.Context, fileID string) ([]database.FileStatus, error) {
+	return db.getFileStatusHistory(ctx, nil, fileID)
 }
 
 func (db *pgDb) GetHeader(ctx context.Context, fileID string) ([]byte, error) {
@@ -215,8 +213,8 @@ func (db *pgDb) GetAccessionID(ctx context.Context, fileID string) (string, erro
 	return db.getAccessionID(ctx, nil, fileID)
 }
 
-func (db *pgDb) MapFileToDataset(ctx context.Context, datasetID, fileID string) error {
-	return db.mapFileToDataset(ctx, nil, datasetID, fileID)
+func (db *pgDb) MapFileToDataset(ctx context.Context, datasetID, fileID string, downloadPath *string) error {
+	return db.mapFileToDataset(ctx, nil, datasetID, fileID, downloadPath)
 }
 
 func (db *pgDb) GetInboxPath(ctx context.Context, accessionID string) (string, error) {
@@ -327,8 +325,16 @@ func (db *pgDb) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]stri
 	return db.getDatasetFileIDs(ctx, nil, datasetID)
 }
 
+func (db *pgDb) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
+	return db.getDatasetDetails(ctx, nil, datasetID)
+}
+
 func (db *pgDb) GetFileDetails(ctx context.Context, fileID, event string) (*database.FileDetails, error) {
 	return db.getFileDetails(ctx, nil, fileID, event)
+}
+
+func (db *pgDb) GetFileEvents(ctx context.Context) ([]string, error) {
+	return db.getFileEvents(ctx, nil)
 }
 
 func (db *pgDb) GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error) {

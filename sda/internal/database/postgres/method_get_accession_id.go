@@ -8,11 +8,9 @@ import (
 const getAccessionIDQuery = "getAccessionID"
 
 func init() {
-	queries[getAccessionIDQuery] = `
-SELECT stable_id 
+	queries[getAccessionIDQuery] = `SELECT stable_id 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getAccessionID(ctx context.Context, tx *sql.Tx, fileID string) (string, error) {

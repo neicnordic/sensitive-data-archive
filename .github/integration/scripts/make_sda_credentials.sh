@@ -8,11 +8,14 @@ if [ -n "$PGSSLCERT" ]; then
     URI=https://rabbitmq:15671
 fi
 
-apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
-apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client xxd >/dev/null
+export DEBIAN_FRONTEND=noninteractive
+echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
-pip install --upgrade pip > /dev/null
-pip install aiohttp Authlib joserfc requests > /dev/null
+apt-get -o DPkg::Lock::Timeout=60 update > /dev/null
+apt-get -o DPkg::Lock::Timeout=60 install -y curl jq openssh-client openssl postgresql-client xxd > /dev/null
+
+python -m pip install --upgrade pip > /dev/null
+python -m pip install aiohttp Authlib joserfc requests > /dev/null
 
 for n in api auth download finalize inbox ingest mapper rotatekey sync verify; do
     echo "creating credentials for: $n"
@@ -21,8 +24,8 @@ for n in api auth download finalize inbox ingest mapper rotatekey sync verify; d
 
     ## password and permissions for MQ
     body_data=$(jq -n -c --arg password "$n" --arg tags none '$ARGS.named')
-    curl -s -u guest:guest -X PUT -k "$URI/api/users/$n" -H "content-type:application/json" -d "${body_data}"
-    curl -s -u guest:guest -X PUT -k "$URI/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":"","write":"sda","read":".*"}'
+    curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/users/$n" -H "content-type:application/json" -d "${body_data}"
+    curl -fsS --connect-timeout 5 --max-time 20 -u guest:guest -X PUT -k "$URI/api/permissions/sda/$n" -H "content-type:application/json" -d '{"configure":"","write":"sda","read":".*"}'
 done
 
 # create EC256 key for signing the JWT tokens
@@ -74,7 +77,7 @@ EOF
 fi
 
 echo "creating token"
-python /scripts/sign_jwt.py testu@lifescience-ri.eu  > "/shared/token"
+python /scripts/sign_jwt.py testu@lifescience-ri.eu > /shared/token
 
 cat >/shared/s3cfg <<EOD
 [default]
@@ -111,8 +114,11 @@ if [ ! -f "/shared/crypt4gh" ]; then
             ;;
     esac
     echo "Detected architecture: $ARCH, downloading crypt4gh for: $CRYPT4GH_ARCH"
-    latest_c4gh=$(curl --retry 100 -sL https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
-    curl --retry 100 -s -L "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_${CRYPT4GH_ARCH}.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    latest_c4gh=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
+      https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
+    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
+      "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_${CRYPT4GH_ARCH}.tar.gz" \
+      | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
 fi
 
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
@@ -138,7 +144,6 @@ fi
 # register the rotation key in the db (idempotent)
 rotateKeyHash=$(cat /shared/rotatekey.pub.pem | awk 'NR==2' | base64 -d | xxd -p -c256)
 resp=$(psql -U postgres -h postgres -d sda -At -c "INSERT INTO sda.encryption_keys(key_hash, description) VALUES('$rotateKeyHash', 'this is the new key to rotate to') ON CONFLICT (key_hash) DO UPDATE SET description = EXCLUDED.description;")
-# psql prints e.g. "INSERT 0 1" or "INSERT 0 0" depending on conflict; accept both.
 case "$(echo "$resp" | tr -d '\n')" in
     "INSERT 0 1"|"INSERT 0 0") : ;;
     *)
@@ -167,6 +172,9 @@ fi
 ## download grpcurl
 if [ ! -f "/shared/grpcurl" ]; then
     echo "downloading grpcurl"
-    latest_grpculr=$(curl --retry 100 -sL https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
-    curl --retry 100 -s -L "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpculr}/grpcurl_${latest_grpculr}_linux_x86_64.tar.gz" | tar -xz -C /shared/ && chmod +x /shared/grpcurl
+    latest_grpcurl=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
+      https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
+    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
+      "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpcurl}/grpcurl_${latest_grpcurl}_linux_x86_64.tar.gz" \
+      | tar -xz -C /shared/ && chmod +x /shared/grpcurl
 fi

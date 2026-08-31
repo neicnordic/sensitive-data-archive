@@ -1,8 +1,9 @@
 log:
   format: "json"
   level: "debug"
+
 api:
-  rbacFile: /rbac.json
+  rbac_file: /rbac.json
 
 storage:
   archive:

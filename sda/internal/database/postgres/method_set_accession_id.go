@@ -9,11 +9,9 @@ import (
 const setAccessionIDQuery = "setAccessionID"
 
 func init() {
-	queries[setAccessionIDQuery] = `
-UPDATE sda.files 
+	queries[setAccessionIDQuery] = `UPDATE sda.files 
 SET stable_id = $1 
-WHERE id = $2;
-`
+WHERE id = $2;`
 }
 
 func (db *pgDb) setAccessionID(ctx context.Context, tx *sql.Tx, accessionID, fileID string) error {

@@ -9,8 +9,7 @@ import (
 const getSizeAndObjectCountOfLocationQuery = "getSizeAndObjectCountOfLocation"
 
 func init() {
-	queries[getSizeAndObjectCountOfLocationQuery] = `
-SELECT SUM(CASE WHEN f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE THEN f.submission_file_size ELSE f.archive_file_size END ) AS size, COUNT(*)
+	queries[getSizeAndObjectCountOfLocationQuery] = `SELECT SUM(CASE WHEN f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE THEN f.submission_file_size ELSE f.archive_file_size END ) AS size, COUNT(*)
 FROM (
 SELECT f.submission_file_size, f.archive_file_size, f.submission_location, f.archive_location, f.backup_location,
       (EXISTS (SELECT 1
@@ -19,8 +18,7 @@ SELECT f.submission_file_size, f.archive_file_size, f.submission_location, f.arc
       ) AS file_in_dataset
   FROM sda.files AS f
 ) as f
-WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archive_location = $1 OR f.backup_location = $1;
-`
+WHERE (f.submission_location = $1 AND f.file_in_dataset IS NOT TRUE) OR f.archive_location = $1 OR f.backup_location = $1;`
 }
 
 func (db *pgDb) getSizeAndObjectCountOfLocation(ctx context.Context, tx *sql.Tx, location string) (uint64, uint64, error) {

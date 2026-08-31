@@ -282,7 +282,7 @@ k3d-version-check:
 		echo "kubectl is missing";\
 	fi
 k3d-create-cluster:
-	@k3d cluster create --agents 2 --image rancher/k3s:v1.34.2-k3s1 \
+	@k3d cluster create --agents 2 --image rancher/k3s:v1.36.3-k3s1 \
 	--port "80:80@loadbalancer" \
 	--port "443:443@loadbalancer"
 k3d-delete-cluster:
