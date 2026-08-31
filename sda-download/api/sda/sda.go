@@ -483,7 +483,7 @@ var sendStream = func(ctx context.Context, reader io.Reader, writer http.Respons
 
 	buf := make([]byte, 4096)
 
-// Read until the target byte count is reached. If end is 0 (unknown/unset) read until EOF
+	// Read until the target byte count is reached. If end is 0 (unknown/unset) read until EOF
 	for end == 0 || togo > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -508,16 +508,11 @@ var sendStream = func(ctx context.Context, reader io.Reader, writer http.Respons
 		}
 		consecutiveEmptyReads = 0
 
-		// Nothing more to read?
+		// EOF with no bytes read means we've consumed the stream cleanly.
+		// If r > 0 we fall through to write the last chunk before exiting.
 		if err == io.EOF && r == 0 {
-			// Fall out without error if we had EOF (if we got any data, do one
-			// more lap in the loop)
 			return nil
-    // EOF with no bytes read means we've consumed the stream cleanly.
-    // If r > 0 we fall through to write the last chunk before exiting.
-    if err == io.EOF && r == 0 {
-        return nil
-    }
+		}
 
 		if err != nil && err != io.EOF {
 			// An error we want to signal?
