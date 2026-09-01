@@ -126,7 +126,7 @@ func TestHealthCheck(t *testing.T) {
 			w := httptest.NewRecorder()
 			p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "/health", nil))
 
-			assert.Equal(t, w.Code, tc.expectedStatusCode)
+			assert.Equal(t, tc.expectedStatusCode, w.Code)
 			mockDatabase.AssertExpectations(t)
 			mockBroker.AssertExpectations(t)
 			mockS3ServerImpl.AssertExpectations(t)

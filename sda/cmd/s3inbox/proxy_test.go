@@ -303,7 +303,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			w := httptest.NewRecorder()
 			p.ServeHTTP(w, tc.req)
 
-			assert.Equal(t, w.Code, 200)
+			assert.Equal(t, 200, w.Code)
 			ma.AssertExpectations(t)
 			mockDatabase.AssertExpectations(t)
 			mockBroker.AssertExpectations(t)
@@ -770,7 +770,7 @@ func TestProxyForbiddenS3Actions(t *testing.T) {
 			w := httptest.NewRecorder()
 			p.ServeHTTP(w, tc.req)
 
-			assert.Equal(t, w.Code, 403)
+			assert.Equal(t, 403, w.Code)
 			ma.AssertExpectations(t)
 		})
 	}
