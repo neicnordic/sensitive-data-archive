@@ -1,7 +1,7 @@
 ---
 status: exploring
 date: "2026-08-28"
-discussion: ""
+discussion: "https://github.com/neicnordic/sensitive-data-archive/pull/2555"
 authors:
   - "@jhagberg"
 consulted: []
