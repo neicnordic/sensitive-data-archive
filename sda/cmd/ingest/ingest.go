@@ -167,7 +167,6 @@ func run() error {
 	select {
 	case sig := <-sigc:
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
-		cancel()
 
 		// Subscribe returns once the handler that was running has finished
 		// and acked its message; broker.shutdown_grace cancels the handler's
@@ -186,7 +185,6 @@ func run() error {
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
 			slog.Error("consumer failure", "error", err, "source-queue", ingestconf.SourceQueue())
-			cancel()
 
 			return err
 		}
