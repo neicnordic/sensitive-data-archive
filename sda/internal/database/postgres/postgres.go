@@ -76,7 +76,7 @@ func NewPostgresSQLDatabase(ctx context.Context, options ...func(config *dbConfi
 	if err != nil {
 		_ = pg.Close()
 
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to register database metrics: %w", err)
 	}
 
 	// Prepare the statements from the queries
