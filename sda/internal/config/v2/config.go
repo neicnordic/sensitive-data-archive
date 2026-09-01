@@ -169,9 +169,8 @@ func slogLogLevelFromString(level string) slog.Level {
 		return slog.LevelWarn
 	case "info":
 		return slog.LevelInfo
-	case "debug", "trace":
-		return slog.LevelDebug
 	default:
-		return slog.Level(100) // Custom level higher than any standard level, so silent by default
+		// "debug", "trace":, and unknown level -> Debug level
+		return slog.LevelDebug
 	}
 }
