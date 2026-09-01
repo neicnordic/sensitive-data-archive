@@ -68,7 +68,7 @@ func TestRabbitMQ_AcksOnSuccess(t *testing.T) {
 	b := newTestBroker()
 	delivery := makeDelivery(ack, "key-1", []byte(`{}`), nil)
 
-	b.handleDelivery("unit_test-queue", delivery, noopHandle)
+	b.handleDelivery(context.Background(), "unit_test-queue", delivery, noopHandle)
 
 	assert.True(t, ack.ackCalled, "Ack should be called on success")
 	assert.False(t, ack.nackCalled, "Nack must not be called on success")
@@ -88,7 +88,7 @@ func TestRabbitMQ_CallbacksRunOnSuccess(t *testing.T) {
 		}, nil
 	}
 
-	b.handleDelivery("unit_test-queue", delivery, handle)
+	b.handleDelivery(context.Background(), "unit_test-queue", delivery, handle)
 
 	require.Equal(t, []string{"first", "second"}, ran)
 }
@@ -103,7 +103,7 @@ func TestRabbitMQ_NilCallbacksNosPanic(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		b.handleDelivery("unit_test-queue", delivery, handle)
+		b.handleDelivery(context.Background(), "unit_test-queue", delivery, handle)
 	})
 }
 
@@ -112,7 +112,7 @@ func TestRabbitMQ_NacksWithoutRequeueOnError(t *testing.T) {
 	b := newTestBroker()
 	delivery := makeDelivery(ack, "key-4", []byte(`{}`), nil)
 
-	b.handleDelivery("unit_test-queue", delivery, errorHandle)
+	b.handleDelivery(context.Background(), "unit_test-queue", delivery, errorHandle)
 
 	assert.True(t, ack.nackCalled, "Nack should be called on error")
 	assert.False(t, ack.nackMultiple, "Nack should use multiple=false")
@@ -123,7 +123,7 @@ func TestRabbitMQ_AckNotCalledOnError(t *testing.T) {
 	b := newTestBroker()
 	delivery := makeDelivery(ack, "key-5", []byte(`{}`), nil)
 
-	b.handleDelivery("unit_test-queue", delivery, errorHandle)
+	b.handleDelivery(context.Background(), "unit_test-queue", delivery, errorHandle)
 
 	assert.False(t, ack.ackCalled, "Ack must not be called when handleFunc returns an error")
 }
@@ -141,7 +141,7 @@ func TestRabbitMQ_CallbacksRunBeforeNack(t *testing.T) {
 		}, errors.New("boom")
 	}
 
-	b.handleDelivery("unit_test-queue", delivery, handle)
+	b.handleDelivery(context.Background(), "unit_test-queue", delivery, handle)
 
 	require.Equal(t, []string{"cb"}, order, "callback must run even on error")
 	assert.True(t, ack.nackCalled)
@@ -154,7 +154,7 @@ func TestRabbitMQ_EmptyBodyAndHeaders(t *testing.T) {
 	delivery := makeDelivery(ack, "", nil, nil)
 
 	assert.NotPanics(t, func() {
-		b.handleDelivery("unit_test-queue", delivery, noopHandle)
+		b.handleDelivery(context.Background(), "unit_test-queue", delivery, noopHandle)
 	})
 	assert.True(t, ack.ackCalled)
 }

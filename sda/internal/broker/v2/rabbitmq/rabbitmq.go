@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var errBrokerClosed = errors.New("broker is closed, not reconnecting")
@@ -374,8 +375,9 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, sourceQueue string, deli
 	hctx, done := b.handlerContext(ctx)
 	defer done()
 
+	// We use a trace.ContextWithSpanContext here so that each message consumptions is not linked to the span from ctx calling NewRabbitMQBroker
 	hctx, span := observability.StartSpan(
-		extractTraceContext(hctx, delivery.Headers),
+		extractTraceContext(trace.ContextWithSpanContext(hctx, trace.SpanContext{}), delivery.Headers),
 		"rabbitmq.handle_message",
 		attribute.String("messaging.system", "rabbitmq"),
 		attribute.String("messaging.source.name", sourceQueue),
