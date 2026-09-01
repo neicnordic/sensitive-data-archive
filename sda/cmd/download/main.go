@@ -234,6 +234,7 @@ func run() error {
 	}
 
 	// Start server in goroutine
+	serverErr := make(chan error, 1)
 	go func() {
 		var err error
 		if config.APIServerCert() != "" && config.APIServerKey() != "" {
@@ -245,8 +246,7 @@ func run() error {
 		}
 
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("server error: %v", err)
-			cancel()
+			serverErr <- err
 		}
 	}()
 
@@ -259,6 +259,8 @@ func run() error {
 		log.Info("received shutdown signal")
 	case <-ctx.Done():
 		log.Info("context cancelled")
+	case <-serverErr:
+		log.Errorf("server error: %v", err)
 	}
 
 	// Graceful shutdown
