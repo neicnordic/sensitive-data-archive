@@ -331,7 +331,7 @@ func Init() error {
 	if err != nil {
 		_ = pg.Close()
 
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return fmt.Errorf("failed to register database metrics: %w", err)
 	}
 
 	// Configure connection pool
