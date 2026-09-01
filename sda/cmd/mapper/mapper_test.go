@@ -376,7 +376,7 @@ var unknownOperationCase = testCase{
 		mockBroker.On("Publish", "error", brokerv2.Message{
 			Key: "dataset_123",
 			Headers: map[string]any{
-				"error-queue-reason": "could derive schema from message",
+				"error-queue-reason": "could not derive schema from message",
 			},
 			Body: expectedRaw,
 		}).Return(nil).Once()

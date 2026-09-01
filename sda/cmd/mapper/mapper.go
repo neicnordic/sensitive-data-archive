@@ -126,10 +126,10 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 
 	schemaType, err := schemaFromDatasetOperation(message.Body)
 	if err != nil {
-		slog.Error("could derive schema from message", "error", err, "message-key", message.Key)
+		slog.Error("could not derive schema from message", "error", err, "message-key", message.Key)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "could derive schema from message")}, nil
+		return []func(){app.errorQueue(message, "could not derive schema from message")}, nil
 	}
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/%s.json", app.schemaPath, schemaType), message.Body); err != nil {
