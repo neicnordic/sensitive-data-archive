@@ -10,7 +10,6 @@ var (
 	ErrUniqueViolation = errors.New("unique violation")
 
 	// ErrNotNullViolation indicates that an operation attempts to store a null value where not allowed.
-	// where one is not allowed.
 	ErrNotNullViolation = errors.New("not-null violation")
 
 	// ErrForeignKeyViolation indicates that an operation violates a foreign key constraint.
