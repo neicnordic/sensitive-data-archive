@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add observability configuration options
+
+
+### Fixed
+- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
+
 ## [4.0.0] - 2026-08-26
 
 ### Changed
@@ -40,13 +49,6 @@ See `MIGRATION-4.0.md` for upgrade instructions and examples.
 Closes #2387.
 
 ## [3.4.4] - 2026-07-22
-
-### Added
-
-- Add observability configuration options
-
-### Fixed
-- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
 
 ### Changed
 
