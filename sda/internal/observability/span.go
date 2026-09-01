@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -38,10 +39,10 @@ type Span interface {
 
 type span struct {
 	oteltrace.Span
-	ctx   context.Context
-	name  string
-	start time.Time
-	ended bool
+	ctx     context.Context
+	name    string
+	start   time.Time
+	endOnce sync.Once
 }
 
 func (s *span) EndWithAttributes(attrs ...attribute.KeyValue) {
@@ -52,25 +53,24 @@ func (s *span) End(options ...oteltrace.SpanEndOption) {
 }
 
 func (s *span) end(options []oteltrace.SpanEndOption, attrs ...attribute.KeyValue) {
-	if s.ended {
-		return
-	}
+	s.endOnce.Do(
+		func() {
+			if len(attrs) > 0 {
+				s.SetAttributes(attrs...)
+			}
 
-	if len(attrs) > 0 {
-		s.SetAttributes(attrs...)
-	}
+			slog.LogAttrs(s.ctx, slog.LevelDebug, "span ended",
+				append(otelAttrsToSlog(attrs),
+					slog.String("span", s.name),
+					slog.Duration("duration", time.Since(s.start)),
+					slog.String("trace-id", s.SpanContext().TraceID().String()),
+					slog.String("span-id", s.SpanContext().SpanID().String()),
+				)...,
+			)
 
-	slog.LogAttrs(s.ctx, slog.LevelDebug, "span ended",
-		append(otelAttrsToSlog(attrs),
-			slog.String("span", s.name),
-			slog.Duration("duration", time.Since(s.start)),
-			slog.String("trace-id", s.SpanContext().TraceID().String()),
-			slog.String("span-id", s.SpanContext().SpanID().String()),
-		)...,
+			s.Span.End(options...)
+		},
 	)
-
-	s.Span.End(options...)
-	s.ended = true
 }
 
 func (s *span) Debug(msg string, args ...slog.Attr) {
