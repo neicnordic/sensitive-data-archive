@@ -20,11 +20,22 @@ Currently the management API is located under `sda/cmd/api` and when built the c
 ## Considered Options
 
 * **`admin-api`** - Not a good choice since through RBAC restrictions submitters can also use the app.
-* **`manager` or `management`** - Possible new name that is better describes the application.
+* **`manager` or `management`** - Possible new name that better describes the application.
 * Keeping the name **`api`** - Based on the fact that we have other APIs that are task specific and thus have matching names this should be no different.
+* Keeping the name **`api`** and removing `sda-admin` tool
+
 * Splitting the code into `submitter` and `admin/management` parts together with new names for the apps.
 
 ## Open Questions
 
 * Decide on renaming the API app
 * Split the code into `submitter` and `admin/management` parts
+
+## Pros and Cons
+### Keeping the name api
+
+* Good, because it avoid additional work
+
+### Keeping the name api and removing the sda-admin tool
+
+* Good, because gives less overhead in the repository; less code to maintain and overall just less complexity.
