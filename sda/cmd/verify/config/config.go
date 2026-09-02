@@ -39,7 +39,7 @@ func init() {
 		&config.Flag{
 			Name: "schema_type",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "isolated", "Path to JSON schemas to validate broker messages against, available values: federated, isolated")
+				flagSet.String(flagName, "isolated", "Schema type to validate incoming broker messages against, supported values: federated, isolated")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -50,7 +50,7 @@ func init() {
 				case "isolated":
 					schemaPath = "/schemas/isolated/"
 				default:
-					panic(fmt.Sprintf("schema type '%s' not supported, needs: <federated|isolated>", schemaType))
+					panic(fmt.Sprintf("schema_type '%s' not supported, needs: <federated|isolated>", schemaType))
 				}
 			},
 		},
