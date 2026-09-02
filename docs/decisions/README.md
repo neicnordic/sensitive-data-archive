@@ -113,6 +113,7 @@ superseded-by: "0005-use-new-approach.md"
 | [0003](0003-shared-state-strategy-for-s3inbox-and-caching.md) | Replace s3inbox In-Memory File ID Cache with Database Lookups  | accepted |
 | [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md)  | Introduce RFCs as an upstream exploration phase for ADRs       | accepted |
 | [0006](0006-metrics-and-tracing.md)                           | Metrics and Tracing in the sensitive-data-archive applications | accepted |
+| [0007](0007-use-conventional-commits.md)                      | Use Conventional Commits for commit messages                   | accepted |
 
 Numbers `0001` and `0004` were proposed in PRs
 [#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263) and
