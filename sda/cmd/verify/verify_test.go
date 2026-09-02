@@ -44,8 +44,8 @@ func TestVerify(t *testing.T) {
 				archiveKeyList: []*[32]byte{
 					&privateKey,
 				},
-				schemaPath:       "../../schemas/isolated/",
-				destinationQueue: "unit-test_destination",
+				schemaPath: "../../schemas/isolated/",
+				routingKey: "unit-test_destination",
 			}
 
 			jsonMsg, err := json.Marshal(tc.sourceMessage)
