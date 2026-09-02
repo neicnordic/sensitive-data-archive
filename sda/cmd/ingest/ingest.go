@@ -96,6 +96,15 @@ func run() error {
 		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
 
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize sda db: %v", err)
+	}
+	defer app.db.Close()
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
+	}
+
 	app.Broker, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker: %v", err)
@@ -109,15 +118,6 @@ func run() error {
 			slog.Error("could not close broker", "error", err)
 		}
 	}()
-
-	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to initialize sda db: %v", err)
-	}
-	defer app.db.Close()
-	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
-	}
 
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
@@ -290,7 +290,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *broke
 	if app.BackupWriter != nil && archiveData.BackupFilePath != "" && archiveData.BackupLocation != "" {
 		if err := app.BackupWriter.RemoveFile(ctx, archiveData.BackupLocation, archiveData.BackupFilePath); err != nil {
 			// Just log error and continue as this should not block updating the db
-			span.Warn("failed to remove file with from backup", slog.Any("error", err))
+			span.Warn("failed to remove file with backup", slog.Any("error", err))
 		}
 	}
 
@@ -659,6 +659,8 @@ func (app *Ingest) errorQueue(ctx context.Context, originMessage *brokerv2.Messa
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
 		if err := app.Broker.Publish(ctx, "error", *originMessage); err != nil {
 			span.Error("failed to publish to error queue", err)
+
+			return
 		}
 		span.Info("published message to error queue")
 	}
