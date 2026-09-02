@@ -33,12 +33,12 @@ import (
 )
 
 type verify struct {
-	db               database.Database
-	broker           broker.Broker
-	archiveReader    storage.Reader
-	archiveKeyList   []*[32]byte
-	schemaPath       string
-	destinationQueue string
+	db             database.Database
+	broker         broker.Broker
+	archiveReader  storage.Reader
+	archiveKeyList []*[32]byte
+	schemaPath     string
+	routingKey     string
 }
 
 func main() {
@@ -56,8 +56,8 @@ func run() error {
 	}
 
 	app := &verify{
-		schemaPath:       verifyconfig.SchemaPath(),
-		destinationQueue: verifyconfig.DestinationQueue(),
+		schemaPath: verifyconfig.SchemaPath(),
+		routingKey: verifyconfig.RoutingKey(),
 	}
 
 	app.db, err = postgres.NewPostgresSQLDatabase()
@@ -459,13 +459,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	}
 
 	// Send message to verified queue
-	if err := app.broker.Publish(ctx, app.destinationQueue, broker.Message{
+	if err := app.broker.Publish(ctx, app.routingKey, broker.Message{
 		Key:  message.Key,
 		Body: verifiedMessage,
 	}); err != nil {
 		slog.Error("failed to publish verified message",
 			slog.String("file-id", ingestionVerification.FileID),
-			slog.String("destination-queue", app.destinationQueue),
+			slog.String("routing-key", app.routingKey),
 			slog.Any("error", err),
 		)
 
