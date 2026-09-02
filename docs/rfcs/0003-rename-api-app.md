@@ -1,6 +1,7 @@
 ---
 status: exploring
 date: "2026-05-28"
+discussion: "https://github.com/neicnordic/sensitive-data-archive/pull/2453"
 authors:
    - "@jbygdell"
 consulted: []
@@ -32,6 +33,7 @@ Currently the management API is located under `sda/cmd/api` and when built the c
 * Split the code into `submitter` and `admin/management` parts
 
 ## Pros and Cons
+
 ### Keeping the name api
 
 * Good, because it avoid additional work
