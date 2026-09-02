@@ -78,7 +78,7 @@ These settings control how `verify` connects to the RabbitMQ message broker.
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `1`)
 - `SOURCE_QUEUE`: message queue to read messages from (commonly: `archived`)
-- `DESTINATION_QUEUE`: Routing key for publishing messages (commonly: `verified`)
+- `ROUTING_KEY`: Routing key for publishing messages (commonly: `verified`)
 - `SCHEMA_TYPE`: Path to JSON schemas to validate broker messages against, available values: federated, isolated
 
 
