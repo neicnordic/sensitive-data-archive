@@ -1,0 +1,39 @@
+#!/bin/sh
+# commit-msg hook: enforce Conventional Commits, see docs/decisions/0007-use-conventional-commits.md
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# CI runs this same script on the stored subject of every commit in a pull request.
+
+msg_file="$1"
+types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+
+# A merge in progress keeps git's generated message.
+if [ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+  exit 0
+fi
+
+# Subject is the first line after git's own cleanup: comments (core.commentChar) and blank lines removed.
+subject=$(git stripspace --strip-comments < "$msg_file" | head -n 1 | tr -d '\r')
+
+# Messages git generates for reverts, and autosquash markers, are exempt.
+case "$subject" in
+  'Revert "'* | 'Reapply "'* | "fixup! "* | "squash! "* | "amend! "*) exit 0 ;;
+esac
+
+if printf '%s\n' "$subject" | grep -Eq "^(${types})(\([A-Za-z0-9_,./ -]+\))?!?: [^[:space:]]"; then
+  exit 0
+fi
+
+cat >&2 <<MSG
+Commit message does not follow Conventional Commits:
+
+    ${subject}
+
+Expected:  <type>[optional scope][!]: <description>
+Types:     ${types}
+Examples:  feat(api): add dataset release endpoint
+           fix(s3inbox)!: reject uploads without a checksum
+
+See docs/decisions/0007-use-conventional-commits.md and CONTRIBUTING.md.
+MSG
+exit 1
