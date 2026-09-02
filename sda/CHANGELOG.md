@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
+- api: resolve the inbox path through the configured project-code layout again when deleting and downloading inbox files. The `gin` -> `net/http` rewrite in 3.1.75 reverted both call sites to the stock `UnanonymizeFilepath`, so on a deployment with `storage.inbox.projectCode` set they addressed a directory that does not exist: the download returned 500, and on an s3 inbox the delete reported success while leaving the file in place.
 
 ## [3.1.76] - 2026-07-15
 
