@@ -30,7 +30,7 @@ func (db *pgDb) getArchived(ctx context.Context, tx *sql.Tx, fileID string) (*da
 			return nil, nil
 		}
 
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	if archiveFilePath != "" || archiveFileSize.Valid || archiveLocation.Valid {
 		ad := &database.ArchiveData{

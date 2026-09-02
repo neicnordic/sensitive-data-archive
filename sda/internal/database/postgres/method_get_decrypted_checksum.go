@@ -22,7 +22,7 @@ func (db *pgDb) getDecryptedChecksum(ctx context.Context, tx *sql.Tx, id string)
 
 	var unencryptedChecksum string
 	if err := stmt.QueryRowContext(ctx, id).Scan(&unencryptedChecksum); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return unencryptedChecksum, nil

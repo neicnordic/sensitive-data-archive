@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	mapperconf "github.com/neicnordic/sensitive-data-archive/cmd/mapper/config"
+	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -20,14 +23,16 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
-	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 )
 
-var db database.Database
-var inboxWriter storage.Writer
-var mqBroker *broker.AMQPBroker
-var inboxConfig helper.InboxProjectConfig
+type mapper struct {
+	db          database.Database
+	inboxWriter storage.Writer
+	broker      broker.Broker
+	inboxConfig helper.InboxProjectConfig
+	schemaPath  string
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -37,185 +42,185 @@ func main() {
 func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	if err := configv2.Load(); err != nil {
+	err := configv2.Load()
+	if err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	var err error
-	conf, err := config.NewConfig("mapper")
-	if err != nil {
-		return fmt.Errorf("failed to load config, due to: %v", err)
+	app := &mapper{
+		db:          nil,
+		inboxWriter: nil,
+		broker:      nil,
+		inboxConfig: helper.InboxProjectConfig{},
+		schemaPath:  mapperconf.SchemaPath(),
 	}
-	inboxConfig = conf.Inbox
 
-	db, err = postgres.NewPostgresSQLDatabase()
+	app.inboxConfig, err = config.LoadInboxProjectConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load inbox project config: %v", err)
+	}
+
+	app.db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer db.Close()
-	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 25 {
+	defer func() {
+		_ = app.db.Close()
+	}()
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 25 {
 		return errors.Join(errors.New("database schema v25 is required"), err)
 	}
 
-	mqBroker, err = broker.NewMQ(conf.Broker)
+	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
 	defer func() {
-		if mqBroker == nil {
+		if app.broker == nil {
 			return
 		}
-		if mqBroker.Channel != nil {
-			if err := mqBroker.Channel.Close(); err != nil {
-				log.Errorf("failed to close mq broker channel due to: %v", err)
-			}
-		}
-		if mqBroker.Connection != nil {
-			if err := mqBroker.Connection.Close(); err != nil {
-				log.Errorf("failed to close mq broker connection due to: %v", err)
-			}
+		if err := app.broker.Close(); err != nil {
+			slog.Error("could not close broker", "error", err)
 		}
 	}()
 
-	lb, err := locationbroker.NewLocationBroker(db)
+	lb, err := locationbroker.NewLocationBroker(app.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize location broker, due to: %v", err)
 	}
-	inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
+	app.inboxWriter, err = storage.NewWriter(ctx, "inbox", lb)
 	if err != nil {
 		return fmt.Errorf("failed to initialize inbox writer, due to: %v", err)
 	}
 
-	log.Info("Starting mapper service")
 	consumeErr := make(chan error, 1)
 	go func() {
-		consumeErr <- startConsumer(ctx)
+		consumeErr <- app.broker.Subscribe(ctx, mapperconf.SourceQueue(), app.handleMessage)
 	}()
+	log.Info("mapper service started")
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
-	case <-sigc:
-	case err := <-mqBroker.Connection.NotifyClose(make(chan *amqp.Error)):
-		return err
-	case err := <-mqBroker.Channel.NotifyClose(make(chan *amqp.Error)):
-		return err
+	case sig := <-sigc:
+		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		cancel()
+
+		return nil
 	case err := <-consumeErr:
-		return err
-	}
+		if !errors.Is(err, context.Canceled) {
+			slog.Error("consumer failure", "error", err, "source-queue", mapperconf.SourceQueue())
+			cancel()
 
-	return nil
-}
-func startConsumer(ctx context.Context) error {
-	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
-	if err != nil {
-		return fmt.Errorf("failed to get message from mq (error: %v)", err)
-	}
+			return err
+		}
 
-	for delivered := range messages {
-		handleMessage(ctx, delivered)
+		return nil
 	}
-
-	return nil
 }
 
-func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	log.Debugf("received a message: %s", delivered.Body)
-	schemaType, err := schemaFromDatasetOperation(delivered.Body)
-	if err != nil {
-		log.Errorf("%s", err.Error())
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to ack message: %v", err)
-		}
-		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", delivered.Body); err != nil {
-			log.Errorf("failed to send error message: %v", err)
-		}
 
-		return
+	schemaType, err := schemaFromDatasetOperation(message.Body)
+	if err != nil {
+		slog.Error("could not derive schema from message", "error", err, "message-key", message.Key)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(message, "could not derive schema from message")}, nil
 	}
 
-	err = schema.ValidateJSON(fmt.Sprintf("%s/%s.json", mqBroker.Conf.SchemasPath, schemaType), delivered.Body)
-	if err != nil {
-		log.Errorf("validation of incoming message (%s) failed, reason: %v ", schemaType, err)
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed acking canceled work, reason: %v", err)
-		}
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/%s.json", app.schemaPath, schemaType), message.Body); err != nil {
+		slog.Error("incoming message validation failed", "error", err, "message-key", message.Key)
 
-		return
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(message, "incoming message validation failed")}, nil
 	}
 
 	var mappings schema.DatasetMapping
 	// we unmarshal the message in the validation step so this is safe to do
-	_ = json.Unmarshal(delivered.Body, &mappings)
+	if err := json.Unmarshal(message.Body, &mappings); err != nil {
+		slog.Error("failed to unmarshal incoming message", "error", err, "message-key", message.Key)
 
-	tx, err := db.BeginTransaction(ctx)
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(message, "failed to unmarshal incoming message")}, nil
+	}
+
+	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		log.Errorf("failed to start database transaction, due to: %v", err)
+		slog.Error("failed to begin transaction", "error", err, "dataset-id", mappings.DatasetID)
 
-		if err := delivered.Nack(false, true); err != nil {
-			log.Errorf("failed to nack message: %v", err)
-		}
-
-		return
+		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback database transaction, due to: %v", err)
+			slog.Error("failed to rollback transaction", "error", err, "dataset-id", mappings.DatasetID)
 		}
 	}()
+
+	slog.Info("received mapping operation",
+		slog.String("dataset-id", mappings.DatasetID),
+		slog.String("operation", mappings.Type),
+	)
 
 	var filesToCleanFromInbox []*database.MappingData
 
 	switch mappings.Type {
 	case "mapping":
-		log.Debug("mapping type operation, mapping files to dataset")
-		for _, aID := range mappings.AccessionIDs {
+		for _, fileAccession := range mappings.AccessionIDs {
 			var fileDownloadPath *string
 
 			if mappings.FileDownloadPaths != nil {
-				if v, ok := mappings.FileDownloadPaths[aID]; ok && v != "" {
+				if v, ok := mappings.FileDownloadPaths[fileAccession]; ok && v != "" {
 					fileDownloadPath = &v
 				}
 			}
 
-			log.Debugf("Mapping file to dataset (correlation-id: %s, dataset-id: %s, accession-id: %s, file-download-path overridden: %t)", delivered.CorrelationId, mappings.DatasetID, aID, fileDownloadPath != nil)
-			fileMappingData, err := tx.GetMappingData(ctx, aID)
+			slog.Debug("mapping file to dataset",
+				slog.String("dataset-id", mappings.DatasetID),
+				slog.String("file-accession", fileAccession),
+				slog.Bool("overridden-download-path", fileDownloadPath != nil),
+			)
+			fileMappingData, err := tx.GetMappingData(ctx, fileAccession)
 			if err != nil {
-				log.Errorf("failed to get file info for file with accession-id: %s, can not map file to dataset: %s, due to: %v", aID, mappings.DatasetID, err)
+				slog.Error("failed to get mapping data of file",
+					slog.String("file-accession", fileAccession),
+					slog.String("dataset-id", mappings.DatasetID),
+					slog.Any("error", err),
+				)
 
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				return
+				return nil, err
 			}
 
 			if fileMappingData == nil {
-				log.Errorf("could not find file with accession-id: %s, can not map file to dataset: %s", aID, mappings.DatasetID)
+				slog.Error("mapping data for file not found",
+					slog.String("file-accession", fileAccession),
+					slog.String("dataset-id", mappings.DatasetID),
+				)
 
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
-
-				return
+				// send message to error queue and do not requeue
+				return []func(){app.errorQueue(message, "mapping data for file not found")}, nil
 			}
 			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID, fileDownloadPath); err != nil {
-				log.Errorf("failed to map file: %s to dataset-id: %s, reason: %v", fileMappingData.FileID, mappings.DatasetID, err)
+				slog.Error("failed to map file to dataset-id",
+					slog.String("file-accession", fileAccession),
+					slog.String("dataset-id", mappings.DatasetID),
+					slog.Any("error", err),
+				)
 
-				// Nack message so the server gets notified that something is wrong and requeue the message
-				if err := delivered.Nack(false, false); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
+				if errors.Is(err, database.ErrUniqueViolation) {
+					return []func(){app.errorQueue(message, "mapping violates unique constraint")}, nil
 				}
 
-				return
+				return nil, err
 			}
 
 			if fileMappingData.SubmissionLocation == "" {
-				log.Errorf("file with fileID: %s does not have a known submission location, can not remove file from inbox", fileMappingData.FileID)
+				slog.Warn("file does not have a known submission location, can not remove file from inbox",
+					slog.String("file-id", fileMappingData.FileID),
+				)
 
 				continue
 			}
@@ -223,66 +228,58 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			filesToCleanFromInbox = append(filesToCleanFromInbox, fileMappingData)
 		}
 
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(delivered.Body)); err != nil {
-			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-			if err = delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(message.Body)); err != nil {
+			slog.Error("failed to update dataset status",
+				slog.String("dataset-id", mappings.DatasetID),
+				slog.Any("error", err),
+			)
 
-			return
+			return nil, err
 		}
 	case "release":
-		log.Debug("release type operation, marking dataset as released")
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "released", string(delivered.Body)); err != nil {
-			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-			if err = delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "released", string(message.Body)); err != nil {
+			slog.Error("failed to update dataset status",
+				slog.String("dataset-id", mappings.DatasetID),
+				slog.Any("error", err),
+			)
 
-			return
+			return nil, err
 		}
 	case "deprecate":
-		log.Debug("deprecate type operation, marking dataset as deprecated")
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "deprecated", string(delivered.Body)); err != nil {
-			log.Errorf("failed to set dataset status for dataset: %s", mappings.DatasetID)
-			if err = delivered.Nack(false, false); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "deprecated", string(message.Body)); err != nil {
+			slog.Error("failed to update dataset status",
+				slog.String("dataset-id", mappings.DatasetID),
+				slog.Any("error", err),
+			)
 
-			return
+			return nil, err
 		}
 	default:
-		log.Errorf("unknown mapping type, %s", mappings.Type)
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to ack message: %v", err)
-		}
-		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", delivered.Body); err != nil {
-			log.Errorf("failed to send error message: %v", err)
-		}
+		slog.Error("unknown mapping operation", slog.String("operation", mappings.Type))
 
-		return
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(message, "unknown mapping type")}, nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Errorf("failed to commit transaction: %v", err)
-
-		if err = delivered.Nack(false, true); err != nil {
-			log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-		}
-
-		return
+		slog.Error("failed to commit transaction", "error", err, "dataset-id", mappings.DatasetID)
+		// requeue message as db error is not expected and should succeed on retries
+		return nil, err
 	}
 
 	for _, fileMappingData := range filesToCleanFromInbox {
-		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, inboxConfig)
-		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
-			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, resolvedSubmissionPath, err)
+		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, app.inboxConfig)
+		if err := app.inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
+			slog.Warn("failed to remove file from inbox",
+				slog.String("file-id", fileMappingData.FileID),
+				slog.String("submission-path", fileMappingData.SubmissionFilePath),
+				slog.String("submission-location", fileMappingData.SubmissionLocation),
+				slog.Any("error", err),
+			)
 		}
 	}
 
-	if err := delivered.Ack(false); err != nil {
-		log.Errorf("failed to Ack message, reason: (%v)", err)
-	}
+	return nil, nil
 }
 
 // schemaFromDatasetOperation returns the operation done with dataset supplied in body of the message
@@ -312,5 +309,20 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 		return "dataset-deprecate", nil
 	default:
 		return "", errors.New("could not recognize mapping operation")
+	}
+}
+
+func (app *mapper) errorQueue(originMessage *broker.Message, errorQueueReason string) func() {
+	return func() {
+		if originMessage.Headers == nil {
+			originMessage.Headers = make(map[string]any)
+		}
+		originMessage.Headers["error-queue-reason"] = errorQueueReason
+		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
+			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
+
+			return
+		}
+		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }

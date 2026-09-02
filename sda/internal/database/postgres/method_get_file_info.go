@@ -34,12 +34,12 @@ func (db *pgDb) getFileInfo(ctx context.Context, tx *sql.Tx, id string) (*databa
 
 	info := new(database.FileInfo)
 	if err := getFileIDStmt.QueryRowContext(ctx, id).Scan(&info.Path, &info.Size); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	var archivedChecksum, decryptedChecksum, uploadedChecksum sql.NullString
 	if err := getChecksumStmt.QueryRowContext(ctx, id).Scan(&archivedChecksum, &decryptedChecksum, &uploadedChecksum); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	info.ArchivedChecksum = archivedChecksum.String
 	info.DecryptedChecksum = decryptedChecksum.String

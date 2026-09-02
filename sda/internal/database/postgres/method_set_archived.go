@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 )
@@ -34,11 +33,11 @@ func (db *pgDb) setArchived(ctx context.Context, tx *sql.Tx, location string, fi
 	}
 
 	if _, err := stmt.ExecContext(ctx, location, file.Path, file.Size, fileID); err != nil {
-		return fmt.Errorf("setArchived error: %w", err)
+		return parsePQError(err)
 	}
 
 	if _, err := addCheckSumStmt.ExecContext(ctx, fileID, file.UploadedChecksum, "SHA256"); err != nil {
-		return fmt.Errorf("addChecksum error: %w", err)
+		return parsePQError(err)
 	}
 
 	return nil

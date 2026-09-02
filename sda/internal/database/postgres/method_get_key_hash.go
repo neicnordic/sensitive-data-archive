@@ -21,7 +21,7 @@ func (db *pgDb) getKeyHash(ctx context.Context, tx *sql.Tx, fileID string) (stri
 
 	var keyHash string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&keyHash); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return keyHash, nil

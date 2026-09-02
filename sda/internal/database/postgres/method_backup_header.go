@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"fmt"
 )
 
 const backupHeaderQuery = "backupHeader"
@@ -27,7 +26,7 @@ func (db *pgDb) backupHeader(ctx context.Context, tx *sql.Tx, fileID string, hea
 
 	result, err := stmt.ExecContext(ctx, fileID, hex.EncodeToString(header), keyHash)
 	if err != nil {
-		return fmt.Errorf("backupHeader error: %w", err)
+		return parsePQError(err)
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {

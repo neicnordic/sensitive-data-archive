@@ -26,7 +26,7 @@ func (db *pgDb) listActiveUsers(ctx context.Context, tx *sql.Tx) ([]string, erro
 	var users []string
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -34,16 +34,15 @@ func (db *pgDb) listActiveUsers(ctx context.Context, tx *sql.Tx) ([]string, erro
 
 	for rows.Next() {
 		var user string
-		err := rows.Scan(&user)
-		if err != nil {
-			return nil, err
+		if err := rows.Scan(&user); err != nil {
+			return nil, parsePQError(err)
 		}
 
 		users = append(users, user)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return users, nil

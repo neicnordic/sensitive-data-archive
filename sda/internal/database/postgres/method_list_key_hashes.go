@@ -26,7 +26,7 @@ func (db *pgDb) listKeyHashes(ctx context.Context, tx *sql.Tx) ([]*database.C4gh
 	var hashList []*database.C4ghKeyHash
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -35,9 +35,8 @@ func (db *pgDb) listKeyHashes(ctx context.Context, tx *sql.Tx) ([]*database.C4gh
 	for rows.Next() {
 		h := new(database.C4ghKeyHash)
 		depr := sql.NullString{}
-		err := rows.Scan(&h.Hash, &h.Description, &h.CreatedAt, &depr)
-		if err != nil {
-			return nil, err
+		if err := rows.Scan(&h.Hash, &h.Description, &h.CreatedAt, &depr); err != nil {
+			return nil, parsePQError(err)
 		}
 		h.DeprecatedAt = depr.String
 
@@ -45,7 +44,7 @@ func (db *pgDb) listKeyHashes(ctx context.Context, tx *sql.Tx) ([]*database.C4gh
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return hashList, nil
