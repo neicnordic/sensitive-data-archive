@@ -29,13 +29,13 @@ import (
 
 // proxy represents the toplevel object in this application
 type proxy struct {
-	s3Conf           s3InboxConfig
-	s3Client         *s3.Client
-	auth             userauth.Authenticator
-	broker           broker.Broker
-	database         database.Database
-	client           *http.Client
-	destinationQueue string
+	s3Conf     s3InboxConfig
+	s3Client   *s3.Client
+	auth       userauth.Authenticator
+	broker     broker.Broker
+	database   database.Database
+	client     *http.Client
+	routingKey string
 }
 
 type s3InboxConfig struct {
@@ -90,18 +90,18 @@ const (
 )
 
 // newProxy creates a new S3Proxy. This implements the ServerHTTP interface.
-func newProxy(s3conf s3InboxConfig, s3Client *s3.Client, auth userauth.Authenticator, b broker.Broker, db database.Database, tlsConf *tls.Config, destinationQueue string) *proxy {
+func newProxy(s3conf s3InboxConfig, s3Client *s3.Client, auth userauth.Authenticator, b broker.Broker, db database.Database, tlsConf *tls.Config, routingKey string) *proxy {
 	tr := &http.Transport{TLSClientConfig: tlsConf}
 	client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
 	return &proxy{
-		s3Conf:           s3conf,
-		s3Client:         s3Client,
-		auth:             auth,
-		broker:           b,
-		database:         db,
-		client:           client,
-		destinationQueue: destinationQueue,
+		s3Conf:     s3conf,
+		s3Client:   s3Client,
+		auth:       auth,
+		broker:     b,
+		database:   db,
+		client:     client,
+		routingKey: routingKey,
 	}
 }
 
@@ -320,7 +320,7 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 
-		if err := p.broker.Publish(context.WithoutCancel(r.Context()), p.destinationQueue, broker.Message{
+		if err := p.broker.Publish(context.WithoutCancel(r.Context()), p.routingKey, broker.Message{
 			Key:  fileID,
 			Body: jsonMessage,
 		}); err != nil {
@@ -570,7 +570,7 @@ func (p *proxy) sendMessageOnOverwrite(ctx context.Context, username, fileID, s3
 		return err
 	}
 
-	return p.broker.Publish(ctx, p.destinationQueue, broker.Message{
+	return p.broker.Publish(ctx, p.routingKey, broker.Message{
 		Key:  fileID,
 		Body: jsonMessage,
 	})
