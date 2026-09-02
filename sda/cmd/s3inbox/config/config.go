@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	destinationQueue    string
+	routingKey          string
 	s3InboxEndpoint     string
 	s3InboxAccessKey    string
 	s3InboxSecretKey    string
@@ -24,13 +24,13 @@ var (
 func init() {
 	config.RegisterFlags(
 		&config.Flag{
-			Name: "destination_queue",
+			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "inbox", "The queue where the s3inbox service publishes messages to")
+				flagSet.String(flagName, "inbox", "The routing key the s3inbox service publishes messages with")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				destinationQueue = viper.GetString(flagName)
+				routingKey = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -146,8 +146,8 @@ func init() {
 	)
 }
 
-func DestinationQueue() string {
-	return destinationQueue
+func RoutingKey() string {
+	return routingKey
 }
 
 func S3InboxEndpoint() string {

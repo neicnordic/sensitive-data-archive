@@ -292,12 +292,12 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 					secretKey: "unit_test_secret_key",
 					bucket:    "test_inbox_bucket",
 				},
-				s3Client:         s3Client,
-				auth:             ma,
-				broker:           mockBroker,
-				database:         mockDatabase,
-				client:           &http.Client{},
-				destinationQueue: "unit-test_destination",
+				s3Client:   s3Client,
+				auth:       ma,
+				broker:     mockBroker,
+				database:   mockDatabase,
+				client:     &http.Client{},
+				routingKey: "unit-test_destination",
 			}
 
 			w := httptest.NewRecorder()
