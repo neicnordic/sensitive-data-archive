@@ -170,7 +170,7 @@ func slogLogLevelFromString(level string) slog.Level {
 	case "info":
 		return slog.LevelInfo
 	default:
-		// "debug", "trace":, and unknown level -> Debug level
+		// "debug", "trace", and unknown level -> Debug level
 		return slog.LevelDebug
 	}
 }
