@@ -114,7 +114,7 @@ func run() error {
 	}
 
 	router := mux.NewRouter()
-	proxy := newProxy(s3InboxConf, s3Client, auth, mqBroker, db, tlsProxy, s3inboxconf.DestinationQueue())
+	proxy := newProxy(s3InboxConf, s3Client, auth, mqBroker, db, tlsProxy, s3inboxconf.RoutingKey())
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
