@@ -106,7 +106,7 @@ func init() {
 		&config.Flag{
 			Name: "server.jwt_pub_key_path",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to file containing jwt key to used to verify bearer token signatures, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
+				flagSet.String(flagName, "", "Path to jwt key file used for bearer token signature verification, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -116,7 +116,7 @@ func init() {
 		&config.Flag{
 			Name: "server.jwt_pub_key_url",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Url to jwt key to used to verify bearer token signatures, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
+				flagSet.String(flagName, "", "Url to jwt key used for bearer token signature verification, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -126,7 +126,7 @@ func init() {
 		&config.Flag{
 			Name: "server.key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to key file to used for TLS, both server.key and server.cert needs to be set for server to serve traffic with TLS")
+				flagSet.String(flagName, "", "Path to TLS key file, both server.key and server.cert needs to be set for server to serve traffic with TLS")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -136,7 +136,7 @@ func init() {
 		&config.Flag{
 			Name: "server.cert",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to cert file used for TLS, both server.key and server.cert needs to be set for server to serve traffic with TLS")
+				flagSet.String(flagName, "", "Path to TLS cert file, both server.key and server.cert needs to be set for server to serve traffic with TLS")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
