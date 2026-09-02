@@ -15,21 +15,15 @@ const (
 )
 
 func init() {
-	queries[setVerifiedQuery] = `
-UPDATE sda.files SET decrypted_file_size = $1 WHERE id = $2;
-`
-	queries[setVerifiedAddArchiveChecksumQuery] = `
-INSERT INTO sda.checksums(file_id, checksum, type, source)
+	queries[setVerifiedQuery] = `UPDATE sda.files SET decrypted_file_size = $1 WHERE id = $2;`
+
+	queries[setVerifiedAddArchiveChecksumQuery] = `INSERT INTO sda.checksums(file_id, checksum, type, source)
 VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source)
-ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;
+ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;`
 
-`
-	queries[setVerifiedAddUnencryptedChecksumQuery] = `
-INSERT INTO sda.checksums(file_id, checksum, type, source)
+	queries[setVerifiedAddUnencryptedChecksumQuery] = `INSERT INTO sda.checksums(file_id, checksum, type, source)
 VALUES($1, $2, upper($3)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source)
-ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;
-
-`
+ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = EXCLUDED.checksum;`
 }
 
 func (db *pgDb) setVerified(ctx context.Context, tx *sql.Tx, file *database.FileInfo, fileID string) error {

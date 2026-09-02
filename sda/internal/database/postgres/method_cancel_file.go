@@ -12,15 +12,11 @@ const (
 )
 
 func init() {
-	queries[cancelFileUnSetArchivedQuery] = `
-UPDATE sda.files 
+	queries[cancelFileUnSetArchivedQuery] = `UPDATE sda.files 
 SET archive_location = NULL, archive_file_path = '', archive_file_size = NULL, decrypted_file_size = NULL, stable_id = NULL
-WHERE id = $1;
-`
-	queries[cancelFileDeleteChecksumsQuery] = `
-DELETE FROM sda.checksums 
-WHERE file_id = $1
-`
+WHERE id = $1;`
+	queries[cancelFileDeleteChecksumsQuery] = `DELETE FROM sda.checksums 
+WHERE file_id = $1`
 }
 
 func (db *pgDb) cancelFile(ctx context.Context, tx *sql.Tx, fileID string, message string) error {

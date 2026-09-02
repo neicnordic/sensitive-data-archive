@@ -8,12 +8,10 @@ import (
 const getDecryptedChecksumQuery = "getDecryptedChecksum"
 
 func init() {
-	queries[getDecryptedChecksumQuery] = `
-SELECT checksum 
+	queries[getDecryptedChecksumQuery] = `SELECT checksum 
 FROM sda.checksums 
 WHERE file_id = $1 
-AND source = 'UNENCRYPTED';
-`
+AND source = 'UNENCRYPTED';`
 }
 
 func (db *pgDb) getDecryptedChecksum(ctx context.Context, tx *sql.Tx, id string) (string, error) {

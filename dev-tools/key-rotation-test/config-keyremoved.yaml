@@ -1,0 +1,165 @@
+# ==============================================================================
+# UNIFIED SDA CONFIGURATION FOR DEV KEY ROTATION STACK
+# ==============================================================================
+
+log:
+  format: "json"
+  level: "debug"
+
+# --- CORE SERVICES & CONTROL ---
+api:
+  host: "0.0.0.0"
+  port: 8080
+  rbacFile: /rbac.json
+
+service:
+  id: "neicnordic.sda.download"
+  org-name: "NBIS"
+  org-url: "https://nbis.se"
+
+server:
+  cert: ""
+  key: ""
+  jwtpubkeyurl: "http://mockauth:8000/jwks"   # Point to the compose service URL
+
+# --- COMBINED S3 STORAGE TOPOLOGY ---
+storage:
+  backend: "archive"
+  archive:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        bucket_prefix: "archive"
+        region: "us-east-1"
+        disable_https: true
+        max_buckets: 10
+        max_objects: 3
+  backup:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        bucket_prefix: "backup"
+        region: "us-east-1"
+        disable_https: true
+  inbox:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        bucket_prefix: "inbox"
+        region: "us-east-1"
+        disable_https: true
+  sync:
+    s3:
+      - endpoint: "http://s3:9000"
+        access_key: "access"
+        secret_key: "secretKey"
+        bucket_prefix: "sync"
+        region: "us-east-1"
+        disable_https: true
+        max_buckets: 10
+        max_objects: 10
+
+s3inbox:
+  endpoint: "http://s3:9000"
+  access_key: "access"
+  secret_key: "secretKey"
+  bucket: "inbox"
+  region: "us-east-1"
+  ready_path: "/minio/health/ready"
+
+# --- NETWORK & IPC ---
+grpc:
+  host: "reencrypt"
+  port: 50051
+  timeout: 30
+
+broker:
+  host: "rabbitmq"
+  port: "5672"
+  user: ""       # Leave empty or set if using a custom rabbitmq definition
+  password: ""   # Leave empty or set if using a custom rabbitmq definition
+  vhost: "/sda"
+  exchange: "sda"
+  routingKey: ""
+  ssl: "false"
+
+# --- PERSISTENCE ---
+# This block satisfies both the pipeline services (`database`) and download (`db`)
+database:
+  host: "postgres"
+  port: "5432"
+  name: "sda"
+  ssl_mode: "disable"
+
+db:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "rootpasswd"
+  database: "sda"
+  sslmode: "disable"
+
+schema:
+  type: "isolated"
+
+# --- MULTI-KEY / CRYPT4GH SETTINGS FOR ROTATION ---
+c4gh:
+  # The primary key is now the rotated key
+  filePath: /shared/rotatekey.sec.pem
+  passphrase: "rotatekeyPass"
+  syncPubKeyPath: /shared/sync.pub.pem
+  rotatePubKeyPath: /shared/rotatekey.pub.pem
+
+  privateKeys:
+    # Original c4gh.sec.pem is removed from this list
+    - filePath: /shared/rotatekey.sec.pem
+      passphrase: "rotatekeyPass"
+
+# --- AUTH & OIDC VISA VALIDATION ---
+jwt:
+  pubkey-path: "/shared/keys/pub/"
+  allow-all-data: true
+
+permission:
+  model: "combined"
+
+auth:
+  allow-opaque: false
+  # Stripped cega configuration block as requested
+
+visa:
+  enabled: true
+  source: "userinfo"
+  userinfo-url: "http://mockauth:8000/userinfo"
+  trusted-issuers-path: "/shared/trusted-issuers.json"
+  dataset-id-mode: "raw"
+  identity:
+    mode: "broker-bound"
+  validate-asserted: true
+  allow-insecure-jku: true
+  limits:
+    max-visas: 200
+    max-jwks-per-request: 10
+    max-visa-size: 16384
+  cache:
+    token-ttl: 3600
+    jwk-ttl: 300
+    validation-ttl: 120
+    userinfo-ttl: 60
+
+session:
+  expiration: 3600
+  secure: false
+  http-only: true
+  name: "sda_session"
+
+cache:
+  enabled: false
+  file-ttl: 300
+  permission-ttl: 120
+  dataset-ttl: 300
+
+location_broker.cache_ttl: 0

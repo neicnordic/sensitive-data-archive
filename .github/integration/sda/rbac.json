@@ -13,7 +13,7 @@
       {
          "role": "admin",
          "path": "/dataset/*",
-         "action": "(POST)|(PUT)"
+         "action": "(GET)|(POST)|(PUT)"
       },
        {
          "role": "submission",
@@ -23,6 +23,16 @@
        {
           "role": "submission",
           "path": "/file/ingest",
+          "action": "POST"
+       },
+       {
+          "role": "admin",
+          "path": "/file/events/:fileid",
+          "action": "GET"
+       },
+       {
+          "role": "admin",
+          "path": "/file/events/:fileid/:event",
           "action": "POST"
        },
        {

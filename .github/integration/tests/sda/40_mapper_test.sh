@@ -202,7 +202,25 @@ done
 token="$(cat /shared/token)"
 resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/datasets/list" | jq '. | length')"
 if [ "$resp" -ne 2 ]; then
-	echo "Error when listing key hash, expected 2 entries got: $resp"
+	echo "Error when listing datasets, expected 2 entries got: $resp"
+	exit 1
+fi
+
+resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/SYNC-001-12345" | jq '.numberOfFiles')"
+if [ "$resp" -ne 2 ]; then
+	echo "Error when getting SYNC-001-12345 dataset, expected it to have 2 files, got: $resp"
+	exit 1
+fi
+
+resp="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD74900000101" | jq -r '.status')"
+if [ "$resp" != "deprecated" ]; then
+	echo "Error when getting EGAD74900000101 dataset, expected it be deprecated, got: $resp"
+	exit 1
+fi
+
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD74900000102")"
+if [ "$resp" != "404" ]; then
+	echo "Error when getting dataset, expected 404 got: $resp"
 	exit 1
 fi
 

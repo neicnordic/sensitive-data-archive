@@ -5,19 +5,21 @@ on:
   pull_request:
     paths:
       - "docs/decisions/**"
+      - "docs/rfcs/**"
       - ".github/workflows/adr_lint_markdown.yml"
       - ".markdownlint.yml"
 
 jobs:
   markdownlint:
-    name: Decision records
+    name: Decision records and RFCs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Lint decision records
-        uses: DavidAnson/markdownlint-cli2-action@v23
+      - name: Lint decision records and RFCs
+        uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           globs: |
             docs/decisions/**/*.md
+            docs/rfcs/**/*.md

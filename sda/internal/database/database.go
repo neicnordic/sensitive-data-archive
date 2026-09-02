@@ -41,10 +41,6 @@ type functions interface {
 	// and returns its fileID for the latest specified status
 	GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser, filePath, status string) (string, error)
 
-	// CheckAccessionIDOwnedByUser checks if the file a accessionID links to belongs to the user
-	// Returns true if a file is found by the accessionID and user, false if not found
-	CheckAccessionIDOwnedByUser(ctx context.Context, accessionID, user string) (bool, error)
-
 	// UpdateFileEventLog updates the status in of the file in the files table
 	// The message parameter is the rabbitmq message sent on file upload.
 	UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error
@@ -66,6 +62,9 @@ type functions interface {
 
 	// GetFileStatus get the latest event for a file id
 	GetFileStatus(ctx context.Context, fileID string) (string, error)
+
+	// GetFileStatusHistory gets all events for a file id
+	GetFileStatusHistory(ctx context.Context, fileID string) ([]FileStatus, error)
 
 	// GetHeader retrieves the file header
 	GetHeader(ctx context.Context, fileID string) ([]byte, error)
@@ -90,8 +89,8 @@ type functions interface {
 	// GetAccessionID returns the stable id of a file identified by its file_id
 	GetAccessionID(ctx context.Context, fileID string) (string, error)
 
-	// MapFileToDataset maps a file to a dataset in the database
-	MapFileToDataset(ctx context.Context, datasetID, fileID string) error
+	// MapFileToDataset maps a file to a dataset in the database, provide a fileDownloadPathOverride to override the file submission path as the exposed download path
+	MapFileToDataset(ctx context.Context, datasetID, fileID string, fileDownloadPathOverride *string) error
 
 	// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
 	GetInboxPath(ctx context.Context, accessionID string) (string, error)
@@ -183,8 +182,14 @@ type functions interface {
 	// GetDatasetFileIDs returns all file IDs in a dataset
 	GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error)
 
+	// GetDatasetDetails returns details of the details of the dataset based on the datasetID, if dataset not found, will return nil, nil
+	GetDatasetDetails(ctx context.Context, datasetID string) (*DatasetDetails, error)
+
 	// GetFileDetails retrieves user, path and correlation id by giving the file id
 	GetFileDetails(ctx context.Context, fileID, event string) (*FileDetails, error)
+
+	// GetFileEvents retrieves the event types that can be registered in the file_event_log table
+	GetFileEvents(ctx context.Context) ([]string, error)
 
 	// GetSizeAndObjectCountOfLocation Sums the size and count of the files in a location
 	GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error)

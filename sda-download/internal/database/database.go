@@ -188,9 +188,9 @@ func (dbs *SQLdb) getFiles(datasetID string) ([]*FileInfo, error) {
 
 	const query = `
 SELECT files.stable_id AS id,
-	reverse(split_part(reverse(files.submission_file_path::text), '/'::text, 1)) AS display_file_name,
+	reverse(split_part(reverse(COALESCE(file_dataset.download_path, files.submission_file_path)::text), '/'::text, 1)) AS display_file_name,
 	files.submission_user AS user_id,
-	files.submission_file_path AS file_path,
+	COALESCE(file_dataset.download_path, files.submission_file_path) AS file_path,
 	files.decrypted_file_size,
 	sha_unenc.checksum AS decrypted_file_checksum,
 	sha_unenc.type AS decrypted_file_checksum_type
@@ -342,7 +342,8 @@ SELECT files.stable_id
 FROM sda.files
  	JOIN sda.file_dataset file_dataset ON file_dataset.file_id = files.id
  	JOIN sda.datasets datasets ON file_dataset.dataset_id = datasets.id
-	WHERE datasets.stable_id = $1 AND files.submission_file_path ~ ('^[^/]*/?' || $2);`
+	WHERE datasets.stable_id = $1 
+	  AND COALESCE(file_dataset.download_path, files.submission_file_path) ~ ('^[^/]*/?' || $2);`
 	// regexp matching in the submission file path in order to disregard the
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
@@ -360,17 +361,17 @@ FROM sda.files
 	return fileStableID, nil
 }
 
-// CheckFilePermission checks if user has permissions to access the dataset the file is a part of
-var CheckFilePermission = func(fileID string) (string, error) {
+// GetDatasetsContainingFile returns the accession ids of all datasets which contains the file
+var GetDatasetsContainingFile = func(fileID string) ([]string, error) {
 	var (
-		r           = ""
+		r     []string
 		err   error = nil
 		count       = 0
 	)
 
 	for count < dbRetryTimes {
-		r, err = DB.checkFilePermission(fileID)
-		if err != nil {
+		r, err = DB.getDatasetsContainingFile(fileID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			count++
 
 			continue
@@ -382,8 +383,8 @@ var CheckFilePermission = func(fileID string) (string, error) {
 	return r, err
 }
 
-// checkFilePermission is the actual function performing work for CheckFilePermission
-func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
+// getDatasetsContainingFile is the actual function performing work for GetDatasetsContainingFile
+func (dbs *SQLdb) getDatasetsContainingFile(fileID string) ([]string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	log.Debugf("check permissions for file with %s", sanitizeString(fileID))
@@ -396,14 +397,34 @@ func (dbs *SQLdb) checkFilePermission(fileID string) (string, error) {
 		WHERE files.stable_id = $1;
 	`
 
-	var datasetName string
-	if err := db.QueryRow(query, fileID).Scan(&datasetName); err != nil {
-		log.Errorf("requested file with %s does not exist", sanitizeString(fileID))
+	var datasetAccessions []string
 
-		return "", err
+	rows, err := db.Query(query, fileID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var datasetAccession string
+
+		if err := rows.Scan(&datasetAccession); err != nil {
+			return nil, err
+		}
+
+		datasetAccessions = append(datasetAccessions, datasetAccession)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	return datasetName, nil
+	if len(datasetAccessions) == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return datasetAccessions, nil
 }
 
 // FileDownload details are used for downloading a file

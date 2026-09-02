@@ -11,11 +11,9 @@ import (
 const getMappingDataQuery = "getMappingData"
 
 func init() {
-	queries[getMappingDataQuery] = `
-SELECT id, submission_user, submission_file_path, submission_location 
+	queries[getMappingDataQuery] = `SELECT id, submission_user, submission_file_path, submission_location 
 FROM sda.files 
-WHERE stable_id = $1;
-`
+WHERE stable_id = $1;`
 }
 
 func (db *pgDb) getMappingData(ctx context.Context, tx *sql.Tx, accessionID string) (*database.MappingData, error) {

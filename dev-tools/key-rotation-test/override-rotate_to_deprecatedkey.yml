@@ -1,0 +1,17 @@
+services:
+  api:
+    depends_on: !reset []
+    volumes:
+      - ./config-rotate_to_deprecatedkey.yaml:/config.yaml
+  reencrypt:
+    depends_on: !reset []
+    volumes:
+      - ./config-rotate_to_deprecatedkey.yaml:/config.yaml
+  download:
+    depends_on: !reset []
+    volumes:
+      - ./config-rotate_to_deprecatedkey.yaml:/config.yaml
+  rotatekey:
+    depends_on: !reset []
+    volumes:
+      - ./config-rotate_to_deprecatedkey.yaml:/config.yaml

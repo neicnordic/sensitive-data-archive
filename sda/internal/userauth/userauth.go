@@ -64,11 +64,11 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 		authStr := r.Header.Get("Authorization")
 		tokenStr, err := readTokenFromHeader(authStr)
 		if err != nil {
-			return nil, fmt.Errorf("auth header not valid: %s, (header was %s)", err.Error(), authStr)
+			return nil, fmt.Errorf("authorization header not valid: %w", err)
 		}
 		token, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(u.Keyset, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 		if err != nil {
-			return nil, fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), tokenStr)
+			return nil, fmt.Errorf("signed token not valid: %w", err)
 		}
 
 		iss, err := url.ParseRequestURI(token.Issuer())
@@ -92,22 +92,14 @@ func (u *ValidateFromToken) ReadJwtPubKeyPath(jwtpubkeypath string) error {
 			}
 			if info.Mode().IsRegular() {
 				log.Debug("Reading file: ", filepath.Join(filepath.Clean(jwtpubkeypath), info.Name()))
-				keyData, err := os.ReadFile(filepath.Join(filepath.Clean(jwtpubkeypath), info.Name()))
+				keyBytes, err := os.ReadFile(filepath.Join(filepath.Clean(jwtpubkeypath), info.Name()))
 				if err != nil {
 					return fmt.Errorf("key file error: %v", err)
 				}
 
-				key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+				err = u.ReadJwtPubKeyBytes(keyBytes)
 				if err != nil {
-					return fmt.Errorf("parseKey failed: %v", err)
-				}
-
-				if err := jwk.AssignKeyID(key); err != nil {
-					return fmt.Errorf("assignKeyID failed: %v", err)
-				}
-
-				if err := u.Keyset.AddKey(key); err != nil {
-					return fmt.Errorf("failed to add key to set: %v", err)
+					return err
 				}
 			}
 
@@ -115,6 +107,23 @@ func (u *ValidateFromToken) ReadJwtPubKeyPath(jwtpubkeypath string) error {
 		})
 	if err != nil {
 		return fmt.Errorf("failed to get public key files (%v)", err)
+	}
+
+	return nil
+}
+
+func (u *ValidateFromToken) ReadJwtPubKeyBytes(pubKeyBytes []byte) error {
+	key, err := jwk.ParseKey(pubKeyBytes, jwk.WithPEM(true))
+	if err != nil {
+		return fmt.Errorf("failed to parse JWT public key, reason: %v", err)
+	}
+
+	if err := jwk.AssignKeyID(key); err != nil {
+		return fmt.Errorf("failed to assign JWK key id, reason: %v", err)
+	}
+
+	if err := u.Keyset.AddKey(key); err != nil {
+		return fmt.Errorf("failed to add JWT key to keyset, reason: %v", err)
 	}
 
 	return nil
@@ -130,7 +139,6 @@ func (u *ValidateFromToken) FetchJwtPubKeyURL(jwtpubkeyurl string) error {
 
 		return fmt.Errorf("jwtpubkeyurl is not a proper URL (%s)", jwkURL)
 	}
-	log.Info("jwkURL: ", jwtpubkeyurl)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

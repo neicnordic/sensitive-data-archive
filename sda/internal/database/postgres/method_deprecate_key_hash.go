@@ -9,12 +9,10 @@ import (
 const deprecateKeyHashQuery = "deprecateKeyHash"
 
 func init() {
-	queries[deprecateKeyHashQuery] = `
-UPDATE sda.encryption_keys 
+	queries[deprecateKeyHashQuery] = `UPDATE sda.encryption_keys 
 SET deprecated_at = NOW() 
 WHERE key_hash = $1 
-AND deprecated_at IS NULL;
-`
+AND deprecated_at IS NULL;`
 }
 
 func (db *pgDb) deprecateKeyHash(ctx context.Context, tx *sql.Tx, keyHash string) error {

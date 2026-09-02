@@ -1,0 +1,375 @@
+# Complete dev stack for end-to-end ingestion and key rotation testing
+# Includes full pipeline (ingest, verify, finalize, mapper) and download/api services.
+#
+# Usage:
+#   docker compose -f compose.yml up -d
+
+name: key-rotation-test-full
+
+services:
+  postgres:
+    build:
+      context: ../../postgresql
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "15432:5432"
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    build:
+      context: ../../rabbitmq
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-rabbitmq
+    container_name: rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    restart: always
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    networks:
+      default:
+        aliases:
+          - s3
+    environment:
+      - MINIO_ROOT_USER=access
+      - MINIO_ROOT_PASSWORD=secretKey
+      - MINIO_SERVER_URL=http://127.0.0.1:9000
+    healthcheck:
+      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+
+  # Generates keys and handles bulk DB configuration for all pipeline roles
+  credentials:
+    image: python:3.13-slim-trixie
+    container_name: credentials
+    command:
+      - "/bin/sh"
+      - "/make_sda_credentials.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=rootpasswd
+    volumes:
+      - ./make_sda_credentials.sh:/make_sda_credentials.sh:ro
+      - ./helpers.sh:/helpers.sh:ro
+      - shared:/shared
+
+  seed:
+    image: python:3.14-slim-trixie
+    container_name: seed
+    command:
+      - /bin/sh
+      - -c
+      - "sh /seed.sh"
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      s3inbox:
+        condition: service_started
+      api:
+        condition: service_started
+      ingest:
+        condition: service_started
+      verify:
+        condition: service_started
+    environment:
+      - PGPASSWORD=rootpasswd
+    volumes:
+      - ./seed.sh:/seed.sh:ro
+      - ./helpers.sh:/helpers.sh:ro
+      - shared:/shared
+
+  mockauth:
+    container_name: mockauth
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --upgrade pip > /dev/null
+        pip install aiohttp Authlib > /dev/null
+        python -u /mockoidc.py
+    image: python:3.14-slim-trixie
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/jwks')\" || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - ./mockoidc.py:/mockoidc.py:ro
+      - shared:/shared
+    ports:
+      - "8000:8000"
+    restart: always
+
+  # --- INGESTION PIPELINE SERVICES ---
+
+  s3inbox:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-s3inbox]
+    container_name: s3inbox
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mockauth:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=inbox
+      - BROKER_USER=inbox
+      - BROKER_ROUTINGKEY=inbox
+      - DATABASE_PASSWORD=inbox
+      - DATABASE_USER=inbox
+    ports:
+      - "18000:8000"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  ingest:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-ingest]
+    container_name: ingest
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=ingest
+      - BROKER_USER=ingest
+      - BROKER_QUEUE=ingest
+      - BROKER_ROUTINGKEY=archived
+      - DATABASE_PASSWORD=ingest
+      - DATABASE_USER=ingest
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  verify:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-verify]
+    container_name: verify
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=verify
+      - BROKER_USER=verify
+      - BROKER_QUEUE=archived
+      - BROKER_ROUTINGKEY=verified
+      - DATABASE_PASSWORD=verify
+      - DATABASE_USER=verify
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  finalize:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-finalize]
+    container_name: finalize
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=finalize
+      - BROKER_USER=finalize
+      - BROKER_QUEUE=accession
+      - BROKER_ROUTINGKEY=completed
+      - DATABASE_PASSWORD=finalize
+      - DATABASE_USER=finalize
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  mapper:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-mapper]
+    container_name: mapper
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=mapper
+      - BROKER_USER=mapper
+      - BROKER_QUEUE=mappings
+      - DATABASE_PASSWORD=mapper
+      - DATABASE_USER=mapper
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  # --- EGRESS & CORE CONTROL SERVICES ---
+
+  api:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-api]
+    container_name: api
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mockauth:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=api
+      - BROKER_USER=api
+      - DATABASE_PASSWORD=api
+      - DATABASE_USER=api
+      - JWT_PUB_KEY_URL=http://mockauth:8000/jwks
+    ports:
+      - "8090:8080"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./rbac.json:/rbac.json
+      - shared:/shared
+
+  reencrypt:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    container_name: reencrypt
+    command: [sda-reencrypt]
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+    ports:
+      - "50051:50051"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  download:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    container_name: download
+    command:
+      - sda-download
+      - "--config-file=/config.yaml"
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      reencrypt:
+        condition: service_started
+      mockauth:
+        condition: service_started
+    environment:
+      - CONFIG_FILE=/config.yaml
+      - CACHE_FILE_TTL=1
+    ports:
+      - "8085:8080"
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+  rotatekey:
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    command: [sda-rotatekey]
+    container_name: rotatekey
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_PASSWORD=rotatekey
+      - BROKER_USER=rotatekey
+      - BROKER_QUEUE=rotatekey
+      - BROKER_ROUTINGKEY=rotatekey
+      - DATABASE_PASSWORD=rotatekey
+      - DATABASE_USER=rotatekey
+    restart: always
+    volumes:
+      - ./config.yaml:/config.yaml
+      - shared:/shared
+
+volumes:
+  minio_data:
+  postgres_data:
+  rabbitmq_data:
+  shared:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"

@@ -3,6 +3,7 @@ package file
 import (
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
@@ -250,6 +251,38 @@ func TestRotateKey_Failure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "post request failed")
 	mockHelpers.AssertExpectations(t)
+}
+
+func TestGetEvent_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/file/events/file123", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	body, err := GetEvent(server.URL, "test-token", "file123")
+
+	assert.NoError(t, err)
+	assert.Equal(t, `{"status":"ok"}`, string(body))
+}
+
+func TestPostEvent_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/file/events/file123/created", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	body, err := PostEvent(server.URL, "test-token", "file123", "created", "initial upload")
+
+	assert.NoError(t, err)
+	assert.Equal(t, `{"status":"ok"}`, string(body))
 }
 
 func TestListMultiPage(t *testing.T) {

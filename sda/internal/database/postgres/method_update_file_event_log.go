@@ -11,10 +11,8 @@ import (
 const updateFileEventLogQuery = "updateFileEventLog"
 
 func init() {
-	queries[updateFileEventLogQuery] = `
-INSERT INTO sda.file_event_log(file_id, event, user_id, details, message)
-VALUES($1, $2, $3, $4, $5);
-`
+	queries[updateFileEventLogQuery] = `INSERT INTO sda.file_event_log(file_id, event, user_id, details, message)
+VALUES($1, $2, $3, $4, $5);`
 }
 func (db *pgDb) updateFileEventLog(ctx context.Context, tx *sql.Tx, fileUUID, event, user, details, message string) error {
 	stmt, err := db.getPreparedStmt(tx, updateFileEventLogQuery)

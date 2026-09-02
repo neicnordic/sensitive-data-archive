@@ -1,0 +1,5 @@
+services:
+  rotatekey:
+    depends_on: !reset []
+    volumes:
+      - ./config-norotatetarget.yaml:/config.yaml

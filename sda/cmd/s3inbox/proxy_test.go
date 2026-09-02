@@ -433,6 +433,16 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore()) // Testing the pinged interface
 
+	w = httptest.NewRecorder()
+	r, err = http.NewRequest("HEAD", "/dummy/file", nil)
+	assert.NoError(s.T(), err)
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"abc\"", "X-Amz-Meta-Unencrypted-Hash": "unit-testing"}
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), "\"abc\"", w.Result().Header.Get("ETag"))
+	assert.Equal(s.T(), "unit-testing", w.Result().Header.Get("X-Amz-Meta-Unencrypted-Hash"))
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+
 	// Put file works
 	w = httptest.NewRecorder()
 	r, err = http.NewRequest("PUT", "/dummy/file", nil)

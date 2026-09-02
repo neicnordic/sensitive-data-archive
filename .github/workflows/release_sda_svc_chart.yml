@@ -1,0 +1,142 @@
+name: Release sda-svc Helm Chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.3)"
+        required: true
+        type: string
+
+jobs:
+  validate_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Ensure main or hotfix branch
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+
+          echo "Branch: $BRANCH"
+
+          if [[ "$BRANCH" != "main" && ! "$BRANCH" =~ ^hotfix/ ]]; then
+            echo "Workflow may only run on:"
+            echo "  - main"
+            echo "  - hotfix/*"
+            exit 1
+          fi
+
+      - name: Validate target version
+        env:
+          TARGET_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          
+          # Validate target version format
+           if ! [[ "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ]]; then
+             echo "$TARGET_VERSION: Version must match MAJOR.MINOR.PATCH[-suffix]"
+             exit 1
+           fi
+
+          CHART_VERSION=$(yq '.version' charts/sda-svc/Chart.yaml)
+          
+          if [ "$CHART_VERSION" != "${TARGET_VERSION}" ]; then
+            echo "Target version and Version specified in charts/sda-svc/Chart.yaml differs, chart version: is $CHART_VERSION, target version: ${TARGET_VERSION}"
+            exit 1
+          fi
+          
+
+          CHANGELOG_VERSION=$(
+            grep -E '^## \[[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?\]' charts/sda-svc/CHANGELOG.md \
+            | head -n1 \
+            | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?)\].*/\1/'
+          )
+
+          if [ -z "$CHANGELOG_VERSION" ]; then
+            echo "Could not determine current version from the charts/sda-svc/CHANGELOG.md"
+            exit 1
+          fi
+
+          if [ "$CHANGELOG_VERSION" != "${TARGET_VERSION}" ]; then
+            echo "Latest version in changelog is $CHANGELOG_VERSION, target version is ${TARGET_VERSION}"
+            exit 1
+          fi
+
+          UNRELEASED_CONTENT=$(
+            awk '
+            /^## \[Unreleased\]/ { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+            ' charts/sda-svc/CHANGELOG.md
+          )
+
+          # Remove blank lines and whitespace
+          UNRELEASED_CONTENT_CLEAN=$(echo "$UNRELEASED_CONTENT" | sed '/^[[:space:]]*$/d')
+
+          if [ -n "$UNRELEASED_CONTENT_CLEAN" ]; then
+            echo "Unreleased section is not empty"
+            exit 1
+          fi
+
+           CONTENT_TO_BE_RELEASED=$(
+            awk "
+            /^## \[${TARGET_VERSION}\]/ { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+            " charts/sda-svc/CHANGELOG.md
+          )
+
+          # Remove blank lines and whitespace
+          CONTENT_TO_BE_RELEASED_CLEAN=$(echo "$CONTENT_TO_BE_RELEASED" | sed '/^[[:space:]]*$/d')
+
+          if [ -z "$CONTENT_TO_BE_RELEASED_CLEAN" ]; then
+            echo "Changelog entry for ${TARGET_VERSION} is empty"
+            exit 1
+          fi
+
+  package:
+    needs: [validate_release]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Run chart-releaser
+        id: chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Update release notes
+        if: ${{ steps.chart-releaser.outputs.changed_charts }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=$(yq '.version' charts/sda-svc/Chart.yaml)
+          
+          awk "
+            /^## \\[${VERSION}\\]/ { in_section=1; next }
+            /^## \\[/ && in_section { exit }
+            in_section { print }
+          " charts/sda-svc/CHANGELOG.md > RELEASE_NOTES.md
+
+          gh release edit "sda-svc-${VERSION}" --notes-file RELEASE_NOTES.md
+
+          

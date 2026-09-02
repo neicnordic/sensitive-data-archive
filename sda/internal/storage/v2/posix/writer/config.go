@@ -33,7 +33,12 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 		return nil, err
 	}
 
+	var writerEndpoints []*endpointConfig
+
 	for _, e := range endpointConf {
+		// A writer_disabled entry is the config for a reader. Writing to it is
+		// not supported, and deleting counts as a write, so it is dropped here
+		// and the writer never sees it.
 		if e.WriterDisabled {
 			continue
 		}
@@ -47,9 +52,11 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 			}
 			e.maxSizeBytes = byteSize.Bytes()
 		}
+
+		writerEndpoints = append(writerEndpoints, e)
 	}
 
-	return endpointConf, nil
+	return writerEndpoints, nil
 }
 
 func (endpointConf *endpointConfig) isUsable(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (bool, error) {

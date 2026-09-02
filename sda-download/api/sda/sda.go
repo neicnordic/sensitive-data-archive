@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -234,9 +235,17 @@ func Download(c *gin.Context) {
 	fileID := c.Param("fileid")
 
 	// Check user has permissions for this file (as part of a dataset)
-	dataset, err := database.CheckFilePermission(fileID)
+	datasetsAccessions, err := database.GetDatasetsContainingFile(fileID)
 	if err != nil {
-		c.String(http.StatusNotFound, "file not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Debugf("user requested to view file: %s, but file is not found or not present in any dataset", sanitizeString(fileID))
+			c.String(http.StatusNotFound, "file not found")
+
+			return
+		}
+
+		log.Debugf("database error when checking datasets containing file: %s, error: %v", sanitizeString(fileID), err)
+		c.String(http.StatusInternalServerError, "database error")
 
 		return
 	}
@@ -247,14 +256,19 @@ func Download(c *gin.Context) {
 	// Verify user has permission to datafile
 	permission := false
 	for d := range cache.Datasets {
-		if cache.Datasets[d] == dataset {
-			permission = true
+		for _, datasetAccession := range datasetsAccessions {
+			if cache.Datasets[d] == datasetAccession {
+				permission = true
 
+				break
+			}
+		}
+		if permission {
 			break
 		}
 	}
 	if !permission {
-		log.Debugf("user requested to view file, but does not have permissions for dataset %s", dataset)
+		log.Debugf("user requested to view file: %s, but does not have permissions for any dataset which contains file", sanitizeString(fileID))
 		c.String(http.StatusUnauthorized, "unauthorised")
 
 		return

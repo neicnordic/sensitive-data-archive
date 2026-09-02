@@ -59,15 +59,31 @@ sda-admin file set-accession -filepath /path/to/file.c4gh -user test-user@exampl
 
 **By file ID:**
 ```sh
-sda-admin file set-accession -fileid <FILEUUID> -accession-id my-accession-id-1
+sda-admin file set-accession -fileid <FILE_UUID> -accession-id my-accession-id-1
+```
+
+## Get file events for a given file
+
+List all file events associated to a file:
+
+```sh
+sda-admin file get-events -file-id <FILE_UUID>
+```
+
+## Update latest file event for a given file
+
+Append a new file event to the file_event_log for a given file by specifying the fileID and the new event in the request payload
+
+```sh
+sda-admin file update-event -file-id <FILE_UUID> -event disabled -reason "file set to disabled, broken checksum, don't ingest"
 ```
 
 ## Create a dataset from a list of accession IDs and a dataset ID
 
-Use the following command to create a dataset `dataset001` from accession IDs `my-accession-id-1` and `my-accession-id-2` for files that belongs to the user `test-user@example.org`
+Use the following command to create a dataset `dataset001` from accession IDs `my-accession-id-1` and `my-accession-id-2`
 
 ```sh
-sda-admin dataset create  -user test-user@example.org -dataset-id dataset001 my-accession-id-1 my-accession-id-2 
+sda-admin dataset create  -dataset-id dataset001 my-accession-id-1 my-accession-id-2 
 ```
 
 ## Release a dataset for downloading

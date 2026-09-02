@@ -1,5 +1,5 @@
 {{- if .Values.releasetest.run }}
-{{- if eq "s3" .Values.global.inbox.storageType }}
+{{- if not (empty .Values.global.inbox.s3) }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -65,7 +65,7 @@ spec:
           value: "{{ .Values.global.deploymentType }}"
         - name: INBOX_SERVICE_NAME
           value: "{{ template "sda.fullname" . }}-inbox"
-      {{- if eq "s3" .Values.global.inbox.storageType }}
+      {{- if not (empty .Values.global.inbox.s3) }}
         - name: AUTH_SERVICE_NAME
           value: "{{ template "sda.fullname" . }}-auth"
         - name: INBOX_ACCESS_TOKEN
@@ -83,9 +83,9 @@ spec:
           value: "{{ template "sda.fullname" . }}-download"
         {{- end }}
         - name: INBOX_STORAGE_TYPE
-          value: {{ required "Missing storage type for inbox" .Values.global.inbox.storageType | quote }}
+          value: {{ if not (empty .Values.global.inbox.s3) }}s3{{ else if not (empty .Values.global.inbox.posix) }}posix{{ else }}{{ fail "Missing storage type for inbox (set global.inbox.s3 or global.inbox.posix)" }}{{ end }}
         - name: ARCHIVE_STORAGE_TYPE
-          value: {{ required "Missing storage type for archive" .Values.global.archive.storageType | quote }}
+          value: {{ if not (empty .Values.global.archive.s3) }}s3{{ else if not (empty .Values.global.archive.posix) }}posix{{ else }}{{ fail "Missing storage type for archive (set global.archive.s3 or global.archive.posix)" }}{{ end }}
       command: [ "/bin/bash" ]
       args:
         - "/release-test-app/release-test.sh"

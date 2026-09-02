@@ -7,6 +7,7 @@ on:
       - "sda-download/**"
       - "sda-validator/orchestrator/**"
       - "sda-admin/**"
+      - ".github/workflows/pr_code_tests.yml"
 
 env:
   go-version: '1.25'
@@ -22,13 +23,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: ${{ matrix.java-version }}
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -43,13 +44,13 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -61,7 +62,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v6.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda-download/coverage.txt
@@ -74,29 +75,45 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
           cd sda
           go get -v -t ./...
+          go get -v -t -tags=visas ./cmd/download/...
       - name: Test
         run: |
           cd sda
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
+      - name: Test download v2 visa unit tests
+        run: |
+          cd sda
+          go test -v -tags=visas -coverprofile=coverage-visas.txt -covermode=atomic ./cmd/download/...
+
       - name: Codecov
-        uses: codecov/codecov-action@v6.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./sda/coverage.txt
+          files: ./sda/coverage.txt
+          disable_search: true
           flags: unittests
+          fail_ci_if_error: false
+
+      - name: Codecov (download v2 visa)
+        uses: codecov/codecov-action@v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./sda/coverage-visas.txt
+          disable_search: true
+          flags: download-v2-visas
           fail_ci_if_error: false
 
   test_sda_admin:
@@ -105,13 +122,13 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -123,7 +140,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v6.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda-admin/coverage.txt
@@ -136,13 +153,13 @@ jobs:
     steps:
 
       - name: Set up Go ${{ env.go-version-validator-orchestrator }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version-validator-orchestrator }}
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -154,7 +171,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
-        uses: codecov/codecov-action@v6.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./sda-validator/orchestrator/coverage.txt

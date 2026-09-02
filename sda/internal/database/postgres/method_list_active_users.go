@@ -8,15 +8,13 @@ import (
 const listActiveUsersQuery = "listActiveUsers"
 
 func init() {
-	queries[listActiveUsersQuery] = `
-SELECT DISTINCT submission_user 
+	queries[listActiveUsersQuery] = `SELECT DISTINCT submission_user 
 FROM sda.files f 
 WHERE NOT EXISTS (
 	SELECT 1 
 	FROM sda.file_dataset d 
 	WHERE f.id = d.file_id
-) ORDER BY submission_user ASC;
-`
+) ORDER BY submission_user ASC;`
 }
 
 func (db *pgDb) listActiveUsers(ctx context.Context, tx *sql.Tx) ([]string, error) {

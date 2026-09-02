@@ -80,20 +80,26 @@ spec:
         resources:
 {{ toYaml .Values.sync.resources | trim | indent 10 }}
         volumeMounts:
-      {{- if not .Values.global.vaultSecrets }}
-          - name: c4gh
-            mountPath: {{ template "c4ghPath" . }}
-          - name: config
-            mountPath: {{ template "configPath" . }}
-      {{- end }}
-  {{- if eq "posix" .Values.global.archive.storageType }}
-          - name: archive
-            mountPath: {{ .Values.global.archive.volumePath | quote }}
-  {{- end }}
-  {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
-          - name: tls
-            mountPath: {{ template "tlsPath" . }}
-  {{- end }}
+        {{- if not .Values.global.vaultSecrets }}
+        - name: c4gh
+          mountPath: {{ template "c4ghPath" . }}
+        - name: config
+          mountPath: {{ template "configPath" . }}
+        {{- end }}
+        {{- if .Values.global.archive.posix }}
+          {{- include "sda.posixVolumeMounts" (dict
+              "config" .Values.global.archive
+              "name" "archive") | nindent 8 }}
+        {{- end }}
+        {{- if .Values.global.sync.destination.posix }}
+          {{- include "sda.posixVolumeMounts" (dict
+              "config" .Values.global.sync.destination
+              "name" "syncDestination") | nindent 8 }}
+        {{- end }}
+        {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
+        - name: tls
+          mountPath: {{ template "tlsPath" . }}
+        {{- end }}
       enableServiceLinks: false
       volumes:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
@@ -123,17 +129,16 @@ spec:
             defaultMode: 0440
             secretName: {{ template "sda.fullname" . }}-sync
     {{- end }}
-  {{- if eq "posix" .Values.global.archive.storageType }}
-        - name: archive
-    {{- if .Values.global.archive.existingClaim }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.global.archive.existingClaim }}
-    {{- else }}
-          nfs:
-            server: {{ required "An archive NFS server is required" .Values.global.archive.nfsServer | quote }}
-            path: {{ if .Values.global.archive.nfsPath }}{{ .Values.global.archive.nfsPath | quote }}{{ else }}{{ "/" }}{{ end }}
-    {{- end }}
-  {{- end }}
+      {{- if .Values.global.archive.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.archive
+            "name" "archive") | nindent 8 }}
+      {{- end }}
+      {{- if .Values.global.sync.destination.posix }}
+        {{- include "sda.posixVolumes" (dict
+            "config" .Values.global.sync.destination
+            "name" "syncDestination") | nindent 8 }}
+      {{- end }}
       restartPolicy: Always
 {{- end }}
 {{- end }}

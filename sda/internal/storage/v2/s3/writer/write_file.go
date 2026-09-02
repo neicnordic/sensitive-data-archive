@@ -44,6 +44,12 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 	}
 	writer.Unlock()
 
+	// No endpoint had a free bucket, so there is nowhere to write. Bail out
+	// before the upload runs against an empty bucket name.
+	if activeBucket == "" {
+		return "", storageerrors.ErrorNoFreeBucket
+	}
+
 	client, err := writer.activeEndpoint.getS3Client(ctx)
 	if err != nil {
 		return "", err

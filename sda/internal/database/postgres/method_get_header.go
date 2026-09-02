@@ -9,11 +9,9 @@ import (
 const getHeaderQuery = "getHeader"
 
 func init() {
-	queries[getHeaderQuery] = `
-SELECT header 
+	queries[getHeaderQuery] = `SELECT header 
 FROM sda.files 
-WHERE id = $1;
-`
+WHERE id = $1;`
 }
 
 func (db *pgDb) getHeader(ctx context.Context, tx *sql.Tx, fileID string) ([]byte, error) {

@@ -308,8 +308,8 @@ func hashStrings(strs []string) string {
 
 	h := sha256.New()
 	for _, s := range sorted {
-		h.Write([]byte(s))
-		h.Write([]byte{0}) // Separator to avoid collision between ["ab", "c"] and ["a", "bc"]
+		_, _ = h.Write([]byte(s))
+		_, _ = h.Write([]byte{0}) // Separator to avoid collision between ["ab", "c"] and ["a", "bc"]
 	}
 
 	return hex.EncodeToString(h.Sum(nil))[:24] // Use first 24 chars (96 bits) for low collision probability

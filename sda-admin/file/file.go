@@ -28,6 +28,10 @@ type RequestBodyFileAccession struct {
 	User        string `json:"user"`
 }
 
+type RequestBodyUpdateReason struct {
+	Reason string `json:"reason"`
+}
+
 // List fetches and prints all files for username, auto-paginating.
 //
 // When stdout is a TTY (interactive session), each page is printed as it
@@ -80,7 +84,7 @@ func List(apiURI, token, username string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Print(string(pretty.Pretty(out)))
+		_, _ = fmt.Print(string(pretty.Pretty(out)))
 	}
 
 	return nil
@@ -88,15 +92,15 @@ func List(apiURI, token, username string) error {
 
 func handleListPage(body []byte, cursor string, isTTY bool, allItems []json.RawMessage) ([]json.RawMessage, error) {
 	if isTTY {
-		fmt.Print(string(pretty.Pretty(body)))
+		_, _ = fmt.Print(string(pretty.Pretty(body)))
 		if cursor == "" {
 			return allItems, nil
 		}
-		fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
+		_, _ = fmt.Fprint(os.Stderr, "-- Press [Enter] or [Space] for next page, Ctrl+C to quit --")
 		if err := waitForContinue(); err != nil {
 			return nil, err
 		}
-		fmt.Fprintln(os.Stderr)
+		_, _ = fmt.Fprintln(os.Stderr)
 
 		return allItems, nil
 	}
@@ -141,7 +145,7 @@ func waitForUserContinue() error {
 		case '\r', '\n', ' ':
 			return nil
 		case 3: // Ctrl+C
-			fmt.Fprintln(os.Stderr)
+			_, _ = fmt.Fprintln(os.Stderr)
 
 			return ErrAborted
 		}
@@ -242,4 +246,40 @@ func RotateKey(apiURI, token, fileID string) error {
 	}
 
 	return nil
+}
+
+func GetEvent(apiURI, token, fileID string) ([]byte, error) {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedURL.Path = path.Join(parsedURL.Path, "file", "events", fileID)
+	responseBody, err := helpers.GetReq(parsedURL.String(), token, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseBody, nil
+}
+
+func PostEvent(apiURI, token, fileID, event, reason string) ([]byte, error) {
+	parsedURL, err := url.Parse(apiURI)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := RequestBodyUpdateReason{Reason: reason}
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedURL.Path = path.Join(parsedURL.Path, "file", "events", fileID, event)
+	responseBody, err := helpers.PostReq(parsedURL.String(), token, jsonBody)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseBody, nil
 }
