@@ -26,7 +26,10 @@ credentialed browser login via `/oidc/cors_login`, and the chart has
 service, though: what the template renders
 ([auth-secrets.yaml#L18-L23][auth-secrets]) does not match the keys the
 service reads ([config.go#L427-L440][config-cors]). The service also accepts
-`*` and `null` origins. No other service sends `Access-Control-*` headers.
+`*` and `null` origins. In the [discussion][pr-2555-jb], jbygdell writes that
+the code was meant for a CLI-based login that was never finished, that
+nothing uses it, and that it may not be fully functional. No other service
+sends `Access-Control-*` headers.
 
 The one browser client we have, [sda-download-ui][ui-repo], does not need
 CORS. Both of its download modes, the tar stream ([tar-download.md][ui-tar])
@@ -100,6 +103,11 @@ it.
    `cors.origins: "*"`, patterns or `cors.methods`. Reject at startup, which
    turns an upgrade into a login outage, or warn for one release? Should
    `cors.methods` stay configurable?
+   Or, since the feature was never finished and is unused
+   ([discussion][pr-2555-jb]), remove the middleware, the `cors.*` keys, the
+   `global.auth.cors*` values, the auth.md section and perhaps
+   `/oidc/cors_login` instead? That would also drop acceptance criterion 9
+   and the two-layer objection to Option 2.
 7. **Configuration encoding.** `sda-auth` reads a comma-separated string via
    `viper.GetString`, which returns empty for a YAML list. Is that the
    canonical shape everywhere?
@@ -112,6 +120,11 @@ it.
    against the proxy's stitched stream. Pointing it at v2 would need the
    stitch on the client or a stable header per file and recipient. Does a
    direct path need API changes first, and is it worth designing for?
+9. **Is the ask still live?** Sprint planning raised it; jbygdell's view in
+   the [discussion][pr-2555-jb] is to wait. If the ask is deferred, the
+   outcome is Option 3 now and Option 2 if a browser client turns up, the
+   header contract stays in this file for whoever configures the edge, and
+   the RFC is ready for decision.
 
 ## Pros and Cons of the Options
 
@@ -165,6 +178,8 @@ profiles in the chart and sites supply only origins.
   need CORS (open question 2). If they do not, the scope is two Go services
   and this advantage is small.
 * Good, because preflight never reaches the application.
+* Neutral, because it is the layer jbygdell would use if CORS turns out to
+  be needed at all ([discussion][pr-2555-jb]).
 * Bad, because `sda-auth` already has application CORS. Ingress CORS is
   immediately two layers for it unless its middleware is removed, and then
   `cors_login`'s credential handling moves to every site.
@@ -191,6 +206,11 @@ sda-download-ui does. A more deliberate form is a dedicated streaming
 backend-for-frontend.
 
 * Good, because it works today with no SDA change.
+* Good, because with a bearer on every request, which
+  [download.md][download-md-session] recommends even with the session
+  cookie, there is no ambient credential and no security reason to add CORS
+  before a client needs it. In the [discussion][pr-2555-jb] jbygdell prefers
+  this option for now, with Option 2 as the fallback.
 * Good, because the bearer never reaches the browser, which is the strongest
   defence against token theft via XSS, and the proxy can do what the API
   does not: stitch header and content into one resumable stream.
@@ -244,6 +264,16 @@ What tips it for me is that `sda-auth` already works this way, that the
 header contract is the part that drifts when it lives apart from the code,
 and that the chart cannot ship a working ingress default. The edge-error gap
 and the release dependency are the counter-arguments I take most seriously.
+
+In the [discussion][pr-2555-jb], jbygdell reads it the other way: no
+application needs CORS today, since every API call carries a bearer, so do
+nothing now and use the edge if the need arises. That is Option 3 with
+Option 2 as the fallback. The bearer does not remove the need for CORS for
+a browser client, since `Authorization` makes every call preflighted, but it
+does remove any security reason to hurry. It also weakens my first argument
+above: `sda-auth` has the code, but nothing exercises it. What decides
+between the two readings is whether the ask is deferred (open question 9).
+
 Nothing below is a decision. The header contract holds whichever layer is
 chosen; the acceptance criteria are written for Option 1 and say which of
 them carry over to the edge.
@@ -425,6 +455,7 @@ chart adopts a gateway or mesh; or when the htsget-rs topology changes.
 [ui-fsa]: https://github.com/NBISweden/sda-download-ui/blob/4103342f/frontend/src/app/components/FileSystemAccessBatchDownloadActions.tsx
 [ui-pr-173]: https://github.com/NBISweden/sda-download-ui/pull/173
 [pr-2541]: https://github.com/neicnordic/sensitive-data-archive/pull/2541
+[pr-2555-jb]: https://github.com/neicnordic/sensitive-data-archive/pull/2555#issuecomment-5493669638
 [download-md-session]: https://github.com/neicnordic/sensitive-data-archive/blob/102c2c7f/sda/cmd/download/download.md#the-session-cookie
 [validator]: https://github.com/neicnordic/sensitive-data-archive/blob/60389bd1/sda-validator/orchestrator/README.md
 [auth-cors]: https://github.com/neicnordic/sensitive-data-archive/blob/60389bd1/sda/cmd/auth/main.go#L409-L417
