@@ -806,8 +806,8 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	releaseMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
-	if err := api.mq.Publish(context.Background(), "accession", releaseMessage); err != nil {
-		slog.Debug("failed to publish accession message", "err", err)
+	if err := api.mq.Publish(context.Background(), "mappings", releaseMessage); err != nil {
+		slog.Debug("failed to publish dataset release message", "err", err)
 		writeJSON(w, http.StatusInternalServerError, err.Error())
 
 		return
