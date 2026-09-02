@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
   - Use log/slog for logging instead of logrus.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- inbox project code:
+  - Moved `storage.inbox.projectCode` and `storage.inbox.projectCodeDelimiter` out of `internal/config` into `internal/v2/inboxproject`, registered through `config/v2` so both appear in `--help`. Key names, validation and the stock default are unchanged.
+  - `helper.ResolveInboxPath` takes the project code and delimiter as strings rather than a config struct, so `internal/helper` holds no config type and `internal/config` no longer imports it.
+  - Only ingest, mapper and api validate the section now. finalize, verify and intercept never read it and no longer fail at startup on a malformed one.
 
 ### Fixed
 

@@ -34,18 +34,19 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/internal/v2/inboxproject"
 	log "github.com/sirupsen/logrus"
 )
 
 type Ingest struct {
-	ArchiveWriter      storage.Writer
-	BackupWriter       storage.Writer
-	ArchiveReader      storage.Reader
-	ArchiveKeyList     []*[32]byte
-	db                 database.Database
-	InboxReader        storage.Reader
-	InboxProjectConfig helper.InboxProjectConfig
-	Broker             brokerv2.Broker
+	ArchiveWriter  storage.Writer
+	BackupWriter   storage.Writer
+	ArchiveReader  storage.Reader
+	ArchiveKeyList []*[32]byte
+	db             database.Database
+	InboxReader    storage.Reader
+	Inbox          inboxproject.Config
+	Broker         brokerv2.Broker
 }
 
 type decryptResult struct {
@@ -71,7 +72,7 @@ func run() error {
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
-	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
+	app.Inbox, err = inboxproject.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
@@ -322,7 +323,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 		// message.Key is the broker correlation-id, not the submission path; use the trigger's
 		// filePath and resolve it to the physical inbox path before locating it.
-		submissionLocation, err = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
+		submissionLocation, err = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.Inbox.Code, app.Inbox.Delimiter))
 		if err != nil {
 			slog.Error("failed to find submission location for file", "error", err, "file-id", fileID)
 
@@ -359,7 +360,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
 	}
 
-	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
+	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.Inbox.Code, app.Inbox.Delimiter))
 	if err != nil {
 		switch {
 		case errors.Is(err, storageerrors.ErrorFileNotFoundInLocation):
