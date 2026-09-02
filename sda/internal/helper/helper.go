@@ -465,38 +465,25 @@ func UnanonymizeFilepath(fp string, username string) string {
 	return filepath.Join(strings.Replace(username, "@", "_", 1), fp)
 }
 
-// InboxProjectConfig describes how a deployment names its per-user inbox directories, so an
-// anonymized submission path (the user prefix stripped) can be resolved back to the physical
-// inbox-relative path. An empty Code selects stock SDA behavior.
-type InboxProjectConfig struct {
-	// Code optionally prefixes the per-user inbox directory (e.g. "p11"). Empty keeps the
-	// stock layout where the directory is the normalized username (see UnanonymizeFilepath).
-	Code string
-	// Delimiter separates Code from the username (e.g. "-"). Unused when
-	// Code is empty.
-	Delimiter string
-}
-
 // ResolveInboxPath reconstructs the physical inbox-relative path for an anonymized submission
 // filePath.
 //
-// With no Code it is the stock round-trip, deferring to UnanonymizeFilepath unchanged (normalize
-// the username, first "@" -> "_", and prepend "<user>/"), so existing deployments are unaffected,
-// edge inputs included.
+// With an empty projectCode it defers to UnanonymizeFilepath (first "@" -> "_", then prepend
+// "<user>/"), so existing deployments keep the stock layout.
 //
-// With a Code it rebuilds "<Code><delimiter><username>/<filePath>" using the RAW username. In
-// this branch an already-resolved path (e.g. on reprocessing) is returned as-is, with any leading
-// separator normalized away. Whether to normalize is derived from the project code rather than
-// configured separately: a project code denotes a TSD-style inbox namespaced by project (e.g.
-// FEGA-Norway's "p11-dummy@elixir-europe.org/files/..."), which stores the username verbatim. No
-// current deployment needs a project code together with normalization; add an explicit toggle if
-// one does.
-func ResolveInboxPath(filePath, username string, cfg InboxProjectConfig) string {
-	if cfg.Code == "" {
+// With a projectCode it rebuilds "<projectCode><delimiter><username>/<filePath>" using the RAW
+// username. In this branch an already-resolved path (e.g. on reprocessing) is returned as-is, with
+// any leading separator normalized away. Whether to normalize is derived from the project code
+// rather than configured separately: a project code denotes a TSD-style inbox namespaced by
+// project (e.g. FEGA-Norway's "p11-dummy@elixir-europe.org/files/..."), which stores the username
+// verbatim. No current deployment needs a project code together with normalization; add an
+// explicit toggle if one does.
+func ResolveInboxPath(filePath, username, projectCode, delimiter string) string {
+	if projectCode == "" {
 		return UnanonymizeFilepath(filePath, username)
 	}
 
-	userDir := cfg.Code + cfg.Delimiter + username
+	userDir := projectCode + delimiter + username
 	// Tolerate leading separators from older proxy formats (e.g. "/p11-user/files/..."); without
 	// stripping them the prefix check below misses and userDir gets prepended a second time.
 	relPath := strings.TrimLeft(filePath, "/")
