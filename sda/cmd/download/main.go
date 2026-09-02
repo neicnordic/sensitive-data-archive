@@ -259,7 +259,7 @@ func run() error {
 		log.Info("received shutdown signal")
 	case <-ctx.Done():
 		log.Info("context cancelled")
-	case <-serverErr:
+	case err := <-serverErr:
 		log.Errorf("server error: %v", err)
 	}
 
