@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	sourceQueue      string
-	destinationQueue string
-	schemaPath       string
+	sourceQueue string
+	routingKey  string
+	schemaPath  string
 )
 
 func init() {
@@ -27,13 +27,13 @@ func init() {
 			},
 		},
 		&config.Flag{
-			Name: "destination_queue",
+			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "verified", "The queue where the verify service publishes messages to")
+				flagSet.String(flagName, "verified", "The routing key the verify service publishes messages with")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				destinationQueue = viper.GetString(flagName)
+				routingKey = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -61,8 +61,8 @@ func SourceQueue() string {
 	return sourceQueue
 }
 
-func DestinationQueue() string {
-	return destinationQueue
+func RoutingKey() string {
+	return routingKey
 }
 
 func SchemaPath() string {
