@@ -6,40 +6,25 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
 	log "github.com/sirupsen/logrus"
 )
 
 // CheckHealth does a health check of the connections to the DB, S3, and MQ
-func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
+func (p *proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 	// try to connect to mq, check connection and channel
 	var err error
-	if p.messenger == nil {
+	if p.broker == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 
 		return
 	}
-	if p.messenger.IsConnClosed() {
-		log.Warning("connection is closed, reconnecting...")
-		p.messenger, err = broker.NewMQ(p.messenger.Conf)
-		if err != nil {
-			log.Warning(err)
-			w.WriteHeader(http.StatusServiceUnavailable)
+	if !p.broker.Alive() {
+		log.Error("broker connection not alive")
+		w.WriteHeader(http.StatusServiceUnavailable)
 
-			return
-		}
+		return
 	}
 
-	if p.messenger.Channel.IsClosed() {
-		log.Warning("channel is closed, recreating...")
-		err := p.messenger.CreateNewChannel()
-		if err != nil {
-			log.Warning(err)
-			w.WriteHeader(http.StatusServiceUnavailable)
-
-			return
-		}
-	}
 	// Ping database, reconnect if there was a connection problem
 	err = p.database.Ping(r.Context())
 	if err != nil {
@@ -68,7 +53,7 @@ func (p *Proxy) CheckHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // httpsGetCheck sends a request to the S3 backend and makes sure it is healthy
-func (p *Proxy) httpsGetCheck(uri string) error {
+func (p *proxy) httpsGetCheck(uri string) error {
 	resp, e := p.client.Get(uri) // #nosec G704 uri originates from configuration
 	if e != nil {
 		return e
@@ -81,13 +66,13 @@ func (p *Proxy) httpsGetCheck(uri string) error {
 	return nil
 }
 
-func (p *Proxy) getS3ReadyPath() (string, error) {
-	s3URL, err := url.Parse(p.s3Conf.Endpoint)
+func (p *proxy) getS3ReadyPath() (string, error) {
+	s3URL, err := url.Parse(p.s3Conf.endpoint)
 	if err != nil {
 		return "", err
 	}
-	if p.s3Conf.ReadyPath != "" {
-		s3URL.Path = path.Join(s3URL.Path, p.s3Conf.ReadyPath)
+	if p.s3Conf.readyPath != "" {
+		s3URL.Path = path.Join(s3URL.Path, p.s3Conf.readyPath)
 	}
 
 	return s3URL.String(), nil

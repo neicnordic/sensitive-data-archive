@@ -2,192 +2,134 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/mock"
 )
 
-type HealthcheckTestSuite struct {
-	suite.Suite
-	mockS3Conf     config.S3InboxConf // fakeserver
-	s3ClientToMock *s3.Client
-	fakeServer     *FakeServer
-	MQConf         broker.MQConf
-	messenger      *broker.AMQPBroker
-	database       database.Database
-}
+func TestHealthCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		clientTimeout      time.Duration
+		newMocks           func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer)
+		expectedStatusCode int
+	}{
+		{
+			name: "AllGood",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				ms := &mockServer{}
 
-func TestHealthTestSuite(t *testing.T) {
-	suite.Run(t, new(HealthcheckTestSuite))
-}
+				mb.On("Alive").Return(true).Once()
+				mdb.On("Ping").Return(nil).Once()
+				ms.On("ServeHTTP", http.MethodGet, "/ready", "").Return(200, nil, nil).Once()
 
-func (ts *HealthcheckTestSuite) SetupTest() {
-	ts.fakeServer = startFakeServer("9024")
+				return mdb, mb, ms
+			},
+			expectedStatusCode: http.StatusOK,
+		}, {
+			name: "broker_bad",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mb := &mocks.MockBroker{}
 
-	// Create an s3config for the fake server
-	ts.mockS3Conf = config.S3InboxConf{
-		Endpoint:  "http://127.0.0.1:9024",
-		AccessKey: "someAccess",
-		SecretKey: "someSecret",
-		Bucket:    "buckbuck",
-		Region:    "us-east-1",
+				mb.On("Alive").Return(false).Once()
+
+				return &mocks.MockDatabase{}, mb, &mockServer{}
+			},
+			expectedStatusCode: http.StatusServiceUnavailable,
+		}, {
+			name: "database_bad",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				mb.On("Alive").Return(true).Once()
+				mdb.On("Ping").Return(errors.New("connection error")).Once()
+
+				return mdb, mb, &mockServer{}
+			},
+			expectedStatusCode: http.StatusServiceUnavailable,
+		}, {
+			name: "s3_bad",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				ms := &mockServer{}
+
+				mb.On("Alive").Return(true).Once()
+				mdb.On("Ping").Return(nil).Once()
+				ms.On("ServeHTTP", http.MethodGet, "/ready", "").Return(500, nil, nil).Once()
+
+				return mdb, mb, ms
+			},
+			expectedStatusCode: http.StatusServiceUnavailable,
+		}, {
+			name: "db_timeout",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				mb.On("Alive").Return(true).Once()
+				mdb.On("Ping").Run(func(_ mock.Arguments) {
+					time.Sleep(1 * time.Second)
+				}).Return(context.Canceled).Once()
+
+				return mdb, mb, &mockServer{}
+			},
+			clientTimeout:      500 * time.Millisecond,
+			expectedStatusCode: http.StatusServiceUnavailable,
+		}, {
+			name: "s3_timeout",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				ms := &mockServer{}
+
+				mb.On("Alive").Return(true).Once()
+				mdb.On("Ping").Return(nil).Once()
+
+				ms.On("ServeHTTP", http.MethodGet, "/ready", "").Run(func(_ mock.Arguments) {
+					time.Sleep(1 * time.Second)
+				}).Return(500, nil, nil).Once()
+
+				return mdb, mb, ms
+			},
+			clientTimeout:      500 * time.Millisecond,
+			expectedStatusCode: http.StatusServiceUnavailable,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDatabase, mockBroker, mockS3ServerImpl := tc.newMocks()
+
+			s3MockServer := httptest.NewServer(http.HandlerFunc(mockS3ServerImpl.ServeHTTP))
+			defer s3MockServer.Close()
+
+			p := &proxy{
+				s3Conf: s3InboxConfig{
+					endpoint:  s3MockServer.URL,
+					readyPath: "/ready",
+				},
+				broker:   mockBroker,
+				database: mockDatabase,
+				client: &http.Client{
+					Timeout: tc.clientTimeout,
+				},
+			}
+
+			w := httptest.NewRecorder()
+			p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+			assert.Equal(t, tc.expectedStatusCode, w.Code)
+			mockDatabase.AssertExpectations(t)
+			mockBroker.AssertExpectations(t)
+			mockS3ServerImpl.AssertExpectations(t)
+		})
 	}
-	var err error
-	ts.s3ClientToMock, err = newS3Client(context.Background(), ts.mockS3Conf)
-	if err != nil {
-		ts.FailNow(err.Error())
-	}
-
-	// Create a configuration for the fake MQ
-	ts.MQConf = broker.MQConf{
-		Host:     "127.0.0.1",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Vhost:    "/",
-		Exchange: "",
-	}
-
-	ts.messenger = &broker.AMQPBroker{}
-
-	ts.database, err = postgres.NewPostgresSQLDatabase(
-		postgres.Host("127.0.0.1"),
-		postgres.Port(dbPort),
-		postgres.User("postgres"),
-		postgres.Password("rootpasswd"),
-		postgres.DatabaseName("sda"),
-		postgres.Schema("sda"),
-		postgres.CACert(""),
-		postgres.SslMode("disable"),
-		postgres.ClientCert(""),
-		postgres.ClientKey(""),
-	)
-	if err != nil {
-		ts.FailNow("failed to connect to database", err)
-	}
-}
-
-func (ts *HealthcheckTestSuite) TearDownTest() {
-	ts.fakeServer.Close()
-	_ = ts.database.Close()
-}
-
-func (ts *HealthcheckTestSuite) TestHttpsGetCheck() {
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
-
-	url, _ := p.getS3ReadyPath()
-	assert.NoError(ts.T(), p.httpsGetCheck(url))
-	assert.Error(ts.T(), p.httpsGetCheck("http://127.0.0.1:8888/nonexistent"), "404 should fail")
-}
-
-func (ts *HealthcheckTestSuite) TestS3URL() {
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, ts.messenger, ts.database, new(tls.Config))
-
-	_, err := p.getS3ReadyPath()
-	assert.NoError(ts.T(), err)
-
-	p.s3Conf.Endpoint = "://badurl"
-	url, err := p.getS3ReadyPath()
-	assert.Empty(ts.T(), url)
-	assert.Error(ts.T(), err)
-}
-
-func (ts *HealthcheckTestSuite) TestHealthchecks() {
-	// Setup
-	messenger, err := broker.NewMQ(ts.MQConf)
-	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
-
-	w := httptest.NewRecorder()
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp := w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 200, resp.StatusCode)
-}
-
-func (ts *HealthcheckTestSuite) TestClosedDBHealthchecks() {
-	// Setup
-	messenger, err := broker.NewMQ(ts.MQConf)
-	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
-
-	// Check that 200 is reported
-	w := httptest.NewRecorder()
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp := w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 200, resp.StatusCode)
-
-	pgContainer, _ := dockerPool.ContainerByName(postgresContainerName)
-	if pgContainer == nil {
-		ts.FailNow("postgres container not found")
-	}
-
-	networks, err := dockerPool.NetworksByName("bridge")
-	if err != nil || len(networks) != 1 {
-		ts.FailNow("failed to find docker network: bridge")
-	}
-
-	if err := pgContainer.DisconnectFromNetwork(&networks[0]); err != nil {
-		ts.FailNow("failed to disconnect postgres from bridge network")
-	}
-
-	w = httptest.NewRecorder()
-
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp = w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 503, resp.StatusCode)
-
-	if err := pgContainer.ConnectToNetwork(&networks[0]); err != nil {
-		ts.FailNow("failed to connect postgres from bridge network")
-	}
-
-	w = httptest.NewRecorder()
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp = w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 200, resp.StatusCode)
-}
-
-func (ts *HealthcheckTestSuite) TestNoS3Healthchecks() {
-	// Setup
-	messenger, err := broker.NewMQ(ts.MQConf)
-	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
-
-	// S3 unavailable, check that 503 is reported
-	w := httptest.NewRecorder()
-	p.s3Conf.Endpoint = "http://badurl"
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp := w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 503, resp.StatusCode)
-}
-
-func (ts *HealthcheckTestSuite) TestNoMQHealthchecks() {
-	// Setup
-	messenger, err := broker.NewMQ(ts.MQConf)
-	assert.NoError(ts.T(), err)
-	p := NewProxy(ts.mockS3Conf, ts.s3ClientToMock, &helper.AlwaysAllow{}, messenger, ts.database, new(tls.Config))
-
-	// Messenger unavailable, check that 503 is reported
-	p.messenger.Conf.Port = 123456
-	p.messenger.Connection.Close()
-	assert.True(ts.T(), p.messenger.Connection.IsClosed())
-	w := httptest.NewRecorder()
-	p.CheckHealth(w, httptest.NewRequest(http.MethodGet, "https://dummy/health", nil))
-	resp := w.Result()
-	defer resp.Body.Close()
-	assert.Equal(ts.T(), 503, resp.StatusCode)
 }
