@@ -181,7 +181,7 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 			slog.Debug("mapping file to dataset",
 				slog.String("dataset-id", mappings.DatasetID),
 				slog.String("file-accession", fileAccession),
-				slog.Bool("overriden-download-path", fileDownloadPath != nil),
+				slog.Bool("overridden-download-path", fileDownloadPath != nil),
 			)
 			fileMappingData, err := tx.GetMappingData(ctx, fileAccession)
 			if err != nil {
