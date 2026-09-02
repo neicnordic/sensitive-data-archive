@@ -453,7 +453,7 @@ var mappingSuccessNoSubmissionLocationsCase = testCase{
 }
 
 var mappingGetMappingDataRetryableErrorCase = testCase{
-	name: "mapping_MapFileToDataset_retryable_db_error",
+	name: "mapping_GetMappingData_retryable_db_error",
 	sourceMessage: schema.DatasetMapping{
 		Type:         "mapping",
 		DatasetID:    "dataset_123",
