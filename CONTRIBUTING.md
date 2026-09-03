@@ -8,15 +8,15 @@ We thank you in advance 👍 🎉 for taking the time to contribute, whether wit
 
 - If you're unable to find an issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
 
-    - a *clear* description,
-    - as much relevant information as possible, and
-    - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
+  - a *clear* description,
+  - as much relevant information as possible, and
+  - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
 
 - If possible, prefix the issue title with a short identifier for the relevant repository component, e.g. **[ingest]**, **[postgres]** etc.
 
 ## How to work on a new feature/bug
 
-- Create an issue on Github or you can alternatively pick one already created.
+- Create an issue on Github or you can alternatively pick one of the already [open Issues].
 
 - Assign yourself to that issue.
 
@@ -36,12 +36,11 @@ All work takes place in feature branches. Give your branch a short descriptive n
 
 Use comments in your code, choose variable and function names that clearly show what you intend to implement.
 
-Once the feature is done you can request it to be merged back into `main` by making a Pull Request.
+Once the feature is done you can request it to be merged back into `main` by making a Pull Request using the [template to open a new Pull Request].
 
 Before making the pull request, it is a good idea to rebase your branch onto `main` to ensure that eventual conflicts with the `main` branch are solved before the PR is reviewed and that there can be a clean merge.
 > NOTE:
 > In older github repositories the default branch might be called `master` instead of `main`.
-
 
 ### About git and commit messages
 
@@ -109,7 +108,6 @@ Some tips about writing helpful commit messages:
 
 For an in-depth explanation of the above points, please see [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/).
 
-
 ### How we do code reviews
 
 A code review is initiated when someone has made a Pull Request in the appropriate repo on github.
@@ -133,7 +131,6 @@ Once at least 3 reviews from 3 different partners are positive, the Pull Request
 
 If it takes long for some partner to review code, it is common practice to try to contact them on slack to see what the problem is and if it can be resolved quickly or whether it's ok to merge.
 
-
 ----
 
 Thanks again,
@@ -141,5 +138,5 @@ Thanks again,
 
 [searching under Issues]: https://github.com/neicnordic/sensitive-data-archive/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug
 [template to report a bug]: https://github.com/neicnordic/sensitive-data-archive/issues/new?assignees=&labels=bug&projects=&template=BUG_REPORT.md
-[open Issues]: https://github.com/neicnordic/neic-sda/issues
-[template to open a new Pull Request]: https://github.com/neicnordic/neic-sda/blob/master/.github/PULL_REQUEST_TEMPLATE.md
+[open Issues]: https://github.com/neicnordic/sensitive-data-archive/issues
+[template to open a new Pull Request]: https://github.com/neicnordic/sensitive-data-archive/blob/main/.github/PULL_REQUEST_TEMPLATE.md
