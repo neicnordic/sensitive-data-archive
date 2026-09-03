@@ -1,5 +1,5 @@
 {{- if eq "isolated" .Values.global.schemaType }}
-{{- if ne "" .Values.global.sync.remote.host }}
+{{- if .Values.global.sync.enabled }}
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 apiVersion: apps/v1
 kind: Deployment
