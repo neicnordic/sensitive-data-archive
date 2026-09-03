@@ -8,15 +8,15 @@ We thank you in advance 👍 🎉 for taking the time to contribute, whether wit
 
 - If you're unable to find an issue addressing the problem, open a new one by using the following [template to report a bug]. Be sure to include:
 
-    - a *clear* description,
-    - as much relevant information as possible, and
-    - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
+  - a *clear* description,
+  - as much relevant information as possible, and
+  - a *code sample* or an (executable) *test case* demonstrating the expected behaviour that is not occurring.
 
 - If possible, prefix the issue title with a short identifier for the relevant repository component, e.g. **[ingest]**, **[postgres]** etc.
 
 ## How to work on a new feature/bug
 
-- Create an issue on Github or you can alternatively pick one already created.
+- Create an issue on Github or you can alternatively pick one of the already [open Issues].
 
 - Assign yourself to that issue.
 
@@ -36,12 +36,11 @@ All work takes place in feature branches. Give your branch a short descriptive n
 
 Use comments in your code, choose variable and function names that clearly show what you intend to implement.
 
-Once the feature is done you can request it to be merged back into `main` by making a Pull Request.
+Once the feature is done you can request it to be merged back into `main` by making a Pull Request using the [template to open a new Pull Request].
 
 Before making the pull request, it is a good idea to rebase your branch onto `main` to ensure that eventual conflicts with the `main` branch are solved before the PR is reviewed and that there can be a clean merge.
 > NOTE:
 > In older github repositories the default branch might be called `master` instead of `main`.
-
 
 ### About git and commit messages
 
@@ -54,22 +53,60 @@ Each commit should contain changes that are functionally connected and/or relate
 > NOTE:
 > The commands `git add -p` or `git commit -p` can prove useful for selecting chunks of changed files in order to group unrelated things into multiple separate commits.
 
+#### Commit message format
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), see [ADR-0007](docs/decisions/0007-use-conventional-commits.md):
+
+```text
+<type>[optional scope][!]: <description>
+
+<optional body>
+
+<optional footer(s)>
+```
+
+- `type` is one of `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`.
+- `scope` is optional and names the part of the repository you touch, e.g. `api`, `s3inbox`, `sda-download`, `chart`, `deps`.
+- `!` before the colon marks a breaking change. A `BREAKING CHANGE:` footer can describe it in more detail.
+- `description` is a short summary in the imperative mood ("add", not "added"), with no trailing period.
+
+Examples:
+
+```text
+feat(api): add dataset release endpoint
+fix(s3inbox): honour writer_disabled when selecting writers
+docs(chart)!: 4.0.0 migration guide
+build(deps): bump golang.org/x/crypto
+```
+
+Merge commits and the `Revert "..."` and `Reapply "..."` messages git generates are exempt.
+
+Pull requests are rebase-merged, so every commit message in a PR is preserved on `main`. Reword commits such as `fix review comments` or `Apply suggestions from code review` before the PR is merged, for example with `git rebase -i main`. When you commit a suggestion in the GitHub web UI you can edit the commit message in the dialog before confirming.
+
+#### Checking the format
+
+Enable the repository's `commit-msg` hook once per clone, and `git commit` and `git merge` check the message before the commit is created:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The same check runs in CI on every commit of a pull request against `main`, including commits created by rebase, cherry-pick or revert, which the hook does not see. A failing check lists the offending commits; reword them and force-push the branch.
+
 #### Helpful commit messages
 
 The commit messages may be seen as meta-comments on the code that are incredibly helpful for anyone who wants to know how this piece of software is working, including colleagues (current and future) and external users.
 
 Some tips about writing helpful commit messages:
 
- 1. Separate subject (the first line of the message) from body with a  blank line.
- 2. Limit the subject line to 50 characters.
- 3. Capitalize the subject line.
- 4. Do not end the subject line with a period.
- 5. Use the imperative mood in the subject line.
- 6. Wrap the body at 72 characters.
- 7. Use the body to explain what and why vs. how.
+ 1. Separate subject (the first line of the message) from body with a blank line.
+ 2. Keep the subject line short, 72 characters is a good limit.
+ 3. Do not end the subject line with a period.
+ 4. Use the imperative mood in the subject line.
+ 5. Wrap the body at 72 characters.
+ 6. Use the body to explain what and why vs. how.
 
 For an in-depth explanation of the above points, please see [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/).
-
 
 ### How we do code reviews
 
@@ -94,7 +131,6 @@ Once at least 3 reviews from 3 different partners are positive, the Pull Request
 
 If it takes long for some partner to review code, it is common practice to try to contact them on slack to see what the problem is and if it can be resolved quickly or whether it's ok to merge.
 
-
 ----
 
 Thanks again,
@@ -102,5 +138,5 @@ Thanks again,
 
 [searching under Issues]: https://github.com/neicnordic/sensitive-data-archive/issues?utf8=%E2%9C%93&q=is%3Aissue%20label%3Abug
 [template to report a bug]: https://github.com/neicnordic/sensitive-data-archive/issues/new?assignees=&labels=bug&projects=&template=BUG_REPORT.md
-[open Issues]: https://github.com/neicnordic/neic-sda/issues
-[template to open a new Pull Request]: https://github.com/neicnordic/neic-sda/blob/master/.github/PULL_REQUEST_TEMPLATE.md
+[open Issues]: https://github.com/neicnordic/sensitive-data-archive/issues
+[template to open a new Pull Request]: https://github.com/neicnordic/sensitive-data-archive/blob/main/.github/PULL_REQUEST_TEMPLATE.md
