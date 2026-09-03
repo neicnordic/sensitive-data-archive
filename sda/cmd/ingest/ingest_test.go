@@ -16,9 +16,10 @@ import (
 	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
@@ -74,6 +75,21 @@ func (ts *TestSuite) SetupTest() {
 	ts.ingest.BackupWriter = ts.mockBackupWriter
 	ts.ingest.db = ts.mockDB
 	ts.ingest.Broker = ts.mockBroker
+}
+
+// useProjectCode installs a project-code inbox layout through inboxpath's real entry point, and
+// restores the stock layout when the test ends.
+func (ts *TestSuite) useProjectCode() {
+	ts.T().Cleanup(func() {
+		viper.Reset()
+		ts.Require().NoError(inboxpath.Load())
+	})
+
+	viper.Reset()
+	viper.SetConfigType("yaml")
+	ts.Require().NoError(viper.ReadConfig(bytes.NewBufferString(
+		"inboxpath:\n  project_code: p11\n  project_delimiter: \"-\"\n")))
+	ts.Require().NoError(inboxpath.Load())
 }
 
 func (ts *TestSuite) encryptBytes(in []byte) ([]byte, []byte) {
@@ -143,7 +159,7 @@ func (ts *TestSuite) TestCancelFile_NotArchived() {
 func (ts *TestSuite) TestIngestFile_BaseCase() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
 
@@ -152,7 +168,7 @@ func (ts *TestSuite) TestIngestFile_BaseCase() {
 	ts.mockDB.On("BeginTransaction").Return(nil)
 	ts.mockDB.On("Commit").Return(nil)
 	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", "test-ingest/files/TestIngestMessage.c4gh").Return(encryptedContent, nil)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
 	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
 	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
@@ -178,6 +194,49 @@ func (ts *TestSuite) TestIngestFile_BaseCase() {
 	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Publish", 1)
 }
 
+// A deployment with a project code stores the inbox directory as "<code><delimiter><rawuser>", so
+// the anonymized path on the trigger must be resolved against that layout before the inbox read.
+// Resolving it as the stock normalized username instead reads from a directory that does not exist
+// and the file is never ingested.
+func (ts *TestSuite) TestIngestFile_ProjectCode_ResolvesInboxPath() {
+	fileID := uuid.NewString()
+	// The "@" matters: the stock branch would normalize it to "_", the project-code branch keeps
+	// the username raw, so the expected path below differs by more than the prefix.
+	userName := "dummy@elixir-europe.org"
+	filePath := "files/TestIngestMessage.c4gh"
+	ts.useProjectCode()
+
+	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Commit").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", "p11-dummy@elixir-europe.org/files/TestIngestMessage.c4gh").Return(encryptedContent, nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
+	ts.mockArchiveWriter.On("WriteFile", fileID).Return("archive_unit_test_location", nil)
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.NoError(ts.T(), err, "unexpected error when ingesting file")
+	ts.mockInboxReader.AssertExpectations(ts.T())
+	ts.mockDB.AssertCalled(ts.T(), "SetArchived", "archive_unit_test_location", database.FileInfo{
+		Size:             1,
+		Path:             fileID,
+		UploadedChecksum: fmt.Sprintf("%x", encryptedChecksum),
+	}, fileID)
+}
+
 // Non-s3inbox flow (e.g. FEGA-Norway via TSD): nothing pre-registers the file, so ingest's
 // catch-all (status "") is the first registration point. It must register AND archive in one
 // pass; an early return after RegisterFile would park the file at "registered" and verify would
@@ -185,7 +244,7 @@ func (ts *TestSuite) TestIngestFile_BaseCase() {
 func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
 
@@ -194,9 +253,9 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 	ts.mockDB.On("BeginTransaction").Return(nil)
 	ts.mockDB.On("Commit").Return(nil)
 	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("submission_unit_test_location", nil)
+	ts.mockInboxReader.On("FindFile", "test-ingest/files/TestIngestMessage.c4gh").Return("submission_unit_test_location", nil)
 	ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil)
-	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", "test-ingest/files/TestIngestMessage.c4gh").Return(encryptedContent, nil)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
 	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
 	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
@@ -225,16 +284,64 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Publish", 1)
 }
 
+// The catch-all crossed with a project code: the combination FEGA-Norway actually runs, since it
+// uploads through TSD rather than s3inbox and namespaces every inbox directory by project. The
+// path handed to FindFile is the one the file is stored under, so resolving it as the stock
+// normalized username leaves the file unfindable and the ingest never starts.
+func (ts *TestSuite) TestIngestFile_NotRegistered_ProjectCode_ResolvesInboxPath() {
+	fileID := uuid.NewString()
+	// The "@" matters: the stock branch would normalize it to "_", the project-code branch keeps
+	// the username raw, so the expected path below differs by more than the prefix.
+	userName := "dummy@elixir-europe.org"
+	filePath := "files/TestIngestMessage.c4gh"
+	ts.useProjectCode()
+
+	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Commit").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockInboxReader.On("FindFile", "p11-dummy@elixir-europe.org/files/TestIngestMessage.c4gh").Return("submission_unit_test_location", nil)
+	ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", "p11-dummy@elixir-europe.org/files/TestIngestMessage.c4gh").Return(encryptedContent, nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
+	ts.mockArchiveWriter.On("WriteFile", fileID).Return("archive_unit_test_location", nil)
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.NoError(ts.T(), err, "unexpected error when ingesting file")
+	// The anonymized path, not the resolved one, is what gets registered: the mapper resolves it
+	// again on cleanup.
+	ts.mockDB.AssertCalled(ts.T(), "RegisterFile", &fileID, "submission_unit_test_location", filePath, userName)
+	ts.mockInboxReader.AssertExpectations(ts.T())
+	ts.mockDB.AssertCalled(ts.T(), "SetArchived", "archive_unit_test_location", database.FileInfo{
+		Size:             1,
+		Path:             fileID,
+		UploadedChecksum: fmt.Sprintf("%x", encryptedChecksum),
+	}, fileID)
+}
+
 func (ts *TestSuite) TestIngestFile_NotRegistered_NotFoundInInbox() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
 	ts.mockDB.On("BeginTransaction").Return(nil)
 	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("", storageerrors.ErrorFileNotFoundInLocation)
+	ts.mockInboxReader.On("FindFile", "test-ingest/files/TestIngestMessage.c4gh").Return("", storageerrors.ErrorFileNotFoundInLocation)
 	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
 
 	message := createMessage("ingest", filePath, userName, fileID)
@@ -250,7 +357,7 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_NotFoundInInbox() {
 func (ts *TestSuite) TestIngestFile_NoSubmissionLocation() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
@@ -273,7 +380,7 @@ func (ts *TestSuite) TestIngestFile_NoSubmissionLocation() {
 func (ts *TestSuite) TestIngestFile_AlreadyIngested() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
@@ -293,13 +400,13 @@ func (ts *TestSuite) TestIngestFile_AlreadyIngested() {
 func (ts *TestSuite) TestIngestFile_MissingFile() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
 	ts.mockDB.On("BeginTransaction").Return(nil)
 	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(nil, storageerrors.ErrorFileNotFoundInLocation)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", "test-ingest/files/TestIngestMessage.c4gh").Return(nil, storageerrors.ErrorFileNotFoundInLocation)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "error", "ingest", mock.Anything, mock.Anything).Return(nil)
 	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
 
@@ -317,7 +424,7 @@ func (ts *TestSuite) TestIngestFile_MissingFile() {
 func (ts *TestSuite) TestIngestFile_DatabaseError() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	filePath := "files/TestIngestMessage.c4gh"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("", errors.New("some error"))
 

@@ -16,7 +16,7 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
@@ -27,7 +27,6 @@ import (
 var db database.Database
 var inboxWriter storage.Writer
 var mqBroker *broker.AMQPBroker
-var inboxConfig helper.InboxProjectConfig
 
 func main() {
 	if err := run(); err != nil {
@@ -47,7 +46,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	inboxConfig = conf.Inbox
+
+	if err := inboxpath.Load(); err != nil {
+		return fmt.Errorf("failed to load inbox path config: %v", err)
+	}
 
 	db, err = postgres.NewPostgresSQLDatabase()
 	if err != nil {
@@ -274,7 +276,7 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	for _, fileMappingData := range filesToCleanFromInbox {
-		resolvedSubmissionPath := helper.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User, inboxConfig)
+		resolvedSubmissionPath := inboxpath.ResolveInboxPath(fileMappingData.SubmissionFilePath, fileMappingData.User)
 		if err := inboxWriter.RemoveFile(ctx, fileMappingData.SubmissionLocation, resolvedSubmissionPath); err != nil {
 			log.Errorf("removal of file id: %s at location: %s, path: %s failed, reason: %v", fileMappingData.FileID, fileMappingData.SubmissionLocation, resolvedSubmissionPath, err)
 		}
