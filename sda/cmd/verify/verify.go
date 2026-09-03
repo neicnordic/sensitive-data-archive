@@ -458,7 +458,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		return nil, err
 	}
 
-	// Send message to verified queue
+	// Publish verified message
 	if err := app.broker.Publish(ctx, app.routingKey, broker.Message{
 		Key:  message.Key,
 		Body: verifiedMessage,
