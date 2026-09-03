@@ -150,6 +150,7 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
+| 0003 | Rename the API app | exploring | |
 
 *(empty at the time this folder is introduced; entries added as RFCs are
 written)*
