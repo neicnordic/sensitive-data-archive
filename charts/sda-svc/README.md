@@ -133,6 +133,9 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 | `global.ingress.ingressClassName`                | Class of ingress controller to use                                                                                                                                                                                                                                                             | `""`                                            |
 | `global.log.format`                              | Log format for all services, JSON or TEXT.                                                                                                                                                                                                                                                     | `json`                                          |
 | `global.log.level`                               | Log level for all services.                                                                                                                                                                                                                                                                    | `info`                                          |
+| `global.observability.enabled`                   | If application observability is to be enabled, if enabled the sda applications will host a prometheus endpoint at 9090, And export traces to the configured otelExporterOtlpEndpoint.                                                                                                          | `false`                                         |
+| `global.observability.otelExporterOtlpInsecure`  | If client transport security(TLS) should be disabled/enabled on the exporter connection.                                                                                                                                                                                                       | `false`                                         |
+| `global.observability.otelExporterOtlpEndpoint`  | Endpoint to which the applications export the otlp trace information, needs to be set if observability is to be enabled.                                                                                                                                                                       | `""`                                            |
 | `global.networkPolicy.create`                    | Use network isolation.                                                                                                                                                                                                                                                                         | `false`                                         |
 | `global.networkPolicy.brokerNamespace`           | Namespace where the broker is deployed.                                                                                                                                                                                                                                                        | `""`                                            |
 | `global.networkPolicy.databaseNamespace`         | Namespace where the database is deployed.                                                                                                                                                                                                                                                      | `""`                                            |
@@ -257,48 +260,48 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 If no shared credentials for the message broker and database are used these should be set in the `credentials` section
 of the values file.
 
- Parameter                          | Description                    | Default 
-------------------------------------|--------------------------------|---------
- `credentials.api.dbUser`           | Database user for api          | `""`    
- `credentials.api.dbPassword`       | Database password for api      | `""`    
- `credentials.api.mqUser`           | Broker user for api            | `""`    
- `credentials.auth.dbUser`          | Database user for auth         | `""`    
- `credentials.auth.dbPassword`      | Database password for auth     | `""`    
- `credentials.api.mqPassword`       | Broker password for api        | `""`    
- `credentials.doa.dbUser`           | Database user for doa          | `""`    
- `credentials.doa.dbPassword`       | Database password for doa      | `""`    
- `credentials.download.dbUser`      | Database user for download     | `""`    
- `credentials.download.dbPassword`  | Database password for download | `""`    
- `credentials.finalize.dbUser`      | Database user for finalize     | `""`    
- `credentials.finalize.dbPassword`  | Database password for finalize | `""`    
- `credentials.finalize.mqUser`      | Broker user for finalize       | `""`    
- `credentials.finalize.mqPassword`  | Broker password for finalize   | `""`    
- `credentials.inbox.mqUser`         | Broker user for inbox          | `""`    
- `credentials.inbox.mqPassword`     | Broker password for inbox      | `""`    
- `credentials.ingest.dbUser`        | Database user for ingest       | `""`    
- `credentials.ingest.dbPassword`    | Database password for ingest   | `""`    
- `credentials.ingest.mqUser`        | Broker user for ingest         | `""`    
- `credentials.ingest.mqPassword`    | Broker password for ingest     | `""`    
- `credentials.intercept.mqUser`     | Broker user for intercept      | `""`    
- `credentials.intercept.mqPassword` | Broker password for intercept  | `""`    
- `credentials.sync.dbUser`          | Database user for sync         | `""`    
- `credentials.sync.dbPassword`      | Database password for sync     | `""`    
- `credentials.sync.mqUser`          | Broker user for sync           | `""`    
- `credentials.sync.mqPassword`      | Broker password for sync       | `""`    
- `credentials.syncapi.mqUser`       | Broker user for sync           | `""`    
- `credentials.syncapi.mqPassword`   | Broker password for sync       | `""`    
- `credentials.test.dbUser`          | Database user for test         | `""`    
- `credentials.test.dbPassword`      | Database password for test     | `""`    
- `credentials.test.mqUser`          | Broker user for test           | `""`    
- `credentials.test.mqPassword`      | Broker password for test       | `""`    
- `credentials.verify.dbUser`        | Database user for verify       | `""`    
- `credentials.verify.dbPassword`    | Database password for verify   | `""`    
- `credentials.verify.mqUser`        | Broker user for verify         | `""`    
- `credentials.verify.mqPassword`    | Broker password for verify     | `""`    
- `credentials.rotatekey.dbUser`     | Database user for rotatekey    | `""`    
- `credentials.rotatekey.dbPassword` | Database password for rotatekey| `""`    
- `credentials.rotatekey.mqUser`     | Broker user for rotatekey      | `""`    
- `credentials.rotatekey.mqPassword` | Broker password for rotatekey  | `""`    
+ Parameter                          | Description                     | Default 
+------------------------------------|---------------------------------|---------
+ `credentials.api.dbUser`           | Database user for api           | `""`    
+ `credentials.api.dbPassword`       | Database password for api       | `""`    
+ `credentials.api.mqUser`           | Broker user for api             | `""`    
+ `credentials.auth.dbUser`          | Database user for auth          | `""`    
+ `credentials.auth.dbPassword`      | Database password for auth      | `""`    
+ `credentials.api.mqPassword`       | Broker password for api         | `""`    
+ `credentials.doa.dbUser`           | Database user for doa           | `""`    
+ `credentials.doa.dbPassword`       | Database password for doa       | `""`    
+ `credentials.download.dbUser`      | Database user for download      | `""`    
+ `credentials.download.dbPassword`  | Database password for download  | `""`    
+ `credentials.finalize.dbUser`      | Database user for finalize      | `""`    
+ `credentials.finalize.dbPassword`  | Database password for finalize  | `""`    
+ `credentials.finalize.mqUser`      | Broker user for finalize        | `""`    
+ `credentials.finalize.mqPassword`  | Broker password for finalize    | `""`    
+ `credentials.inbox.mqUser`         | Broker user for inbox           | `""`    
+ `credentials.inbox.mqPassword`     | Broker password for inbox       | `""`    
+ `credentials.ingest.dbUser`        | Database user for ingest        | `""`    
+ `credentials.ingest.dbPassword`    | Database password for ingest    | `""`    
+ `credentials.ingest.mqUser`        | Broker user for ingest          | `""`    
+ `credentials.ingest.mqPassword`    | Broker password for ingest      | `""`    
+ `credentials.intercept.mqUser`     | Broker user for intercept       | `""`    
+ `credentials.intercept.mqPassword` | Broker password for intercept   | `""`    
+ `credentials.sync.dbUser`          | Database user for sync          | `""`    
+ `credentials.sync.dbPassword`      | Database password for sync      | `""`    
+ `credentials.sync.mqUser`          | Broker user for sync            | `""`    
+ `credentials.sync.mqPassword`      | Broker password for sync        | `""`    
+ `credentials.syncapi.mqUser`       | Broker user for sync            | `""`    
+ `credentials.syncapi.mqPassword`   | Broker password for sync        | `""`    
+ `credentials.test.dbUser`          | Database user for test          | `""`    
+ `credentials.test.dbPassword`      | Database password for test      | `""`    
+ `credentials.test.mqUser`          | Broker user for test            | `""`    
+ `credentials.test.mqPassword`      | Broker password for test        | `""`    
+ `credentials.verify.dbUser`        | Database user for verify        | `""`    
+ `credentials.verify.dbPassword`    | Database password for verify    | `""`    
+ `credentials.verify.mqUser`        | Broker user for verify          | `""`    
+ `credentials.verify.mqPassword`    | Broker password for verify      | `""`    
+ `credentials.rotatekey.dbUser`     | Database user for rotatekey     | `""`    
+ `credentials.rotatekey.dbPassword` | Database password for rotatekey | `""`    
+ `credentials.rotatekey.mqUser`     | Broker user for rotatekey       | `""`    
+ `credentials.rotatekey.mqPassword` | Broker password for rotatekey   | `""`    
 
 ### Pod settings
 

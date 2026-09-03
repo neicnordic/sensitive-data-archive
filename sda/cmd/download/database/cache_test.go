@@ -28,8 +28,8 @@ func (m *MockDatabase) Close() error {
 	return args.Error(0)
 }
 
-func (m *MockDatabase) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
-	args := m.Called(ctx)
+func (m *MockDatabase) GetAllDatasets(_ context.Context) ([]Dataset, error) {
+	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -37,8 +37,8 @@ func (m *MockDatabase) GetAllDatasets(ctx context.Context) ([]Dataset, error) {
 	return args.Get(0).([]Dataset), args.Error(1)
 }
 
-func (m *MockDatabase) GetDatasetIDsByUser(ctx context.Context, user string) ([]string, error) {
-	args := m.Called(ctx, user)
+func (m *MockDatabase) GetDatasetIDsByUser(_ context.Context, user string) ([]string, error) {
+	args := m.Called(user)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -46,8 +46,8 @@ func (m *MockDatabase) GetDatasetIDsByUser(ctx context.Context, user string) ([]
 	return args.Get(0).([]string), args.Error(1)
 }
 
-func (m *MockDatabase) GetUserDatasets(ctx context.Context, datasetIDs []string) ([]Dataset, error) {
-	args := m.Called(ctx, datasetIDs)
+func (m *MockDatabase) GetUserDatasets(_ context.Context, datasetIDs []string) ([]Dataset, error) {
+	args := m.Called(datasetIDs)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -55,8 +55,8 @@ func (m *MockDatabase) GetUserDatasets(ctx context.Context, datasetIDs []string)
 	return args.Get(0).([]Dataset), args.Error(1)
 }
 
-func (m *MockDatabase) GetDatasetInfo(ctx context.Context, datasetID string) (*DatasetInfo, error) {
-	args := m.Called(ctx, datasetID)
+func (m *MockDatabase) GetDatasetInfo(_ context.Context, datasetID string) (*DatasetInfo, error) {
+	args := m.Called(datasetID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -64,8 +64,8 @@ func (m *MockDatabase) GetDatasetInfo(ctx context.Context, datasetID string) (*D
 	return args.Get(0).(*DatasetInfo), args.Error(1)
 }
 
-func (m *MockDatabase) GetFileByID(ctx context.Context, fileID string) (*File, error) {
-	args := m.Called(ctx, fileID)
+func (m *MockDatabase) GetFileByID(_ context.Context, fileID string) (*File, error) {
+	args := m.Called(fileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -73,8 +73,8 @@ func (m *MockDatabase) GetFileByID(ctx context.Context, fileID string) (*File, e
 	return args.Get(0).(*File), args.Error(1)
 }
 
-func (m *MockDatabase) GetFileByPath(ctx context.Context, datasetID, filePath string) (*File, error) {
-	args := m.Called(ctx, datasetID, filePath)
+func (m *MockDatabase) GetFileByPath(_ context.Context, datasetID, filePath string) (*File, error) {
+	args := m.Called(datasetID, filePath)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -82,20 +82,20 @@ func (m *MockDatabase) GetFileByPath(ctx context.Context, datasetID, filePath st
 	return args.Get(0).(*File), args.Error(1)
 }
 
-func (m *MockDatabase) CheckFilePermission(ctx context.Context, fileID string, datasetIDs []string) (bool, error) {
-	args := m.Called(ctx, fileID, datasetIDs)
+func (m *MockDatabase) CheckFilePermission(_ context.Context, fileID string, datasetIDs []string) (bool, error) {
+	args := m.Called(fileID, datasetIDs)
 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockDatabase) CheckDatasetExists(ctx context.Context, datasetID string) (bool, error) {
-	args := m.Called(ctx, datasetID)
+func (m *MockDatabase) CheckDatasetExists(_ context.Context, datasetID string) (bool, error) {
+	args := m.Called(datasetID)
 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockDatabase) GetFileChecksums(ctx context.Context, fileID string, source string) ([]Checksum, error) {
-	args := m.Called(ctx, fileID, source)
+func (m *MockDatabase) GetFileChecksums(_ context.Context, fileID string, source string) ([]Checksum, error) {
+	args := m.Called(fileID, source)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -103,8 +103,8 @@ func (m *MockDatabase) GetFileChecksums(ctx context.Context, fileID string, sour
 	return args.Get(0).([]Checksum), args.Error(1)
 }
 
-func (m *MockDatabase) GetDatasetFilesPaginated(ctx context.Context, datasetID string, opts FileListOptions) ([]File, error) {
-	args := m.Called(ctx, datasetID, opts)
+func (m *MockDatabase) GetDatasetFilesPaginated(_ context.Context, datasetID string, opts FileListOptions) ([]File, error) {
+	args := m.Called(datasetID, opts)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -147,7 +147,7 @@ func TestCachedDB_GetFileByID_CacheHit(t *testing.T) {
 	}
 
 	// First call should hit the database
-	mockDB.On("GetFileByID", ctx, "file123").Return(expectedFile, nil).Once()
+	mockDB.On("GetFileByID", "file123").Return(expectedFile, nil).Once()
 
 	file1, err := cachedDB.GetFileByID(ctx, "file123")
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestCachedDB_GetFileByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	// Database returns nil for not found
-	mockDB.On("GetFileByID", ctx, "nonexistent").Return(nil, nil).Once()
+	mockDB.On("GetFileByID", "nonexistent").Return(nil, nil).Once()
 
 	file, err := cachedDB.GetFileByID(ctx, "nonexistent")
 	require.NoError(t, err)
@@ -194,7 +194,7 @@ func TestCachedDB_GetFileByID_Error(t *testing.T) {
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
 
-	mockDB.On("GetFileByID", ctx, "file123").Return(nil, expectedErr).Once()
+	mockDB.On("GetFileByID", "file123").Return(nil, expectedErr).Once()
 
 	file, err := cachedDB.GetFileByID(ctx, "file123")
 	assert.Error(t, err)
@@ -223,7 +223,7 @@ func TestCachedDB_GetFileByPath_CacheHit(t *testing.T) {
 	}
 
 	// First call should hit the database
-	mockDB.On("GetFileByPath", ctx, "dataset1", "/path/to/file.txt").Return(expectedFile, nil).Once()
+	mockDB.On("GetFileByPath", "dataset1", "/path/to/file.txt").Return(expectedFile, nil).Once()
 
 	file1, err := cachedDB.GetFileByPath(ctx, "dataset1", "/path/to/file.txt")
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestCachedDB_CheckFilePermission_CacheHit(t *testing.T) {
 	datasetIDs := []string{"dataset1", "dataset2"}
 
 	// First call should hit the database
-	mockDB.On("CheckFilePermission", ctx, "file123", datasetIDs).Return(true, nil).Once()
+	mockDB.On("CheckFilePermission", "file123", datasetIDs).Return(true, nil).Once()
 
 	hasPermission1, err := cachedDB.CheckFilePermission(ctx, "file123", datasetIDs)
 	require.NoError(t, err)
@@ -288,8 +288,8 @@ func TestCachedDB_CheckFilePermission_DifferentDatasets(t *testing.T) {
 	datasetIDs2 := []string{"dataset3"}
 
 	// Each unique set of datasets should result in a separate cache entry
-	mockDB.On("CheckFilePermission", ctx, "file123", datasetIDs1).Return(true, nil).Once()
-	mockDB.On("CheckFilePermission", ctx, "file123", datasetIDs2).Return(false, nil).Once()
+	mockDB.On("CheckFilePermission", "file123", datasetIDs1).Return(true, nil).Once()
+	mockDB.On("CheckFilePermission", "file123", datasetIDs2).Return(false, nil).Once()
 
 	hasPermission1, err := cachedDB.CheckFilePermission(ctx, "file123", datasetIDs1)
 	require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestCachedDB_CheckFilePermission_OrderIndependent(t *testing.T) {
 	datasetIDs2 := []string{"dataset1", "dataset2"}
 
 	// Only one DB call expected because cache key should be the same
-	mockDB.On("CheckFilePermission", ctx, "file123", datasetIDs1).Return(true, nil).Once()
+	mockDB.On("CheckFilePermission", "file123", datasetIDs1).Return(true, nil).Once()
 
 	hasPermission1, err := cachedDB.CheckFilePermission(ctx, "file123", datasetIDs1)
 	require.NoError(t, err)
@@ -355,7 +355,7 @@ func TestCachedDB_GetDatasetInfo_CacheHit(t *testing.T) {
 		TotalSize: 1024000,
 	}
 
-	mockDB.On("GetDatasetInfo", ctx, "dataset1").Return(expectedInfo, nil).Once()
+	mockDB.On("GetDatasetInfo", "dataset1").Return(expectedInfo, nil).Once()
 
 	info1, err := cachedDB.GetDatasetInfo(ctx, "dataset1")
 	require.NoError(t, err)
@@ -389,7 +389,7 @@ func TestCachedDB_GetAllDatasets_CacheHit(t *testing.T) {
 		{ID: "dataset2", Title: "Dataset 2"},
 	}
 
-	mockDB.On("GetAllDatasets", ctx).Return(expectedDatasets, nil).Once()
+	mockDB.On("GetAllDatasets").Return(expectedDatasets, nil).Once()
 
 	datasets1, err := cachedDB.GetAllDatasets(ctx)
 	require.NoError(t, err)
@@ -420,7 +420,7 @@ func TestCachedDB_GetDatasetIDsByUser_CacheHit(t *testing.T) {
 	ctx := context.Background()
 	expectedIDs := []string{"dataset1", "dataset2"}
 
-	mockDB.On("GetDatasetIDsByUser", ctx, "user@example.com").Return(expectedIDs, nil).Once()
+	mockDB.On("GetDatasetIDsByUser", "user@example.com").Return(expectedIDs, nil).Once()
 
 	ids1, err := cachedDB.GetDatasetIDsByUser(ctx, "user@example.com")
 	require.NoError(t, err)
@@ -455,7 +455,7 @@ func TestCachedDB_GetUserDatasets_CacheHit(t *testing.T) {
 		{ID: "dataset2", Title: "Dataset 2"},
 	}
 
-	mockDB.On("GetUserDatasets", ctx, datasetIDs).Return(expectedDatasets, nil).Once()
+	mockDB.On("GetUserDatasets", datasetIDs).Return(expectedDatasets, nil).Once()
 
 	datasets1, err := cachedDB.GetUserDatasets(ctx, datasetIDs)
 	require.NoError(t, err)

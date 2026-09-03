@@ -949,14 +949,14 @@ func (ts *DatabaseTests) TestDeprecateKeyHashes() {
 
 func (ts *DatabaseTests) TestDeprecateKeyHashes_wrongHash() {
 	assert.NoError(ts.T(), ts.db.AddKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc11", "this is a another key"), "failed to register key in database")
-	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "wr0n6h4sh"), "key hash not found or already deprecated", "failure when deprecating non existing keyhash")
+	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "wr0n6h4sh"), sql.ErrNoRows.Error(), "failure when deprecating non existing keyhash")
 }
 
 func (ts *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
 	assert.NoError(ts.T(), ts.db.AddKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54", "this is a test key"), "failed to register key in database")
 	assert.NoError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "failure when deprecating keyhash")
 	// we should not be able to change the deprecation date
-	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "key hash not found or already deprecated", "failure when deprecating keyhash")
+	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), sql.ErrNoRows.Error(), "failure when deprecating keyhash")
 }
 
 func (ts *DatabaseTests) TestSetKeyHash() {

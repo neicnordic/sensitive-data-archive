@@ -4,12 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type rmqBroker struct {
@@ -58,10 +65,33 @@ func (b *rmqBroker) Subscribe(ctx context.Context, sourceQueue string, handleFun
 			continue
 		}
 
-		if done := b.consumeMessages(ctx, messageChan, handleFunc); done {
+		if done := b.consumeMessages(ctx, sourceQueue, messageChan, handleFunc); done {
 			return ctx.Err()
 		}
 	}
+}
+
+func extractTraceContext(ctx context.Context, headers amqp.Table) context.Context {
+	carrier := propagation.MapCarrier{}
+
+	for k, v := range headers {
+		switch v := v.(type) {
+		case string:
+			carrier[k] = v
+		case int:
+			carrier[k] = strconv.Itoa(v)
+		case int32:
+			carrier[k] = strconv.FormatInt(int64(v), 10)
+		case int64:
+			carrier[k] = strconv.FormatInt(v, 10)
+		case []byte:
+			carrier[k] = string(v)
+		default:
+			carrier[k] = fmt.Sprintf("%v", v)
+		}
+	}
+
+	return otel.GetTextMapPropagator().Extract(ctx, carrier)
 }
 
 func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, message broker.Message) error {
@@ -78,6 +108,25 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 		return errors.New("cannot publish: broker channel is not initialized")
 	}
 
+	ctx, span := observability.StartSpan(ctx, "rabbitmq.publish",
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.destination.name", destinationQueue),
+	)
+	defer span.End()
+
+	headers := make(amqp.Table)
+
+	for k, v := range message.Headers {
+		headers[k] = v
+	}
+
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	for k, v := range carrier {
+		headers[k] = v
+	}
+
 	err := ch.PublishWithContext(
 		ctx,
 		b.config.exchange,
@@ -85,8 +134,7 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 		false,
 		false,
 		amqp.Publishing{
-
-			Headers:         message.Headers,
+			Headers:         headers,
 			ContentEncoding: "UTF-8",
 			ContentType:     "application/json",
 			DeliveryMode:    amqp.Persistent,
@@ -190,7 +238,7 @@ func (b *rmqBroker) startConsuming(sourceQueue string) (<-chan amqp.Delivery, er
 	return ch.Consume(sourceQueue, "", autoAck, exclusive, noLocal, noWait, nil)
 }
 
-func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) bool {
+func (b *rmqBroker) consumeMessages(ctx context.Context, sourceQueue string, messageChan <-chan amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) bool {
 	for {
 		select {
 		case <-ctx.Done():
@@ -208,20 +256,31 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp
 
 				return false
 			}
-			b.handleDelivery(ctx, delivery, handleFunc)
+			b.handleDelivery(ctx, sourceQueue, delivery, handleFunc)
 		}
 	}
 }
 
-func (b *rmqBroker) handleDelivery(ctx context.Context, delivery amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) {
-	msg := &broker.Message{
+func (b *rmqBroker) handleDelivery(ctx context.Context, sourceQueue string, delivery amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) {
+	// We use a trace.ContextWithSpanContext here so that each message consumptions is not linked to the span from ctx calling NewRabbitMQBroker
+	// but keeps cancellation/deadline
+	ctx = extractTraceContext(trace.ContextWithSpanContext(ctx, trace.SpanContext{}), delivery.Headers)
+	ctx, span := observability.StartSpan(ctx, "rabbitmq.handle-message",
+		attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.source.name", sourceQueue),
+		attribute.String("messaging.rabbitmq.routing_key", delivery.RoutingKey),
+		attribute.String("messaging.rabbitmq.exchange", delivery.Exchange),
+	)
+	defer span.End()
+
+	callbacks, err := handleFunc(ctx, &broker.Message{
 		Key:     delivery.CorrelationId,
 		Headers: delivery.Headers,
 		Body:    delivery.Body,
-	}
-
-	callbacks, err := handleFunc(ctx, msg)
+	})
 	if err != nil {
+		span.SetStatus(codes.Error, "message process handling failed, requeuing message")
+		span.RecordError(err)
 		delivery.Nack(false, true)
 	} else {
 		delivery.Ack(false)

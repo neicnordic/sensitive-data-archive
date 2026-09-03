@@ -14,6 +14,18 @@ global:
   tlsPath: "tls"
   jwtPath: "jwt"
 
+  observability:
+    # If application observability is to be enabled, if enabled the sda applications will host a
+    # prometheus endpoint at 9090
+    # and export traces to the configured otelExporterOtlpEndpoint
+    # If global.networkPolicy.create is enabled a network policy to allow egress to the OTLP endpoint, and allow ingress to services at 9090 needs to be added
+    enabled: false
+    # If client transport security(TLS) should be disabled/enabled on the exporter connection
+    otelExporterOtlpInsecure: false
+    # Endpoint to which the applications export the otlp trace information, needs to be set if observability is to be enabled
+    otelExporterOtlpEndpoint: ""
+
+
 # Name of an injected config file, located in the secretsPath
 # If the file is located in a subpath it can be set using the confFilePath
 # If no conf file is specified DB and MQ connections will be configured via ENVs

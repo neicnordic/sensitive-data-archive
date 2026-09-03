@@ -18,6 +18,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 )
 
 type endpointConfig struct {
@@ -128,6 +129,7 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 			o.UsePathStyle = true
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			otelaws.AppendMiddlewares(&o.APIOptions)
 		},
 	)
 

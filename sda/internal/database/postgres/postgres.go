@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/XSAM/otelsql"
 	"github.com/lib/pq"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
 type pgDb struct {
@@ -16,6 +19,8 @@ type pgDb struct {
 	config             *dbConfig
 	schemaVersion      int
 	preparedStatements map[string]*sql.Stmt
+
+	metricsReg metric.Registration
 }
 
 const getSchemaVersionQuery = "getSchemaVersion"
@@ -27,31 +32,56 @@ func init() {
 FROM sda.dbschema_version;`
 }
 
-func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Database, error) {
+func NewPostgresSQLDatabase(ctx context.Context, options ...func(config *dbConfig)) (database.Database, error) {
 	dbConf := globalConf.clone()
 
 	for _, o := range options {
 		o(dbConf)
 	}
 
-	pg := &pgDb{db: nil, config: dbConf}
+	pg := &pgDb{
+		db:                 nil,
+		config:             dbConf,
+		schemaVersion:      0,
+		preparedStatements: make(map[string]*sql.Stmt),
+		metricsReg:         nil,
+	}
 
 	pqConnectConfig, err := pq.NewConnectorConfig(pg.config.buildPostgresConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup postgres connect config: %w", err)
 	}
 
-	pg.db = sql.OpenDB(pqConnectConfig)
-	if err := pg.db.Ping(); err != nil {
-		_ = pg.db.Close()
+	pg.db = otelsql.OpenDB(pqConnectConfig,
+		otelsql.WithAttributes(
+			semconv.DBSystemPostgreSQL,
+		),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			OmitConnResetSession: true,
+			OmitConnectorConnect: true,
+			OmitConnPrepare:      true,
+			OmitRows:             true,
+			OmitConnQuery:        true,
+		}),
+	)
+	if err := pg.db.PingContext(ctx); err != nil {
+		_ = pg.Close()
 
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	pg.metricsReg, err = otelsql.RegisterDBStatsMetrics(pg.db, otelsql.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+	))
+	if err != nil {
+		_ = pg.Close()
+
+		return nil, fmt.Errorf("failed to register database metrics: %w", err)
+	}
+
 	// Prepare the statements from the queries
-	pg.preparedStatements = make(map[string]*sql.Stmt)
 	for queryName, query := range queries {
-		preparedStmt, err := pg.db.Prepare(query)
+		preparedStmt, err := pg.db.PrepareContext(ctx, query)
 		if err != nil {
 			log.Errorf("failed to prepare query: %s, due to: %v", queryName, err)
 			_ = pg.Close()
@@ -67,7 +97,7 @@ func NewPostgresSQLDatabase(options ...func(config *dbConfig)) (database.Databas
 	pg.db.SetConnMaxLifetime(pg.config.connectionMaxLifeTime)
 
 	stmt := pg.preparedStatements[getSchemaVersionQuery]
-	if err := stmt.QueryRow().Scan(&pg.schemaVersion); err != nil {
+	if err := stmt.QueryRowContext(ctx).Scan(&pg.schemaVersion); err != nil {
 		_ = pg.Close()
 
 		return nil, fmt.Errorf("failed to query schema version: %w", err)
@@ -105,7 +135,15 @@ func (db *pgDb) Close() error {
 		}
 	}
 
-	return errors.Join(err, db.db.Close())
+	if db.db != nil {
+		err = errors.Join(err, db.db.Close())
+	}
+
+	if db.metricsReg != nil {
+		err = errors.Join(err, db.metricsReg.Unregister())
+	}
+
+	return err
 }
 
 func (db *pgDb) BeginTransaction(ctx context.Context) (database.Transaction, error) {

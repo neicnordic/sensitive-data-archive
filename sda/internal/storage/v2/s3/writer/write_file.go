@@ -8,10 +8,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileContent io.Reader) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.s3.writer.WriteFile",
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	// Find endpoint / bucket that is to be used for writing
 	writer.Lock()
 	activeBucket, err := writer.activeEndpoint.findActiveBucket(ctx, writer.backendName, writer.locationBroker)
@@ -42,6 +49,10 @@ func (writer *Writer) WriteFile(ctx context.Context, filePath string, fileConten
 			break
 		}
 	}
+
+	span.SetAttributes(attribute.String("activeBucket", activeBucket))
+	span.SetAttributes(attribute.String("activeEndpoint", writer.activeEndpoint.Endpoint))
+
 	writer.Unlock()
 
 	// No endpoint had a free bucket, so there is nowhere to write. Bail out

@@ -87,16 +87,23 @@ if [ -n "$output" ] ; then
     exit 1
 fi
 
-# Try to delete an unknown file
+# Try to delete with invalid file id
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/badfileid")"
+if [ "$resp" != "400" ]; then
+    echo "Error when deleting the file, expected 400 error got: $resp"
+    exit 1
+fi
+
+# Try to delete with unknown file id
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/00000000-0000-0000-0000-000000000000")"
 if [ "$resp" != "404" ]; then
-    echo "Error when deleting the file, expected error got: $resp"
+    echo "Error when deleting the file, expected 404 error got: $resp"
     exit 1
 fi
 
 
 # Try to delete file of other user
-fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/requester@demo.org/files" | jq -r '.[0]| .fileID')"
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/testu@lifescience-ri.eu/files" | jq -r '.[0]| .fileID')"
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"
 if [ "$resp" != "404" ]; then
     echo "Error when deleting the file, expected 404 got: $resp"
@@ -238,8 +245,8 @@ if [ "$resp" != "401" ]; then
 fi
 
 # download a non existing file should fail
-badfileid="badfileid"
-resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$badfileid" -JO)"
+nonExistingId="00000000-0000-0000-0000-000000000000"
+resp="$(curl -s -k -L -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "C4GH-Public-Key: $clientPubKey" "http://api:8080/users/test@dummy.org/file/$nonExistingId" -JO)"
 if [ "$resp" != "404" ]; then
     echo "Trying to download a non existing file, expected 404 got: $resp"
     exit 1
