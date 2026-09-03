@@ -1,230 +1,412 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path"
-	"runtime"
-	"strconv"
 	"testing"
-	"time"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	"github.com/google/uuid"
+	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/crypt4gh/streaming"
+	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
-	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/mock"
 )
 
-var dbPort uint16
+var archivePublicKey, archivePrivateKey, archiveKeyError = keys.GenerateKeyPair()
+var syncPublicKey, syncPrivateKey, syncKeyError = keys.GenerateKeyPair()
 
-type SyncTest struct {
-	suite.Suite
-	keyPath string
-}
-
-func TestSyncTestSuite(t *testing.T) {
-	suite.Run(t, new(SyncTest))
-}
-
-func TestMain(m *testing.M) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		m.Run()
-	}
-	_, b, _, _ := runtime.Caller(0)
-	rootDir := path.Join(path.Dir(b), "../../../")
-
-	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("Could not construct pool: %s", err)
+func TestSync(t *testing.T) {
+	if archiveKeyError != nil {
+		t.Fatalf("archive key generation failed: %v", archiveKeyError)
 	}
 
-	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
-	if err != nil {
-		log.Fatalf("Could not connect to Docker: %s", err)
+	if syncKeyError != nil {
+		t.Fatalf("sync key generation failed: %v", syncKeyError)
 	}
 
-	// pulls an image, creates a container based on it and runs it
-	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15.2-alpine3.17",
-		Env: []string{
-			"POSTGRES_PASSWORD=rootpasswd",
-			"POSTGRES_DB=sda",
+	for _, tc := range []struct {
+		name                       string
+		sourceMessage              schema.DatasetMapping
+		newMocks                   func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer)
+		remoteUser, remotePassword string
+		withRemote                 bool
+		expectedErrorContains      string
+	}{
+		{
+			name: "mapping_success_with_remote",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mr := &mocks.MockReader{}
+				mw := &mocks.MockWriter{}
+				mdb := &mocks.MockDatabase{}
+				ms := &mockServer{}
+
+				expectedSyncDataset := schema.SyncDataset{
+					DatasetID: "test_dataset_123",
+					User:      "test_user",
+				}
+				for i, accession := range []string{"accession_1", "accession_2", "accession_3"} {
+					fileContent := fmt.Sprintf("file %v content: %s", i, uuid.NewString())
+					ftd, err := generateFileTestData([]byte(fileContent))
+					if err != nil {
+						t.Fatalf("failed to generate test file data: %v", err)
+					}
+
+					archivePath := fmt.Sprintf("archive_path_%d", i)
+					submissionPath := fmt.Sprintf("/inbox_path/file_%d", i)
+
+					mdb.On("GetInboxPath", accession).Return(submissionPath, nil).Once()
+					mdb.On("GetArchivePathAndLocation", accession).Return(archivePath, "archive_location", nil).Once()
+
+					mr.On("GetFileSize", "archive_location", archivePath).Return(int64(len(ftd.encryptedContentNoHeader)), nil).Once()
+					mr.On("NewFileReader", "archive_location", archivePath).Return(ftd.encryptedContentNoHeader, nil).Once()
+
+					mdb.On("GetHeaderByAccessionID", accession).Return(ftd.header, nil).Once()
+
+					mw.On("WriteFile", submissionPath, mock.MatchedBy(func(content []byte) bool {
+						return verifyCanDecryptAndMatch(t, content, fileContent)
+					})).Return("sync_location", nil).Once()
+
+					mdb.On("GetSyncData", accession).Return(&database.SyncData{
+						User:     "test_user",
+						FilePath: submissionPath,
+						Checksum: ftd.unencryptedSha256Checksum,
+					}, nil).Once()
+
+					expectedSyncDataset.DatasetFiles = append(expectedSyncDataset.DatasetFiles, schema.DatasetFiles{
+						FilePath: submissionPath,
+						FileID:   accession,
+						ShaSum:   ftd.unencryptedSha256Checksum,
+					})
+				}
+
+				expectedSyncDatasetJSON, err := json.Marshal(expectedSyncDataset)
+				if err != nil {
+					t.Fatalf("failed to marshal expected sync data: %v", err)
+				}
+
+				ms.On("ServeHTTP", "/", expectedSyncDatasetJSON).Return(http.StatusOK).Once()
+
+				return mr, mw, mdb, &mocks.MockBroker{}, ms
+			},
+			remoteUser:     "user",
+			remotePassword: "password",
+			withRemote:     true,
+		}, {
+			name: "mapping_remote_failure",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mr := &mocks.MockReader{}
+				mw := &mocks.MockWriter{}
+				mdb := &mocks.MockDatabase{}
+				ms := &mockServer{}
+				mb := &mocks.MockBroker{}
+
+				expectedSyncDataset := schema.SyncDataset{
+					DatasetID: "test_dataset_123",
+					User:      "test_user",
+				}
+				for i, accession := range []string{"accession_1", "accession_2", "accession_3"} {
+					fileContent := fmt.Sprintf("file %v content: %s", i, uuid.NewString())
+					ftd, err := generateFileTestData([]byte(fileContent))
+					if err != nil {
+						t.Fatalf("failed to generate test file data: %v", err)
+					}
+
+					archivePath := fmt.Sprintf("archive_path_%d", i)
+					submissionPath := fmt.Sprintf("/inbox_path/file_%d", i)
+
+					mdb.On("GetInboxPath", accession).Return(submissionPath, nil).Once()
+					mdb.On("GetArchivePathAndLocation", accession).Return(archivePath, "archive_location", nil).Once()
+
+					mr.On("GetFileSize", "archive_location", archivePath).Return(int64(len(ftd.encryptedContentNoHeader)), nil).Once()
+					mr.On("NewFileReader", "archive_location", archivePath).Return(ftd.encryptedContentNoHeader, nil).Once()
+
+					mdb.On("GetHeaderByAccessionID", accession).Return(ftd.header, nil).Once()
+
+					mw.On("WriteFile", submissionPath, mock.MatchedBy(func(content []byte) bool {
+						return verifyCanDecryptAndMatch(t, content, fileContent)
+					})).Return("sync_location", nil).Once()
+
+					mdb.On("GetSyncData", accession).Return(&database.SyncData{
+						User:     "test_user",
+						FilePath: submissionPath,
+						Checksum: ftd.unencryptedSha256Checksum,
+					}, nil).Once()
+
+					expectedSyncDataset.DatasetFiles = append(expectedSyncDataset.DatasetFiles, schema.DatasetFiles{
+						FilePath: submissionPath,
+						FileID:   accession,
+						ShaSum:   ftd.unencryptedSha256Checksum,
+					})
+				}
+
+				expectedSyncDatasetJSON, err := json.Marshal(expectedSyncDataset)
+				if err != nil {
+					t.Fatalf("failed to marshal expected sync data: %v", err)
+				}
+
+				ms.On("ServeHTTP", "/", expectedSyncDatasetJSON).Return(http.StatusInternalServerError).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to send http sync notification: 500 Internal Server Error"
+				})).Return(nil).Once()
+
+				return mr, mw, mdb, mb, ms
+			},
+			remoteUser:            "user",
+			remotePassword:        "password",
+			withRemote:            true,
+			expectedErrorContains: "",
+		}, {
+			name: "mapping_success_no_remote",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mr := &mocks.MockReader{}
+				mw := &mocks.MockWriter{}
+				mdb := &mocks.MockDatabase{}
+
+				for i, accession := range []string{"accession_1", "accession_2", "accession_3"} {
+					fileContent := fmt.Sprintf("file %v content: %s", i, uuid.NewString())
+					ftd, err := generateFileTestData([]byte(fileContent))
+					if err != nil {
+						t.Fatalf("failed to generate test file data: %v", err)
+					}
+
+					archivePath := fmt.Sprintf("archive_path_%d", i)
+					submissionPath := fmt.Sprintf("/inbox_path/file_%d", i)
+
+					mdb.On("GetInboxPath", accession).Return(submissionPath, nil).Once()
+					mdb.On("GetArchivePathAndLocation", accession).Return(archivePath, "archive_location", nil).Once()
+
+					mr.On("GetFileSize", "archive_location", archivePath).Return(int64(len(ftd.encryptedContentNoHeader)), nil).Once()
+					mr.On("NewFileReader", "archive_location", archivePath).Return(ftd.encryptedContentNoHeader, nil).Once()
+
+					mdb.On("GetHeaderByAccessionID", accession).Return(ftd.header, nil).Once()
+
+					mw.On("WriteFile", submissionPath, mock.MatchedBy(func(content []byte) bool {
+						return verifyCanDecryptAndMatch(t, content, fileContent)
+					})).Return("sync_location", nil).Once()
+				}
+
+				return mr, mw, mdb, &mocks.MockBroker{}, &mockServer{}
+			},
+		}, {
+			name: "mapping_failure_incorrect_file_size",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mr := &mocks.MockReader{}
+				mdb := &mocks.MockDatabase{}
+
+				fileContent := fmt.Sprintf("file 1 content: %s", uuid.NewString())
+				ftd, err := generateFileTestData([]byte(fileContent))
+				if err != nil {
+					t.Fatalf("failed to generate test file data: %v", err)
+				}
+
+				archivePath := "archive_path_%1"
+				submissionPath := "/inbox_path/file_1"
+
+				mdb.On("GetInboxPath", "accession_1").Return(submissionPath, nil).Once()
+				mdb.On("GetArchivePathAndLocation", "accession_1").Return(archivePath, "archive_location", nil).Once()
+
+				mr.On("GetFileSize", "archive_location", archivePath).Return(int64(1), nil).Once()
+				mr.On("NewFileReader", "archive_location", archivePath).Return(ftd.encryptedContentNoHeader, nil).Once()
+
+				mdb.On("GetHeaderByAccessionID", "accession_1").Return(ftd.header, nil).Once()
+
+				return mr, &mocks.MockWriter{}, mdb, &mocks.MockBroker{}, &mockServer{}
+			},
+			withRemote:            false,
+			expectedErrorContains: "copied size does not match file size",
+		}, {
+			name: "dataset_release_message",
+			sourceMessage: schema.DatasetMapping{
+				Type:      "release",
+				DatasetID: "test_dataset_123",
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				return &mocks.MockReader{}, &mocks.MockWriter{}, &mocks.MockDatabase{}, &mocks.MockBroker{}, &mockServer{}
+			},
+			withRemote:            false,
+			expectedErrorContains: "",
+		}, {
+			name: "mapping_failure_inbox_path_not_found",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				mdb.On("GetInboxPath", "accession_1").Return("", sql.ErrNoRows).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "could not sync file accession_1: failed to get inbox path, reason: sql: no rows in result set"
+				})).Return(nil).Once()
+
+				return &mocks.MockReader{}, &mocks.MockWriter{}, mdb, mb, &mockServer{}
+			},
+			withRemote:            false,
+			expectedErrorContains: "",
 		},
-		Mounts: []string{
-			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
-		},
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockArchiveReader, mockSyncWriter, mockDatabase, mockBroker, mockRemoteServer := tc.newMocks(t)
+
+			v := &sync{
+				archiveC4ghPrivateKey: &archivePrivateKey,
+				syncC4ghPubKey:        &syncPublicKey,
+				db:                    mockDatabase,
+				broker:                mockBroker,
+				archiveReader:         mockArchiveReader,
+				syncWriter:            mockSyncWriter,
+				schemaPath:            "../../schemas/isolated/",
+				syncDatasetWithPrefix: "test",
+				remoteURL:             "", // Set the httptest server url if test case has withRemote
+				remoteUser:            tc.remoteUser,
+				remotePassword:        tc.remotePassword,
+			}
+			if tc.withRemote {
+				mockRemote := httptest.NewServer(http.HandlerFunc(mockRemoteServer.ServeHTTP))
+				defer mockRemote.Close()
+				v.remoteURL = mockRemote.URL
+			}
+
+			jsonMsg, err := json.Marshal(tc.sourceMessage)
+			if err != nil {
+				t.Errorf("failed to marshal source message: %s", err.Error())
+			}
+			callbacks, err := v.handleMessage(context.Background(), &brokerv2.Message{Body: jsonMsg})
+			for _, cb := range callbacks {
+				cb()
+			}
+			if tc.expectedErrorContains == "" {
+				assert.Nil(t, err)
+			} else {
+				assert.ErrorContains(t, err, tc.expectedErrorContains)
+			}
+			mockArchiveReader.AssertExpectations(t)
+			mockSyncWriter.AssertExpectations(t)
+			mockRemoteServer.AssertExpectations(t)
+			mockDatabase.AssertExpectations(t)
+			mockBroker.AssertExpectations(t)
+		})
+	}
+}
+
+func verifyCanDecryptAndMatch(t *testing.T, encrypted []byte, expected string) bool {
+	decryptedContentReader, err := streaming.NewCrypt4GHReader(bytes.NewBuffer(encrypted), syncPrivateKey, nil)
 	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
+		t.Logf("failed to decrypt content: %v", err)
+
+		return false
+	}
+	defer func() {
+		_ = decryptedContentReader
+	}()
+
+	decryptedContent, err := io.ReadAll(decryptedContentReader)
+	if err != nil {
+		t.Logf("failed to read decrypted content: %v", err)
+
+		return false
+	}
+	if string(decryptedContent) != expected {
+		return false
 	}
 
-	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
-	dbPortUint64, _ := strconv.ParseUint(postgresContainer.GetPort("5432/tcp"), 10, 16)
-	dbPort = uint16(dbPortUint64)
-	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
-
-	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
-		db, err := sql.Open("postgres", databaseURL)
-		if err != nil {
-			log.Println(err)
-
-			return err
-		}
-
-		query := "SELECT MAX(version) FROM sda.dbschema_version;"
-		var dbVersion int
-
-		return db.QueryRow(query).Scan(&dbVersion)
-	}); err != nil {
-		log.Fatalf("Could not connect to postgres: %s", err)
-	}
-
-	log.Println("starting tests")
-	code := m.Run()
-
-	log.Println("tests completed")
-	if err := pool.Purge(postgresContainer); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-	pvo := docker.PruneVolumesOptions{Filters: make(map[string][]string), Context: context.Background()}
-	if _, err := pool.Client.PruneVolumes(pvo); err != nil {
-		log.Fatalf("could not prune docker volumes: %s", err.Error())
-	}
-
-	os.Exit(code)
+	return true
 }
 
-func (s *SyncTest) SetupTest() {
-	viper.Set("log.level", "debug")
-	viper.Set("archive.type", "posix")
-	viper.Set("archive.location", "../../dev_utils")
-	viper.Set("sync.destination.type", "posix")
-	viper.Set("sync.destination.location", "../../dev_utils")
-
-	viper.Set("broker.host", "localhost")
-	viper.Set("broker.port", 123)
-	viper.Set("broker.user", "guest")
-	viper.Set("broker.password", "guest")
-	viper.Set("broker.queue", "test")
-	viper.Set("sync.centerPrefix", "prefix")
-	viper.Set("sync.remote.host", "http://remote.example")
-	viper.Set("sync.remote.user", "user")
-	viper.Set("sync.remote.password", "pass")
-
-	key := "-----BEGIN CRYPT4GH ENCRYPTED PRIVATE KEY-----\nYzRnaC12MQAGc2NyeXB0ABQAAAAAEna8op+BzhTVrqtO5Rx7OgARY2hhY2hhMjBfcG9seTEzMDUAPMx2Gbtxdva0M2B0tb205DJT9RzZmvy/9ZQGDx9zjlObj11JCqg57z60F0KhJW+j/fzWL57leTEcIffRTA==\n-----END CRYPT4GH ENCRYPTED PRIVATE KEY-----"
-	s.keyPath, _ = os.MkdirTemp("", "key")
-	err := os.WriteFile(s.keyPath+"/c4gh.key", []byte(key), 0600)
-	assert.NoError(s.T(), err)
-
-	viper.Set("c4gh.filepath", s.keyPath+"/c4gh.key")
-	viper.Set("c4gh.passphrase", "test")
-
-	pubKey := "-----BEGIN CRYPT4GH PUBLIC KEY-----\nuQO46R56f/Jx0YJjBAkZa2J6n72r6HW/JPMS4tfepBs=\n-----END CRYPT4GH PUBLIC KEY-----"
-	err = os.WriteFile(s.keyPath+"/c4gh.pub", []byte(pubKey), 0600)
-	assert.NoError(s.T(), err)
-	viper.Set("c4gh.syncPubKeyPath", s.keyPath+"/c4gh.pub")
+type fileTestData struct {
+	header, encryptedContentNoHeader, unencryptedContent []byte
+	unencryptedMd5Checksum, unencryptedSha256Checksum    string
+	encryptedContentNoHeaderSha256Checksum               string
 }
 
-func (s *SyncTest) TestBuildSyncDatasetJSON() {
-	s.SetupTest()
-	defer os.RemoveAll(s.keyPath)
+func generateFileTestData(in []byte) (fileTestData, error) {
+	contentBuf := &bytes.Buffer{}
 
-	var err error
-	db, err = postgres.NewPostgresSQLDatabase(
-		postgres.Host("localhost"),
-		postgres.Port(dbPort),
-		postgres.User("postgres"),
-		postgres.Password("rootpasswd"),
-		postgres.DatabaseName("sda"),
-		postgres.Schema("sda"),
-		postgres.SslMode("disable"),
-	)
-	assert.NoError(s.T(), err)
-	defer func() { _ = db.Close() }()
+	crypt4GHWriter, err := streaming.NewCrypt4GHWriter(contentBuf, archivePrivateKey, [][32]byte{archivePublicKey}, nil)
+	if err != nil {
+		return fileTestData{}, fmt.Errorf("failed to init new c4gh writer: %s", err.Error())
+	}
+	defer func() {
+		_ = crypt4GHWriter.Close()
+	}()
+	if _, err := io.Copy(crypt4GHWriter, bytes.NewReader(in)); err != nil {
+		return fileTestData{}, fmt.Errorf("failed to write to c4gh writer: %s", err.Error())
+	}
+	_ = crypt4GHWriter.Close()
 
-	fileID, err := db.RegisterFile(context.Background(), nil, "/inbox", "dummy.user/test/file1.c4gh", "dummy.user")
-	assert.NoError(s.T(), err, "failed to register file in database")
-	err = db.SetAccessionID(context.Background(), "ed6af454-d910-49e3-8cda-488a6f246e67", fileID)
-	assert.NoError(s.T(), err)
+	unencryptedMd5Checksum := md5.New()
+	unencryptedSha256Checksum := sha256.New()
+	_, _ = unencryptedSha256Checksum.Write(in)
+	_, _ = unencryptedMd5Checksum.Write(in)
 
-	checksum := fmt.Sprintf("%x", sha256.New().Sum(nil))
-	fileInfo := &database.FileInfo{ArchivedChecksum: fmt.Sprintf("%x", sha256.New().Sum(nil)), Size: 1234, Path: "dummy.user/test/file1.c4gh", DecryptedChecksum: checksum, DecryptedSize: 999}
+	header, err := headers.ReadHeader(contentBuf)
+	if err != nil {
+		return fileTestData{}, fmt.Errorf("failed to parse crypt4gh header: %s", err.Error())
+	}
+	encryptedContentNoHeader, err := io.ReadAll(contentBuf)
+	if err != nil {
+		return fileTestData{}, fmt.Errorf("failed to read to c4gh no header content: %s", err.Error())
+	}
+	encryptedContentNoHeaderSha256Checksum := sha256.New()
+	_, _ = encryptedContentNoHeaderSha256Checksum.Write(encryptedContentNoHeader)
 
-	err = db.SetArchived(context.Background(), "/archive", fileInfo, fileID)
-	assert.NoError(s.T(), err, "failed to mark file as Archived")
-	err = db.SetVerified(context.Background(), fileInfo, fileID)
-	assert.NoError(s.T(), err, "failed to mark file as Verified")
-
-	assert.NoError(s.T(), db.MapFileToDataset(context.Background(), "cd532362-e06e-4461-8490-b9ce64b8d9e7", fileID, nil), "failed to map file to dataset")
-
-	m := []byte(`{"type":"mapping", "dataset_id": "cd532362-e06e-4461-8490-b9ce64b8d9e7", "accession_ids": ["ed6af454-d910-49e3-8cda-488a6f246e67"]}`)
-	jsonData, err := buildSyncDatasetJSON(context.Background(), m)
-	assert.NoError(s.T(), err)
-	dataset := []byte(`{"dataset_id":"cd532362-e06e-4461-8490-b9ce64b8d9e7","dataset_files":[{"filepath":"dummy.user/test/file1.c4gh","file_id":"ed6af454-d910-49e3-8cda-488a6f246e67","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}],"user":"dummy.user"}`)
-	assert.Equal(s.T(), string(dataset), string(jsonData))
+	return fileTestData{
+		header:                                 header,
+		encryptedContentNoHeader:               encryptedContentNoHeader,
+		unencryptedContent:                     in,
+		unencryptedMd5Checksum:                 fmt.Sprintf("%x", unencryptedMd5Checksum.Sum(nil)),
+		unencryptedSha256Checksum:              fmt.Sprintf("%x", unencryptedSha256Checksum.Sum(nil)),
+		encryptedContentNoHeaderSha256Checksum: fmt.Sprintf("%x", encryptedContentNoHeaderSha256Checksum.Sum(nil)),
+	}, nil
 }
 
-func (s *SyncTest) TestCreateHostURL() {
-	conf = &config.Config{}
-	conf.Sync = config.Sync{
-		RemoteHost: "http://localhost",
-		RemotePort: 443,
-	}
-
-	h, err := createHostURL(conf.Sync.RemoteHost, conf.Sync.RemotePort)
-	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), "http://localhost:443/dataset", h)
+type mockServer struct {
+	mock.Mock
 }
 
-func (s *SyncTest) TestSendPOST() {
-	r := http.NewServeMux()
-	r.HandleFunc("/dataset", func(w http.ResponseWriter, r *http.Request) {
-		username, _, ok := r.BasicAuth()
-		if ok && username == "foo" {
-			w.WriteHeader(http.StatusUnauthorized)
-
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-
-	conf = &config.Config{}
-	conf.Sync = config.Sync{
-		RemoteHost:     ts.URL,
-		RemoteUser:     "test",
-		RemotePassword: "test",
+func (s *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	expectedBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.Called("failure to read request body")
 	}
-	syncJSON := []byte(`{"user":"test.user@example.com", "dataset_id": "cd532362-e06e-4460-8490-b9ce64b8d9e7", "dataset_files": [{"filepath": "inbox/user/file1.c4gh","file_id": "5fe7b660-afea-4c3a-88a9-3daabf055ebb", "sha256": "82E4e60e7beb3db2e06A00a079788F7d71f75b61a4b75f28c4c942703dabb6d6"}, {"filepath": "inbox/user/file2.c4gh","file_id": "ed6af454-d910-49e3-8cda-488a6f246e76", "sha256": "c967d96e56dec0f0cfee8f661846238b7f15771796ee1c345cae73cd812acc2b"}]}`)
-	err := sendPOST(syncJSON)
-	assert.NoError(s.T(), err)
 
-	conf.Sync = config.Sync{
-		RemoteHost:     ts.URL,
-		RemoteUser:     "foo",
-		RemotePassword: "bar",
-	}
-	assert.EqualError(s.T(), sendPOST(syncJSON), "401 Unauthorized")
+	args := s.Called(r.URL.Path, expectedBody)
+	w.WriteHeader(args.Int(0))
 }

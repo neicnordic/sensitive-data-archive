@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - verify:
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
+- sync:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+  - Allow the remote configuration to be optional, and don't send http notifications if not these are configured
+  - Do not hardcode the `/dataset` path when doing the http calls to the configured remote, instead rely on it being configured in the remote.url
 
 ### Fixed
 
