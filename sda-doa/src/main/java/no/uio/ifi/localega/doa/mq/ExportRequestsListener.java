@@ -183,7 +183,7 @@ public class ExportRequestsListener {
         String fileName = metadataService.getFileName(fileId);
         String filePath = user + "/" + fileName;
         log.info("Exporting {} to {}", fileId, filePath);
-        outboxClient.putObject(PutObjectArgs.builder().bucket(s3Bucket).object(filePath).stream(inputStream, -1, 10485760).build());
+        outboxClient.putObject(PutObjectArgs.builder().bucket(s3Bucket).object(filePath).stream(inputStream, -1L, 10485760L).build());
         log.info("File exported");
     }
 
