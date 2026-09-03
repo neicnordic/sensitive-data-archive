@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use log/slog for logging instead of logrus.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
 - inbox project code:
-  - Moved `storage.inbox.projectCode` and `storage.inbox.projectCodeDelimiter` out of `internal/config` into `internal/v2/inboxproject`, registered through `config/v2` so both appear in `--help`. Key names, validation and the stock default are unchanged.
-  - `helper.ResolveInboxPath` takes the project code and delimiter as strings rather than a config struct, so `internal/helper` holds no config type and `internal/config` no longer imports it.
+  - **Breaking:** `storage.inbox.projectCode` and `storage.inbox.projectCodeDelimiter` are renamed to `inboxpath.project_code` and `inboxpath.project_delimiter`. A deployment that sets the old keys silently falls back to the stock inbox layout, so update the config before upgrading.
+  - New `internal/inboxpath` package owns the layout: it registers both keys through `config/v2`, so they appear in `--help`, and carries `ResolveInboxPath`. Services call `inboxpath.Load()` once at startup to validate, then resolve paths without holding any config of their own.
+  - `helper.ResolveInboxPath` and `helper.UnanonymizeFilepath` moved into that package, so `internal/config` no longer imports `internal/helper`. `helper.AnonymizeFilepath` stays where it is.
   - Only ingest, mapper and api validate the section now. finalize, verify and intercept never read it and no longer fail at startup on a malformed one.
 
 ### Fixed

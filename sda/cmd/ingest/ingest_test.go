@@ -16,9 +16,10 @@ import (
 	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
-	"github.com/neicnordic/sensitive-data-archive/internal/v2/inboxproject"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
@@ -74,7 +75,21 @@ func (ts *TestSuite) SetupTest() {
 	ts.ingest.BackupWriter = ts.mockBackupWriter
 	ts.ingest.db = ts.mockDB
 	ts.ingest.Broker = ts.mockBroker
-	ts.ingest.Inbox = inboxproject.Config{}
+}
+
+// useProjectCode installs a project-code inbox layout through inboxpath's real entry point, and
+// restores the stock layout when the test ends.
+func (ts *TestSuite) useProjectCode() {
+	ts.T().Cleanup(func() {
+		viper.Reset()
+		ts.Require().NoError(inboxpath.Load())
+	})
+
+	viper.Reset()
+	viper.SetConfigType("yaml")
+	ts.Require().NoError(viper.ReadConfig(bytes.NewBufferString(
+		"inboxpath:\n  project_code: p11\n  project_delimiter: \"-\"\n")))
+	ts.Require().NoError(inboxpath.Load())
 }
 
 func (ts *TestSuite) encryptBytes(in []byte) ([]byte, []byte) {
@@ -189,7 +204,7 @@ func (ts *TestSuite) TestIngestFile_ProjectCode_ResolvesInboxPath() {
 	// the username raw, so the expected path below differs by more than the prefix.
 	userName := "dummy@elixir-europe.org"
 	filePath := "files/TestIngestMessage.c4gh"
-	ts.ingest.Inbox = inboxproject.Config{Code: "p11", Delimiter: "-"}
+	ts.useProjectCode()
 
 	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
 
@@ -279,7 +294,7 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_ProjectCode_ResolvesInboxPath(
 	// the username raw, so the expected path below differs by more than the prefix.
 	userName := "dummy@elixir-europe.org"
 	filePath := "files/TestIngestMessage.c4gh"
-	ts.ingest.Inbox = inboxproject.Config{Code: "p11", Delimiter: "-"}
+	ts.useProjectCode()
 
 	encryptedContent, encryptedChecksum := ts.encryptBytes([]byte("test file content"))
 
