@@ -31,6 +31,7 @@ outbox:
   enabled: ${OUTBOX_ENABLED:true}
   type: ${OUTBOX_TYPE:POSIX}
   queue: ${OUTBOX_QUEUE:exportRequests}
+  queue-auto-create: ${OUTBOX_QUEUE_AUTO_CREATE:true}
   location: ${OUTBOX_LOCATION:/ega/outbox/p11-%s/files/}
 
 spring:
