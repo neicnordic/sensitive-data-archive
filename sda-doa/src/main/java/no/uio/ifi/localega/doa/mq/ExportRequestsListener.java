@@ -17,7 +17,6 @@ import no.uio.ifi.localega.doa.services.MetadataService;
 import no.uio.ifi.localega.doa.services.StreamingService;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,9 +63,7 @@ public class ExportRequestsListener {
     @Value("${s3.bucket}")
     private String s3Bucket;
 
-    @RabbitListener(
-            queuesToDeclare = @Queue(name = "${outbox.queue}", durable = "false", exclusive = "true", autoDelete = "true")
-    )
+    @RabbitListener(queues = "${outbox.queue}")
     public void listen(String message) {
         try {
             jsonSchemaValidationService.validate(message);
