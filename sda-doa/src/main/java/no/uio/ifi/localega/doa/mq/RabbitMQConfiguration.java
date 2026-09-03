@@ -13,6 +13,9 @@ public class RabbitMQConfiguration {
     @Bean
     @ConditionalOnProperty(name = "outbox.queue-auto-create", havingValue = "true", matchIfMissing = true)
     public Queue exportQueue(@Value("${outbox.queue}") String queueName) {
-        return new Queue(queueName, false, true, true);
+        boolean durable = false;
+        boolean exclusive = true;
+        boolean autoDelete = true;
+        return new Queue(queueName,durable, exclusive, autoDelete);
     }
 }
