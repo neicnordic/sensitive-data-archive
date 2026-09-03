@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
   - Use log/slog for logging instead of logrus.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- sync:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+  - Allow the remote configuration to be optional, and don't send http notifications if not these are configured
+  - Do not hardcode the `/dataset` path when doing the http calls to the configured remote, instead rely on it being configured in the remote.url 
 
 ### Fixed
 

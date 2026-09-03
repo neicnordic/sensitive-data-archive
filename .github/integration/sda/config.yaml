@@ -92,7 +92,6 @@ database:
 c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
-  syncPubKeyPath: /shared/sync.pub.pem
   rotatePubKeyPath: /shared/rotatekey.pub.pem
   privateKeys:
   - filePath: /shared/c4gh.sec.pem
@@ -117,12 +116,14 @@ sync:
   api:
     password: "pass"
     user: "user"
-  centerPrefix: "SYNC"
-  remote:
-    host: "http://sync-api"
-    port: "8080"
-    password: "pass"
-    user: "user"
+  dataset_with_prefix: "SYNC"
+  c4gh_pub_key_path: /shared/sync.pub.pem
+remote:
+  url: "http://sync-api:8080/dataset"
+  password: "pass"
+  user: "user"
 
 schema:
   type: "isolated"
+
+schema_type: "isolated"
