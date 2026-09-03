@@ -63,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - SERVER_JWTPUBKEYURL -> SERVER_JWT_PUB_KEY_URL
       - BROKER_ROUTING_KEY -> ROUTING_KEY
       - S3INBOX_CACERT -> S3INBOX_CA_CERT
+- sync:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+  - Allow the remote configuration to be optional, and don't send http notifications if it is not configured
+  - Do not hardcode the `/dataset` path when doing the http calls to the configured remote, instead rely on it being configured in the remote.url
 
 ### Fixed
 
