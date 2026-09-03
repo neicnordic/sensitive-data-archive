@@ -153,8 +153,6 @@ services:
     environment:
       - BROKER_PASSWORD=verify
       - BROKER_USER=verify
-      - BROKER_QUEUE=archived
-      - BROKER_ROUTINGKEY=verified
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
     restart: always

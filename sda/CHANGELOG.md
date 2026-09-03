@@ -21,11 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
   - Use log/slog for logging instead of logrus.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- verify:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
 
 ### Fixed
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
+- Populate slog log level from LOG_LEVEL configuration
 
 ## [3.1.76] - 2026-07-15
 
