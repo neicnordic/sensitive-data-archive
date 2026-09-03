@@ -179,7 +179,7 @@ services:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
       - BROKER_QUEUE=accession
-      - BROKER_ROUTINGKEY=completed
+      - BROKER_ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
     restart: always

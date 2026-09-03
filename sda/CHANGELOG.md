@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- finalize:
+  - Migrate to Broker V2 package
+  - Use db transactions to ensure correct state even if an error occurs.
 - ingest:
   - Use db transactions during cancel and ingest actions and rollback if encounter error.
   - Requeue messages which could be expected to succeed on a retry.

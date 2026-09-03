@@ -58,10 +58,10 @@ These settings control how `finalize` connects to the RabbitMQ message broker.
 - `BROKER_HOST`: hostname of the RabbitMQ server
 - `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
 - `BROKER_QUEUE`: message queue to read messages from (commonly: `accession`)
-- `BROKER_ROUTINGKEY`: Routing key for publishing messages (commonly: `completed`)
+- `BROKER_ROUTING_KEY`: Routing key for publishing messages (commonly: `completed`)
 - `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
-- `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `1`)
 
 ### PostgreSQL Database settings
 
