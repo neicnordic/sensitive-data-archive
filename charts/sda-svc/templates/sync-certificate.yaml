@@ -1,5 +1,5 @@
 {{- if eq "isolated" .Values.global.schemaType }}
-{{- if ne "" .Values.global.sync.remote.host }}
+{{- if .Values.global.sync.enabled }}
 {{- if .Values.global.tls.enabled }}
 {{- if or .Values.global.tls.clusterIssuer .Values.global.tls.issuer }}
 apiVersion: cert-manager.io/v1

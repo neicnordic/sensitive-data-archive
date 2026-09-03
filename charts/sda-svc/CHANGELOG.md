@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Populate broker_v2 config for sync
+- Add global.sync.enabled to control if the sync service is to be enabled and deployed instead of relying on that global.sync.remote.host is set
+- Update global.sync.remote configuration to specify url instead of host and port, and for remote configuration to be optional
+
 ## [4.0.0] - 2026-08-26
 
 ### Changed
