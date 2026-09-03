@@ -437,6 +437,8 @@ global:
     timeout: 5
 
   sync:
+    # @param global.sync.enabled If the sync service is to be enabled and deployed
+    enabled: false
     api:
       pass: ""
       user: ""
@@ -472,10 +474,13 @@ global:
       #     nfsServer: ""
       #     nfsPath: ""
     remote:
-      host: ""
-      port: ""
-      password: ""
+      # @param global.sync.remote.url The URL to an http endpoint which is to get notifications about datasets being synced, if not set no http sync notifications will be sent.
+      # Example: https://synt.to.here:1234/dataset_sync
+      url: ""
+      # @param global.sync.remote.user Username to be used for HTTP basic auth on requests to remote.url, if not set basic auth will not be used when sending http notifications.
       user: ""
+      # @param global.sync.remote.password Password to be used for HTTP basic auth on requests to remote.url, if not set basic auth will not be used when sending http notifications.
+      password: ""
 
 ##################################
 # service specific credentials
