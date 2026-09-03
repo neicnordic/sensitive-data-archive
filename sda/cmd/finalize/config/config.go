@@ -17,7 +17,7 @@ var (
 func init() {
 	config.RegisterFlags(
 		&config.Flag{
-			Name: "broker.queue",
+			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "accession", "The queue where the service consumes messages from")
 			},
@@ -27,9 +27,9 @@ func init() {
 			},
 		},
 		&config.Flag{
-			Name: "broker.routing_key",
+			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "completed", "The routing key where the service publishes messages to")
+				flagSet.String(flagName, "completed", "The routing key used by the service to publish messages")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
