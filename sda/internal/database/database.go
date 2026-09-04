@@ -113,7 +113,7 @@ type functions interface {
 	// GetSyncData retrieves the file information needed to sync a dataset
 	GetSyncData(ctx context.Context, accessionID string) (*SyncData, error)
 
-	// GetFileIDInInbox gets the file id of a file which last known event is either 'registered', 'uploaded', or 'disabled'
+	// GetFileIDInInbox gets the file id of a file which last known event is either 'registered', 'uploaded', 'disabled' or 'deleted'
 	// as that means that ingestion has not been triggered and users are allowed continue uploading or reupload the file to the inbox
 	// if no row is found does not return sql.ErrNoRows, just empty string in id return field
 	GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error)

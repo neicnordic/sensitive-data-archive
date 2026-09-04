@@ -39,7 +39,8 @@ VALUES (0, now(), 'Created with version'),
        (22, now(), 'Add file_headers_backup table for key rotation safekeeping'),
        (23, now(), 'Expand files table with storage locations'),
        (24, now(), 'Add last_event column to files to avoid join on file_event_log'),
-       (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading');
+       (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading'),
+       (26, now(), 'Add deleted file event');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -79,7 +80,8 @@ VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
        (80, 'downloaded'  , 'Downloaded by user'),
        ( 0, 'error'       , 'An Error occurred, check the error table'),
        ( 1, 'disabled'    , 'Disables the file for all actions'),
-       ( 2, 'enabled'     , 'Reenables a disabled file');
+       ( 2, 'enabled'     , 'Reenables a disabled file'),
+       ( 3, 'deleted'     , 'File has been deleted from the inbox storage by the user');
 
 -- `files` is the main table of the schema, holding the file paths, encryption
 -- header, and stable id.

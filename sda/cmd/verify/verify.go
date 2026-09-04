@@ -182,8 +182,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 
 		return
 	}
-	if status == "disabled" {
-		log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
+	if status == "disabled" || status == "deleted" {
+		log.Infof("file with file-id: %s is disabled or deleted, stopping verification", message.FileID)
 		if err := delivered.Ack(false); err != nil {
 			log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 		}
@@ -446,8 +446,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 			return
 		}
 
-		if status == "disabled" {
-			log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
+		if status == "disabled" || status == "deleted" {
+			log.Infof("file with file-id: %s is disabled or deleted, stopping verification", message.FileID)
 			if err := delivered.Ack(false); err != nil {
 				log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
 			}
