@@ -59,8 +59,8 @@ func run() error {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
 	defer db.Close()
-	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 26 {
+		return errors.Join(errors.New("database schema v26 is required"), err)
 	}
 
 	s3Client, err := newS3Client(ctx, conf.S3Inbox)
