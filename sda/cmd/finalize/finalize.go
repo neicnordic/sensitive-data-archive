@@ -162,8 +162,8 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	switch status {
-	case "disabled":
-		log.Infof("file with file-id: %s is disabled, aborting work", fileID)
+	case "disabled", "deleted":
+		log.Infof("file with file-id: %s is disabled or deleted, aborting work", fileID)
 		if err := delivered.Ack(false); err != nil {
 			log.Errorf("Failed acking canceled work, reason: %v", err)
 		}
