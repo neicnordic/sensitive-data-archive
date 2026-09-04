@@ -578,8 +578,10 @@ func (p *Proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 }
 
 // handleDelete handles removal of an object from the inbox for the DeleteObject request type.
-// Only objects that are still eligible for inbox actions (registered, uploaded or already
-// disabled, i.e. not yet ingested) can be removed this way.
+// Only objects that are still eligible for inbox actions (registered, uploaded, already
+// disabled or previously deleted, i.e. not yet ingested) can be removed this way. Unlike
+// "disabled" (used for cancellation, which leaves the object in storage), "deleted" marks
+// that the object has actually been removed from the inbox storage backend.
 func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
 
@@ -631,7 +633,7 @@ func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 
-		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "disabled", username, "{}", "{}"); err != nil {
+		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "deleted", username, "{}", "{}"); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
