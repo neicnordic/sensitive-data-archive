@@ -218,6 +218,20 @@ func (s *ProxyTests) TestServeHTTP_concurrent_put_noRace() {
 	}
 }
 
+// fixedSubjectAuth authenticates every request as the same, fixed JWT subject.
+type fixedSubjectAuth struct {
+	subject string
+}
+
+func (f fixedSubjectAuth) Authenticate(_ *http.Request) (jwt.Token, error) {
+	token := jwt.New()
+	if err := token.Set("sub", f.subject); err != nil {
+		return nil, err
+	}
+
+	return token, nil
+}
+
 type FakeServer struct {
 	ts          *httptest.Server
 	headHeaders map[string]string
@@ -302,11 +316,12 @@ func (s *ProxyTests) TestServeHTTP_disallowed() {
 	assert.Equal(s.T(), 403, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
-	// Deletion of files are disallowed
+	// Deletion of another user's file is disallowed
+	w = httptest.NewRecorder()
 	r.Method = "DELETE"
 	r.URL, _ = url.Parse("/asdf/asdf")
 	proxy.ServeHTTP(w, r)
-	assert.Equal(s.T(), 403, w.Result().StatusCode)
+	assert.Equal(s.T(), 400, w.Result().StatusCode)
 	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
 
 	log.Warnf("getting to not allowed stuff")
@@ -453,6 +468,28 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
+	// Delete of the uploaded object works and marks it deleted in the database
+	fileID, err := s.database.GetFileIDInInbox(context.Background(), "dummy", "file")
+	assert.NoError(s.T(), err)
+	assert.NotEmpty(s.T(), fileID)
+	w = httptest.NewRecorder()
+	r.Method = "DELETE"
+	r.URL, _ = url.Parse("/dummy/file")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+	status, err := s.database.GetFileStatus(context.Background(), fileID)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), "deleted", status)
+
+	// Deleting a file that was never uploaded is not found
+	w = httptest.NewRecorder()
+	r.Method = "DELETE"
+	r.URL, _ = url.Parse("/dummy/never-uploaded")
+	proxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 404, w.Result().StatusCode)
+	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
+
 	// Put with partnumber sends no message
 	w = httptest.NewRecorder()
 	r.Method = "PUT"
@@ -535,6 +572,41 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	proxy.ServeHTTP(w, r)
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+}
+
+// TestServeHTTP_deleteAnotherUsersFile verifies that a user cannot delete a file
+// belonging to another user's inbox, even when targeting that user's path directly.
+func (s *ProxyTests) TestServeHTTP_deleteAnotherUsersFile() {
+	messenger, err := broker.NewMQ(s.MQConf)
+	assert.NoError(s.T(), err)
+
+	// The owner uploads a file to their own inbox
+	ownerProxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, fixedSubjectAuth{"owner"}, messenger, s.database, new(tls.Config))
+	w := httptest.NewRecorder()
+	r, err := http.NewRequest("PUT", "/owner/secret.txt", nil)
+	assert.NoError(s.T(), err)
+	s.fakeServer.headHeaders = map[string]string{"ETag": "\"abc\"", "Content-Length": "5"}
+	ownerProxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 200, w.Result().StatusCode)
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+
+	fileID, err := s.database.GetFileIDInInbox(context.Background(), "owner", "secret.txt")
+	assert.NoError(s.T(), err)
+	assert.NotEmpty(s.T(), fileID)
+
+	// A different, authenticated user tries to delete it via the owner's path
+	attackerProxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, fixedSubjectAuth{"attacker"}, messenger, s.database, new(tls.Config))
+	w = httptest.NewRecorder()
+	r, err = http.NewRequest("DELETE", "/owner/secret.txt", nil)
+	assert.NoError(s.T(), err)
+	attackerProxy.ServeHTTP(w, r)
+	assert.Equal(s.T(), 400, w.Result().StatusCode)
+	assert.Equal(s.T(), false, s.fakeServer.PingedAndRestore())
+
+	// The file is untouched and still eligible for inbox actions by its owner
+	fileIDAfter, err := s.database.GetFileIDInInbox(context.Background(), "owner", "secret.txt")
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fileID, fileIDAfter)
 }
 
 func (s *ProxyTests) TestMessageFormatting() {

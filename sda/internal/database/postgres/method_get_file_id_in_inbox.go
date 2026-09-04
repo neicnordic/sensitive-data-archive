@@ -18,7 +18,7 @@ FROM (
       AND f.archive_file_path = ''
     ORDER BY f.id, fel.started_at DESC LIMIT 1
     ) AS id_and_event
-WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled');`
+WHERE id_and_event.event IN ('registered', 'uploaded', 'disabled', 'deleted');`
 }
 
 func (db *pgDb) getFileIDInInbox(ctx context.Context, tx *sql.Tx, submissionUser, filePath string) (string, error) {
