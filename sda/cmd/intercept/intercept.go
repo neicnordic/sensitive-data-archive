@@ -3,109 +3,147 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	interceptconfig "github.com/neicnordic/sensitive-data-archive/cmd/intercept/config"
+	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 
 	log "github.com/sirupsen/logrus"
 )
 
+type messageType string
+
 const (
-	msgAccession string = "accession"
-	msgCancel    string = "cancel"
-	msgIngest    string = "ingest"
-	msgMapping   string = "mapping"
-	msgRelease   string = "release"
-	msgDeprecate string = "deprecate"
+	messageTypeAccession messageType = "accession"
+	messageTypeCancel    messageType = "cancel"
+	messageTypeIngest    messageType = "ingest"
+	messageTypeMapping   messageType = "mapping"
+	messageTypeRelease   messageType = "release"
+	messageTypeDeprecate messageType = "deprecate"
 )
 
+type intercept struct {
+	broker  broker.Broker
+	routing map[messageType]string
+}
+
 func main() {
-	forever := make(chan bool)
-	conf, err := config.NewConfig("intercept")
-	if err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
-	mq, err := broker.NewMQ(conf.Broker)
-	if err != nil {
-		log.Fatal(err)
+}
+
+func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := configv2.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	defer mq.Channel.Close()
-	defer mq.Connection.Close()
+	app := &intercept{
+		routing: map[messageType]string{
+			messageTypeAccession: interceptconfig.AccessionRoutingKey(),
+			messageTypeCancel:    interceptconfig.CancelRoutingKey(),
+			messageTypeIngest:    interceptconfig.IngestRoutingKey(),
+			messageTypeMapping:   interceptconfig.MappingRoutingKey(),
+			messageTypeRelease:   interceptconfig.ReleaseRoutingKey(),
+			messageTypeDeprecate: interceptconfig.DeprecateRoutingKey(),
+		},
+	}
 
-	go func() {
-		connError := mq.ConnectionWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
+	var err error
+	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create new rabbit mq broker: %w", err)
+	}
 
-	go func() {
-		connError := mq.ChannelWatcher()
-		log.Error(connError)
-		forever <- false
-	}()
-
-	log.Info("Starting intercept service")
-
-	go func() {
-		messages, err := mq.GetMessages(conf.Broker.Queue)
-		if err != nil {
-			log.Fatal(err)
+	defer func() {
+		if app.broker == nil {
+			return
 		}
-		for delivered := range messages {
-			log.Debugf("Received a message: %s", delivered.Body)
-
-			msgType, err := typeFromMessage(delivered.Body)
-			if err != nil {
-				log.Errorf("Failed to get type for message (%v), reason: %v", msgType, err.Error())
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("Failed acking canceled work, reason: (%v)", err)
-				}
-				// Restart on new message
-				continue
-			}
-
-			routing := map[string]string{
-				msgAccession: "accession",
-				msgCancel:    "ingest",
-				msgIngest:    "ingest",
-				msgMapping:   "mappings",
-				msgRelease:   "mappings",
-				msgDeprecate: "mappings",
-			}
-
-			routingKey := routing[msgType]
-
-			if routingKey == "" {
-				log.Debugf("msg type: %s", msgType)
-				if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, "undeliverable", delivered.Body); err != nil {
-					log.Errorf("failed to publish message, reason: (%v)", err)
-				}
-				if err := delivered.Ack(false); err != nil {
-					log.Errorf("failed to ack message for reason: %v", err)
-				}
-
-				continue
-			}
-
-			log.Infof("Routing message (correlation-id: %s, routingkey: %s)", delivered.CorrelationId, routingKey)
-			if err := mq.SendMessage(delivered.CorrelationId, conf.Broker.Exchange, routingKey, delivered.Body); err != nil {
-				log.Errorf("failed to publish message, reason: (%v)", err)
-			}
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("failed to ack message for reason: %v", err)
-			}
+		if err := app.broker.Close(); err != nil {
+			slog.Error("could not close broker", "error", err)
 		}
 	}()
 
-	<-forever
+	consumeErr := make(chan error, 1)
+	go func() {
+		consumeErr <- app.broker.Subscribe(ctx, interceptconfig.SourceQueue(), app.handleMessage)
+	}()
+
+	slog.Info("intercept service started")
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	select {
+	case sig := <-sigc:
+		slog.Info("received signal, shutting down gracefully", "signal", sig)
+
+		return nil
+	case err := <-consumeErr:
+		if !errors.Is(err, context.Canceled) {
+			slog.Error("consumer failure", "error", err, "source-queue", interceptconfig.SourceQueue())
+
+			return err
+		}
+
+		return nil
+	}
+}
+
+func (app *intercept) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
+	msgType, err := typeFromMessage(message.Body)
+	if err != nil {
+		slog.Error("Failed to get type from message",
+			slog.String("message-key", message.Key),
+			slog.Any("error", err),
+		)
+		// Restart on new message
+		return nil, nil
+	}
+
+	routingKey := app.routing[msgType]
+
+	if routingKey == "" {
+		slog.Warn("unknown routing key for message type, routing to undeliverable",
+			slog.String("message-key", message.Key),
+			slog.String("message-type", string(msgType)),
+		)
+
+		routingKey = "undeliverable"
+	}
+
+	slog.Info(
+		"Routing message",
+		slog.String("message-key", message.Key),
+		slog.String("message-type", string(msgType)),
+		slog.String("routing-key", routingKey),
+	)
+	if err := app.broker.Publish(ctx, routingKey, *message); err != nil {
+		slog.Error("failed to publish message",
+			slog.Any("error", err),
+		)
+
+		return nil, err
+	}
+
+	return nil, nil
 }
 
 // typeFromMessage returns the type value given a JSON structure for the message
 // supplied in body
-func typeFromMessage(body []byte) (string, error) {
+func typeFromMessage(body []byte) (messageType, error) {
 	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -113,7 +151,7 @@ func typeFromMessage(body []byte) (string, error) {
 	}
 
 	msgTypeFetch, ok := message["type"]
-	if !ok {
+	if !ok || msgTypeFetch == "" {
 		return "", errors.New("malformed message, type is missing")
 	}
 
@@ -122,5 +160,5 @@ func typeFromMessage(body []byte) (string, error) {
 		return "", errors.New("could not cast type attribute to string")
 	}
 
-	return msgType, nil
+	return messageType(msgType), nil
 }
