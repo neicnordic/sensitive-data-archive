@@ -37,13 +37,13 @@ func (db *pgDb) getDatasetFiles(ctx context.Context, tx *sql.Tx, datasetID strin
 	}()
 
 	for rows.Next() {
-		var accession string
-		err := rows.Scan(&accession)
+		var accessionID string
+		err := rows.Scan(&accessionID)
 		if err != nil {
 			return nil, err
 		}
 
-		accessions = append(accessions, accession)
+		accessions = append(accessions, accessionID)
 	}
 
 	if err := rows.Err(); err != nil {
