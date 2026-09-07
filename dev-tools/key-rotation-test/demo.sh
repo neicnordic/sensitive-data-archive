@@ -147,8 +147,8 @@ case_2_mixed_key_dataset() {
     FILE3_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000103';" | tr -d '\r\n[:space:]')
     FILE4_ID=$(docker compose exec -T -e PGPASSWORD=rootpasswd postgres psql $DB_OPTS -tA -c "SELECT id FROM sda.files WHERE stable_id = 'EGAF00000000104';" | tr -d '\r\n[:space:]')
 
-    echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, StableID=EGAF00000000101; ID=$FILE2_ID, StableID=EGAF00000000102"
-    echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, StableID=EGAF00000000103; ID=$FILE4_ID, StableID=EGAF00000000104"
+    echo "File 1 and 2 (To be rotated): ID=$FILE1_ID, AccessionID=EGAF00000000101; ID=$FILE2_ID, AccessionID=EGAF00000000102"
+    echo "File 3 and 4 (To be left alone): ID=$FILE3_ID, AccessionID=EGAF00000000103; ID=$FILE4_ID, AccessionID=EGAF00000000104"
 
     echo -e "\nStep 2.4: Executing key rotation ONLY on File 1 and 2..."
     curl -s -f -H "Authorization: Bearer $TOKEN" -X POST "$API_HOST/file/rotatekey/$FILE1_ID"
