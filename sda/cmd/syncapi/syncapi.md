@@ -11,7 +11,7 @@ When enabled the service will perform the following tasks:
 1. Upon receiving a POST request with JSON data to the `/dataset` route.
    1. Parse the JSON blob and validate it against the `file-sync` schema.
    2. Build and send messages to start ingestion of files.
-   3. Build and send messages to assign stableIDs to files.
+   3. Build and send messages to assign accession IDs to files.
    4. Build and send messages to map files to a dataset.
 
 ## Configuration
