@@ -686,7 +686,7 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	assert.NoError(ts.T(), err, "failed to register disabled file in database")
 	err = ts.db.UpdateFileEventLog(context.Background(), disabledFileID, "disabled", testUser, "{}", "{}")
 	assert.NoError(ts.T(), err, "failed to set file as disabled in database")
-	err = ts.db.SetAccessionID(context.Background(), "stableID-disabled", disabledFileID)
+	err = ts.db.SetAccessionID(context.Background(), "accessionID-disabled", disabledFileID)
 	assert.NoError(ts.T(), err, "failed to set accession id for disabled file")
 
 	filelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), "unknownuser", "", true, 0, "")
