@@ -1,5 +1,7 @@
 ---
-status: ready-for-decision
+status: promoted
+promoted-to:
+  - "0008-use-accessionid-in-application-code.md"
 date: "2026-09-07"
 discussion: "https://github.com/neicnordic/sensitive-data-archive/pull/2263"
 authors:
