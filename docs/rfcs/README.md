@@ -150,4 +150,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
-| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere? | exploring | — |
+| [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere? | ready-for-decision | — |

@@ -1,6 +1,6 @@
 ---
-status: exploring
-date: "2026-09-02"
+status: ready-for-decision
+date: "2026-09-07"
 discussion: "https://github.com/neicnordic/sensitive-data-archive/pull/2263"
 authors:
   - "@jhagberg"
@@ -214,7 +214,8 @@ live and are listed by name under [Open Questions](#open-questions): @kjellp's
 that option 3 is the cheaper, sufficient first step, and @viklund's that the
 column should be dropped rather than renamed (option 5). The first Open
 Question has to be answered before this RFC can be promoted per
-[ADR-0005][adr-0005].
+[ADR-0005][adr-0005]; it was answered at the NeIC SDA-Devs meet-up on
+2026-09-07, see [Discussion history](#discussion-history).
 
 If we go with option 1, the naming convention would be:
 
@@ -320,5 +321,10 @@ previous application versions. `ALTER TABLE ... RENAME COLUMN` is reversible.
 * 2026-05-20: converted from ADR-0001 to RFC-0001 per [ADR-0005][adr-0005].
 * 2026-09-02: thread folded into the file per the
   [RFC review loop](README.md#how-to-write-an-rfc); codebase survey refreshed.
+* 2026-09-07 (NeIC SDA-Devs meet-up): agreed to promote this RFC to an ADR
+  recording option 3 — `accessionID` in application code, `stable_id` kept as
+  the column name — and to defer option 5 (drop the column in favour of the
+  reference tables) to the v4.0 schema work. Status set to
+  `ready-for-decision`.
 
 [adr-0005]: ../decisions/0005-introduce-rfcs-as-upstream-exploration-phase.md
