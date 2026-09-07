@@ -468,7 +468,7 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(s.T(), 200, w.Result().StatusCode)
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 
-	// Delete of the uploaded object works and marks it deleted in the database
+	// Remove of the uploaded object works and marks it removed in the database
 	fileID, err := s.database.GetFileIDInInbox(context.Background(), "dummy", "file")
 	assert.NoError(s.T(), err)
 	assert.NotEmpty(s.T(), fileID)
@@ -480,7 +480,7 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 	status, err := s.database.GetFileStatus(context.Background(), fileID)
 	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), "deleted", status)
+	assert.Equal(s.T(), "removed", status)
 
 	// Deleting a file that was never uploaded is not found
 	w = httptest.NewRecorder()
@@ -574,9 +574,9 @@ func (s *ProxyTests) TestServeHTTP_allowed() {
 	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
 }
 
-// TestServeHTTP_deleteAnotherUsersFile verifies that a user cannot delete a file
+// TestServeHTTP_removeAnotherUsersFile verifies that a user cannot remove a file
 // belonging to another user's inbox, even when targeting that user's path directly.
-func (s *ProxyTests) TestServeHTTP_deleteAnotherUsersFile() {
+func (s *ProxyTests) TestServeHTTP_removeAnotherUsersFile() {
 	messenger, err := broker.NewMQ(s.MQConf)
 	assert.NoError(s.T(), err)
 
@@ -594,7 +594,7 @@ func (s *ProxyTests) TestServeHTTP_deleteAnotherUsersFile() {
 	assert.NoError(s.T(), err)
 	assert.NotEmpty(s.T(), fileID)
 
-	// A different, authenticated user tries to delete it via the owner's path
+	// A different, authenticated user tries to remove it via the owner's path
 	attackerProxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, fixedSubjectAuth{"attacker"}, messenger, s.database, new(tls.Config))
 	w = httptest.NewRecorder()
 	r, err = http.NewRequest("DELETE", "/owner/secret.txt", nil)

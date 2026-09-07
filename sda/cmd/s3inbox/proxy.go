@@ -113,7 +113,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case PutObject, CreateMultiPartUpload, CompleteMultiPartUpload:
 		p.handleUpload(s3RequestType, w, r, token)
 	case DeleteObject:
-		p.handleDelete(s3RequestType, w, r, token)
+		p.handleRemove(s3RequestType, w, r, token)
 	default:
 		log.Warnf("user: %s, attempted to do not allowed request: method: %s, path: %s, query: %s", token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery)
 		reportErrorToClient(http.StatusForbidden, "Forbidden", w)
@@ -577,12 +577,12 @@ func (p *Proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 	return result != nil, err
 }
 
-// handleDelete handles removal of an object from the inbox for the DeleteObject request type.
+// handleRemove handles removal of an object from the inbox for the RemoveObject request type.
 // Only objects that are still eligible for inbox actions (registered, uploaded, already
-// disabled or previously deleted, i.e. not yet ingested) can be removed this way. Unlike
-// "disabled" (used for cancellation, which leaves the object in storage), "deleted" marks
+// disabled or previously removed, i.e. not yet ingested) can be removed this way. Unlike
+// "disabled" (used for cancellation, which leaves the object in storage), "removed" marks
 // that the object has actually been removed from the inbox storage backend.
-func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
+func (p *Proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
 
 	var err error
@@ -610,7 +610,7 @@ func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter,
 		return
 	}
 	if fileID == "" {
-		log.Warnf("user: %s, attempted to delete file not eligible for removal: %s", username, filePath)
+		log.Warnf("user: %s, attempted to remove file not eligible for removal: %s", username, filePath)
 		reportErrorToClient(http.StatusNotFound, "Not Found", w)
 
 		return
@@ -633,13 +633,13 @@ func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 
-		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "deleted", username, "{}", "{}"); err != nil {
+		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "removed", username, "{}", "{}"); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
 
 			return
 		}
 
-		log.Infof("user: %s, deleted file: %s, with id: %s", username, filePath, fileID)
+		log.Infof("user: %s, removed file: %s, with id: %s", username, filePath, fileID)
 	}
 
 	if err := p.forwardResponseToClient(s3Response, w); err != nil {
@@ -648,7 +648,7 @@ func (p *Proxy) handleDelete(s3RequestType S3RequestType, w http.ResponseWriter,
 }
 
 // sendInboxRemoveMessage sends an inbox-remove message to the broker, used both when a
-// file is overwritten by a reupload and when a file is explicitly deleted by the user.
+// file is overwritten by a reupload and when a file is explicitly removed by the user.
 func (p *Proxy) sendInboxRemoveMessage(username, fileID, s3FilePath string) error {
 	msg := schema.InboxRemove{
 		User:      username,
