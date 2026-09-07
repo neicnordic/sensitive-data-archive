@@ -308,17 +308,17 @@ func (dbs *SQLdb) getDatasetInfo(datasetID string) (*DatasetInfo, error) {
 	return dataset, nil
 }
 
-// GetDatasetFileStableID returns the stable id of a file given a dataset ID and an
+// GetDatasetFileAccessionID returns the accession ID of a file given a dataset ID and an
 // upload file path
-var GetDatasetFileStableID = func(datasetID, filePath string) (string, error) {
+var GetDatasetFileAccessionID = func(datasetID, filePath string) (string, error) {
 	var (
-		fileStableID string
-		err          error
-		count        int
+		fileAccessionID string
+		err             error
+		count           int
 	)
 
 	for count < dbRetryTimes {
-		fileStableID, err = DB.getDatasetFileStableID(datasetID, filePath)
+		fileAccessionID, err = DB.getDatasetFileAccessionID(datasetID, filePath)
 		if err != nil {
 			count++
 
@@ -328,11 +328,11 @@ var GetDatasetFileStableID = func(datasetID, filePath string) (string, error) {
 		break
 	}
 
-	return fileStableID, err
+	return fileAccessionID, err
 }
 
 // getDatasetFileInfo is the actual function performing work for GetFile
-func (dbs *SQLdb) getDatasetFileStableID(datasetID, filePath string) (string, error) {
+func (dbs *SQLdb) getDatasetFileAccessionID(datasetID, filePath string) (string, error) {
 	dbs.checkAndReconnectIfNeeded()
 
 	db := dbs.DB
@@ -348,9 +348,9 @@ FROM sda.files
 	// first slash-separated path element. The first path element is the id of
 	// the uploading user which should not be displayed.
 
-	var fileStableID string
+	var fileAccessionID string
 	// nolint:rowserrcheck
-	err := db.QueryRow(query, datasetID, filePath).Scan(&fileStableID)
+	err := db.QueryRow(query, datasetID, filePath).Scan(&fileAccessionID)
 
 	if err != nil {
 		log.Error(err)
@@ -358,7 +358,7 @@ FROM sda.files
 		return "", err
 	}
 
-	return fileStableID, nil
+	return fileAccessionID, nil
 }
 
 // GetDatasetsContainingFile returns the accession ids of all datasets which contains the file
