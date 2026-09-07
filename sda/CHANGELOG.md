@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - BROKER_QUEUE -> SOURCE_QUEUE
       - BROKER_ROUTINGKEY -> ROUTING_KEY
       - BROKER_PREFETCHCOUNT -> BROKER_PREFETCH_COUNT
+- intercept:
+  - Update to use broker/v2 instead of broker (v1)
+  - Refactor and add unit tests
+  - Add configuration options for destination routing keys
 
 ### Fixed
 
