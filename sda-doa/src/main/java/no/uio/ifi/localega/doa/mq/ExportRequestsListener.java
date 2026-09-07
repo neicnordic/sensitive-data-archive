@@ -81,15 +81,15 @@ public class ExportRequestsListener {
             if (StringUtils.isNotEmpty(requestedDatasetId)) {
                 if (metadataService.findByReferenceId(requestedDatasetId) != null) {
                     Integer datasetsDbTableId = metadataService.findByReferenceId(requestedDatasetId).getDatasetId();
-                    String stableDatasetId = metadataService.getDataset(datasetsDbTableId).getStableId();
-                    log.info("Reference id {} mapped to dataset id {}", requestedDatasetId, stableDatasetId);
-                    requestedDatasetId = stableDatasetId; // use stable dataset id instead of reference to complete the export as normal
+                    String datasetAccessionId = metadataService.getDataset(datasetsDbTableId).getAccessionId();
+                    log.info("Reference id {} mapped to dataset id {}", requestedDatasetId, datasetAccessionId);
+                    requestedDatasetId = datasetAccessionId; // use the dataset accession ID instead of the reference to complete the export as normal
                     Collection<String> approvedMappedDatasetIds = approvedDatasetIds.stream()
                             .map(x -> {
                                 var reference = metadataService.findByReferenceId(x);
                                 if (reference != null && reference.getDatasetId() != null) {
                                     var dataset = metadataService.getDataset(reference.getDatasetId());
-                                    return dataset != null ? dataset.getStableId() : x;
+                                    return dataset != null ? dataset.getAccessionId() : x;
                                 } else {
                                     return x;
                                 }

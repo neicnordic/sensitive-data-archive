@@ -24,5 +24,5 @@ public class Dataset {
     private Long id;
 
     @Column(name = "stable_id", unique = true)
-    private String stableId;
+    private String accessionId;
 }
