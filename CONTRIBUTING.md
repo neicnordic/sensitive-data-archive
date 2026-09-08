@@ -26,11 +26,11 @@ To avoid unnecessary work duplication and waste of time and effort, it's general
 
 ## How we work with Git
 
-All work takes place in feature branches. Give your branch a short descriptive name and prefix the name with the most suitable of:
+All work takes place in feature branches. Give your branch a short descriptive name and prefix it with the [Conventional Commits type](#commit-message-format) that best describes the change, for example:
 
-- `feature/`
+- `feat/`
+- `fix/`
 - `docs/`
-- `bugfix/`
 - `test/`
 - `refactor/`
 
