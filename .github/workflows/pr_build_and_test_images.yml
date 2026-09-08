@@ -175,6 +175,9 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
 
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-${{matrix.storage}}-integration.yml
+
       - name: Test sensitive-data-archive ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
 
@@ -186,6 +189,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-sync-integration.yml
       - name: Test sda-sync
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
 
@@ -263,6 +268,9 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml
 
       - name: Test sda-doa ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
