@@ -170,6 +170,7 @@ jobs:
     strategy:
       matrix:
         storage: ["posix", "s3"]
+      fail-fast: false
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -258,6 +259,7 @@ jobs:
     strategy:
       matrix:
         storage: [s3, posix]
+      fail-fast: false
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -309,6 +311,7 @@ jobs:
           - version: "1.36"
             tls: "false"
             storage: "posix"
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
