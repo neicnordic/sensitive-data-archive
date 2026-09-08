@@ -17,4 +17,6 @@ mkdir -p ~/.kube/ && touch ~/.kube/config
 make k3d-create-cluster
 
 docker build -t ghcr.io/neicnordic/sensitive-data-archive:oidc -f .github/integration/scripts/charts/Dockerfile .
-k3d image import ghcr.io/neicnordic/sensitive-data-archive:oidc -c k3s-default
+# direct mode streams the image into each node; the default tools-node mode goes through a
+# shared tarball that the nodes sometimes cannot see, and k3d reports success regardless
+k3d image import --mode direct ghcr.io/neicnordic/sensitive-data-archive:oidc -c k3s-default
