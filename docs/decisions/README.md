@@ -114,7 +114,7 @@ superseded-by: "0005-use-new-approach.md"
 | [0005](0005-introduce-rfcs-as-upstream-exploration-phase.md)  | Introduce RFCs as an upstream exploration phase for ADRs       | accepted |
 | [0006](0006-metrics-and-tracing.md)                           | Metrics and Tracing in the sensitive-data-archive applications | accepted |
 | [0007](0007-use-conventional-commits.md)                      | Use Conventional Commits for commit messages                   | accepted |
-| [0008](0008-use-accessionid-in-application-code.md)           | Use `accessionID` in code, keep `stable_id` in the database    | proposed |
+| [0008](0008-use-accessionid-in-application-code.md)           | Use `accessionID` in code, keep `stable_id` in the database    | accepted |
 
 Numbers `0001` and `0004` were proposed in PRs
 [#2263](https://github.com/neicnordic/sensitive-data-archive/pull/2263) and

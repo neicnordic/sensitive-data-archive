@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: "2026-09-07"
+status: accepted
+date: "2026-09-08"
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 consulted:
