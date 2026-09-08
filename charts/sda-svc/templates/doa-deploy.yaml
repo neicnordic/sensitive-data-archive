@@ -249,6 +249,8 @@ spec:
       {{- if .Values.global.doa.outbox.enabled }}
         - name: OUTBOX_QUEUE
           value: {{ .Values.global.doa.outbox.queue | quote }}
+        - name: OUTBOX_QUEUE_AUTO_CREATE
+          value: "true"
         - name: OUTBOX_TYPE
           value: {{ .Values.global.doa.outbox.type | quote}}
         {{- if eq "s3" .Values.global.doa.outbox.type }}
