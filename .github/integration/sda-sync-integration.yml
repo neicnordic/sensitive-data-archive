@@ -363,7 +363,7 @@ services:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
       - SYNCTEST=true
-    image: python:3.11-slim-bullseye
+    image: python:3.13-slim-trixie
     profiles:
       - tests
     volumes:
