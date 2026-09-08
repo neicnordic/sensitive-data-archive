@@ -10,6 +10,8 @@ on:
       - "sda-sftp-inbox/**"
       - "postgresql/**"
       - "rabbitmq/**"
+      - ".github/integration/**" # the integration tests themselves
+      - ".github/workflows/pr_build_and_test_images.yml"
 env:
   PR_NUMBER: ${{ github.event.number }} # Needed by the triggered integration tests to pull image for this PR
 
