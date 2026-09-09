@@ -316,6 +316,13 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	switch status {
 	case "uploaded", "disabled":
 
+	case "removed":
+		reason := "file is removed, cannot ingest"
+		slog.Error(reason, "file-id", fileID)
+
+		// Publish to error queue so the message can be analyzed and not silently dropped.
+		return []func(){app.errorQueue(message, "file is removed, cannot ingest")}, nil
+
 	case "":
 		// Catch all for implementations inbox uploading that does not register the file in the DB, e.g. for those not using S3inbox or sftpInbox
 		// Since we dont have the submission location in storage, we need to look through all configured storage locations.
