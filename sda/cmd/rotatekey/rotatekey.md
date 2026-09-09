@@ -59,20 +59,20 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
 - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queue or stream to read messages from (commonly `rotatekey_stream`)
+- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey_stream`)
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `BROKER_ROUTINGKEY`: routing from a rabbitmq exchange to the rotatekey queue
-- `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `REVERIFY_ROUTING_KEY`: routing from a rabbitmq exchange to the rotatekey queue
+- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
 
 ### PostgreSQL Database settings
 
-- `DB_HOST`: hostname for the postgresql database
-- `DB_PORT`: database port (commonly 5432)
-- `DB_USER`: username for the database
-- `DB_PASSWORD`: password for the database
-- `DB_DATABASE`: database name
-- `DB_SSLMODE`: The TLS encryption policy to use for database connections. Valid options are:
+- `DATABASE_HOST`: hostname for the postgresql database
+- `DATABASE_PORT`: database port (commonly 5432)
+- `DATABASE_USER`: username for the database
+- `DATABASE_PASSWORD`: password for the database
+- `DATABASE_NAME`: database name
+- `DATABASE_SSL_MODE`: The TLS encryption policy to use for database connections. Valid options are:
   - `disable`
   - `allow`
   - `prefer`
@@ -92,11 +92,11 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 ### GRPC settings
 
-- `GRPC_HOST`: Host name of the grpc server
-- `GRPC_PORT`: Port number of the grpc server
-- `GRPC_CACERT`: Certificate Authority (CA) certificate for validating incoming request
-- `GRPC_SERVERCERT`: path to the x509 certificate used by the service
-- `GRPC_SERVERKEY`: path to the x509 private key used by the service
+- `REENCRYPT_TARGET`: The target where the Reencrypt service is hosted, see https://github.com/grpc/grpc/blob/master/doc/naming.md for more details on syntax
+- `REENCRYPT_TIMEOUT`: The duration before timing out when calling the Reencrypt service
+- `REENCRYPT_CA_CERT`: Path to the ca cert file used when calling the the Reencrypt service
+- `REENCRYPT_CLIENT_CERT`: Path to client cert file used when calling the the Reencrypt service
+- `REENCRYPT_CLIENT_KEY`: Path to client key file used when calling the the Reencrypt service
 
 
 ### Logging settings

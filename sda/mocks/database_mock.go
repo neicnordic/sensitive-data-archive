@@ -50,7 +50,12 @@ func (m *MockDatabase) ListUserDatasets(_ context.Context, submissionUser string
 func (m *MockDatabase) ListKeyHashes(_ context.Context) ([]*database.C4ghKeyHash, error) {
 	args := m.Called()
 
-	return args.Get(0).([]*database.C4ghKeyHash), args.Error(1)
+	v := args.Get(0)
+	if v == nil {
+		return nil, args.Error(1)
+	}
+
+	return v.([]*database.C4ghKeyHash), args.Error(1)
 }
 
 func (m *MockDatabase) ListDatasets(_ context.Context) ([]*database.DatasetInfo, error) {
@@ -242,8 +247,12 @@ func (m *MockDatabase) GetFileStatus(_ context.Context, fileID string) (string, 
 
 func (m *MockDatabase) GetHeader(_ context.Context, fileID string) ([]byte, error) {
 	args := m.Called(fileID)
+	v := args.Get(0)
+	if v == nil {
+		return nil, args.Error(1)
+	}
 
-	return args.Get(0).([]byte), args.Error(1)
+	return v.([]byte), args.Error(1)
 }
 
 func (m *MockDatabase) BackupHeader(_ context.Context, fileID string, header []byte, keyHash string) error {

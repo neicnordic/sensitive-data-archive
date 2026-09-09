@@ -294,8 +294,8 @@ services:
     environment:
       - BROKER_PASSWORD=rotatekey
       - BROKER_USER=rotatekey
-      - BROKER_QUEUE=rotatekey
-      - BROKER_ROUTINGKEY=rotatekey
+      - SOURCE_QUEUE=rotatekey
+      - REVERIFY_ROUTING_KEY=archived
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
     restart: always

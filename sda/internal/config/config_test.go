@@ -540,7 +540,7 @@ func (ts *ConfigTestSuite) TestConfigReEncryptServer_noKeys() {
 
 func (ts *ConfigTestSuite) TestConfigReEncryptClient() {
 	ts.SetupTest()
-	conf, err := configReEncryptClient()
+	conf, err := ConfigReEncryptClient()
 	assert.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "reencrypt", conf.Host)
 	assert.Nil(ts.T(), conf.ClientCreds)
@@ -550,7 +550,7 @@ func (ts *ConfigTestSuite) TestConfigReEncryptClient_withTLS() {
 	viper.Set("grpc.CACert", certPath+"/ca.crt")
 	viper.Set("grpc.clientCert", certPath+"/tls.crt")
 	viper.Set("grpc.clientKey", certPath+"/tls.key")
-	conf, err := configReEncryptClient()
+	conf, err := ConfigReEncryptClient()
 	assert.NoError(ts.T(), err)
 	assert.NotNil(ts.T(), conf.ClientCreds)
 	assert.Equal(ts.T(), 50443, conf.Port)
