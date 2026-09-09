@@ -21,12 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
   - Use log/slog for logging instead of logrus.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- inbox project code:
+  - **Breaking:** `storage.inbox.projectCode` and `storage.inbox.projectCodeDelimiter` are renamed to `inboxpath.project_code` and `inboxpath.project_delimiter`. A deployment that sets the old keys silently falls back to the stock inbox layout, so update the config before upgrading.
+  - New `internal/inboxpath` package owns the layout: it registers both keys through `config/v2`, so they appear in `--help`, and carries `ResolveInboxPath`. Services call `inboxpath.Load()` once at startup to validate, then resolve paths without holding any config of their own.
+  - `helper.ResolveInboxPath` and `helper.UnanonymizeFilepath` moved into that package, so `internal/config` no longer imports `internal/helper`. `helper.AnonymizeFilepath` stays where it is.
+  - Only ingest, mapper and api validate the section now. finalize, verify and intercept never read it and no longer fail at startup on a malformed one.
 
 ### Fixed
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
+- api: resolve the inbox path through the configured project-code layout again when deleting and downloading inbox files. The `gin` -> `net/http` rewrite in 3.1.75 reverted both call sites to the stock `UnanonymizeFilepath`, so on a deployment with `storage.inbox.projectCode` set they addressed a directory that does not exist: the download returned 500, and on an s3 inbox the delete reported success while leaving the file in place.
 
 ## [3.1.76] - 2026-07-15
 

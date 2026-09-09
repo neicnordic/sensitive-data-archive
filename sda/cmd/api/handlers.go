@@ -25,7 +25,7 @@ import (
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 )
@@ -417,7 +417,7 @@ func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath = helper.UnanonymizeFilepath(filePath, username)
+	filePath = inboxpath.ResolveInboxPath(filePath, username)
 	for count := 1; count <= 5; count++ {
 		err = api.inboxWriter.RemoveFile(r.Context(), location, filePath)
 		if err == nil {
@@ -490,10 +490,11 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := api.inboxReader.NewFileReader(r.Context(), location, helper.UnanonymizeFilepath(filePath, submissionUser))
+	inboxPath := inboxpath.ResolveInboxPath(filePath, submissionUser)
+	file, err := api.inboxReader.NewFileReader(r.Context(), location, inboxPath)
 	if err != nil {
 		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("inbox file not found or failed to read", "file_path", filePath, "err", err)
+		slog.Error("inbox file not found or failed to read", "file_path", inboxPath, "err", err)
 		writeJSON(w, http.StatusInternalServerError, "failed to read inbox file")
 
 		return

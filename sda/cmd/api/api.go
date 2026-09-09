@@ -22,6 +22,7 @@ import (
 	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
@@ -59,6 +60,10 @@ func run() error {
 
 	if err := config.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	if err := inboxpath.Load(); err != nil {
+		return fmt.Errorf("failed to load inbox path config: %v", err)
 	}
 
 	db, err := postgres.NewPostgresSQLDatabase()
