@@ -384,7 +384,7 @@ func NewConfig(app string) (*Config, error) {
 			return nil, err
 		}
 
-		c.API.Grpc, err = configReEncryptClient()
+		c.API.Grpc, err = ConfigReEncryptClient()
 		if err != nil {
 			return nil, err
 		}
@@ -488,7 +488,7 @@ func NewConfig(app string) (*Config, error) {
 		c.configSchemas()
 
 		var err error
-		c.RotateKey.Grpc, err = configReEncryptClient()
+		c.RotateKey.Grpc, err = ConfigReEncryptClient()
 		if err != nil {
 			return nil, err
 		}
@@ -692,7 +692,7 @@ func (c *Config) configOrchestrator() {
 	}
 }
 
-func configReEncryptClient() (Grpc, error) {
+func ConfigReEncryptClient() (Grpc, error) {
 	var grpc Grpc
 	grpc.Host = viper.GetString("grpc.host")
 	grpc.Port = 50051
