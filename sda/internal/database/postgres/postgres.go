@@ -153,6 +153,10 @@ func (db *pgDb) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return db.getFileIDByUserPathAndStatus(ctx, nil, submissionUser, filePath, status)
 }
 
+func (db *pgDb) GetFileIDByUserAndPath(ctx context.Context, submissionUser, filePath string) (string, error) {
+	return db.getFileIDByUserAndPath(ctx, nil, submissionUser, filePath)
+}
+
 func (db *pgDb) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return db.updateFileEventLog(ctx, nil, fileID, event, user, details, message)
 }
