@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add observability package which adds support for tracing and metrics collecting and exporting with OpenTelemetry
+  - See [Observability README.md](internal/observability/README.md) for additional information
   - Add OpenTelemetry instrumentation for the PostgreSQL database connection
   - Add support for injecting/extracting trace headers on the broker rabbitmq to support distributed tracing
   - Add tracing in the storage reader/writer libraries for s3 and posix

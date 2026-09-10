@@ -74,6 +74,11 @@ which is the behaviour of earlier releases. Two further things it does not do:
   that the download configuration is always built from the provider's access
   token, regardless of `AUTH_RESIGNJWT`.
 
+
+## Observability
+The auth service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
+
 ## Running with Cross-Origin Resource Sharing (CORS)
 
 This service can be run as a backend only, and in the case where the frontend is running somewhere else, CORS is needed.
