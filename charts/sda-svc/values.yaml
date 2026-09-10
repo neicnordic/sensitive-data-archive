@@ -20,9 +20,7 @@ global:
     # and export traces to the configured otelExporterOtlpEndpoint
     # If global.networkPolicy.create is enabled a network policy to allow egress to the OTLP endpoint, and allow ingress to services at 9090 needs to be added
     enabled: false
-    # If client transport security(TLS) should be disabled/enabled on the exporter connection
-    otelExporterOtlpInsecure: false
-    # Endpoint to which the applications export the otlp trace information, needs to be set if observability is to be enabled
+    # Endpoint to which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo:4318, needs to be set if observability is to be enabled.
     otelExporterOtlpEndpoint: ""
 
 
