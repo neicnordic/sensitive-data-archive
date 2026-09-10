@@ -317,7 +317,12 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 			slog.Any("error", err),
 		)
 
-		return nil, err
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return []func(){app.errorQueue(message, "file reverification data not found")}, nil
+		default:
+			return nil, err
+		}
 	}
 
 	reVerify := schema.IngestionVerification{
@@ -336,7 +341,7 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 	if err != nil {
 		slog.Error("validation of outgoing re-verify message failed", slog.Any("error", err))
 
-		return nil, err
+		return []func(){app.errorQueue(message, "validation of outgoing re-verify message failed")}, nil
 	}
 
 	if err := tx.Commit(); err != nil {
