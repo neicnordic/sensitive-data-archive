@@ -35,7 +35,7 @@ func init() {
 		}, &config.Flag{
 			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "rotatekey_stream", "The queue where the verify service consumes messages from")
+				flagSet.String(flagName, "rotatekey", "The queue where the verify service consumes messages from")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
@@ -63,7 +63,7 @@ func init() {
 		&config.Flag{
 			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "archived", "The routing key where the rotatekey service publishes reverify messages with")
+				flagSet.String(flagName, "archived", "The routing key which the rotatekey service publishes reverify messages with")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
