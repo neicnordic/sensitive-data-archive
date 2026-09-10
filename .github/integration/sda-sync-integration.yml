@@ -177,7 +177,7 @@ services:
     environment:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
-      - source_QUEUE=accession
+      - SOURCE_QUEUE=accession
       - ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
