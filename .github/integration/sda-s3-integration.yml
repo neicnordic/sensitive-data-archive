@@ -17,7 +17,7 @@ services:
       - shared:/shared
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:3.0.2
     container_name: tempo
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
@@ -29,7 +29,7 @@ services:
 
   prometheus:
     container_name: prometheus
-    image: prom/prometheus
+    image: prom/prometheus:v3.14.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-remote-write-receiver
@@ -41,7 +41,7 @@ services:
       - 9090:9090
 
   grafana:
-    image: grafana/grafana-enterprise
+    image: grafana/grafana-enterprise:13.2.1
     depends_on:
       tempo:
         condition: service_started
