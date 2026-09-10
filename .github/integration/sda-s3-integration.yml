@@ -134,7 +134,6 @@ services:
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
@@ -168,7 +167,6 @@ services:
       - DATABASE_PASSWORD=ingest
       - DATABASE_USER=ingest
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
     extra_hosts:
@@ -198,7 +196,6 @@ services:
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
     extra_hosts:
@@ -230,7 +227,6 @@ services:
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
     extra_hosts:
@@ -261,7 +257,6 @@ services:
       - DATABASE_PASSWORD=mapper
       - DATABASE_USER=mapper
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
     extra_hosts:
@@ -290,7 +285,6 @@ services:
       - DATABASE_PASSWORD=api
       - DATABASE_USER=api
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
@@ -310,7 +304,6 @@ services:
     container_name: reencrypt
     environment:
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     depends_on:
       credentials:
@@ -346,7 +339,6 @@ services:
     environment:
       - CONFIG_FILE=/config.yaml
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
@@ -377,7 +369,6 @@ services:
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
     ports:
@@ -423,7 +414,6 @@ services:
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
@@ -448,7 +438,6 @@ services:
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
       - OBSERVABILITY_ENABLED=true
-      - OTEL_EXPORTER_OTLP_INSECURE=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
