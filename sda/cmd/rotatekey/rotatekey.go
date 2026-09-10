@@ -72,7 +72,7 @@ func run() error {
 		schemaPath:             rotatekeyconfig.SchemaPath(),
 		targetKeyNotUsableChan: make(chan error, 1),
 		reencryptClientTimeout: rotatekeyconfig.ReencryptTimeout(),
-		reverifyRoutingKey:     rotatekeyconfig.ReverifyRoutingKey(),
+		reverifyRoutingKey:     rotatekeyconfig.RoutingKey(),
 		targetPublicKey:        targetPublicKey,
 	}
 
