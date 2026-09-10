@@ -26,6 +26,11 @@
           "action": "POST"
        },
        {
+          "role": "submission",
+          "path": "/file/cancel",
+          "action": "POST"
+       },
+       {
           "role": "admin",
           "path": "/file/events/:fileid",
           "action": "GET"

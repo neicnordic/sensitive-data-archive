@@ -15,6 +15,7 @@ func (api *API) routes() http.Handler {
 	// Files
 	mux.HandleFunc("GET /files", api.rbac(api.getFiles))
 	mux.HandleFunc("POST /file/ingest", api.rbac(api.ingestFile))
+	mux.HandleFunc("POST /file/cancel", api.rbac(api.cancelFile))
 	mux.HandleFunc("POST /file/accession", api.rbac(api.setAccession))
 	mux.HandleFunc("POST /file/rotatekey/{fileid}", api.rbac(api.rotateKeyFile))
 	mux.HandleFunc("GET /file/events/{fileid}", api.rbac(api.getFileEvents))
