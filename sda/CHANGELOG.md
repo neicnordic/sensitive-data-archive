@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - GRPC_CLIENTCERT -> REENCRYPT_CLIENT_CERT
       - GRPC_CLIENTKEY -> REENCRYPT_CLIENT_KEY
       - BROKER_QUEUE -> SOURCE_QUEUE
-      - BROKER_ROUTINGKEY -> REVERIFY_ROUTING_KEY
+      - BROKER_ROUTINGKEY -> ROUTING_KEY
       - BROKER_PREFETCHCOUNT -> BROKER_PREFETCH_COUNT
 
 ### Fixed

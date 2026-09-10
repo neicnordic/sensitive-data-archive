@@ -62,7 +62,7 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
 - `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey_stream`)
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `REVERIFY_ROUTING_KEY`: routing from a rabbitmq exchange to the rotatekey queue
+- `ROUTING_KEY`: routing from a rabbitmq exchange to the rotatekey queue
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
 
 ### PostgreSQL Database settings
