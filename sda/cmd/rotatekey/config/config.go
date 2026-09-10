@@ -12,7 +12,7 @@ import (
 var (
 	targetPublicKey     string
 	sourceQueue         string
-	reverifyRoutingKey  string
+	routingKey          string
 	schemaPath          string
 	reencryptTarget     string
 	reencryptClientCert string
@@ -61,13 +61,13 @@ func init() {
 			},
 		},
 		&config.Flag{
-			Name: "reverify_routing_key",
+			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "archived", "The routing key where the rotatekey service publishes reverify messages with")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				reverifyRoutingKey = viper.GetString(flagName)
+				routingKey = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -130,8 +130,8 @@ func SourceQueue() string {
 	return sourceQueue
 }
 
-func ReverifyRoutingKey() string {
-	return reverifyRoutingKey
+func RoutingKey() string {
+	return routingKey
 }
 func SchemaPath() string {
 	return schemaPath
