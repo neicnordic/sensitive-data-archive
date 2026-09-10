@@ -38,6 +38,10 @@ func (tx *pgTx) GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser
 	return tx.getFileIDByUserPathAndStatus(ctx, tx.tx, submissionUser, filePath, status)
 }
 
+func (tx *pgTx) GetFileIDByUserAndPath(ctx context.Context, submissionUser, filePath string) (string, error) {
+	return tx.getFileIDByUserAndPath(ctx, tx.tx, submissionUser, filePath)
+}
+
 func (tx *pgTx) UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error {
 	return tx.updateFileEventLog(ctx, tx.tx, fileID, event, user, details, message)
 }
