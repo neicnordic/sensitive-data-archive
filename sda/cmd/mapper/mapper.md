@@ -99,3 +99,7 @@ For more details on available configuration see [storage/v2 README.md](../../int
     - `error`
     - `fatal`
     - `panic`
+
+### Observability
+The mapper service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).

@@ -421,3 +421,7 @@ storage:
     ${STORAGE_IMPLEMENTATION}:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
+
+## Observability
+The API service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
