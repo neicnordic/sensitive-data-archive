@@ -88,6 +88,34 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     ```bash
     curl -H "Authorization: Bearer $token" -X POST "https://HOSTNAME/file/ingest?fileid=<FILE_UUID>"
 
+- `/file/cancel`
+  - accepts `POST` requests with either:
+    - A JSON payload: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
+    - OR a `fileid` query parameter: `/file/cancel?fileid=<FILE_UUID>`
+  - triggers the cancellation of the file, thus removing it from the archive and marking it as `disabled`. Only files that have not yet been linked to a dataset can be cancelled. If the file is already added to the archive it will be removed.
+
+  - If both a JSON payload and a `fileid` query parameter are provided in the same request, a `400 Bad Request` is returned.
+
+  - Error codes
+    - `200` Query executed successfully.
+    - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and fileid provided, invalid fileid, or invalid JSON).
+    - `401` Token user is not in the list of admins.
+    - `404` File id is not found, file is not in archive, or file is already disabled.
+    - `409` File has already been linked to a dataset.
+    - `500` Internal error due to DB or MQ failures.
+
+    Example (JSON payload):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d '{"filepath": "/uploads/file.c4gh", "user": "testuser"}' https://HOSTNAME/file/cancel
+    ```
+
+    Example (fileid query parameter):
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X POST "https://HOSTNAME/file/cancel?fileid=<FILE_UUID>"
+    ```
+
 - `/file/accession`
   - accepts `POST` requests with either:
     - A JSON payload: `{"accession_id": "<FILE_ACCESSION>", "filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
@@ -372,6 +400,11 @@ The `roles` section defines the available roles
       {
          "role": "submission",
          "path": "/file/ingest",
+         "action": "POST"
+      },
+      {
+         "role": "admin",
+         "path": "/file/cancel",
          "action": "POST"
       },
       {
