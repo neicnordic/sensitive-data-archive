@@ -51,7 +51,7 @@ export LOG_FORMAT="json"
 
 This setting controls which crypt4gh keyfile is loaded.
 
-- `C4GH_ROTATEPUBKEYPATH`: path to the crypt4gh public key to use for reencrypting file headers.
+- `TARGET_PUBLIC_KEY`: path to the crypt4gh public key to use for reencrypting file headers.
 
 ### RabbitMQ broker settings
 
@@ -59,11 +59,13 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
 - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey_stream`)
+- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey`)
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `ROUTING_KEY`: routing from a rabbitmq exchange to the rotatekey queue
+- `ROUTING_KEY`: The routing key which the rotatekey service publishes reverify messages with
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
+[config.go](config/config.go)
+- `SCHEMA_TYPE`: Schema type to validate incoming broker messages against, supported values: federated, isolated 
 
 ### PostgreSQL Database settings
 
