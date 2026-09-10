@@ -8,17 +8,10 @@ import (
 const getFileIDByUserAndPathQuery = "getFileIDByUserAndPath"
 
 func init() {
-	queries[getFileIDByUserAndPathQuery] = `SELECT id_and_event.id
-FROM (
-    SELECT DISTINCT ON (f.id) f.id, fel.event, fel.started_at FROM sda.files AS f
-        LEFT JOIN sda.file_event_log AS fel ON fel.file_id = f.id
+	queries[getFileIDByUserAndPathQuery] = `SELECT id FROM sda.files AS f
     WHERE f.submission_user = $1
-      AND f.submission_file_path = $2
-    ORDER BY f.id, fel.started_at DESC
-    ) AS id_and_event
-WHERE id_and_event.event != 'disabled'
-ORDER BY id_and_event.started_at DESC
-LIMIT 1;`
+    AND f.submission_file_path = $2
+    AND f.last_event != 'disabled';`
 }
 
 // getFileIDByUserAndPath returns the currently active (not disabled) file for a given
