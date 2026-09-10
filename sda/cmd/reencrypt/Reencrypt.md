@@ -64,3 +64,7 @@ These settings control which crypt4gh keyfile is loaded.
 - `GRPC_CACERT`: Certificate Authority (CA) certificate for validating incoming request
 - `GRPC_SERVERCERT`: path to the x509 certificate used by the service
 - `GRPC_SERVERKEY`: path to the x509 private key used by the service
+
+### Observability
+The reencrypt service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
