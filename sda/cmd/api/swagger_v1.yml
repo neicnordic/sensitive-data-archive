@@ -263,6 +263,38 @@ paths:
           description: Authentication failure.
         "500":
           description: Internal application error.
+  /file/cancel:
+    post:
+      description: |
+        Cancel an the ingestion of a given file. Only files that have not yet
+        been mapped to a datest can be cancelled.
+        You can provide either a JSON payload with `user` and `filepath`, or a `fileid` query parameter.
+        If both are provided, a 400 Bad Request is returned.
+      parameters:
+        - in: query
+          name: fileid
+          schema:
+            type: string
+          required: false
+          description: UUID of the file to cancel. If provided, payload must be empty.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileIngest"
+        required: false
+      responses:
+        "200":
+          description: Successful operation.
+        "400":
+          description: |
+            Bad request. Returned if both fileid and payload are provided, or if payload is invalid, or if fileid is invalid.
+        "401":
+          description: Authentication failure.
+        "409":
+          description: File has already been added to a dataset.
+        "500":
+          description: Internal application error.
   /file/events/{fileID}:
     get:
       description: Get the latest event associated with a given fileid
