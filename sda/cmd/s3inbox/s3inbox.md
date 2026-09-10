@@ -104,3 +104,7 @@ These settings control how verify connects to the RabbitMQ message broker.
     - `error`
     - `fatal`
     - `panic`
+
+### Observability
+The s3inbox service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
