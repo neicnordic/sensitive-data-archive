@@ -144,22 +144,6 @@ func (ts *ConfigTestSuite) TestMissingRequiredConfVar() {
 	}
 }
 
-func (ts *ConfigTestSuite) TestConfigS3Storage() {
-	viper.Set("s3inbox.endpoint", "testurl")
-	viper.Set("s3inbox.access_key", "testaccess")
-	viper.Set("s3inbox.secret_key", "testsecret")
-	viper.Set("s3inbox.bucket", "testbucket")
-	viper.Set("s3inbox.region", "testregion")
-	config, err := NewConfig("s3inbox")
-	assert.NotNil(ts.T(), config)
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "testurl", config.S3Inbox.Endpoint)
-	assert.Equal(ts.T(), "testaccess", config.S3Inbox.AccessKey)
-	assert.Equal(ts.T(), "testsecret", config.S3Inbox.SecretKey)
-	assert.Equal(ts.T(), "testbucket", config.S3Inbox.Bucket)
-	assert.Equal(ts.T(), "testregion", config.S3Inbox.Region)
-}
-
 func (ts *ConfigTestSuite) TestConfigBroker() {
 	viper.Set("s3inbox.endpoint", "mock-value")
 	viper.Set("s3inbox.access_key", "mock-value")
