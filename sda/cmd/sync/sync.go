@@ -134,13 +134,11 @@ func run() error {
 	select {
 	case sig := <-sigc:
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
-		cancel()
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
 			slog.Error("consumer failure", "error", err, "source-queue", syncconf.SourceQueue())
-			cancel()
 
 			return err
 		}
@@ -211,9 +209,10 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 				slog.Any("error", err),
 			)
 
-			// Here we reconsume message, as we don't expect error when syncing file
-			// possible that if some files from message are synced, and then reconsume that sync storage will have duplicate files in different locations
-			return nil, err
+			// send message to error queue and do not requeue
+			// This error message should be handled manually to ensure all files that were not synced are synced once
+			// the cause of the failure has been fixed
+			return []func(){app.errorQueue(message, fmt.Sprintf("failed to sync files: %v", err))}, nil
 		}
 	}
 
