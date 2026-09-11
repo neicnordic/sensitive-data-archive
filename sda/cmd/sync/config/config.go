@@ -24,7 +24,7 @@ func init() {
 		&config.Flag{
 			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "ingest", "The queue where the sync service consumes messages from")
+				flagSet.String(flagName, "mapping_stream", "The queue where the sync service consumes messages from")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
