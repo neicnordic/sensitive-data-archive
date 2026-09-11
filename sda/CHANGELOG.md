@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - verify:
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
+- intercept:
+  - Update to use broker/v2 instead of broker (v1)
+  - Refactor and add unit tests
+  - Add configuration options for destination routing keys
 
 ### Fixed
 
