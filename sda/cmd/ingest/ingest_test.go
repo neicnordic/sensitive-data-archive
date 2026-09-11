@@ -290,6 +290,26 @@ func (ts *TestSuite) TestIngestFile_AlreadyIngested() {
 	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
 }
 
+func (ts *TestSuite) TestIngestFile_RemovedStatus() {
+	fileID := uuid.NewString()
+	userName := "test-ingest"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("removed", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil)
+	ts.mockDB.On("Rollback").Return(nil)
+	ts.mockBroker.On("Publish", "error", mock.Anything).Return(nil)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.NoError(ts.T(), err)
+	ts.mockBroker.AssertCalled(ts.T(), "Publish", "error", mock.Anything)
+}
+
 func (ts *TestSuite) TestIngestFile_MissingFile() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
