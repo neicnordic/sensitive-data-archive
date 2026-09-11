@@ -46,7 +46,7 @@ func TestSync(t *testing.T) {
 		expectedErrorContains      string
 	}{
 		{
-			name: "mapping_success_with_remote",
+			name: "mapping_success_with_remote_basic_auth",
 			sourceMessage: schema.DatasetMapping{
 				Type:         "mapping",
 				DatasetID:    "test_dataset_123",
@@ -102,12 +102,76 @@ func TestSync(t *testing.T) {
 					t.Fatalf("failed to marshal expected sync data: %v", err)
 				}
 
-				ms.On("ServeHTTP", "/", expectedSyncDatasetJSON).Return(http.StatusOK).Once()
+				ms.On("ServeHTTP", "/", "user", "password", true, expectedSyncDatasetJSON).Return(http.StatusOK).Once()
 
 				return mr, mw, mdb, &mocks.MockBroker{}, ms
 			},
 			remoteUser:     "user",
 			remotePassword: "password",
+			withRemote:     true,
+		}, {
+			name: "mapping_success_with_remote_no_basic_auth",
+			sourceMessage: schema.DatasetMapping{
+				Type:         "mapping",
+				DatasetID:    "test_dataset_123",
+				AccessionIDs: []string{"accession_1", "accession_2", "accession_3"},
+			},
+			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mr := &mocks.MockReader{}
+				mw := &mocks.MockWriter{}
+				mdb := &mocks.MockDatabase{}
+				ms := &mockServer{}
+
+				expectedSyncDataset := schema.SyncDataset{
+					DatasetID: "test_dataset_123",
+					User:      "test_user",
+				}
+				for i, accession := range []string{"accession_1", "accession_2", "accession_3"} {
+					fileContent := fmt.Sprintf("file %v content: %s", i, uuid.NewString())
+					ftd, err := generateFileTestData([]byte(fileContent))
+					if err != nil {
+						t.Fatalf("failed to generate test file data: %v", err)
+					}
+
+					archivePath := fmt.Sprintf("archive_path_%d", i)
+					submissionPath := fmt.Sprintf("/inbox_path/file_%d", i)
+
+					mdb.On("GetInboxPath", accession).Return(submissionPath, nil).Once()
+					mdb.On("GetArchivePathAndLocation", accession).Return(archivePath, "archive_location", nil).Once()
+
+					mr.On("GetFileSize", "archive_location", archivePath).Return(int64(len(ftd.encryptedContentNoHeader)), nil).Once()
+					mr.On("NewFileReader", "archive_location", archivePath).Return(ftd.encryptedContentNoHeader, nil).Once()
+
+					mdb.On("GetHeaderByAccessionID", accession).Return(ftd.header, nil).Once()
+
+					mw.On("WriteFile", submissionPath, mock.MatchedBy(func(content []byte) bool {
+						return verifyCanDecryptAndMatch(t, content, fileContent)
+					})).Return("sync_location", nil).Once()
+
+					mdb.On("GetSyncData", accession).Return(&database.SyncData{
+						User:     "test_user",
+						FilePath: submissionPath,
+						Checksum: ftd.unencryptedSha256Checksum,
+					}, nil).Once()
+
+					expectedSyncDataset.DatasetFiles = append(expectedSyncDataset.DatasetFiles, schema.DatasetFiles{
+						FilePath: submissionPath,
+						FileID:   accession,
+						ShaSum:   ftd.unencryptedSha256Checksum,
+					})
+				}
+
+				expectedSyncDatasetJSON, err := json.Marshal(expectedSyncDataset)
+				if err != nil {
+					t.Fatalf("failed to marshal expected sync data: %v", err)
+				}
+
+				ms.On("ServeHTTP", "/", "", "", false, expectedSyncDatasetJSON).Return(http.StatusOK).Once()
+
+				return mr, mw, mdb, &mocks.MockBroker{}, ms
+			},
+			remoteUser:     "",
+			remotePassword: "",
 			withRemote:     true,
 		}, {
 			name: "mapping_remote_failure",
@@ -167,7 +231,7 @@ func TestSync(t *testing.T) {
 					t.Fatalf("failed to marshal expected sync data: %v", err)
 				}
 
-				ms.On("ServeHTTP", "/", expectedSyncDatasetJSON).Return(http.StatusInternalServerError).Once()
+				ms.On("ServeHTTP", "/", "user", "password", true, expectedSyncDatasetJSON).Return(http.StatusInternalServerError).Once()
 
 				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
 					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to send http sync notification: 500 Internal Server Error"
@@ -226,6 +290,7 @@ func TestSync(t *testing.T) {
 			newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mr := &mocks.MockReader{}
 				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
 
 				fileContent := fmt.Sprintf("file 1 content: %s", uuid.NewString())
 				ftd, err := generateFileTestData([]byte(fileContent))
@@ -244,10 +309,13 @@ func TestSync(t *testing.T) {
 
 				mdb.On("GetHeaderByAccessionID", "accession_1").Return(ftd.header, nil).Once()
 
-				return mr, &mocks.MockWriter{}, mdb, &mocks.MockBroker{}, &mockServer{}
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to sync files: failed to upload file to storage, reason: copied size does not match file size"
+				})).Return(nil).Once()
+
+				return mr, &mocks.MockWriter{}, mdb, mb, &mockServer{}
 			},
-			withRemote:            false,
-			expectedErrorContains: "copied size does not match file size",
+			withRemote: false,
 		}, {
 			name: "dataset_release_message",
 			sourceMessage: schema.DatasetMapping{
@@ -402,11 +470,13 @@ type mockServer struct {
 }
 
 func (s *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	username, password, basicAuthPresent := r.BasicAuth()
+
 	expectedBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.Called("failure to read request body")
 	}
 
-	args := s.Called(r.URL.Path, expectedBody)
+	args := s.Called(r.URL.Path, username, password, basicAuthPresent, expectedBody)
 	w.WriteHeader(args.Int(0))
 }
