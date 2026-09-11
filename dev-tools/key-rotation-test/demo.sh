@@ -219,15 +219,15 @@ case_3_invalid_rotation_target() {
     # Allow time for the container to attempt initialization and fail
     sleep 2
 
-    echo -e "\nStep 3.2: Verifying rotatekey service crashed on missing c4gh.rotatePubKeyPath..."
+    echo -e "\nStep 3.2: Verifying rotatekey service crashed on missing target_public_key..."
 
     # Capture stderr and stdout from the container logs
     LOG_OUTPUT=$(docker compose logs rotatekey 2>&1)
 
-    if echo "$LOG_OUTPUT" | grep -q "c4gh.rotatePubKeyPath not set"; then
+    if echo "$LOG_OUTPUT" | grep -q "missing required flag: target_public_key"; then
         echo -e "\033[1;32mSUCCESS: rotatekey correctly refused to start due to missing configuration.\033[0m"
         echo "Observed fatal log output:"
-        echo "$LOG_OUTPUT" | grep "c4gh.rotatePubKeyPath not set" | head -n 5
+        echo "$LOG_OUTPUT" | grep "missing required flag: target_public_key" | head -n 5
     else
         echo -e "\033[1;31mFAILED: rotatekey did not fail with the expected configuration error.\033[0m"
         echo "Full log output:"
@@ -822,10 +822,10 @@ case_8_rotate_to_deprecated_key_rejection() {
     echo -e "\nStep 8.7: Verifying background rejection in rotatekey container logs..."
     ROTATE_LOGS=$(docker compose logs --tail=50 rotatekey 2>&1)
 
-    if echo "$ROTATE_LOGS" | grep -q "the c4gh key hash has been deprecated"; then
-        echo "✅ SUCCESS: rotatekey service logged fatal rejection: 'the c4gh key hash has been deprecated'"
+    if echo "$ROTATE_LOGS" | grep -q "key deprecated"; then
+        echo "✅ SUCCESS: rotatekey service logged fatal rejection: 'key deprecated'"
     else
-        echo "❌ FAILURE: Expected log message 'the c4gh key hash has been deprecated' was not found in rotatekey logs!"
+        echo "❌ FAILURE: Expected log message 'key deprecated' was not found in rotatekey logs!"
         echo "--- Recent rotatekey logs ---"
         echo "$ROTATE_LOGS"
         echo "-----------------------------"

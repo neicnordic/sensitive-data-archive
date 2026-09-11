@@ -1,346 +1,471 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
-	"os"
-	"path"
-	"runtime"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
+	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
-	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
-	"github.com/ory/dockertest"
-	"github.com/ory/dockertest/docker"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
+	"github.com/neicnordic/sensitive-data-archive/internal/schema"
+	"github.com/neicnordic/sensitive-data-archive/mocks"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
-var mqPort int
-var dbPort uint16
+var oldPublicKey, _, oldKeyGenerationError = keys.GenerateKeyPair()
+var targetPublicKey, _, targetKeyGenerationError = keys.GenerateKeyPair()
 
-func TestMain(m *testing.M) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		m.Run()
-	}
-	_, b, _, _ := runtime.Caller(0)
-	rootDir := path.Join(path.Dir(b), "../../../")
-
-	// uses a sensible default on windows (tcp/http) and linux/osx (socket)
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("Could not construct pool: %s", err)
-	}
-
-	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
-	if err != nil {
-		log.Fatalf("Could not connect to Docker: %s", err)
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	postgresContainer, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15.4-alpine3.17",
-		Env: []string{
-			"POSTGRES_PASSWORD=rootpasswd",
-			"POSTGRES_DB=sda",
-		},
-		Mounts: []string{
-			fmt.Sprintf("%s/postgresql/initdb.d:/docker-entrypoint-initdb.d", rootDir),
-		},
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	dbHostAndPort := postgresContainer.GetHostPort("5432/tcp")
-	dbPortUint64, _ := strconv.ParseUint(postgresContainer.GetPort("5432/tcp"), 10, 16)
-	dbPort = uint16(dbPortUint64)
-	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
-
-	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
-		db, err := sql.Open("postgres", databaseURL)
-		if err != nil {
-			log.Println(err)
-
-			return err
-		}
-
-		query := "SELECT MAX(version) FROM sda.dbschema_version;"
-		var dbVersion int
-
-		return db.QueryRow(query).Scan(&dbVersion)
-	}); err != nil {
-		log.Fatalf("Could not connect to postgres: %s", err)
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	rabbitmq, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "ghcr.io/neicnordic/sensitive-data-archive",
-		Tag:        "v3.0.0-rabbitmq",
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true so that stopped container goes away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-	if err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	mqPort, _ = strconv.Atoi(rabbitmq.GetPort("5672/tcp"))
-	brokerAPI := rabbitmq.GetHostPort("15672/tcp")
-
-	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "http://"+brokerAPI+"/api/queues/sda/", http.NoBody)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.SetBasicAuth("guest", "guest")
-
-	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
-		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
-		if err != nil || res.StatusCode != 200 {
-			return err
-		}
-		_ = res.Body.Close()
-
-		return nil
-	}); err != nil {
-		if err := pool.Purge(postgresContainer); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		if err := pool.Purge(rabbitmq); err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-		log.Fatalf("Could not connect to rabbitmq: %s", err)
-	}
-
-	log.Println("starting tests")
-	code := m.Run()
-
-	log.Println("tests completed")
-	if err := pool.Purge(postgresContainer); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-	if err := pool.Purge(rabbitmq); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
-
-	os.Exit(code)
+type mockReencryptClient struct {
+	mock.Mock
 }
 
-type TestSuite struct {
-	suite.Suite
-	app            RotateKey
-	fileID         string
-	privateKeyList []*[32]byte
-	verificationDB *sql.DB
-}
-type server struct {
-	re.UnimplementedReencryptServer
-	c4ghPrivateKeyList []*[32]byte
-}
+func (mrc *mockReencryptClient) ReencryptHeader(ctx context.Context, in *reencrypt.ReencryptRequest, _ ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
+	args := mrc.Called(in.GetPublickey(), in.GetOldheader())
 
-func TestRotateKeyTestSuite(t *testing.T) {
-	suite.Run(t, new(TestSuite))
-}
-
-func (ts *TestSuite) TearDownSuite() {
-	_ = ts.app.db.Close()
-	if ts.verificationDB != nil {
-		ts.NoError(ts.verificationDB.Close())
-	}
-}
-func (ts *TestSuite) SetupSuite() {
-	ts.app.Conf = &config.Config{}
-	ts.app.Conf.Broker.SchemasPath = "../../schemas/isolated"
-	var err error
-	ts.app.db, err = postgres.NewPostgresSQLDatabase(
-		postgres.Host("localhost"),
-		postgres.Port(dbPort),
-		postgres.User("postgres"),
-		postgres.Password("rootpasswd"),
-		postgres.DatabaseName("sda"),
-		postgres.Schema("sda"),
-		postgres.SslMode("disable"),
-	)
-	if err != nil {
-		ts.FailNow("Failed to create DB connection")
-	}
-	ts.verificationDB, err = sql.Open("postgres", fmt.Sprintf("host=localhost port=%d user=postgres password=rootpasswd dbname=sda sslmode=disable search_path=sda", dbPort))
-	if err != nil {
-		ts.FailNow("Failed to create DB connection")
-	}
-	ts.app.MQ, err = broker.NewMQ(broker.MQConf{
-		Host:     "localhost",
-		Port:     mqPort,
-		User:     "guest",
-		Password: "guest",
-		Exchange: "sda",
-		Vhost:    "/sda",
-	})
-	if err != nil {
-		ts.T().Log(err.Error())
-		ts.FailNow("Failed to create MQ connection")
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
-	publicKey, _, err := keys.GenerateKeyPair()
-	if err != nil {
-		ts.FailNow("Failed to create new c4gh keypair")
+	rsp := args.Get(0)
+	if rsp == nil {
+		return nil, args.Error(1)
 	}
 
-	for i, kh := range []string{"79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", hex.EncodeToString(publicKey[:])} {
-		if err := ts.app.db.AddKeyHash(context.Background(), kh, fmt.Sprintf("key num: %d", i)); err != nil {
-			ts.FailNow("failed to register a public key")
-		}
-	}
-
-	ts.app.Conf.RotateKey.PublicKey = &publicKey
-
-	ts.fileID, err = ts.app.db.RegisterFile(context.Background(), nil, "/inbox", "rotate-key-test/data.c4gh", "tester_example.org")
-	if err != nil {
-		ts.FailNow("Failed to register file in DB")
-	}
-	for _, status := range []string{"uploaded", "archived", "verified"} {
-		if err = ts.app.db.UpdateFileEventLog(context.Background(), ts.fileID, status, "tester_example.org", "{}", "{}"); err != nil {
-			ts.FailNow("Failed to set status of file in DB")
-		}
-	}
-	if err := ts.app.db.SetKeyHash(context.Background(), "79f2f4dd9cd9435743d5e8ef3d0da55d64437055e89cfa5531395abf8857bd63", ts.fileID); err != nil {
-		ts.FailNow("Failed to set key hash of file in DB")
-	}
-	if err := ts.app.db.StoreHeader(context.Background(), []byte("637279707434676801000000010000006c000000000000004f6ae97503ac19b6316cb3330ea4e55e0fa98ed7342afc79deec64606aa33a587e78743695f3be5d5b9d0f386c2b66aefb06de07c506eccec4910455d75f54ce6324b98b4dd35dcc6c0684bbf8a05fb5c2976f540dbbbc95646c2e55ec52c5833115e5659"), ts.fileID); err != nil {
-		ts.FailNow("Failed to store header of file in DB")
-	}
-
-	fileInfo := &database.FileInfo{
-		ArchivedChecksum:  "239729e2f471a02f8b43374fa58ea2d3a85ec93874b58696030b4af804c32f36",
-		DecryptedChecksum: "9aa63cfe45c560c8f16dde4b002a3fe38afa69801df6a6e266b757ab6aace2d8",
-		DecryptedSize:     34,
-		Path:              ts.fileID,
-		Size:              59,
-	}
-	if err := ts.app.db.SetVerified(context.Background(), fileInfo, ts.fileID); err != nil {
-		ts.FailNow("Failed to store header of file in DB")
-	}
-
-	lis, err := net.Listen("tcp", "localhost:")
-	if err != nil {
-		log.Errorf("failed to create listener: %v", err)
-		ts.T().FailNow()
-	}
-	reHost, rePort, err := net.SplitHostPort(lis.Addr().String())
-	if err != nil {
-		ts.T().FailNow()
-	}
-	go func() {
-		var opts []grpc.ServerOption
-		s := grpc.NewServer(opts...)
-		re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: ts.privateKeyList})
-		reflection.Register(s)
-		if err := s.Serve(lis); err != nil {
-			log.Errorf("failed to start GRPC server: %v", err)
-			ts.T().Fail()
-		}
-	}()
-
-	rePortInt, err := strconv.Atoi(rePort)
-	if err != nil {
-		ts.T().FailNow()
-	}
-
-	ts.app.Conf.RotateKey.Grpc = config.Grpc{
-		Host:    reHost,
-		Port:    rePortInt,
-		Timeout: 30,
-	}
-
-	ts.T().Log("suite setup completed")
+	return rsp.(*reencrypt.ReencryptResponse), args.Error(1)
 }
 
-// ReencryptHeader serves a mock response since we don't need to test the actual reencryption
-func (s *server) ReencryptHeader(ctx context.Context, req *re.ReencryptRequest) (*re.ReencryptResponse, error) {
-	// Mock response based on your needs
-	if req.Publickey == "phail" {
-		return &re.ReencryptResponse{}, errors.New("bad error")
+func TestRotateKey(t *testing.T) {
+	if oldKeyGenerationError != nil {
+		t.Fatalf("old key generation error: %v", oldKeyGenerationError)
+	}
+	if targetKeyGenerationError != nil {
+		t.Fatalf("target key generation error: %v", targetKeyGenerationError)
 	}
 
-	mockedResponse := &re.ReencryptResponse{
-		Header: []byte("predefined header response"),
-	}
-
-	return mockedResponse, nil
-}
-
-func (ts *TestSuite) TestReEncryptHeader() {
-	newFileID := uuid.NewString()
-	for _, test := range []struct {
-		expectedError error
-		expectedMgs   string
-		expectedRes   string
-		fileID        string
-		testName      string
-		verifyBackup  bool
+	for _, tc := range []struct {
+		name                            string
+		sourceMessage                   schema.KeyRotation
+		reencryptClientTimeout          time.Duration
+		newMocks                        func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient)
+		expectedError                   error
+		expectedTargetKeyNotUsableError error
 	}{
 		{
-			testName:      "ingested file",
-			expectedError: nil,
-			expectedMgs:   "",
-			expectedRes:   "ack",
-			fileID:        ts.fileID,
-			verifyBackup:  true,
-		},
-		{
-			testName:      "un-ingested file",
-			expectedError: errors.New("sql: no rows in result set"),
-			expectedMgs:   fmt.Sprintf("failed to get keyhash for file with file-id: %s", newFileID),
-			expectedRes:   "ackSendToError",
-			fileID:        newFileID,
-			verifyBackup:  false,
+			name: "success",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				mrc := &mockReencryptClient{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return([]byte("old_header"), nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("Rollback").Return(nil).Once()
+				mdb.On("Commit").Return(nil).Once()
+				mdb.On("BackupHeader", "00000000-0000-0000-0000-000000000000", []byte("old_header"), oldKeyHash).Return(nil).Once()
+
+				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Return(&reencrypt.ReencryptResponse{
+					Header: []byte("new_header"),
+				}, nil).Once()
+
+				mdb.On("RotateHeaderKey", []byte("new_header"), newKeyHash, "00000000-0000-0000-0000-000000000000").Return(nil).Once()
+
+				mdb.On("GetReVerificationDataFromFileID", "00000000-0000-0000-0000-000000000000").Return(&database.ReVerificationData{
+					FileID:               "00000000-0000-0000-0000-000000000000",
+					ArchiveFilePath:      "/archive/test_file",
+					SubmissionFilePath:   "/inbox/test_file",
+					SubmissionUser:       "test_user",
+					ArchivedCheckSum:     "1234123412341234123412341234123412341234123412341234123412341234",
+					ArchivedCheckSumType: "sha256",
+				}, nil).Once()
+
+				mb.On("Publish", "reverify_queue", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var reverifyMessage schema.IngestionVerification
+
+					if err := json.Unmarshal(msg.Body, &reverifyMessage); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return reverifyMessage.User == "test_user" &&
+						reverifyMessage.FilePath == "/inbox/test_file" &&
+						reverifyMessage.FileID == "00000000-0000-0000-0000-000000000000" &&
+						reverifyMessage.ArchivePath == "/archive/test_file" &&
+						len(reverifyMessage.EncryptedChecksums) == 1 &&
+						reverifyMessage.EncryptedChecksums[0].Type == "sha256" &&
+						reverifyMessage.EncryptedChecksums[0].Value == "1234123412341234123412341234123412341234123412341234123412341234" &&
+						reverifyMessage.ReVerify
+				})).Return(nil).Once()
+
+				return mdb, mb, mrc
+			},
+		}, {
+			name: "publish_failure",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				mrc := &mockReencryptClient{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return([]byte("old_header"), nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("Rollback").Return(nil).Once()
+				mdb.On("Commit").Return(nil).Once()
+				mdb.On("BackupHeader", "00000000-0000-0000-0000-000000000000", []byte("old_header"), oldKeyHash).Return(nil).Once()
+
+				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Return(&reencrypt.ReencryptResponse{
+					Header: []byte("new_header"),
+				}, nil).Once()
+
+				mdb.On("RotateHeaderKey", []byte("new_header"), newKeyHash, "00000000-0000-0000-0000-000000000000").Return(nil).Once()
+
+				mdb.On("GetReVerificationDataFromFileID", "00000000-0000-0000-0000-000000000000").Return(&database.ReVerificationData{
+					FileID:               "00000000-0000-0000-0000-000000000000",
+					ArchiveFilePath:      "/archive/test_file",
+					SubmissionFilePath:   "/inbox/test_file",
+					SubmissionUser:       "test_user",
+					ArchivedCheckSum:     "1234123412341234123412341234123412341234123412341234123412341234",
+					ArchivedCheckSumType: "sha256",
+				}, nil).Once()
+
+				mb.On("Publish", "reverify_queue", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var reverifyMessage schema.IngestionVerification
+
+					if err := json.Unmarshal(msg.Body, &reverifyMessage); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return reverifyMessage.User == "test_user" &&
+						reverifyMessage.FilePath == "/inbox/test_file" &&
+						reverifyMessage.FileID == "00000000-0000-0000-0000-000000000000" &&
+						reverifyMessage.ArchivePath == "/archive/test_file" &&
+						len(reverifyMessage.EncryptedChecksums) == 1 &&
+						reverifyMessage.EncryptedChecksums[0].Type == "sha256" &&
+						reverifyMessage.EncryptedChecksums[0].Value == "1234123412341234123412341234123412341234123412341234123412341234" &&
+						reverifyMessage.ReVerify
+				})).Return(errors.New("publish failure")).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var keyRotationMsg schema.KeyRotation
+
+					if err := json.Unmarshal(msg.Body, &keyRotationMsg); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return keyRotationMsg.Type == "key_rotation" &&
+						keyRotationMsg.FileID == "00000000-0000-0000-0000-000000000000" &&
+						msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to publish re verify message after database transaction committed"
+				})).Return(nil).Once()
+
+				return mdb, mb, mrc
+			},
+		}, {
+			name: "reencrypt_retryable_error",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				mrc := &mockReencryptClient{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return([]byte("old_header"), nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("Rollback").Return(nil).Once()
+				mdb.On("BackupHeader", "00000000-0000-0000-0000-000000000000", []byte("old_header"), oldKeyHash).Return(nil).Once()
+
+				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Return(nil, errors.New("error")).Once()
+
+				return mdb, mb, mrc
+			},
+			expectedError: errors.New("error"),
+		}, {
+			name: "reencrypt_timeout",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				mrc := &mockReencryptClient{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return([]byte("old_header"), nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("Rollback").Return(nil).Once()
+				mdb.On("BackupHeader", "00000000-0000-0000-0000-000000000000", []byte("old_header"), oldKeyHash).Return(nil).Once()
+
+				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Run(func(_ mock.Arguments) {
+					time.Sleep(1 * time.Second)
+				}).Return(&reencrypt.ReencryptResponse{
+					Header: []byte("not expected to succeed"),
+				}, nil).Once()
+
+				return mdb, mb, mrc
+			},
+			reencryptClientTimeout: 500 * time.Millisecond,
+			expectedError:          context.DeadlineExceeded,
+		}, {
+			name: "retryable_db_error",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+
+				mdb.On("ListKeyHashes").Return(nil, errors.New("retryable error")).Once()
+
+				return mdb, &mocks.MockBroker{}, &mockReencryptClient{}
+			},
+			expectedError: errors.New("retryable error"),
+		}, {
+			name: "file_already_target_key",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(newKeyHash, nil).Once()
+
+				return mdb, &mocks.MockBroker{}, &mockReencryptClient{}
+			},
+		}, {
+			name: "file_key_hash_not_found",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(_ string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return("", sql.ErrNoRows).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var keyRotationMsg schema.KeyRotation
+
+					if err := json.Unmarshal(msg.Body, &keyRotationMsg); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return keyRotationMsg.Type == "key_rotation" &&
+						keyRotationMsg.FileID == "00000000-0000-0000-0000-000000000000" &&
+						msg.Headers != nil && msg.Headers["error-queue-reason"] == "file key hash not found"
+				})).Return(nil).Once()
+
+				return mdb, mb, &mockReencryptClient{}
+			},
+		}, {
+			name: "file_key_header_not_found",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(_ string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return(nil, sql.ErrNoRows).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var keyRotationMsg schema.KeyRotation
+
+					if err := json.Unmarshal(msg.Body, &keyRotationMsg); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return keyRotationMsg.Type == "key_rotation" &&
+						keyRotationMsg.FileID == "00000000-0000-0000-0000-000000000000" &&
+						msg.Headers != nil && msg.Headers["error-queue-reason"] == "file header not found"
+				})).Return(nil).Once()
+
+				return mdb, mb, &mockReencryptClient{}
+			},
+		}, {
+			name: "incoming_message_not_valid",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "",
+			},
+			newMocks: func(_ string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mb := &mocks.MockBroker{}
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var keyRotationMsg schema.KeyRotation
+
+					if err := json.Unmarshal(msg.Body, &keyRotationMsg); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return keyRotationMsg.Type == "key_rotation" &&
+						keyRotationMsg.FileID == "" &&
+						msg.Headers != nil && msg.Headers["error-queue-reason"] == "validation of incoming message failed"
+				})).Return(nil).Once()
+
+				return &mocks.MockDatabase{}, mb, &mockReencryptClient{}
+			},
+		}, {
+			name: "target_key_not_deprecated",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(_ string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: time.Now().Format(time.RFC3339),
+				}}, nil).Once()
+
+				return mdb, mb, &mockReencryptClient{}
+			},
+			expectedError:                   ErrorKeyDeprecated,
+			expectedTargetKeyNotUsableError: ErrorKeyDeprecated,
+		}, {
+			name: "target_key_not_registered",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(_ string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{}, nil).Once()
+
+				return mdb, mb, &mockReencryptClient{}
+			},
+			expectedError:                   ErrorKeyNotRegistered,
+			expectedTargetKeyNotUsableError: ErrorKeyNotRegistered,
 		},
 	} {
-		ts.T().Run(test.testName, func(t *testing.T) {
-			res, msg, err := ts.app.reEncryptHeader(context.Background(), test.fileID)
-			assert.Equal(t, res, test.expectedRes)
-			assert.Equal(t, msg, test.expectedMgs)
-			assert.Equal(t, err, test.expectedError)
-
-			// Verify that the backup was actually created in the DB for successful cases
-			if test.verifyBackup {
-				var count int
-				err := ts.verificationDB.QueryRow("SELECT count(*) FROM sda.file_headers_backup WHERE file_id = $1", test.fileID).Scan(&count)
-				assert.NoError(t, err)
-				assert.GreaterOrEqual(t, count, 1, "Backup record should exist in sda.file_headers_backup")
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := &bytes.Buffer{}
+			if err := keys.WriteCrypt4GHX25519PublicKey(tmp, targetPublicKey); err != nil {
+				t.Fatal(fmt.Errorf("failed to encode public key to pem: %w", err))
 			}
+			targetPublicKeyPemEncoded := base64.StdEncoding.EncodeToString(tmp.Bytes())
+
+			mockDatabase, mockBroker, mockReencrypt := tc.newMocks(targetPublicKeyPemEncoded)
+
+			rk := &rotateKey{
+				broker:                    mockBroker,
+				db:                        mockDatabase,
+				reverifyRoutingKey:        "reverify_queue",
+				targetPublicKeyPemEncoded: targetPublicKeyPemEncoded,
+				schemaPath:                "../../schemas/isolated/",
+				targetPublicKey:           &targetPublicKey,
+				targetKeyNotUsableChan:    make(chan error, 1),
+				reencryptClient:           mockReencrypt,
+				reencryptClientTimeout:    max(tc.reencryptClientTimeout, 100*time.Millisecond),
+			}
+
+			jsonMsg, err := json.Marshal(tc.sourceMessage)
+			if err != nil {
+				t.Errorf("failed to marshal source message: %s", err.Error())
+			}
+			callbacks, err := rk.handleMessage(context.Background(), &brokerv2.Message{Key: tc.sourceMessage.FileID, Body: jsonMsg})
+			for _, cb := range callbacks {
+				cb()
+			}
+			assert.Equal(t, tc.expectedError, err)
+			if tc.expectedTargetKeyNotUsableError != nil {
+				select {
+				case err := <-rk.targetKeyNotUsableChan:
+					assert.Equal(t, tc.expectedTargetKeyNotUsableError, err)
+				case <-time.After(2 * time.Second):
+					t.Error("timed out waiting for target key not usable error")
+					t.Fail()
+				}
+			}
+
+			mockDatabase.AssertExpectations(t)
+			mockBroker.AssertExpectations(t)
+			mockReencrypt.AssertExpectations(t)
 		})
 	}
 }
