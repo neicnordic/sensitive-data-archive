@@ -111,8 +111,7 @@ global:
         port: 9000
         region: us-east-1
     remote:
-      host: "http://remote-sync"
-      port: "8080"
+      url: "http://remote-sync:8080/dataset"
       password: "pass"
       user: "user"
 api:
