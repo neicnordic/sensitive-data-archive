@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -153,5 +154,53 @@ func TestRabbitMQ_EmptyBodyAndHeaders(t *testing.T) {
 	assert.NotPanics(t, func() {
 		b.handleDelivery(context.Background(), delivery, noopHandle)
 	})
+	assert.True(t, ack.ackCalled)
+}
+
+func TestRabbitMQ_HandlerContextOutlivesCancelByGrace(t *testing.T) {
+	b := newTestBroker()
+	b.config.shutdownGrace = 1
+	ctx, cancel := context.WithCancel(context.Background())
+
+	hctx, done := b.handlerContext(ctx)
+	defer done()
+
+	cancel()
+	assert.NoError(t, hctx.Err(), "handler context must survive the parent being cancelled")
+	assert.Eventually(t, func() bool { return hctx.Err() != nil }, 3*time.Second, 50*time.Millisecond,
+		"handler context should be cancelled once the grace period has passed")
+}
+
+func TestRabbitMQ_HandlerContextWithoutGraceFollowsParent(t *testing.T) {
+	b := newTestBroker()
+	b.config.shutdownGrace = 0
+	ctx, cancel := context.WithCancel(context.Background())
+
+	hctx, done := b.handlerContext(ctx)
+	defer done()
+
+	cancel()
+	assert.Eventually(t, func() bool { return hctx.Err() != nil }, time.Second, 10*time.Millisecond)
+}
+
+func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
+	ack := &mockAckNack{}
+	b := newTestBroker()
+	b.config.shutdownGrace = 5
+	delivery := makeDelivery(ack, "key-4", []byte(`{}`), nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // shutdown already started when the handler runs
+
+	var seen error
+	handle := func(hctx context.Context, _ *broker.Message) ([]func(), error) {
+		seen = hctx.Err()
+
+		return nil, nil
+	}
+
+	b.handleDelivery(ctx, delivery, handle)
+
+	assert.NoError(t, seen, "handler should still be able to finish after shutdown started")
 	assert.True(t, ack.ackCalled)
 }
