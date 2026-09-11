@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Populate broker_v2 config for finalize
 - Populate broker_v2 config for mapper
 - Populate broker_v2 config for verify
 
