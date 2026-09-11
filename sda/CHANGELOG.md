@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Update unit tests to use mocks of the db, and storage reader, writer instead of docker / temp directory.
     - Remove redundant unit tests which are covered by other tests, and remove unit tests which should be covered by integration tests.
   - Use log/slog for logging instead of logrus.
+  - Wait for the handler that is running to finish on shutdown before closing the broker; a second signal skips the wait.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
 
 ### Fixed
