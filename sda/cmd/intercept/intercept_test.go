@@ -93,6 +93,28 @@ func TestHandleMessage(t *testing.T) {
 			},
 			expectedError: nil,
 		}, {
+			name: "publish_failure",
+			message: &schema.IngestionTrigger{
+				Type:     "cancel",
+				User:     "123",
+				FilePath: "321",
+			},
+			newMock: func(tc testCase) *mocks.MockBroker {
+				mb := &mocks.MockBroker{}
+
+				expectedMsgBody, _ := json.Marshal(tc.message)
+
+				mb.On("Publish", "cancel_rk", mock.MatchedBy(func(msg broker.Message) bool {
+					return bytes.Equal(msg.Body, expectedMsgBody) && msg.Key == "publish_failure_test_case"
+				})).Return(errors.New("error")).Once()
+
+				return mb
+			},
+			routing: map[messageType]string{
+				"cancel": "cancel_rk",
+			},
+			expectedError: errors.New("error"),
+		}, {
 			name: "type_no_rk",
 			message: &schema.IngestionTrigger{
 				Type: "no_rk",
