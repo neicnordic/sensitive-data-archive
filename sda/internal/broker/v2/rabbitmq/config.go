@@ -26,6 +26,7 @@ type options struct {
 	clientCert    string
 	clientKey     string
 	timeout       int
+	shutdownGrace int
 }
 
 var defaultConfig *options
@@ -154,6 +155,16 @@ func init() {
 				defaultConfig.timeout = viper.GetInt(flagName)
 			},
 		},
+		&config.Flag{
+			Name: "broker.shutdown_grace",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Int(flagName, 30, "Seconds a message handler that is already running gets to finish after shutdown starts, before its context is cancelled")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				defaultConfig.shutdownGrace = viper.GetInt(flagName)
+			},
+		},
 	)
 }
 
@@ -172,6 +183,7 @@ func (cfg *options) clone() *options {
 		clientCert:    cfg.clientCert,
 		clientKey:     cfg.clientKey,
 		timeout:       cfg.timeout,
+		shutdownGrace: cfg.shutdownGrace,
 	}
 }
 
