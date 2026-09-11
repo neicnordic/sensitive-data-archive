@@ -929,6 +929,10 @@ Production safety guards enforce:
 - `pagination.hmac-secret` must be configured
 - `grpc.client-cert` and `grpc.client-key` must be configured
 
+### Observability
+The download service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
+
 ## Testing
 
 ### Unit Tests

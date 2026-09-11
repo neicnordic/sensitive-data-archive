@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add observability configuration options
+  - global.observability.enabled - If application observability is to be enabled, if enabled the sda applications will host a prometheus endpoint at 9090, And export traces to the configured otelExporterOtlpEndpoint.
+  - global.observability.otelExporterOtlpEndpoint - Endpoint to which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo:4318, needs to be set if observability is to be enabled.
+
+
+### Fixed
+- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
+
 ## [4.0.0] - 2026-08-26
 
 ### Changed

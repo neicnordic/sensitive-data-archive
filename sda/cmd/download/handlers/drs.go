@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,6 +55,9 @@ func drsChecksumType(sdaType string) string {
 // GetDrsObject returns a GA4GH DRS object for a file identified by dataset and path.
 // GET /objects/{datasetId}/{filePath}
 func (h *Handlers) GetDrsObject(c *gin.Context) {
+	ctx, span := observability.StartSpan(c.Request.Context(), "GetDrsObject")
+	defer span.End()
+
 	rawPath := strings.TrimPrefix(c.Param("path"), "/")
 
 	idx := strings.Index(rawPath, "/")
@@ -80,7 +84,7 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 		return
 	}
 
-	file, err := h.db.GetFileByPath(c.Request.Context(), datasetID, filePath)
+	file, err := h.db.GetFileByPath(ctx, datasetID, filePath)
 	if err != nil {
 		log.Errorf("failed to get file by path: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve file")
@@ -102,7 +106,7 @@ func (h *Handlers) GetDrsObject(c *gin.Context) {
 	}
 
 	// Fetch ARCHIVED checksums (over the encrypted blob, per DRS 1.5 spec)
-	archivedChecksums, err := h.db.GetFileChecksums(c.Request.Context(), file.ID, "ARCHIVED")
+	archivedChecksums, err := h.db.GetFileChecksums(ctx, file.ID, "ARCHIVED")
 	if err != nil {
 		log.Errorf("failed to get file checksums: %v", err)
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve checksums")

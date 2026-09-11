@@ -62,7 +62,7 @@ func (ts *HealthcheckTestSuite) SetupTest() {
 
 	ts.messenger = &broker.AMQPBroker{}
 
-	ts.database, err = postgres.NewPostgresSQLDatabase(
+	ts.database, err = postgres.NewPostgresSQLDatabase(context.Background(),
 		postgres.Host("127.0.0.1"),
 		postgres.Port(dbPort),
 		postgres.User("postgres"),

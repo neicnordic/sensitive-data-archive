@@ -19,13 +19,15 @@ import (
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -61,7 +63,20 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	db, err := postgres.NewPostgresSQLDatabase()
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-api")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	db, err := postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
@@ -70,7 +85,7 @@ func run() error {
 		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
-	mq, err := rabbitmq.NewRabbitMQBroker(context.Background())
+	mq, err := rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
@@ -94,7 +109,7 @@ func run() error {
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 
 	if jwtPubKeyURL != "" {
-		if err := auth.FetchJwtPubKeyURL(jwtPubKeyURL); err != nil {
+		if err := auth.FetchJwtPubKeyURL(ctx, jwtPubKeyURL); err != nil {
 			return fmt.Errorf("failed to read JWT public key URL, reason: %v", err)
 		}
 	}
@@ -128,7 +143,7 @@ func run() error {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(creds))
 
-	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), opts...)
+	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))...)
 	if err != nil {
 		slog.Error("failed to connect to reencrypt service", "err", err)
 
@@ -171,6 +186,7 @@ func run() error {
 		serverShutdownCancel()
 	}()
 
+	startupSpan.End()
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

@@ -13,6 +13,12 @@ spec:
   - name: healthcheck
     port: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
     targetPort: grpchealth
+  {{- if .Values.global.observability.enabled }}
+  - name: prometheus
+    port: 9090
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.name" . }}-reencrypt
 {{- end }}

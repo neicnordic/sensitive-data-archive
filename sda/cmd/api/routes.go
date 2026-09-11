@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func (api *API) routes() http.Handler {
@@ -45,6 +47,12 @@ func (api *API) routes() http.Handler {
 	var handler http.Handler = mux
 	handler = api.recoveryMiddleware(handler)
 	handler = api.loggingMiddleware(handler)
+	handler = otelhttp.NewHandler(handler, "http-server",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			// TODO better span names, but avoid having high cardinality when ids, etc is part of the path
+			return r.Method
+		}),
+	)
 
 	return handler
 }

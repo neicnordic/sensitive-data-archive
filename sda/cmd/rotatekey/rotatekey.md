@@ -110,3 +110,7 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
   - `error`
   - `fatal`
   - `panic`
+
+### Observability
+The rotatekey service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).

@@ -18,10 +18,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/c2h5oh/datasize"
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type endpointConfig struct {
@@ -158,6 +161,7 @@ func (endpointConf *endpointConfig) getS3Client(ctx context.Context) (*s3.Client
 			o.UsePathStyle = true
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			otelaws.AppendMiddlewares(&o.APIOptions)
 		},
 	)
 
@@ -193,6 +197,12 @@ func (endpointConf *endpointConfig) transportConfigS3() (http.RoundTripper, erro
 }
 
 func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "storage.s3.writer.findActiveBucket",
+		attribute.String("backend", backendName),
+		attribute.String("endpoint", endpointConf.Endpoint),
+	)
+	defer span.End()
+
 	client, err := endpointConf.getS3Client(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create S3 client to endpoint: %s, due to %v", endpointConf.Endpoint, err)
