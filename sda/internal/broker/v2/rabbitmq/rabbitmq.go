@@ -20,6 +20,8 @@ type rmqBroker struct {
 	consumeChannel     *amqp.Channel
 	publishChannel     *amqp.Channel
 	publishConfirmChan <-chan amqp.Confirmation
+	consumerTag        string
+	closed             bool
 	config             *options
 }
 
@@ -115,6 +117,10 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 }
 
 func (b *rmqBroker) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closed = true
+
 	if b.publishChannel != nil {
 		if err := b.publishChannel.Close(); err != nil {
 			return fmt.Errorf("failed to close broker channel connection, reason: %v", err)
@@ -164,6 +170,15 @@ func (b *rmqBroker) ensureConnected(ctx context.Context) error {
 		return err
 	}
 
+	// After Close() the connection stays closed, otherwise a handler that is
+	// still running would reconnect and publish the message a second time.
+	b.mu.Lock()
+	closed := b.closed
+	b.mu.Unlock()
+	if closed {
+		return errors.New("broker is closed, not reconnecting")
+	}
+
 	if err := b.connect(); err != nil {
 		log.Errorf("failed to reconnect, reason: %v", err)
 
@@ -183,11 +198,16 @@ func (b *rmqBroker) startConsuming(sourceQueue string) (<-chan amqp.Delivery, er
 		noWait    = false
 	)
 
+	// A tag we know, so the shutdown path can cancel this consumer; with ""
+	// the client generates one that Cancel cannot refer to.
+	tag := fmt.Sprintf("%s-%d", sourceQueue, time.Now().UnixNano())
+
 	b.mu.Lock()
 	ch := b.consumeChannel
+	b.consumerTag = tag
 	b.mu.Unlock()
 
-	return ch.Consume(sourceQueue, "", autoAck, exclusive, noLocal, noWait, nil)
+	return ch.Consume(sourceQueue, tag, autoAck, exclusive, noLocal, noWait, nil)
 }
 
 func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp.Delivery, handleFunc func(context.Context, *broker.Message) ([]func(), error)) bool {
@@ -196,7 +216,9 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp
 		case <-ctx.Done():
 			b.mu.Lock()
 			if b.consumeChannel != nil {
-				_ = b.consumeChannel.Cancel("", true)
+				if err := b.consumeChannel.Cancel(b.consumerTag, false); err != nil {
+					log.Debugf("cancelling consumer during shutdown: %v", err)
+				}
 			}
 			b.mu.Unlock()
 
@@ -220,7 +242,12 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, delivery amqp.Delivery, 
 		Body:    delivery.Body,
 	}
 
-	callbacks, err := handleFunc(ctx, msg)
+	// The handler keeps running after shutdown starts, so the message it is
+	// working on can be finished and acked instead of being cut off.
+	hctx, done := b.handlerContext(ctx)
+	defer done()
+
+	callbacks, err := handleFunc(hctx, msg)
 	if err != nil {
 		delivery.Nack(false, true)
 	} else {
@@ -229,6 +256,29 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, delivery amqp.Delivery, 
 
 	for _, cb := range callbacks {
 		cb()
+	}
+}
+
+// handlerContext returns a context for one handler call. It carries the
+// values of ctx but is not cancelled with it: when ctx is cancelled the
+// handler gets shutdownGrace seconds to finish before hctx is cancelled.
+// A grace of 0 keeps the old behaviour, where the handler stops with ctx.
+func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	hctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	grace := time.Duration(b.config.shutdownGrace) * time.Second
+
+	stop := context.AfterFunc(ctx, func() {
+		if grace <= 0 {
+			cancel()
+
+			return
+		}
+		time.AfterFunc(grace, cancel)
+	})
+
+	return hctx, func() {
+		stop()
+		cancel()
 	}
 }
 
