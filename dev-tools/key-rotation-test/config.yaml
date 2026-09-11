@@ -71,6 +71,9 @@ s3inbox:
   ready_path: "/minio/health/ready"
 
 # --- NETWORK & IPC ---
+reencrypt:
+  target: "reencrypt:50051"
+
 grpc:
   host: "reencrypt"
   port: 50051
@@ -83,8 +86,9 @@ broker:
   password: ""   # Leave empty or set if using a custom rabbitmq definition
   vhost: "/sda"
   exchange: "sda"
-  routingKey: ""
   ssl: "false"
+
+routing_key: ""
 
 # --- PERSISTENCE ---
 # This block satisfies both the pipeline services (`database`) and download (`db`)
@@ -105,12 +109,15 @@ db:
 schema:
   type: "isolated"
 
+schema_type: "isolated"
+
 # --- MULTI-KEY / CRYPT4GH SETTINGS FOR ROTATION ---
+target_public_key: /shared/rotatekey.pub.pem
+
 c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
-  rotatePubKeyPath: /shared/rotatekey.pub.pem
 
   # Crucial for test cases involving multi-key / deprecated decryption:
   # Order and metadata setup here will govern how sda-rotatekey and sda-reencrypt
