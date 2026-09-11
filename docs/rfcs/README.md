@@ -151,5 +151,5 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 | # | RFC | Status | Promoted to |
 | --- | --- | --- | --- |
 | [0001](0001-standardize-on-accessionid.md) | Standardize on `accessionID` everywhere? | promoted | [ADR-0008](../decisions/0008-use-accessionid-in-application-code.md) |
-| 0003 | Rename the API app | exploring | |
-| 0004(0004-plan-releases.md) | Plan releases for the SDA GO applications | exploring | - |
+| [0003](0003-rename-api-app.md) | Rename the API app | exploring | - |
+| [0004](0004-plan-releases.md) | Plan releases for the SDA GO applications | exploring | - |
