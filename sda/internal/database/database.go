@@ -41,6 +41,10 @@ type functions interface {
 	// and returns its fileID for the latest specified status
 	GetFileIDByUserPathAndStatus(ctx context.Context, submissionUser, filePath, status string) (string, error)
 
+	// GetFileIDByUserAndPath returns the fileID of the currently active (not disabled) file for a
+	// given user and submission filepath, regardless of its status or whether it has an accession id
+	GetFileIDByUserAndPath(ctx context.Context, submissionUser, filePath string) (string, error)
+
 	// UpdateFileEventLog updates the status in of the file in the files table
 	// The message parameter is the rabbitmq message sent on file upload.
 	UpdateFileEventLog(ctx context.Context, fileID, event, user, details, message string) error

@@ -198,6 +198,12 @@ func (m *MockDatabase) GetFileIDByUserPathAndStatus(_ context.Context, submissio
 	return args.Get(0).(string), args.Error(1)
 }
 
+func (m *MockDatabase) GetFileIDByUserAndPath(_ context.Context, submissionUser, filePath string) (string, error) {
+	args := m.Called(submissionUser, filePath)
+
+	return args.Get(0).(string), args.Error(1)
+}
+
 func (m *MockDatabase) UpdateFileEventLog(_ context.Context, fileID, event, user, details, message string) error {
 	args := m.Called(fileID, event, user, details, message)
 

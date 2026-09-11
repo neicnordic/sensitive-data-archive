@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -37,7 +38,10 @@ var (
 	api               API
 	token             string
 	filePath          = "test/file.c4gh"
+	unknownFilePath   = "test/not-ingested.c4gh"
+	inDatasetFilePath = "test/in-dataset.c4gh"
 	fileID            = "3a7f2c91-b4e0-4d8a-9f3b-2c6e1a0d5f8e"
+	inDatasetFileID   = "5c8e3f2a-1b4d-4a9e-8f0a-6d2e7c1a9b3f"
 	userID            = "dummy"
 	datasetID         = "test-dataset-123"
 	accessionID       = "test-file-123"
@@ -138,6 +142,7 @@ func setup() error {
 		{"role":"submission","path":"/dataset/release/:datasetid","action":"POST"},
 		{"role":"submission","path":"/dataset/verify/","action":"PUT"},
 		{"role":"submission","path":"/file/ingest","action":"POST"},
+		{"role":"submission","path":"/file/cancel","action":"POST"},
 		{"role":"submission","path":"/file/verify/","action":"PUT"},
 		{"role":"submission","path":"/file/accession","action":"POST"},
 		{"role":"submission","path":"/file","action":"DELETE"},
@@ -166,6 +171,13 @@ func setup() error {
 	mockDB.On("GetUserFiles", userID, "", true, 1000, "").Return(userFiles, "", nil)
 	mockDB.On("GetFileIDByUserPathAndStatus", userID, filePath, "uploaded").Return(fileID, nil)
 	mockDB.On("GetFileIDByUserPathAndStatus", userID, filePath, "verified").Return(fileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, filePath).Return(fileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, unknownFilePath).Return("", sql.ErrNoRows)
+	mockDB.On("GetFileIDByUserAndPath", userID, inDatasetFilePath).Return(inDatasetFileID, nil)
+	mockDB.On("GetFileStatus", fileID).Return("archived", nil)
+	mockDB.On("GetFileStatus", inDatasetFileID).Return("ready", nil)
+	mockDB.On("IsFileInDataset", fileID).Return(false, nil)
+	mockDB.On("IsFileInDataset", inDatasetFileID).Return(true, nil)
 	mockDB.On("GetUploadedSubmissionFilePathAndLocation", userID, fileID).Return("inbox", "inbox", nil)
 	mockDB.On("GetDatasetStatus", datasetID).Return("registered", nil)
 	mockDB.On("GetDecryptedChecksum", fileID).Return(decryptedChecksum, nil)
@@ -268,6 +280,42 @@ func TestIngestFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, w := newRequest(t, http.MethodPost, "/file/ingest", tc.body, tc.token)
 			api.rbac(api.ingestFile)(w, r)
+			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+}
+
+func TestCancelFile(t *testing.T) {
+	validBody := toJSON(t, map[string]any{
+		"filepath": filePath,
+		"user":     userID,
+	})
+	notIngestedBody := toJSON(t, map[string]any{
+		"filepath": unknownFilePath,
+		"user":     userID,
+	})
+	inDatasetBody := toJSON(t, map[string]any{
+		"filepath": inDatasetFilePath,
+		"user":     userID,
+	})
+	tests := []struct {
+		name     string
+		token    string
+		body     []byte
+		wantCode int
+	}{
+		{"Valid Request", token, validBody, http.StatusOK},
+		{"Invalid Token", "invalidtoken", validBody, http.StatusUnauthorized},
+		{"Missing Token", "", validBody, http.StatusUnauthorized},
+		{"Invalid Body", token, []byte("not json"), http.StatusBadRequest},
+		{"Empty Body", token, nil, http.StatusBadRequest},
+		{"Not Being Ingested", token, notIngestedBody, http.StatusBadRequest},
+		{"Already In Dataset", token, inDatasetBody, http.StatusConflict},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, w := newRequest(t, http.MethodPost, "/file/cancel", tc.body, tc.token)
+			api.rbac(api.cancelFile)(w, r)
 			assert.Equal(t, tc.wantCode, w.Code)
 		})
 	}

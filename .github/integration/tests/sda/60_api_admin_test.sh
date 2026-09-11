@@ -176,6 +176,101 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.fil
 done
 echo "Finalize by using json payload finished successfully"
 
+
+# Test canceling a file that has already been mapped to a dataset should fail
+dataset_create_payload=$(
+jq -c -n \
+	--argjson accession_ids '["my-id-01"]' \
+	--arg dataset_id "cancel-test-dataset" \
+	'$ARGS.named'
+)
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$dataset_create_payload" "http://api:8080/dataset/create")"
+if [ "$resp" != "200" ]; then
+    echo "Error when creating dataset, expected 200 got: $resp"
+    exit 1
+fi
+
+# wait for the mapper to add the file to the dataset
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select count(id) from sda.file_dataset where dataset_id = (select id from sda.datasets where stable_id = 'cancel-test-dataset');")" -eq 1 ]; do
+    echo "waiting for dataset mapping to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset mapping to complete"
+        exit 1
+    fi
+    sleep 2
+done
+
+already_mapped_payload=$(
+jq -c -n \
+	--arg filepath "NE12878.bam.c4gh" \
+	--arg user "test@dummy.org" \
+	'$ARGS.named'
+)
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$already_mapped_payload" "http://api:8080/file/cancel")"
+if [ "$resp" != "409" ]; then
+    echo "Error when cancelling a file that has already been mapped to a dataset, expected 409 got: $resp"
+    exit 1
+fi
+echo "Cancelling ingestion via file/cancel finished successfully"
+
+# Test canceling a file that is still being ingested
+cancelfile="cancelingest.bam"
+s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/$cancelfile.c4gh
+stream_size=$((stream_size + 1))
+RETRY_TIMES=0
+
+until [ $((stream_size)) -eq "$(curl -s -u guest:guest $URI/api/queues/sda/inbox | jq '.messages_ready')" ]; do
+    echo "waiting for upload to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "Upload did not complete successfully"
+        exit 1
+    fi
+    sleep 2
+done
+
+cancel_test_payload=$(
+jq -c -n \
+	--arg filepath "$cancelfile.c4gh" \
+	--arg user "test@dummy.org" \
+	'$ARGS.named'
+)
+
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$cancel_test_payload" "http://api:8080/file/ingest")"
+if [ "$resp" != "200" ]; then
+    echo "Error when requesting to ingest file, expected 200 got: $resp"
+    exit 1
+fi
+
+fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r ".[] | select(.inboxPath == \"$cancelfile.c4gh\") | .fileID")"
+
+# Cancel the ingestion using the same payload that was used to start it
+resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$cancel_test_payload" "http://api:8080/file/cancel")"
+if [ "$resp" != "200" ]; then
+    echo "Error when requesting to cancel file, expected 200 got: $resp"
+    exit 1
+fi
+
+# Check that the file has been disabled
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$fileid' order by started_at desc limit 1;")" = "disabled" ]; do
+   echo "waiting for cancellation to complete"
+   RETRY_TIMES=$((RETRY_TIMES + 1))
+   if [ "$RETRY_TIMES" -eq 30 ]; then
+      echo "::error::Time out while waiting for file: $fileid cancellation to complete"
+      exit 1
+   fi
+   sleep 2
+done
+
+# Check that the archive location and path have been unset
+if [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT 1 FROM sda.files WHERE id='$fileid' AND archive_file_path = '' AND archive_location IS NULL")" != "1" ]; then
+    echo "cancelling file via API failed, archive data not cleared"
+    exit 1
+fi
+
 # Try to delete file not in inbox
 fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r '.[] | select(.inboxPath == "NE12878.bam.c4gh") | .fileID')"
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/file/test@dummy.org/$fileid")"

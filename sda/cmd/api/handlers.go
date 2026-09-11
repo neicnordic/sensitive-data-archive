@@ -387,6 +387,127 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+/*
+cancelFile handles requests to cancel ingestion of a file.
+This endpoint supports two input modes:
+1. By file ID (via the "fileid" query parameter).
+2. By JSON payload: Expects a JSON body with user and file path, resolved to the
+currently active (not disabled) file for that user and path.
+Only files that are not yet linked to a dataset can be cancelled.
+Files that have already been added to a dataset cannot be cancelled either.
+The function constructs a cancel message, validates it
+and sends it to the broker with the appropriate file ID.
+*/
+func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
+	var (
+		cancel schema.IngestionTrigger
+		err    error
+	)
+
+	fileID := r.URL.Query().Get("fileid")
+
+	switch {
+	case fileID != "" && r.ContentLength > 0:
+		slog.Error("recieved both file ID and payload")
+		writeJSON(w, http.StatusBadRequest, "recieved both file ID and payload")
+
+		return
+
+	case fileID != "":
+		if _, err := uuid.Parse(fileID); err != nil {
+			slog.Error("could not parse fileID as uuid", "file_id", fileID, "err", err) // #nosec G706
+			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not parse %s as uuid, reason: %v", fileID, err))
+
+			return
+		}
+		status, err := api.db.GetFileStatus(r.Context(), fileID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				slog.Error("file not found", "file_id", fileID) // #nosec G706
+				writeJSON(w, http.StatusNotFound, fmt.Sprintf("file %s not found", fileID))
+
+				return
+			}
+			slog.Error("failed to get file status", "file_id", fileID, "err", err) // #nosec G706
+			writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("could not get status for %s, reason: %v", fileID, err))
+
+			return
+		}
+		fileDetails, err := api.db.GetFileDetails(r.Context(), fileID, status)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not find details for %s, reason: %v", fileID, err))
+
+			return
+		}
+
+		cancel.User = fileDetails.User
+		cancel.FilePath = fileDetails.Path
+
+	case r.ContentLength > 0:
+		if err := json.NewDecoder(r.Body).Decode(&cancel); err != nil {
+			slog.Error("could not decode request body", "err", err)
+			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not decode request body, reason: %v", err))
+
+			return
+		}
+
+		fileID, err = api.db.GetFileIDByUserAndPath(r.Context(), cancel.User, cancel.FilePath)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath) // #nosec G706
+				writeJSON(w, http.StatusBadRequest, fmt.Sprintf("file id %s not found in database", cancel.FilePath))
+
+				return
+			}
+			slog.Error("failed to get fileid for user", "user", cancel.User, "file_path", cancel.FilePath, "err", err) // #nosec G706
+			writeJSON(w, http.StatusInternalServerError, err.Error())
+
+			return
+		}
+
+	default:
+		slog.Error("missing parameter in payload")
+		writeJSON(w, http.StatusBadRequest, "missing parameter in payload")
+
+		return
+	}
+
+	fileExistsInDataset, err := api.db.IsFileInDataset(r.Context(), fileID)
+	if err != nil {
+		slog.Error("failed to check if file is in a dataset", "file_id", fileID, "err", err) // #nosec G706
+		writeJSON(w, http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	if fileExistsInDataset {
+		slog.Error("cannot cancel file: already added to a dataset", "file_id", fileID) // #nosec G706
+		writeJSON(w, http.StatusConflict, fmt.Sprintf("cannot cancel file %s: already added to a dataset", fileID))
+
+		return
+	}
+
+	slog.Info("cancelling file", "file_id", fileID) // #nosec G706
+	cancel.Type = "cancel"
+	marshaledMsg, _ := json.Marshal(&cancel)
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
+		slog.Error("could not validate cancel message", "err", err)
+		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate cancel message, reason: %v", err))
+
+		return
+	}
+
+	cancelMessage := broker.Message{Key: fileID, Body: marshaledMsg}
+	if err := api.mq.Publish(context.Background(), "ingest", cancelMessage); err != nil {
+		slog.Debug("failed to publish cancel message", "err", err)
+		writeJSON(w, http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 	fileID := r.PathValue("fileid")
