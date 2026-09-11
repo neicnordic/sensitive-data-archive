@@ -101,6 +101,7 @@ if [ "$1" == "sda-svc" ]; then
         --set global.broker.port="$MQ_PORT" \
         --set global.sync.api.password="$sync_api_pass" \
         --set global.sync.api.user="$sync_api_user" \
+        --set global.sync.enabled="true" \
         --set global.sync.remote.host="$sync_host" \
         --set api.readinessProbe.httpGet.scheme="$SCHEME" \
         --set auth.readinessProbe.httpGet.scheme="$SCHEME" \
