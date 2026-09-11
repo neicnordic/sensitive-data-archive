@@ -33,4 +33,3 @@ That has now changed in favour of a manual approach that reduced the number of r
 ## Open Questions
 
 * Decide on a future release strategy
-* Rework the RFC into an ADR
