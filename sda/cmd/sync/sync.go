@@ -117,11 +117,6 @@ func run() error {
 		return fmt.Errorf("failed to initialize archive reader, due to: %v", err)
 	}
 
-	app.archiveC4ghPrivateKey, err = config.GetC4GHKey()
-	if err != nil {
-		return fmt.Errorf("failed to get c4gh key from config, due to: %v", err)
-	}
-
 	consumeErr := make(chan error, 1)
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, syncconf.SourceQueue(), app.handleMessage)
