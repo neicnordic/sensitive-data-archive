@@ -55,11 +55,11 @@ export LOG_FORMAT="json"
 
 ### Service settings
 
-- `SYNC_CENTERPREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not
-- `SYNC_REMOTE_HOST`: URL to the remote API host
-- `SYNC_REMOTE_POST`: Port for the remote API host, if other than the standard HTTP(S) ports
+- `SYNC_DATASET_WITH_PREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not
+- `SYNC_REMOTE_URL`: URL to the remote API host (including scheme, port, and path)
 - `SYNC_REMOTE_USER`: Username for connecting to the remote API
 - `SYNC_REMOTE_PASSWORD`: Password for the API user
+- `SYNC_C4GH_PUB_KEY_PATH`: path to the crypt4gh public key to use for reencrypting file headers.
 
 ### Keyfile settings
 
@@ -67,7 +67,6 @@ These settings control which crypt4gh keyfile is loaded.
 
 - `C4GH_FILEPATH`: path to the crypt4gh keyfile
 - `C4GH_PASSPHRASE`: pass phrase to unlock the keyfile
-- `C4GH_SYNCPUBKEYPATH`: path to the crypt4gh public key to use for reencrypting file headers.
 
 ### RabbitMQ broker settings
 
@@ -75,10 +74,10 @@ These settings control how sync connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
 - `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queue or stream to read messages from (commonly `mapping_stream`)
+- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `mapping_stream`)
 - `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to 2)
+- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to 2)
 
 ### PostgreSQL Database settings
 
