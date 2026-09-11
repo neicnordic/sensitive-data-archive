@@ -33,6 +33,25 @@ available, `sda-admin` prints the current page and prompts for `Enter` or
 `Space` before fetching the next page. Users do not need to pass a cursor
 manually.
 
+### Filtering by status
+
+Use `-status` to only show files with a given `fileStatus` (e.g. `uploaded`):
+```sh
+sda-admin file list -user test-user@example.org -status uploaded
+```
+
+### Filtering by inbox path prefix
+
+Use `-path-prefix` to only show files whose inbox path starts with the given prefix:
+```sh
+sda-admin file list -user test-user@example.org -path-prefix some/path
+```
+
+Both options are optional and can be combined:
+```sh
+sda-admin file list -user test-user@example.org -status uploaded -path-prefix some/path
+```
+
 
 ## Ingest a file
 
