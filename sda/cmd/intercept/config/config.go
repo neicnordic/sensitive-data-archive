@@ -21,7 +21,7 @@ func init() {
 		&config.Flag{
 			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "from_cega", "The queue where the verify service consumes messages from")
+				flagSet.String(flagName, "from_cega", "The queue where the intercept service consumes messages from")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
