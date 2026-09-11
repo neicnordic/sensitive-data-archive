@@ -31,8 +31,12 @@ type mockReencryptClient struct {
 	mock.Mock
 }
 
-func (mrc *mockReencryptClient) ReencryptHeader(_ context.Context, in *reencrypt.ReencryptRequest, _ ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
+func (mrc *mockReencryptClient) ReencryptHeader(ctx context.Context, in *reencrypt.ReencryptRequest, _ ...grpc.CallOption) (*reencrypt.ReencryptResponse, error) {
 	args := mrc.Called(in.GetPublickey(), in.GetOldheader())
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	rsp := args.Get(0)
 	if rsp == nil {
@@ -119,6 +123,80 @@ func TestRotateKey(t *testing.T) {
 				return mdb, mb, mrc
 			},
 		}, {
+			name: "publish_failure",
+			sourceMessage: schema.KeyRotation{
+				Type:   "key_rotation",
+				FileID: "00000000-0000-0000-0000-000000000000",
+			},
+			newMocks: func(targetPublicKeyPemEncoded string) (*mocks.MockDatabase, *mocks.MockBroker, *mockReencryptClient) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				mrc := &mockReencryptClient{}
+
+				newKeyHash := hex.EncodeToString(targetPublicKey[:])
+				mdb.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{
+					Hash:         newKeyHash,
+					DeprecatedAt: "",
+				}}, nil).Once()
+				oldKeyHash := hex.EncodeToString(oldPublicKey[:])
+				mdb.On("GetKeyHash", "00000000-0000-0000-0000-000000000000").Return(oldKeyHash, nil).Once()
+				mdb.On("GetHeader", "00000000-0000-0000-0000-000000000000").Return([]byte("old_header"), nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("Rollback").Return(nil).Once()
+				mdb.On("Commit").Return(nil).Once()
+				mdb.On("BackupHeader", "00000000-0000-0000-0000-000000000000", []byte("old_header"), oldKeyHash).Return(nil).Once()
+
+				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Return(&reencrypt.ReencryptResponse{
+					Header: []byte("new_header"),
+				}, nil).Once()
+
+				mdb.On("RotateHeaderKey", []byte("new_header"), newKeyHash, "00000000-0000-0000-0000-000000000000").Return(nil).Once()
+
+				mdb.On("GetReVerificationDataFromFileID", "00000000-0000-0000-0000-000000000000").Return(&database.ReVerificationData{
+					FileID:               "00000000-0000-0000-0000-000000000000",
+					ArchiveFilePath:      "/archive/test_file",
+					SubmissionFilePath:   "/inbox/test_file",
+					SubmissionUser:       "test_user",
+					ArchivedCheckSum:     "1234123412341234123412341234123412341234123412341234123412341234",
+					ArchivedCheckSumType: "sha256",
+				}, nil).Once()
+
+				mb.On("Publish", "reverify_queue", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var reverifyMessage schema.IngestionVerification
+
+					if err := json.Unmarshal(msg.Body, &reverifyMessage); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return reverifyMessage.User == "test_user" &&
+						reverifyMessage.FilePath == "/inbox/test_file" &&
+						reverifyMessage.FileID == "00000000-0000-0000-0000-000000000000" &&
+						reverifyMessage.ArchivePath == "/archive/test_file" &&
+						len(reverifyMessage.EncryptedChecksums) == 1 &&
+						reverifyMessage.EncryptedChecksums[0].Type == "sha256" &&
+						reverifyMessage.EncryptedChecksums[0].Value == "1234123412341234123412341234123412341234123412341234123412341234" &&
+						reverifyMessage.ReVerify
+				})).Return(errors.New("publish failure")).Once()
+
+				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
+					var keyRotationMsg schema.KeyRotation
+
+					if err := json.Unmarshal(msg.Body, &keyRotationMsg); err != nil {
+						log.Errorf("failed to unmarshal mock message: %v", err)
+
+						return false
+					}
+
+					return keyRotationMsg.Type == "key_rotation" &&
+						keyRotationMsg.FileID == "00000000-0000-0000-0000-000000000000" &&
+						msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to publish re verify message after database transaction committed"
+				})).Return(nil).Once()
+
+				return mdb, mb, mrc
+			},
+		}, {
 			name: "reencrypt_retryable_error",
 			sourceMessage: schema.KeyRotation{
 				Type:   "key_rotation",
@@ -171,12 +249,14 @@ func TestRotateKey(t *testing.T) {
 
 				mrc.On("ReencryptHeader", targetPublicKeyPemEncoded, []byte("old_header")).Run(func(_ mock.Arguments) {
 					time.Sleep(1 * time.Second)
-				}).Return(nil, context.Canceled).Once()
+				}).Return(&reencrypt.ReencryptResponse{
+					Header: []byte("not expected to succeed"),
+				}, nil).Once()
 
 				return mdb, mb, mrc
 			},
 			reencryptClientTimeout: 500 * time.Millisecond,
-			expectedError:          context.Canceled,
+			expectedError:          context.DeadlineExceeded,
 		}, {
 			name: "retryable_db_error",
 			sourceMessage: schema.KeyRotation{
