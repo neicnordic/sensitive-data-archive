@@ -415,7 +415,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 	case fileID != "":
 		if _, err := uuid.Parse(fileID); err != nil {
-			slog.Error("could not parse fileID as uuid", "file_id", fileID, "err", err) // #nosec G706
+			slog.Error("could not parse fileID as uuid", "file_id", fileID, "err", err)
 			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not parse %s as uuid, reason: %v", fileID, err))
 
 			return
@@ -423,12 +423,12 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 		status, err := api.db.GetFileStatus(r.Context(), fileID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				slog.Error("file not found", "file_id", fileID) // #nosec G706
+				slog.Error("file not found", "file_id", fileID)
 				writeJSON(w, http.StatusNotFound, fmt.Sprintf("file %s not found", fileID))
 
 				return
 			}
-			slog.Error("failed to get file status", "file_id", fileID, "err", err) // #nosec G706
+			slog.Error("failed to get file status", "file_id", fileID, "err", err)
 			writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("could not get status for %s, reason: %v", fileID, err))
 
 			return
@@ -454,12 +454,12 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 		fileID, err = api.db.GetFileIDByUserAndPath(r.Context(), cancel.User, cancel.FilePath)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath) // #nosec G706
+				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath)
 				writeJSON(w, http.StatusBadRequest, fmt.Sprintf("file id %s not found in database", cancel.FilePath))
 
 				return
 			}
-			slog.Error("failed to get fileid for user", "user", cancel.User, "file_path", cancel.FilePath, "err", err) // #nosec G706
+			slog.Error("failed to get fileid for user", "user", cancel.User, "file_path", cancel.FilePath, "err", err)
 			writeJSON(w, http.StatusInternalServerError, err.Error())
 
 			return
@@ -474,20 +474,20 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 	fileExistsInDataset, err := api.db.IsFileInDataset(r.Context(), fileID)
 	if err != nil {
-		slog.Error("failed to check if file is in a dataset", "file_id", fileID, "err", err) // #nosec G706
+		slog.Error("failed to check if file is in a dataset", "file_id", fileID, "err", err)
 		writeJSON(w, http.StatusInternalServerError, err.Error())
 
 		return
 	}
 
 	if fileExistsInDataset {
-		slog.Error("cannot cancel file: already added to a dataset", "file_id", fileID) // #nosec G706
+		slog.Error("cannot cancel file: already added to a dataset", "file_id", fileID)
 		writeJSON(w, http.StatusConflict, fmt.Sprintf("cannot cancel file %s: already added to a dataset", fileID))
 
 		return
 	}
 
-	slog.Info("cancelling file", "file_id", fileID) // #nosec G706
+	slog.Info("cancelling file", "file_id", fileID)
 	cancel.Type = "cancel"
 	marshaledMsg, _ := json.Marshal(&cancel)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
