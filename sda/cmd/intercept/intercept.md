@@ -46,9 +46,15 @@ These settings control how `intercept` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the RabbitMQ server
 - `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queue to read messages from (commonly: `from_cega`)
+- `SOURCE_QUEUE`: message queue to read messages from (commonly: `from_cega`)
 - `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `ACCESSION_ROUTING_KEY`: routing key used to route `accession` type message to 
+- `INGEST_ROUTING_KEY`: routing key used to route `ingest` type message to 
+- `CANCEL_ROUTING_KEY`: routing key used to route `cancel` type message to 
+- `MAPPING_ROUTING_KEY`: routing key used to route `mapping` type message to 
+- `RELEASE_ROUTING_KEY`: routing key used to route `release` type message to 
+- `DEPRECATE_ROUTING_KEY`: routing key used to route `deprecate` type message to 
 
 ### Logging settings
 
