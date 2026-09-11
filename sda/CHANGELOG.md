@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
+- broker/v2:
+  - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` seconds (default 30) to finish and ack its message, instead of failing its publish with `context canceled`.
+  - Cancel the consumer by its real tag on shutdown; `Cancel("")` referred to a tag the client never registered.
+  - Do not reconnect after `Close()`, so a handler that outlives shutdown cannot publish a duplicate; `Close()` now takes the broker mutex.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
 
