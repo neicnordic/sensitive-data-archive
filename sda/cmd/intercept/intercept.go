@@ -151,7 +151,7 @@ func typeFromMessage(body []byte) (messageType, error) {
 	}
 
 	msgTypeFetch, ok := message["type"]
-	if !ok || msgTypeFetch == "" {
+	if !ok {
 		return "", errors.New("malformed message, type is missing")
 	}
 

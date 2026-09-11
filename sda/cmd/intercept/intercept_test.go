@@ -113,6 +113,26 @@ func TestHandleMessage(t *testing.T) {
 			},
 			expectedError: nil,
 		}, {
+			name: "empty_type",
+			message: &schema.IngestionTrigger{
+				Type: "",
+			},
+			newMock: func(tc testCase) *mocks.MockBroker {
+				mb := &mocks.MockBroker{}
+
+				expectedMsgBody, _ := json.Marshal(tc.message)
+
+				mb.On("Publish", "undeliverable", mock.MatchedBy(func(msg broker.Message) bool {
+					return bytes.Equal(msg.Body, expectedMsgBody) && msg.Key == "empty_type_test_case"
+				})).Return(nil).Once()
+
+				return mb
+			},
+			routing: map[messageType]string{
+				"cancel": "cancel_rk",
+			},
+			expectedError: nil,
+		}, {
 			name: "inc_msg_no_type",
 			message: &struct {
 				NoType string `json:"no_type"`
@@ -213,7 +233,7 @@ func TestTypeFromMessage(t *testing.T) {
 				Type string `json:"type"`
 			}{},
 			expectedMessageType: "",
-			expectedError:       errors.New("malformed message, type is missing"),
+			expectedError:       nil,
 		}, {
 			name: "wrong_type_type",
 			message: &struct {
