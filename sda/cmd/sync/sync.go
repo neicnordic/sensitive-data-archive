@@ -336,7 +336,7 @@ func (app *sync) sendHTTPNotification(ctx context.Context, datasetMapping schema
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, app.remoteURL, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, app.remoteURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
