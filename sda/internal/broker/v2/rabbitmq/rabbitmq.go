@@ -137,6 +137,13 @@ func (b *rmqBroker) Close() error {
 }
 
 func (b *rmqBroker) Alive() bool {
+	if err := b.ensureConnected(b.ctx); err != nil {
+		return false
+	}
+
+	return true
+}
+func (b *rmqBroker) alive() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -156,7 +163,7 @@ func (b *rmqBroker) Alive() bool {
 }
 
 func (b *rmqBroker) ensureConnected(ctx context.Context) error {
-	if b.Alive() {
+	if b.alive() {
 		return nil
 	}
 

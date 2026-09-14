@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- broker/v2/rabbitmq:
+  - Update Alive() implementation to trigger reconnection if rabbitmq connection is closed
 - finalize:
   - Migrate to Broker V2 package
   - Use db transactions to ensure correct state even if an error occurs.
@@ -32,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - verify:
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
+- s3inbox:
+  - Update to use broker/v2 instead of broker (v1)
+  - Fix reuploads to publish the "remove" message before the "upload" messages, instead of after 
+  - Update unit test to use mocks instead of docker containers
+  - Add additional checks in detectS3RequestType, to reject additional s3 action not previously rejected but not supported
+  - Remove dependency on config (v1) by moving required configuration registration to s3inbox/config
+    - Env variable changes:
+      - SERVER_JWTPUBKEYPATH -> SERVER_JWT_PUB_KEY_PATH
+      - SERVER_JWTPUBKEYURL -> SERVER_JWT_PUB_KEY_URL
+      - BROKER_ROUTING_KEY -> ROUTING_KEY
+      - S3INBOX_CACERT -> S3INBOX_CA_CERT
 
 ### Fixed
 
