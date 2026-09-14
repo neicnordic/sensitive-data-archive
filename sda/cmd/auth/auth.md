@@ -36,6 +36,10 @@ The following settings can be configured for deploying the service, either by us
 | `SERVER_CERT`           | Certificate file path                                                                | `""`                                    |
 | `SERVER_KEY`            | Private key file path                                                                | `""`                                    |
 
+## Observability
+The auth service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../internal/observability/README.md).
+
 ## Running with Cross-Origin Resource Sharing (CORS)
 
 This service can be run as a backend only, and in the case where the frontend is running somewhere else, CORS is needed.

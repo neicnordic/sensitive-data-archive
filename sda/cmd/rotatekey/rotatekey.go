@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -24,10 +25,12 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type RotateKey struct {
@@ -45,8 +48,20 @@ func main() {
 		panic(fmt.Errorf("failed to load config: %v", err))
 	}
 
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-rotatekey")
+	if err != nil {
+		panic(fmt.Errorf("failed to setup OTel SDK: %v", err))
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app := RotateKey{}
-	var err error
 
 	sigc := make(chan os.Signal, 5)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -75,7 +90,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -119,6 +134,7 @@ func main() {
 	}()
 
 	log.Info("Starting rotatekey service")
+	startupSpan.End()
 
 	go func() {
 		// Create a function to handle panic and exit gracefully
@@ -149,10 +165,8 @@ func main() {
 func (app *RotateKey) handleMessage(delivered amqp091.Delivery) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	log.Debugf("Received a message (correlation-id: %s, message: %s)",
-		delivered.CorrelationId,
-		delivered.Body)
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.CorrelationId))
+	defer span.End()
 
 	err := schema.ValidateJSON(fmt.Sprintf("%s/rotate-key.json", app.Conf.Broker.SchemasPath), delivered.Body)
 	if err != nil {

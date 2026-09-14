@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,9 +24,11 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/attribute"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -54,11 +57,27 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config, due to: %v", err)
 	}
-	db, err = postgres.NewPostgresSQLDatabase()
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-verify")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
@@ -100,6 +119,7 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case <-sigc:
@@ -128,9 +148,10 @@ func startConsumer(ctx context.Context) error {
 func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
-	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", mqBroker.Conf.SchemasPath), delivered.Body)
-	if err != nil {
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", delivered.CorrelationId))
+	defer span.End()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", mqBroker.Conf.SchemasPath), delivered.Body); err != nil {
 		log.Errorf("validation of incoming message (ingestion-verification) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
 		// Send the message to an error queue so it can be analyzed.
 		infoErrorMessage := broker.InfoError{

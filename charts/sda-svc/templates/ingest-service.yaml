@@ -1,0 +1,18 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- if .Values.global.observability.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sda.fullname" . }}-ingest
+  labels:
+    app: {{ template "sda.fullname" . }}-ingest
+spec:
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: prometheus
+    protocol: TCP
+  selector:
+    app: {{ template "sda.fullname" . }}-ingest
+{{- end }}
+{{- end }}

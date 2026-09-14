@@ -30,11 +30,13 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Ingest struct {
@@ -71,12 +73,35 @@ func run() error {
 	if err = configv2.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-ingest")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app.InboxProjectConfig, err = config.LoadInboxProjectConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load inbox project config: %v", err)
 	}
 
-	app.Broker, err = rabbitmq.NewRabbitMQBroker(context.Background())
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize sda db: %v", err)
+	}
+	defer app.db.Close()
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
+	}
+
+	app.Broker, err = rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker: %v", err)
 	}
@@ -89,15 +114,6 @@ func run() error {
 			slog.Error("could not close broker", "error", err)
 		}
 	}()
-
-	app.db, err = postgres.NewPostgresSQLDatabase()
-	if err != nil {
-		return fmt.Errorf("failed to initialize sda db: %v", err)
-	}
-	defer app.db.Close()
-	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
-	}
 
 	app.ArchiveKeyList, err = config.GetC4GHprivateKeys()
 	if err != nil || len(app.ArchiveKeyList) == 0 {
@@ -142,17 +158,16 @@ func run() error {
 		consumeErr <- app.Broker.Subscribe(ctx, ingestconf.SourceQueue(), app.handleMessage)
 	}()
 	slog.Info("ingest service started")
+	startupSpan.End()
 
 	select {
 	case sig := <-sigc:
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
-		cancel()
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
 			slog.Error("consumer failure", "error", err, "source-queue", ingestconf.SourceQueue())
-			cancel()
 
 			return err
 		}
@@ -164,23 +179,25 @@ func run() error {
 func (app *Ingest) handleMessage(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", ingestconf.SchemaPath()), message.Body); err != nil {
-		slog.Error("could not validate message", "error", err, "message-key", message.Key)
+		span.Error("could not validate message", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "could not validate message")}, nil
+		return []func(){app.errorQueue(ctx, message, "could not validate message")}, nil
 	}
 
 	var ingestionTrigger schema.IngestionTrigger
 
 	if err := json.Unmarshal(message.Body, &ingestionTrigger); err != nil {
-		slog.Error("could not unmarshal message", "error", err, "message-key", message.Key)
+		span.Error("could not unmarshal message", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "could not unmarshal message")}, nil
+		return []func(){app.errorQueue(ctx, message, "could not unmarshal message")}, nil
 	}
-	slog.Info("received work", "message-key", message.Key, "filepath", ingestionTrigger.FilePath, "user", ingestionTrigger.User)
+	span.Info("received work", slog.String("filepath", ingestionTrigger.FilePath), slog.String("user", ingestionTrigger.User))
 
 	var callbacks []func()
 	var err error
@@ -190,10 +207,10 @@ func (app *Ingest) handleMessage(ctx context.Context, message *brokerv2.Message)
 	case "ingest":
 		callbacks, err = app.ingestFile(ctx, message.Key, ingestionTrigger.FilePath, ingestionTrigger.User, ingestconf.ArchivedQueue(), message)
 	default:
-		slog.Warn("unknown ingest type", "type", ingestionTrigger.Type, "message-key", message.Key, "filepath", ingestionTrigger.FilePath, "user", ingestionTrigger.User)
+		span.Warn("unknown ingest type", slog.String("type", ingestionTrigger.Type), slog.String("filepath", ingestionTrigger.FilePath), slog.String("user", ingestionTrigger.User))
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "unknown ingest type")}, nil
+		return []func(){app.errorQueue(ctx, message, "unknown ingest type")}, nil
 	}
 
 	return callbacks, err
@@ -217,6 +234,9 @@ func (app *Ingest) registerC4GHKey(ctx context.Context) error {
 }
 
 func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *brokerv2.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "cancelFile", attribute.String("file-id", fileID))
+	defer span.End()
+
 	fileExistsInDataset, err := app.db.IsFileInDataset(ctx, fileID)
 	if err != nil {
 		// requeue message as db error is not expected and should succeed on retries
@@ -224,11 +244,11 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *broke
 	}
 
 	if fileExistsInDataset {
-		slog.Warn("cannot cancel file as it has been added to a dataset", "file-id", fileID)
+		span.Warn("cannot cancel file as it has been added to a dataset")
 
 		reason := "cannot cancel file: already added to a dataset"
 		// send message to error queue, set file error event, and do not requeue
-		return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
+		return []func(){app.errorQueue(ctx, message, reason), app.setErrorEvent(ctx, reason, message)}, nil
 	}
 
 	archiveData, err := app.db.GetArchived(ctx, fileID)
@@ -238,7 +258,7 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *broke
 	}
 
 	if archiveData == nil {
-		slog.Warn("file not found in archive, skipping", "file-id", fileID)
+		span.Warn("file not found in archive, skipping")
 
 		return nil, nil
 	}
@@ -246,70 +266,77 @@ func (app *Ingest) cancelFile(ctx context.Context, fileID string, message *broke
 	if archiveData.Location != "" {
 		if err := app.ArchiveWriter.RemoveFile(ctx, archiveData.Location, archiveData.FilePath); err != nil {
 			// Just log error and continue as this should not block updating the db
-			slog.Error("failed to remove file with from archive", "error", err, "file-id", fileID)
+			span.Warn("failed to remove file with from archive", slog.Any("error", err))
 		}
 	}
 
 	if app.BackupWriter != nil && archiveData.BackupFilePath != "" && archiveData.BackupLocation != "" {
 		if err := app.BackupWriter.RemoveFile(ctx, archiveData.BackupLocation, archiveData.BackupFilePath); err != nil {
 			// Just log error and continue as this should not block updating the db
-			slog.Error("failed to remove file from backup", "error", err, "file-id", fileID)
+			span.Warn("failed to remove file with backup", slog.Any("error", err))
 		}
 	}
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
+		span.Error("failed to begin transaction", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
 	if err := tx.CancelFile(ctx, fileID, string(message.Body)); err != nil {
-		slog.Error("failed to cancel file", "error", err, "file-id", fileID)
+		span.Error("failed to cancel file", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction", "error", err, "file-id", fileID)
+		span.Error("failed to commit transaction", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
-	slog.Info("file cancelled successfully", "file-id", fileID)
+	span.Info("file cancelled successfully")
 
 	return nil, nil
 }
 
 func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archivedQueue string, message *brokerv2.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "ingestFile",
+		attribute.String("file-id", fileID),
+		attribute.String("file-path", filePath),
+		attribute.String("user", user),
+	)
+	defer span.End()
+
 	status, err := app.db.GetFileStatus(ctx, fileID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		slog.Error("could not get file status for file", "error", err, "file-id", fileID)
+		span.Error("could not get file status for file", err)
 		// requeue message as db error(other than sql.ErrNoRows) is not expected and should succeed on retries
 		return nil, err
 	}
 
 	submissionLocation, err := app.db.GetSubmissionLocation(ctx, fileID)
 	if err != nil {
-		slog.Error("failed to get submission location for file", "error", err, "file-id", fileID)
+		span.Error("failed to get submission location for file", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
+		span.Error("failed to begin transaction", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
@@ -324,11 +351,11 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// filePath and resolve it to the physical inbox path before locating it.
 		submissionLocation, err = app.InboxReader.FindFile(ctx, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 		if err != nil {
-			slog.Error("failed to find submission location for file", "error", err, "file-id", fileID)
+			span.Error("failed to find submission location for file", err)
 
 			if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
 				// send message to error queue and do not requeue
-				return []func(){app.errorQueue(message, "failed to find submission location for file")}, nil
+				return []func(){app.errorQueue(ctx, message, "failed to find submission location for file")}, nil
 			}
 
 			return nil, err
@@ -337,7 +364,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// Store the anonymized submission path (filePath), not the correlation-id, so the mapper can resolve it back on cleanup.
 		fileID, err = tx.RegisterFile(ctx, &fileID, submissionLocation, filePath, user)
 		if err != nil {
-			slog.Error("failed to register file", "error", err, "file-id", fileID)
+			span.Error("failed to register file", err)
 
 			return nil, err
 		}
@@ -346,39 +373,30 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// upload stuck at "registered", so verify never runs.
 
 	default:
-		slog.Warn("received ingestion trigger for file with unexpected status", "file-id", fileID, "status", status)
+		span.Warn("received ingestion trigger for file with unexpected status", slog.String("status", status))
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "unexpected file status for ingest trigger")}, nil
+		return []func(){app.errorQueue(ctx, message, "unexpected file status for ingest trigger")}, nil
 	}
 
 	if submissionLocation == "" {
-		reason := "file submission location not known"
-		slog.Error(reason, "file-id", fileID)
+		err := errors.New("file submission location not known")
+		span.Error("failed to ingest file", err)
 		// send message to error queue, set file event log, and do not requeue
-		return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
+		return []func(){app.errorQueue(ctx, message, err.Error()), app.setErrorEvent(ctx, err.Error(), message)}, nil
 	}
 
 	sourceReader, err := app.InboxReader.NewFileReader(ctx, submissionLocation, helper.ResolveInboxPath(filePath, user, app.InboxProjectConfig))
 	if err != nil {
 		switch {
-		case errors.Is(err, storageerrors.ErrorFileNotFoundInLocation):
-			reason := "failed to find file in inbox when expected"
-			slog.Error(reason, "file-id", fileID)
+		case errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) ||
+			errors.Is(err, storageerrors.ErrorInvalidLocation) ||
+			errors.Is(err, storageerrors.ErrorNoEndpointConfiguredForLocation):
+			span.Error("failed to ingest file", err, slog.String("submission-location", submissionLocation))
 			// send message to error queue, set file event log, and do not requeue
-			return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
-		case errors.Is(err, storageerrors.ErrorInvalidLocation):
-			reason := "file has invalid submission location"
-			slog.Error(reason, "file-id", fileID, "submission-location", submissionLocation)
-			// send message to error queue, set file event log, and do not requeue
-			return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
-		case errors.Is(err, storageerrors.ErrorNoEndpointConfiguredForLocation):
-			reason := "file has submission location which is not configured"
-			slog.Error(reason, "file-id", fileID, "submission-location", submissionLocation)
-			// send message to error queue, set file event log, and do not requeue
-			return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
+			return []func(){app.errorQueue(ctx, message, err.Error()), app.setErrorEvent(ctx, err.Error(), message)}, nil
 		default:
-			slog.Error("failed to read file", "error", err, "file-id", fileID)
+			span.Error("failed to read file", err, slog.String("submission-location", submissionLocation))
 			// requeue message as inbox error is not expected and should succeed on retries
 			return nil, err
 		}
@@ -388,21 +406,21 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	}()
 
 	if err := tx.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(message.Body)); err != nil {
-		slog.Error("failed to update file event log", "error", err, "file-id", fileID)
+		span.Error("failed to update file event log", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	dr, err := app.decrypt(sourceReader)
 	if err != nil {
-		slog.Error("failed ingestion during decrypt and archive", "error", err, "file-id", fileID)
+		span.Error("failed ingestion during decrypt and archive", err)
 		// send message to error queue, set file event log, and do not requeue
-		return []func(){app.errorQueue(message, err.Error()), app.setErrorEvent(err.Error(), message)}, nil
+		return []func(){app.errorQueue(ctx, message, err.Error()), app.setErrorEvent(ctx, err.Error(), message)}, nil
 	}
 
 	location, err := app.archive(ctx, tx, dr.keyHash, fileID, dr.header, dr.teedReader)
 	if err != nil {
-		slog.Error("failed to archive file", "error", err, "file-id", fileID)
+		span.Error("failed to archive file", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -410,7 +428,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	checksum := fmt.Sprintf("%x", dr.hash.Sum(nil))
 
 	if err := app.finalizeDatabaseRecords(ctx, tx, fileID, location, checksum, message); err != nil {
-		slog.Error("failed to finalize database records", "error", err, "file-id", fileID)
+		span.Error("failed to finalize database records", err)
 		// requeue message as error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -418,7 +436,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	// If commit fails we've already uploaded the file to the archive
 	// but we will still rollback and reconsume the message as that can be done again, and it would just overwrite it
 	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction for ingest action", "error", err, "file-id", fileID)
+		span.Error("failed to commit transaction for ingest action", err)
 		// requeue message as broker error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -426,14 +444,13 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	// We need to send message after the commit, since there is a race condition where verify would consume and start processing the message before the commit is actioned.
 	// If notifyArchived fails we can not requeue the message as the db transaction has already been commited. Failure here would require manual intervertion.
 	if err := app.notifyArchived(ctx, fileID, filePath, user, checksum, archivedQueue, message); err != nil {
-		reason := "failed to notify archived"
-		slog.Error(reason, "error", err, "file-id", fileID)
+		span.Error("failed to notify archived", err)
 
 		// send message to error queue, set file event log, and do not requeue
-		return []func(){app.errorQueue(message, reason), app.setErrorEvent(reason, message)}, nil
+		return []func(){app.errorQueue(ctx, message, err.Error()), app.setErrorEvent(ctx, err.Error(), message)}, nil
 	}
 
-	slog.Info("file ingested successfully", "file-id", fileID)
+	span.Info("file ingested successfully")
 
 	return nil, nil
 }
@@ -528,40 +545,54 @@ func (app *Ingest) notifyArchived(ctx context.Context, fileID, filePath, user, c
 
 	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", ingestconf.SchemaPath()), messageBody)
 	if err != nil {
-		slog.Error("could not validate message", "error", err, "message-key", message.Key)
-
-		return err
+		return fmt.Errorf("could not validate message: %w", err)
 	}
 
 	return app.Broker.Publish(ctx, archivedQueue, archivedMessage)
 }
 
-func (app *Ingest) setErrorEvent(details string, message *brokerv2.Message) func() {
+func (app *Ingest) setErrorEvent(ctx context.Context, details string, message *brokerv2.Message) func() {
+	// Ignore if ctx is cancelled as this callback func will execute after context have been cancelled
+	// But we want same context to spawn the spans under the parent span.
+	ctx = context.WithoutCancel(ctx)
+
 	return func() {
+		ctx, span := observability.StartSpan(ctx, "setErrorEvent", attribute.String("message-key", message.Key))
+		defer span.End()
+
 		detailsMap := map[string]string{
 			"error": details,
 		}
 
 		detailsJSON, err := json.Marshal(detailsMap)
 		if err != nil {
-			slog.Error("failed to marshal details to JSON", "error", err)
+			span.Error("failed to marshal details to JSON", err)
 			detailsJSON = []byte("{}")
 		}
-		if err := app.db.UpdateFileEventLog(context.Background(), message.Key, "error", "ingest", string(detailsJSON), string(message.Body)); err != nil {
-			slog.Error("failed to set file event log error event", "error", err)
+		if err := app.db.UpdateFileEventLog(ctx, message.Key, "error", "ingest", string(detailsJSON), string(message.Body)); err != nil {
+			span.Error("failed to set file event log error event", err)
 		}
 	}
 }
 
-func (app *Ingest) errorQueue(originMessage *brokerv2.Message, errorQueueReason string) func() {
+func (app *Ingest) errorQueue(ctx context.Context, originMessage *brokerv2.Message, errorQueueReason string) func() {
+	// Ignore if ctx is cancelled as this callback func will execute after context have been cancelled
+	// But we want same context to spawn the spans under the parent span.
+	ctx = context.WithoutCancel(ctx)
+
 	return func() {
+		ctx, span := observability.StartSpan(ctx, "errorQueue", attribute.String("message-key", originMessage.Key), attribute.String("reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.Broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
+		if err := app.Broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
+
+			return
 		}
-		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
+		span.Info("published message to error queue")
 	}
 }
