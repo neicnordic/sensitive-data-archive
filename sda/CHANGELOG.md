@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Do not start on a new delivery once shutdown has begun; the grace period is for the handler that was already running.
   - Do not reconnect after `Close()`, so a handler that outlives shutdown cannot publish a duplicate; `Close()` now takes the broker mutex.
   - `Alive()` makes one bounded reconnect attempt when the connection is down, so a service that only publishes recovers through its readiness probe instead of needing a restart; it answers within a few seconds and never waits behind another caller's dial.
+  - `Publish` waits on a confirmation that belongs to that publish alone; on the shared `NotifyPublish` channel concurrent publishers, as in api, could get each other's ack or nack, and a confirmation nobody read within five seconds was dropped.
+  - A reconnect attempt returns when its context is done even while the library is still in a handshake or channel open it cannot interrupt; the abandoned attempt closes what it opened.
+  - The consumer tag is cut to fit AMQP's 255-byte limit for long queue names.
   - Reconnects are serialised on their own mutex and the dial no longer holds the broker state mutex, so `Close()` and `Alive()` are not blocked for the dial and handshake timeouts while a reconnect is in flight, two callers that both see a dead connection result in one dial, and the TCP dial and handshake follow the caller's context deadline.
   - `Close()` closes the connection with a deadline instead of closing each channel and waiting for the server's reply without one, so shutdown against a frozen server ends after a few seconds instead of the heartbeat timeout; a connection the server had already dropped is no longer reported as an error.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full

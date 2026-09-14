@@ -209,14 +209,17 @@ func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
 
 // hangingBroker points the broker at a local listener that accepts TCP
 // connections and never speaks AMQP, so the handshake stalls until the dial
-// deadline. accepted counts the connections it received.
-func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32) {
+// deadline. accepted counts the connections it received and acceptedCh gets
+// one value per accepted connection, so a test can wait for a dial to be
+// in flight instead of sleeping.
+func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32, <-chan struct{}) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = l.Close() })
 
 	var accepted atomic.Int32
+	acceptedCh := make(chan struct{}, 16)
 	go func() {
 		for {
 			c, err := l.Accept()
@@ -224,6 +227,7 @@ func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32) {
 				return
 			}
 			accepted.Add(1)
+			acceptedCh <- struct{}{}
 			t.Cleanup(func() { _ = c.Close() })
 		}
 	}()
@@ -235,11 +239,20 @@ func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32) {
 	b.config.password = "guest"
 	b.config.vhost = "/"
 
-	return b, &accepted
+	return b, &accepted, acceptedCh
+}
+
+func waitAccepted(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the dial never reached the listener")
+	}
 }
 
 func TestRabbitMQ_EnsureConnectedAfterCloseDoesNotDial(t *testing.T) {
-	b, accepted := hangingBroker(t)
+	b, accepted, _ := hangingBroker(t)
 	require.NoError(t, b.Close())
 
 	err := b.ensureConnected(context.Background())
@@ -249,25 +262,43 @@ func TestRabbitMQ_EnsureConnectedAfterCloseDoesNotDial(t *testing.T) {
 }
 
 func TestRabbitMQ_ConnectFollowsContext(t *testing.T) {
-	b, accepted := hangingBroker(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	b, accepted, acceptedCh := hangingBroker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
 	err := b.ensureConnected(ctx)
 	require.Error(t, err)
 	assert.Less(t, time.Since(start), 5*time.Second, "the handshake must stop at the context deadline, not the 30s default")
+	waitAccepted(t, acceptedCh)
 	assert.Equal(t, int32(1), accepted.Load())
 }
 
+func TestRabbitMQ_ConnectFollowsCancelWithoutDeadline(t *testing.T) {
+	b, _, acceptedCh := hangingBroker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- b.ensureConnected(ctx) }()
+	waitAccepted(t, acceptedCh) // handshake is now stalled inside the library
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("ensureConnected did not return on cancel while the handshake was stalled")
+	}
+}
+
 func TestRabbitMQ_CloseIsNotBlockedByDial(t *testing.T) {
-	b, _ := hangingBroker(t)
+	b, _, acceptedCh := hangingBroker(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	dialErr := make(chan error, 1)
 	go func() { dialErr <- b.ensureConnected(ctx) }()
-	time.Sleep(100 * time.Millisecond) // let the dial start
+	waitAccepted(t, acceptedCh) // the dial is in flight
 
 	closed := make(chan error, 1)
 	go func() { closed <- b.Close() }()
@@ -288,8 +319,8 @@ func TestRabbitMQ_CloseIsNotBlockedByDial(t *testing.T) {
 }
 
 func TestRabbitMQ_ConcurrentEnsureConnectedDialsOnce(t *testing.T) {
-	b, accepted := hangingBroker(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	b, accepted, acceptedCh := hangingBroker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	const callers = 5
@@ -297,6 +328,7 @@ func TestRabbitMQ_ConcurrentEnsureConnectedDialsOnce(t *testing.T) {
 	for range callers {
 		go func() { errs <- b.ensureConnected(ctx) }()
 	}
+	waitAccepted(t, acceptedCh)
 	for range callers {
 		select {
 		case err := <-errs:
@@ -309,20 +341,21 @@ func TestRabbitMQ_ConcurrentEnsureConnectedDialsOnce(t *testing.T) {
 }
 
 func TestRabbitMQ_AliveDoesNotWaitForAnotherDial(t *testing.T) {
-	b, _ := hangingBroker(t)
+	b, accepted, acceptedCh := hangingBroker(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	go func() { _ = b.ensureConnected(ctx) }()
-	time.Sleep(100 * time.Millisecond) // let the dial take connMu
+	waitAccepted(t, acceptedCh) // the other caller holds connMu
 
 	start := time.Now()
 	assert.False(t, b.Alive())
 	assert.Less(t, time.Since(start), 500*time.Millisecond, "Alive() must answer while another caller is dialling")
+	assert.Equal(t, int32(1), accepted.Load(), "Alive() must not start a second dial")
 }
 
 func TestRabbitMQ_AliveIsBounded(t *testing.T) {
-	b, accepted := hangingBroker(t)
+	b, accepted, _ := hangingBroker(t)
 
 	start := time.Now()
 	assert.False(t, b.Alive())
