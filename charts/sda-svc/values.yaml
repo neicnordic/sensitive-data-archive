@@ -444,6 +444,7 @@ global:
       pass: ""
       user: ""
     brokerQueue: ""
+    # @param global.sync.centerPrefix Only sync datasets which has this prefix in the accession, if not set all datasets will be synced
     centerPrefix: ""
     destination:
       locationBrokerCacheTTL: ""

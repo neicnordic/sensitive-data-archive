@@ -62,7 +62,7 @@ func init() {
 		&config.Flag{
 			Name: "sync.dataset_with_prefix",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Only sync datasets which has this prefix in the accession")
+				flagSet.String(flagName, "", "Only sync datasets which has this prefix in the accession, if not set all datasets will be synced")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
