@@ -39,6 +39,8 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 * A service switches logger in one PR, so no service ships with both imports.
 * Hard errors are returned to `main` and handled there, so that deferred cleanup runs.
   There is no `Fatal` replacement: the logrus `Fatal` calls in production code become returned errors.
+* Span-scoped logging in the observability package proposed in #2523 writes through `log/slog` as well, so trace and span ids land in the same log stream as everything else.
+  The epic sets the convention for context-aware `slog` calls so that this works outside the span wrapper too.
 * Audit output, such as the download service's JSON audit log, is separate from application logging and is not affected.
 
 ### Consequences
