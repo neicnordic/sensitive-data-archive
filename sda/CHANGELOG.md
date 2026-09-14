@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - verify:
   - Update to use broker/v2 instead of broker (v1)
   - Add unit tests
+- rotatekey:
+  - Update to use broker/v2 instead of broker (v1)
+  - Update unit tests to use mocks instead of docker 
+  - Use transaction for write actions during message handling incase error for rollback
+  - Remove dependency on config(v1) package, add required rotatekey related configuration to be registrated to config/v2
+    - Changed
+      - C4GH_ROTATEPUBKEYPATH -> TARGET_PUBLIC_KEY
+      - GRPC_HOST + GRPC_PORT -> REENCRYPT_TARGET
+      - GRPC_CACERT -> REENCRYPT_CA_CERT
+      - GRPC_CLIENTCERT -> REENCRYPT_CLIENT_CERT
+      - GRPC_CLIENTKEY -> REENCRYPT_CLIENT_KEY
+      - BROKER_QUEUE -> SOURCE_QUEUE
+      - BROKER_ROUTINGKEY -> ROUTING_KEY
+      - BROKER_PREFETCHCOUNT -> BROKER_PREFETCH_COUNT
 
 ### Fixed
 
