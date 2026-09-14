@@ -159,7 +159,7 @@ func TestRabbitMQ_EmptyBodyAndHeaders(t *testing.T) {
 
 func TestRabbitMQ_HandlerContextOutlivesCancelByGrace(t *testing.T) {
 	b := newTestBroker()
-	b.config.shutdownGrace = 1
+	b.config.shutdownGrace = time.Second
 	ctx, cancel := context.WithCancel(context.Background())
 
 	hctx, done := b.handlerContext(ctx)
@@ -186,7 +186,7 @@ func TestRabbitMQ_HandlerContextWithoutGraceFollowsParent(t *testing.T) {
 func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
 	ack := &mockAckNack{}
 	b := newTestBroker()
-	b.config.shutdownGrace = 5
+	b.config.shutdownGrace = 5 * time.Second
 	delivery := makeDelivery(ack, "key-4", []byte(`{}`), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
