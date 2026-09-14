@@ -9,11 +9,12 @@ For each message, these steps are taken:
 
 1. The message type is read from the message `type` field.
    1. If the message `type` is not known, an error is logged and the message is Ack'ed.
-2. The correct queue for the message is decided based on message type.
-3. The message is sent to the queue. 
-   - This has no error handling as the resend-mechanism hasn't been finished.
+2. The target routing key for the message is decided based on message type.
+   1. If the message type is of unknown type or the routing key for it has been set to "", it will be routed it to `undeliverable` (`undeliverable` needs to exist)
+3. The message is routed to the configured key. 
+   1. If publishing the fails, the message will be Nack'ed and re-queued for reconsumption 
 4. The message is Ack'ed.
-5. If the message type is of unknown type, we acknowledge it and send it to `catch_all.dead` (needs to exist)
+
 
 ## Communication
 
