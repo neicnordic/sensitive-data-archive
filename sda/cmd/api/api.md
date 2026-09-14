@@ -388,7 +388,6 @@ The `roles` section defines the available roles
 - `role`: rolename or username from the access token
 - `roleBinding`: maps a user/role to another role, this makes roles work as groups which simplifies the policy definitions.
 
-TODO repository mananger = admin or submission? should be used for /file/cancel
 ```json
 {
    "policy": [
@@ -403,7 +402,7 @@ TODO repository mananger = admin or submission? should be used for /file/cancel
          "action": "POST"
       },
       {
-         "role": "submission",
+         "role": "admin",
          "path": "/file/cancel",
          "action": "POST"
       },
