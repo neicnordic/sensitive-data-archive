@@ -1,17 +1,23 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -61,7 +67,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 				ms.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/unit_test_user/test", "").Return(200, nil, map[string]string{"ETag": "shaa", "Content-Length": "321"}).Times(3)
 				ms.On("ServeHTTP", http.MethodPost, "/test_inbox_bucket/unit_test_user/test", "uploadId=upload-id").Return(200, nil, nil).Once()
 
-				mb.On("Publish", "unit-test_destination", broker.Message{
+				publishRemove := mb.On("Publish", "unit-test_destination", broker.Message{
 					Key:  "file_id_123",
 					Body: []byte(`{"user":"unit_test_user","filepath":"unit_test_user/test","operation":"remove"}`),
 				}).Return(nil).Once()
@@ -69,7 +75,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 				mb.On("Publish", "unit-test_destination", broker.Message{
 					Key:  "file_id_123",
 					Body: []byte(`{"operation":"upload","user":"unit_test_user","filepath":"unit_test_user/test","filesize":321,"encrypted_checksums":[{"type":"md5","value":"shaa"}]}`),
-				}).Return(nil).Once()
+				}).Return(nil).Once().NotBefore(publishRemove)
 
 				mdb.On("SetSubmissionFileSize", "file_id_123", int64(321)).Return(nil).Once()
 				mdb.On("UpdateFileEventLog", "file_id_123", "uploaded", "inbox", "{}", mock.Anything).Return(nil).Once()
@@ -164,7 +170,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 				ms.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/unit_test_user/test", "").Return(200, nil, map[string]string{"ETag": "shaa", "Content-Length": "321"}).Times(3)
 				ms.On("ServeHTTP", http.MethodPut, "/test_inbox_bucket/unit_test_user/test", "").Return(200, nil, nil).Once()
 
-				mb.On("Publish", "unit-test_destination", broker.Message{
+				publishRemove := mb.On("Publish", "unit-test_destination", broker.Message{
 					Key:  "file_id_123",
 					Body: []byte(`{"user":"unit_test_user","filepath":"unit_test_user/test","operation":"remove"}`),
 				}).Return(nil).Once()
@@ -172,7 +178,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 				mb.On("Publish", "unit-test_destination", broker.Message{
 					Key:  "file_id_123",
 					Body: []byte(`{"operation":"upload","user":"unit_test_user","filepath":"unit_test_user/test","filesize":321,"encrypted_checksums":[{"type":"md5","value":"shaa"}]}`),
-				}).Return(nil).Once()
+				}).Return(nil).Once().NotBefore(publishRemove)
 
 				mdb.On("SetSubmissionFileSize", "file_id_123", int64(321)).Return(nil).Once()
 				mdb.On("UpdateFileEventLog", "file_id_123", "uploaded", "inbox", "{}", mock.Anything).Return(nil).Once()
@@ -808,4 +814,257 @@ func (m *mockAuthenticator) Authenticate(r *http.Request) (jwt.Token, error) {
 	}
 
 	return token.(jwt.Token), args.Error(1)
+}
+
+func TestUnauthorizedRequest(t *testing.T) {
+	ma := &mockAuthenticator{}
+	ma.On("Authenticate", mock.Anything).Once().Return(nil, errors.New("unathoirzed"))
+
+	p := &proxy{
+		auth: ma,
+	}
+
+	w := httptest.NewRecorder()
+	p.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/unit_test_user/test", nil))
+
+	assert.Equal(t, 401, w.Code)
+	ma.AssertExpectations(t)
+}
+
+func TestUnsupportedUploadFilePath(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{
+			name: "differnt_user_in_path",
+			path: "/differnt_user/file/path",
+		}, {
+			name: "mixed_slashes",
+			path: "/unit_test_user/file\\path/path",
+		}, {
+			name: "disallowed_character_:",
+			path: "/unit_test_user/file:path",
+		}, {
+			name: "disallowed_character_;",
+			path: "/unit_test_user/file;path",
+		}, {
+			name: "disallowed_character_#",
+			path: "/unit_test_user/file#path",
+		}, {
+			name: "disallowed_character_[",
+			path: "/unit_test_user/file[path",
+		}, {
+			name: "disallowed_character_]",
+			path: "/unit_test_user/file]path",
+		}, {
+			name: "disallowed_character_%",
+			path: "/unit_test_user/file%path",
+		},
+		{
+			name: "disallowed_character_$",
+			path: "/unit_test_user/file$path",
+		},
+		{
+			name: "disallowed_character_+",
+			path: "/unit_test_user/file+path",
+		},
+		{
+			name: "disallowed_character_=",
+			path: "/unit_test_user/file=path",
+		},
+		{
+			name: "disallowed_character_@",
+			path: "/unit_test_user/file@path",
+		},
+		{
+			name: "disallowed_character_&",
+			path: "/unit_test_user/file&path",
+		},
+		{
+			name: "disallowed_character_(",
+			path: "/unit_test_user/file(path",
+		},
+		{
+			name: "disallowed_character_)",
+			path: "/unit_test_user/file)path",
+		},
+		{
+			name: "disallowed_character_<",
+			path: "/unit_test_user/file<path",
+		},
+		{
+			name: "disallowed_character_>",
+			path: "/unit_test_user/file>path",
+		},
+		{
+			name: "disallowed_character_|",
+			path: "/unit_test_user/file|path",
+		},
+		{
+			name: "disallowed_character_*",
+			path: "/unit_test_user/file*path",
+		},
+		{
+			name: "disallowed_character_!",
+			path: "/unit_test_user/file!path",
+		},
+		{
+			name: "disallowed_character_,",
+			path: "/unit_test_user/file,path",
+		},
+		{
+			name: "disallowed_character_'",
+			path: "/unit_test_user/file'path",
+		},
+		{
+			name: "disallowed_character_\"",
+			path: "/unit_test_user/file\"path",
+		},
+		{
+			name: "disallowed_character_\"",
+			path: "/unit_test_user/file\"path",
+		},
+		{
+			name: "disallowed_character_?",
+			path: "/unit_test_user/file?path",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ma := &mockAuthenticator{}
+			testToken := jwt.New()
+			_ = testToken.Set("sub", "unit_test_user")
+			ma.On("Authenticate", mock.Anything).Once().Return(testToken, nil)
+
+			p := &proxy{
+				auth: ma,
+			}
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPut, "/temp", nil)
+			// Set URL path directly to not have URL parse errors client side
+			u := &url.URL{
+				Path: tc.path,
+			}
+			req.URL = u
+			p.ServeHTTP(w, req)
+
+			assert.Equal(t, 400, w.Code)
+			ma.AssertExpectations(t)
+		})
+	}
+}
+
+// TestServeHTTP_concurrent_put_noRace verifies that after the in-memory
+// fileIDs map was replaced with Postgres-backed lookups (#2382), concurren
+// PUT requests no longer trigger the "fatal error: concurrent map writes"
+// crash from #2295. The same-shaped test fails on main under -race with
+// warnings on proxy.go:182/185/195 and the fatal error. Here it should pass.
+func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
+	const workers = 50
+	const rounds = 10
+
+	mockDatabase := &mocks.MockDatabase{}
+	mockBroker := &mocks.MockBroker{}
+	mockS3ServerImpl := &mockServer{}
+
+	s3MockServer := httptest.NewServer(http.HandlerFunc(mockS3ServerImpl.ServeHTTP))
+	defer s3MockServer.Close()
+	s3Client := s3.New(s3.Options{
+		BaseEndpoint: aws.String(s3MockServer.URL),
+		Region:       "test",
+		Credentials:  credentials.NewStaticCredentialsProvider("unit_test_access_key", "unit_test_secret_key", ""),
+	})
+
+	ma := &mockAuthenticator{}
+	testToken := jwt.New()
+	_ = testToken.Set("sub", "dummy")
+	ma.On("Authenticate", mock.Anything).Times(rounds*workers).Return(testToken, nil)
+
+	p := &proxy{
+		s3Conf: s3InboxConfig{
+			endpoint:  s3MockServer.URL,
+			accessKey: "unit_test_access_key",
+			secretKey: "unit_test_secret_key",
+			bucket:    "test_inbox_bucket",
+		},
+		s3Client:   s3Client,
+		auth:       ma,
+		broker:     mockBroker,
+		database:   mockDatabase,
+		client:     &http.Client{},
+		routingKey: "unit-test_destination",
+	}
+
+	for round := 0; round < rounds; round++ {
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(workers)
+		for i := 0; i < workers; i++ {
+			n := round*workers + i
+
+			filePath := fmt.Sprintf("race-%04d.c4gh", n)
+			fileID := uuid.NewString()
+
+			mockDatabase.On("GetFileIDInInbox", "dummy", filePath).Return("", nil).Once()
+			mockDatabase.On("BeginTransaction").Return(nil).Once()
+			mockDatabase.On("RegisterFile", (*string)(nil), mock.MatchedBy(func(loc string) bool {
+				// cant verify the port as the mock s3 server gets different port each run by httptest, so just verify it sets the bucket and format correctly
+				u, err := url.Parse(loc)
+
+				return err == nil &&
+					u.Scheme == "http" &&
+					u.Hostname() == "127.0.0.1" &&
+					u.Path == "/test_inbox_bucket"
+			}), filePath, "dummy").Return(fileID, nil).Once()
+			mockDatabase.On("Commit").Return(nil).Once()
+
+			mockS3ServerImpl.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/dummy/"+filePath, "").Return(404, nil, nil).Once()
+			mockS3ServerImpl.On("ServeHTTP", http.MethodPut, "/test_inbox_bucket/dummy/"+filePath, "").Return(200, nil, nil).Once()
+
+			mockS3ServerImpl.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/dummy/"+filePath, "").Return(200, nil, map[string]string{"ETag": "shaa", "Content-Length": "321"}).Twice()
+
+			mockBroker.On("Publish", "unit-test_destination", broker.Message{
+				Key:  fileID,
+				Body: []byte(fmt.Sprintf(`{"operation":"upload","user":"dummy","filepath":"dummy/%s","filesize":321,"encrypted_checksums":[{"type":"md5","value":"shaa"}]}`, filePath)),
+			}).Return(nil).Once()
+
+			mockDatabase.On("SetSubmissionFileSize", fileID, int64(321)).Return(nil).Once()
+			mockDatabase.On("UpdateFileEventLog", fileID, "uploaded", "inbox", "{}", mock.Anything).Return(nil).Once()
+
+			go func() {
+				defer wg.Done()
+				req := httptest.NewRequest(
+					http.MethodPut,
+					"/dummy/"+filePath,
+					http.NoBody,
+				)
+
+				rec := httptest.NewRecorder()
+
+				<-start
+
+				p.ServeHTTP(rec, req)
+			}()
+		}
+		close(start)
+
+		done := make(chan struct{})
+
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(180 * time.Second):
+			log.Error("timed out waiting for all workers do be done")
+		}
+	}
+
+	ma.AssertExpectations(t)
+	mockDatabase.AssertExpectations(t)
+	mockBroker.AssertExpectations(t)
+	mockS3ServerImpl.AssertExpectations(t)
 }
