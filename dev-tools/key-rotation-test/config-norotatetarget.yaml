@@ -21,6 +21,7 @@ server:
   cert: ""
   key: ""
   jwtpubkeyurl: "http://mockauth:8000/jwks"   # Point to the compose service URL
+  jwt_pub_key_url: "http://mockauth:8000/jwks"   # Point to the compose service URL
 
 # --- COMBINED S3 STORAGE TOPOLOGY ---
 storage:
