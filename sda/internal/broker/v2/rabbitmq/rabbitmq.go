@@ -26,13 +26,12 @@ type rmqBroker struct {
 	mu     sync.Mutex
 	connMu sync.Mutex
 
-	connection         *amqp.Connection
-	consumeChannel     *amqp.Channel
-	publishChannel     *amqp.Channel
-	publishConfirmChan <-chan amqp.Confirmation
-	consumerTag        string
-	closed             bool
-	config             *options
+	connection     *amqp.Connection
+	consumeChannel *amqp.Channel
+	publishChannel *amqp.Channel
+	consumerTag    string
+	closed         bool
+	config         *options
 }
 
 func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.Broker, error) {
@@ -83,14 +82,16 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 
 	b.mu.Lock()
 	ch := b.publishChannel
-	confirmChan := b.publishConfirmChan
 	b.mu.Unlock()
 
 	if ch == nil {
 		return errors.New("cannot publish: broker channel is not initialized")
 	}
 
-	err := ch.PublishWithContext(
+	// A deferred confirmation belongs to this publish alone. A shared
+	// NotifyPublish channel hands concurrent callers each other's ack or nack,
+	// and the library drops a confirmation nobody reads within five seconds.
+	dc, err := ch.PublishWithDeferredConfirmWithContext(
 		ctx,
 		b.config.exchange,
 		destinationQueue,
@@ -111,16 +112,14 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 	if err != nil {
 		return fmt.Errorf("failed to publish message, reason: %v", err)
 	}
-	select {
-	case confirm, ok := <-confirmChan:
-		if !ok {
-			return errors.New("publish confirm channel closed")
-		}
-		if !confirm.Ack {
-			return fmt.Errorf("publish nacked by broker for queue %s", destinationQueue)
-		}
-	case <-ctx.Done():
-		return ctx.Err()
+
+	acked, err := dc.WaitContext(ctx)
+	if err != nil {
+		return err
+	}
+	if !acked {
+		// A nack from the server, or the channel closed before it confirmed.
+		return fmt.Errorf("publish not confirmed by broker for queue %s", destinationQueue)
 	}
 
 	return nil
@@ -138,15 +137,25 @@ const closeTimeout = 5 * time.Second
 func (b *rmqBroker) Close() error {
 	b.mu.Lock()
 	b.closed = true
-	conn := b.connection
-	b.connection, b.consumeChannel, b.publishChannel, b.publishConfirmChan = nil, nil, nil, nil
+	conn := b.detachLocked()
 	b.mu.Unlock()
 
+	if err := closeConn(conn); err != nil {
+		return fmt.Errorf("failed to close broker connection, reason: %w", err)
+	}
+
+	return nil
+}
+
+// closeConn closes a connection with closeTimeout, which takes its channels
+// with it. Never called with mu held. A connection the server already
+// dropped is not an error.
+func closeConn(conn *amqp.Connection) error {
 	if conn == nil {
 		return nil
 	}
 	if err := conn.CloseDeadline(time.Now().Add(closeTimeout)); err != nil && !errors.Is(err, amqp.ErrClosed) {
-		return fmt.Errorf("failed to close broker connection, reason: %w", err)
+		return err
 	}
 
 	return nil
@@ -159,8 +168,8 @@ const aliveDialTimeout = 2 * time.Second
 // Alive reports whether the broker is connected. If it is not, and no other
 // caller is already reconnecting, it makes one bounded reconnect attempt, so
 // a service that only publishes can recover through its readiness probe
-// instead of needing a restart. It never blocks behind another caller's
-// dial and never reconnects after Close().
+// instead of needing a restart. It never waits behind another caller's dial
+// and never reconnects after Close().
 func (b *rmqBroker) Alive() bool {
 	if b.alive() {
 		return true
@@ -169,12 +178,19 @@ func (b *rmqBroker) Alive() bool {
 	if !b.connMu.TryLock() {
 		return false
 	}
-	b.connMu.Unlock()
+	defer b.connMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(b.ctx, aliveDialTimeout)
 	defer cancel()
 
-	return b.ensureConnected(ctx) == nil
+	if err := b.connectLocked(ctx); err != nil {
+		log.Debugf("readiness reconnect attempt failed: %v", err)
+
+		return false
+	}
+	log.Info("successfully reconnected to broker")
+
+	return true
 }
 
 func (b *rmqBroker) alive() bool {
@@ -228,8 +244,9 @@ func (b *rmqBroker) startConsuming(sourceQueue string) (<-chan amqp.Delivery, er
 	)
 
 	// A tag we know, so the shutdown path can cancel this consumer; with ""
-	// the client generates one that Cancel cannot refer to.
-	tag := fmt.Sprintf("%s-%d", sourceQueue, time.Now().UnixNano())
+	// the client generates one that Cancel cannot refer to. AMQP limits the
+	// tag to 255 bytes, so a long queue name is cut.
+	tag := fmt.Sprintf("%.200s-%d", sourceQueue, time.Now().UnixNano())
 
 	b.mu.Lock()
 	ch := b.consumeChannel
@@ -272,6 +289,16 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp
 				log.Warn("RabbitMQ consumption channel closed, preparing to recover...")
 
 				return false
+			}
+			// Cancelled between the check above and the select: hand the
+			// delivery back instead of starting it with a full grace period.
+			if ctx.Err() != nil {
+				if err := delivery.Nack(false, true); err != nil {
+					log.Debugf("requeueing delivery during shutdown: %v", err)
+				}
+				b.cancelConsumer()
+
+				return true
 			}
 			b.handleDelivery(ctx, delivery, handleFunc)
 		}
@@ -329,6 +356,7 @@ func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, contex
 	var (
 		timerMu sync.Mutex
 		timer   *time.Timer
+		done    bool
 	)
 	stop := context.AfterFunc(ctx, func() {
 		if grace <= 0 {
@@ -337,13 +365,19 @@ func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, contex
 			return
 		}
 		timerMu.Lock()
+		defer timerMu.Unlock()
+		// The handler finished while this callback was starting; nothing
+		// left to cancel later.
+		if done {
+			return
+		}
 		timer = time.AfterFunc(grace, cancel)
-		timerMu.Unlock()
 	})
 
 	return hctx, func() {
 		stop()
 		timerMu.Lock()
+		done = true
 		if timer != nil {
 			timer.Stop()
 		}
@@ -353,14 +387,21 @@ func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, contex
 }
 
 // connect (re)establishes the connection and both channels. Reconnects are
-// serialised on connMu and the state is re-checked under it, so two callers
-// that both saw a dead connection result in one dial, and a caller that
-// arrives after Close() does not reconnect. The dial itself runs without mu
-// held; the new state is swapped in under mu only once everything succeeded.
+// serialised on connMu, so two callers that both saw a dead connection
+// result in one dial.
 func (b *rmqBroker) connect(ctx context.Context) error {
 	b.connMu.Lock()
 	defer b.connMu.Unlock()
 
+	return b.connectLocked(ctx)
+}
+
+// connectLocked does the work of connect for a caller that holds connMu. The
+// state is re-checked under it, so a caller that arrives after Close() does
+// not reconnect. The dial runs without mu held, the old connection is closed
+// without mu held, and the new state is swapped in under mu only once
+// everything succeeded.
+func (b *rmqBroker) connectLocked(ctx context.Context) error {
 	if b.alive() {
 		return nil
 	}
@@ -377,45 +418,93 @@ func (b *rmqBroker) connect(ctx context.Context) error {
 		// Drop the dead state so Close() does not report the server having
 		// gone away first as its own failure.
 		b.mu.Lock()
+		var old *amqp.Connection
 		if !b.closed {
-			b.closeLocked()
+			old = b.detachLocked()
 		}
 		b.mu.Unlock()
+		if err := closeConn(old); err != nil {
+			log.Debugf("closing dead connection during reconnect: %v", err)
+		}
 
 		return err
 	}
 
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	// Close() may have run while we were dialling.
 	if b.closed {
-		conn.connection.Close()
+		b.mu.Unlock()
+		if err := closeConn(conn.connection); err != nil {
+			log.Debugf("closing connection dialled after Close(): %v", err)
+		}
 
 		return errBrokerClosed
 	}
-
-	b.closeLocked()
+	old := b.detachLocked()
 	b.connection = conn.connection
 	b.consumeChannel = conn.consumeChannel
 	b.publishChannel = conn.publishChannel
-	b.publishConfirmChan = conn.publishConfirmChan
+	b.mu.Unlock()
+
+	if err := closeConn(old); err != nil {
+		log.Debugf("closing old connection during reconnect: %v", err)
+	}
 
 	return nil
 }
 
-type brokerConn struct {
-	connection         *amqp.Connection
-	consumeChannel     *amqp.Channel
-	publishChannel     *amqp.Channel
-	publishConfirmChan <-chan amqp.Confirmation
+// detachLocked takes the current connection state out of the broker and
+// returns the connection for the caller to close without mu held. Closing
+// under mu would hold Publish, Alive and Close() for the server's reply.
+// Caller holds mu.
+func (b *rmqBroker) detachLocked() *amqp.Connection {
+	conn := b.connection
+	b.connection, b.consumeChannel, b.publishChannel, b.consumerTag = nil, nil, nil, ""
+
+	return conn
 }
 
-// dial opens a new connection with both channels set up. The TCP dial follows
-// ctx. The TLS and AMQP handshakes get the deadline amqp091-go's default
-// dialer would set, or the ctx deadline if that is sooner; the library clears
-// the deadline once the connection is open, so it has no effect afterwards.
+type brokerConn struct {
+	connection     *amqp.Connection
+	consumeChannel *amqp.Channel
+	publishChannel *amqp.Channel
+}
+
+// dial opens a new connection with both channels set up, and returns as soon
+// as ctx is done even if the library is still in a handshake or channel open
+// it cannot interrupt; the abandoned attempt then closes whatever it opened.
 func (b *rmqBroker) dial(ctx context.Context) (*brokerConn, error) {
+	type result struct {
+		conn *brokerConn
+		err  error
+	}
+	res := make(chan result, 1)
+	go func() {
+		conn, err := b.dialBlocking(ctx)
+		res <- result{conn, err}
+	}()
+
+	select {
+	case r := <-res:
+		return r.conn, r.err
+	case <-ctx.Done():
+		go func() {
+			if r := <-res; r.conn != nil {
+				if err := closeConn(r.conn.connection); err != nil {
+					log.Debugf("closing abandoned connection: %v", err)
+				}
+			}
+		}()
+
+		return nil, ctx.Err()
+	}
+}
+
+// dialBlocking is the library dial. The TCP dial follows ctx. The TLS and
+// AMQP handshakes get the deadline amqp091-go's default dialer would set, or
+// the ctx deadline if that is sooner; the library clears the deadline once
+// the connection is open, so it has no effect afterwards.
+func (b *rmqBroker) dialBlocking(ctx context.Context) (*brokerConn, error) {
 	const handshakeTimeout = 30 * time.Second
 
 	amqpConf := amqp.Config{
@@ -454,7 +543,9 @@ func (b *rmqBroker) dial(ctx context.Context) (*brokerConn, error) {
 
 	c, err := b.openChannels(connection)
 	if err != nil {
-		connection.Close()
+		if cerr := closeConn(connection); cerr != nil {
+			log.Debugf("closing connection after channel setup failed: %v", cerr)
+		}
 
 		return nil, err
 	}
@@ -495,34 +586,8 @@ func (b *rmqBroker) openChannels(connection *amqp.Connection) (*brokerConn, erro
 	}
 
 	return &brokerConn{
-		connection:         connection,
-		consumeChannel:     consumeChannel,
-		publishChannel:     publishChannel,
-		publishConfirmChan: publishChannel.NotifyPublish(make(chan amqp.Confirmation, 1)),
+		connection:     connection,
+		consumeChannel: consumeChannel,
+		publishChannel: publishChannel,
 	}, nil
-}
-
-// closeLocked drops the current connection state before a reconnect. Errors
-// are expected here, the connection is usually already gone. Caller holds mu.
-func (b *rmqBroker) closeLocked() {
-	if b.consumeChannel != nil {
-		if err := b.consumeChannel.Close(); err != nil {
-			log.Debugf("closing consume channel during reconnect: %v", err)
-		}
-		b.consumeChannel = nil
-	}
-
-	if b.publishChannel != nil {
-		if err := b.publishChannel.Close(); err != nil {
-			log.Debugf("closing publish channel during reconnect: %v", err)
-		}
-		b.publishChannel = nil
-	}
-
-	if b.connection != nil {
-		if err := b.connection.Close(); err != nil {
-			log.Debugf("closing connection during reconnect: %v", err)
-		}
-		b.connection = nil
-	}
 }
