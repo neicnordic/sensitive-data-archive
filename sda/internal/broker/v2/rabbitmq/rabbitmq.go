@@ -12,6 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var errBrokerClosed = errors.New("broker is closed, not reconnecting")
+
 type rmqBroker struct {
 	ctx context.Context
 	mu  sync.Mutex
@@ -176,7 +178,7 @@ func (b *rmqBroker) ensureConnected(ctx context.Context) error {
 	closed := b.closed
 	b.mu.Unlock()
 	if closed {
-		return errors.New("broker is closed, not reconnecting")
+		return errBrokerClosed
 	}
 
 	if err := b.connect(); err != nil {
@@ -285,6 +287,12 @@ func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, contex
 func (b *rmqBroker) connect() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	// Re-check under the lock: Close() may have run between the check in
+	// ensureConnected and here, and a reconnect after Close() must not happen.
+	if b.closed {
+		return errBrokerClosed
+	}
 
 	if b.consumeChannel != nil {
 		if err := b.consumeChannel.Close(); err != nil {
