@@ -263,11 +263,11 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, delivery amqp.Delivery, 
 
 // handlerContext returns a context for one handler call. It carries the
 // values of ctx but is not cancelled with it: when ctx is cancelled the
-// handler gets shutdownGrace seconds to finish before hctx is cancelled.
+// handler gets shutdownGrace to finish before hctx is cancelled.
 // A grace of 0 keeps the old behaviour, where the handler stops with ctx.
 func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	hctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	grace := time.Duration(b.config.shutdownGrace) * time.Second
+	grace := b.config.shutdownGrace
 
 	stop := context.AfterFunc(ctx, func() {
 		if grace <= 0 {
