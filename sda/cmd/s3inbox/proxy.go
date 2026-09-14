@@ -307,11 +307,14 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 
 		if isReupload {
 			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
-			if err := p.sendInboxRemoveMessage(context.WithoutCancel(r.Context()), username, fileID, s3FilePath); err != nil {
+			pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+			if err := p.sendInboxRemoveMessage(pubCtx, username, fileID, s3FilePath); err != nil {
 				p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+				pubCancel()
 
 				return
 			}
+			pubCancel()
 		} else {
 			log.Infof("user: %s, uploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
 		}
@@ -323,14 +326,17 @@ func (p *proxy) handleUpload(s3RequestType S3RequestType, w http.ResponseWriter,
 			return
 		}
 
-		if err := p.broker.Publish(context.WithoutCancel(r.Context()), p.routingKey, broker.Message{
+		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+		if err := p.broker.Publish(pubCtx, p.routingKey, broker.Message{
 			Key:  fileID,
 			Body: jsonMessage,
 		}); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("broker error: %v", err))
+			pubCancel()
 
 			return
 		}
+		pubCancel()
 
 		if err := p.storeObjectSizeInDB(r.Context(), s3FilePath, fileID); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("storeObjectSizeInDB failed because: %v", err))
@@ -626,11 +632,14 @@ func (p *proxy) handleRemove(s3RequestType S3RequestType, w http.ResponseWriter,
 	}()
 
 	if s3Response.StatusCode >= 200 && s3Response.StatusCode < 300 {
-		if err := p.sendInboxRemoveMessage(context.WithoutCancel(r.Context()), username, fileID, s3FilePath); err != nil {
+		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+		if err := p.sendInboxRemoveMessage(pubCtx, username, fileID, s3FilePath); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err.Error())
+			pubCancel()
 
 			return
 		}
+		pubCancel()
 
 		if err := p.database.UpdateFileEventLog(r.Context(), fileID, "removed", username, "{}", "{}"); err != nil {
 			p.internalServerError(w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Sprintf("could not connect to db: %v", err))
