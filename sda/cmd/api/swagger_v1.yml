@@ -266,10 +266,11 @@ paths:
   /file/cancel:
     post:
       description: |
-        Cancel an the ingestion of a given file. Only files that have not yet
-        been mapped to a datest can be cancelled.
-        You can provide either a JSON payload with `user` and `filepath`, or a `fileid` query parameter.
-        If both are provided, a 400 Bad Request is returned.
+        Cancel the ingestion of a given file. Only files that are uploaded to
+        the archive but have not yet been mapped to a dataset can be cancelled.
+        You can provide either a JSON payload with `user` and `filepath`, or a
+        `fileid` query parameter. If both are provided, a 400 Bad Request is
+        returned. Cancelling an already disabled file will result in a 409 Conflict.
       parameters:
         - in: query
           name: fileid
@@ -291,8 +292,10 @@ paths:
             Bad request. Returned if both fileid and payload are provided, or if payload is invalid, or if fileid is invalid.
         "401":
           description: Authentication failure.
+        "404":
+          description: File ID not found, or file is not in archive.
         "409":
-          description: File has already been added to a dataset.
+          description: File has already been added to a dataset, or is disabled.
         "500":
           description: Internal application error.
   /file/events/{fileID}:

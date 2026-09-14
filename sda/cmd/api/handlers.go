@@ -433,6 +433,12 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
+		if status == "disabled" {
+			slog.Error("file is already disabled", "file_id", fileID)
+			writeJSON(w, http.StatusNotFound, fmt.Sprintf("no active filepath %s found in database", fileID))
+
+			return
+		}
 		fileDetails, err := api.db.GetFileDetails(r.Context(), fileID, status)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not find details for %s, reason: %v", fileID, err))
@@ -452,10 +458,11 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fileID, err = api.db.GetFileIDByUserAndPath(r.Context(), cancel.User, cancel.FilePath)
+		// files with status disabled will not be returned by GetFileIDByUserAndPath
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath)
-				writeJSON(w, http.StatusBadRequest, fmt.Sprintf("file id %s not found in database", cancel.FilePath))
+				writeJSON(w, http.StatusBadRequest, fmt.Sprintf("no active file path %s found in database", cancel.FilePath))
 
 				return
 			}
@@ -468,6 +475,21 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 	default:
 		slog.Error("missing parameter in payload")
 		writeJSON(w, http.StatusBadRequest, "missing parameter in payload")
+
+		return
+	}
+
+	archiveData, err := api.db.GetArchived(r.Context(), fileID)
+	if err != nil {
+		slog.Error("failed to check if file is in archive", "file_id", fileID, "err", err)
+		writeJSON(w, http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	if archiveData == nil {
+		slog.Error("file not found in archive", "file_id", fileID)
+		writeJSON(w, http.StatusNotFound, fmt.Sprintf("cannot cancel file %s: not found in archive", fileID))
 
 		return
 	}

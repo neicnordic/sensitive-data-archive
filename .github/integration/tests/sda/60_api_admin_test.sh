@@ -215,7 +215,7 @@ if [ "$resp" != "409" ]; then
 fi
 echo "Cancelling ingestion via file/cancel finished successfully"
 
-# Test canceling a file that is still being ingested
+# Test canceling a file that is uploaded but not mapped to a dataset yet
 cancelfile="cancelingest.bam"
 s3cmd -c s3cfg put NA12878.bam.c4gh s3://test_dummy.org/$cancelfile.c4gh
 stream_size=$((stream_size + 1))

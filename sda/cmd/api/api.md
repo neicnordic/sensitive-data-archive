@@ -100,7 +100,8 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     - `200` Query executed successfully.
     - `400` Bad request (e.g. wrong `user` + `filepath` combination, both payload and fileid provided, invalid fileid, or invalid JSON).
     - `401` Token user is not in the list of admins.
-    - `409` File has already been linked to a dataset.
+    - `404` File id is not found, or file is not in archive.
+    - `409` File has already been linked to a dataset or is already disabled.
     - `500` Internal error due to DB or MQ failures.
 
     Example (JSON payload):

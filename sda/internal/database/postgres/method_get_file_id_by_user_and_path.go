@@ -11,7 +11,8 @@ func init() {
 	queries[getFileIDByUserAndPathQuery] = `SELECT id FROM sda.files AS f
     WHERE f.submission_user = $1
     AND f.submission_file_path = $2
-    AND f.last_event != 'disabled';`
+    AND f.last_event != 'disabled'
+	ORDER BY f.created_at DESC LIMIT 1;`
 }
 
 // getFileIDByUserAndPath returns the currently active (not disabled) file for a given

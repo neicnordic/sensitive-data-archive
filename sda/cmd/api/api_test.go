@@ -40,6 +40,8 @@ var (
 	filePath          = "test/file.c4gh"
 	unknownFilePath   = "test/not-ingested.c4gh"
 	inDatasetFilePath = "test/in-dataset.c4gh"
+	uploadedFilePath  = "test/upoaded.c4gh"
+	uploadedFileID    = "7d9f3c2b-4e1a-4b8c-9f2d-3c6e1a0d5f8e"
 	fileID            = "3a7f2c91-b4e0-4d8a-9f3b-2c6e1a0d5f8e"
 	inDatasetFileID   = "5c8e3f2a-1b4d-4a9e-8f0a-6d2e7c1a9b3f"
 	userID            = "dummy"
@@ -174,8 +176,13 @@ func setup() error {
 	mockDB.On("GetFileIDByUserAndPath", userID, filePath).Return(fileID, nil)
 	mockDB.On("GetFileIDByUserAndPath", userID, unknownFilePath).Return("", sql.ErrNoRows)
 	mockDB.On("GetFileIDByUserAndPath", userID, inDatasetFilePath).Return(inDatasetFileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, uploadedFilePath).Return(uploadedFileID, nil)
+	mockDB.On("GetArchived", uploadedFileID).Return(nil, nil)
+	mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{FilePath: "test", Location: "test", FileSize: 0}, nil)
+	mockDB.On("GetArchived", inDatasetFileID).Return(&database.ArchiveData{FilePath: "test", Location: "test", FileSize: 0}, nil)
 	mockDB.On("GetFileStatus", fileID).Return("archived", nil)
 	mockDB.On("GetFileStatus", inDatasetFileID).Return("ready", nil)
+	mockDB.On("GetFileStatus", uploadedFileID).Return("uploaded", nil)
 	mockDB.On("IsFileInDataset", fileID).Return(false, nil)
 	mockDB.On("IsFileInDataset", inDatasetFileID).Return(true, nil)
 	mockDB.On("GetUploadedSubmissionFilePathAndLocation", userID, fileID).Return("inbox", "inbox", nil)
@@ -298,6 +305,10 @@ func TestCancelFile(t *testing.T) {
 		"filepath": inDatasetFilePath,
 		"user":     userID,
 	})
+	unArchivedBody := toJSON(t, map[string]any{
+		"filepath": uploadedFilePath,
+		"user":     userID,
+	})
 	tests := []struct {
 		name     string
 		token    string
@@ -309,6 +320,7 @@ func TestCancelFile(t *testing.T) {
 		{"Missing Token", "", validBody, http.StatusUnauthorized},
 		{"Invalid Body", token, []byte("not json"), http.StatusBadRequest},
 		{"Empty Body", token, nil, http.StatusBadRequest},
+		{"Not Found in Archive", token, unArchivedBody, http.StatusNotFound},
 		{"Not Being Ingested", token, notIngestedBody, http.StatusBadRequest},
 		{"Already In Dataset", token, inDatasetBody, http.StatusConflict},
 	}
