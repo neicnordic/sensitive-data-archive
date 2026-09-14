@@ -12,7 +12,7 @@ When running, sync reads messages from the `mapping_stream` RabbitMQ queue.
 For each message, these steps are taken (if not otherwise noted, errors halts progress, the message is Nack'ed, and the service moves on to the next message):
 
 1. The message is validated as valid JSON that matches the "dataset-mapping" schema. If the message can’t be validated it is sent to the error queue for later analysis.
-2. Checks where the dataset is created by comparing the center prefix on the dataset ID, if it is a remote ID processing stops.
+2. Checks where the dataset is created by comparing the configured prefix(SYNC_DATASET_WITH_PREFIX) with the dataset ID, if it is a does not have the provided ID processing stops.
 3. For each stable ID in the dataset the following is performed:
     1. The archive file path and file size is fetched from the database.
     2. The file size on disk is requested from the storage system.
@@ -55,7 +55,7 @@ export LOG_FORMAT="json"
 
 ### Service settings
 
-- `SYNC_DATASET_WITH_PREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not
+- `SYNC_DATASET_WITH_PREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not, if not set all datasets will be synced
 - `SYNC_REMOTE_URL`: URL to the remote API host (including scheme, port, and path)
 - `SYNC_REMOTE_USER`: Username for connecting to the remote API
 - `SYNC_REMOTE_PASSWORD`: Password for the API user
