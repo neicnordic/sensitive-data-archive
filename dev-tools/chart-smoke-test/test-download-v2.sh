@@ -243,7 +243,7 @@ spec:
     spec:
       containers:
       - name: minio
-        image: minio/minio:latest
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
         command: ["minio", "server", "/data"]
         env:
         - name: MINIO_ROOT_USER

@@ -25,7 +25,7 @@ services:
 
   # MinIO for archive storage
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     container_name: s3
     environment:
@@ -100,7 +100,7 @@ services:
   # Initialize MinIO with archive bucket and test data
   minio_init:
     container_name: minio_init
-    image: minio/mc
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
