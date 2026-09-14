@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- broker/v2/rabbitmq:
+  - Update Alive() implementation to trigger reconnection if rabbitmq connection is closed
 - finalize:
   - Migrate to Broker V2 package
   - Use db transactions to ensure correct state even if an error occurs.
