@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,46 +207,61 @@ func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
 	assert.True(t, ack.ackCalled)
 }
 
-// unreachableBroker points the broker at TEST-NET-1 (RFC 5737), which is not
-// routed, so a dial hangs until its context or timeout ends.
-func unreachableBroker() *rmqBroker {
+// hangingBroker points the broker at a local listener that accepts TCP
+// connections and never speaks AMQP, so the handshake stalls until the dial
+// deadline. accepted counts the connections it received.
+func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32) {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = l.Close() })
+
+	var accepted atomic.Int32
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			accepted.Add(1)
+			t.Cleanup(func() { _ = c.Close() })
+		}
+	}()
+
 	b := newTestBroker()
-	b.config.host = "192.0.2.1"
-	b.config.port = 5672
+	b.config.host = "127.0.0.1"
+	b.config.port = l.Addr().(*net.TCPAddr).Port
 	b.config.user = "guest"
 	b.config.password = "guest"
 	b.config.vhost = "/"
 
-	return b
+	return b, &accepted
 }
 
 func TestRabbitMQ_EnsureConnectedAfterCloseDoesNotDial(t *testing.T) {
-	b := unreachableBroker()
+	b, accepted := hangingBroker(t)
 	require.NoError(t, b.Close())
 
-	start := time.Now()
 	err := b.ensureConnected(context.Background())
 	assert.ErrorIs(t, err, errBrokerClosed)
-	assert.Less(t, time.Since(start), time.Second, "a closed broker must not try to dial")
 	assert.False(t, b.Alive())
+	assert.Equal(t, int32(0), accepted.Load(), "a closed broker must not try to dial")
 }
 
 func TestRabbitMQ_ConnectFollowsContext(t *testing.T) {
-	b := unreachableBroker()
+	b, accepted := hangingBroker(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
 	err := b.ensureConnected(ctx)
 	require.Error(t, err)
-	var netErr net.Error
-	require.ErrorAs(t, err, &netErr)
-	assert.True(t, netErr.Timeout(), "net.Dialer reports the expired context as a timeout")
-	assert.Less(t, time.Since(start), 5*time.Second, "the dial must stop with the context")
+	assert.Less(t, time.Since(start), 5*time.Second, "the handshake must stop at the context deadline, not the 30s default")
+	assert.Equal(t, int32(1), accepted.Load())
 }
 
 func TestRabbitMQ_CloseIsNotBlockedByDial(t *testing.T) {
-	b := unreachableBroker()
+	b, _ := hangingBroker(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -264,15 +280,15 @@ func TestRabbitMQ_CloseIsNotBlockedByDial(t *testing.T) {
 
 	select {
 	case err := <-dialErr:
-		require.Error(t, err, "the dial must not succeed against an unreachable host")
+		require.Error(t, err, "the dial must not succeed against a server that never answers")
 	case <-time.After(5 * time.Second):
 		t.Fatal("ensureConnected did not return after the context ended")
 	}
 	assert.False(t, b.Alive(), "Alive() must not reconnect after Close()")
 }
 
-func TestRabbitMQ_ConcurrentEnsureConnectedSerialises(t *testing.T) {
-	b := unreachableBroker()
+func TestRabbitMQ_ConcurrentEnsureConnectedDialsOnce(t *testing.T) {
+	b, accepted := hangingBroker(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
@@ -289,4 +305,27 @@ func TestRabbitMQ_ConcurrentEnsureConnectedSerialises(t *testing.T) {
 			t.Fatal("a concurrent caller never returned")
 		}
 	}
+	assert.Equal(t, int32(1), accepted.Load(), "callers waiting on connMu must not dial again once the context is done")
+}
+
+func TestRabbitMQ_AliveDoesNotWaitForAnotherDial(t *testing.T) {
+	b, _ := hangingBroker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	go func() { _ = b.ensureConnected(ctx) }()
+	time.Sleep(100 * time.Millisecond) // let the dial take connMu
+
+	start := time.Now()
+	assert.False(t, b.Alive())
+	assert.Less(t, time.Since(start), 500*time.Millisecond, "Alive() must answer while another caller is dialling")
+}
+
+func TestRabbitMQ_AliveIsBounded(t *testing.T) {
+	b, accepted := hangingBroker(t)
+
+	start := time.Now()
+	assert.False(t, b.Alive())
+	assert.Less(t, time.Since(start), aliveDialTimeout+time.Second)
+	assert.Equal(t, int32(1), accepted.Load(), "Alive() makes one reconnect attempt")
 }
