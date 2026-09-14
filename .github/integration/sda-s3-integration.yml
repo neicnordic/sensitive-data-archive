@@ -99,7 +99,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTINGKEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
     extra_hosts:
