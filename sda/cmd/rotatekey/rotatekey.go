@@ -168,15 +168,18 @@ func run() error {
 	select {
 	case err := <-app.targetKeyNotUsableChan:
 		slog.Error("target key no longer usable", slog.Any("error", err))
+		cancel()
 
 		return err
 	case sig := <-sigc:
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		cancel()
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
 			slog.Error("consumer failure", "error", err, "source-queue", rotatekeyconfig.SourceQueue())
+			cancel()
 
 			return err
 		}
