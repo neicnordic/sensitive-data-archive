@@ -20,6 +20,7 @@ server:
   cert: ""
   key: ""
   jwtpubkeyurl: "http://mockauth:8000/jwks"
+  jwt_pub_key_url: "http://mockauth:8000/jwks"
 
 storage:
   backend: "archive"
