@@ -106,11 +106,11 @@ func (ts *TestSuite) TestBackupFile() {
 
 	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
 	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil)
-	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(1234), nil)
-	ts.mockBackupWriter.On("WriteFile", fileID).Return("backup_test_location", nil)
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil)
+	ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil)
 	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
 		FilePath: fileID,
-		FileSize: int64(1234),
+		FileSize: int64(len(encryptedContent)),
 		Location: "archive_test_location",
 	}, nil)
 	ts.mockDB.On("BeginTransaction").Return(nil)
