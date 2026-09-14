@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	// pulls an image, creates a container based on it and runs it
 	minio, err := dockerPool.RunWithOptions(&dockertest.RunOptions{
 		Name:       "s3test",
-		Repository: "minio/minio",
+		Repository: "quay.io/minio/minio",
 		Tag:        "RELEASE.2023-05-18T00-05-36Z",
 		Cmd:        []string{"server", "/data", "--console-address", ":9001"},
 		Env: []string{
