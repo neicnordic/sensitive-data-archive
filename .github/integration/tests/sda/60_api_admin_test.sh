@@ -213,7 +213,7 @@ if [ "$resp" != "409" ]; then
     echo "Error when cancelling a file that has already been mapped to a dataset, expected 409 got: $resp"
     exit 1
 fi
-echo "Cancelling ingestion via file/cancel finished successfully"
+echo "Testing cancelation of files already mapped to a dataset finished successfully"
 
 # Test canceling a file that is uploaded but not mapped to a dataset yet
 cancelfile="cancelingest.bam"
@@ -238,6 +238,7 @@ jq -c -n \
 	'$ARGS.named'
 )
 
+# Ingest the file
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$cancel_test_payload" "http://api:8080/file/ingest")"
 if [ "$resp" != "200" ]; then
     echo "Error when requesting to ingest file, expected 200 got: $resp"
@@ -246,12 +247,28 @@ fi
 
 fileid="$(curl -k -L -H "Authorization: Bearer $token" "http://api:8080/users/test@dummy.org/files" | jq -r ".[] | select(.inboxPath == \"$cancelfile.c4gh\") | .fileID")"
 
+# Wait until the file is in the archive
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.file_event_log WHERE file_id='$fileid' order by started_at desc limit 1;")" = "verified" ]; do
+   echo "waiting for verified to complete"
+   RETRY_TIMES=$((RETRY_TIMES + 1))
+   if [ "$RETRY_TIMES" -eq 10 ]; then
+      echo "::error::Time out while waiting for verified to complete"
+      exit 1
+   fi
+   sleep 2
+done
+echo "File ingested successfully"
+
+
+
 # Cancel the ingestion using the same payload that was used to start it
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -X POST -d "$cancel_test_payload" "http://api:8080/file/cancel")"
 if [ "$resp" != "200" ]; then
     echo "Error when requesting to cancel file, expected 200 got: $resp"
     exit 1
 fi
+echo "Testing cancelation of uploaded file finished successfully"
 
 # Check that the file has been disabled
 RETRY_TIMES=0

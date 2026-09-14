@@ -462,7 +462,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath)
-				writeJSON(w, http.StatusBadRequest, fmt.Sprintf("no active file path %s found in database", cancel.FilePath))
+				writeJSON(w, http.StatusNotFound, fmt.Sprintf("no active file path %s found in database", cancel.FilePath))
 
 				return
 			}
