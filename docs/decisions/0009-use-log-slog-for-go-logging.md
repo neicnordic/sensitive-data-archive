@@ -37,6 +37,8 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 * Replacing logrus in existing code is its own epic and release, since it touches every Go service.
   It stays out of the broker v2 feature branch.
 * A service switches logger in one PR, so no service ships with both imports.
+* Hard errors are returned to `main` and handled there, so that deferred cleanup runs.
+  There is no `Fatal` replacement: the logrus `Fatal` calls in production code become returned errors.
 * Audit output, such as the download service's JSON audit log, is separate from application logging and is not affected.
 
 ### Consequences
@@ -45,7 +47,7 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 * Good, because structured key-value logs become the norm rather than something each call site formats by hand.
 * Bad, because the `trace`, `fatal` and `panic` levels have no `slog` counterpart.
   The epic defines the mapping for `log.level` values and what invalid values do.
-  The 25 logrus `Fatal` calls in production code become `slog.Error` followed by `os.Exit(1)`.
+  The 25 logrus `Fatal` calls in production code become returned errors, since a hard error has to reach `main` so that deferred closures run; `slog` deliberately has no `Fatal`.
 * Bad, because two logging APIs coexist until the epic is done.
 
 ### Confirmation
@@ -61,7 +63,8 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 
 * Good, because it is part of the standard library since Go 1.21 and the repository is on Go 1.25.
 * Good, because handlers are pluggable, so the text and JSON output both come from the standard library.
-* Bad, because it has fewer log levels than logrus and no `Fatal` helper.
+* Bad, because it has fewer log levels than logrus.
+  The missing `Fatal` is not a loss, since hard errors propagate to `main` instead of exiting in place.
 
 ### Keep logrus
 
@@ -77,3 +80,4 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 
 The team agreed on `slog` and a separate migration epic in the broker v2 discussion on 2026-09-11 (issue [#2459](https://github.com/neicnordic/sensitive-data-archive/issues/2459#issuecomment-5630655843)), after `log/slog` had already entered the code base ad hoc.
 This record documents that agreement after the fact.
+The migration is tracked in epic #2593.
