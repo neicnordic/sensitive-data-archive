@@ -69,11 +69,13 @@ if [ "$1" == "sda-mq" ]; then
 fi
 
 if [ "$1" == "sda-svc" ]; then
-    sync_host=""
+    sync_url=""
+    sync_enabled=false
     if [ "$4" == "s3" ]; then
-        sync_host=https://sync-api
+        sync_url=https://sync-api/dataset
         sync_api_pass=pass
         sync_api_user=user
+        sync_enabled=true
     fi
     # Chart 4.0 uses s3:/posix: lists per backend. The base values.yaml
     # ships S3 placeholders that dependencies.sh fills in. For the POSIX
@@ -101,7 +103,8 @@ if [ "$1" == "sda-svc" ]; then
         --set global.broker.port="$MQ_PORT" \
         --set global.sync.api.password="$sync_api_pass" \
         --set global.sync.api.user="$sync_api_user" \
-        --set global.sync.remote.host="$sync_host" \
+        --set global.sync.enabled="$sync_enabled" \
+        --set global.sync.remote.url="$sync_url" \
         --set api.readinessProbe.httpGet.scheme="$SCHEME" \
         --set auth.readinessProbe.httpGet.scheme="$SCHEME" \
         --set download.readinessProbe.httpGet.scheme="$SCHEME" \
