@@ -9,11 +9,12 @@ For each message, these steps are taken:
 
 1. The message type is read from the message `type` field.
    1. If the message `type` is not known, an error is logged and the message is Ack'ed.
-2. The correct queue for the message is decided based on message type.
-3. The message is sent to the queue. 
-   - This has no error handling as the resend-mechanism hasn't been finished.
+2. The target routing key for the message is decided based on message type.
+   1. If the message type is of unknown type or the routing key for it has been set to "", it will be routed it to `undeliverable` (`undeliverable` needs to exist)
+3. The message is routed to the configured key. 
+   1. If publishing the fails, the message will be Nack'ed and re-queued for reconsumption 
 4. The message is Ack'ed.
-5. If the message type is of unknown type, we acknowledge it and send it to `catch_all.dead` (needs to exist)
+
 
 ## Communication
 
@@ -46,9 +47,15 @@ These settings control how `intercept` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the RabbitMQ server
 - `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queue to read messages from (commonly: `from_cega`)
+- `SOURCE_QUEUE`: message queue to read messages from (commonly: `from_cega`)
 - `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `ACCESSION_ROUTING_KEY`: routing key used to route `accession` type message to 
+- `INGEST_ROUTING_KEY`: routing key used to route `ingest` type message to 
+- `CANCEL_ROUTING_KEY`: routing key used to route `cancel` type message to 
+- `MAPPING_ROUTING_KEY`: routing key used to route `mapping` type message to 
+- `RELEASE_ROUTING_KEY`: routing key used to route `release` type message to 
+- `DEPRECATE_ROUTING_KEY`: routing key used to route `deprecate` type message to 
 
 ### Logging settings
 
