@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -203,4 +204,89 @@ func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
 
 	assert.NoError(t, seen, "handler should still be able to finish after shutdown started")
 	assert.True(t, ack.ackCalled)
+}
+
+// unreachableBroker points the broker at TEST-NET-1 (RFC 5737), which is not
+// routed, so a dial hangs until its context or timeout ends.
+func unreachableBroker() *rmqBroker {
+	b := newTestBroker()
+	b.config.host = "192.0.2.1"
+	b.config.port = 5672
+	b.config.user = "guest"
+	b.config.password = "guest"
+	b.config.vhost = "/"
+
+	return b
+}
+
+func TestRabbitMQ_EnsureConnectedAfterCloseDoesNotDial(t *testing.T) {
+	b := unreachableBroker()
+	require.NoError(t, b.Close())
+
+	start := time.Now()
+	err := b.ensureConnected(context.Background())
+	assert.ErrorIs(t, err, errBrokerClosed)
+	assert.Less(t, time.Since(start), time.Second, "a closed broker must not try to dial")
+	assert.False(t, b.Alive())
+}
+
+func TestRabbitMQ_ConnectFollowsContext(t *testing.T) {
+	b := unreachableBroker()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := b.ensureConnected(ctx)
+	require.Error(t, err)
+	var netErr net.Error
+	require.ErrorAs(t, err, &netErr)
+	assert.True(t, netErr.Timeout(), "net.Dialer reports the expired context as a timeout")
+	assert.Less(t, time.Since(start), 5*time.Second, "the dial must stop with the context")
+}
+
+func TestRabbitMQ_CloseIsNotBlockedByDial(t *testing.T) {
+	b := unreachableBroker()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	dialErr := make(chan error, 1)
+	go func() { dialErr <- b.ensureConnected(ctx) }()
+	time.Sleep(100 * time.Millisecond) // let the dial start
+
+	closed := make(chan error, 1)
+	go func() { closed <- b.Close() }()
+	select {
+	case err := <-closed:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Close() blocked behind an in-flight dial")
+	}
+
+	select {
+	case err := <-dialErr:
+		require.Error(t, err, "the dial must not succeed against an unreachable host")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ensureConnected did not return after the context ended")
+	}
+	assert.False(t, b.Alive(), "Alive() must not reconnect after Close()")
+}
+
+func TestRabbitMQ_ConcurrentEnsureConnectedSerialises(t *testing.T) {
+	b := unreachableBroker()
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	const callers = 5
+	errs := make(chan error, callers)
+	for range callers {
+		go func() { errs <- b.ensureConnected(ctx) }()
+	}
+	for range callers {
+		select {
+		case err := <-errs:
+			assert.Error(t, err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("a concurrent caller never returned")
+		}
+	}
 }

@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` (a duration, default `30s`) to finish and ack its message, instead of failing its publish with `context canceled`.
   - Cancel the consumer by its real tag on shutdown; `Cancel("")` referred to a tag the client never registered.
   - Do not reconnect after `Close()`, so a handler that outlives shutdown cannot publish a duplicate; `Close()` now takes the broker mutex.
+  - `Alive()` reconnects when the connection is down, so a service that only publishes recovers through its readiness probe instead of needing a restart.
+  - Reconnects are serialised and the dial no longer holds the broker mutex, so `Publish`, `Close()` and `Alive()` are not blocked for the dial and handshake timeouts while a reconnect is in flight, and two callers that both see a dead connection result in one dial.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
 
