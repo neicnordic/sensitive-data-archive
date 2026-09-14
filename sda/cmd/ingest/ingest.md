@@ -77,6 +77,7 @@ These settings control how `ingest` connects to the RabbitMQ message broker.
 - `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
 - `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `BROKER_SHUTDOWN_GRACE`: how long a message handler that is already running gets to finish after shutdown starts, before its context is cancelled, as a Go duration (default `30s`, `0` cancels it immediately). Keep it below the pod's `terminationGracePeriodSeconds`.
 
 ### PostgreSQL Database settings:
 

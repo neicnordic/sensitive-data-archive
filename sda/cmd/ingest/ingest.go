@@ -148,9 +148,10 @@ func run() error {
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
 		cancel()
 
-		// Subscribe returns once the handler that was running has finished,
-		// bounded by broker.shutdown_grace, so its message is acked before
-		// the deferred broker.Close() runs. A second signal skips the wait.
+		// Subscribe returns once the handler that was running has finished
+		// and acked its message; broker.shutdown_grace cancels the handler's
+		// context after that long, but the handler decides when it returns.
+		// A second signal skips the wait.
 		select {
 		case err := <-consumeErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
