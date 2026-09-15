@@ -12,9 +12,9 @@ spec:
     port: {{ template "inboxServicePort" . }}
     targetPort: inbox
     protocol: TCP
-  {{- if and .Values.global.observability.enabled (not (empty .Values.global.inbox.s3)) }}
+  {{- if and (eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER) (not (empty .Values.global.inbox.s3)) }}
   - name: prometheus
-    port: 9090
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
     targetPort: prometheus
     protocol: TCP
   {{- end }}
