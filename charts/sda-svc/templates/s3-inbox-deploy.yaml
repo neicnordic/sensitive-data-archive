@@ -94,22 +94,20 @@ spec:
 {{- end }}
         env:
         - name: CONFIGFILE
-          value: {{ include "confFile" .}}
+          value: {{ include "confFile" . }}
         - name: CONFIG_FILE
-          value: {{ include "confFile" .}}
-        - name: OBSERVABILITY_ENABLED
-          value: {{ .Values.global.observability.enabled | quote }}
-        {{- if .Values.global.observability.enabled }}
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: {{ required "Otel Exporter Otlp Endpoint must be set if observability is enabled" .Values.global.observability.otelExporterOtlpEndpoint }}
+          value: {{ include "confFile" . }}
+        {{- range $name, $value := .Values.global.observability }}
+        - name: {{ $name }}
+          value: {{ $value | quote }}
         {{- end }}
         ports:
         - name: inbox
           containerPort: 8000
           protocol: TCP
-        {{- if .Values.global.observability.enabled }}
+        {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
         - name: prometheus
-          containerPort: 9090
+          containerPort: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
           protocol: TCP
         {{- end }}
         livenessProbe:
