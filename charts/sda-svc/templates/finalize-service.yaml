@@ -1,5 +1,5 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
-{{- if .Values.global.observability.enabled }}
+{{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,7 +9,7 @@ metadata:
 spec:
   ports:
   - name: prometheus
-    port: 9090
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
     targetPort: prometheus
     protocol: TCP
   selector:
