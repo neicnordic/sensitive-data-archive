@@ -11,11 +11,11 @@ func init() {
 	queries[getFileIDByUserAndPathQuery] = `SELECT id FROM sda.files AS f
     WHERE f.submission_user = $1
     AND f.submission_file_path = $2
-    AND f.last_event != 'disabled'
+	AND f.last_event NOT IN ('disabled', 'removed')
 	ORDER BY f.created_at DESC LIMIT 1;`
 }
 
-// getFileIDByUserAndPath returns the currently active (not disabled) file for a given
+// getFileIDByUserAndPath returns the currently active (not disabled or removed) file for a given
 // user and submission path, regardless of its status or whether it has an accession id.
 func (db *pgDb) getFileIDByUserAndPath(ctx context.Context, tx *sql.Tx, submissionUser, filePath string) (string, error) {
 	stmt, err := db.getPreparedStmt(tx, getFileIDByUserAndPathQuery)

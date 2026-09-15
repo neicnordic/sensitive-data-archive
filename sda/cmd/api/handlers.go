@@ -433,7 +433,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		if status == "disabled" {
+		if status == "disabled" || status == "removed" {
 			slog.Error("file is already disabled", "file_id", fileID)
 			writeJSON(w, http.StatusNotFound, fmt.Sprintf("no active filepath %s found in database", fileID))
 
@@ -458,7 +458,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fileID, err = api.db.GetFileIDByUserAndPath(r.Context(), cancel.User, cancel.FilePath)
-		// files with status disabled will not be returned by GetFileIDByUserAndPath
+		// files with status disabled or removed will not be returned by GetFileIDByUserAndPath
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				slog.Error("could not locate file in db", "submission_user", cancel.User, "file_path", cancel.FilePath)
