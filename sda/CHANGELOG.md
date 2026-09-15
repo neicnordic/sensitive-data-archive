@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - broker/v2:
-  - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` (a duration, default `30s`) to finish and ack its message, instead of failing its publish with `context canceled`.
+  - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` (a duration, default `20s`) to finish and ack its message, instead of failing its publish with `context canceled`.
   - Cancel the consumer by its real tag on shutdown, without waiting for the server's reply; `Cancel("")` referred to a tag the client never registered, and waiting for the reply held the broker mutex while a slow or gone server never answered.
   - Do not start on a new delivery once shutdown has begun; the grace period is for the handler that was already running.
   - Do not reconnect after `Close()`, so a handler that outlives shutdown cannot publish a duplicate; `Close()` now takes the broker mutex.
