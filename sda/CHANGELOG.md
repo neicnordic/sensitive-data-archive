@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
+- api: fix publishing to correct destination on POST /dataset/release/{datasetid}
 
 ## [3.1.76] - 2026-07-15
 

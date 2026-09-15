@@ -4,7 +4,7 @@ updates:
     directory: "/"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       github-actions:
         patterns:
@@ -22,7 +22,7 @@ updates:
       - "/sda-doa"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       docker:
         patterns:
@@ -33,9 +33,14 @@ updates:
       - "/sda-validator/orchestrator"
       - "/sda"
       - "/sda-download"
+      - "/sda-admin"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       go:
         patterns:
@@ -45,7 +50,11 @@ updates:
     directory: "/sda-sftp-inbox"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       maven:
         patterns:
@@ -55,7 +64,11 @@ updates:
     directory: "/sda-doa"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       maven:
         patterns:
@@ -67,7 +80,7 @@ updates:
     directory: "/"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       github-actions:
         patterns:
@@ -86,7 +99,7 @@ updates:
       - "/sda-doa"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       docker:
         patterns:
@@ -99,7 +112,11 @@ updates:
     directory: "/sda-doa"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       maven:
         patterns:
@@ -112,7 +129,11 @@ updates:
     directory: "/sda-sftp-inbox"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       maven:
         patterns:
@@ -127,7 +148,11 @@ updates:
       - "/sda-download"
     open-pull-requests-limit: 1
     schedule:
-      interval: weekly
+      interval: monthly
+    cooldown:
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 14
     groups:
       go:
         patterns:

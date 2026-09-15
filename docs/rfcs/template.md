@@ -3,6 +3,7 @@
 status: exploring # exploring | ready-for-decision | promoted | withdrawn
 promoted-to: [] # one or more ADR filenames — set when status is `promoted`
 date: "YYYY-MM-DD" # when the RFC was last updated
+discussion: "" # required once the PR exists: leave blank, open the PR, then add its URL in a follow-up commit
 authors: [] # people actively shaping this RFC
 consulted: [] # subject-matter experts consulted (two-way communication)
 informed: [] # kept up to date on the discussion (one-way communication)
@@ -55,8 +56,8 @@ answer — it is fine to describe a tension the team wants to explore.}
 
 <!--
 Intentionally no `## Decision Outcome` section in RFCs. The whole point of an
-RFC is that the team is not yet ready to commit. Add this section at promotion
-time.
+RFC is that the team is not yet ready to commit. At promotion time the section
+is written in the new ADR file, never here; this RFC's body is frozen instead.
 -->
 
 ## Open Questions
@@ -100,5 +101,5 @@ RFC is ready for promotion.}
 
 {Provide additional evidence or context. Link to related RFCs, ADRs, prior art
 from other projects, and any external discussion threads. If the RFC has a
-suspected eventual decision direction, note it here — but do not put a
-commitment in the `## Decision Outcome` section until promotion.}
+suspected eventual decision direction, note it here — but do not add a
+`## Decision Outcome` section; that belongs in the ADR created at promotion.}

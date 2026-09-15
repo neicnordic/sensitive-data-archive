@@ -28,6 +28,24 @@ info:
       In all cases, byte offsets refer to the encrypted wire format, NOT the original
       plaintext file.
 
+    Authentication and session caching:
+      Everything except /health/* and /service-info is authenticated, and clients
+      SHOULD present a bearer token in Authorization or in X-Amz-Security-Token. Where
+      the server resolves an authorisation itself, it caches the result so that later
+      requests skip signature checks and visa fetching. Caching writes two entries
+      with the same TTL: one keyed on the token, and one whose key comes back as a
+      Set-Cookie session handle, with Max-Age set to that TTL truncated to whole
+      seconds and omitted when the truncation reaches zero. That TTL is the configured
+      value, bounded by the JWT exp claim where the token has one and by the earliest
+      expiry among accepted visas where there are any. A non-positive TTL is not
+      cached at all, and neither is a combined-mode request whose visa processing
+      failed.
+
+      A client that ignores cookies still gets the same cache hit, keyed on its token.
+      Clients that do keep the cookie SHOULD go on sending the bearer token, because
+      the cache belongs to a single replica and the cookie only hits on the one that
+      issued it.
+
     Error semantics on resource-by-ID endpoints:
       Endpoints that accept a resource identifier in the path (e.g. /datasets/{datasetId},
       /files/{fileId}) return 403 Forbidden both when the caller lacks access and when
@@ -100,7 +118,15 @@ paths:
                 version: 2.0.0
                 environment: production
         "500":
-          $ref: "#/components/responses/InternalServerError"
+          description: Internal application error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              example:
+                title: Internal Server Error
+                status: 500
+                detail: Unexpected error.
 
   /datasets:
     get:
@@ -119,6 +145,8 @@ paths:
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/json:
               schema:
@@ -148,6 +176,8 @@ paths:
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/json:
               schema:
@@ -215,6 +245,8 @@ paths:
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/json:
               schema:
@@ -302,6 +334,8 @@ paths:
               $ref: "#/components/headers/ETag"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -360,6 +394,8 @@ paths:
               $ref: "#/components/headers/ETag"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/octet-stream:
               schema:
@@ -378,6 +414,8 @@ paths:
               $ref: "#/components/headers/ETag"
             Content-Disposition:
               $ref: "#/components/headers/ContentDisposition"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/octet-stream:
               schema:
@@ -456,6 +494,8 @@ paths:
               $ref: "#/components/headers/ContentLength"
             SDA-Content-ETag:
               $ref: "#/components/headers/SDA-Content-ETag"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -495,6 +535,8 @@ paths:
               $ref: "#/components/headers/ContentLength"
             SDA-Content-ETag:
               $ref: "#/components/headers/SDA-Content-ETag"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/octet-stream:
               schema:
@@ -537,6 +579,8 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -581,6 +625,8 @@ paths:
               $ref: "#/components/headers/ContentLength"
             ETag:
               $ref: "#/components/headers/ContentETag"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/octet-stream:
               schema:
@@ -597,6 +643,8 @@ paths:
               $ref: "#/components/headers/ContentRange"
             ETag:
               $ref: "#/components/headers/ContentETag"
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
           content:
             application/octet-stream:
               schema:
@@ -670,12 +718,18 @@ paths:
       responses:
         '200':
           description: DRS object with resolved access URL
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DrsObject'
         '400':
           description: Malformed path (missing dataset or file component)
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
           content:
             application/problem+json:
               schema:
@@ -688,12 +742,18 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '403':
           description: Access denied (also returned when the resource does not exist)
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
         '500':
           description: Internal server error
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
           content:
             application/problem+json:
               schema:
@@ -1207,9 +1267,37 @@ components:
         type: string
       example: attachment; filename="sample1.cram.c4gh"
 
+    SetSessionCookie:
+      description: |
+        Session handle the server sends whenever it stores a new session. A request
+        served from cache does not get one, and neither does a request whose
+        authorisation the server declined to cache: a non-positive TTL, or
+        combined-mode visa processing that failed. The header can also appear on an
+        error response, where authentication succeeded and the request failed
+        afterwards.
+
+        The value is an opaque identifier that clients never construct. Max-Age is the
+        server-side cache TTL truncated to whole seconds, and is omitted where that
+        truncation reaches zero. The TTL is the configured value, bounded by the JWT
+        exp claim where the token has one and by the earliest expiry among accepted
+        visas where there are any. The cookie name defaults to sda_session and is
+        deployment-configurable, as are Domain, Secure and HttpOnly; SameSite is
+        always Lax.
+
+        The server does accept a request carrying only this cookie, and skips token
+        validation for it. That works on the replica that issued the cookie and
+        nowhere else, since the cache lives in process memory, so clients SHOULD go on
+        sending the bearer token on every request.
+      schema:
+        type: string
+      example: "sda_session=9f1c2a4e-7b3d-4c58-9a6e-2f0b8d3e5c71; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax"
+
   responses:
     BadRequest:
       description: Bad request
+      headers:
+        Set-Cookie:
+          $ref: "#/components/headers/SetSessionCookie"
       content:
         application/problem+json:
           schema:
@@ -1264,6 +1352,9 @@ components:
 
     Forbidden:
       description: The caller does not have access to the requested resource
+      headers:
+        Set-Cookie:
+          $ref: "#/components/headers/SetSessionCookie"
       content:
         application/problem+json:
           schema:
@@ -1276,6 +1367,8 @@ components:
     RangeNotSatisfiable:
       description: Unsatisfiable range
       headers:
+        Set-Cookie:
+          $ref: "#/components/headers/SetSessionCookie"
         Content-Range:
           description: Indicates the current total length of the resource.
           schema:
@@ -1293,6 +1386,9 @@ components:
 
     InternalServerError:
       description: Internal application error
+      headers:
+        Set-Cookie:
+          $ref: "#/components/headers/SetSessionCookie"
       content:
         application/problem+json:
           schema:
@@ -1307,6 +1403,15 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >-
+      description: |
+        Access token presented in `Authorization: Bearer <token>`.
+        `X-Amz-Security-Token` is accepted in its place, for S3-style clients.
+
         If an access token expires during transfer, server SHOULD return
         401 Unauthorized; clients SHOULD re-authenticate and retry/resume.
+
+        A request the server authenticates from scratch may come back with a
+        `Set-Cookie` session handle (see the SetSessionCookie response header). The
+        server accepts that cookie on its own afterwards, on the replica that issued
+        it. It is not declared here as an alternative scheme because no client should
+        rely on it as its only credential.

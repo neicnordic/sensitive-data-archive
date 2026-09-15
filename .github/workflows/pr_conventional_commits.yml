@@ -1,0 +1,48 @@
+name: Conventional commits
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  commit-messages:
+    name: Check commit messages
+    # merge_group has no branch filter; release_v1 has its own queue and keeps its "[release_v1]" prefix.
+    if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check every commit in the pull request
+        env:
+          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || format('origin/{0}', github.event.pull_request.base.ref) }}
+          HEAD: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+        run: |
+          range="$(git merge-base "$BASE" "$HEAD")..$HEAD"
+          failed=0
+          for sha in $(git rev-list --no-merges --reverse "$range"); do
+            # Stored subject only, with CR/LF removed so it cannot forge a workflow command.
+            subject=$(git log -1 --format=%s "$sha" | tr -d '\r\n')
+            printf '%s\n' "$subject" > "$RUNNER_TEMP/commit-msg"
+            case "$subject" in
+              "fixup! "* | "squash! "* | "amend! "*)
+                echo "::error::${sha:0:8} must be squashed before merge: $subject"
+                failed=1
+                continue
+                ;;
+            esac
+            if ! sh .githooks/commit-msg "$RUNNER_TEMP/commit-msg"; then
+              echo "::error::${sha:0:8} does not follow Conventional Commits: $subject"
+              failed=1
+            fi
+          done
+          exit "$failed"

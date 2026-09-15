@@ -22,6 +22,7 @@ Environment variables used:
 | OUTBOX_ENABLED                         | true                                                                 | Enables/disables the outbox functionality          |
 | OUTBOX_TYPE                            | POSIX                                                                | Outbox type: `POSIX` or `S3`                       |
 | OUTBOX_QUEUE                           | exportRequests                                                       | MQ queue name for files/datasets export requests   |
+| OUTBOX_QUEUE_AUTO_CREATE               | true                                                                 | Automatically create an exclusive and non-durable queue; when false, the queue must be provisioned externally |
 | OUTBOX_LOCATION                        | /ega/outbox/p11-%s/files/                                            | Outbox location with placeholder for the username  |
 | BROKER_HOST                            | private-mq                                                           | Local RabbitMQ broker hostname                     |
 | BROKER_PORT                            | 5671                                                                 | Local RabbitMQ broker port                         |

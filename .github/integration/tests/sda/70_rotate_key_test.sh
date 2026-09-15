@@ -126,30 +126,29 @@ rotatekey_body=$(
         '$ARGS.named'
 )
 
+# error events for the file and acknowledged messages on the archived queue before the
+# rotation, used to detect that verify has processed the re-verify message without error
+errorEvents=$(psql -U postgres -h postgres -d sda -At -c "select count(*) from sda.file_event_log where file_id='$fileID' and event='error';")
+archivedAcks=$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/archived/ | jq -r '.message_stats.ack // 0')
+
 curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$rotatekey_body" | jq
 
-# check that rotate key doesn't fail
+# check that rotate key doesn't fail, the key hash in sda.files is only updated once
+# rotatekey has re-encrypted the header, so poll the database instead of the queue depth
 echo "waiting for rotatekey to complete"
+rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
 RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/rotatekey/ | jq -r '.messages_ready')" -eq 0 ]; do
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where id='$fileID';")" = "$rotatekeyHash" ]; do
     echo "waiting for rotatekey to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for rotatekey to complete"
+        echo "::error::Time out while waiting for the key hash of the file to be updated"
         exit 1
     fi
     sleep 2
 done
-
-# check DB for updated key hash in sda.files
-rotatekeyHash=$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.encryption_keys where description='this is the rotatekey key';")
-if [ "$(psql -U postgres -h postgres -d sda -At -c "select key_hash from sda.files where id='$fileID';" | grep -c "$rotatekeyHash")" -ne 1 ];
-then
-	echo "failed to update the key hash of files"
-	exit 1
-fi
 
 echo "verifying header backup in sda.file_headers_backup"
 backupCount=$(psql -U postgres -h postgres -d sda -At -c "SELECT count(*) FROM sda.file_headers_backup WHERE file_id='$fileID';")
@@ -158,18 +157,27 @@ if [ "$backupCount" -lt 1 ]; then
     exit 1
 fi
 
-# check that files were re-verified
+# check that the file was re-verified, verify writes nothing to the database when a
+# re-verification succeeds and acks the message only once it is done, so wait for the ack
+# counter of the archived queue to grow (it is monotonic, unlike the queue depth which
+# reads 0 both before the message arrives and after it is consumed) and then require that
+# verify has not logged an error event for the file
 echo "waiting for re-verify to complete"
 RETRY_TIMES=0
-until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/archived/ | jq -r '.messages_ready')" -eq 0 ]; do
+until [ "$(curl -su guest:guest http://rabbitmq:15672/api/queues/sda/archived/ | jq -r '.message_stats.ack // 0')" -gt "$archivedAcks" ]; do
     echo "waiting for re-verify to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
-        echo "::error::Time out while waiting for verify to complete"
+        echo "::error::Time out while waiting for the re-verification of the file to complete"
         exit 1
     fi
     sleep 2
 done
+
+if [ "$(psql -U postgres -h postgres -d sda -At -c "select count(*) from sda.file_event_log where file_id='$fileID' and event='error';")" -ne "$errorEvents" ]; then
+    echo "::error::verify logged an error event for file $fileID during re-verification"
+    exit 1
+fi
 
 # check that no other erros occured
 sleep 5

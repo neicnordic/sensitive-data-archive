@@ -51,11 +51,157 @@ response is used as the user identity. The issuer is taken from `oidc.issuer`.
 
 ### Session Caching
 
-Authenticated sessions are cached in-memory keyed by `sha256(token)`. The cache TTL
-is bounded by `min(token.exp, min(visa.exp), configured TTL)`. A session cookie
-(configurable via `session.name`, default `sda_session`) provides fast lookups for
-repeat requests. The legacy cookie name `sda_session_key` is also checked for
-backwards compatibility.
+For API clients the short version is: send `Authorization: Bearer <token>` on
+every request and ignore the cookie described below. The rest of this section
+explains what the cookie is, for operators and for anyone who sees it on the
+wire.
+
+The service caches a successful authentication so that later requests skip token
+validation and visa fetching. It writes two entries with the same TTL: a token
+cache keyed by `sha256(token)`, and a session cache keyed by a random UUID that
+goes back to the client as a cookie:
+
+```http
+Set-Cookie: sda_session=9f1c2a4e-7b3d-4c58-9a6e-2f0b8d3e5c71; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax
+```
+
+A client that stores it sends it back as `Cookie: sda_session=<uuid>`. The
+cookie only appears on the response to a request the server authenticated from
+scratch; a request served from either cache gets no `Set-Cookie`. It is not the
+same thing as the `X-Correlation-ID` header, which every response carries and
+which is a per-request identifier for logs and support, not a session.
+
+Every client gets the token cache for free, since the bearer token is what a
+client sends anyway. Caching does not depend on the cookie, which is there for v1
+compatibility and for clients that keep a cookie jar. A client that never stores
+it gets the same cache hit on its token.
+
+#### The session cookie
+
+The server issues the cookie and a client never constructs one. Its value is an
+opaque UUID with nothing in it to decode; the resolved subject and dataset list
+stay in the download process. When a request arrives with the cookie, the
+middleware looks it up before it reads the `Authorization` header, and on a hit
+it skips the signature check and the visa round trip.
+
+| Attribute  | Value                                  |
+|------------|----------------------------------------|
+| Name       | `session.name`, default `sda_session`  |
+| `Path`     | `/`                                    |
+| `Domain`   | `session.domain`; host-only when empty |
+| `Max-Age`  | the cache TTL in whole seconds, below  |
+| `Secure`   | `session.secure`, default `true`       |
+| `HttpOnly` | `session.http-only`, default `true`    |
+| `SameSite` | `Lax`, hardcoded and not configurable  |
+
+`session.domain` is often set without anyone choosing it. When the `sda-svc`
+Helm chart renders the download config itself (`global.vaultSecrets` off), it
+fills a blank `global.downloadV2.session.domain` with
+`global.ingress.hostName.downloadV2`, so those deployments send a `Domain`
+attribute whenever that hostname is set. Vault-managed secrets and deployments
+without an ingress hostname keep the host-only form.
+
+The v1 cookie name `sda_session_key` is read as a fallback when the configured
+name is absent, which keeps a client working if it sends the session value back
+under the old name. Only the configured name is ever written, and a request that
+hits on the fallback returns before the cookie is set, so nothing renames the
+cookie for the client. A cookie left over from a v1 service is no use here
+either way, since the cache only holds sessions this process issued.
+
+#### Cache TTL
+
+The TTL starts from the configured value and is then bounded by whatever expiry
+the credential carries: the JWT `exp` claim where the token has one, and the
+earliest expiry among accepted visas where there are any. An opaque token with no
+accepted visas carries neither bound, so the configured value applies as it
+stands.
+
+That configured value comes from `visa.cache.token-ttl` (default `3600`);
+`session.expiration` is used instead when `visa.cache.token-ttl` is exactly `0`.
+The cookie's `Max-Age` is the resulting TTL truncated to whole seconds, and is
+left off entirely if the truncation reaches zero, which turns the cookie into a
+browser-session one.
+
+Where the token does carry an `exp`, a session cannot outlive it, and it can be
+much shorter than the configuration suggests: a JWT with two minutes left gives a
+two-minute session whatever the TTL is set to.
+
+The service caches nothing and issues no cookie when
+
+- the computed TTL is not positive, either because the effective configured
+  value is zero or negative (neither setting is validated) or because a token or
+  visa has already expired, or
+- visa retrieval or passport processing failed under `permission.model:
+  combined`. The request is served from ownership data alone, and skipping the
+  cache keeps a visa outage from pinning a reduced dataset list into a session.
+  A single visa that fails validation is a different case: it is dropped, the
+  rest of the passport still counts, and the result is cached.
+
+#### Operational notes
+
+Both caches live inside the process, so a second replica knows nothing about
+them and a restart empties them. Behind a load balancer without session affinity
+a cookie only hits on the replica that issued it, so clients have to keep
+sending the bearer token. That is the default deployment rather than an edge
+case: the Helm chart runs `downloadV2` with `replicaCount: 2` and configures no
+session affinity.
+
+A request that hits either cache is served from the stored authorisation with no
+revalidation, and a session-cache hit is served without the `Authorization`
+header being read at all. A revoked token therefore keeps working for the rest of
+the TTL. The TTL is not a revocation window in any wider sense, though: JWTs are
+validated locally against the configured keys, so the service never asks the
+issuer whether a token is still good, and the userinfo lookup behind an opaque
+token has a cache of its own (`visa.cache.userinfo-ttl`).
+
+`swagger_v2.yml` lists `bearerAuth` as its only security scheme because of the
+per-replica scope. The server does authenticate a request carrying nothing but
+the cookie, so the cookie is a session credential in its own right. It is one no
+client should depend on.
+
+#### Browser clients
+
+The cookie is `HttpOnly` by default, so application JavaScript can neither read
+nor write it. The browser still stores it and sends it back wherever the cookie's
+own rules allow, which is where `SameSite=Lax` starts to matter.
+
+`Lax` excludes cross-site requests, and same-site is decided by scheme plus
+registrable domain rather than by origin. A webapp on `https://app.example.org`
+calling an API on `https://api.example.org` is same-site, so its `fetch()` calls
+carry the cookie as long as they set `credentials: 'include'`. The cookie needs
+no configuration for that: it is already scoped to the API host that issued it,
+and pointing `session.domain` at `example.org` only widens it to sibling hosts.
+The call itself is a different matter. Those two hosts are still separate
+origins, so the browser withholds the response from the page unless the API
+answers with `Access-Control-Allow-Origin` naming that exact origin and
+`Access-Control-Allow-Credentials: true`, and the service emits no
+`Access-Control-*` headers at present. Mixing schemes breaks the cookie too,
+since `https://app.example.org` and `http://api.example.org` count as
+cross-site. So does a webapp on an unrelated domain: its `fetch()` calls never
+carry the cookie whatever `credentials` is set to, it needs the same CORS
+headers, and it ends up sending the bearer token on every request and taking
+its cache hit from the token cache.
+
+Navigation-based downloads do not produce a usable file, with or without the
+cookie. `GET /files/:fileId` requires a Crypt4GH recipient key in
+`X-C4GH-Public-Key` or `Htsget-Context-Public-Key` and has no query-parameter
+equivalent, so an `<a href>` or a `window.location` assignment cannot supply it
+and the download has to go through `fetch()` with explicit headers.
+`GET /files/:fileId/content` takes no recipient key, so a plain navigation does
+fetch the encrypted data segments, a `Lax` cookie rides along even cross-site,
+and on the replica that issued the session the navigation is authenticated by
+the cookie alone. Those segments are the header-stripped archive object, though,
+and cannot be decrypted without the header from `GET /files/:fileId/header`,
+which needs the recipient key and therefore `fetch()`. A page can fetch the
+header and navigate to the content, which keeps the large transfer in the
+browser's own download machinery, but it has no way to join the two into one
+file. A browser client therefore ends up on `fetch()` for anything it wants to
+decrypt. Same-site, on the replica that issued the session, the cookie alone
+would authenticate those calls; cross-site it never travels. Either way the
+client should keep sending the bearer token and take its cache hit from the
+token cache like any other client.
+
+Cookie configuration is listed under [Session](#session).
 
 ## Permission Model
 
@@ -608,6 +754,11 @@ All error responses use [RFC 9457 Problem Details](https://www.rfc-editor.org/rf
 Resource-by-ID endpoints (`/datasets/:datasetId`, `/files/:fileId`) return `403`
 for both "access denied" and "does not exist" to prevent existence leakage.
 
+Every response, error or not, carries an `X-Correlation-ID` header with a
+per-request UUID, the same value the audit log records for that request. Quote
+it when reporting a problem. It is not a session identifier and clients never
+send it back.
+
 ## Configuration
 
 The service is configured via YAML config file or environment variables.
@@ -737,6 +888,11 @@ storage:
 | `SESSION_SECURE`     | `session.secure`     | Use secure cookies (HTTPS only)  | `true`        |
 | `SESSION_HTTP_ONLY`  | `session.http-only`  | HTTP-only cookies                | `true`        |
 | `SESSION_NAME`       | `session.name`       | Session cookie name              | `sda_session` |
+
+`session.expiration` only takes effect when `visa.cache.token-ttl` is `0`;
+otherwise the session TTL comes from that setting. See
+[Session Caching](#session-caching) for the full TTL rule and for the cookie
+attributes these keys control.
 
 ### Database Cache
 

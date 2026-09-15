@@ -193,7 +193,7 @@ services:
       - PGSSLKEY=/certs/client.key
       - PGSSLMODE=verify-ca
       - STORAGETYPE=posix
-    image: python:3.11-slim-bullseye
+    image: python:3.13-slim-trixie
     profiles:
       - tests
     volumes:

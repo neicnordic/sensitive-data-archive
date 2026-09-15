@@ -1,0 +1,33 @@
+services:
+  ingest:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  verify:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  mapper:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  finalize:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  api:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  reencrypt:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  download:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml
+  rotatekey:
+    depends_on: !reset []
+    volumes:
+      - ./config-multikey.yaml:/config.yaml

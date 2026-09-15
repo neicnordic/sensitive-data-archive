@@ -185,6 +185,16 @@ dev-download-v2-up: build-all
 dev-download-v2-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/download-v2-dev/compose.yml down -v --remove-orphans
 
+# Dev stack for end-to-end key rotation tests (pipeline + download)
+dev-key-rotation-up: build-all
+	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/key-rotation-test/compose.yml up -d
+	@echo ""
+	@echo "Key rotation test stack ready."
+	@echo "Get a token:  TOKEN=\$$(curl -s http://localhost:8000/tokens | jq -r '.[0]')"
+
+dev-key-rotation-down:
+	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/key-rotation-test/compose.yml down -v --remove-orphans
+
 # Download benchmark (compares old vs new public endpoints)
 # Uses sda-benchmark.yml which extends sda-s3-integration.yml with benchmark services
 # The benchmark runs in a container with auto-configuration from the environment

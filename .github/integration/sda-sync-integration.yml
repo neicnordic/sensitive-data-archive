@@ -57,7 +57,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data  --console-address ":9001"
     container_name: s3
     environment:
@@ -363,7 +363,7 @@ services:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
       - SYNCTEST=true
-    image: python:3.11-slim-bullseye
+    image: python:3.13-slim-trixie
     profiles:
       - tests
     volumes:

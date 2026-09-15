@@ -48,7 +48,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9000:9000"
 
@@ -64,13 +64,13 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9001:9000"
 
   createbucket:
     container_name: buckets
-    image: minio/mc
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       s3:
         condition: service_healthy

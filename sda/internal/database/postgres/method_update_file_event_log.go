@@ -14,13 +14,13 @@ func init() {
 	queries[updateFileEventLogQuery] = `INSERT INTO sda.file_event_log(file_id, event, user_id, details, message)
 VALUES($1, $2, $3, $4, $5);`
 }
-func (db *pgDb) updateFileEventLog(ctx context.Context, tx *sql.Tx, fileUUID, event, user, details, message string) error {
+func (db *pgDb) updateFileEventLog(ctx context.Context, tx *sql.Tx, fileID, event, user, details, message string) error {
 	stmt, err := db.getPreparedStmt(tx, updateFileEventLogQuery)
 	if err != nil {
 		return err
 	}
 
-	result, err := stmt.ExecContext(ctx, fileUUID, event, user, details, message)
+	result, err := stmt.ExecContext(ctx, fileID, event, user, details, message)
 	if err != nil {
 		// 23503 error code == foreign_key_violation, meaning the files row does not exist
 		// http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html

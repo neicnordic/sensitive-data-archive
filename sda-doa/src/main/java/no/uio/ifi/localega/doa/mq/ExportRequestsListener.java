@@ -17,7 +17,6 @@ import no.uio.ifi.localega.doa.services.MetadataService;
 import no.uio.ifi.localega.doa.services.StreamingService;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,9 +63,7 @@ public class ExportRequestsListener {
     @Value("${s3.bucket}")
     private String s3Bucket;
 
-    @RabbitListener(
-            queuesToDeclare = @Queue(name = "${outbox.queue}", durable = "false", exclusive = "true", autoDelete = "true")
-    )
+    @RabbitListener(queues = "${outbox.queue}")
     public void listen(String message) {
         try {
             jsonSchemaValidationService.validate(message);
@@ -84,15 +81,15 @@ public class ExportRequestsListener {
             if (StringUtils.isNotEmpty(requestedDatasetId)) {
                 if (metadataService.findByReferenceId(requestedDatasetId) != null) {
                     Integer datasetsDbTableId = metadataService.findByReferenceId(requestedDatasetId).getDatasetId();
-                    String stableDatasetId = metadataService.getDataset(datasetsDbTableId).getStableId();
-                    log.info("Reference id {} mapped to dataset id {}", requestedDatasetId, stableDatasetId);
-                    requestedDatasetId = stableDatasetId; // use stable dataset id instead of reference to complete the export as normal
+                    String datasetAccessionId = metadataService.getDataset(datasetsDbTableId).getAccessionId();
+                    log.info("Reference id {} mapped to dataset id {}", requestedDatasetId, datasetAccessionId);
+                    requestedDatasetId = datasetAccessionId; // use the dataset accession ID instead of the reference to complete the export as normal
                     Collection<String> approvedMappedDatasetIds = approvedDatasetIds.stream()
                             .map(x -> {
                                 var reference = metadataService.findByReferenceId(x);
                                 if (reference != null && reference.getDatasetId() != null) {
                                     var dataset = metadataService.getDataset(reference.getDatasetId());
-                                    return dataset != null ? dataset.getStableId() : x;
+                                    return dataset != null ? dataset.getAccessionId() : x;
                                 } else {
                                     return x;
                                 }

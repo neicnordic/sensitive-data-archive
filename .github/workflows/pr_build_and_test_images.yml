@@ -10,6 +10,8 @@ on:
       - "sda-sftp-inbox/**"
       - "postgresql/**"
       - "rabbitmq/**"
+      - ".github/integration/**" # the integration tests themselves
+      - ".github/workflows/pr_build_and_test_images.yml"
 env:
   PR_NUMBER: ${{ github.event.number }} # Needed by the triggered integration tests to pull image for this PR
 
@@ -170,9 +172,13 @@ jobs:
     strategy:
       matrix:
         storage: ["posix", "s3"]
+      fail-fast: false
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-${{matrix.storage}}-integration.yml
 
       - name: Test sensitive-data-archive ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-${{matrix.storage}}-integration.yml run integration_test
@@ -185,6 +191,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-sync-integration.yml
       - name: Test sda-sync
         run: docker compose -f .github/integration/sda-sync-integration.yml run integration_test
 
@@ -258,9 +266,13 @@ jobs:
     strategy:
       matrix:
         storage: [s3, posix]
+      fail-fast: false
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+
+      - name: Pull images
+        run: bash .github/integration/scripts/compose_pull.sh .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml
 
       - name: Test sda-doa ${{ matrix.storage }} storage
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
@@ -309,6 +321,7 @@ jobs:
           - version: "1.36"
             tls: "false"
             storage: "posix"
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7

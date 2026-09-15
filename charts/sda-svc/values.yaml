@@ -272,6 +272,7 @@ global:
       s3Bucket: ""
       s3AccessKey: null
       s3SecretKey: null
+      autoCreateQueue: true
     servicePort: 443
     envFile: env
 

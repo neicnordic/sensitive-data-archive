@@ -78,19 +78,17 @@ func (ts *TestSuite) probeCapabilities() {
 	resp, _, reqErr := ts.doRequest("GET", "/files/"+fileID+"/content", nil, ts.authHeaders())
 	ts.hasStorageFile = reqErr == nil && resp.StatusCode == http.StatusOK
 
-	// Probe session cookie: check if first auth request sets sda_session
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
-	req.Header.Set("Authorization", "Bearer "+ts.token)
-	cookieResp, cookieErr := http.DefaultClient.Do(req)
-	if cookieErr == nil {
-		for _, c := range cookieResp.Cookies() {
-			if c.Name == "sda_session" {
-				ts.hasSessionCache = true
-
-				break
-			}
+	// Probe session cookie. The service only sets sda_session on a request it
+	// authenticates from scratch, and ts.token is already in its token cache
+	// from getFirstFileID above, so probe with a token it has not seen.
+	if probeToken, tokenErr := ts.generateToken("integration_test@example.org"); tokenErr == nil {
+		req, _ := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
+		req.Header.Set("Authorization", "Bearer "+probeToken)
+		cookieResp, cookieErr := http.DefaultClient.Do(req)
+		if cookieErr == nil {
+			ts.hasSessionCache = sessionCookie(cookieResp) != nil
+			cookieResp.Body.Close()
 		}
-		cookieResp.Body.Close()
 	}
 
 	ts.T().Logf("Environment capabilities: reencrypt=%v, storageFile=%v, sessionCache=%v",
@@ -126,6 +124,10 @@ func (ts *TestSuite) generateToken(sub string) (string, error) {
 		Issuer:    "http://integration.test",
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Minute)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		// Unique per call: iat/exp have second precision, so without this two
+		// tokens minted for the same subject in the same second are identical
+		// and hit the service's token cache instead of authenticating afresh.
+		ID: fmt.Sprintf("%d", time.Now().UnixNano()),
 	})
 
 	token.Header["kid"] = "rsa1"
@@ -139,6 +141,17 @@ func (ts *TestSuite) generateToken(sub string) (string, error) {
 	}
 
 	return token.SignedString(keyRaw)
+}
+
+// sessionCookie returns the sda_session cookie from a response, or nil.
+func sessionCookie(resp *http.Response) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == "sda_session" {
+			return c
+		}
+	}
+
+	return nil
 }
 
 func (ts *TestSuite) doRequest(method, path string, body io.Reader, headers map[string]string) (*http.Response, []byte, error) {
@@ -457,40 +470,50 @@ func (ts *TestSuite) Test15_OpaqueTokenNotJWTShaped() {
 // Test17_SessionCookieReuse tests that a session cookie from a previous request
 // can be reused to authenticate without sending the token again
 func (ts *TestSuite) Test17_SessionCookieReuse() {
-	// First request with JWT to get a session cookie
+	if !ts.hasSessionCache {
+		ts.T().Skip("REQUIRES_SESSION_CACHE: visa processing may prevent caching in combined mode")
+		return
+	}
+
+	// The cookie is only set on a request the service authenticates from
+	// scratch, so use a token it has not seen (ts.token is already cached).
+	token, err := ts.generateToken("integration_test@example.org")
+	ts.Require().NoError(err)
+
+	// First request with the fresh JWT: expect a session cookie.
+	// Use a jar-less client so we can inspect cookies manually.
 	req, err := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
 	ts.Require().NoError(err)
-	req.Header.Set("Authorization", "Bearer "+ts.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
-	// Use a jar-less client so we can inspect cookies manually
 	resp, err := http.DefaultClient.Do(req)
 	ts.Require().NoError(err)
 	defer resp.Body.Close()
 	ts.Require().Equal(http.StatusOK, resp.StatusCode)
 
-	// Extract session cookie from response
-	var sessionCookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == "sda_session" {
-			sessionCookie = c
-			break
-		}
-	}
-	if !ts.hasSessionCache {
-		ts.T().Skip("REQUIRES_SESSION_CACHE: visa processing may prevent caching in combined mode")
-		return
-	}
-	ts.Require().NotNil(sessionCookie, "response should set sda_session cookie")
+	cookie := sessionCookie(resp)
+	ts.Require().NotNil(cookie, "first request with a fresh token should set sda_session cookie")
 
-	// Second request with only the session cookie (no Authorization header)
+	// Second request with the same JWT is served from the token cache: no new cookie
 	req2, err := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
 	ts.Require().NoError(err)
-	req2.AddCookie(sessionCookie)
+	req2.Header.Set("Authorization", "Bearer "+token)
 
 	resp2, err := http.DefaultClient.Do(req2)
 	ts.Require().NoError(err)
 	defer resp2.Body.Close()
-	ts.Equal(http.StatusOK, resp2.StatusCode,
+	ts.Equal(http.StatusOK, resp2.StatusCode)
+	ts.Nil(sessionCookie(resp2), "request served from the token cache should not set a new sda_session cookie")
+
+	// Third request with only the session cookie (no Authorization header)
+	req3, err := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
+	ts.Require().NoError(err)
+	req3.AddCookie(cookie)
+
+	resp3, err := http.DefaultClient.Do(req3)
+	ts.Require().NoError(err)
+	defer resp3.Body.Close()
+	ts.Equal(http.StatusOK, resp3.StatusCode,
 		"session cookie should authenticate without access token")
 }
 
