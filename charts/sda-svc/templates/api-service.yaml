@@ -11,9 +11,9 @@ spec:
     port: 8080
     targetPort: api
     protocol: TCP
-  {{- if .Values.global.observability.enabled }}
+  {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
   - name: prometheus
-    port: 9090
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
     targetPort: prometheus
     protocol: TCP
   {{- end }}
