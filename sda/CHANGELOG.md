@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
 - api: add new API /dataset/{dataset_id} for getting state of a dataset
+- inbox: allow users to delete files from their inbox
 
 ### Changed
 
