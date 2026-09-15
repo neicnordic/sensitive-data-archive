@@ -159,7 +159,7 @@ func init() {
 		&config.Flag{
 			Name: "broker.shutdown_grace",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Duration(flagName, 30*time.Second, "How long a message handler that is already running gets to finish after shutdown starts, before its context is cancelled. Expects a go time.Duration parsable string")
+				flagSet.Duration(flagName, 20*time.Second, "How long a message handler that is already running gets to finish after shutdown starts, before its context is cancelled. Expects a go time.Duration parsable string")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
