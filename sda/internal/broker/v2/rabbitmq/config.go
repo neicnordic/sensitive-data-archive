@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	log "github.com/sirupsen/logrus"
@@ -26,6 +27,7 @@ type options struct {
 	clientCert    string
 	clientKey     string
 	timeout       int
+	shutdownGrace time.Duration
 }
 
 var defaultConfig *options
@@ -154,6 +156,16 @@ func init() {
 				defaultConfig.timeout = viper.GetInt(flagName)
 			},
 		},
+		&config.Flag{
+			Name: "broker.shutdown_grace",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Duration(flagName, 20*time.Second, "How long a message handler that is already running gets to finish after shutdown starts, before its context is cancelled. Expects a go time.Duration parsable string")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				defaultConfig.shutdownGrace = viper.GetDuration(flagName)
+			},
+		},
 	)
 }
 
@@ -172,6 +184,7 @@ func (cfg *options) clone() *options {
 		clientCert:    cfg.clientCert,
 		clientKey:     cfg.clientKey,
 		timeout:       cfg.timeout,
+		shutdownGrace: cfg.shutdownGrace,
 	}
 }
 

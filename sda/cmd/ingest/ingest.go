@@ -148,6 +148,19 @@ func run() error {
 		slog.Info("received signal, shutting down gracefully", "signal", sig)
 		cancel()
 
+		// Subscribe returns once the handler that was running has finished
+		// and acked its message; broker.shutdown_grace cancels the handler's
+		// context after that long, but the handler decides when it returns.
+		// A second signal skips the wait.
+		select {
+		case err := <-consumeErr:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("consumer failure during shutdown", "error", err)
+			}
+		case sig := <-sigc:
+			slog.Warn("received a second signal, not waiting for the running handler", "signal", sig)
+		}
+
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {

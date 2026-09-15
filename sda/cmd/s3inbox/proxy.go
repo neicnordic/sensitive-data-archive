@@ -416,6 +416,13 @@ func (p *Proxy) resignHeader(r *http.Request) *http.Request {
 	r.Header.Del("X-Real-Ip")
 	r.Header.Del("X-Request-Id")
 	r.Header.Del("X-Scheme")
+	// Clients such as s3cmd send "Content-Length: 0" on bodiless requests, but
+	// net/http does not put the header on the wire for a request without a body.
+	// Signing it would make the backend verify a header it never received, which
+	// Ceph RGW rejects with 403 (MinIO tolerates it).
+	if r.ContentLength == 0 {
+		r.Header.Del("Content-Length")
+	}
 	if strings.Contains(p.s3Conf.Endpoint, "//") {
 		host := strings.SplitN(p.s3Conf.Endpoint, "//", 2)
 		r.Host = host[1]

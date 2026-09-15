@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -237,6 +238,10 @@ type FakeServer struct {
 	headHeaders map[string]string
 	resp        string
 	pinged      bool
+	// the Authorization header and the Content-Length header as they were
+	// received on the wire, for the request signing tests
+	gotAuthorization string
+	gotContentLength string
 }
 
 func startFakeServer(port string) *FakeServer {
@@ -248,6 +253,8 @@ func startFakeServer(port string) *FakeServer {
 	f := FakeServer{}
 	foo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.pinged = true
+		f.gotAuthorization = r.Header.Get("Authorization")
+		f.gotContentLength = r.Header.Get("Content-Length")
 		if f.headHeaders != nil && r.Method == "HEAD" {
 			for k, v := range f.headHeaders {
 				w.Header().Set(k, v)
@@ -607,6 +614,52 @@ func (s *ProxyTests) TestServeHTTP_removeAnotherUsersFile() {
 	fileIDAfter, err := s.database.GetFileIDInInbox(context.Background(), "owner", "secret.txt")
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fileID, fileIDAfter)
+// signedHeaders picks the SignedHeaders list out of a SignV4 Authorization header
+func signedHeaders(authorization string) string {
+	for _, part := range strings.Split(authorization, ", ") {
+		if strings.HasPrefix(part, "SignedHeaders=") {
+			return strings.TrimPrefix(part, "SignedHeaders=")
+		}
+	}
+
+	return ""
+}
+
+// s3cmd sends "Content-Length: 0" on bodiless requests such as bucket listings.
+// net/http does not put the header on the wire for a request without a body, so
+// signing it makes the backend verify a header it never received. Ceph RGW
+// answers 403 on that, MinIO tolerates it.
+func (s *ProxyTests) TestServeHTTP_bodilessRequestDoesNotSignContentLength() {
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
+
+	r, err := http.NewRequest("GET", "/dummy?list-type=2", http.NoBody)
+	assert.NoError(s.T(), err)
+	r.Header.Set("Content-Length", "0")
+	w := httptest.NewRecorder()
+	proxy.ServeHTTP(w, r)
+
+	assert.Equal(s.T(), 200, w.Result().StatusCode) // nolint:bodyclose
+	assert.Equal(s.T(), true, s.fakeServer.PingedAndRestore())
+	assert.NotContains(s.T(), signedHeaders(s.fakeServer.gotAuthorization), "content-length")
+	assert.Empty(s.T(), s.fakeServer.gotContentLength)
+}
+
+// Counterpart to the test above: a request that actually has a body must keep
+// content-length both signed and on the wire.
+func (s *ProxyTests) TestForwardRequestToBackend_uploadSignsContentLength() {
+	proxy := NewProxy(s.s3Fakeconf, s.s3ClientToFake, helper.NewAlwaysAllow(), s.messenger, s.database, new(tls.Config))
+
+	body := "some file content"
+	r, err := http.NewRequest("PUT", "/dummy/contentlength-file", strings.NewReader(body))
+	assert.NoError(s.T(), err)
+	r.Header.Set("Content-Length", strconv.Itoa(len(body)))
+
+	resp, err := proxy.forwardRequestToBackend(r)
+	assert.NoError(s.T(), err)
+	_ = resp.Body.Close()
+
+	assert.Contains(s.T(), signedHeaders(s.fakeServer.gotAuthorization), "content-length")
+	assert.Equal(s.T(), strconv.Itoa(len(body)), s.fakeServer.gotContentLength)
 }
 
 func (s *ProxyTests) TestMessageFormatting() {
