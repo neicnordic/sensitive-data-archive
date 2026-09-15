@@ -294,7 +294,7 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp
 			// delivery back instead of starting it with a full grace period.
 			if ctx.Err() != nil {
 				if err := delivery.Nack(false, true); err != nil {
-					log.Debugf("requeueing delivery during shutdown: %v", err)
+					log.Warnf("requeueing delivery during shutdown: %v", err)
 				}
 				b.cancelConsumer()
 
@@ -335,9 +335,11 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, delivery amqp.Delivery, 
 
 	callbacks, err := handleFunc(hctx, msg)
 	if err != nil {
-		delivery.Nack(false, true)
-	} else {
-		delivery.Ack(false)
+		if nerr := delivery.Nack(false, true); nerr != nil {
+			log.Warnf("failed to nack message with correlation id %s: %v", delivery.CorrelationId, nerr)
+		}
+	} else if aerr := delivery.Ack(false); aerr != nil {
+		log.Warnf("failed to ack message with correlation id %s: %v", delivery.CorrelationId, aerr)
 	}
 
 	for _, cb := range callbacks {
@@ -424,7 +426,7 @@ func (b *rmqBroker) connectLocked(ctx context.Context) error {
 		}
 		b.mu.Unlock()
 		if err := closeConn(old); err != nil {
-			log.Debugf("closing dead connection during reconnect: %v", err)
+			log.Warnf("closing dead connection during reconnect: %v", err)
 		}
 
 		return err
@@ -435,7 +437,7 @@ func (b *rmqBroker) connectLocked(ctx context.Context) error {
 	if b.closed {
 		b.mu.Unlock()
 		if err := closeConn(conn.connection); err != nil {
-			log.Debugf("closing connection dialled after Close(): %v", err)
+			log.Warnf("closing connection dialled after Close(): %v", err)
 		}
 
 		return errBrokerClosed
@@ -447,7 +449,7 @@ func (b *rmqBroker) connectLocked(ctx context.Context) error {
 	b.mu.Unlock()
 
 	if err := closeConn(old); err != nil {
-		log.Debugf("closing old connection during reconnect: %v", err)
+		log.Warnf("closing old connection during reconnect: %v", err)
 	}
 
 	return nil
@@ -491,7 +493,7 @@ func (b *rmqBroker) dial(ctx context.Context) (*brokerConn, error) {
 		go func() {
 			if r := <-res; r.conn != nil {
 				if err := closeConn(r.conn.connection); err != nil {
-					log.Debugf("closing abandoned connection: %v", err)
+					log.Warnf("closing abandoned connection: %v", err)
 				}
 			}
 		}()
@@ -520,7 +522,9 @@ func (b *rmqBroker) dialBlocking(ctx context.Context) (*brokerConn, error) {
 				deadline = d
 			}
 			if err := conn.SetDeadline(deadline); err != nil {
-				conn.Close()
+				if cerr := conn.Close(); cerr != nil {
+					log.Warnf("closing connection after setting the handshake deadline failed: %v", cerr)
+				}
 
 				return nil, err
 			}
@@ -544,7 +548,7 @@ func (b *rmqBroker) dialBlocking(ctx context.Context) (*brokerConn, error) {
 	c, err := b.openChannels(connection)
 	if err != nil {
 		if cerr := closeConn(connection); cerr != nil {
-			log.Debugf("closing connection after channel setup failed: %v", cerr)
+			log.Warnf("closing connection after channel setup failed: %v", cerr)
 		}
 
 		return nil, err
