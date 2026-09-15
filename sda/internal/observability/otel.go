@@ -4,17 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
+	"os"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -25,8 +21,6 @@ import (
 )
 
 var tracerName string
-
-var promSrv *http.Server
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
@@ -46,9 +40,6 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 
 		return err
 	}
-	if !enabled {
-		return shutdown, nil
-	}
 
 	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
 	handleErr := func(inErr error) {
@@ -61,7 +52,15 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	)
 	otel.SetTextMapPropagator(prop)
 
-	traceExporter, err := otlptrace.New(ctx, otlptracehttp.NewClient())
+	// Override the default value of OTEL_TRACES_EXPORTER('otlp`) from autoexport to 'none` to have trace exporting disabled by default.
+	if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
+		if err = os.Setenv("OTEL_TRACES_EXPORTER", "none"); err != nil {
+			handleErr(err)
+
+			return
+		}
+	}
+	traceExporter, err := autoexport.NewSpanExporter(ctx)
 	if err != nil {
 		handleErr(err)
 
@@ -88,10 +87,24 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	reg := prometheus.NewRegistry()
-	metricsExposer, err := otelprom.New(
-		otelprom.WithRegisterer(reg), // register exporter with this registry
-	)
+	// Override the default value of OTEL_METRICS_EXPORTER('otlp`) from autoexport to 'none` to have metrics exporting disabled by default.
+	if os.Getenv("OTEL_METRICS_EXPORTER") == "" {
+		if err = os.Setenv("OTEL_METRICS_EXPORTER", "none"); err != nil {
+			handleErr(err)
+
+			return
+		}
+	}
+	// Override the default value of OTEL_EXPORTER_PROMETHEUS_HOST("localhost") to "0.0.0.0" to allow Prometheus scraping from outside the process/container.
+	// We do this override even if OTEL_METRICS_EXPORTER is not set as "prometheus" as it does not have any effect in such scenarios anyway
+	if os.Getenv("OTEL_EXPORTER_PROMETHEUS_HOST") == "" {
+		if err = os.Setenv("OTEL_EXPORTER_PROMETHEUS_HOST", "0.0.0.0"); err != nil {
+			handleErr(err)
+
+			return
+		}
+	}
+	metricReader, err := autoexport.NewMetricReader(ctx)
 	if err != nil {
 		handleErr(err)
 
@@ -99,7 +112,7 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 	}
 
 	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(metricsExposer.Reader),
+		metric.WithReader(metricReader),
 		metric.WithResource(serviceResource),
 	)
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
@@ -110,27 +123,6 @@ func SetupOTelSDK(ctx context.Context, serviceName string) (shutdown func(contex
 
 		return
 	}
-
-	prometheusMux := http.NewServeMux()
-
-	prometheusMux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-
-	promSrv = &http.Server{
-		Addr:              ":9090",
-		Handler:           prometheusMux,
-		ReadHeaderTimeout: 20 * time.Second,
-	}
-	go func() {
-		if err := promSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("failed to start prometheus metrics server", "error", err)
-		}
-	}()
-	shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-
-		return promSrv.Shutdown(ctx)
-	})
 
 	return
 }
