@@ -283,7 +283,6 @@ func (b *rmqBroker) consumeMessages(ctx context.Context, messageChan <-chan amqp
 			b.cancelConsumer()
 
 			return true
-
 		case delivery, ok := <-messageChan:
 			if !ok {
 				log.Warn("RabbitMQ consumption channel closed, preparing to recover...")
