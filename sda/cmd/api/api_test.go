@@ -25,12 +25,14 @@ import (
 	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
+	"github.com/neicnordic/sensitive-data-archive/internal/inboxpath"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -344,6 +346,119 @@ func TestDeleteFile(t *testing.T) {
 			r.SetPathValue("fileid", tc.fileID)
 			api.rbac(api.deleteFile)(w, r)
 			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+}
+
+// setup runs configv2.Load, the only place in the unit suites where the real flag registration is
+// exercised. Importing inboxproject is what registers the inbox keys, so if that ever stops
+// happening the flags vanish from --help and no config file can switch the layout on. Nothing
+// else fails when they are missing, since an unregistered key just reads as the stock default.
+func TestInboxProjectFlagsAreRegistered(t *testing.T) {
+	// AllKeys includes keys bound from pflags, which is what registration produces; IsSet does not
+	// consider a flag's default, so an unset string flag would read as absent either way.
+	registered := map[string]bool{}
+	for _, key := range viper.AllKeys() {
+		registered[key] = true
+	}
+	for _, key := range []string{"inboxpath.project_code", "inboxpath.project_delimiter"} {
+		assert.True(t, registered[key], "%s should be bound after config load, got keys: %v", key, viper.AllKeys())
+	}
+}
+
+// submissionUser carries an "@" on purpose: the stock branch normalizes it to "_" while the
+// project-code branch keeps it raw, so the two expectations in each table differ by the username
+// itself and not only by the prefix.
+const submissionUser = "dummy@elixir-europe.org"
+
+const projectCodeConfig = "inboxpath:\n  project_code: p11\n  project_delimiter: \"-\"\n"
+
+// useInboxLayout installs an inbox layout through the package's real entry point, so these tests
+// exercise the same path a service takes at startup.
+func useInboxLayout(t *testing.T, yaml string) {
+	t.Helper()
+	t.Cleanup(func() {
+		viper.Reset()
+		require.NoError(t, inboxpath.Load())
+	})
+
+	viper.Reset()
+	if yaml != "" {
+		viper.SetConfigType("yaml")
+		require.NoError(t, viper.ReadConfig(bytes.NewBufferString(yaml)))
+	}
+	require.NoError(t, inboxpath.Load())
+}
+
+func TestDeleteFile_resolvesInboxProjectPath(t *testing.T) {
+	// A deployment with a project code stores the inbox directory as "<code><delimiter><rawuser>",
+	// so the stored anonymized path must be resolved against that layout before the inbox write.
+	// Resolving it as the stock normalized username instead targets a directory that does not
+	// exist and the delete silently misses.
+	for _, tc := range []struct {
+		name     string
+		yaml     string
+		wantPath string
+	}{
+		{"stock", "", "dummy_elixir-europe.org/files/x.c4gh"},
+		{"project code", projectCodeConfig, "p11-dummy@elixir-europe.org/files/x.c4gh"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDB := &mocks.MockDatabase{}
+			mockDB.On("GetUploadedSubmissionFilePathAndLocation", submissionUser, fileID).
+				Return("files/x.c4gh", "inbox-location", nil).Once()
+			mockDB.On("UpdateFileEventLog", fileID, "disabled", "api", "{}", "{}").Return(nil).Once()
+
+			mockWriter := &mocks.MockWriter{}
+			mockWriter.On("RemoveFile", "inbox-location", tc.wantPath).Return(nil).Once()
+
+			useInboxLayout(t, tc.yaml)
+			apiImpl := &API{db: mockDB, inboxWriter: mockWriter}
+
+			r, w := newRequest(t, http.MethodDelete, "/file", nil, "")
+			r.SetPathValue("username", submissionUser)
+			r.SetPathValue("fileid", fileID)
+			apiImpl.deleteFile(w, r)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			mockDB.AssertExpectations(t)
+			mockWriter.AssertExpectations(t)
+		})
+	}
+}
+
+func TestDownloadFile_resolvesInboxProjectPath(t *testing.T) {
+	// Same layout contract on the read side. The reader is failed deliberately: the assertion is
+	// the path it was handed, not the crypt4gh stream that would follow.
+	for _, tc := range []struct {
+		name     string
+		yaml     string
+		wantPath string
+	}{
+		{"stock", "", "dummy_elixir-europe.org/files/x.c4gh"},
+		{"project code", projectCodeConfig, "p11-dummy@elixir-europe.org/files/x.c4gh"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDB := &mocks.MockDatabase{}
+			mockDB.On("GetUploadedSubmissionFilePathAndLocation", submissionUser, fileID).
+				Return("files/x.c4gh", "inbox-location", nil).Once()
+
+			mockReader := &mocks.MockReader{}
+			mockReader.On("NewFileReader", "inbox-location", tc.wantPath).
+				Return(nil, errors.New("read failed")).Once()
+
+			useInboxLayout(t, tc.yaml)
+			apiImpl := &API{db: mockDB, inboxReader: mockReader}
+
+			r, w := newRequest(t, http.MethodGet, "/users/file", nil, "")
+			r.Header.Set("C4GH-Public-Key", base64.StdEncoding.EncodeToString([]byte(publicKey)))
+			r.SetPathValue("username", submissionUser)
+			r.SetPathValue("fileid", fileID)
+			apiImpl.downloadFile(w, r)
+
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			mockDB.AssertExpectations(t)
+			mockReader.AssertExpectations(t)
 		})
 	}
 }
