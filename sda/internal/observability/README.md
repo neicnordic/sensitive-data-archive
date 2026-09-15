@@ -4,22 +4,39 @@ The Observability package adds configurable support for collecting and exporting
 using OpenTelemetry.
 
 ## Configuration
-The Observability package is disabled by default and will send collected traces to a no-op exporter and will not expose any Prometheus metrics endpoint.                      
 
-The enabled the exporting of traces and expose Prometheus metrics, the options OBSERVABILITY_ENABLED needs to be configured to `true`.
+The Observability package disables trace and metrics exporting by default.
+> **_Note_**: These defaults differs from the OpenTelemetry defaults described in https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
 
-| Flag Name:            | Env Variable          | Type: | Description:                                         | Default Value: |          
-|-----------------------|-----------------------|-------|------------------------------------------------------|----------------|                               
-| observability.enabled | OBSERVABILITY_ENABLED | Bool  | If observability(metrics, tracing) is to be enabled. | false          |         
+To enable/change the exporting of traces and/or exporting of metrics the following environment variable configurations are available:
 
-Additionally, the OTEL_EXPORTER_OTLP_ENDPOINT needs to be configured to an OTLP/HTTP receiver, for example http://tempo:4318. 
-See [OTLP Exporter Configuration](https://opentelemetry.io/docs/specs/otel/protocol/exporter/) for additional configuration options for the OTLP exporter.
+| Env Variable          | Type:  | Description:                                                                                                                                                                                                                 | Default Value: |          
+|-----------------------|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|                               
+| OTEL_TRACES_EXPORTER  | string | Defines the traces exporter; supported values "none", "otlp", "console". See https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/exporters/autoexport/spans.go#L35 for additional details.                  | "none"         |         
+| OTEL_METRICS_EXPORTER | string | Defines the metrics exporter; supported values "none", "otlp", "prometheus", "console". See https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/exporters/autoexport/metrics.go#L42 for additional details. | "none"         |         
 
-When observability is enabled the application will host a Prometheus endpoint (/metrics) on port 9090. 
-By default, only https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/instrumentation/runtime/runtime.go#L38 are collected. 
+### Suggested configuration:
+
+OTEL_TRACES_EXPORTER="otlp"
+OTEL_METRICS_EXPORTER="prometheus"
+
+Additionally, the OTEL_EXPORTER_OTLP_ENDPOINT needs to be configured to an OTLP/HTTP receiver, for
+example http://tempo:4318.
+See [OTLP Exporter Configuration](https://opentelemetry.io/docs/specs/otel/protocol/exporter/) for additional
+configuration options for the OTLP exporter.
+
+When OTEL_METRICS_EXPORTER is configured to "prometheus" the application will host a Prometheus endpoint (/metrics) on
+host: "0.0.0.0"(configurable by OTEL_EXPORTER_PROMETHEUS_HOST) port: 9464(configurable by
+OTEL_EXPORTER_PROMETHEUS_PORT)
+> **_Note_**: The "official" default of OTEL_EXPORTER_PROMETHEUS_HOST is "localhost", but the observability defaults it to "0.0.0.0" to allow Prometheus scraping from outside the process/container.
+
+By default,
+only https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/instrumentation/runtime/runtime.go#L38 are
+collected.
 If application has other instrumentation added those will also be available.
 
-See [OpenTelemetry Environment Variable Specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/) for OpenTelemetry environment variable documentation. 
+See [OpenTelemetry Environment Variable Specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)
+for OpenTelemetry environment variable documentation to configure different exporters or additional exporter configurations.
 
 ## Usage
 
@@ -32,7 +49,7 @@ To initialize the Observability package in an application, add the following:
 ```go
 shutdown, err := observability.SetupOTelSDK(ctx, "APPLICATION_NAME")
 if err != nil {
-return fmt.Errorf("failed to setup OTel SDK: %v", err)
+    return fmt.Errorf("failed to setup OTel SDK: %v", err)
 }
 ```
 
@@ -40,9 +57,9 @@ And call the shutdown func when application is to terminate
 
 ```go
 defer func () {
-if err := shutdown(ctx); err != nil {
-slog.Error("failed to shutdown OTel SDK", "err", err)
-}
+    if err := shutdown(ctx); err != nil {
+        slog.Error("failed to shutdown OTel SDK", "err", err)
+    }
 }()
 ```
 
@@ -50,17 +67,17 @@ for example:
 
 ```go
 func main() {
-...
-shutdown, err := observability.SetupOTelSDK(ctx, "APPLICATION_NAME")
-if err != nil {
-return fmt.Errorf("failed to setup OTel SDK: %v", err)
-}
-defer func () {
-if err := shutdown(ctx); err != nil {
-slog.Error("failed to shutdown OTel SDK", "err", err)
-}
-}()
-...
+	// ...
+    shutdown, err := observability.SetupOTelSDK(ctx, "APPLICATION_NAME")
+    if err != nil {
+        return fmt.Errorf("failed to setup OTel SDK: %v", err)
+    }
+    defer func () {
+        if err := shutdown(ctx); err != nil {
+            slog.Error("failed to shutdown OTel SDK", "err", err)
+        }
+    }()
+    // ...
 }
 ```
 
@@ -76,7 +93,7 @@ Example:
 
 ```go
 client := &http.Client{
-Transport: otelhttp.NewTransport(http.DefaultTransport),
+    Transport: otelhttp.NewTransport(http.DefaultTransport),
 }
 ```
 
@@ -99,9 +116,9 @@ There are also additional options for the instrumentation for example how to nam
 ```go
 handler = otelhttp.NewHandler(handler, "http-server",
 otelhttp.WithSpanNameFormatter(func (_ string, r *http.Request) string {
-// name the spans by the HTTP method
-return r.Method
-}),
+        // name the spans by the HTTP method
+        return r.Method
+    }),
 )
 ```
 
@@ -139,21 +156,21 @@ Example for a postgres connection:
 
 ```go 
 db, err := otelsql.Open("postgres", connStr,
-otelsql.WithAttributes(
-semconv.DBSystemPostgreSQL,
-),
-otelsql.WithSpanOptions(otelsql.SpanOptions{
-OmitConnResetSession: true,
-OmitConnectorConnect: true,
-OmitConnPrepare:      true,
-OmitRows:             true,
-OmitConnQuery:        true,
-}),
+    otelsql.WithAttributes(
+        semconv.DBSystemPostgreSQL,
+    ),
+    otelsql.WithSpanOptions(otelsql.SpanOptions{
+        OmitConnResetSession: true,
+        OmitConnectorConnect: true,
+        OmitConnPrepare:      true,
+        OmitRows:             true,
+        OmitConnQuery:        true,
+    }),
 )
 // error handling
 
 metricsReg, err := otelsql.RegisterDBStatsMetrics(pg.db, otelsql.WithAttributes(
-semconv.DBSystemPostgreSQL,
+    semconv.DBSystemPostgreSQL,
 ))
 // metricsReg should be closed when DB is closed
 ```
@@ -177,7 +194,7 @@ carrier := propagation.MapCarrier{}
 otel.GetTextMapPropagator().Inject(ctx, carrier)
 
 for k, v := range carrier {
-headers[k] = v
+    headers[k] = v
 }
 ```
 
@@ -189,29 +206,29 @@ context.Context for processing the message.
 Any existing span context is first cleared so that the consumer does not accidentally inherit an unrelated span from the
 context used to receive the message.
 
-```go 
+```go
 ctx = extractTraceContext(trace.ContextWithSpanContext(ctx, trace.SpanContext{}), delivery.Headers)
 
-...
+// ...
 func extractTraceContext(ctx context.Context, headers amqp.Table) context.Context {
-carrier := propagation.MapCarrier{}
+    carrier := propagation.MapCarrier{}
 
-for k, v := range headers {
-switch v := v.(type) {
-case string:
-carrier[k] = v
-case int:
-carrier[k] = strconv.Itoa(v)
-case int32:
-carrier[k] = strconv.FormatInt(int64(v), 10)
-case int64:
-carrier[k] = strconv.FormatInt(v, 10)
-case []byte:
-carrier[k] = string(v)
-default:
-carrier[k] = fmt.Sprintf("%v", v)
-}
-}
+    for k, v := range headers {
+        switch v := v.(type) {
+        case string:
+            carrier[k] = v
+        case int:
+            carrier[k] = strconv.Itoa(v)
+        case int32:
+            carrier[k] = strconv.FormatInt(int64(v), 10)
+        case int64:
+            carrier[k] = strconv.FormatInt(v, 10)
+        case []byte:
+            carrier[k] = string(v)
+        default:
+            carrier[k] = fmt.Sprintf("%v", v)
+        }
+	}
 
 return otel.GetTextMapPropagator().Extract(ctx, carrier)
 }
@@ -240,8 +257,8 @@ Example:
 
 ```go
 func doSomething(ctx context.Context, ...) {
-ctx, span := observability.StartSpan(ctx, "doSomething")
-defer span.End()
+	ctx, span := observability.StartSpan(ctx, "doSomething")
+    defer span.End()
 }
 ```
 
@@ -249,10 +266,10 @@ Attributes can be attached to span which provide additional information, for exa
 
 ```go
 func doSomething(ctx context.Context, id string, ...) {
-ctx, span := observability.StartSpan(ctx, "doSomething",
-attribute.String("id", id),
-)
-defer span.End()
+    ctx, span := observability.StartSpan(ctx, "doSomething",
+        attribute.String("id", id),
+    )
+    defer span.End()
 }
 ```
 
@@ -261,20 +278,20 @@ can be done by
 
 ```go
 func doSomething(ctx context.Context, ...) {
-ctx, span := observability.StartSpan(ctx, "doSomething")
-defer span.End()
+    ctx, span := observability.StartSpan(ctx, "doSomething")
+    defer span.End()
 
-// make a debug log
-span.Debug("did something", slog.String("what", "something"))
+    // make a debug log
+    span.Debug("did something", slog.String("what", "something"))
 
-// make a debug log
-span.Info("something was done", slog.String("what", "something"))
+    // make a debug log
+    span.Info("something was done", slog.String("what", "something"))
 
-// make a debug log
-span.Warn("something unexpected but manageable occured", slog.String("what", "something"), slog.Any("error", err))
-...
-// something bad happened
-span.Error("something bad happened", err)
+    // make a debug log
+    span.Warn("something unexpected but manageable occured", slog.String("what", "something"), slog.Any("error", err))
+    
+    // something bad happened
+    span.Error("something bad happened", err)
 }
 ```
 
@@ -288,37 +305,37 @@ Example:
 var thingsOccurredCounter metric.Int64Counter
 
 func main(){
-// observability setup
+    // observability setup
 
-appMeter, err := observability.NewMeter("APPLICATION_NAME")
-// error handling 
+    appMeter, err := observability.NewMeter("APPLICATION_NAME")
+    // error handling 
 
-thingsOccurredCounter, err = appMeter.Int64Counter("things_occurred")
-// error handling
+    thingsOccurredCounter, err = appMeter.Int64Counter("things_occurred")
+    // error handling
 
-var thingsOccurring int64
-_, err = appMeter.Int64ObservableGauge(
-"things_occurring",
-metric.WithInt64Callback(func (ctx context.Context, o metric.Int64Observer) error {
-o.Observe(thingsOccurring)
-return nil
-}),
-)
-// error handling
+    var thingsOccurring int64
+    _, err = appMeter.Int64ObservableGauge(
+        "things_occurring",
+        metric.WithInt64Callback(func (ctx context.Context, o metric.Int64Observer) error {
+            o.Observe(thingsOccurring)
+            return nil
+        }),
+    )
+    // error handling
 
-// ...
-for msg := range msgChan {
-func () {
-thingsOccurredCounter.Add(1)
-thingsOccurring++
+    // ...
+    for msg := range msgChan {
+        func () {
+            thingsOccurredCounter.Add(1)
+            thingsOccurring++
 
-defer func (){
-thingsOccurring--
-}   
+            defer func (){
+                thingsOccurring--
+            }   
 
-// process msg
-}()
-}
+            // process msg 
+        }()
+	}
 }
 
 ```
