@@ -614,6 +614,8 @@ func (s *ProxyTests) TestServeHTTP_removeAnotherUsersFile() {
 	fileIDAfter, err := s.database.GetFileIDInInbox(context.Background(), "owner", "secret.txt")
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fileID, fileIDAfter)
+}
+
 // signedHeaders picks the SignedHeaders list out of a SignV4 Authorization header
 func signedHeaders(authorization string) string {
 	for _, part := range strings.Split(authorization, ", ") {
