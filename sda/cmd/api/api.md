@@ -92,7 +92,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
   - accepts `POST` requests with either:
     - A JSON payload: `{"filepath": "</PATH/TO/FILE/IN/INBOX>", "user": "<USERNAME>"}`
     - OR a `fileid` query parameter: `/file/cancel?fileid=<FILE_UUID>`
-  - triggers the cancellation of an in-progress ingestion of the file. Only files that have not yet been linked to a dataset can be cancelled. If the file is already added to the archive it will be removed.
+  - triggers the cancellation of the file, thus removing it from the archive and marking it as `disabled`. Only files that have not yet been linked to a dataset can be cancelled. If the file is already added to the archive it will be removed.
 
   - If both a JSON payload and a `fileid` query parameter are provided in the same request, a `400 Bad Request` is returned.
 

@@ -266,11 +266,14 @@ paths:
   /file/cancel:
     post:
       description: |
-        Cancel the ingestion of a given file. Only files that are uploaded to
-        the archive but have not yet been mapped to a dataset can be cancelled.
+        Trigger the cancellation of a given, previously ingested, file, thus
+        removing it from the archive and marking it as `disabled`.
+        Only files that are uploaded to the
+        archive but have not yet been mapped to a dataset can be cancelled.
         You can provide either a JSON payload with `user` and `filepath`, or a
         `fileid` query parameter. If both are provided, a 400 Bad Request is
-        returned. Cancelling an already disabled file will result in a 409 Conflict.
+        returned. Cancelling a file that is already linked to a dataset will
+        result in a 409 Conflict.
       parameters:
         - in: query
           name: fileid

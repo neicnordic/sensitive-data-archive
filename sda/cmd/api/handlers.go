@@ -514,7 +514,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 	marshaledMsg, _ := json.Marshal(&cancel)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-trigger.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
 		slog.Error("could not validate cancel message", "err", err)
-		writeJSON(w, http.StatusBadRequest, fmt.Sprintf("could not validate cancel message, reason: %v", err))
+		writeJSON(w, http.StatusInternalServerError, fmt.Sprintf("could not validate cancel message, reason: %v", err))
 
 		return
 	}
