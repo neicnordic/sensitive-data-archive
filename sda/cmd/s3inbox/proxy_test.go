@@ -29,7 +29,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 		name             string
 		req              func() *http.Request
 		newMocks         func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer)
-		expectedHttpCode int
+		expectedHTTPCode int
 	}{
 		{
 			name: "CompleteMultipartUpload",
@@ -58,7 +58,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "CompleteMultipartUpload_Reupload",
 			req: func() *http.Request {
@@ -89,7 +89,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "CreateMultipartUpload",
 			req: func() *http.Request {
@@ -116,7 +116,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "CreateMultipartUpload_AlreadyExists",
 			req: func() *http.Request {
@@ -131,7 +131,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "PutObject_Content_Length",
 			req: func() *http.Request {
@@ -175,7 +175,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "PutObject_Signed_Content_Length_Header",
 			req: func() *http.Request {
@@ -221,7 +221,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "PutObject_AlreadyExists",
 			req: func() *http.Request {
@@ -252,7 +252,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "AbortMultipartUpload",
 			req: func() *http.Request {
@@ -265,7 +265,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "GetBucketLocation",
 			req: func() *http.Request {
@@ -278,7 +278,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "ListObjects",
 			req: func() *http.Request {
@@ -291,7 +291,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "ListObjectsV2",
 			req: func() *http.Request {
@@ -304,7 +304,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "UploadPart",
 			req: func() *http.Request {
@@ -317,7 +317,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "ListParts",
 			req: func() *http.Request {
@@ -330,7 +330,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "ListMultipartUploads",
 			req: func() *http.Request {
@@ -343,7 +343,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "HeadObject",
 			req: func() *http.Request {
@@ -356,7 +356,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "DeleteObject",
 			req: func() *http.Request {
@@ -380,7 +380,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, mb, ms
 			},
-			expectedHttpCode: 200,
+			expectedHTTPCode: 200,
 		}, {
 			name: "DeleteObject_FileNotExists",
 			req: func() *http.Request {
@@ -393,7 +393,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 
 				return mdb, &mocks.MockBroker{}, &mockServer{}
 			},
-			expectedHttpCode: 404,
+			expectedHTTPCode: 404,
 		}, {
 			name: "DeleteObject_OtherUsersFile",
 			req: func() *http.Request {
@@ -402,7 +402,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, &mockServer{}
 			},
-			expectedHttpCode: 400,
+			expectedHTTPCode: 400,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -439,7 +439,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			w := httptest.NewRecorder()
 			p.ServeHTTP(w, tc.req())
 
-			assert.Equal(t, tc.expectedHttpCode, w.Code)
+			assert.Equal(t, tc.expectedHTTPCode, w.Code)
 			ma.AssertExpectations(t)
 			mockDatabase.AssertExpectations(t)
 			mockBroker.AssertExpectations(t)
