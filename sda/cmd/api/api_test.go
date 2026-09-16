@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -37,7 +38,15 @@ var (
 	api               API
 	token             string
 	filePath          = "test/file.c4gh"
+	unknownFilePath   = "test/not-ingested.c4gh"
+	unknownID         = "00000000-0000-0000-0000-000000000000"
+	inDatasetFilePath = "test/in-dataset.c4gh"
+	uploadedFilePath  = "test/upoaded.c4gh"
+	uploadedFileID    = "7d9f3c2b-4e1a-4b8c-9f2d-3c6e1a0d5f8e"
 	fileID            = "3a7f2c91-b4e0-4d8a-9f3b-2c6e1a0d5f8e"
+	inDatasetFileID   = "5c8e3f2a-1b4d-4a9e-8f0a-6d2e7c1a9b3f"
+	disabledFilePath  = "test/disabled.c4gh"
+	disabledFileID    = "9e8f7d6c-5b4a-4c3d-2e1f-0a9b8c7d6e5f"
 	userID            = "dummy"
 	datasetID         = "test-dataset-123"
 	accessionID       = "test-file-123"
@@ -138,6 +147,7 @@ func setup() error {
 		{"role":"submission","path":"/dataset/release/:datasetid","action":"POST"},
 		{"role":"submission","path":"/dataset/verify/","action":"PUT"},
 		{"role":"submission","path":"/file/ingest","action":"POST"},
+		{"role":"admin","path":"/file/cancel","action":"POST"},
 		{"role":"submission","path":"/file/verify/","action":"PUT"},
 		{"role":"submission","path":"/file/accession","action":"POST"},
 		{"role":"submission","path":"/file","action":"DELETE"},
@@ -166,6 +176,27 @@ func setup() error {
 	mockDB.On("GetUserFiles", userID, "", true, 1000, "").Return(userFiles, "", nil)
 	mockDB.On("GetFileIDByUserPathAndStatus", userID, filePath, "uploaded").Return(fileID, nil)
 	mockDB.On("GetFileIDByUserPathAndStatus", userID, filePath, "verified").Return(fileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, filePath).Return(fileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, unknownFilePath).Return("", sql.ErrNoRows)
+	mockDB.On("GetFileIDByUserAndPath", userID, inDatasetFilePath).Return(inDatasetFileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, uploadedFilePath).Return(uploadedFileID, nil)
+	mockDB.On("GetFileIDByUserAndPath", userID, disabledFilePath).Return("", sql.ErrNoRows)
+	mockDB.On("GetArchived", uploadedFileID).Return(nil, nil)
+	mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{FilePath: "test", Location: "test", FileSize: 0}, nil)
+	mockDB.On("GetArchived", inDatasetFileID).Return(&database.ArchiveData{FilePath: "test", Location: "test", FileSize: 0}, nil)
+	mockDB.On("GetArchived", disabledFileID).Return(&database.ArchiveData{FilePath: disabledFilePath, Location: "test", FileSize: 0}, nil)
+	mockDB.On("GetFileStatus", fileID).Return("archived", nil)
+	mockDB.On("GetFileStatus", inDatasetFileID).Return("ready", nil)
+	mockDB.On("GetFileStatus", uploadedFileID).Return("uploaded", nil)
+	mockDB.On("GetFileStatus", disabledFileID).Return("disabled", nil)
+	mockDB.On("GetFileStatus", unknownID).Return("", sql.ErrNoRows)
+	mockDB.On("GetFileDetails", fileID, mock.Anything).Return(&database.FileDetails{User: userID, Path: filePath}, nil)
+	mockDB.On("GetFileDetails", inDatasetFileID, mock.Anything).Return(&database.FileDetails{User: userID, Path: inDatasetFilePath}, nil)
+	mockDB.On("GetFileDetails", uploadedFileID, mock.Anything).Return(&database.FileDetails{User: userID, Path: uploadedFilePath}, nil)
+	mockDB.On("GetFileDetails", disabledFileID, "disabled").Return(&database.FileDetails{User: userID, Path: disabledFilePath}, nil)
+	mockDB.On("IsFileInDataset", fileID).Return(false, nil)
+	mockDB.On("IsFileInDataset", inDatasetFileID).Return(true, nil)
+	mockDB.On("IsFileInDataset", disabledFileID).Return(false, nil)
 	mockDB.On("GetUploadedSubmissionFilePathAndLocation", userID, fileID).Return("inbox", "inbox", nil)
 	mockDB.On("GetDatasetStatus", datasetID).Return("registered", nil)
 	mockDB.On("GetDecryptedChecksum", fileID).Return(decryptedChecksum, nil)
@@ -268,6 +299,70 @@ func TestIngestFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, w := newRequest(t, http.MethodPost, "/file/ingest", tc.body, tc.token)
 			api.rbac(api.ingestFile)(w, r)
+			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+}
+
+func TestCancelFile(t *testing.T) {
+	validBody := toJSON(t, map[string]any{
+		"filepath": filePath,
+		"fileid":   fileID,
+		"user":     userID,
+	})
+	unknownBody := toJSON(t, map[string]any{
+		"filepath": unknownFilePath,
+		"fileid":   unknownID,
+		"user":     userID,
+	})
+	inDatasetBody := toJSON(t, map[string]any{
+		"filepath": inDatasetFilePath,
+		"fileid":   inDatasetFileID,
+		"user":     userID,
+	})
+	unArchivedBody := toJSON(t, map[string]any{
+		"filepath": uploadedFilePath,
+		"fileid":   uploadedFileID,
+		"user":     userID,
+	})
+	disabledBody := toJSON(t, map[string]any{
+		"filepath": disabledFilePath,
+		"fileid":   disabledFileID,
+		"user":     userID,
+	})
+	tests := []struct {
+		name     string
+		token    string
+		body     []byte
+		wantCode int
+	}{
+		{"Valid Request", token, validBody, http.StatusOK},
+		{"Invalid Token", "invalidtoken", validBody, http.StatusUnauthorized},
+		{"Missing Token", "", validBody, http.StatusUnauthorized},
+		{"Invalid Body", token, []byte("not json"), http.StatusBadRequest},
+		{"Empty Body", token, nil, http.StatusBadRequest},
+		{"Unknown file", token, unknownBody, http.StatusNotFound},
+		{"Not Found in Archive", token, unArchivedBody, http.StatusNotFound},
+		{"Already Disabled", token, disabledBody, http.StatusNotFound},
+		{"Already In Dataset", token, inDatasetBody, http.StatusConflict},
+	}
+	// Tests for canceling files via POST body
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, w := newRequest(t, http.MethodPost, "/file/cancel", tc.body, tc.token)
+			api.rbac(api.cancelFile)(w, r)
+			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+	// Tests for canceling files via POST query parameter
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var body struct {
+				FileID string `json:"fileid"`
+			}
+			_ = json.Unmarshal(tc.body, &body)
+			r, w := newRequest(t, http.MethodPost, "/file/cancel?fileid="+body.FileID, nil, tc.token)
+			api.rbac(api.cancelFile)(w, r)
 			assert.Equal(t, tc.wantCode, w.Code)
 		})
 	}
