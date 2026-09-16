@@ -145,7 +145,8 @@ func run() error {
 		}
 	}()
 	defer func() {
-		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		// Use context.WithoutCancel to ensure server shutdown is not immediately cut off incase parent context is cancelled
+		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		if err := server.Shutdown(serverShutdownCtx); err != nil {
 			log.Errorf("failed to close http/https server due to: %v", err)
 		}
