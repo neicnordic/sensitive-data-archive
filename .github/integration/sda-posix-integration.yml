@@ -161,7 +161,7 @@ services:
       - BROKER_HOST=rabbitmq
       - BROKER_PASSWORD=inbox
       - BROKER_PORT=5671
-      - BROKER_ROUTING_KEY=inbox
+      - ROUTING_KEY=inbox
       - BROKER_USERNAME=inbox
       - BROKER_VHOST=sda
       - CEGA_ENDPOINT=https://cega-nss:8443/username/%s
