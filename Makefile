@@ -269,7 +269,7 @@ test-sda:
 test-sda-download:
 	@cd sda-download && go test ./... -count=1
 test-sda-sftp-inbox:
-		@docker run --rm -v ./sda-sftp-inbox:/inbox maven:3.9.4-eclipse-temurin-21-alpine sh -c "cd /inbox && mvn test -B"
+	@docker run --rm -v ./sda-sftp-inbox:/inbox maven:3.9.4-eclipse-temurin-21-alpine sh -c "cd /inbox && mvn test -B"
 test-sda-admin:
 	@cd sda-admin && go test ./... -count=1
 
