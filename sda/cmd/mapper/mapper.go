@@ -242,10 +242,14 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 		}
 
 		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(message.Body)); err != nil {
-			slog.Error("failed to update dataset status",
+			slog.Error("failed to update dataset status to registered",
 				slog.String("dataset-id", mappings.DatasetID),
 				slog.Any("error", err),
 			)
+
+			if errors.Is(err, database.ErrForeignKeyViolation) {
+				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+			}
 
 			return nil, err
 		}
@@ -256,6 +260,10 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 				slog.Any("error", err),
 			)
 
+			if errors.Is(err, database.ErrForeignKeyViolation) {
+				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+			}
+
 			return nil, err
 		}
 	case "deprecate":
@@ -264,6 +272,10 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 				slog.String("dataset-id", mappings.DatasetID),
 				slog.Any("error", err),
 			)
+
+			if errors.Is(err, database.ErrForeignKeyViolation) {
+				return []func(){app.errorQueue(message, "mapping violates foreign key constraint")}, nil
+			}
 
 			return nil, err
 		}
