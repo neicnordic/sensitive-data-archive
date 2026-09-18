@@ -318,7 +318,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	stream := io.TeeReader(c4ghr, md5hash)
 
 	if file.DecryptedSize, err = io.Copy(decryptedChecksum, stream); err != nil {
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 			slog.Warn("context canceled while decrypting file",
 				slog.String("file-id", ingestionVerification.FileID),
 			)
