@@ -109,10 +109,19 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 
 	// acr_values is only a request, the provider is free to authenticate the
 	// user in a weaker context, so the returned acr has to be verified.
-	if err := verifyAcr(claims.AcrClaim, conf.AcrValues); err != nil {
-		log.Errorf("Authentication context not accepted for user %s: %v", userInfo.Subject, err)
+	if len(conf.AcrValues) > 0 {
+		acr, err := authenticationContext(contx, verifier, oauth2Token, claims.AcrClaim)
+		if err != nil {
+			log.Errorf("Could not determine the authentication context for user %s: %v", userInfo.Subject, err)
 
-		return OIDCIdentity{}, err
+			return OIDCIdentity{}, err
+		}
+
+		if err := verifyAcr(acr, conf.AcrValues); err != nil {
+			log.Errorf("Authentication context not accepted for user %s: %v", userInfo.Subject, err)
+
+			return OIDCIdentity{}, err
+		}
 	}
 
 	idStruct = OIDCIdentity{
@@ -128,6 +137,35 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	}
 
 	return idStruct, err
+}
+
+// authenticationContext returns the acr the user was authenticated with. The
+// claim belongs to the ID token, but not every provider issues it there, so the
+// acr from the userinfo response is used as a fallback. The ID token wins when
+// both carry one, since that is where the claim is specified to live.
+func authenticationContext(ctx context.Context, verifier *oidc.IDTokenVerifier, oauth2Token *oauth2.Token, userinfoAcr string) (string, error) {
+	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
+	if !ok || rawIDToken == "" {
+		return userinfoAcr, nil
+	}
+
+	idToken, err := verifier.Verify(ctx, rawIDToken)
+	if err != nil {
+		return "", fmt.Errorf("could not verify id token: %w", err)
+	}
+
+	var claims struct {
+		AcrClaim string `json:"acr"`
+	}
+	if err := idToken.Claims(&claims); err != nil {
+		return "", fmt.Errorf("could not read the id token claims: %w", err)
+	}
+
+	if claims.AcrClaim == "" {
+		return userinfoAcr, nil
+	}
+
+	return claims.AcrClaim, nil
 }
 
 // ErrAcrNotAccepted is returned when the provider authenticated the user in an
