@@ -98,3 +98,34 @@ func TestLoginFailureMessage(t *testing.T) {
 	assert.Contains(t, loginFailureMessage(errors.New("token exchange failed")), "clear your session cookies", "unrelated failures keep the generic message")
 	assert.NotContains(t, loginFailureMessage(errors.New("token exchange failed")), "two factor")
 }
+
+// elixirLoginResponse serves a request to the oidc callback and returns the
+// response, with the state cookie set to match so that the state check passes.
+func elixirLoginResponse(t *testing.T, requestURL, state string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	authHandler := AuthHandler{Config: config.AuthConf{OIDC: config.OIDCConfig{ID: "client"}}}
+
+	app := iris.New()
+	app.Get("/oidc/login", func(ctx iris.Context) { authHandler.elixirLogin(ctx) })
+	require.NoError(t, app.Build())
+
+	req := httptest.NewRequest(http.MethodGet, requestURL, nil)
+	req.AddCookie(&http.Cookie{Name: "state", Value: state})
+	res := httptest.NewRecorder()
+	app.ServeHTTP(res, req)
+
+	return res
+}
+
+func TestElixirLoginReportsProviderError(t *testing.T) {
+	// A provider that refuses the authorization request redirects back with an
+	// error and no code. Exchanging the empty code instead loses what it said.
+	res := elixirLoginResponse(t,
+		"/oidc/login?state=s&error=invalid_request&error_description=More+than+one+entity+found",
+		"s")
+
+	assert.Contains(t, res.Body.String(), "invalid_request", "the provider's error was not reported")
+	assert.NotContains(t, res.Body.String(), "clear your session cookies", "a refused request is not a stale cookie")
+	assert.NotContains(t, res.Body.String(), "More than one entity found", "the description may carry provider internals and belongs in the log only")
+}
