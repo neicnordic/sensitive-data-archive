@@ -57,9 +57,9 @@ func init() {
 				schemaType := viper.GetString(flagName)
 				switch schemaType {
 				case "federated":
-					schemaType = "/schemas/federated/"
+					schemaPath = "/schemas/federated/"
 				case "isolated":
-					schemaType = "/schemas/isolated/"
+					schemaPath = "/schemas/isolated/"
 				default:
 					panic(fmt.Sprintf("schema_type '%s' not supported, needs: <federated|isolated>", schemaType))
 				}
