@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	jwtgo "github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -192,31 +193,50 @@ func (ts *OIDCTests) TestValidateJwt() {
 	assert.ErrorContains(ts.T(), err, "signed token not valid: \"exp\" not satisfied: required claim not found")
 }
 
-// acrUser is a mockoidc user whose userinfo response carries an acr claim,
-// which the default mock user does not.
+// acrUser is a mockoidc user that can put an acr claim in the userinfo
+// response, in the ID token, or in both, which the default mock user does in
+// neither.
 type acrUser struct {
 	*mockoidc.MockUser
-	acr string
+	userinfoAcr string
+	idTokenAcr  string
 }
 
 func (u *acrUser) Userinfo(_ []string) ([]byte, error) {
 	info := map[string]any{"sub": u.Subject, "email": u.Email}
-	if u.acr != "" {
-		info["acr"] = u.acr
+	if u.userinfoAcr != "" {
+		info["acr"] = u.userinfoAcr
 	}
 
 	return json.Marshal(info)
 }
 
+// acrIDTokenClaims adds an acr claim to the ID token the mock issues.
+type acrIDTokenClaims struct {
+	*mockoidc.IDTokenClaims
+	Acr string `json:"acr,omitempty"`
+}
+
+func (u *acrUser) Claims(scope []string, claims *mockoidc.IDTokenClaims) (jwtgo.Claims, error) {
+	return &acrIDTokenClaims{IDTokenClaims: claims, Acr: u.idTokenAcr}, nil
+}
+
 // authenticateWithAcr runs an OIDC login where the provider returns the given
-// acr, against a configuration requiring the given acr values.
+// acr in its userinfo response, against a configuration requiring the given
+// acr values.
 func (ts *OIDCTests) authenticateWithAcr(returnedAcr string, requiredAcrValues []string) (OIDCIdentity, error) {
-	user := &acrUser{MockUser: mockoidc.DefaultUser(), acr: returnedAcr}
+	return ts.authenticateWithUser(&acrUser{MockUser: mockoidc.DefaultUser(), userinfoAcr: returnedAcr}, requiredAcrValues)
+}
+
+// authenticateWithUser runs an OIDC login as the given mock user against a
+// configuration requiring the given acr values.
+func (ts *OIDCTests) authenticateWithUser(user *acrUser, requiredAcrValues []string) (OIDCIdentity, error) {
 	session, err := ts.mockServer.SessionStore.NewSession("openid email profile", "nonce", user, "", "")
 	assert.NoError(ts.T(), err)
 
 	oidcConfig := ts.OIDCConfig
 	oidcConfig.AcrValues = requiredAcrValues
+
 	oauth2Config, provider := getOidcClient(oidcConfig)
 
 	return authenticateWithOidc(oauth2Config, provider, session.SessionID, oidcConfig)
@@ -270,4 +290,36 @@ func TestVerifyAcr(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func (ts *OIDCTests) TestAcrFromIDTokenWhenUserinfoHasNone() {
+	// The acr claim is specified for the ID token, and a provider is not
+	// required to repeat it in userinfo. Such a login must still be accepted.
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), idTokenAcr: refedsMFA}
+	identity, err := ts.authenticateWithUser(user, []string{refedsMFA})
+	assert.NoError(ts.T(), err, "an MFA login carrying acr only in the ID token was rejected")
+	assert.NotEqual(ts.T(), "", identity.RawToken)
+}
+
+func (ts *OIDCTests) TestAcrFromIDTokenWinsOverUserinfo() {
+	// The ID token is where the claim belongs, so a weaker context there is
+	// not rescued by a stronger one in the userinfo response.
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), idTokenAcr: "https://refeds.org/profile/sfa", userinfoAcr: refedsMFA}
+	_, err := ts.authenticateWithUser(user, []string{refedsMFA})
+	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted)
+	assert.ErrorContains(ts.T(), err, "https://refeds.org/profile/sfa")
+}
+
+func (ts *OIDCTests) TestAcrFallsBackToUserinfo() {
+	// Providers that only populate userinfo keep working.
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), userinfoAcr: refedsMFA}
+	_, err := ts.authenticateWithUser(user, []string{refedsMFA})
+	assert.NoError(ts.T(), err, "the userinfo fallback was lost")
+}
+
+func (ts *OIDCTests) TestAcrMissingFromBoth() {
+	user := &acrUser{MockUser: mockoidc.DefaultUser()}
+	_, err := ts.authenticateWithUser(user, []string{refedsMFA})
+	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted)
+	assert.ErrorContains(ts.T(), err, "no acr claim returned")
 }
