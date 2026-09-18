@@ -1,3 +1,4 @@
+import re
 import unittest
 from urllib.parse import parse_qs, urlparse
 
@@ -35,7 +36,7 @@ class TestOIDCAuth(unittest.TestCase):
 
     def setUp(self):
         """Initialise authenticator."""
-        self.backend_url = "http://auth-aai:8080/oidc"
+        self.backend_url = "http://auth-aai-mfa:8080/oidc"
 
 
     def tearDown(self):
@@ -76,3 +77,34 @@ class TestOIDCAuth(unittest.TestCase):
         self.assertNotIn("error=", provider_location)
         query = parse_qs(urlparse(provider_location).query)
         self.assertEqual(query["acr_values"], ["https://refeds.org/profile/mfa"])
+
+
+    def test_login_without_the_required_context_is_rejected(self):
+        """Test that a complete login is refused when the provider reports no authentication context."""
+        session = requests.Session()
+
+        redirect = session.get(self.backend_url, allow_redirects=False)
+        self.assertEqual(redirect.status_code, 302)
+        # auth marks the state cookie Secure, which no client stores over plain
+        # http. A browser against a TLS deployment would send it back, so it is
+        # carried by hand on the callback below.
+        state = re.search(r"state=([^;]+)", redirect.headers["Set-Cookie"]).group(1)
+
+        # Log in at the mocked AAI and approve the release of the attributes.
+        login = session.get(redirect.headers["Location"])
+        self.assertIn("Choose the user", login.text)
+        consent = session.post(login.url, data={"username": "test@dummy.org", "password": ""})
+
+        form = {"user_oauth_approval": "true", "authorize": "Yes", "remember": "none"}
+        for scope in set(re.findall(r'name="(scope_[a-z0-9_]+)"', consent.text)):
+            form[scope] = scope.removeprefix("scope_")
+        action = re.search(r'action="([^"]+)"\s+method="post"', consent.text, re.IGNORECASE).group(1)
+        callback = session.post(action, data=form, allow_redirects=False)
+        location = callback.headers.get("Location", callback.url)
+        self.assertIn("code=", location, "the provider did not return an authorization code")
+
+        # The mock reports an empty acr, so the login must not produce a token.
+        result = session.get(location, cookies={"state": state})
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("stronger authentication method", result.text)
+        self.assertNotIn("Token", result.text)

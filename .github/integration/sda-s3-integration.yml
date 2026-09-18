@@ -359,12 +359,37 @@ services:
       - AUTH_RESIGNJWT=false
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
-      - OIDC_ACRVALUES=https://refeds.org/profile/mfa
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8801:8080"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  # Same service as auth-aai, but requiring an authentication context, so that
+  # the acr tests cannot disturb an ordinary OIDC login against auth-aai.
+  auth-aai-mfa:
+    command: [sda-auth]
+    container_name: auth-aai-mfa
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      mock-aai:
+        condition: service_started
+    environment:
+      - AUTH_RESIGNJWT=false
+      - DATABASE_PASSWORD=auth
+      - DATABASE_USER=auth
+      - OIDC_ACRVALUES=https://refeds.org/profile/mfa
+      - OIDC_REDIRECTURL=http://localhost:8802/oidc/login
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    ports:
+      - "8802:8080"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -418,6 +443,8 @@ services:
       auth-cega:
         condition: service_started
       auth-aai:
+        condition: service_started
+      auth-aai-mfa:
         condition: service_started
       cega-nss:
         condition: service_started
