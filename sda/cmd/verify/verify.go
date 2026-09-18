@@ -318,6 +318,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	stream := io.TeeReader(c4ghr, md5hash)
 
 	if file.DecryptedSize, err = io.Copy(decryptedChecksum, stream); err != nil {
+		if errors.Is(err, context.Canceled) {
+			slog.Warn("context canceled while decrypting file",
+				slog.String("file-id", ingestionVerification.FileID),
+			)
+
+			return nil, err
+		}
 		slog.Error("failed to copy decrypted data",
 			slog.String("file-id", ingestionVerification.FileID),
 			slog.Any("error", err),
