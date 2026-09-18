@@ -198,6 +198,12 @@ func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, me
 		return nil, fmt.Errorf("file archive information not found")
 	}
 
+	if archiveData.BackupLocation != "" && archiveData.BackupFilePath != "" {
+		log.Infof("skipping backup, file: %s already backed up", message.Key)
+
+		return nil, nil
+	}
+
 	// Get size on disk, will also give some time for the file to appear if it has not already
 	diskFileSize, err := app.archiveReader.GetFileSize(ctx, archiveData.Location, archiveData.FilePath)
 	if err != nil {
