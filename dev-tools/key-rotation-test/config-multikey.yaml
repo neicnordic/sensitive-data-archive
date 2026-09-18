@@ -84,7 +84,6 @@ broker:
   password: ""
   vhost: "/sda"
   exchange: "sda"
-  routingKey: ""
   ssl: "false"
 
 database:
