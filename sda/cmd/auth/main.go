@@ -263,6 +263,19 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 		return nil
 	}
 
+	// The provider reports a refused authorization by redirecting back with an
+	// error instead of a code. Without this the empty code would be exchanged,
+	// and the provider's description of what went wrong would be lost.
+	if providerError := ctx.Request().URL.Query().Get("error"); providerError != "" {
+		description := ctx.Request().URL.Query().Get("error_description")
+		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("provider refused the authorization request: %s (%s)", providerError, description)
+		if _, err := ctx.Writef("Authentication failed. The login provider refused the request: %s", providerError); err != nil {
+			log.Error("Failed to write response: ", err)
+		}
+
+		return nil
+	}
+
 	code := ctx.Request().URL.Query().Get("code")
 	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC)
 	if err != nil {
