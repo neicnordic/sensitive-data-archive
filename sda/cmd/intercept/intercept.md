@@ -8,7 +8,7 @@ When running, `intercept` reads messages from the configured RabbitMQ queue (com
 For each message, these steps are taken:
 
 1. The message type is read from the message `type` field.
-   1. If the message `type` is not known, an error is logged and the message is Ack'ed.
+   1. If the message does not contain the `type` field, an error is logged and the message is Ack'ed.
 2. The target routing key for the message is decided based on message type.
    1. If the message type is of unknown type or the routing key for it has been set to "", it will be routed it to `undeliverable` (`undeliverable` needs to exist)
 3. The message is routed to the configured key. 
