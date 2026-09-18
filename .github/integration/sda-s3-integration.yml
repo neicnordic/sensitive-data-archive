@@ -359,6 +359,7 @@ services:
       - AUTH_RESIGNJWT=false
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
+      - OIDC_ACRVALUES=https://refeds.org/profile/mfa
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
