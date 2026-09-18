@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -87,4 +89,12 @@ func TestGetOIDCKeepsRedirectURIWithAcrValues(t *testing.T) {
 	query := oidcRedirect(t, oidcConf, "/oidc?redirect_uri=http://frontend/callback")
 	assert.Equal(t, "http://frontend/callback", query.Get("redirect_uri"), "the per request redirect_uri was dropped")
 	assert.Equal(t, "https://refeds.org/profile/mfa", query.Get("acr_values"), "acr_values was dropped when a redirect_uri was given")
+}
+
+func TestLoginFailureMessage(t *testing.T) {
+	acrErr := fmt.Errorf("%w: acr %q returned, required one of [x]", ErrAcrNotAccepted, "y")
+	assert.Contains(t, loginFailureMessage(acrErr), "two factor authentication", "a rejected authentication context needs its own message")
+
+	assert.Contains(t, loginFailureMessage(errors.New("token exchange failed")), "clear your session cookies", "unrelated failures keep the generic message")
+	assert.NotContains(t, loginFailureMessage(errors.New("token exchange failed")), "two factor")
 }

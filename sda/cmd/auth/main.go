@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -266,7 +267,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC)
 	if err != nil {
 		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("authentication failed: %s", err)
-		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
+		_, err := ctx.Writef("%s", loginFailureMessage(err))
 		if err != nil {
 			log.Error("Failed to write response: ", err)
 
@@ -301,6 +302,20 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	s3confDownload := getS3ConfigMap(idStruct.RawToken, auth.Config.S3Inbox, idStruct.User)
 
 	return &OIDCData{S3ConfInbox: s3confInbox, S3ConfDownload: s3confDownload, OIDCID: idStruct}
+}
+
+// loginFailureMessage returns the message shown to a user whose login failed.
+// A rejected authentication context gets its own message, since telling the
+// user to clear their cookies is useless advice when the real problem is that
+// they did not log in with the method the service requires.
+func loginFailureMessage(err error) string {
+	if errors.Is(err, ErrAcrNotAccepted) {
+		return "Authentication failed. This service requires you to log in with a stronger " +
+			"authentication method, for example two factor authentication. Please log in again " +
+			"using the required method."
+	}
+
+	return "Authentication failed. You may need to clear your session cookies and try again."
 }
 
 // getOIDCLogin renders the `oidc.html` template to the given iris context
