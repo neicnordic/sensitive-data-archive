@@ -390,6 +390,8 @@ global:
     jwkPath: "/jwk"
     id: ""
     secret: ""
+    # @param global.oidc.acrValues space separated authentication context class references required at login, e.g. "https://refeds.org/profile/mfa" to enforce two factor authentication (optional)
+    acrValues: ""
     # @param global.oidc.jwtSecret name of k8s secret containing JWT public keys for token verification (optional)
     jwtSecret: ""
 

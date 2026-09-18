@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `global.oidc.acrValues` to require an authentication context at OIDC
+  login, e.g. `https://refeds.org/profile/mfa` to enforce login with a
+  second factor.
+
 ### Changed
 
 - Populate broker_v2 config for finalize
