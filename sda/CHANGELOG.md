@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - finalize:
   - Migrate to Broker V2 package
+  - Multiple completion messages may be published if finalize messages are consumed when file is already in ready
+    - This is to address possible scenario where publish fails after commit during the setting of accession
   - Use db transactions to ensure correct state even if an error occurs.
 - ingest:
   - Use db transactions during cancel and ingest actions and rollback if encounter error.
