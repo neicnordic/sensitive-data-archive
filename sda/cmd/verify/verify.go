@@ -480,7 +480,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		return nil, nil
 	}
 
-	if storedFileInfo.DecryptedChecksum == "" && storedFileInfo.ArchivedChecksum == "" {
+	if storedFileInfo.DecryptedChecksum == "" || storedFileInfo.ArchivedChecksum == "" {
 		if err := tx.SetVerified(ctx, file, ingestionVerification.FileID); err != nil {
 			slog.Error("failed to set file as verified",
 				slog.String("file-id", ingestionVerification.FileID),
