@@ -435,6 +435,7 @@ global:
   reencrypt:
     host: ""
     port: 50051
+    # @param global.reencrypt.timeout The amount of seconds the clients of reencrypt will wait before timing out a call
     timeout: 5
 
   sync:
