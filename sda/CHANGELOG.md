@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- finalize:
+  - Migrate to Broker V2 package
+  - Multiple completion messages may be published if finalize messages are consumed when file is already in ready
+    - This is to address possible scenario where publish fails after commit during the setting of accession
+  - Use db transactions to ensure correct state even if an error occurs.
 - ingest:
   - Use db transactions during cancel and ingest actions and rollback if encounter error.
   - Requeue messages which could be expected to succeed on a retry.
@@ -23,6 +28,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use log/slog for logging instead of logrus.
   - Wait for the handler that is running to finish on shutdown before closing the broker; a second signal skips the wait.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- database: add ErrUniqueViolation, ErrNotNullViolation, ErrForeignKeyViolation errors,
+  - Add pq error code parsing for these in the Postgres implementation
+- mapper: 
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+- verify:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+- rotatekey:
+  - Update to use broker/v2 instead of broker (v1)
+  - Update unit tests to use mocks instead of docker 
+  - Use transaction for write actions during message handling incase error for rollback
+  - Remove dependency on config(v1) package, add required rotatekey related configuration to be registrated to config/v2
+    - Changed
+      - C4GH_ROTATEPUBKEYPATH -> TARGET_PUBLIC_KEY
+      - GRPC_HOST + GRPC_PORT -> REENCRYPT_TARGET
+      - GRPC_CACERT -> REENCRYPT_CA_CERT
+      - GRPC_CLIENTCERT -> REENCRYPT_CLIENT_CERT
+      - GRPC_CLIENTKEY -> REENCRYPT_CLIENT_KEY
+      - GRPC_TIMEOUT -> REENCRYPT_TIMEOUT, also now a time.Duration instead of integer of seconds
+      - BROKER_QUEUE -> SOURCE_QUEUE
+      - BROKER_ROUTINGKEY -> ROUTING_KEY
+      - BROKER_PREFETCHCOUNT -> BROKER_PREFETCH_COUNT
+- intercept:
+  - Update to use broker/v2 instead of broker (v1)
+  - Refactor and add unit tests
+  - Add configuration options for destination routing keys
+- s3inbox:
+  - Update to use broker/v2 instead of broker (v1)
+  - Fix reuploads to publish the "remove" message before the "upload" messages, instead of after 
+  - Update unit test to use mocks instead of docker containers
+  - Add additional checks in detectS3RequestType, to reject additional s3 action not previously rejected but not supported
+  - Remove dependency on config (v1) by moving required configuration registration to s3inbox/config
+    - Env variable changes:
+      - SERVER_JWTPUBKEYPATH -> SERVER_JWT_PUB_KEY_PATH
+      - SERVER_JWTPUBKEYURL -> SERVER_JWT_PUB_KEY_URL
+      - BROKER_ROUTING_KEY -> ROUTING_KEY
+      - S3INBOX_CACERT -> S3INBOX_CA_CERT
+- sync:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+  - Allow the remote configuration to be optional, and don't send http notifications if it is not configured
+  - Do not hardcode the `/dataset` path when doing the http calls to the configured remote, instead rely on it being configured in the remote.url
 
 ### Fixed
 
@@ -40,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Close()` closes the connection with a deadline instead of closing each channel and waiting for the server's reply without one, so shutdown against a frozen server ends after a few seconds instead of the heartbeat timeout; a connection the server had already dropped is no longer reported as an error.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
+- Populate slog log level from LOG_LEVEL configuration
 
 ## [3.1.76] - 2026-07-15
 

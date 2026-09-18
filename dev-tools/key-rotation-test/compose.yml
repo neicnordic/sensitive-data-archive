@@ -160,7 +160,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTING_KEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
     ports:
@@ -187,7 +187,7 @@ services:
       - BROKER_PASSWORD=ingest
       - BROKER_USER=ingest
       - BROKER_QUEUE=ingest
-      - BROKER_ROUTINGKEY=archived
+      - ROUTING_KEY=archived
       - DATABASE_PASSWORD=ingest
       - DATABASE_USER=ingest
     restart: always
@@ -212,7 +212,7 @@ services:
       - BROKER_PASSWORD=verify
       - BROKER_USER=verify
       - BROKER_QUEUE=archived
-      - BROKER_ROUTINGKEY=verified
+      - ROUTING_KEY=verified
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
     restart: always
@@ -236,8 +236,8 @@ services:
     environment:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
-      - BROKER_QUEUE=accession
-      - BROKER_ROUTINGKEY=completed
+      - SOURCE_QUEUE=accession
+      - ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
     restart: always
@@ -354,7 +354,7 @@ services:
       - BROKER_PASSWORD=rotatekey
       - BROKER_USER=rotatekey
       - BROKER_QUEUE=rotatekey
-      - BROKER_ROUTINGKEY=rotatekey
+      - ROUTING_KEY=rotatekey
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
     restart: always

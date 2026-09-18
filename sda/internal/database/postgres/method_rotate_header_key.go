@@ -23,7 +23,7 @@ func (db *pgDb) rotateHeaderKey(ctx context.Context, tx *sql.Tx, header []byte, 
 
 	result, err := stmt.ExecContext(ctx, hex.EncodeToString(header), keyHash, fileID)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")

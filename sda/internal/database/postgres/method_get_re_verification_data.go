@@ -27,7 +27,7 @@ func (db *pgDb) getReVerificationData(ctx context.Context, tx *sql.Tx, accession
 	if err := stmt.QueryRowContext(ctx, accessionID).Scan(
 		&reVerificationData.FileID, &reVerificationData.ArchiveFilePath, &reVerificationData.SubmissionFilePath,
 		&reVerificationData.SubmissionUser, &reVerificationData.ArchivedCheckSumType, &reVerificationData.ArchivedCheckSum); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	reVerificationData.ArchivedCheckSumType = strings.ToLower(reVerificationData.ArchivedCheckSumType)

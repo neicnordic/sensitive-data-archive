@@ -883,13 +883,14 @@ func GetC4GHKey() (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = keyFile.Close()
+	}()
 
 	key, err := keys.ReadPrivateKey(keyFile, []byte(passphrase))
 	if err != nil {
 		return nil, err
 	}
-
-	_ = keyFile.Close()
 
 	return &key, nil
 }
@@ -929,13 +930,13 @@ func GetC4GHPublicKey(keyPath string) (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	defer func() {
+		_ = keyFile.Close()
+	}()
 	key, err := keys.ReadPublicKey(keyFile)
 	if err != nil {
 		return nil, err
 	}
-
-	_ = keyFile.Close()
 
 	return &key, nil
 }

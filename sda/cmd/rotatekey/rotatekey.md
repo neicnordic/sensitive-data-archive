@@ -12,6 +12,7 @@ For each message, these steps are taken:
 1. The message is validated as valid JSON that matches the "rotate-key" schema.
 2. A database look-up is performed for the configured target public key hash. If the look-up fails or the key has been deprecated, the service will exit.
 3. The key hash of the c4gh key with which the file is currently encrypted is fetched from the database and compared with the configured target key.
+   * If the current c4gh key is not configured for the reencrypt service then the message will be reconsumed until it its configured for the reencrypt service 
 4. If these key hashes differ, the reencrypt service is called to re-encrypt the file header with the target key.
 5. The file header entry in the database is updated with the new one.
 6. The key hash entry in the database is updated with the new one (target key).
@@ -51,28 +52,29 @@ export LOG_FORMAT="json"
 
 This setting controls which crypt4gh keyfile is loaded.
 
-- `C4GH_ROTATEPUBKEYPATH`: path to the crypt4gh public key to use for reencrypting file headers.
+- `TARGET_PUBLIC_KEY`: path to the crypt4gh public key to use for reencrypting file headers.
 
 ### RabbitMQ broker settings
 
 These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `BROKER_QUEUE`: message queue or stream to read messages from (commonly `rotatekey_stream`)
-- `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `BROKER_ROUTINGKEY`: routing from a rabbitmq exchange to the rotatekey queue
-- `BROKER_PREFETCHCOUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
+- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `BROKER_USER`: username to connect to rabbitmq
+- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey`)
+- `ROUTING_KEY`: The routing key which the rotatekey service publishes reverify messages with
+- `SCHEMA_TYPE`: Schema type to validate incoming broker messages against, supported values: federated, isolated 
 
 ### PostgreSQL Database settings
 
-- `DB_HOST`: hostname for the postgresql database
-- `DB_PORT`: database port (commonly 5432)
-- `DB_USER`: username for the database
-- `DB_PASSWORD`: password for the database
-- `DB_DATABASE`: database name
-- `DB_SSLMODE`: The TLS encryption policy to use for database connections. Valid options are:
+- `DATABASE_HOST`: hostname for the postgresql database
+- `DATABASE_PORT`: database port (commonly 5432)
+- `DATABASE_USER`: username for the database
+- `DATABASE_PASSWORD`: password for the database
+- `DATABASE_NAME`: database name
+- `DATABASE_SSL_MODE`: The TLS encryption policy to use for database connections. Valid options are:
   - `disable`
   - `allow`
   - `prefer`
@@ -92,11 +94,11 @@ These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 ### GRPC settings
 
-- `GRPC_HOST`: Host name of the grpc server
-- `GRPC_PORT`: Port number of the grpc server
-- `GRPC_CACERT`: Certificate Authority (CA) certificate for validating incoming request
-- `GRPC_SERVERCERT`: path to the x509 certificate used by the service
-- `GRPC_SERVERKEY`: path to the x509 private key used by the service
+- `REENCRYPT_TARGET`: The target where the Reencrypt service is hosted, see https://github.com/grpc/grpc/blob/master/doc/naming.md for more details on syntax
+- `REENCRYPT_TIMEOUT`: The duration before timing out when calling the Reencrypt service
+- `REENCRYPT_CA_CERT`: Path to the ca cert file used when calling the the Reencrypt service
+- `REENCRYPT_CLIENT_CERT`: Path to client cert file used when calling the the Reencrypt service
+- `REENCRYPT_CLIENT_KEY`: Path to client key file used when calling the the Reencrypt service
 
 
 ### Logging settings

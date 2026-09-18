@@ -98,7 +98,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTING_KEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
     extra_hosts:
@@ -177,8 +177,8 @@ services:
     environment:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
-      - BROKER_QUEUE=accession
-      - BROKER_ROUTINGKEY=completed
+      - SOURCE_QUEUE=accession
+      - ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
     restart: always
@@ -226,7 +226,7 @@ services:
     environment:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=mapping_stream
+      - SOURCE_QUEUE=mapping_stream
       - DATABASE_PASSWORD=sync
       - DATABASE_USER=sync
     restart: always
