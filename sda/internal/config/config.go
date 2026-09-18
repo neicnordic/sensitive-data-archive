@@ -156,6 +156,11 @@ type OIDCConfig struct {
 	RevocationURL string
 	Secret        string // #nosec G117 -- Export needed to access configuration atm
 	JwkURL        string
+	// AcrValues holds the authentication context class references requested
+	// from, and required of, the OIDC provider, configured as a space separated
+	// string. When empty no specific authentication context is requested or
+	// enforced.
+	AcrValues []string
 }
 
 type CegaConfig struct {
@@ -397,6 +402,7 @@ func NewConfig(app string) (*Config, error) {
 		c.Auth.OIDC.Provider = viper.GetString("oidc.provider")
 		c.Auth.OIDC.RedirectURL = viper.GetString("oidc.redirectUrl")
 		c.Auth.OIDC.Secret = viper.GetString("oidc.secret")
+		c.Auth.OIDC.AcrValues = strings.Fields(viper.GetString("oidc.acrValues"))
 		if viper.IsSet("oidc.jwkPath") {
 			c.Auth.OIDC.JwkURL = c.Auth.OIDC.Provider + viper.GetString("oidc.jwkPath")
 		}

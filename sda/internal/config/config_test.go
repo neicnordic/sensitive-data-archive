@@ -594,8 +594,16 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 
 	viper.Set("oidc.provider", "http://provider:9000")
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
-	_, err = NewConfig("auth")
+	c, err := NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+	assert.Empty(ts.T(), c.Auth.OIDC.AcrValues, "no authentication context should be required by default")
+
+	// acr values are space separated in the configuration, as in the OIDC
+	// acr_values request parameter they end up in.
+	viper.Set("oidc.acrValues", "https://refeds.org/profile/mfa https://example.org/loa3")
+	c, err = NewConfig("auth")
+	assert.NoError(ts.T(), err, "unexpected failure")
+	assert.Equal(ts.T(), []string{"https://refeds.org/profile/mfa", "https://example.org/loa3"}, c.Auth.OIDC.AcrValues)
 }
 
 func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_readsNestedStorageInboxKeys() {
