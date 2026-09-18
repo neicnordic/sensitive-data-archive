@@ -19,7 +19,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -27,15 +26,13 @@ import (
 func TestProxyAllowedS3Actions(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
-		req              func() *http.Request
+		req              *http.Request
 		newMocks         func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer)
 		expectedHTTPCode int
 	}{
 		{
 			name: "CompleteMultipartUpload",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploadId=upload-id", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploadId=upload-id", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -61,9 +58,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "CompleteMultipartUpload_Reupload",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploadId=upload-id", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploadId=upload-id", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -92,9 +87,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "CreateMultipartUpload",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploads", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploads", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				ms := &mockServer{}
@@ -119,9 +112,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "CreateMultipartUpload_AlreadyExists",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploads", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPost, "/unit_test_user/test?uploads", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				ms := &mockServer{}
@@ -133,13 +124,13 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			},
 			expectedHTTPCode: 200,
 		}, {
-			name: "PutObject_Content_Length",
+			name: "PutObject_NoContentLength",
 			req: func() *http.Request {
 				req := httptest.NewRequest(http.MethodPut, "/unit_test_user/test", nil)
 				req.Header.Set("Content-Length", "0")
 
 				return req
-			},
+			}(),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -177,6 +168,42 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			},
 			expectedHTTPCode: 200,
 		}, {
+			name: "PutObject_PublishFailure",
+			req:  httptest.NewRequest(http.MethodPut, "/unit_test_user/test", nil),
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
+				mdb := &mocks.MockDatabase{}
+				mb := &mocks.MockBroker{}
+				ms := &mockServer{}
+
+				mdb.On("GetFileIDInInbox", "unit_test_user", "test").Return("", nil).Once()
+				mdb.On("BeginTransaction").Return(nil).Once()
+				mdb.On("RegisterFile", (*string)(nil), mock.MatchedBy(func(loc string) bool {
+					// cant verify the port as the mock s3 server gets different port each run by httptest, so just verify it sets the bucket and format correctly
+					u, err := url.Parse(loc)
+
+					return err == nil &&
+						u.Scheme == "http" &&
+						u.Hostname() == "127.0.0.1" &&
+						u.Path == "/test_inbox_bucket"
+				}), "test", "unit_test_user").Return("file_id_123", nil).Once()
+				mdb.On("Commit").Return(nil).Once()
+
+				ms.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/unit_test_user/test", "", mock.Anything).Return(404, nil, nil).Once()
+				ms.On("ServeHTTP", http.MethodPut, "/test_inbox_bucket/unit_test_user/test", "", mock.MatchedBy(func(headers http.Header) bool {
+					return !strings.Contains(signedHeaders(headers["Authorization"][0]), "content-length")
+				})).Return(200, nil, nil).Once()
+
+				ms.On("ServeHTTP", http.MethodHead, "/test_inbox_bucket/unit_test_user/test", "", mock.Anything).Return(200, nil, map[string]string{"ETag": "shaa", "Content-Length": "321"}).Once()
+
+				mb.On("Publish", "unit-test_destination", broker.Message{
+					Key:  "file_id_123",
+					Body: []byte(`{"operation":"upload","user":"unit_test_user","filepath":"unit_test_user/test","filesize":321,"encrypted_checksums":[{"type":"md5","value":"shaa"}]}`),
+				}).Return(errors.New("publish failure")).Once()
+
+				return mdb, mb, ms
+			},
+			expectedHTTPCode: 500,
+		}, {
 			name: "PutObject_Signed_Content_Length_Header",
 			req: func() *http.Request {
 				body := "some file content"
@@ -185,7 +212,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 				req.Header.Set("Content-Length", strconv.Itoa(len(body)))
 
 				return req
-			},
+			}(),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -224,9 +251,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "PutObject_AlreadyExists",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPut, "/unit_test_user/test", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPut, "/unit_test_user/test", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -255,9 +280,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "AbortMultipartUpload",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodDelete, "/unit_test_user/test?uploadId=upload-id", nil)
-			},
+			req:  httptest.NewRequest(http.MethodDelete, "/unit_test_user/test?uploadId=upload-id", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -268,9 +291,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "GetBucketLocation",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/unit_test_user?location", nil)
-			},
+			req:  httptest.NewRequest(http.MethodGet, "/unit_test_user?location", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -281,9 +302,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "ListObjects",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/unit_test_user", nil)
-			},
+			req:  httptest.NewRequest(http.MethodGet, "/unit_test_user", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -294,9 +313,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "ListObjectsV2",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/unit_test_user?list-type=2", nil)
-			},
+			req:  httptest.NewRequest(http.MethodGet, "/unit_test_user?list-type=2", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -307,9 +324,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "UploadPart",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodPut, "/unit_test_user/test?partNumber=1&uploadId=upload-id", nil)
-			},
+			req:  httptest.NewRequest(http.MethodPut, "/unit_test_user/test?partNumber=1&uploadId=upload-id", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -320,9 +335,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "ListParts",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/unit_test_user/test?uploadId=upload-id", nil)
-			},
+			req:  httptest.NewRequest(http.MethodGet, "/unit_test_user/test?uploadId=upload-id", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -333,9 +346,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "ListMultipartUploads",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/unit_test_user?uploads", nil)
-			},
+			req:  httptest.NewRequest(http.MethodGet, "/unit_test_user?uploads", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -346,9 +357,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "HeadObject",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodHead, "/unit_test_user/test", nil)
-			},
+			req:  httptest.NewRequest(http.MethodHead, "/unit_test_user/test", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				ms := &mockServer{}
 
@@ -359,9 +368,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "DeleteObject",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodDelete, "/unit_test_user/test", nil)
-			},
+			req:  httptest.NewRequest(http.MethodDelete, "/unit_test_user/test", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
@@ -383,9 +390,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 200,
 		}, {
 			name: "DeleteObject_FileNotExists",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodDelete, "/unit_test_user/test", nil)
-			},
+			req:  httptest.NewRequest(http.MethodDelete, "/unit_test_user/test", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				mdb := &mocks.MockDatabase{}
 
@@ -396,9 +401,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			expectedHTTPCode: 404,
 		}, {
 			name: "DeleteObject_OtherUsersFile",
-			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodDelete, "/other_user/test", nil)
-			},
+			req:  httptest.NewRequest(http.MethodDelete, "/other_user/test", nil),
 			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker, *mockServer) {
 				return &mocks.MockDatabase{}, &mocks.MockBroker{}, &mockServer{}
 			},
@@ -437,7 +440,7 @@ func TestProxyAllowedS3Actions(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			p.ServeHTTP(w, tc.req())
+			p.ServeHTTP(w, tc.req)
 
 			assert.Equal(t, tc.expectedHTTPCode, w.Code)
 			ma.AssertExpectations(t)
@@ -1197,7 +1200,7 @@ func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
 		select {
 		case <-done:
 		case <-time.After(180 * time.Second):
-			log.Error("timed out waiting for all workers do be done")
+			t.Fatalf("timed out waiting for all workers do be done")
 		}
 	}
 
