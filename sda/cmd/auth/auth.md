@@ -50,15 +50,27 @@ OIDC_ACRVALUES="https://refeds.org/profile/mfa"
 ```
 
 The value is sent as the `acr_values` parameter of the authorization request,
-and the `acr` claim of the provider's userinfo response is checked against it
-when the user returns. Both steps are needed: `acr_values` is only a request,
-and a provider is free to authenticate the user in a weaker context. A login
-whose `acr` is missing or not one of the configured values is rejected.
+and the `acr` the provider reports back is checked against it when the user
+returns. Both steps are needed: `acr_values` is only a request, and a provider
+is free to authenticate the user in a weaker context. A login whose `acr` is
+missing or not one of the configured values is rejected, and the user is told
+that a stronger authentication method is required.
+
+`acr` is read from the ID token, which is where OpenID Connect specifies the
+claim. Providers that report it only in the userinfo response are supported
+as a fallback; when both carry one the ID token wins.
 
 When the option is unset no authentication context is requested or required,
-which is the behaviour of earlier releases. Note that enabling it does not
-invalidate tokens that were issued before, they remain valid for their
-`AUTH_JWT_TOKENTTL`, and that it does not apply to the `EGA` login provider.
+which is the behaviour of earlier releases. Two further things it does not do:
+
+- It does not apply to the `EGA` login provider, which has no OIDC
+  authentication context to check.
+- It does not invalidate credentials that were handed out before it was
+  enabled. Those stay valid until they expire on their own terms: the inbox
+  token for `AUTH_JWT_TOKENTTL` when `AUTH_RESIGNJWT` is set, and the
+  provider's access token for whatever lifetime the provider gave it. Note
+  that the download configuration is always built from the provider's access
+  token, regardless of `AUTH_RESIGNJWT`.
 
 ## Running with Cross-Origin Resource Sharing (CORS)
 
