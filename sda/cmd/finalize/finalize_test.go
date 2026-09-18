@@ -147,6 +147,7 @@ func (ts *TestSuite) TestHandleMessage_ready() {
 	accession := "file-asdfg-1234"
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("ready", nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
