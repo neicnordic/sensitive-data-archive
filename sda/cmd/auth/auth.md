@@ -29,12 +29,36 @@ The following settings can be configured for deploying the service, either by us
 | `AUTH_RESIGNJWT`        | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it                 | `""`                                    |
 | `AUTH_S3INBOX`          | S3 inbox host                                                                        | `http://s3.example.com`                 |
 | `LOG_LEVEL`             | Log level                                                                            | `info`                                  |
+| `OIDC_ACRVALUES`        | Space separated authentication contexts required at login, see below                 | `""`                                    |
 | `OIDC_ID`               | OIDC authentication id                                                               | `XC56EL11xx`                            |
 | `OIDC_SECRET`           | OIDC authentication secret                                                           | `wHPVQaYXmdDHg`                         |
 | `OIDC_PROVIDER`         | OIDC issuer URL                                                                      | `http://oidc:8080`                      |
 | `OIDC_JWKPATH`          | JWK endpoint where the public key can be retrieved for token validation              | `/jwks`                                 |
 | `SERVER_CERT`           | Certificate file path                                                                | `""`                                    |
 | `SERVER_KEY`            | Private key file path                                                                | `""`                                    |
+
+## Enforcing an authentication context (two factor login)
+
+`OIDC_ACRVALUES` holds a space separated list of [authentication context class
+references](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest)
+that the user must have been authenticated with. LS AAI signals login with a
+second factor using the [REFEDS MFA profile](https://refeds.org/profile/mfa), so
+requiring two factor login there means:
+
+```txt
+OIDC_ACRVALUES="https://refeds.org/profile/mfa"
+```
+
+The value is sent as the `acr_values` parameter of the authorization request,
+and the `acr` claim of the provider's userinfo response is checked against it
+when the user returns. Both steps are needed: `acr_values` is only a request,
+and a provider is free to authenticate the user in a weaker context. A login
+whose `acr` is missing or not one of the configured values is rejected.
+
+When the option is unset no authentication context is requested or required,
+which is the behaviour of earlier releases. Note that enabling it does not
+invalidate tokens that were issued before, they remain valid for their
+`AUTH_JWT_TOKENTTL`, and that it does not apply to the `EGA` login provider.
 
 ## Running with Cross-Origin Resource Sharing (CORS)
 
