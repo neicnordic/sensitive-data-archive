@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -47,7 +48,7 @@ func getOidcClient(conf config.OIDCConfig) (oauth2.Config, *oidc.Provider) {
 }
 
 // Authenticate with an Oidc client.against OIDC AAI
-func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, code, jwkURL string) (OIDCIdentity, error) {
+func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, code string, conf config.OIDCConfig) (OIDCIdentity, error) {
 	contx := context.Background()
 	defer contx.Done()
 	var idStruct OIDCIdentity
@@ -68,7 +69,7 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	}
 
 	// Validate raw token signature and get expiration date
-	_, rawExpDate, err := validateToken(rawAccessToken, jwkURL)
+	_, rawExpDate, err := validateToken(rawAccessToken, conf.JwkURL)
 	if err != nil {
 		return idStruct, fmt.Errorf("could not validate raw jwt against pub key, reason: %v", err)
 	}
@@ -97,11 +98,20 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 		FullnameClaim        string   `json:"name"`
 		EmailClaim           string   `json:"email"`
 		EdupersonEntitlement []string `json:"eduperson_entitlement"`
+		AcrClaim             string   `json:"acr"`
 	}
 	if err := userInfo.Claims(&claims); err != nil {
 		log.Error("Failed to get custom claims")
 
 		return idStruct, err
+	}
+
+	// acr_values is only a request, the provider is free to authenticate the
+	// user in a weaker context, so the returned acr has to be verified.
+	if err := verifyAcr(claims.AcrClaim, conf.AcrValues); err != nil {
+		log.Errorf("Authentication context not accepted for user %s: %v", userInfo.Subject, err)
+
+		return OIDCIdentity{}, err
 	}
 
 	idStruct = OIDCIdentity{
@@ -117,6 +127,24 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	}
 
 	return idStruct, err
+}
+
+// verifyAcr checks that the authentication context class reference returned by
+// the provider is one of the required ones. No requirement means anything goes.
+func verifyAcr(acr string, required []string) error {
+	if len(required) == 0 {
+		return nil
+	}
+
+	if slices.Contains(required, acr) {
+		return nil
+	}
+
+	if acr == "" {
+		return fmt.Errorf("no acr claim returned, required one of %v", required)
+	}
+
+	return fmt.Errorf("acr %q returned, required one of %v", acr, required)
 }
 
 // Validate raw (OIDC) jwt against public key from jwk. Return parsed jwt and its expiration date.

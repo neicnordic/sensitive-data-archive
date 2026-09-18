@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -29,6 +30,10 @@ type OIDCTests struct {
 	OIDCConfig config.OIDCConfig
 }
 
+// refedsMFA is the REFEDS MFA profile, the authentication context LS AAI uses
+// to signal that the user logged in with a second factor.
+const refedsMFA = "https://refeds.org/profile/mfa"
+
 func TestOIDCTestSuite(t *testing.T) {
 	suite.Run(t, new(OIDCTests))
 }
@@ -44,6 +49,7 @@ func (ts *OIDCTests) SetupTest() {
 		Provider:    ts.mockServer.Issuer(),
 		RedirectURL: "http://redirect",
 		Secret:      ts.mockServer.ClientSecret,
+		JwkURL:      ts.mockServer.JWKSEndpoint(),
 	}
 }
 
@@ -75,11 +81,10 @@ func (ts *OIDCTests) TestAuthenticateWithOidc() {
 		log.Error(err)
 	}
 	code := session.SessionID
-	jwkURL := ts.mockServer.JWKSEndpoint()
 
 	oauth2Config, provider := getOidcClient(ts.OIDCConfig)
 
-	elixirIdentity, err := authenticateWithOidc(oauth2Config, provider, code, jwkURL)
+	elixirIdentity, err := authenticateWithOidc(oauth2Config, provider, code, ts.OIDCConfig)
 	assert.Nil(ts.T(), err, "Failed to authenticate with OIDC")
 	// Ensure both RawToken and ResignedToken are not empty
 	assert.NotEqual(ts.T(), "", elixirIdentity.RawToken, "Empty RawToken returned from OIDC authentication")
@@ -90,8 +95,7 @@ func (ts *OIDCTests) TestValidateJwt() {
 	session, err := ts.mockServer.SessionStore.NewSession("openid email profile", "nonce", mockoidc.DefaultUser(), "", "")
 	assert.NoError(ts.T(), err)
 	oauth2Config, provider := getOidcClient(ts.OIDCConfig)
-	jwkURL := ts.mockServer.JWKSEndpoint()
-	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, jwkURL)
+	elixirIdentity, _ := authenticateWithOidc(oauth2Config, provider, session.SessionID, ts.OIDCConfig)
 	elixirJWT := elixirIdentity.RawToken
 
 	claims := map[string]any{
@@ -186,4 +190,82 @@ func (ts *OIDCTests) TestValidateJwt() {
 	assert.NoError(ts.T(), err)
 	_, _, err = validateToken(string(noExpiryToken), ts.mockServer.JWKSEndpoint())
 	assert.ErrorContains(ts.T(), err, "signed token not valid: \"exp\" not satisfied: required claim not found")
+}
+
+// acrUser is a mockoidc user whose userinfo response carries an acr claim,
+// which the default mock user does not.
+type acrUser struct {
+	*mockoidc.MockUser
+	acr string
+}
+
+func (u *acrUser) Userinfo(_ []string) ([]byte, error) {
+	info := map[string]any{"sub": u.Subject, "email": u.Email}
+	if u.acr != "" {
+		info["acr"] = u.acr
+	}
+
+	return json.Marshal(info)
+}
+
+// authenticateWithAcr runs an OIDC login where the provider returns the given
+// acr, against a configuration requiring the given acr values.
+func (ts *OIDCTests) authenticateWithAcr(returnedAcr string, requiredAcrValues []string) (OIDCIdentity, error) {
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), acr: returnedAcr}
+	session, err := ts.mockServer.SessionStore.NewSession("openid email profile", "nonce", user, "", "")
+	assert.NoError(ts.T(), err)
+
+	oidcConfig := ts.OIDCConfig
+	oidcConfig.AcrValues = requiredAcrValues
+	oauth2Config, provider := getOidcClient(oidcConfig)
+
+	return authenticateWithOidc(oauth2Config, provider, session.SessionID, oidcConfig)
+}
+
+func (ts *OIDCTests) TestAuthenticateWithOidcAcceptsRequiredAcr() {
+	identity, err := ts.authenticateWithAcr(refedsMFA, []string{refedsMFA})
+	assert.NoError(ts.T(), err, "login with the required authentication context was rejected")
+	assert.NotEqual(ts.T(), "", identity.RawToken, "Empty RawToken returned from OIDC authentication")
+}
+
+func (ts *OIDCTests) TestAuthenticateWithOidcRejectsWeakerAcr() {
+	identity, err := ts.authenticateWithAcr("https://refeds.org/profile/sfa", []string{refedsMFA})
+	assert.ErrorContains(ts.T(), err, "https://refeds.org/profile/sfa")
+	assert.Equal(ts.T(), OIDCIdentity{}, identity, "an identity was returned although the authentication context was rejected")
+}
+
+func (ts *OIDCTests) TestAuthenticateWithOidcRejectsMissingAcr() {
+	_, err := ts.authenticateWithAcr("", []string{refedsMFA})
+	assert.ErrorContains(ts.T(), err, "no acr claim returned")
+}
+
+func (ts *OIDCTests) TestAuthenticateWithOidcIgnoresAcrWhenNotRequired() {
+	_, err := ts.authenticateWithAcr("https://refeds.org/profile/sfa", nil)
+	assert.NoError(ts.T(), err, "the acr claim was enforced although no acr values are configured")
+}
+
+func TestVerifyAcr(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		acr       string
+		required  []string
+		expectErr bool
+	}{
+		{name: "nothing required", acr: "", required: nil, expectErr: false},
+		{name: "nothing required, acr returned", acr: refedsMFA, required: nil, expectErr: false},
+		{name: "required and returned", acr: refedsMFA, required: []string{refedsMFA}, expectErr: false},
+		{name: "one of several required", acr: refedsMFA, required: []string{"https://example.org/loa3", refedsMFA}, expectErr: false},
+		{name: "weaker context returned", acr: "https://refeds.org/profile/sfa", required: []string{refedsMFA}, expectErr: true},
+		{name: "no context returned", acr: "", required: []string{refedsMFA}, expectErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := verifyAcr(tc.acr, tc.required)
+			if tc.expectErr {
+				assert.Error(t, err)
+
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }

@@ -227,13 +227,20 @@ func (auth AuthHandler) getOIDC(ctx iris.Context) {
 	state := uuid.New()
 	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
+	var authOptions []oauth2.AuthCodeOption
+
 	redirectURI := ctx.Request().URL.Query().Get("redirect_uri")
 	if redirectURI != "" {
-		redirectParam := oauth2.SetAuthURLParam("redirect_uri", redirectURI)
-		ctx.Redirect(auth.OAuth2Config.AuthCodeURL(state.String(), redirectParam))
-	} else {
-		ctx.Redirect(auth.OAuth2Config.AuthCodeURL(state.String()))
+		authOptions = append(authOptions, oauth2.SetAuthURLParam("redirect_uri", redirectURI))
 	}
+
+	// Ask the provider for the required authentication context, e.g. multi
+	// factor authentication. The returned acr is verified in elixirLogin.
+	if len(auth.Config.OIDC.AcrValues) > 0 {
+		authOptions = append(authOptions, oauth2.SetAuthURLParam("acr_values", strings.Join(auth.Config.OIDC.AcrValues, " ")))
+	}
+
+	ctx.Redirect(auth.OAuth2Config.AuthCodeURL(state.String(), authOptions...))
 }
 
 // elixirLogin authenticates the user with return values from the oidc
@@ -256,7 +263,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	}
 
 	code := ctx.Request().URL.Query().Get("code")
-	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC.JwkURL)
+	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC)
 	if err != nil {
 		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("authentication failed: %s", err)
 		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
