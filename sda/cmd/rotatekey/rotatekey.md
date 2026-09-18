@@ -59,13 +59,12 @@ This setting controls which crypt4gh keyfile is loaded.
 These settings control how `rotatekey` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the rabbitmq server
-- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
-- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey`)
-- `BROKER_USER`: username to connect to rabbitmq
 - `BROKER_PASSWORD`: password to connect to rabbitmq
-- `ROUTING_KEY`: The routing key which the rotatekey service publishes reverify messages with
+- `BROKER_PORT`: rabbitmq broker port (commonly `5671` with TLS and `5672` without)
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
-[config.go](config/config.go)
+- `BROKER_USER`: username to connect to rabbitmq
+- `SOURCE_QUEUE`: message queue or stream to read messages from (commonly `rotatekey`)
+- `ROUTING_KEY`: The routing key which the rotatekey service publishes reverify messages with
 - `SCHEMA_TYPE`: Schema type to validate incoming broker messages against, supported values: federated, isolated 
 
 ### PostgreSQL Database settings

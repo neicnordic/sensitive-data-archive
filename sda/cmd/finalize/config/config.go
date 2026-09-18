@@ -9,23 +9,13 @@ import (
 )
 
 var (
-	sourceQueue string
 	routingKey  string
 	schemaPath  string
+	sourceQueue string
 )
 
 func init() {
 	config.RegisterFlags(
-		&config.Flag{
-			Name: "source_queue",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "accession", "The queue where the service consumes messages from")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				sourceQueue = viper.GetString(flagName)
-			},
-		},
 		&config.Flag{
 			Name: "routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
@@ -35,8 +25,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				routingKey = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "schema_type",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "isolated", "JSON schemas to validate rabbitmq messages against")
@@ -52,6 +41,15 @@ func init() {
 				default:
 					panic(fmt.Sprintf("schema.type '%s' not supported, needs: <federated|isolated>", schemaType))
 				}
+			},
+		}, &config.Flag{
+			Name: "source_queue",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "accession", "The queue where the service consumes messages from")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sourceQueue = viper.GetString(flagName)
 			},
 		},
 	)
