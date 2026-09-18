@@ -281,6 +281,9 @@ func (app *sync) syncFile(ctx context.Context, accessionID string) error {
 	}
 
 	contentReader, contentWriter := io.Pipe()
+	defer func() {
+		_ = contentReader.Close()
+	}()
 
 	go func() {
 		defer func() {
@@ -302,7 +305,6 @@ func (app *sync) syncFile(ctx context.Context, accessionID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to upload file to storage, reason: %w", err)
 	}
-	_ = contentReader.Close()
 
 	return nil
 }
