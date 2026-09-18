@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -129,6 +130,10 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 	return idStruct, err
 }
 
+// ErrAcrNotAccepted is returned when the provider authenticated the user in an
+// authentication context that is not one of the configured acr values.
+var ErrAcrNotAccepted = errors.New("authentication context not accepted")
+
 // verifyAcr checks that the authentication context class reference returned by
 // the provider is one of the required ones. No requirement means anything goes.
 func verifyAcr(acr string, required []string) error {
@@ -141,10 +146,10 @@ func verifyAcr(acr string, required []string) error {
 	}
 
 	if acr == "" {
-		return fmt.Errorf("no acr claim returned, required one of %v", required)
+		return fmt.Errorf("%w: no acr claim returned, required one of %v", ErrAcrNotAccepted, required)
 	}
 
-	return fmt.Errorf("acr %q returned, required one of %v", acr, required)
+	return fmt.Errorf("%w: acr %q returned, required one of %v", ErrAcrNotAccepted, acr, required)
 }
 
 // Validate raw (OIDC) jwt against public key from jwk. Return parsed jwt and its expiration date.

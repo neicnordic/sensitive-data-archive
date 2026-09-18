@@ -230,12 +230,14 @@ func (ts *OIDCTests) TestAuthenticateWithOidcAcceptsRequiredAcr() {
 
 func (ts *OIDCTests) TestAuthenticateWithOidcRejectsWeakerAcr() {
 	identity, err := ts.authenticateWithAcr("https://refeds.org/profile/sfa", []string{refedsMFA})
+	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted, "the caller must be able to tell an acr rejection from other login failures")
 	assert.ErrorContains(ts.T(), err, "https://refeds.org/profile/sfa")
 	assert.Equal(ts.T(), OIDCIdentity{}, identity, "an identity was returned although the authentication context was rejected")
 }
 
 func (ts *OIDCTests) TestAuthenticateWithOidcRejectsMissingAcr() {
 	_, err := ts.authenticateWithAcr("", []string{refedsMFA})
+	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted)
 	assert.ErrorContains(ts.T(), err, "no acr claim returned")
 }
 
