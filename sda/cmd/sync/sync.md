@@ -56,9 +56,9 @@ export LOG_FORMAT="json"
 ### Service settings
 
 - `SYNC_DATASET_WITH_PREFIX`: Prefix of the dataset ID to detect if the dataset was minted locally or not, if not set all datasets will be synced
-- `SYNC_REMOTE_URL`: URL to the remote API host (including scheme, port, and path)
-- `SYNC_REMOTE_USER`: Username for connecting to the remote API
-- `SYNC_REMOTE_PASSWORD`: Password for the API user
+- `REMOTE_URL`: URL to the remote API host (including scheme, port, and path)
+- `REMOTE_USER`: Username for connecting to the remote API
+- `REMOTE_PASSWORD`: Password for the API user
 - `SYNC_C4GH_PUB_KEY_PATH`: path to the crypt4gh public key to use for reencrypting file headers.
 
 ### Keyfile settings
