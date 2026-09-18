@@ -195,7 +195,7 @@ func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, me
 	}
 
 	if archiveData == nil {
-		return nil, fmt.Errorf("file archive information not found")
+		return nil, errors.New("file archive information not found")
 	}
 
 	if archiveData.BackupLocation != "" && archiveData.BackupFilePath != "" {

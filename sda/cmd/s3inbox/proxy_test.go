@@ -1200,7 +1200,7 @@ func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
 		select {
 		case <-done:
 		case <-time.After(180 * time.Second):
-			t.Fatalf("timed out waiting for all workers do be done")
+			t.Fatal("timed out waiting for all workers do be done")
 		}
 	}
 
