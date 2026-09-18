@@ -182,9 +182,13 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, message *brokerv2.Message) ([]func(), error) {
 	log.Debug("Backup initiated")
 
-	archiveData, err := app.db.GetArchived(ctx, message.Key)
+	archiveData, err := tx.GetArchived(ctx, message.Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file archive information, reason: %v", err)
+	}
+
+	if archiveData == nil {
+		return nil, fmt.Errorf("file archive information not found")
 	}
 
 	// Get size on disk, will also give some time for the file to appear if it has not already
