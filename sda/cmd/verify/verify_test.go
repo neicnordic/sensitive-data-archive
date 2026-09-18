@@ -30,6 +30,7 @@ func TestVerify(t *testing.T) {
 		verifyDbErrorCase,
 		verifyStorageRetryableErrorCase,
 		verifyStorageNonRetryableErrorCase,
+		fileStatusChangedDuringVerificationCase,
 		alreadyVerifiedCase,
 		reverifyCase,
 		reverifyFailedArchivedChecksumCase,
@@ -158,6 +159,7 @@ var verifySuccessCase = testCase{
 		mockDatabase.On("BeginTransaction").Return(nil).Once()
 		mockDatabase.On("Rollback").Return(nil).Once()
 		mockDatabase.On("Commit").Return(nil).Once()
+		mockDatabase.On("GetFileStatus", "123").Return("archived", nil).Once()
 		mockDatabase.On("SetVerified", database.FileInfo{
 			Size:              int64(len(fileTestData.encryptedContentNoHeader)),
 			Path:              "",
@@ -344,6 +346,7 @@ var alreadyVerifiedCase = testCase{
 		mockDatabase.On("BeginTransaction").Return(nil).Once()
 		mockDatabase.On("Rollback").Return(nil).Once()
 		mockDatabase.On("Commit").Return(nil).Once()
+		mockDatabase.On("GetFileStatus", "321").Return("archived", nil).Once()
 		mockDatabase.On("UpdateFileEventLog", "321", "verified", "verify", "{}", mock.Anything).Return(nil).Once()
 
 		expectedMessage := schema.IngestionAccessionRequest{
@@ -366,6 +369,54 @@ var alreadyVerifiedCase = testCase{
 			Headers: nil,
 			Body:    expectedRaw,
 		}).Return(nil).Once()
+
+		return mockReader, mockDatabase, mockBroker
+	},
+	assertMocks: func(t *testing.T, mockReader *mocks.MockReader, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
+		mockReader.AssertExpectations(t)
+		mockDatabase.AssertExpectations(t)
+		mockBroker.AssertExpectations(t)
+	},
+	expectedError: nil,
+}
+
+var fileStatusChangedDuringVerificationCase = testCase{
+	name: "fileStatusChangedDuringVerification",
+	sourceMessage: schema.IngestionVerification{
+		User:               "unit_test_user",
+		FilePath:           "/unit_test_file_321.c4gh",
+		FileID:             "321",
+		ArchivePath:        "/321",
+		EncryptedChecksums: []schema.Checksums{},
+		ReVerify:           false,
+	},
+	newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockDatabase, *mocks.MockBroker) {
+		mockReader := &mocks.MockReader{}
+		mockDatabase := &mocks.MockDatabase{}
+		mockBroker := &mocks.MockBroker{}
+
+		fileTestData, err := generateFileTestData([]byte("file content" + uuid.NewString()))
+		if err != nil {
+			t.Error(err.Error())
+			t.FailNow()
+		}
+		mockDatabase.On("GetFileStatus", "321").Return("verified", nil).Once()
+		mockDatabase.On("GetHeader", "321").Return(fileTestData.header, nil).Once()
+		mockDatabase.On("GetArchiveLocation", "321").Return("archive_location", nil).Once()
+
+		mockReader.On("GetFileSize", "archive_location", "/321").Return(int64(len(fileTestData.encryptedContentNoHeader)), nil).Once()
+		mockReader.On("NewFileReader", "archive_location", "/321").Return(fileTestData.encryptedContentNoHeader, nil).Once()
+
+		mockDatabase.On("GetFileInfo", "321").Return(&database.FileInfo{
+			Size:              int64(len(fileTestData.encryptedContentNoHeader)),
+			ArchivedChecksum:  fileTestData.encryptedContentNoHeaderSha256Checksum,
+			DecryptedChecksum: fileTestData.unencryptedSha256Checksum,
+			DecryptedSize:     int64(len(fileTestData.unencryptedContent)),
+		}, nil).Once()
+
+		mockDatabase.On("BeginTransaction").Return(nil).Once()
+		mockDatabase.On("Rollback").Return(nil).Once()
+		mockDatabase.On("GetFileStatus", "321").Return("disabled", nil).Once()
 
 		return mockReader, mockDatabase, mockBroker
 	},
