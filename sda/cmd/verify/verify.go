@@ -446,6 +446,33 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		}
 	}()
 
+	// Here we check the file status again to ensure it has not been canceled or removed during the verification
+	// and we don't override that with a verified file event
+	status, err = tx.GetFileStatus(ctx, ingestionVerification.FileID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			slog.Error("file status not found after verification", slog.String("file-id", ingestionVerification.FileID))
+
+			return []func(){app.errorQueue(message, "file status not found after verification")}, nil
+		}
+
+		slog.Error("failed to get file status after verification",
+			slog.String("file-id", ingestionVerification.FileID),
+			slog.Any("error", err),
+		)
+
+		return nil, err
+	}
+
+	if status == "disabled" || status == "removed" {
+		slog.Info("file was disabled or removed during verification",
+			slog.String("file-id", ingestionVerification.FileID),
+			slog.String("status", status),
+		)
+
+		return nil, nil
+	}
+
 	if storedFileInfo.DecryptedChecksum == "" && storedFileInfo.ArchivedChecksum == "" {
 		if err := tx.SetVerified(ctx, file, ingestionVerification.FileID); err != nil {
 			slog.Error("failed to set file as verified",
