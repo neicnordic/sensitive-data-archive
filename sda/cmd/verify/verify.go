@@ -511,7 +511,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 
 	// Publish verified message
 	if err := app.broker.Publish(ctx, app.routingKey, broker.Message{
-		Key:  message.Key,
+		Key:  ingestionVerification.FileID,
 		Body: verifiedMessage,
 	}); err != nil {
 		slog.Error("failed to publish verified message",
