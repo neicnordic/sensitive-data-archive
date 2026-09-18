@@ -12,6 +12,7 @@ For each message, these steps are taken:
 1. The message is validated as valid JSON that matches the "rotate-key" schema.
 2. A database look-up is performed for the configured target public key hash. If the look-up fails or the key has been deprecated, the service will exit.
 3. The key hash of the c4gh key with which the file is currently encrypted is fetched from the database and compared with the configured target key.
+   * If the current c4gh key is not configured for the reencrypt service then the message will be reconsumed until it its configured for the reencrypt service 
 4. If these key hashes differ, the reencrypt service is called to re-encrypt the file header with the target key.
 5. The file header entry in the database is updated with the new one.
 6. The key hash entry in the database is updated with the new one (target key).
