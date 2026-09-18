@@ -169,6 +169,13 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	case "ready":
 		log.Debugf("File with file-id: %s is already marked as ready.", message.Key)
 
+		// Here we send completion message again if file is already marked as ready
+		// This is to protect against scenarios where the setAccession transaction updating file was successful
+		// but publishing the message failed meaning it was not delivered to the broker
+		if err := app.sendCompleted(ctx, message.Key, &ingestionAccession); err != nil {
+			return nil, err
+		}
+
 		return nil, nil
 	default:
 		log.Warnf("file with file-id: %s is not verified yet, aborting work", message.Key)
