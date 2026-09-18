@@ -60,3 +60,19 @@ class TestOIDCAuth(unittest.TestCase):
         query = parse_qs(urlparse(login_response.headers["Location"]).query)
         self.assertEqual(query["redirect_uri"], ["http://frontend/callback"])
         self.assertEqual(query["acr_values"], ["https://refeds.org/profile/mfa"])
+
+
+    def test_provider_receives_the_authentication_context(self):
+        """Test that the authorization server accepts the request and carries the context on."""
+        login_response = requests.get(self.backend_url, allow_redirects=False)
+        self.assertEqual(login_response.status_code, 302)
+
+        # Follow the redirect to the mocked AAI. It accepts the authorization
+        # request instead of rejecting the parameter, and passes acr_values on
+        # to its own login flow, which is what proves it received it.
+        provider_response = requests.get(login_response.headers["Location"], allow_redirects=False)
+        self.assertEqual(provider_response.status_code, 302)
+        provider_location = provider_response.headers["Location"]
+        self.assertNotIn("error=", provider_location)
+        query = parse_qs(urlparse(provider_location).query)
+        self.assertEqual(query["acr_values"], ["https://refeds.org/profile/mfa"])
