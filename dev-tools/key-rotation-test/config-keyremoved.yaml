@@ -86,7 +86,6 @@ broker:
   password: ""   # Leave empty or set if using a custom rabbitmq definition
   vhost: "/sda"
   exchange: "sda"
-  routingKey: ""
   ssl: "false"
 
 # --- PERSISTENCE ---

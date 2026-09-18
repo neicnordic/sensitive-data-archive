@@ -89,8 +89,6 @@ broker:
   exchange: "sda"
   ssl: "false"
 
-routing_key: ""
-
 # --- PERSISTENCE ---
 # This block satisfies both the pipeline services (`database`) and download (`db`)
 database:

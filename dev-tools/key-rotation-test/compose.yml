@@ -187,7 +187,7 @@ services:
       - BROKER_PASSWORD=ingest
       - BROKER_USER=ingest
       - BROKER_QUEUE=ingest
-      - BROKER_ROUTINGKEY=archived
+      - ROUTING_KEY=archived
       - DATABASE_PASSWORD=ingest
       - DATABASE_USER=ingest
     restart: always
@@ -212,7 +212,7 @@ services:
       - BROKER_PASSWORD=verify
       - BROKER_USER=verify
       - BROKER_QUEUE=archived
-      - BROKER_ROUTINGKEY=verified
+      - ROUTING_KEY=verified
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
     restart: always
@@ -354,7 +354,7 @@ services:
       - BROKER_PASSWORD=rotatekey
       - BROKER_USER=rotatekey
       - BROKER_QUEUE=rotatekey
-      - BROKER_ROUTINGKEY=rotatekey
+      - ROUTING_KEY=rotatekey
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
     restart: always
