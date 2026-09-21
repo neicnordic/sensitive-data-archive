@@ -146,6 +146,8 @@ func authenticateWithOidc(oauth2Config oauth2.Config, provider *oidc.Provider, c
 func authenticationContext(ctx context.Context, verifier *oidc.IDTokenVerifier, oauth2Token *oauth2.Token, userinfoAcr string) (string, error) {
 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
+		log.Debug("No id token in the token response, using the acr from userinfo")
+
 		return userinfoAcr, nil
 	}
 
@@ -162,8 +164,12 @@ func authenticationContext(ctx context.Context, verifier *oidc.IDTokenVerifier, 
 	}
 
 	if claims.AcrClaim == "" {
+		log.Debug("The id token carries no acr claim, using the acr from userinfo")
+
 		return userinfoAcr, nil
 	}
+
+	log.Debugf("Using the acr from the id token (userinfo reported %q)", userinfoAcr)
 
 	return claims.AcrClaim, nil
 }
