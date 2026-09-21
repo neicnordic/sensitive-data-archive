@@ -29,7 +29,7 @@ The following settings can be configured for deploying the service, either by us
 | `AUTH_RESIGNJWT`        | Set to `false` to serve the raw OIDC JWT, i.e. without re-signing it                 | `""`                                    |
 | `AUTH_S3INBOX`          | S3 inbox host                                                                        | `http://s3.example.com`                 |
 | `LOG_LEVEL`             | Log level                                                                            | `info`                                  |
-| `OIDC_ACRVALUES`        | Space separated authentication contexts required at login, see below                 | `""`                                    |
+| `OIDC_ACRVALUES`        | Space separated authentication contexts, one of which a login must match, see below  | `""`                                    |
 | `OIDC_ID`               | OIDC authentication id                                                               | `XC56EL11xx`                            |
 | `OIDC_SECRET`           | OIDC authentication secret                                                           | `wHPVQaYXmdDHg`                         |
 | `OIDC_PROVIDER`         | OIDC issuer URL                                                                      | `http://oidc:8080`                      |
