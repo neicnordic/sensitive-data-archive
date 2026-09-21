@@ -111,7 +111,7 @@ func elixirLoginResponse(t *testing.T, requestURL, state string) *httptest.Respo
 	require.NoError(t, app.Build())
 
 	req := httptest.NewRequest(http.MethodGet, requestURL, nil)
-	req.AddCookie(&http.Cookie{Name: "state", Value: state})
+	req.AddCookie(&http.Cookie{Name: "state", Value: state}) // #nosec G124 -- request built by the unit test, no browser involved
 	res := httptest.NewRecorder()
 	app.ServeHTTP(res, req)
 
