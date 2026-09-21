@@ -9,22 +9,12 @@ import (
 )
 
 var (
-	sourceQueue string
 	schemaPath  string
+	sourceQueue string
 )
 
 func init() {
 	config.RegisterFlags(
-		&config.Flag{
-			Name: "source_queue",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "mappings", "The queue where the mapper service consumes messages from")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				sourceQueue = viper.GetString(flagName)
-			},
-		},
 		&config.Flag{
 			Name: "schema_type",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
@@ -41,6 +31,15 @@ func init() {
 				default:
 					panic(fmt.Sprintf("schema_type '%s' not supported, needs: <federated|isolated>", schemaType))
 				}
+			},
+		}, &config.Flag{
+			Name: "source_queue",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "mappings", "The queue where the mapper service consumes messages from")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				sourceQueue = viper.GetString(flagName)
 			},
 		},
 	)

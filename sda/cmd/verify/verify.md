@@ -72,14 +72,14 @@ These settings control which crypt4gh keyfile is loaded.
 
 These settings control how `verify` connects to the RabbitMQ message broker.
 
-- `BROKER_HOST`: hostname of the RabbitMQ server
-- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `BROKER_USER`: username to connect to RabbitMQ
-- `BROKER_PASSWORD`: password to connect to RabbitMQ
-- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `1`)
-- `SOURCE_QUEUE`: message queue to read messages from (commonly: `archived`)
 - `ROUTING_KEY`: Routing key for publishing messages (commonly: `verified`)
+- `BROKER_HOST`: hostname of the RabbitMQ server
+- `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
+- `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `1`)
+- `BROKER_USER`: username to connect to RabbitMQ
 - `SCHEMA_TYPE`: Schema type to validate incoming broker messages against, supported values: federated, isolated
+- `SOURCE_QUEUE`: message queue to read messages from (commonly: `archived`)
 
 
 ### PostgreSQL Database settings
