@@ -269,7 +269,10 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	if providerError := ctx.Request().URL.Query().Get("error"); providerError != "" {
 		description := ctx.Request().URL.Query().Get("error_description")
 		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("provider refused the authorization request: %s (%s)", providerError, description)
-		if _, err := ctx.Writef("Authentication failed. The login provider refused the request: %s", providerError); err != nil {
+		// The error code comes from the query string, so pin the content type
+		// rather than leave it to be sniffed, and quote what is echoed back.
+		ctx.ContentType("text/plain")
+		if _, err := ctx.Writef("Authentication failed. The login provider refused the request: %q", providerError); err != nil {
 			log.Error("Failed to write response: ", err)
 		}
 
