@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	jwtgo "github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -322,4 +324,25 @@ func (ts *OIDCTests) TestAcrMissingFromBoth() {
 	_, err := ts.authenticateWithUser(user, []string{refedsMFA})
 	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted)
 	assert.ErrorContains(ts.T(), err, "no acr claim returned")
+}
+
+func (ts *OIDCTests) TestAcrRejectsUnverifiableIDToken() {
+	// An acr is only worth anything if the token carrying it verifies, so a
+	// token that does not must fail the login rather than quietly leave the
+	// userinfo claim to be trusted in its place.
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), idTokenAcr: refedsMFA, userinfoAcr: refedsMFA}
+	session, err := ts.mockServer.SessionStore.NewSession("openid email profile", "nonce", user, "", "")
+	assert.NoError(ts.T(), err)
+
+	oauth2Config, provider := getOidcClient(ts.OIDCConfig)
+	oauth2Token, err := oauth2Config.Exchange(context.Background(), session.SessionID)
+	assert.NoError(ts.T(), err)
+
+	// A verifier for a different client rejects the ID token on its audience,
+	// which is what a token minted for somebody else looks like here.
+	verifier := provider.Verifier(&oidc.Config{ClientID: "another-client"})
+
+	acr, err := authenticationContext(context.Background(), verifier, oauth2Token, refedsMFA)
+	assert.ErrorContains(ts.T(), err, "could not verify id token")
+	assert.Equal(ts.T(), "", acr, "the userinfo acr was trusted although the id token did not verify")
 }
