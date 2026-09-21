@@ -7,27 +7,17 @@ import (
 )
 
 var (
-	sourceQueue         string
 	accessionRoutingKey string
 	cancelRoutingKey    string
+	deprecateRoutingKey string
 	ingestRoutingKey    string
 	mappingRoutingKey   string
 	releaseRoutingKey   string
-	deprecateRoutingKey string
+	sourceQueue         string
 )
 
 func init() {
 	config.RegisterFlags(
-		&config.Flag{
-			Name: "source_queue",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "from_cega", "The queue where the intercept service consumes messages from")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				sourceQueue = viper.GetString(flagName)
-			},
-		},
 		&config.Flag{
 			Name: "accession_routing_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
@@ -36,6 +26,24 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				accessionRoutingKey = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "cancel_routing_key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "ingest", "The routing key the intercept service forwards \"cancel\" type messages to")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				cancelRoutingKey = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "deprecate_routing_key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "mappings", "The routing key the intercept service forwards \"deprecate\" type messages to")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				deprecateRoutingKey = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -46,16 +54,6 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				ingestRoutingKey = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "cancel_routing_key",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "ingest", "The routing key the intercept service forwards \"cancel\" type messages to")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				cancelRoutingKey = viper.GetString(flagName)
 			},
 		},
 		&config.Flag{
@@ -79,13 +77,13 @@ func init() {
 			},
 		},
 		&config.Flag{
-			Name: "deprecate_routing_key",
+			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "mappings", "The routing key the intercept service forwards \"deprecate\" type messages to")
+				flagSet.String(flagName, "from_cega", "The queue where the intercept service consumes messages from")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				deprecateRoutingKey = viper.GetString(flagName)
+				sourceQueue = viper.GetString(flagName)
 			},
 		},
 	)

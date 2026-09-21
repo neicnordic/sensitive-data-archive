@@ -11,14 +11,14 @@ import (
 
 var (
 	targetPublicKey     string
-	sourceQueue         string
-	routingKey          string
-	schemaPath          string
-	reencryptTarget     string
+	reencryptCaCert     string
 	reencryptClientCert string
 	reencryptClientKey  string
-	reencryptCaCert     string
+	reencryptTarget     string
 	reencryptTimeout    time.Duration
+	schemaPath          string
+	sourceQueue         string
+	routingKey          string
 )
 
 func init() {
@@ -33,16 +33,60 @@ func init() {
 				targetPublicKey = viper.GetString(flagName)
 			},
 		}, &config.Flag{
-			Name: "source_queue",
+			Name: "reencrypt.ca_cert",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "rotatekey", "The queue where the verify service consumes messages from")
+				flagSet.String(flagName, "", "Path to the ca cert file used when calling the the Reencrypt service")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				sourceQueue = viper.GetString(flagName)
+				reencryptCaCert = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
+			Name: "reencrypt.client_cert",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to client cert file used when calling the the Reencrypt service")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				reencryptClientCert = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "reencrypt.client_key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to client key file used when calling the the Reencrypt service")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				reencryptClientKey = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "reencrypt.target",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "The target where the Reencrypt service is hosted, see https://github.com/grpc/grpc/blob/master/doc/naming.md for more details on syntax")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				reencryptTarget = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "reencrypt.timeout",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.Duration(flagName, 30*time.Second, "The duration before timing out when calling the Reencrypt service")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				reencryptTimeout = viper.GetDuration(flagName)
+			},
+		}, &config.Flag{
+			Name: "routing_key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "archived", "The routing key which the rotatekey service publishes reverify messages with")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				routingKey = viper.GetString(flagName)
+			},
+		}, &config.Flag{
 			Name: "schema_type",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "isolated", "Schema type to validate incoming broker messages against, supported values: federated, isolated")
@@ -59,65 +103,14 @@ func init() {
 					panic(fmt.Sprintf("schema_type '%s' not supported, needs: <federated|isolated>", schemaType))
 				}
 			},
-		},
-		&config.Flag{
-			Name: "routing_key",
+		}, &config.Flag{
+			Name: "source_queue",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "archived", "The routing key which the rotatekey service publishes reverify messages with")
+				flagSet.String(flagName, "rotatekey", "The queue where the verify service consumes messages from")
 			},
 			Required: false,
 			AssignFunc: func(flagName string) {
-				routingKey = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "reencrypt.target",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "The target where the Reencrypt service is hosted, see https://github.com/grpc/grpc/blob/master/doc/naming.md for more details on syntax")
-			},
-			Required: true,
-			AssignFunc: func(flagName string) {
-				reencryptTarget = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "reencrypt.client_cert",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to client cert file used when calling the the Reencrypt service")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				reencryptClientCert = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "reencrypt.client_key",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to client key file used when calling the the Reencrypt service")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				reencryptClientKey = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "reencrypt.ca_cert",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to the ca cert file used when calling the the Reencrypt service")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				reencryptCaCert = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "reencrypt.timeout",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.Duration(flagName, 30*time.Second, "The duration before timing out when calling the Reencrypt service")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				reencryptTimeout = viper.GetDuration(flagName)
+				sourceQueue = viper.GetString(flagName)
 			},
 		},
 	)

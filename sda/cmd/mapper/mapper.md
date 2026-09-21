@@ -51,11 +51,11 @@ export LOG_FORMAT="json"
 These settings control how `mapper` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the RabbitMQ server
-- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `SOURCE_QUEUE`: message queue to read messages from (commonly: `mappings`)
-- `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `2`)
+- `BROKER_USER`: username to connect to RabbitMQ
+- `SOURCE_QUEUE`: message queue to read messages from (commonly: `mappings`)
 
 ### PostgreSQL Database settings
 

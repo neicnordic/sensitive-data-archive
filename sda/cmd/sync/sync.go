@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,7 +28,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
-	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -203,26 +201,10 @@ func (app *sync) handleMessage(ctx context.Context, message *broker.Message) ([]
 
 	for _, fileAccession := range datasetMapping.AccessionIDs {
 		if err := app.syncFile(ctx, fileAccession); err != nil {
-			// Non retryable errors
-			if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) ||
-				errors.Is(err, sql.ErrNoRows) ||
-				strings.Contains(err.Error(), "failed to reencrypt header") {
-				slog.Error("could not sync file",
-					slog.String("accession-id", fileAccession),
-					slog.Any("error", err),
-				)
-
-				return []func(){app.errorQueue(message, fmt.Sprintf("could not sync file %s: %v", fileAccession, err))}, nil
-			}
-			slog.Warn("failed to sync archived file",
-				slog.String("accession-id", fileAccession),
-				slog.Any("error", err),
-			)
-
 			// send message to error queue and do not requeue
 			// This error message should be handled manually to ensure all files that were not synced are synced once
 			// the cause of the failure has been fixed
-			return []func(){app.errorQueue(message, fmt.Sprintf("failed to sync files: %v", err))}, nil
+			return []func(){app.errorQueue(message, fmt.Sprintf("failed to sync file %s contained in message %s: %v", fileAccession, message.Key, err))}, nil
 		}
 	}
 

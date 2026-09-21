@@ -42,19 +42,19 @@ export LOG_FORMAT="json"
 These settings control the TLS status and where the service gets the public keys to validate the JWT tokens.
 
 - `SERVER_CERT`: path to the x509 certificate used by the service
-- `SERVER_KEY`: path to the x509 private key used by the service
 - `SERVER_JWT_PUB_KEY_PATH`: full path to the folder containing public keys used to validate JWT tokens
 - `SERVER_JWT_PUB_KEY_URL`: URL to OIDC JWK endpoint
+- `SERVER_KEY`: path to the x509 private key used by the service
 
 ### RabbitMQ broker settings
 
 These settings control how verify connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the RabbitMQ server
-- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `ROUTING_KEY`: Routing key for publishing messages (commonly: `inbox`)
-- `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
+- `BROKER_USER`: username to connect to RabbitMQ
+- `ROUTING_KEY`: Routing key for publishing messages (commonly: `inbox`)
 
 ### PostgreSQL Database settings
 
@@ -81,15 +81,13 @@ These settings control how verify connects to the RabbitMQ message broker.
 
 ### Storage settings
 
-- `S3INBOX_ENDPOINT`: Endpoint to the S3 service including the port (e.g., https://s3.example.com:9000)
-- `S3INBOX_ACCESS_KEY`: The S3 access key (username equivalent), used to authenticate to S3
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
-- `S3INBOX_SECRET_KEY`: The S3 secret key (password equivalent), used to authenticate to S3
- [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
+- `S3INBOX_ACCESS_KEY`: The S3 access key (username equivalent), used to authenticate to S3 [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
 - `S3INBOX_BUCKET`: The S3 bucket to be used for storage of uploaded files when forwarding upload requests
-- `S3INBOX_REGION`: S3 region
 - `S3INBOX_CA_CERT`: Path to the Certificate Authority (CA) certificate file for the storage system, this is only needed if the S3 server has a certificate signed by a private entity
-- `S3INBOX_READY_PATH`: Path to use when pinging to check if the s3 bucket is healthy and ready for requests, final URL will be S3INBOX_ENDPOINT + S3INBOX_READY_PATH when calling 
+- `S3INBOX_ENDPOINT`: Endpoint to the S3 service including the port (e.g., https://s3.example.com:9000)
+- `S3INBOX_READY_PATH`: Path to use when pinging to check if the s3 bucket is healthy and ready for requests, final URL will be S3INBOX_ENDPOINT + S3INBOX_READY_PATH when calling
+- `S3INBOX_REGION`: S3 region
+- `S3INBOX_SECRET_KEY`: The S3 secret key (password equivalent), used to authenticate to S3 [more info at AWS](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys)
 
 ### Logging settings
 

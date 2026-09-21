@@ -8,17 +8,17 @@ import (
 
 var (
 	routingKey          string
-	s3InboxEndpoint     string
 	s3InboxAccessKey    string
-	s3InboxSecretKey    string
 	s3InboxBucket       string
-	s3InboxRegion       string
 	s3InboxCaCert       string
+	s3InboxEndpoint     string
 	s3InboxReadyPath    string
-	serverKey           string
+	s3InboxRegion       string
+	s3InboxSecretKey    string
+	serverCert          string
 	serverJwtPubKeyPath string
 	serverJwtPubKeyURL  string
-	serverCert          string
+	serverKey           string
 )
 
 func init() {
@@ -32,18 +32,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				routingKey = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
-			Name: "s3inbox.endpoint",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "The endpoint to the s3 serving as the inbox")
-			},
-			Required: true,
-			AssignFunc: func(flagName string) {
-				s3InboxEndpoint = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "s3inbox.access_key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Access key used to authenticate towards the s3 endpoint")
@@ -52,18 +41,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				s3InboxAccessKey = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
-			Name: "s3inbox.secret_key",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Secret key used to authenticate towards the s3 endpoint")
-			},
-			Required: true,
-			AssignFunc: func(flagName string) {
-				s3InboxSecretKey = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "s3inbox.bucket",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Name of the bucket which serves as the inbox")
@@ -72,18 +50,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				s3InboxBucket = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
-			Name: "s3inbox.region",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "us-east-1", "Region of the s3")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				s3InboxRegion = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "s3inbox.ca_cert",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Ca Cert to be used for TLS traffic towards the s3 serving as the inbox")
@@ -92,8 +59,16 @@ func init() {
 			AssignFunc: func(flagName string) {
 				s3InboxCaCert = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
+			Name: "s3inbox.endpoint",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "The endpoint to the s3 serving as the inbox")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				s3InboxEndpoint = viper.GetString(flagName)
+			},
+		}, &config.Flag{
 			Name: "s3inbox.ready_path",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Path on the s3 endpoint which will be used for ready checking")
@@ -102,8 +77,34 @@ func init() {
 			AssignFunc: func(flagName string) {
 				s3InboxReadyPath = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
+			Name: "s3inbox.region",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "us-east-1", "Region of the s3")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				s3InboxRegion = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "s3inbox.secret_key",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Secret key used to authenticate towards the s3 endpoint")
+			},
+			Required: true,
+			AssignFunc: func(flagName string) {
+				s3InboxSecretKey = viper.GetString(flagName)
+			},
+		}, &config.Flag{
+			Name: "server.cert",
+			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
+				flagSet.String(flagName, "", "Path to TLS cert file, both server.key and server.cert needs to be set for server to serve traffic with TLS")
+			},
+			Required: false,
+			AssignFunc: func(flagName string) {
+				serverCert = viper.GetString(flagName)
+			},
+		}, &config.Flag{
 			Name: "server.jwt_pub_key_path",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Path to jwt key file used for bearer token signature verification, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
@@ -112,8 +113,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				serverJwtPubKeyPath = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "server.jwt_pub_key_url",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Url to jwt key used for bearer token signature verification, at least one of server.jwt_pub_key_url or server.jwt_pub_key_path needs to be set")
@@ -122,8 +122,7 @@ func init() {
 			AssignFunc: func(flagName string) {
 				serverJwtPubKeyURL = viper.GetString(flagName)
 			},
-		},
-		&config.Flag{
+		}, &config.Flag{
 			Name: "server.key",
 			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
 				flagSet.String(flagName, "", "Path to TLS key file, both server.key and server.cert needs to be set for server to serve traffic with TLS")
@@ -131,16 +130,6 @@ func init() {
 			Required: false,
 			AssignFunc: func(flagName string) {
 				serverKey = viper.GetString(flagName)
-			},
-		},
-		&config.Flag{
-			Name: "server.cert",
-			RegisterFunc: func(flagSet *pflag.FlagSet, flagName string) {
-				flagSet.String(flagName, "", "Path to TLS cert file, both server.key and server.cert needs to be set for server to serve traffic with TLS")
-			},
-			Required: false,
-			AssignFunc: func(flagName string) {
-				serverCert = viper.GetString(flagName)
 			},
 		},
 	)

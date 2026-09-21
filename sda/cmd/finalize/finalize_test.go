@@ -63,6 +63,13 @@ func (ts *TestSuite) SetupTest() {
 	ts.app.broker = ts.mockBroker
 }
 
+func (ts *TestSuite) TearDownTest() {
+	ts.mockDB.AssertExpectations(ts.T())
+	ts.mockArchiveReader.AssertExpectations(ts.T())
+	ts.mockBackupWriter.AssertExpectations(ts.T())
+	ts.mockBroker.AssertExpectations(ts.T())
+}
+
 func createMessage(filePath, userName, accession, messageKey string) *broker.Message {
 	body := schema.IngestionAccession{
 		Type:        "accession",
@@ -105,26 +112,19 @@ func (ts *TestSuite) TestBackupFile() {
 	message := createMessage(filePath, userName, accession, fileID)
 
 	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
-	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil)
-	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil)
-	ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil)
+	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
+	ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
 	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
 		FilePath: fileID,
 		FileSize: int64(len(encryptedContent)),
 		Location: "archive_test_location",
-	}, nil)
-	ts.mockDB.On("BeginTransaction").Return(nil)
-	ts.mockDB.On("Commit").Return(nil)
-	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil)
-	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil)
-	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	}, nil).Once()
+	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once()
+	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
 
-	tx, _ := ts.mockDB.BeginTransaction(context.Background())
-	_, err := ts.app.backupFile(context.Background(), tx, message)
+	_, err := ts.app.backupFile(context.Background(), ts.mockDB, message)
 	assert.Equal(ts.T(), nil, err)
-
-	tx.Commit()
 }
 
 func (ts *TestSuite) TestHandleMessage_disabled() {
@@ -133,7 +133,7 @@ func (ts *TestSuite) TestHandleMessage_disabled() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("disabled", nil)
+	ts.mockDB.On("GetFileStatus", fileID).Return("disabled", nil).Once()
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
@@ -146,8 +146,8 @@ func (ts *TestSuite) TestHandleMessage_ready() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("ready", nil)
-	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("GetFileStatus", fileID).Return("ready", nil).Once()
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
@@ -160,7 +160,7 @@ func (ts *TestSuite) TestHandleMessage_other() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil).Once()
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
@@ -173,7 +173,7 @@ func (ts *TestSuite) TestHandleMessage_missing() {
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
 	accession := "file-asdfg-1234"
 
-	ts.mockDB.On("GetFileStatus", fileID).Return("", sql.ErrNoRows)
+	ts.mockDB.On("GetFileStatus", fileID).Return("", sql.ErrNoRows).Once()
 
 	message := createMessage(filePath, userName, accession, fileID)
 	callback, err := ts.app.handleMessage(context.Background(), message)
@@ -182,9 +182,6 @@ func (ts *TestSuite) TestHandleMessage_missing() {
 }
 
 func (ts *TestSuite) TestSetAccession_duplicate() {
-	ts.app.archiveReader = nil
-	ts.app.backupWriter = nil
-
 	fileID := uuid.NewString()
 	userName := "test-finalize"
 	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
@@ -193,10 +190,9 @@ func (ts *TestSuite) TestSetAccession_duplicate() {
 	var content schema.IngestionAccession
 	_ = json.Unmarshal(message.Body, &content)
 
-	ts.mockDB.On("BeginTransaction").Return(nil)
-	ts.mockDB.On("Commit").Return(nil)
-	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("duplicate", nil)
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("duplicate", nil).Once()
 
 	_, err := ts.app.setAccession(context.Background(), &content, message)
 	assert.Equal(ts.T(), nil, err)
@@ -214,14 +210,14 @@ func (ts *TestSuite) TestSetAccession_ok() {
 	var content schema.IngestionAccession
 	_ = json.Unmarshal(message.Body, &content)
 
-	ts.mockDB.On("BeginTransaction").Return(nil)
-	ts.mockDB.On("Commit").Return(nil)
-	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil)
-	ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil)
-	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Commit").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil).Once()
+	ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once()
+	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
 
-	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
 
 	_, err := ts.app.setAccession(context.Background(), &content, message)
 	assert.Equal(ts.T(), nil, err)
@@ -239,13 +235,13 @@ func (ts *TestSuite) TestSetAccession_same() {
 	var content schema.IngestionAccession
 	_ = json.Unmarshal(message.Body, &content)
 
-	ts.mockDB.On("BeginTransaction").Return(nil)
-	ts.mockDB.On("Commit").Return(nil)
-	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("same", nil)
-	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil)
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Commit").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("same", nil).Once()
+	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
 
-	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
 
 	_, err := ts.app.setAccession(context.Background(), &content, message)
 	assert.Equal(ts.T(), nil, err)

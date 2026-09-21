@@ -20,6 +20,8 @@ func (m *MockWriter) RemoveFile(_ context.Context, location, filePath string) er
 func (m *MockWriter) WriteFile(_ context.Context, filePath string, contentReader io.Reader) (location string, err error) {
 	content, err := io.ReadAll(contentReader)
 	if err != nil {
+		m.Called(filePath, err)
+
 		return "", err
 	}
 

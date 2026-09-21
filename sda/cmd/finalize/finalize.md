@@ -56,12 +56,12 @@ export LOG_FORMAT="json"
 These settings control how `finalize` connects to the RabbitMQ message broker.
 
 - `BROKER_HOST`: hostname of the RabbitMQ server
-- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
-- `SOURCE_QUEUE`: message queue to read messages from (commonly: `accession`)
-- `ROUTING_KEY`: Routing key for publishing messages (commonly: `completed`)
-- `BROKER_USER`: username to connect to RabbitMQ
 - `BROKER_PASSWORD`: password to connect to RabbitMQ
+- `BROKER_PORT`: RabbitMQ broker port (commonly: `5671` with TLS and `5672` without)
 - `BROKER_PREFETCH_COUNT`: Number of messages to pull from the message server at the time (default to `1`)
+- `BROKER_USER`: username to connect to RabbitMQ
+- `ROUTING_KEY`: Routing key for publishing messages (commonly: `completed`)
+- `SOURCE_QUEUE`: message queue to read messages from (commonly: `accession`)
 
 ### PostgreSQL Database settings
 

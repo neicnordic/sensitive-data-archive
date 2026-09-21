@@ -318,6 +318,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	stream := io.TeeReader(c4ghr, md5hash)
 
 	if file.DecryptedSize, err = io.Copy(decryptedChecksum, stream); err != nil {
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			slog.Warn("context canceled while decrypting file",
+				slog.String("file-id", ingestionVerification.FileID),
+			)
+
+			return nil, err
+		}
 		slog.Error("failed to copy decrypted data",
 			slog.String("file-id", ingestionVerification.FileID),
 			slog.Any("error", err),
@@ -473,7 +480,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		return nil, nil
 	}
 
-	if storedFileInfo.DecryptedChecksum == "" && storedFileInfo.ArchivedChecksum == "" {
+	if storedFileInfo.DecryptedChecksum == "" || storedFileInfo.ArchivedChecksum == "" {
 		if err := tx.SetVerified(ctx, file, ingestionVerification.FileID); err != nil {
 			slog.Error("failed to set file as verified",
 				slog.String("file-id", ingestionVerification.FileID),
@@ -504,7 +511,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 
 	// Publish verified message
 	if err := app.broker.Publish(ctx, app.routingKey, broker.Message{
-		Key:  message.Key,
+		Key:  ingestionVerification.FileID,
 		Body: verifiedMessage,
 	}); err != nil {
 		slog.Error("failed to publish verified message",

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -291,6 +292,7 @@ func TestSync(t *testing.T) {
 				mr := &mocks.MockReader{}
 				mdb := &mocks.MockDatabase{}
 				mb := &mocks.MockBroker{}
+				mw := &mocks.MockWriter{}
 
 				fileContent := fmt.Sprintf("file 1 content: %s", uuid.NewString())
 				ftd, err := generateFileTestData([]byte(fileContent))
@@ -309,11 +311,13 @@ func TestSync(t *testing.T) {
 
 				mdb.On("GetHeaderByAccessionID", "accession_1").Return(ftd.header, nil).Once()
 
+				mw.On("WriteFile", submissionPath, mock.Anything).Return("", errors.New("error")).Once()
+
 				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
-					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to sync files: failed to upload file to storage, reason: copied size does not match file size"
+					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to sync file accession_1 contained in message test_dataset_123: failed to upload file to storage, reason: copied size does not match file size"
 				})).Return(nil).Once()
 
-				return mr, &mocks.MockWriter{}, mdb, mb, &mockServer{}
+				return mr, mw, mdb, mb, &mockServer{}
 			},
 			withRemote: false,
 		}, {
@@ -341,7 +345,7 @@ func TestSync(t *testing.T) {
 				mdb.On("GetInboxPath", "accession_1").Return("", sql.ErrNoRows).Once()
 
 				mb.On("Publish", "error", mock.MatchedBy(func(msg brokerv2.Message) bool {
-					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "could not sync file accession_1: failed to get inbox path, reason: sql: no rows in result set"
+					return msg.Headers != nil && msg.Headers["error-queue-reason"] == "failed to sync file accession_1 contained in message test_dataset_123: failed to get inbox path, reason: sql: no rows in result set"
 				})).Return(nil).Once()
 
 				return &mocks.MockReader{}, &mocks.MockWriter{}, mdb, mb, &mockServer{}
@@ -376,7 +380,7 @@ func TestSync(t *testing.T) {
 			if err != nil {
 				t.Errorf("failed to marshal source message: %s", err.Error())
 			}
-			callbacks, err := v.handleMessage(context.Background(), &brokerv2.Message{Body: jsonMsg})
+			callbacks, err := v.handleMessage(context.Background(), &brokerv2.Message{Key: tc.sourceMessage.DatasetID, Body: jsonMsg})
 			for _, cb := range callbacks {
 				cb()
 			}
