@@ -57,8 +57,10 @@ missing or not one of the configured values is rejected, and the user is told
 that a stronger authentication method is required.
 
 `acr` is read from the ID token, which is where OpenID Connect specifies the
-claim. Providers that report it only in the userinfo response are supported
-as a fallback; when both carry one the ID token wins.
+claim, and this is what LS AAI populates — it leaves `acr` out of the userinfo
+response. Providers that report it only in userinfo are supported as a
+fallback; when both carry one the ID token wins. The log records which of the
+two was used, at debug level.
 
 When the option is unset no authentication context is requested or required,
 which is the behaviour of earlier releases. Two further things it does not do:
