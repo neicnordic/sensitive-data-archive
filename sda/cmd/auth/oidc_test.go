@@ -306,7 +306,7 @@ func (ts *OIDCTests) TestAcrFromIDTokenWhenUserinfoHasNone() {
 func (ts *OIDCTests) TestAcrFromIDTokenWinsOverUserinfo() {
 	// The ID token is where the claim belongs, so a weaker context there is
 	// not rescued by a stronger one in the userinfo response.
-	user := &acrUser{MockUser: mockoidc.DefaultUser(), idTokenAcr: "https://refeds.org/profile/sfa", userinfoAcr: refedsMFA}
+	user := &acrUser{MockUser: mockoidc.DefaultUser(), idTokenAcr: "https://refeds.org/profile/sfa", userinfoAcr: refedsMFA} // #nosec G101 -- an acr URL, not a credential
 	_, err := ts.authenticateWithUser(user, []string{refedsMFA})
 	assert.ErrorIs(ts.T(), err, ErrAcrNotAccepted)
 	assert.ErrorContains(ts.T(), err, "https://refeds.org/profile/sfa")
