@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: "2026-09-11"
+status: accepted
+date: "2026-09-21"
 decision-makers:
   - "@neicnordic/sensitive-data-development-collaboration"
 ---
@@ -82,4 +82,5 @@ Chosen option: "`log/slog`", because it ships with Go, does structured logging n
 
 The team agreed on `slog` and a separate migration epic in the broker v2 discussion on 2026-09-11 (issue [#2459](https://github.com/neicnordic/sensitive-data-archive/issues/2459#issuecomment-5630655843)), after `log/slog` had already entered the code base ad hoc.
 This record documents that agreement after the fact.
+The team accepted it at the NeIC SDA-Devs meet-up on 2026-09-21.
 The migration is tracked in epic #2593.
