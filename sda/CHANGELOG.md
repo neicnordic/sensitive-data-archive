@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- auth: report what the login provider refused. An OAuth 2 error redirect to `/oidc/login` carries an `error` instead of a `code`; the empty code was exchanged anyway and the user was told to clear their session cookies.
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - broker/v2:
   - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` (a duration, default `20s`) to finish and ack its message, instead of failing its publish with `context canceled`.
