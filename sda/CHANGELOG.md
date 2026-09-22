@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - ingest: Do not keep a transaction open while writing to the archive storage
-  - Separate transaction that is commited before writing to the archive if file is now known in db but present in inbox storage 
+  - Separate transaction that is committed before writing to the archive if the file is not known in the db but present in inbox storage
   - Write the "submitted" file event after writing to the archive
-  - Delete the file from the archive is db actions fail
+  - Read the archived file size before opening the transaction
+  - Delete the file from the archive if the db actions fail
 - finalize: Do not keep a transaction open while writing to the backup storage
-  - Use separate transaction for file backup process
+  - Use a separate transaction for the file backup process
+  - Delete the file from the backup if the db actions fail
 
 
 ## [4.0.0] - 2026-09-21

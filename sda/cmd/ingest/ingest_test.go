@@ -160,6 +160,31 @@ func (ts *TestSuite) TestIngestFile_StorageWriteFailure() {
 	assert.Error(ts.T(), err, "expected error when ingesting file with archive storage write failure")
 }
 
+func (ts *TestSuite) TestIngestFile_SizeLookupFailureAfterStorageWrite() {
+	fileID := uuid.NewString()
+	userName := "test-ingest-size-lookup-failure"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil).Once()
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil).Once()
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Once().Return(encryptedContent, nil)
+	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(0), errors.New("head request failed")).Once().NotBefore(fileWritten)
+	// The size lookup happens before the transaction, so no transaction is opened and the
+	// archived object is removed before the message is requeued.
+	ts.mockArchiveWriter.On("RemoveFile", "archive_unit_test_location", fileID).Return(nil).Once().NotBefore(fileWritten)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.Error(ts.T(), err, "expected error when the archived file size lookup fails")
+	ts.mockDB.AssertNotCalled(ts.T(), "BeginTransaction")
+}
+
 func (ts *TestSuite) TestIngestFile_DBWriteFailureAfterStorageWrite() {
 	fileID := uuid.NewString()
 	userName := "test-ingest-storage-write-failure"
@@ -171,9 +196,9 @@ func (ts *TestSuite) TestIngestFile_DBWriteFailureAfterStorageWrite() {
 
 	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Once().Return(encryptedContent, nil)
 	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).Once()
-	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once().NotBefore(fileWritten)
+	sizeRead := ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once().NotBefore(fileWritten)
 
-	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(sizeRead)
 	ts.mockDB.On("Rollback").Return(nil).Once().NotBefore(fileWritten)
 
 	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Once().Return(nil).NotBefore(fileWritten)
@@ -199,15 +224,17 @@ func (ts *TestSuite) TestIngestFile_BaseCase() {
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
-	ts.mockDB.On("BeginTransaction").Return(nil)
-	ts.mockDB.On("Commit").Return(nil)
-	ts.mockDB.On("Rollback").Return(nil)
 	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
-	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
-	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
-	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
-	ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil)
-	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	// No storage I/O may happen inside the transaction: the write and the size lookup
+	// must both complete before BeginTransaction.
+	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil)
+	sizeRead := ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil).NotBefore(fileWritten)
+	ts.mockDB.On("BeginTransaction").Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("Commit").Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("Rollback").Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil).NotBefore(sizeRead)
 	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)
@@ -241,17 +268,19 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 
 	ts.mockDB.On("GetFileStatus", fileID).Return("", nil)
 	ts.mockDB.On("GetSubmissionLocation", fileID).Return("", nil)
+	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("submission_unit_test_location", nil)
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	// The registration transaction must be committed before the archive write starts, and
+	// the archive transaction must not open before the write and size lookup are done.
+	registered := ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil)
+	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).NotBefore(registered)
+	sizeRead := ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil).NotBefore(fileWritten)
 	ts.mockDB.On("BeginTransaction").Return(nil)
 	ts.mockDB.On("Commit").Return(nil)
 	ts.mockDB.On("Rollback").Return(nil)
-	ts.mockInboxReader.On("FindFile", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return("submission_unit_test_location", nil)
-	ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil)
-	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
-	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil)
-	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil)
-	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil)
-	ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil)
-	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil).NotBefore(sizeRead)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil).NotBefore(sizeRead)
 	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil)
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil)

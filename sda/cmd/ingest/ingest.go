@@ -426,14 +426,35 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, err
 	}
 
+	// From here until the commit succeeds the archive holds an object without a database
+	// record. Remove it before the message is requeued, otherwise a retry that lands in
+	// another bucket (storage/v2 rotation) leaves an orphan behind. The cleanup runs on a
+	// context that survives shutdown so a cancelled handler still removes the object.
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if err := app.ArchiveWriter.RemoveFile(context.WithoutCancel(ctx), location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+	}()
+
+	// Storage I/O stays outside the transaction so a slow backend cannot exceed
+	// idle_in_transaction_session_timeout.
+	fileSize, err := app.ArchiveReader.GetFileSize(ctx, location, fileID)
+	if err != nil {
+		slog.Error("failed to get archived file size", "error", err, "file-id", fileID)
+		// requeue message as archive error is not expected and should succeed on retries
+		return nil, err
+	}
+
+	checksum := fmt.Sprintf("%x", dr.hash.Sum(nil))
+
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
 		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
@@ -444,62 +465,34 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 	if err := tx.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(message.Body)); err != nil {
 		slog.Error("failed to update file event log", "error", err, "file-id", fileID)
-
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	if err := tx.SetKeyHash(ctx, dr.keyHash, fileID); err != nil {
-		slog.Error("failed to set file key hash", slog.Any("error", err), slog.String("file-id", fileID))
-
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		slog.Error("failed to set file key hash", "error", err, "file-id", fileID)
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
 	if err := tx.StoreHeader(ctx, dr.header, fileID); err != nil {
-		slog.Error("failed to store header", slog.Any("error", err), slog.String("file-id", fileID))
-
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		slog.Error("failed to store header", "error", err, "file-id", fileID)
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
-	checksum := fmt.Sprintf("%x", dr.hash.Sum(nil))
-
-	if err := app.finalizeDatabaseRecords(ctx, tx, fileID, location, checksum, message); err != nil {
+	if err := app.finalizeDatabaseRecords(ctx, tx, fileID, location, fileSize, checksum, message); err != nil {
 		slog.Error("failed to finalize database records", "error", err, "file-id", fileID)
-
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 
-	// If commit fails we've already uploaded the file to the archive
-	// but we will still rollback and reconsume the message as that can be done again, and it would just overwrite it
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction for ingest action", "error", err, "file-id", fileID)
-
-		// remove file from archive and requeue the message to be reconsumed
-		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
-		}
-
+		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
+	committed = true
 
 	// We need to send message after the commit, since there is a race condition where verify would consume and start processing the message before the commit is actioned.
 	// If notifyArchived fails we can not requeue the message as the db transaction has already been commited. Failure here would require manual intervertion.
@@ -546,29 +539,7 @@ func (app *Ingest) decrypt(source io.ReadCloser) (decryptResult, error) {
 	return decryptResult{keyHash: keyHash, hash: fileHash, teedReader: teedReader, header: header}, err
 }
 
-func (app *Ingest) archive(ctx context.Context, tx database.Transaction, keyHash, fileID string, rawHeader []byte, reader io.Reader) (string, error) {
-	if err := tx.SetKeyHash(ctx, keyHash, fileID); err != nil {
-		return "", err
-	}
-
-	if err := tx.StoreHeader(ctx, rawHeader, fileID); err != nil {
-		return "", err
-	}
-
-	location, err := app.ArchiveWriter.WriteFile(ctx, fileID, reader)
-	if err != nil {
-		return "", err
-	}
-
-	return location, nil
-}
-
-func (app *Ingest) finalizeDatabaseRecords(ctx context.Context, tx database.Transaction, fileID, location, checksum string, message *brokerv2.Message) error {
-	fileSize, err := app.ArchiveReader.GetFileSize(ctx, location, fileID)
-	if err != nil {
-		return err
-	}
-
+func (app *Ingest) finalizeDatabaseRecords(ctx context.Context, tx database.Transaction, fileID, location string, fileSize int64, checksum string, message *brokerv2.Message) error {
 	fileInfo := new(database.FileInfo)
 	fileInfo.Path = fileID
 	fileInfo.Size = fileSize

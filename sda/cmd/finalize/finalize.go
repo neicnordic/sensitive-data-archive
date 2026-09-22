@@ -243,6 +243,19 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 	_ = contentReader.Close()
 
+	// From here until the commit succeeds the backup holds an object without a database
+	// record. Remove it before the message is requeued so a retry does not leave an orphan
+	// behind. The cleanup runs on a context that survives shutdown.
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if err := app.backupWriter.RemoveFile(context.WithoutCancel(ctx), backupLocation, archiveData.FilePath); err != nil {
+			log.Errorf("failed to remove file from backup during rollback, file-id: %s, reason: %v", message.Key, err)
+		}
+	}()
+
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
 		log.Errorf("failed to begin transaction, reason: %v", err)
@@ -257,28 +270,17 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 
 	// Mark file as "backed up" and populate backup path and location
 	if err := tx.SetBackedUp(ctx, backupLocation, archiveData.FilePath, message.Key); err != nil {
-		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
-			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
-		}
-
 		return nil, fmt.Errorf("SetBackedUp failed, reason: (%w)", err)
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "backed up", "finalize", "{}", string(message.Body)); err != nil {
-		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
-			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
-		}
-
 		return nil, fmt.Errorf("UpdateFileEventLog failed, reason: (%w)", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
-			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
-		}
-
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+	committed = true
 
 	log.Debugf("Backup of file: %s complete", message.Key)
 
