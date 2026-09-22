@@ -314,18 +314,6 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, err
 	}
 
-	tx, err := app.db.BeginTransaction(ctx)
-	if err != nil {
-		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
-		// requeue message as db error is not expected and should succeed on retries
-		return nil, err
-	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
-		}
-	}()
-
 	switch status {
 	case "uploaded", "disabled":
 
@@ -354,6 +342,18 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 			return nil, err
 		}
 
+		tx, err := app.db.BeginTransaction(ctx)
+		if err != nil {
+			slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
+			// requeue message as db error is not expected and should succeed on retries
+			return nil, err
+		}
+		defer func() {
+			if err := tx.Rollback(); err != nil {
+				slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
+			}
+		}()
+
 		// Store the anonymized submission path (filePath), not the correlation-id, so the mapper can resolve it back on cleanup.
 		fileID, err = tx.RegisterFile(ctx, &fileID, submissionLocation, filePath, user)
 		if err != nil {
@@ -364,6 +364,11 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// File is now registered; fall through to read + decrypt + archive in a single pass, the same
 		// way a pre-registered "uploaded" file is handled. Returning here would leave a non-s3inbox
 		// upload stuck at "registered", so verify never runs.
+		if err := tx.Commit(); err != nil {
+			slog.Error("failed to commit transaction for register file action", "error", err, "file-id", fileID)
+			// requeue message as broker error is not expected and should succeed on retries
+			return nil, err
+		}
 
 	default:
 		slog.Warn("received ingestion trigger for file with unexpected status", "file-id", fileID, "status", status)
@@ -407,12 +412,6 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		_ = sourceReader.Close()
 	}()
 
-	if err := tx.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(message.Body)); err != nil {
-		slog.Error("failed to update file event log", "error", err, "file-id", fileID)
-		// requeue message as db error is not expected and should succeed on retries
-		return nil, err
-	}
-
 	dr, err := app.decrypt(sourceReader)
 	if err != nil {
 		slog.Error("failed ingestion during decrypt and archive", "error", err, "file-id", fileID)
@@ -420,10 +419,59 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return []func(){app.errorQueue(message, err.Error()), app.setErrorEvent(err.Error(), message)}, nil
 	}
 
-	location, err := app.archive(ctx, tx, dr.keyHash, fileID, dr.header, dr.teedReader)
+	location, err := app.ArchiveWriter.WriteFile(ctx, fileID, dr.teedReader)
 	if err != nil {
-		slog.Error("failed to archive file", "error", err, "file-id", fileID)
-		// requeue message as db error is not expected and should succeed on retries
+		slog.Error("failed to write file to the archive storage", slog.Any("error", err), slog.String("file-id", fileID))
+
+		return nil, err
+	}
+
+	tx, err := app.db.BeginTransaction(ctx)
+	if err != nil {
+		slog.Error("failed to begin transaction", "error", err, "file-id", fileID)
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
+		return nil, err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slog.Error("failed to rollback transaction", "error", err, "file-id", fileID)
+		}
+	}()
+
+	if err := tx.UpdateFileEventLog(ctx, fileID, "submitted", "ingest", "{}", string(message.Body)); err != nil {
+		slog.Error("failed to update file event log", "error", err, "file-id", fileID)
+
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
+		return nil, err
+	}
+
+	if err := tx.SetKeyHash(ctx, dr.keyHash, fileID); err != nil {
+		slog.Error("failed to set file key hash", slog.Any("error", err), slog.String("file-id", fileID))
+
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
+		return nil, err
+	}
+
+	if err := tx.StoreHeader(ctx, dr.header, fileID); err != nil {
+		slog.Error("failed to store header", slog.Any("error", err), slog.String("file-id", fileID))
+
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
 		return nil, err
 	}
 
@@ -431,7 +479,12 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 	if err := app.finalizeDatabaseRecords(ctx, tx, fileID, location, checksum, message); err != nil {
 		slog.Error("failed to finalize database records", "error", err, "file-id", fileID)
-		// requeue message as error is not expected and should succeed on retries
+
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
 		return nil, err
 	}
 
@@ -439,7 +492,12 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	// but we will still rollback and reconsume the message as that can be done again, and it would just overwrite it
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction for ingest action", "error", err, "file-id", fileID)
-		// requeue message as broker error is not expected and should succeed on retries
+
+		// remove file from archive and requeue the message to be reconsumed
+		if err := app.ArchiveWriter.RemoveFile(ctx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		}
+
 		return nil, err
 	}
 
