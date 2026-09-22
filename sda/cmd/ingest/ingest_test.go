@@ -140,6 +140,56 @@ func (ts *TestSuite) TestCancelFile_NotArchived() {
 	assert.NoError(ts.T(), err, "unexpected error when canceling file")
 }
 
+func (ts *TestSuite) TestIngestFile_StorageWriteFailure() {
+	fileID := uuid.NewString()
+	userName := "test-ingest-storage-write-failure"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil)
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil)
+
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil)
+	ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("", errors.New("failed to write file"))
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.Error(ts.T(), err, "expected error when ingesting file with archive storage write failure")
+}
+
+func (ts *TestSuite) TestIngestFile_DBWriteFailureAfterStorageWrite() {
+	fileID := uuid.NewString()
+	userName := "test-ingest-storage-write-failure"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+
+	ts.mockDB.On("GetFileStatus", fileID).Return("uploaded", nil).Once()
+	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil).Once()
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+
+	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Once().Return(encryptedContent, nil)
+	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once().NotBefore(fileWritten)
+
+	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("Rollback").Return(nil).Once().NotBefore(fileWritten)
+
+	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Once().Return(nil).NotBefore(fileWritten)
+	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(errors.New("db connection error")).Once().NotBefore(fileWritten)
+
+	ts.mockArchiveWriter.On("RemoveFile", "archive_unit_test_location", fileID).Return(nil).Once().NotBefore(fileWritten)
+
+	message := createMessage("ingest", filePath, userName, fileID)
+	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.Error(ts.T(), err, "expected error when ingesting file with db write failure after storage write")
+}
+
 func (ts *TestSuite) TestIngestFile_BaseCase() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
