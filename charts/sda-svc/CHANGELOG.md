@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Populate backup storage in ingest if backupArchive storage configuration configured
+
 ## [5.0.0] - 2026-09-21
 
 ### Added
