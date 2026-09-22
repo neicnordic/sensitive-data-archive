@@ -21,6 +21,16 @@ for n in api auth download finalize inbox ingest mapper rotatekey sync verify; d
     echo "creating credentials for: $n"
     psql -U postgres -h postgres -d sda -c "ALTER ROLE $n LOGIN PASSWORD '$n';"
     psql -U postgres -h postgres -d sda -c "GRANT base TO $n;"
+    # The deployed databases cap idle transactions at 5min (idle_in_transaction_session_timeout).
+    # Postgres disables it by default, which let a transaction spanning a storage write
+    # pass CI while it timed out on big files in staging. Mirror the deployed value for
+    # every role, and make it one second for the services that stream files inside a
+    # message handler so 93_large_file_test.sh fails if a transaction spans storage I/O.
+    timeout=5min
+    case "$n" in
+        ingest | finalize) timeout=1s ;;
+    esac
+    psql -U postgres -h postgres -d sda -c "ALTER ROLE $n SET idle_in_transaction_session_timeout = '$timeout';"
 
     ## password and permissions for MQ
     body_data=$(jq -n -c --arg password "$n" --arg tags none '$ARGS.named')
