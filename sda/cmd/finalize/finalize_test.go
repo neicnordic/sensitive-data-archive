@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -114,17 +115,45 @@ func (ts *TestSuite) TestBackupFile() {
 	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
 	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
 	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
-	ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
+	fileWritten := ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
 	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
 		FilePath: fileID,
 		FileSize: int64(len(encryptedContent)),
 		Location: "archive_test_location",
 	}, nil).Once()
-	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once()
-	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
+	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("Commit").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("Rollback").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once().NotBefore(fileWritten)
 
-	_, err := ts.app.backupFile(context.Background(), ts.mockDB, message)
+	_, err := ts.app.backupFile(context.Background(), message)
 	assert.Equal(ts.T(), nil, err)
+}
+
+func (ts *TestSuite) TestBackupFile_DBFailureAfterWrite() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
+	fileWritten := ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(len(encryptedContent)),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("Rollback").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(errors.New("failure")).Once().NotBefore(fileWritten)
+	ts.mockBackupWriter.On("RemoveFile", "backup_test_location", fileID).Return(nil).Once().NotBefore(fileWritten)
+
+	_, err := ts.app.backupFile(context.Background(), message)
+	assert.Error(ts.T(), err)
 }
 
 func (ts *TestSuite) TestHandleMessage_disabled() {
@@ -190,8 +219,6 @@ func (ts *TestSuite) TestSetAccession_duplicate() {
 	var content schema.IngestionAccession
 	_ = json.Unmarshal(message.Body, &content)
 
-	ts.mockDB.On("BeginTransaction").Return(nil).Once()
-	ts.mockDB.On("Rollback").Return(nil).Once()
 	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("duplicate", nil).Once()
 
 	_, err := ts.app.setAccession(context.Background(), &content, message)

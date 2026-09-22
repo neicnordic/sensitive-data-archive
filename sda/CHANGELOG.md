@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Separate transaction that is commited before writing to the archive if file is now known in db but present in inbox storage 
   - Write the "submitted" file event after writing to the archive
   - Delete the file from the archive is db actions fail
+- finalize: Do not keep a transaction open while writing to the backup storage
+  - Use separate transaction for file backup process
+
 
 ## [4.0.0] - 2026-09-21
 

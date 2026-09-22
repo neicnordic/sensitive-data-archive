@@ -186,10 +186,10 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	return callbacks, err
 }
 
-func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, message *brokerv2.Message) ([]func(), error) {
-	log.Debug("Backup initiated")
+func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
+	log.Debugf("Backup of file: %s initiated", message.Key)
 
-	archiveData, err := tx.GetArchived(ctx, message.Key)
+	archiveData, err := app.db.GetArchived(ctx, message.Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file archive information, reason: %v", err)
 	}
@@ -243,16 +243,44 @@ func (app *Finalize) backupFile(ctx context.Context, tx database.Transaction, me
 	}
 	_ = contentReader.Close()
 
+	tx, err := app.db.BeginTransaction(ctx)
+	if err != nil {
+		log.Errorf("failed to begin transaction, reason: %v", err)
+		// requeue message as db error is not expected and should succeed on retries
+		return nil, err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			log.Errorf("failed to rollback transaction, reason: %v", err)
+		}
+	}()
+
 	// Mark file as "backed up" and populate backup path and location
 	if err := tx.SetBackedUp(ctx, backupLocation, archiveData.FilePath, message.Key); err != nil {
-		return nil, fmt.Errorf("SetBackedUp failed, reason: (%v)", err)
+		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
+			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
+		}
+
+		return nil, fmt.Errorf("SetBackedUp failed, reason: (%w)", err)
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "backed up", "finalize", "{}", string(message.Body)); err != nil {
-		return nil, fmt.Errorf("UpdateFileEventLog failed, reason: (%v)", err)
+		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
+			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
+		}
+
+		return nil, fmt.Errorf("UpdateFileEventLog failed, reason: (%w)", err)
 	}
 
-	log.Debug("Backup completed")
+	if err := tx.Commit(); err != nil {
+		if err := app.backupWriter.RemoveFile(ctx, backupLocation, archiveData.FilePath); err != nil {
+			slog.Error("failed to remove file from backup during rollback", "error", err, "file-id", archiveData.FilePath)
+		}
+
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	log.Debugf("Backup of file: %s complete", message.Key)
 
 	return nil, nil
 }
@@ -263,6 +291,27 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", message.Key, err)
 
 		return nil, err
+	}
+
+	if accessionIDExists == "duplicate" {
+		log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", message.Key, ingestionAccession.AccessionID)
+		// Send the message to an error queue so it can be analyzed.
+		return []func(){app.errorQueue(message, "Duplicate accession ID")}, nil
+	}
+
+	if app.archiveReader != nil && app.backupWriter != nil {
+		// We do not need to remove backup file from storage incase it suceeds and setting accession failes,
+		// as currently all accession setting failures are retried and those would just write the same file again
+		if callbacks, err := app.backupFile(ctx, message); err != nil {
+			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+
+			if callbacks != nil {
+				// Send the message to an error queue  but don't requeue it
+				return callbacks, nil
+			}
+
+			return nil, err
+		}
 	}
 
 	tx, err := app.db.BeginTransaction(ctx)
@@ -278,28 +327,11 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 	}()
 
 	switch accessionIDExists {
-	case "duplicate":
-		log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", message.Key, ingestionAccession.AccessionID)
-		// Send the message to an error queue so it can be analyzed.
-		return []func(){app.errorQueue(message, "Duplicate accession ID")}, nil
 	case "same":
 		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
 	default:
 		if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
 			log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
-
-			return nil, err
-		}
-	}
-
-	if app.archiveReader != nil && app.backupWriter != nil {
-		if callbacks, err := app.backupFile(ctx, tx, message); err != nil {
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
-
-			if callbacks != nil {
-				// Send the message to an error queue  but don't requeue it
-				return callbacks, nil
-			}
 
 			return nil, err
 		}
