@@ -270,10 +270,7 @@ func (ts *TestSuite) Test05_GetDatasetInfo() {
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
 
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available - skipping dataset info test")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
@@ -304,10 +301,7 @@ func (ts *TestSuite) Test06_ListFilesInDataset() {
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
 
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available - skipping files list test")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
@@ -724,10 +718,7 @@ func (ts *TestSuite) Test30_PathPrefixFilter() {
 	}
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
