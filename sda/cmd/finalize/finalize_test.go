@@ -124,11 +124,72 @@ func (ts *TestSuite) TestBackupFile() {
 	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
 	ts.mockDB.On("Commit").Return(nil).Once().NotBefore(fileWritten)
 	ts.mockDB.On("Rollback").Return(nil).Once().NotBefore(fileWritten)
-	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once().NotBefore(fileWritten)
+	backedUp := ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil).Once().NotBefore(backedUp)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once().NotBefore(fileWritten)
 
 	_, err := ts.app.backupFile(context.Background(), message)
 	assert.Equal(ts.T(), nil, err)
+}
+
+// A commit error does not prove the transaction was rolled back, so the backup object must
+// be kept: a retry trusts the recorded backup location and skips the copy.
+func (ts *TestSuite) TestBackupFile_CommitFailureKeepsBackupObject() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
+	ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(len(encryptedContent)),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once()
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil).Once()
+	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
+	ts.mockDB.On("Commit").Return(errors.New("connection lost while waiting for commit reply")).Once()
+
+	_, err := ts.app.backupFile(context.Background(), message)
+	assert.Error(ts.T(), err)
+	ts.mockBackupWriter.AssertNotCalled(ts.T(), "RemoveFile", mock.Anything, mock.Anything)
+}
+
+// A cancel that is committed while the backup is copied is seen under the row lock taken by
+// SetBackedUp. The file must not be marked as backed up and the copy is removed.
+func (ts *TestSuite) TestBackupFile_CancelledDuringCopy() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
+	fileWritten := ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(len(encryptedContent)),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	backedUp := ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once()
+	ts.mockDB.On("GetFileStatus", fileID).Return("disabled", nil).Once().NotBefore(backedUp)
+	ts.mockBackupWriter.On("RemoveFile", "backup_test_location", fileID).Return(nil).Once().NotBefore(fileWritten)
+
+	_, err := ts.app.backupFile(context.Background(), message)
+	assert.ErrorIs(ts.T(), err, errFileCancelled)
+	ts.mockDB.AssertNotCalled(ts.T(), "Commit")
+	ts.mockDB.AssertNotCalled(ts.T(), "UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything)
 }
 
 func (ts *TestSuite) TestBackupFile_DBFailureAfterWrite() {
@@ -241,13 +302,83 @@ func (ts *TestSuite) TestSetAccession_ok() {
 	ts.mockDB.On("Commit").Return(nil).Once()
 	ts.mockDB.On("Rollback").Return(nil).Once()
 	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil).Once()
-	ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once()
+	accessionSet := ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once()
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil).Once().NotBefore(accessionSet)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
 
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
 
 	_, err := ts.app.setAccession(context.Background(), &content, message)
 	assert.Equal(ts.T(), nil, err)
+}
+
+// With backup storage configured the backup commits in its own transaction, and the
+// accession transaction must not open before that commit.
+func (ts *TestSuite) TestSetAccession_withBackup() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+	var content schema.IngestionAccession
+	_ = json.Unmarshal(message.Body, &content)
+
+	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil).Once()
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(len(encryptedContent)),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockArchiveReader.On("NewFileReader", "archive_test_location", fileID).Return(encryptedContent, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(len(encryptedContent)), nil).Once()
+	fileWritten := ts.mockBackupWriter.On("WriteFile", fileID, encryptedContent).Return("backup_test_location", nil).Once()
+
+	backupBegun := ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(fileWritten)
+	ts.mockDB.On("SetBackedUp", "backup_test_location", mock.Anything, fileID).Return(nil).Once().NotBefore(backupBegun)
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil).Once().NotBefore(backupBegun)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "backed up", "finalize", mock.Anything, mock.Anything).Return(nil).Once().NotBefore(backupBegun)
+	backupCommitted := ts.mockDB.On("Commit").Return(nil).Once().NotBefore(backupBegun)
+
+	accessionBegun := ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(backupCommitted)
+	ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once().NotBefore(accessionBegun)
+	ts.mockDB.On("GetFileStatus", fileID).Return("backed up", nil).Once().NotBefore(accessionBegun)
+	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil).Once().NotBefore(accessionBegun)
+	ts.mockDB.On("Commit").Return(nil).Once().NotBefore(accessionBegun)
+	ts.mockDB.On("Rollback").Return(nil).Twice()
+
+	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
+
+	_, err := ts.app.setAccession(context.Background(), &content, message)
+	assert.Equal(ts.T(), nil, err)
+	ts.mockBackupWriter.AssertNotCalled(ts.T(), "RemoveFile", mock.Anything, mock.Anything)
+}
+
+// A cancel committed between the backup and the accession transaction is seen under the
+// row lock taken by SetAccessionID; the file must not be marked as ready.
+func (ts *TestSuite) TestSetAccession_cancelledBeforeReady() {
+	ts.app.archiveReader = nil
+	ts.app.backupWriter = nil
+
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+	var content schema.IngestionAccession
+	_ = json.Unmarshal(message.Body, &content)
+
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil).Once()
+	ts.mockDB.On("BeginTransaction").Return(nil).Once()
+	ts.mockDB.On("Rollback").Return(nil).Once()
+	accessionSet := ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once()
+	ts.mockDB.On("GetFileStatus", fileID).Return("disabled", nil).Once().NotBefore(accessionSet)
+
+	_, err := ts.app.setAccession(context.Background(), &content, message)
+	assert.Equal(ts.T(), nil, err)
+	ts.mockDB.AssertNotCalled(ts.T(), "Commit")
+	ts.mockDB.AssertNotCalled(ts.T(), "UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything)
+	ts.mockBroker.AssertNotCalled(ts.T(), "Publish", mock.Anything, mock.Anything)
 }
 
 func (ts *TestSuite) TestSetAccession_same() {
@@ -266,6 +397,9 @@ func (ts *TestSuite) TestSetAccession_same() {
 	ts.mockDB.On("Commit").Return(nil).Once()
 	ts.mockDB.On("Rollback").Return(nil).Once()
 	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("same", nil).Once()
+	// SetAccessionID is still run to hold the row lock while the status is checked.
+	accessionSet := ts.mockDB.On("SetAccessionID", accession, fileID).Return(nil).Once()
+	ts.mockDB.On("GetFileStatus", fileID).Return("verified", nil).Once().NotBefore(accessionSet)
 	ts.mockDB.On("UpdateFileEventLog", fileID, "ready", "finalize", mock.Anything, mock.Anything).Return(nil).Once()
 
 	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
