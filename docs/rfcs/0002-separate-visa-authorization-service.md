@@ -151,7 +151,7 @@ Option 8 can be minted by whichever of Options 1, 5 or 7 does the validation.
 
 ## Open Questions
 
-The first three block promotion (see the
+Two block promotion, the failure semantics and the measurement (see the
 [direction currently favoured](#direction-currently-favoured)); the rest are
 ordered roughly by how much they change the outcome, with the questions the
 direction has made moot at the end.
@@ -164,9 +164,16 @@ direction has made moot at the end.
   If the answer is the gateway, the shape of the scoped token — audience,
   lifetime, replay handling, whether it carries the subject for the audit
   log, and who holds its signing key — is part of the same question (see
-  [Option 8](#option-8-short-lived-signed-grant-verified-locally)). Live at
-  merge time; to be taken up at the next NeIC SDA-Devs meet-up. Blocks
-  promotion.
+  [Option 8](#option-8-short-lived-signed-grant-verified-locally)).
+  @jbygdell answered on the thread (2026-09-07): a gateway only becomes an
+  option once a standalone visa service has been decided; SDA should not
+  implement any gateway functionality itself, since Cilium, Envoy and the
+  like already provide it in production grade; all the SDA side needs is a
+  dedicated header (he suggested `X-GA4GH-Visa`) so that routing can be done
+  on it. The direction currently favoured defers the standalone service, so
+  this question is deferred with it and no longer blocks promotion; the shape
+  of the scoped token goes with it. @viklund has not yet said whether that
+  settles his question.
 * **Failure semantics.** The current code already answers this, and three
   upstream failures answer it three different ways
   ([auth.go#L539-L557][v2-auth-failure]). Userinfo unavailable (visa source
@@ -605,7 +612,16 @@ grant, verify it locally — is the token half of this option separated from
 the gateway half; it is recorded as
 [Option 8](#option-8-short-lived-signed-grant-verified-locally).
 
-Not yet discussed in the thread; recorded as an open question.
+Discussed once in the thread. @jbygdell's position (2026-09-07) is that this
+option only exists once a standalone visa service has been decided (it needs
+the service as its backend), and that if it is taken, SDA must not build the
+gateway: Cilium, Envoy and similar already implement external authorization
+in production grade, and the only SDA-side change is a dedicated header,
+`X-GA4GH-Visa` or similar, that the gateway can route on. That removes the
+"adds a component SDA maintains" half of the first Bad bullet and leaves the
+dependency on the cluster's gateway or ingress controller. Since the
+[direction currently favoured](#direction-currently-favoured) defers the
+standalone service, this option is deferred with it.
 
 ### Option 6: Postgres-backed shared session cache in the download service
 
@@ -787,11 +803,15 @@ The direction now proposed, in order:
 3. **Deferred:** a separate service (Option 1 without Olric, or as the
    backend of Option 5) when a second consumer needs shared decisions or
    independent scaling, or when the measurement from step 2 shows the miss
-   cost exceeds whatever budget the team then sets. Redis and Olric are not
-   planned. Option 8 is undiscussed and is not ranked against Option 6 yet.
+   cost exceeds whatever budget the team then sets. If it is fronted by a
+   gateway, that gateway is an existing production-grade one (Cilium, Envoy)
+   routing on a dedicated visa header, not something SDA implements
+   (@jbygdell, 2026-09-07). Redis and Olric are not planned. Option 8 is
+   undiscussed and is not ranked against Option 6 yet.
 
-The open questions that still block promotion are the failure semantics, the
-measurement, and @viklund's gateway question. The two approvals on the
+The open questions that still block promotion are the failure semantics and
+the measurement; @viklund's gateway question is deferred together with the
+standalone service, per @jbygdell's answer. The two approvals on the
 review thread (2026-03-20) predate this section's change of direction; the
 authors will ask for a re-review. When those questions land, the authors
 expect to move this RFC to `ready-for-decision` and write an ADR that says
