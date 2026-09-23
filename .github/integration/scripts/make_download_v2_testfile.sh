@@ -60,6 +60,7 @@ with open("/shared/testfile.env.tmp", "w") as f:
     f.write(f"TESTFILE_HEADER={header.hex()}\n")
     f.write(f"TESTFILE_SIZE={len(plaintext)}\n")
     f.write(f"TESTFILE_SHA256={hashlib.sha256(plaintext).hexdigest()}\n")
+    f.write(f"TESTFILE_MD5={hashlib.md5(plaintext).hexdigest()}\n")
     f.write(f"TESTFILE_BODY_SIZE={len(body)}\n")
     f.write(f"TESTFILE_BODY_SHA256={hashlib.sha256(body).hexdigest()}\n")
 os.replace("/shared/testfile.env.tmp", "/shared/testfile.env")
