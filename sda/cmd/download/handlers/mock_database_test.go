@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"sync"
@@ -127,14 +128,26 @@ func (m *mockDatabase) GetDatasetFilesPaginated(_ context.Context, _ string, _ d
 // mockStorageReader is a mock implementation of storage.Reader for testing.
 type mockStorageReader struct {
 	pingErr error
+	content []byte // served by NewFileReadSeeker when set
 }
+
+// nopReadSeekCloser adds a no-op Close to a bytes.Reader.
+type nopReadSeekCloser struct {
+	*bytes.Reader
+}
+
+func (nopReadSeekCloser) Close() error { return nil }
 
 func (m *mockStorageReader) NewFileReader(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return nil, nil
 }
 
 func (m *mockStorageReader) NewFileReadSeeker(_ context.Context, _, _ string) (io.ReadSeekCloser, error) {
-	return nil, nil
+	if m.content == nil {
+		return nil, nil
+	}
+
+	return nopReadSeekCloser{bytes.NewReader(m.content)}, nil
 }
 
 func (m *mockStorageReader) FindFile(_ context.Context, _ string) (string, error) {
