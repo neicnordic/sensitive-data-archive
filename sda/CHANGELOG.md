@@ -8,14 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- ingest: Do not keep a transaction open while writing to the archive storage
-  - Separate transaction that is committed before writing to the archive if the file is not known in the db but present in inbox storage
-  - Write the "submitted" file event after writing to the archive
-  - Read the archived file size before opening the transaction
-  - Delete the file from the archive if the db actions fail
-- finalize: Do not keep a transaction open while writing to the backup storage
-  - Use a separate transaction for the file backup process
-  - Delete the file from the backup if the db actions fail
+- ingest, finalize: Large files no longer exceed `idle_in_transaction_session_timeout` and loop re-streaming; no storage I/O happens while a database transaction is open
+  - ingest: register a file that is not known in the db (but present in the inbox) in its own transaction before streaming, and accept the "registered" status on retry
+  - ingest: read the archived file size and write the "submitted" file event after the archive write
+  - finalize: commit the backup in its own transaction before setting the accession ID
+  - finalize: re-check the file status under the row lock so a cancel during the backup copy is not overwritten by "backed up" or "ready"
+  - both: remove the freshly written archive/backup object when the database work fails before the commit is attempted
 
 
 ## [4.0.0] - 2026-09-21
