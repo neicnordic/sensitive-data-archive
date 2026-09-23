@@ -150,10 +150,13 @@ WHERE f.stable_id = $1 AND c.source = $2`,
 ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
 LIMIT $4`,
 
-	// getDatasetFilesPageByPath returns a file by exact path (at most 1 result).
+	// getDatasetFilesPageByPath returns files with an exact path. Paths are not unique
+	// within a dataset, so it pages on stable_id. $3='' means first page.
 	getDatasetFilesPageByPathQuery: paginatedFileBase + `
   AND COALESCE(fd.download_path, f.submission_file_path) = $2
-LIMIT $3`,
+  AND ($3 = '' OR f.stable_id > $3)
+ORDER BY f.stable_id
+LIMIT $4`,
 
 	// getDatasetFilesPageByPrefix returns paginated files matching a path prefix.
 	// Keyset cursor on (COALESCE(fd.download_path, f.submission_file_path), stable_id). $3='' means first page.
@@ -645,7 +648,7 @@ func (p *PostgresDB) GetDatasetFilesPaginated(ctx context.Context, datasetID str
 	switch {
 	case opts.FilePath != "":
 		stmt := p.preparedStatements[getDatasetFilesPageByPathQuery]
-		rows, err = stmt.QueryContext(ctx, datasetID, opts.FilePath, opts.Limit)
+		rows, err = stmt.QueryContext(ctx, datasetID, opts.FilePath, opts.CursorID, opts.Limit)
 	case opts.PathPrefix != "":
 		stmt := p.preparedStatements[getDatasetFilesPageByPrefixQuery]
 		escaped := escapeLikePrefix(opts.PathPrefix)
