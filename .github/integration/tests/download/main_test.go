@@ -876,6 +876,9 @@ func (ts *TestSuite) Test34_PaginationTraversal() {
 	}{
 		{url.Values{}, []string{seedFileID, unicodeFileID, quotedFileID, multiChecksumFileID, renamedFileID, tiedPathFileID}},
 		{url.Values{"pathPrefix": {"special/"}}, []string{unicodeFileID, quotedFileID, renamedFileID}},
+		// Two files share this effective path, so paging has to break the tie
+		{url.Values{"pathPrefix": {"multi-checksum"}}, []string{multiChecksumFileID, tiedPathFileID}},
+		{url.Values{"filePath": {"multi-checksum.c4gh"}}, []string{multiChecksumFileID, tiedPathFileID}},
 	} {
 		all := ts.listFilePages(tc.filter)
 		ts.Require().Len(all, 1, "default page size should fit the whole listing (%v)", tc.filter)

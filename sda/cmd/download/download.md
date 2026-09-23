@@ -511,8 +511,9 @@ Returns a paginated list of files in the specified dataset.
 - Query Parameters
   - `pageSize` (optional): Number of results per page
   - `pageToken` (optional): Opaque token for the next page
-  - `filePath` (optional): Exact dataset-relative file path. Returns at
-    most one result.
+  - `filePath` (optional): Exact dataset-relative file path. Normally
+    returns at most one result; files that share the path are all returned
+    and paginated.
   - `pathPrefix` (optional): Recursive prefix filter (for example
     `samples/controls/`).
   - `filePath` and `pathPrefix` are mutually exclusive; supplying both
