@@ -319,11 +319,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	}
 
 	switch status {
-	// "registered" is accepted so a requeued message for a file that was registered by ingest
-	// itself (the "" case below commits the registration before streaming) can be retried.
-	// The ingest trigger is the contract that the upload is complete: the api only sends it
-	// for files in state "uploaded", so an s3inbox upload still in progress is not expected here.
-	case "uploaded", "disabled", "registered":
+	case "uploaded", "disabled":
 
 	case "removed":
 		reason := "file is removed, cannot ingest"
@@ -369,9 +365,18 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 
 			return nil, err
 		}
+		// The file is present in the inbox, so it is also "uploaded". This is committed together
+		// with the registration so a message that is requeued after the commit is retried like
+		// any pre-registered file, instead of being rejected as "registered" (a state s3inbox
+		// uses for uploads still in progress).
+		if err := tx.UpdateFileEventLog(ctx, fileID, "uploaded", "ingest", "{}", string(message.Body)); err != nil {
+			slog.Error("failed to update file event log", "error", err, "file-id", fileID)
+
+			return nil, err
+		}
 		// File is now registered; fall through to read + decrypt + archive in a single pass, the same
 		// way a pre-registered "uploaded" file is handled. Returning here would leave a non-s3inbox
-		// upload stuck at "registered", so verify never runs.
+		// upload stuck at "uploaded", so verify never runs.
 		if err := tx.Commit(); err != nil {
 			slog.Error("failed to commit transaction for register file action", "error", err, "file-id", fileID)
 			// requeue message as db error is not expected and should succeed on retries
