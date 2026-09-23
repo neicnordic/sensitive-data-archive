@@ -154,6 +154,23 @@ validated locally against the configured keys, so the service never asks the
 issuer whether a token is still good, and the userinfo lookup behind an opaque
 token has a cache of its own (`visa.cache.userinfo-ttl`).
 
+A grant made after the entry was written is hidden for as long as the entry
+lives. When a REMS approval adds a visa to a user's passport, a user with a
+cached entry keeps getting the old dataset list and the new visa is not fetched
+until the entry expires, which with the default `visa.cache.token-ttl` of
+`3600` is up to an hour. The entry cannot outlive the token, and a stale entry
+never lists more than the user had at login, so nobody gets access they should
+not have. The user just does not see the new dataset yet.
+
+The support answer to "I was granted access but the dataset is not listed" is
+to log in again. The new token misses the token cache and the visas are fetched
+again. This assumes the client stops sending the old `sda_session` cookie: the
+middleware checks the cookie before the bearer token, so a browser that keeps
+it stays on the old list until the cookie's `Max-Age` runs out. A client that
+offers "log in again" should clear the cookie at the same time. Operators who
+want a shorter window can lower `visa.cache.token-ttl`; the visa validation and
+userinfo caches already default to 120 s and 60 s.
+
 `swagger_v2.yml` lists `bearerAuth` as its only security scheme because of the
 per-replica scope. The server does authenticate a request carrying nothing but
 the cookie, so the cookie is a session credential in its own right. It is one no
