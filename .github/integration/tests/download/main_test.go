@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -13,7 +14,9 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,10 +30,38 @@ import (
 // The seeded file: database_seed creates seedFileID from the real Crypt4GH
 // file that scripts/make_download_v2_testfile.sh writes to /shared.
 const (
-	seedFileID     = "EGAF00000000001"
-	seedBodyFile   = "/shared/testfile.body"   // header-stripped archive object
-	seedSHA256File = "/shared/testfile.sha256" // hex SHA-256 of the plaintext
+	seedDatasetID     = "EGAD00000000001"
+	seedFileID        = "EGAF00000000001"
+	seedPlaintextFile = "/shared/testfile"
+	seedBodyFile      = "/shared/testfile.body"   // header-stripped archive object
+	seedSHA256File    = "/shared/testfile.sha256" // hex SHA-256 of the plaintext
 )
+
+// Further files in seedDatasetID, all backed by the same archive object
+// (see scripts/seed_download_v2_db.sh).
+const (
+	unicodeFileID        = "EGAF00000000002"
+	unicodeFilePath      = `special/it's a "quoted" fïle.c4gh`
+	quotedFileID         = "EGAF00000000003"
+	quotedFilePath       = `special/with space "and quote".c4gh`
+	multiChecksumFileID  = "EGAF00000000004" // SHA256 and MD5 UNENCRYPTED checksums
+	renamedFileID        = "EGAF00000000005"
+	renamedSubmittedPath = "special/0-submitted-name.c4gh"
+	renamedDownloadPath  = "special/zz-download-name.c4gh" // file_dataset.download_path
+	tiedPathFileID       = "EGAF00000000006"               // same effective path as multiChecksumFileID
+)
+
+// datasetFile is a file entry from GET /datasets/:datasetId/files.
+type datasetFile struct {
+	FileID    string         `json:"fileId"`
+	FilePath  string         `json:"filePath"`
+	Checksums []fileChecksum `json:"checksums"`
+}
+
+type fileChecksum struct {
+	Type     string `json:"type"`
+	Checksum string `json:"checksum"`
+}
 
 // TestSuite defines the download service integration test suite
 type TestSuite struct {
@@ -843,6 +874,211 @@ func (ts *TestSuite) Test33_LongTransferResume() {
 	ts.Equal(fmt.Sprintf("bytes %d-%d/%d", resumeFrom, len(archiveBody)-1, len(archiveBody)),
 		resp.Header.Get("Content-Range"))
 	ts.True(bytes.Equal(archiveBody[resumeFrom:], body), "resumed body should continue from the Range offset")
+}
+
+// Test34_PaginationTraversal follows nextPageToken across all pages and checks
+// that the pages list every file exactly once, in the unpaginated order
+func (ts *TestSuite) Test34_PaginationTraversal() {
+	for _, tc := range []struct {
+		filter url.Values
+		files  []string
+	}{
+		{url.Values{}, []string{seedFileID, unicodeFileID, quotedFileID, multiChecksumFileID, renamedFileID, tiedPathFileID}},
+		{url.Values{"pathPrefix": {"special/"}}, []string{unicodeFileID, quotedFileID, renamedFileID}},
+	} {
+		all := ts.listFilePages(tc.filter)
+		ts.Require().Len(all, 1, "default page size should fit the whole listing (%v)", tc.filter)
+		want := fileIDs(all[0])
+		ts.Require().ElementsMatch(tc.files, want, "unpaginated listing should hold each seeded file once (%v)", tc.filter)
+
+		for _, pageSize := range []int{1, 2} {
+			paged := url.Values{"pageSize": {strconv.Itoa(pageSize)}}
+			for k, v := range tc.filter {
+				paged[k] = v
+			}
+
+			pages := ts.listFilePages(paged)
+			ts.Len(pages, (len(want)+pageSize-1)/pageSize, "page count for %v", paged)
+
+			var got []string
+			for _, page := range pages {
+				ts.NotEmpty(page, "no page should be empty (%v)", paged)
+				ts.LessOrEqual(len(page), pageSize, "page should respect pageSize (%v)", paged)
+				got = append(got, fileIDs(page)...)
+			}
+			ts.Equal(want, got, "pages should continue without gaps or overlap (%v)", paged)
+		}
+	}
+}
+
+// Test35_MultiChecksumPagination tests that a file with more than one
+// UNENCRYPTED checksum is listed once, carrying all its checksums
+func (ts *TestSuite) Test35_MultiChecksumPagination() {
+	plaintext, err := os.ReadFile(seedPlaintextFile)
+	ts.Require().NoError(err)
+	wantMD5 := fmt.Sprintf("%x", md5.Sum(plaintext))
+
+	for _, pageSize := range []string{"1", "100"} {
+		var listed []datasetFile
+		for _, page := range ts.listFilePages(url.Values{"pageSize": {pageSize}}) {
+			for _, f := range page {
+				if f.FileID == multiChecksumFileID {
+					listed = append(listed, f)
+				}
+			}
+		}
+		ts.Require().Len(listed, 1, "file with two checksums should be listed once (pageSize=%s)", pageSize)
+
+		ts.ElementsMatch([]fileChecksum{{"sha256", ts.seedPlaintextSHA256()}, {"md5", wantMD5}}, listed[0].Checksums,
+			"listing should carry exactly the UNENCRYPTED checksums (pageSize=%s)", pageSize)
+	}
+}
+
+// Test36_ContentDispositionEscaping tests Content-Disposition for filenames
+// with spaces, quotes and non-ASCII characters
+func (ts *TestSuite) Test36_ContentDispositionEscaping() {
+	for _, tc := range []struct {
+		fileID   string
+		filename string
+	}{
+		{unicodeFileID, `it's a "quoted" fïle.c4gh`},
+		{quotedFileID, `with space "and quote".c4gh`},
+	} {
+		resp, _, err := ts.doRequest("GET", "/files/"+tc.fileID, nil, ts.reencryptHeaders())
+		ts.Require().NoError(err)
+		ts.Require().Equal(http.StatusOK, resp.StatusCode, "download of %s should return 200", tc.fileID)
+
+		cd := resp.Header.Get("Content-Disposition")
+		ts.Regexp(`^[\x20-\x7e]+$`, cd, "Content-Disposition should be escaped to printable ASCII")
+		disposition, params, err := mime.ParseMediaType(cd)
+		ts.Require().NoError(err, "Content-Disposition %q should parse", cd)
+		ts.Equal("attachment", disposition)
+		ts.Equal(tc.filename, params["filename"], "Content-Disposition %q should round-trip the filename", cd)
+	}
+}
+
+// Test37_SpecialCharacterPathFilters tests filePath and pathPrefix filtering
+// on paths with spaces, quotes and non-ASCII characters
+func (ts *TestSuite) Test37_SpecialCharacterPathFilters() {
+	for _, tc := range []struct {
+		filter url.Values
+		fileID string
+		path   string
+	}{
+		{url.Values{"filePath": {unicodeFilePath}}, unicodeFileID, unicodeFilePath},
+		{url.Values{"pathPrefix": {`special/it's a "quoted" fï`}}, unicodeFileID, unicodeFilePath},
+		{url.Values{"filePath": {quotedFilePath}}, quotedFileID, quotedFilePath},
+		{url.Values{"pathPrefix": {`special/with space "and`}}, quotedFileID, quotedFilePath},
+	} {
+		pages := ts.listFilePages(tc.filter)
+		ts.Require().Len(pages, 1)
+		ts.Require().Len(pages[0], 1, "%v should match exactly one file", tc.filter)
+		ts.Equal(tc.fileID, pages[0][0].FileID, "%v should match %s", tc.filter, tc.fileID)
+		ts.Equal(tc.path, pages[0][0].FilePath)
+	}
+}
+
+// Test38_DownloadPathOverride tests that file_dataset.download_path replaces
+// the submitted path in listings, filters and Content-Disposition
+func (ts *TestSuite) Test38_DownloadPathOverride() {
+	for _, filter := range []url.Values{
+		{"filePath": {renamedDownloadPath}},
+		{"pathPrefix": {"special/zz-"}},
+	} {
+		pages := ts.listFilePages(filter)
+		ts.Require().Len(pages, 1)
+		ts.Require().Len(pages[0], 1, "%v should match the download path", filter)
+		ts.Equal(renamedFileID, pages[0][0].FileID)
+		ts.Equal(renamedDownloadPath, pages[0][0].FilePath)
+	}
+
+	for _, filter := range []url.Values{
+		{"filePath": {renamedSubmittedPath}},
+		{"pathPrefix": {"special/0-"}},
+	} {
+		pages := ts.listFilePages(filter)
+		ts.Require().Len(pages, 1)
+		ts.Empty(pages[0], "%v should not match the overridden submitted path", filter)
+	}
+
+	resp, _, err := ts.doRequest("HEAD", "/files/"+renamedFileID, nil, ts.reencryptHeaders())
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode)
+	_, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	ts.Require().NoError(err)
+	ts.Equal("zz-download-name.c4gh", params["filename"])
+}
+
+// Test39_DrsObjectChecksums tests that the DRS object for the seeded file
+// carries the ARCHIVED checksum of the archive body and points at /content
+func (ts *TestSuite) Test39_DrsObjectChecksums() {
+	resp, body, err := ts.doRequest("GET", "/objects/"+seedDatasetID+"/test-file.c4gh", nil, ts.authHeaders())
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "DRS object should return 200")
+
+	var obj struct {
+		ID            string         `json:"id"`
+		Size          int64          `json:"size"`
+		Checksums     []fileChecksum `json:"checksums"`
+		AccessMethods []struct {
+			AccessURL struct {
+				URL string `json:"url"`
+			} `json:"access_url"`
+		} `json:"access_methods"`
+	}
+	ts.Require().NoError(json.Unmarshal(body, &obj), "DRS object should be valid JSON")
+
+	archiveBody := ts.seedArchiveBody()
+	ts.Equal(seedFileID, obj.ID)
+	ts.Equal(int64(len(archiveBody)), obj.Size, "DRS size should be the archived body size")
+	ts.Equal([]fileChecksum{{"sha-256", fmt.Sprintf("%x", sha256.Sum256(archiveBody))}}, obj.Checksums,
+		"DRS checksums should be the ARCHIVED checksum of the body")
+	ts.Require().Len(obj.AccessMethods, 1)
+	ts.True(strings.HasSuffix(obj.AccessMethods[0].AccessURL.URL, "/files/"+seedFileID+"/content"),
+		"DRS access URL %q should point at the content endpoint", obj.AccessMethods[0].AccessURL.URL)
+}
+
+// listFilePages lists seedDatasetID's files with the given query parameters,
+// following nextPageToken until the last page, and returns every page.
+func (ts *TestSuite) listFilePages(query url.Values) [][]datasetFile {
+	params := url.Values{}
+	for k, v := range query {
+		params[k] = v
+	}
+
+	var pages [][]datasetFile
+	for range 20 {
+		path := "/datasets/" + seedDatasetID + "/files?" + params.Encode()
+		resp, body, err := ts.doRequest("GET", path, nil, ts.authHeaders())
+		ts.Require().NoError(err)
+		ts.Require().Equal(http.StatusOK, resp.StatusCode, "GET %s should return 200", path)
+
+		var page struct {
+			Files         []datasetFile `json:"files"`
+			NextPageToken *string       `json:"nextPageToken"`
+		}
+		ts.Require().NoError(json.Unmarshal(body, &page), "GET %s should return valid JSON", path)
+		pages = append(pages, page.Files)
+
+		if page.NextPageToken == nil {
+			return pages
+		}
+		params.Set("pageToken", *page.NextPageToken)
+	}
+
+	ts.FailNow("pagination did not reach a last page", "query %v", query)
+
+	return nil
+}
+
+// fileIDs returns the file IDs of a listing page in order.
+func fileIDs(files []datasetFile) []string {
+	ids := make([]string, 0, len(files))
+	for _, f := range files {
+		ids = append(ids, f.FileID)
+	}
+
+	return ids
 }
 
 // generateRecipientKey creates a Crypt4GH key pair and returns the public key
