@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
@@ -36,6 +37,9 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
 )
+
+// cleanupTimeout bounds the removal of a freshly written archive object after a failed ingest.
+const cleanupTimeout = 30 * time.Second
 
 type Ingest struct {
 	ArchiveWriter      storage.Writer
@@ -315,7 +319,11 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	}
 
 	switch status {
-	case "uploaded", "disabled":
+	// "registered" is accepted so a requeued message for a file that was registered by ingest
+	// itself (the "" case below commits the registration before streaming) can be retried.
+	// The ingest trigger is the contract that the upload is complete: the api only sends it
+	// for files in state "uploaded", so an s3inbox upload still in progress is not expected here.
+	case "uploaded", "disabled", "registered":
 
 	case "removed":
 		reason := "file is removed, cannot ingest"
@@ -366,7 +374,7 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		// upload stuck at "registered", so verify never runs.
 		if err := tx.Commit(); err != nil {
 			slog.Error("failed to commit transaction for register file action", "error", err, "file-id", fileID)
-			// requeue message as broker error is not expected and should succeed on retries
+			// requeue message as db error is not expected and should succeed on retries
 			return nil, err
 		}
 
@@ -426,17 +434,22 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, err
 	}
 
-	// From here until the commit succeeds the archive holds an object without a database
+	// From here until the commit is attempted the archive holds an object without a database
 	// record. Remove it before the message is requeued, otherwise a retry that lands in
-	// another bucket (storage/v2 rotation) leaves an orphan behind. The cleanup runs on a
-	// context that survives shutdown so a cancelled handler still removes the object.
-	committed := false
+	// another bucket (storage/v2 rotation) leaves an orphan behind. Once Commit has been
+	// called the outcome is unknown (Postgres may have committed even if the reply was lost),
+	// so the object is kept: an orphan is recoverable, a dangling database record is not.
+	// The cleanup runs on a context that survives shutdown, bounded so a hung storage
+	// endpoint can not block the handler from returning.
+	commitAttempted := false
 	defer func() {
-		if committed {
+		if commitAttempted {
 			return
 		}
-		if err := app.ArchiveWriter.RemoveFile(context.WithoutCancel(ctx), location, fileID); err != nil {
-			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		if err := app.ArchiveWriter.RemoveFile(cleanupCtx, location, fileID); err != nil {
+			slog.Error("failed to remove file from archive during rollback", "error", err, "file-id", fileID, "location", location)
 		}
 	}()
 
@@ -487,12 +500,12 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 		return nil, err
 	}
 
+	commitAttempted = true
 	if err := tx.Commit(); err != nil {
 		slog.Error("failed to commit transaction for ingest action", "error", err, "file-id", fileID)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
-	committed = true
 
 	// We need to send message after the commit, since there is a race condition where verify would consume and start processing the message before the commit is actioned.
 	// If notifyArchived fails we can not requeue the message as the db transaction has already been commited. Failure here would require manual intervertion.

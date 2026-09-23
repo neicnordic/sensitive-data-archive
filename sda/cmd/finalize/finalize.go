@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	appconf "github.com/neicnordic/sensitive-data-archive/cmd/finalize/config"
 	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
@@ -27,6 +28,12 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+// cleanupTimeout bounds the removal of a freshly written backup object after a failed backup.
+const cleanupTimeout = 30 * time.Second
+
+// errFileCancelled is returned by backupFile when the file was cancelled while it was being copied.
+var errFileCancelled = errors.New("file was cancelled during backup")
 
 type Finalize struct {
 	archiveReader storage.Reader
@@ -243,28 +250,33 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 	_ = contentReader.Close()
 
-	// From here until the commit succeeds the backup holds an object without a database
+	// From here until the commit is attempted the backup holds an object without a database
 	// record. Remove it before the message is requeued so a retry does not leave an orphan
-	// behind. The cleanup runs on a context that survives shutdown.
-	committed := false
+	// behind. Once Commit has been called the outcome is unknown (Postgres may have committed
+	// even if the reply was lost), so the object is kept: an orphan is recoverable, a dangling
+	// database record is not. The cleanup runs on a context that survives shutdown, bounded
+	// so a hung storage endpoint can not block the handler from returning.
+	commitAttempted := false
 	defer func() {
-		if committed {
+		if commitAttempted {
 			return
 		}
-		if err := app.backupWriter.RemoveFile(context.WithoutCancel(ctx), backupLocation, archiveData.FilePath); err != nil {
-			log.Errorf("failed to remove file from backup during rollback, file-id: %s, reason: %v", message.Key, err)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		if err := app.backupWriter.RemoveFile(cleanupCtx, backupLocation, archiveData.FilePath); err != nil {
+			log.Errorf("failed to remove file from backup during rollback, file-id: %s, location: %s, reason: %v", message.Key, backupLocation, err)
 		}
 	}()
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		log.Errorf("failed to begin transaction, reason: %v", err)
+		log.Errorf("failed to begin transaction, file-id: %s, reason: %v", message.Key, err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback transaction, reason: %v", err)
+			log.Errorf("failed to rollback transaction, file-id: %s, reason: %v", message.Key, err)
 		}
 	}()
 
@@ -273,14 +285,25 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 		return nil, fmt.Errorf("SetBackedUp failed, reason: (%w)", err)
 	}
 
+	// SetBackedUp holds the row lock on the file, so a cancel that landed while the backup was
+	// copied is visible here and one that arrives later waits until this transaction is done.
+	// The file must not be marked as backed up, and the copy is removed by the deferred cleanup.
+	status, err := tx.GetFileStatus(ctx, message.Key)
+	if err != nil {
+		return nil, fmt.Errorf("GetFileStatus failed, reason: (%w)", err)
+	}
+	if status == "disabled" || status == "removed" {
+		return nil, errFileCancelled
+	}
+
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "backed up", "finalize", "{}", string(message.Body)); err != nil {
 		return nil, fmt.Errorf("UpdateFileEventLog failed, reason: (%w)", err)
 	}
 
+	commitAttempted = true
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	committed = true
 
 	log.Debugf("Backup of file: %s complete", message.Key)
 
@@ -302,15 +325,21 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 	}
 
 	if app.archiveReader != nil && app.backupWriter != nil {
-		// We do not need to remove backup file from storage incase it suceeds and setting accession failes,
-		// as currently all accession setting failures are retried and those would just write the same file again
-		if callbacks, err := app.backupFile(ctx, message); err != nil {
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+		// The backup is committed in its own transaction. If setting the accession fails
+		// afterwards the message is requeued, and the retry skips the copy because the
+		// backup location is already recorded.
+		callbacks, err := app.backupFile(ctx, message)
+		switch {
+		case errors.Is(err, errFileCancelled):
+			log.Warnf("file with file-id: %s was cancelled during backup, aborting work", message.Key)
 
-			if callbacks != nil {
-				// Send the message to an error queue  but don't requeue it
-				return callbacks, nil
-			}
+			return nil, nil
+		case err != nil && callbacks != nil:
+			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+			// Send the message to an error queue but don't requeue it
+			return callbacks, nil
+		case err != nil:
+			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
 
 			return nil, err
 		}
@@ -328,15 +357,29 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		}
 	}()
 
-	switch accessionIDExists {
-	case "same":
+	if accessionIDExists == "same" {
 		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
-	default:
-		if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
-			log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
+	}
 
-			return nil, err
-		}
+	// SetAccessionID is always run, also when the accession ID is already set, because the
+	// update holds the row lock on the file for the rest of the transaction. The status read
+	// below then can not be overtaken by a cancel that commits between the backup and here.
+	if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
+		log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
+
+		return nil, err
+	}
+
+	status, err := tx.GetFileStatus(ctx, message.Key)
+	if err != nil {
+		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
+
+		return nil, err
+	}
+	if status == "disabled" || status == "removed" {
+		log.Warnf("file with file-id: %s was cancelled before it could be marked as ready, aborting work", message.Key)
+
+		return nil, nil
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "ready", "finalize", "{}", string(message.Body)); err != nil {
