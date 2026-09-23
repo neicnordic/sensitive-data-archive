@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - ingest, finalize: Large files no longer exceed `idle_in_transaction_session_timeout` and loop re-streaming; no storage I/O happens while a database transaction is open
-  - ingest: register a file that is not known in the db (but present in the inbox) in its own transaction before streaming, and accept the "registered" status on retry
+  - ingest: register a file that is not known in the db (but present in the inbox) as "uploaded" in its own transaction before streaming, so a requeued message is retried
   - ingest: read the archived file size and write the "submitted" file event after the archive write
   - finalize: commit the backup in its own transaction before setting the accession ID
   - finalize: re-check the file status under the row lock so a cancel during the backup copy is not overwritten by "backed up" or "ready"
