@@ -77,7 +77,9 @@ services:
       - "/bin/sh"
       - "-c"
       - |
+        set -e
         sh /scripts/make_download_credentials.sh
+        sh /scripts/make_download_v2_testfile.sh
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +90,7 @@ services:
       - ./scripts:/scripts
       - shared:/shared
 
-  # Upload a test object to the archive bucket
+  # Upload the header-stripped body of the real test file to the archive bucket
   s3_seed:
     extends:
       file: ceph-rgw.yml
@@ -103,10 +105,13 @@ services:
       - "/bin/sh"
       - "-c"
       - |
-        head -c 1000 /dev/urandom | python3 /scripts/s3.py PUT http://s3:9000/archive/test-file.c4gh -
+        set -e
+        python3 /scripts/s3.py PUT http://s3:9000/archive/test-file.c4gh /shared/testfile.body
         echo 'Ceph RGW seeded with archive/test-file.c4gh'
     healthcheck:
       disable: true
+    volumes:
+      - shared:/shared
 
   # Seed database with test data (files and datasets)
   database_seed:
@@ -127,40 +132,10 @@ services:
       - "/bin/sh"
       - "-c"
       - |
-        # Wait for postgres to be ready
-        pg_isready -h postgres -p 5432 -U postgres
-
-        # Insert test file
-        psql -c "INSERT INTO sda.files (
-          id, stable_id, submission_user, submission_file_path, 
-          archive_file_path, archive_location, archive_file_size, decrypted_file_size,
-          header, encryption_method
-        ) VALUES (
-          'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-          'EGAF00000000001',
-          'integration_test@example.org',
-          'test-file.c4gh',
-          'test-file.c4gh',
-          's3:9000/archive',
-          1000,
-          500,
-          '63727970743467680100000000000000',
-          'CRYPT4GH'
-        ) ON CONFLICT DO NOTHING;"
-
-        # Insert test dataset (id is SERIAL, so let postgres generate it)
-        psql -c "INSERT INTO sda.datasets (stable_id, title) 
-          VALUES ('EGAD00000000001', 'Test Dataset')
-          ON CONFLICT DO NOTHING;"
-
-        # Get the dataset id and link file to dataset
-        psql -c "INSERT INTO sda.file_dataset (file_id, dataset_id)
-          SELECT 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'::uuid, d.id 
-          FROM sda.datasets d 
-          WHERE d.stable_id = 'EGAD00000000001'
-          ON CONFLICT DO NOTHING;"
-
-        echo 'Database seeded with test data';
+        sh /scripts/seed_download_v2_db.sh
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
 
   # Mock OIDC server for opaque token auth and visa validation
   mockauth:
@@ -241,7 +216,6 @@ services:
     environment:
       - DOWNLOAD_URL=http://download:8080
       - JWT_KEY_FILE=/shared/keys/jwt.key
-      - C4GH_PUBKEY_FILE=/shared/c4gh.pub.pem
     extra_hosts:
       - "localhost:host-gateway"
     image: golang:1.25-alpine
