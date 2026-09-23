@@ -15,8 +15,10 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	log "github.com/sirupsen/logrus"
@@ -74,7 +76,9 @@ func TestMain(m *testing.M) {
 	}
 	req.SetBasicAuth("guest", "guest")
 
-	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet.
+	// The management API answers before the AMQP listener does, so open an AMQP connection as well.
+	amqpURL := "amqp://guest:guest@" + rabbitmq.GetHostPort("5672/tcp") + "/"
 	if err := pool.Retry(func() error {
 		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
@@ -82,7 +86,12 @@ func TestMain(m *testing.M) {
 		}
 		_ = res.Body.Close()
 
-		return nil
+		conn, err := amqp.Dial(amqpURL)
+		if err != nil {
+			return err
+		}
+
+		return conn.Close()
 	}); err != nil {
 		if err := pool.Purge(rabbitmq); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
@@ -143,7 +152,7 @@ func (s *SyncAPITest) TestShutdown() {
 	assert.NoError(s.T(), err)
 
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(s.T(), err)
+	require.NoError(s.T(), err)
 	assert.Equal(s.T(), "127.0.0.1", Conf.API.MQ.Conf.Host)
 
 	// make sure all conections are alive
@@ -161,7 +170,7 @@ func (s *SyncAPITest) TestReadinessResponse() {
 	assert.NoError(s.T(), err)
 
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(s.T(), err)
+	require.NoError(s.T(), err)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/ready", readinessResponse)
@@ -206,7 +215,7 @@ func (s *SyncAPITest) TestDatasetRoute() {
 	assert.NoError(s.T(), err)
 
 	Conf.API.MQ, err = broker.NewMQ(Conf.Broker)
-	assert.NoError(s.T(), err)
+	require.NoError(s.T(), err)
 
 	Conf.Broker.SchemasPath = "../../schemas/isolated/"
 
