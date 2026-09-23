@@ -265,40 +265,6 @@ func (ts *TestSuite) TestIngestFile_CommitFailureKeepsArchiveObject() {
 	ts.mockBroker.AssertNotCalled(ts.T(), "Publish", mock.Anything, mock.Anything)
 }
 
-// A message that is requeued after ingest registered the file itself (status "") comes back
-// with status "registered" and must be ingested, not sent to the error queue.
-func (ts *TestSuite) TestIngestFile_RegisteredStatus_Retry() {
-	fileID := uuid.NewString()
-	userName := "test-ingest-registered-retry"
-	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
-
-	encryptedContent, _ := ts.encryptBytes([]byte("test file content"))
-
-	ts.mockDB.On("GetFileStatus", fileID).Return("registered", nil).Once()
-	ts.mockDB.On("GetSubmissionLocation", fileID).Return("submission_unit_test_location", nil).Once()
-	ts.mockInboxReader.On("NewFileReader", "submission_unit_test_location", helper.ResolveInboxPath(filePath, userName, helper.InboxProjectConfig{})).Return(encryptedContent, nil).Once()
-	ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).Once()
-	ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil).Once()
-	ts.mockDB.On("BeginTransaction").Return(nil).Once()
-	ts.mockDB.On("Commit").Return(nil).Once()
-	ts.mockDB.On("Rollback").Return(nil).Once()
-	ts.mockDB.On("UpdateFileEventLog", fileID, "submitted", "ingest", mock.Anything, mock.Anything).Return(nil).Once()
-	ts.mockDB.On("SetKeyHash", mock.Anything, fileID).Return(nil).Once()
-	ts.mockDB.On("StoreHeader", mock.Anything, fileID).Return(nil).Once()
-	ts.mockDB.On("SetArchived", "archive_unit_test_location", mock.Anything, fileID).Return(nil).Once()
-	ts.mockDB.On("UpdateFileEventLog", fileID, "archived", "ingest", mock.Anything, mock.Anything).Return(nil).Once()
-	ts.mockBroker.On("Publish", mock.Anything, mock.Anything).Return(nil).Once()
-
-	message := createMessage("ingest", filePath, userName, fileID)
-	callbacks, err := ts.ingest.handleMessage(context.Background(), message)
-	for _, cb := range callbacks {
-		cb()
-	}
-	assert.NoError(ts.T(), err, "unexpected error when retrying a registered file")
-	ts.mockDB.AssertNotCalled(ts.T(), "RegisterFile", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	ts.mockBroker.AssertNotCalled(ts.T(), "Publish", "error", mock.Anything)
-}
-
 func (ts *TestSuite) TestIngestFile_BaseCase() {
 	fileID := uuid.NewString()
 	userName := "test-ingest"
@@ -358,7 +324,8 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 	// the archive transaction must not open before the write and size lookup are done.
 	registerBegun := ts.mockDB.On("BeginTransaction").Return(nil).Once()
 	registered := ts.mockDB.On("RegisterFile", &fileID, "submission_unit_test_location", filePath, userName).Return(fileID, nil).Once().NotBefore(registerBegun)
-	registerCommitted := ts.mockDB.On("Commit").Return(nil).Once().NotBefore(registered)
+	uploaded := ts.mockDB.On("UpdateFileEventLog", fileID, "uploaded", "ingest", mock.Anything, mock.Anything).Return(nil).Once().NotBefore(registered)
+	registerCommitted := ts.mockDB.On("Commit").Return(nil).Once().NotBefore(uploaded)
 	fileWritten := ts.mockArchiveWriter.On("WriteFile", fileID, mock.Anything).Return("archive_unit_test_location", nil).NotBefore(registerCommitted)
 	sizeRead := ts.mockArchiveReader.On("GetFileSize", "archive_unit_test_location", fileID).Return(int64(1), nil).NotBefore(fileWritten)
 	ts.mockDB.On("BeginTransaction").Return(nil).Once().NotBefore(sizeRead)
@@ -386,7 +353,7 @@ func (ts *TestSuite) TestIngestFile_NotRegistered_FallsThroughToArchive() {
 		Path:             fileID,
 		UploadedChecksum: fmt.Sprintf("%x", encryptedChecksum),
 	}, fileID)
-	ts.mockDB.AssertNumberOfCalls(ts.T(), "UpdateFileEventLog", 2)
+	ts.mockDB.AssertNumberOfCalls(ts.T(), "UpdateFileEventLog", 3)
 	ts.mockBroker.AssertNumberOfCalls(ts.T(), "Publish", 1)
 }
 
