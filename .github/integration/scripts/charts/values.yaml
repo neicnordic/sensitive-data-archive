@@ -45,7 +45,7 @@ global:
     url: PLACEHOLDER_VALUE
     port: 9000
     bucket: "inbox"
-    readyPath: "/minio/health/ready"
+    readyPath: ""
   auth:
     jwtSecret: jwk
     jwtAlg: ES256

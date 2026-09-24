@@ -3,7 +3,7 @@
 helm -n cert-manager uninstall cert-manager
 kubectl delete ns cert-manager || true
 
-helm -n minio uninstall minio
+kubectl -n minio delete deployment,service minio --ignore-not-found
 kubectl delete ns minio || true
 
 kubectl delete secrets c4gh jwk || true
