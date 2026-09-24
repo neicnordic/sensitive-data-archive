@@ -37,50 +37,25 @@ services:
       - PGPASSWORD=rootpassword
 
   s3:
-    command: server /data
+    extends:
+      file: ../../.github/integration/ceph-rgw.yml
+      service: ceph
     container_name: s3
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretkey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 20s
-      retries: 3
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+      - S3_SECRET_KEY=secretkey
+      - S3_BUCKETS=archive
     ports:
       - "9000:9000"
 
   s3-2nd:
-    command: server /data
+    extends:
+      file: ../../.github/integration/ceph-rgw.yml
+      service: ceph
     container_name: s3-2nd
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretkey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fq", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 20s
-      retries: 3
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+      - S3_SECRET_KEY=secretkey
     ports:
       - "9001:9000"
-
-  createbucket:
-    container_name: buckets
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
-    depends_on:
-      s3:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set add s3 http://s3:9000 access secretkey;
-      /usr/bin/mc mb s3/archive;
-      exit 0;
-      "
-    restart: on-failure
 
   download:
     command: sda-download
