@@ -21,6 +21,7 @@ import (
 	syncconf "github.com/neicnordic/sensitive-data-archive/cmd/sync/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -41,6 +42,21 @@ type sync struct {
 	schemaPath                            string
 	syncDatasetWithPrefix                 string
 	remoteURL, remoteUser, remotePassword string
+}
+
+// reEncryptHeader wraps headers.ReEncryptHeader and turns a panic from the
+// crypt4gh header parser into an error. A packet that decrypts with the archive
+// key but has an unknown packet type makes the parser panic on crypt4gh
+// v1.15.0; recovering keeps a single bad header from crashing sync.
+func reEncryptHeader(oldHeader []byte, privateKey [chacha20poly1305.KeySize]byte, publicKeyList [][chacha20poly1305.KeySize]byte) (newHeader []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			newHeader = nil
+			err = fmt.Errorf("panic while reencrypting crypt4gh header: %v", r)
+		}
+	}()
+
+	return headers.ReEncryptHeader(oldHeader, privateKey, publicKeyList)
 }
 
 func main() {
@@ -256,8 +272,11 @@ func (app *sync) syncFile(ctx context.Context, accessionID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get header from db, reason: %w", err)
 	}
+	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
+		return fmt.Errorf("invalid crypt4gh header, reason: %w", err)
+	}
 
-	newHeader, err := headers.ReEncryptHeader(header, *app.archiveC4ghPrivateKey, [][chacha20poly1305.KeySize]byte{*app.syncC4ghPubKey})
+	newHeader, err := reEncryptHeader(header, *app.archiveC4ghPrivateKey, [][chacha20poly1305.KeySize]byte{*app.syncC4ghPubKey})
 	if err != nil {
 		return fmt.Errorf("failed to reencrypt header, reason: %w", err)
 	}
