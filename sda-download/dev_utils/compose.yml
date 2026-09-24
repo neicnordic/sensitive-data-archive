@@ -67,60 +67,35 @@ services:
       - certs:/var/lib/postgresql/tls/
 
   s3:
-    command: server /data  --console-address ":9001"
+    extends:
+      file: ../../.github/integration/ceph-rgw.yml
+      service: ceph
     container_name: s3
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretkey
-      - MINIO_SERVER_URL=https://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 20s
-      retries: 3
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+      - S3_SECRET_KEY=secretkey
+      - S3_BUCKETS=archive
+      - RGW_TLS_CERT=/certs/s3.pem
+      - RGW_TLS_KEY=/certs/s3-key.pem
     ports:
       - "9000:9000"
     volumes:
-      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
-      - ./certs/s3.pem:/root/.minio/certs/public.crt
-      - ./certs/s3-key.pem:/root/.minio/certs/private.key
+      - ./certs/s3.pem:/certs/s3.pem
+      - ./certs/s3-key.pem:/certs/s3-key.pem
 
   s3-2nd:
-    command: server /data  --console-address ":9001"
+    extends:
+      file: ../../.github/integration/ceph-rgw.yml
+      service: ceph
     container_name: s3-2nd
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretkey
-      - MINIO_SERVER_URL=https://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "https://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 20s
-      retries: 3
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+      - S3_SECRET_KEY=secretkey
+      - RGW_TLS_CERT=/certs/s3.pem
+      - RGW_TLS_KEY=/certs/s3-key.pem
     ports:
       - "9001:9000"
     volumes:
-      - ./certs/ca.pem:/root/.minio/certs/CAs/public.crt
-      - ./certs/s3.pem:/root/.minio/certs/public.crt
-      - ./certs/s3-key.pem:/root/.minio/certs/private.key
-
-  createbucket:
-    container_name: buckets
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
-    depends_on:
-      s3:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set s3 https://s3:9000 access secretkey;
-      /usr/bin/mc mb s3/archive;
-      exit 0;
-      "
-    volumes:
-      - ./certs/ca.pem:/etc/ssl/certs/public.crt
-    restart: on-failure
+      - ./certs/s3.pem:/certs/s3.pem
+      - ./certs/s3-key.pem:/certs/s3-key.pem
 
   download:
     command: sda-download
