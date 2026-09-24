@@ -61,7 +61,6 @@ SELF=$(dirname "$0")
 kubectl create configmap oidc --from-file="$SELF/../../sda/oidc.py"
 
 helm repo add jetstack https://charts.jetstack.io
-helm repo add minio https://charts.min.io/
 helm repo add nfs-ganesha-server-and-external-provisioner https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
 
 helm repo update
@@ -84,23 +83,62 @@ if [ "$1" == "local" ]; then
   cp .github/integration/scripts/charts/values.yaml /tmp/values.yaml
 fi
 
+## Single-container Ceph RGW as S3 backend, exposed as service minio.minio on port 9000.
+## The startup script is shared with the compose based integration tests.
+deploy_ceph_rgw() {
+    kubectl -n minio create configmap ceph-rgw \
+        --from-file=.github/integration/scripts/ceph-rgw.sh \
+        --from-file=.github/integration/scripts/s3.py
+    kubectl -n minio create secret generic ceph-rgw-credentials \
+        --from-literal=S3_ACCESS_KEY="$MINIO_ACCESS" \
+        --from-literal=S3_SECRET_KEY="$MINIO_SECRET"
+
+    local tls_env="" tls_mount="" tls_volume=""
+    if [ "$1" = true ]; then
+        tls_env='{"name": "RGW_TLS_CERT", "value": "/certs/tls.crt"}, {"name": "RGW_TLS_KEY", "value": "/certs/tls.key"}'
+        tls_mount='{"name": "certs", "mountPath": "/certs", "readOnly": true},'
+        tls_volume='{"name": "certs", "secret": {"secretName": "minio-cert"}},'
+    fi
+
+    kubectl -n minio apply -f - <<EOF
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {"name": "minio"},
+  "spec": {
+    "replicas": 1,
+    "selector": {"matchLabels": {"app": "minio"}},
+    "template": {
+      "metadata": {"labels": {"app": "minio"}},
+      "spec": {
+        "containers": [{
+          "name": "rgw",
+          "image": "quay.io/ceph/vstart-cluster:19.2.6",
+          "command": ["/scripts/ceph-rgw.sh"],
+          "env": [$tls_env],
+          "envFrom": [{"secretRef": {"name": "ceph-rgw-credentials"}}],
+          "ports": [{"containerPort": 9000}],
+          "readinessProbe": {"exec": {"command": ["/scripts/ceph-rgw.sh", "health"]}, "periodSeconds": 2},
+          "resources": {"requests": {"memory": "256Mi"}},
+          "volumeMounts": [$tls_mount {"name": "scripts", "mountPath": "/scripts"}]
+        }],
+        "volumes": [$tls_volume {"name": "scripts", "configMap": {"name": "ceph-rgw", "defaultMode": 493}}]
+      }
+    }
+  }
+}
+EOF
+    kubectl -n minio expose deployment minio --port=9000 --target-port=9000
+}
+
 if [ "$2" == "s3" ]; then
   if [ "$3" = true ] ; then
-    # Sleep to give cert issuer time to issue certs so we can create an secret with format minio expects
-    sleep 5
-
-    kubectl -n minio create secret generic minio-tls \
-      --from-file=public.crt=<(kubectl -n minio get secret minio-cert -o jsonpath='{.data.tls\.crt}' | base64 -d) \
-      --from-file=private.key=<(kubectl -n minio get secret minio-cert -o jsonpath='{.data.tls\.key}' | base64 -d)
-
     ## S3 storage backend
     MINIO_ACCESS="$(random-string)"
     export MINIO_ACCESS
     MINIO_SECRET="$(random-string)"
     export MINIO_SECRET
-    helm install minio minio/minio \
-            --namespace minio \
-            --set tls.enabled=true,tls.certSecret=minio-tls,rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+    deploy_ceph_rgw true
 
     yq -i '
 .global.archive.s3[0].endpoint = "https://minio.minio" |
@@ -116,9 +154,7 @@ if [ "$2" == "s3" ]; then
     export MINIO_ACCESS
     MINIO_SECRET="$(random-string)"
     export MINIO_SECRET
-    helm install minio minio/minio \
-            --namespace minio \
-            --set rootUser="$MINIO_ACCESS",rootPassword="$MINIO_SECRET",persistence.enabled=false,mode=standalone,resources.requests.memory=128Mi
+    deploy_ceph_rgw false
 
     yq -i '
 .global.archive.s3[0].endpoint = "http://minio.minio" |
