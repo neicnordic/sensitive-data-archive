@@ -674,7 +674,7 @@ func TestGetDatasetFilesPaginated_ByPath(t *testing.T) {
 		AddRow("file-1", "/exact/path.txt", int64(1024), int64(900), checksumJSON)
 
 	mock.ExpectQuery(queries[getDatasetFilesPageByPathQuery]).
-		WithArgs("dataset-1", "/exact/path.txt", 2).
+		WithArgs("dataset-1", "/exact/path.txt", "", 2).
 		WillReturnRows(rows)
 
 	files, err := db.GetDatasetFilesPaginated(context.Background(), "dataset-1", FileListOptions{
@@ -688,6 +688,32 @@ func TestGetDatasetFilesPaginated_ByPath(t *testing.T) {
 	require.Len(t, files[0].Checksums, 1)
 	assert.Equal(t, "sha256", files[0].Checksums[0].Type)
 	assert.Equal(t, "abc123", files[0].Checksums[0].Checksum)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDatasetFilesPaginated_ByPathWithCursor(t *testing.T) {
+	db, mock, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"stable_id", "submission_file_path", "archive_file_size", "decrypted_file_size", "checksums",
+	}).
+		AddRow("file-2", "/exact/path.txt", int64(1024), int64(900), nil)
+
+	mock.ExpectQuery(queries[getDatasetFilesPageByPathQuery]).
+		WithArgs("dataset-1", "/exact/path.txt", "file-1", 2).
+		WillReturnRows(rows)
+
+	files, err := db.GetDatasetFilesPaginated(context.Background(), "dataset-1", FileListOptions{
+		FilePath:   "/exact/path.txt",
+		CursorPath: "/exact/path.txt",
+		CursorID:   "file-1",
+		Limit:      2,
+	})
+
+	assert.NoError(t, err)
+	assert.Len(t, files, 1)
+	assert.Equal(t, "file-2", files[0].ID)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
