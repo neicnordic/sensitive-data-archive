@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,8 @@ func TestVerify(t *testing.T) {
 		reverifyCase,
 		reverifyFailedArchivedChecksumCase,
 		reverifyFailedDecryptedChecksumCase,
+		truncatedSegmentCase,
+		malformedHeaderCase,
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockReader, mockDatabase, mockBroker := tc.newMocks(t)
@@ -540,6 +543,111 @@ var reverifyFailedDecryptedChecksumCase = testCase{
 		mockDatabase.On("GetDecryptedChecksum", "112").Return("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nil).Once()
 
 		mockDatabase.On("UpdateFileEventLog", "112", "error", "verify", `{"error":"decrypted checksum don't match"}`, mock.Anything).Return(nil).Once()
+
+		return mockReader, mockDatabase, mockBroker
+	},
+	assertMocks: func(t *testing.T, mockReader *mocks.MockReader, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
+		mockReader.AssertExpectations(t)
+		mockDatabase.AssertExpectations(t)
+		mockBroker.AssertExpectations(t)
+	},
+	expectedError: nil,
+}
+
+// truncatedSegmentCase feeds verify an archive object whose body ends a few
+// bytes into a data segment. The crypt4gh reader panics on such input; verify
+// must recover, route the message to the error queue and not crash.
+var truncatedSegmentCase = testCase{
+	name: "truncated_segment",
+	sourceMessage: schema.IngestionVerification{
+		User:               "unit_test_user",
+		FilePath:           "/unit_test_truncated.c4gh",
+		FileID:             "trunc",
+		ArchivePath:        "/trunc",
+		EncryptedChecksums: []schema.Checksums{},
+		ReVerify:           false,
+	},
+	newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockDatabase, *mocks.MockBroker) {
+		mockReader := &mocks.MockReader{}
+		mockDatabase := &mocks.MockDatabase{}
+		mockBroker := &mocks.MockBroker{}
+
+		// two full data segments so we can cut a few bytes into the second one
+		fileData, err := generateFileTestData(bytes.Repeat([]byte("a"), 100000))
+		if err != nil {
+			t.Error(err.Error())
+			t.FailNow()
+		}
+		// one encrypted segment is 65536 bytes of data plus a 12-byte nonce and
+		// a 16-byte tag; cut 5 bytes into the second segment.
+		cut := 65536 + 12 + 16 + 5
+		truncated := fileData.encryptedContentNoHeader[:cut]
+
+		mockDatabase.On("GetFileStatus", "trunc").Return("verified", nil).Once()
+		mockDatabase.On("GetHeader", "trunc").Return(fileData.header, nil).Once()
+		mockDatabase.On("GetArchiveLocation", "trunc").Return("archive_location", nil).Once()
+		mockReader.On("GetFileSize", "archive_location", "/trunc").Return(int64(len(truncated)), nil).Once()
+		mockReader.On("NewFileReader", "archive_location", "/trunc").Return(truncated, nil).Once()
+		mockDatabase.On("UpdateFileEventLog", "trunc", "error", "verify", `{"error":"failed to copy decrypted data"}`, mock.Anything).Return(nil).Once()
+		mockBroker.On("Publish", "error", mock.Anything).Return(nil).Once()
+
+		return mockReader, mockDatabase, mockBroker
+	},
+	assertMocks: func(t *testing.T, mockReader *mocks.MockReader, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
+		mockReader.AssertExpectations(t)
+		mockDatabase.AssertExpectations(t)
+		mockBroker.AssertExpectations(t)
+	},
+	expectedError: nil,
+}
+
+func TestEncryptedSegmentSizeRecoversFromMalformedHeader(t *testing.T) {
+	// A header declaring a single packet of length 8 makes the crypt4gh parser
+	// panic on v1.15.0. The key-selection wrapper must turn that into an error
+	// so the key simply does not match, rather than crashing verify.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := encryptedSegmentSize(malformed, privateKey); err == nil {
+		t.Error("expected an error for a malformed header, got nil")
+	}
+}
+
+// malformedHeaderCase feeds verify a stored header whose single packet declares
+// a length below the minimum. The header validator must reject it before the key
+// loop, with its own error reason, so the file goes to the error queue. This
+// pins the validator wiring: without it the header would reach the recover in the
+// key loop and be reported as "no matching key" instead.
+var malformedHeaderCase = testCase{
+	name: "malformed_header",
+	sourceMessage: schema.IngestionVerification{
+		User:               "unit_test_user",
+		FilePath:           "/unit_test_malformed.c4gh",
+		FileID:             "malformed",
+		ArchivePath:        "/malformed",
+		EncryptedChecksums: []schema.Checksums{},
+		ReVerify:           false,
+	},
+	newMocks: func(t *testing.T) (*mocks.MockReader, *mocks.MockDatabase, *mocks.MockBroker) {
+		mockReader := &mocks.MockReader{}
+		mockDatabase := &mocks.MockDatabase{}
+		mockBroker := &mocks.MockBroker{}
+
+		// magic + version 1 + packet count 1 + packet{length 8, method 0}
+		header, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+		if err != nil {
+			t.Error(err.Error())
+			t.FailNow()
+		}
+
+		mockDatabase.On("GetFileStatus", "malformed").Return("verified", nil).Once()
+		mockDatabase.On("GetHeader", "malformed").Return(header, nil).Once()
+		mockDatabase.On("GetArchiveLocation", "malformed").Return("archive_location", nil).Once()
+		mockReader.On("GetFileSize", "archive_location", "/malformed").Return(int64(1024), nil).Once()
+		mockReader.On("NewFileReader", "archive_location", "/malformed").Return([]byte{}, nil).Once()
+		mockDatabase.On("UpdateFileEventLog", "malformed", "error", "verify", `{"error":"invalid crypt4gh header"}`, mock.Anything).Return(nil).Once()
+		mockBroker.On("Publish", "error", mock.Anything).Return(nil).Once()
 
 		return mockReader, mockDatabase, mockBroker
 	},
