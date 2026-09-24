@@ -26,18 +26,11 @@ services:
         condition: service_started
       mockauth:
         condition: service_started
-      minio:
+      s3:
         condition: service_healthy
     volumes:
       - ./sda/download-config-benchmark.yaml:/config.yaml
       - shared:/shared
-
-  # Add network alias for minio so storage URLs work correctly
-  minio:
-    networks:
-      default:
-        aliases:
-          - s3
 
   # Old download service (from sda-download module) for comparison
   download-old:
@@ -55,7 +48,7 @@ services:
         condition: service_started
       mockauth:
         condition: service_started
-      minio:
+      s3:
         condition: service_healthy
     environment:
       - configFile=/config.yaml

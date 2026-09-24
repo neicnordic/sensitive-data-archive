@@ -94,24 +94,13 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data  --console-address ":9001"
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
-    environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   validator-orchestrator_init:
     container_name: validator-orchestrator_init
@@ -230,7 +219,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       mock-aai:
         condition: service_healthy
@@ -360,7 +349,6 @@ services:
       - ./tests/validator-orchestrator:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   rabbitmq_data:
   shared:
