@@ -1,7 +1,7 @@
 apiVersion: v2
 name: sda-svc
-version: 5.0.0
-appVersion: v4.0.0
+version: 5.0.1
+appVersion: v4.0.1
 kubeVersion: '>= 1.26.0'
 description: Components for Sensitive Data Archive (SDA) installation
 home: https://neic-sda.readthedocs.io
