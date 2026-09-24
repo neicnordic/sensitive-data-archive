@@ -26,8 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type ReEncryptTests struct {
@@ -592,4 +594,77 @@ func (ts *ReEncryptTests) TestReencryptHeader_NoMatchingKey() {
 	res, err := c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
 	assert.Contains(ts.T(), err.Error(), "reencryption failed, no matching key available")
 	assert.Nil(ts.T(), res)
+}
+
+func TestRecoveryUnaryInterceptor(t *testing.T) {
+	// A handler that panics (as ReencryptHeader does on crypt4gh v1.15.0 for a
+	// packet of unknown type that passes the length validation) must be turned
+	// into an Internal error, not crash the server.
+	info := &grpc.UnaryServerInfo{FullMethod: "/reencrypt.Reencrypt/ReencryptHeader"}
+	panicking := func(_ context.Context, _ any) (any, error) {
+		panic("boom")
+	}
+
+	resp, err := recoveryUnaryInterceptor(context.Background(), nil, info, panicking)
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+
+	// A normal handler is passed through untouched.
+	ok := func(_ context.Context, _ any) (any, error) {
+		return "ok", nil
+	}
+	resp, err = recoveryUnaryInterceptor(context.Background(), nil, info, ok)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", resp)
+}
+
+// panicReencryptServer is a fake Reencrypt service whose handler always panics,
+// used to prove the recovery interceptor is actually wired into
+// newReencryptServer independently of the crypt4gh library version.
+type panicReencryptServer struct {
+	re.UnimplementedReencryptServer
+}
+
+func (panicReencryptServer) ReencryptHeader(_ context.Context, _ *re.ReencryptRequest) (*re.ReencryptResponse, error) {
+	panic("boom")
+}
+
+// TestReencryptServerRecoversFromHandlerPanic drives a panicking handler through
+// the real server built by newReencryptServer. The interceptor must turn the
+// panic into codes.Internal and leave the server able to serve the next request.
+// This pins the interceptor wiring: without the append in newReencryptServer the
+// first call crashes the server. It does not depend on the crypt4gh version.
+func (ts *ReEncryptTests) TestReencryptServerRecoversFromHandlerPanic() {
+	lis, err := net.Listen("tcp", "localhost:0")
+	require.NoError(ts.T(), err)
+
+	s := newReencryptServer()
+	re.RegisterReencryptServer(s, panicReencryptServer{})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- s.Serve(lis) }()
+	defer func() {
+		s.Stop()
+		if err := <-serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			ts.T().Errorf("grpc server Serve failed: %v", err)
+		}
+	}()
+
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	conn, err := grpc.NewClient(lis.Addr().String(), opts...)
+	require.NoError(ts.T(), err)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	c := re.NewReencryptClient(conn)
+
+	_, err = c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	require.Error(ts.T(), err)
+	assert.Equal(ts.T(), codes.Internal, status.Code(err))
+
+	// the interceptor recovered, so the server is still up for the next call
+	_, err = c.ReencryptHeader(ctx, &re.ReencryptRequest{Oldheader: ts.FileHeader, Publickey: ts.UserPubKeyString})
+	require.Error(ts.T(), err)
+	assert.Equal(ts.T(), codes.Internal, status.Code(err))
 }

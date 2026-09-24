@@ -16,6 +16,7 @@ import (
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
@@ -62,6 +63,11 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	if h := in.GetOldheader(); h == nil {
 		return nil, status.Error(400, "no header received")
+	}
+	// Reject a header whose packet lengths would make the crypt4gh library
+	// allocate gigabytes before it is parsed below.
+	if err := c4ghheader.ValidatePacketLengths(in.GetOldheader()); err != nil {
+		return nil, status.Error(400, err.Error())
 	}
 
 	extraHeaderPackets := make([]headers.EncryptedHeaderPacket, 0)
@@ -156,6 +162,30 @@ func (p *hServer) Check(ctx context.Context, in *healthgrpc.HealthCheckRequest) 
 	}, nil
 }
 
+// recoveryUnaryInterceptor turns a panic in a gRPC handler into an Internal
+// error instead of letting it crash the server. ReEncryptHeader parses a
+// crypt4gh header supplied by the caller, and a malformed header packet makes
+// the crypt4gh reader panic; without this the whole reencrypt service goes down.
+func recoveryUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("recovered from panic in %s: %v", info.FullMethod, r)
+			err = status.Errorf(codes.Internal, "internal error")
+		}
+	}()
+
+	return handler(ctx, req)
+}
+
+// newReencryptServer builds the gRPC server with the recovery interceptor
+// attached. main and the wiring test both build the server through it; the test
+// pins that this function installs the interceptor.
+func newReencryptServer(opts ...grpc.ServerOption) *grpc.Server {
+	opts = append(opts, grpc.ChainUnaryInterceptor(recoveryUnaryInterceptor))
+
+	return grpc.NewServer(opts...)
+}
+
 func main() {
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
@@ -225,7 +255,7 @@ func main() {
 		}
 	}
 
-	s := grpc.NewServer(opts...)
+	s := newReencryptServer(opts...)
 	re.RegisterReencryptServer(s, &server{c4ghPrivateKeyList: conf.ReEncrypt.C4ghPrivateKeyList})
 	reflection.Register(s)
 
