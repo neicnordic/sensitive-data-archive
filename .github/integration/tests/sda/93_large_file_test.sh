@@ -51,8 +51,11 @@ properties=$(
 # fail early on "error" so a broken service does not eat the whole retry budget
 wait_for_event() {
     RETRY_TIMES=0
-    until [ "$(latest_event)" = "$1" ]; do
+    while true; do
         event=$(latest_event)
+        if [ "$event" = "$1" ]; then
+            return
+        fi
         if [ "$event" = "error" ]; then
             echo "::error::File ended in state error while waiting for $1"
             exit 1
