@@ -26,6 +26,7 @@ import (
 	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
 	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -40,6 +41,11 @@ import (
 
 // cleanupTimeout bounds the removal of a freshly written archive object after a failed ingest.
 const cleanupTimeout = 30 * time.Second
+
+// maxHeaderBytes caps how much of an upload ReadHeader may buffer. It is far
+// above any real crypt4gh header but stops a crafted header length from making
+// io.CopyN read the whole upload into memory (an OOM the recover cannot catch).
+const maxHeaderBytes = 16 << 20
 
 type Ingest struct {
 	ArchiveWriter      storage.Writer
@@ -527,15 +533,31 @@ func (app *Ingest) ingestFile(ctx context.Context, fileID, filePath, user, archi
 	return nil, nil
 }
 
-func (app *Ingest) decrypt(source io.ReadCloser) (decryptResult, error) {
+func (app *Ingest) decrypt(source io.ReadCloser) (result decryptResult, err error) {
+	// The crypt4gh reader panics on a malformed or truncated header packet.
+	// Recover so a crafted upload fails this one message to the error queue
+	// instead of crashing ingest and crash-looping on the redelivered message.
+	defer func() {
+		if r := recover(); r != nil {
+			result = decryptResult{}
+			err = fmt.Errorf("panic while parsing crypt4gh header: %v", r)
+		}
+	}()
+
 	fileHash := sha256.New()
 	teedReader := io.TeeReader(source, fileHash)
 	var headerBuf bytes.Buffer
 	headerTee := io.TeeReader(teedReader, &headerBuf)
 
-	header, err := headers.ReadHeader(headerTee)
+	header, err := headers.ReadHeader(io.LimitReader(headerTee, maxHeaderBytes))
 	if err != nil {
 		return decryptResult{}, fmt.Errorf("failed to parse crypt4gh header: %v", err)
+	}
+	// Reject a header whose packet lengths would make the crypt4gh library
+	// allocate gigabytes (a fatal OOM the recover cannot catch) before it is
+	// parsed in the key loop below.
+	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
+		return decryptResult{}, fmt.Errorf("invalid crypt4gh header: %v", err)
 	}
 
 	var validKey *[32]byte
