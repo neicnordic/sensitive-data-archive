@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/database"
 	"github.com/neicnordic/sensitive-data-archive/sda-validator/orchestrator/model"
@@ -597,4 +598,29 @@ func (ts *JobPreparationWorkerTestSuite) TestWorkersConsumeDownloadError() {
 	ts.mockDatabase.AssertNumberOfCalls(ts.T(), "ReadValidationInformation", 1)
 	ts.mockDatabase.AssertCalled(ts.T(), "ReadValidationInformation", validationInformation1.ValidationID)
 	ts.mockDatabase.AssertCalled(ts.T(), "UpdateAllValidationJobFilesOnError", validationInformation1.ValidationID, mock.Anything)
+}
+
+func (ts *JobPreparationWorkerTestSuite) TestCopyDecryptedRecoversFromTruncatedSegment() {
+	publicKey, privateKey, err := keys.GenerateKeyPair()
+	ts.Require().NoError(err)
+
+	var encrypted bytes.Buffer
+	writer, err := streaming.NewCrypt4GHWriter(&encrypted, privateKey, [][32]byte{publicKey}, nil)
+	ts.Require().NoError(err)
+	_, err = writer.Write(bytes.Repeat([]byte("a"), 100000))
+	ts.Require().NoError(err)
+	ts.Require().NoError(writer.Close())
+
+	full := encrypted.Bytes()
+	header, err := headers.ReadHeader(bytes.NewReader(full))
+	ts.Require().NoError(err)
+
+	// cut the stream five bytes into its second data segment, the case that
+	// makes the crypt4gh reader panic
+	cut := len(header) + 65536 + 12 + 16 + 5
+	reader, err := streaming.NewCrypt4GHReader(bytes.NewReader(full[:cut]), privateKey, nil)
+	ts.Require().NoError(err)
+
+	_, err = copyDecrypted(io.Discard, reader)
+	ts.Error(err, "a truncated segment must return an error, not panic")
 }
