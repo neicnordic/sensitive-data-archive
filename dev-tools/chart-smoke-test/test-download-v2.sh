@@ -196,7 +196,7 @@ fi
 echo "Importing image into cluster..."
 k3d image import "$IMAGE" -c "$CLUSTER_NAME"
 
-# -- 3. dependencies (postgres, rabbitmq, minio) --
+# -- 3. dependencies (postgres, rabbitmq, Ceph RGW as minio) --
 echo "=== Step 3: dependencies ==="
 
 if ! helm status postgres >/dev/null 2>&1; then
@@ -225,7 +225,11 @@ else
 fi
 
 if ! kubectl get deploy minio >/dev/null 2>&1; then
-    echo "Installing minio..."
+    echo "Installing Ceph RGW as service minio..."
+    kubectl create configmap ceph-rgw \
+        --from-file=.github/integration/scripts/ceph-rgw.sh \
+        --from-file=.github/integration/scripts/s3.py \
+        --dry-run=client -o yaml | kubectl apply -f -
     kubectl apply -f - <<'MINIO_EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -242,16 +246,28 @@ spec:
         app: minio
     spec:
       containers:
-      - name: minio
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        command: ["minio", "server", "/data"]
+      - name: rgw
+        image: quay.io/ceph/vstart-cluster:19.2.6
+        command: ["/scripts/ceph-rgw.sh"]
         env:
-        - name: MINIO_ROOT_USER
+        - name: S3_ACCESS_KEY
           value: access
-        - name: MINIO_ROOT_PASSWORD
+        - name: S3_SECRET_KEY
           value: secretkey
         ports:
         - containerPort: 9000
+        readinessProbe:
+          exec:
+            command: ["/scripts/ceph-rgw.sh", "health"]
+          periodSeconds: 2
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: ceph-rgw
+          defaultMode: 0755
 ---
 apiVersion: v1
 kind: Service
@@ -264,7 +280,7 @@ spec:
   selector:
     app: minio
 MINIO_EOF
-    wait_for_pod "app=minio" 60
+    wait_for_pod "app=minio" 180
 else
     echo "Minio already installed."
 fi
