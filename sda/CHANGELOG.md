@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- validate crypt4gh header packet lengths before parsing, and recover from crypt4gh reader panics, so a crafted or truncated header can no longer crash, crash-loop or OOM a service:
+  - verify: a truncated file or malformed header now fails to the error queue instead of crashing the service
+  - validator: a truncated file no longer crashes the orchestrator job preparation worker
+  - ingest: a malformed header fails to the error queue; header buffering is bounded so a crafted length cannot exhaust memory
+  - reencrypt: a malformed header is rejected and a panic in a gRPC handler no longer crashes the service
+  - sync: a malformed stored header no longer crashes the service when reencrypting
+  - api: a malformed inbox header is rejected and header buffering is bounded
+
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
