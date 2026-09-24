@@ -28,7 +28,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8085/datasets/EGAD000000
 | download | 8085  | Download API v2                      |
 | mockauth | 8000  | Mock OIDC (JWKS, userinfo, /tokens)  |
 | postgres | 15432 | PostgreSQL with SDA schema           |
-| minio    | 19000 | S3 storage (console at 19001)        |
+| s3       | 19000 | S3 storage (Ceph RGW)                |
 | reencrypt| 50051 | gRPC re-encryption for file downloads|
 
 ## Getting Tokens

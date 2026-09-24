@@ -1,6 +1,6 @@
 #!/bin/sh
 # Seed script for download v2 dev compose.
-# Creates a real Crypt4GH encrypted test file, uploads data segments to MinIO,
+# Creates a real Crypt4GH encrypted test file, uploads data segments to S3,
 # and inserts matching metadata (header, checksums, sizes) into the database.
 # Idempotent: safe to re-run against existing volumes.
 set -e
@@ -50,11 +50,9 @@ with open("/tmp/seed_metadata.env", "w") as f:
 print(f"Header: {len(header)} bytes, Body: {len(body)} bytes")
 PYEOF
 
-# Upload data segments to MinIO (overwrites if exists)
-mc alias set myminio http://s3:9000 access secretKey --quiet
-mc mb myminio/archive --ignore-existing --quiet
-mc pipe myminio/archive/test-file.c4gh < /tmp/body.bin
-echo "Uploaded to MinIO: archive/test-file.c4gh"
+# Upload data segments to S3 (overwrites if exists)
+python3 /s3.py PUT http://s3:9000/archive/test-file.c4gh /tmp/body.bin
+echo "Uploaded to S3: archive/test-file.c4gh"
 
 # Load computed metadata
 # shellcheck source=/dev/null
