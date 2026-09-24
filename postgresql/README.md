@@ -25,6 +25,8 @@ The following environment variables can be used to configure the database:
 | POSTGRES_SERVER_CACERT | Public CA Certificate in PEM format | -                        |
 | POSTGRES_VERIFY_PEER   | Enforce client verification         | verify-ca                |
 
+The image sets `PGDATA` to `/var/lib/postgresql/data`, the pre-18 default of the upstream `postgres` image (18 moved it to `/var/lib/postgresql/18/docker`), so mount the data volume there. The entrypoint refuses to start if `PGDATA` holds data from another PostgreSQL major version, or if `PGDATA` is changed to an empty directory outside `/var/lib/postgresql/data` while `/var/lib/postgresql/data` holds a database or is a mount point.
+
 Client verification is enforced if `POSTGRES_VERIFY_PEER` is set to `verify-ca` or `verify-full`.
 
 ## Data migration instructions docs

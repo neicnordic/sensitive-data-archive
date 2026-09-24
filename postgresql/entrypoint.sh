@@ -123,6 +123,31 @@ setup_lega_users(){
 		unset PGPASSWORD
 	fi
 }
+# Refuse to start on data we cannot use instead of silently running initdb
+# next to it (upstream's docker-entrypoint.sh does the same).
+if [ -s "$PGDATA/PG_VERSION" ]; then
+	data_major="$(tr -d '[:space:]' <"$PGDATA/PG_VERSION")"
+	if [ "$data_major" != "$PG_MAJOR" ]; then
+		echo "Error: $PGDATA holds a PostgreSQL $data_major database, but this server is PostgreSQL $PG_MAJOR."
+		echo "Upgrade the data (for example with pg_dump and restore, or pg_upgrade) before starting this image."
+		exit 1
+	fi
+elif [ "$PGDATA" != "/var/lib/postgresql/$PG_MAJOR/docker" ] && [ -s "/var/lib/postgresql/$PG_MAJOR/docker/PG_VERSION" ]; then
+	# our first PostgreSQL 18 images used upstream's default PGDATA
+	echo "Error: PGDATA is $PGDATA, which is empty, but /var/lib/postgresql/$PG_MAJOR/docker holds a database."
+	echo "Set PGDATA to /var/lib/postgresql/$PG_MAJOR/docker or move the data to $PGDATA."
+	exit 1
+elif [ "${PGDATA#/var/lib/postgresql/data/}" = "$PGDATA" ] && [ "$PGDATA" != /var/lib/postgresql/data ] && {
+	[ -s /var/lib/postgresql/data/PG_VERSION ] ||
+	# BusyBox mountpoint misses bind mounts, so also check mountinfo like upstream
+	mountpoint -q /var/lib/postgresql/data ||
+	awk '$5 == "/var/lib/postgresql/data" { found = 1 } END { exit !found }' /proc/self/mountinfo
+}; then
+	echo "Error: PGDATA is $PGDATA, which is empty and outside /var/lib/postgresql/data, but /var/lib/postgresql/data holds a database or is a mount point."
+	echo "Mount the data volume at $PGDATA or set PGDATA to /var/lib/postgresql/data."
+	exit 1
+fi
+
 # If already initialized, then run
 if [ -s "$PGDATA/PG_VERSION" ]; then
 	migrate "$@"
