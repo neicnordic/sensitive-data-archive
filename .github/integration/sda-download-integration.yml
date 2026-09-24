@@ -23,25 +23,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # MinIO for archive storage
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
+  # Ceph RGW for archive storage
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
+      - S3_BUCKETS=archive
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   # Mock AAI for JWT validation
   mock-aai:
@@ -97,22 +88,25 @@ services:
       - ./scripts:/scripts
       - shared:/shared
 
-  # Initialize MinIO with archive bucket and test data
-  minio_init:
-    container_name: minio_init
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+  # Upload a test object to the archive bucket
+  s3_seed:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
+    container_name: s3_seed
     depends_on:
-      minio:
+      s3:
         condition: service_healthy
       credentials:
         condition: service_completed_successfully
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set myminio http://s3:9000 access secretKey;
-      mc mb myminio/archive || true;
-      dd if=/dev/urandom bs=1000 count=1 2>/dev/null | mc pipe myminio/archive/test-file.c4gh;
-      echo 'MinIO initialized with archive bucket and test file';
-      "
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - |
+        head -c 1000 /dev/urandom | python3 /scripts/s3.py PUT http://s3:9000/archive/test-file.c4gh -
+        echo 'Ceph RGW seeded with archive/test-file.c4gh'
+    healthcheck:
+      disable: true
 
   # Seed database with test data (files and datasets)
   database_seed:
@@ -121,7 +115,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio_init:
+      s3_seed:
         condition: service_completed_successfully
     environment:
       - PGHOST=postgres
@@ -259,7 +253,6 @@ services:
       - ./tests/download:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   shared:
 

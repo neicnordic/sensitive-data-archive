@@ -1,0 +1,17 @@
+# Single-container Ceph RGW used as the S3 backend in the integration and dev
+# stacks. Compose files pull it in with `extends` and set container_name,
+# ports and S3_BUCKETS as needed. See scripts/ceph-rgw.sh for the details.
+services:
+  ceph:
+    image: quay.io/ceph/vstart-cluster:19.2.6
+    entrypoint: ["/scripts/ceph-rgw.sh"]
+    environment:
+      - S3_ACCESS_KEY=access
+      - S3_SECRET_KEY=secretKey
+    healthcheck:
+      test: ["CMD", "/scripts/ceph-rgw.sh", "health"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    volumes:
+      - ./scripts:/scripts:ro

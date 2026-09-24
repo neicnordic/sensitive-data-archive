@@ -83,31 +83,16 @@ services:
       - 25671:15671
 
   outbox:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: outbox
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    environment:
+      - S3_ACCESS_KEY=minio
+      - S3_SECRET_KEY=miniostorage
+      - S3_BUCKETS=lega
     ports:
       - 9000:9000
-    environment:
-      - MINIO_ACCESS_KEY=minio
-      - MINIO_SECRET_KEY=miniostorage
-    command: server /data
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  init-bucket:
-    container_name: init-bucket
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
-    depends_on:
-      outbox:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set s3 http://outbox:9000 minio miniostorage;
-      /usr/bin/mc mb s3/lega;
-      "
 
   doa:
     container_name: doa
@@ -166,8 +151,8 @@ services:
         condition: service_started
       mockauth:
         condition: service_started
-      init-bucket:
-        condition: service_completed_successfully
+      outbox:
+        condition: service_healthy
     environment:
       - OUTBOX_TYPE=S3
       - DOA_URL=http://doa:8080
