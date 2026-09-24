@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
 
+### Fixed
+
+- download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
+
 ## [4.0.2] - 2026-09-30
 
 ### Fixed
