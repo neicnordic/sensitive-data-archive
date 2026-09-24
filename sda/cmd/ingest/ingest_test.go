@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -480,4 +481,19 @@ func createMessage(triggerType, filePath, userID, messageKey string) *broker.Mes
 	bodyJSON, _ := json.Marshal(body)
 
 	return &broker.Message{Key: messageKey, Body: bodyJSON}
+}
+
+func (ts *TestSuite) TestDecryptRecoversFromMalformedHeader() {
+	// A header declaring a single packet of length 8 (no payload) would make the
+	// crypt4gh reader OOM/panic. decrypt must reject it up front so ingest fails
+	// the file to the error queue instead of crashing and crash-looping on the
+	// redelivered message.
+	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	ts.Require().NoError(err)
+
+	// Assert the validator's own error so removing the validator (leaving only the
+	// recover, which would report a decrypt/panic error) is caught.
+	_, err = ts.ingest.decrypt(io.NopCloser(bytes.NewReader(malformed)))
+	ts.ErrorContains(err, "invalid crypt4gh header")
 }
