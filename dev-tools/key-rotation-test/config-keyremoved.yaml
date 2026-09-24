@@ -68,7 +68,6 @@ s3inbox:
   secret_key: "secretKey"
   bucket: "inbox"
   region: "us-east-1"
-  ready_path: "/minio/health/ready"
 
 # --- NETWORK & IPC ---
 reencrypt:

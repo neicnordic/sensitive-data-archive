@@ -1,7 +1,7 @@
 # Lightweight dev stack for the sda-download v2 API.
 #
 # Starts the minimum services needed for local webapp development:
-# postgres, minio, mockoidc, reencrypt, and the download service.
+# postgres, Ceph RGW (S3), mockoidc, reencrypt, and the download service.
 # Database is pre-seeded with a test dataset and file.
 #
 # Usage:
@@ -29,27 +29,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
-    networks:
-      default:
-        aliases:
-          - s3
+  s3:
+    extends:
+      file: ../../.github/integration/ceph-rgw.yml
+      service: ceph
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
+      - S3_BUCKETS=archive
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   # Generates JWT keys, c4gh keys, and a dev token
   credentials:
@@ -141,14 +128,7 @@ services:
     volumes:
       - shared:/shared
 
-  # Provide the mc client binary to the seed service (dl.min.io no longer serves it)
-  mc:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
-    entrypoint: ["/bin/sh", "-c", "cp /usr/bin/mc /shared/mc"]
-    volumes:
-      - shared:/shared
-
-  # Create a real Crypt4GH test file, upload to MinIO, seed database
+  # Create a real Crypt4GH test file, upload to S3, seed database
   seed:
     command:
       - /bin/sh
@@ -158,22 +138,22 @@ services:
         apt-get -o DPkg::Lock::Timeout=60 install -y curl postgresql-client > /dev/null
         pip install --upgrade pip > /dev/null
         pip install crypt4gh > /dev/null
-        cp /shared/mc /usr/local/bin/mc
         sh /seed.sh
     depends_on:
       credentials:
         condition: service_completed_successfully
-      mc:
-        condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
+      - S3_ACCESS_KEY=access
+      - S3_SECRET_KEY=secretKey
     image: python:3.14-slim-trixie
     volumes:
       - ./seed.sh:/seed.sh:ro
+      - ../../.github/integration/scripts/s3.py:/s3.py:ro
       - shared:/shared
 
   # Mock OIDC server with /tokens endpoint for easy token retrieval
@@ -233,6 +213,5 @@ services:
       - shared:/shared
 
 volumes:
-  minio_data:
   postgres_data:
   shared:
