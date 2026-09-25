@@ -67,7 +67,7 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 	// Reject a header whose packet lengths would make the crypt4gh library
 	// allocate gigabytes before it is parsed below.
 	if err := c4ghheader.ValidatePacketLengths(in.GetOldheader()); err != nil {
-		return nil, status.Error(400, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	extraHeaderPackets := make([]headers.EncryptedHeaderPacket, 0)
