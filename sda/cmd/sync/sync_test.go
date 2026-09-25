@@ -499,3 +499,33 @@ func TestReEncryptHeaderRecoversFromMalformedHeader(t *testing.T) {
 		t.Error("expected an error for a malformed header, got nil")
 	}
 }
+
+func TestSyncFileRejectsMalformedHeader(t *testing.T) {
+	// A stored header declaring a packet of length 8 must be rejected by
+	// ValidatePacketLengths before it reaches reEncryptHeader.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mr := &mocks.MockReader{}
+	mdb := &mocks.MockDatabase{}
+	mdb.On("GetInboxPath", "accession_1").Return("/inbox_path/file_1", nil).Once()
+	mdb.On("GetArchivePathAndLocation", "accession_1").Return("archive_path_1", "archive_location", nil).Once()
+	mr.On("GetFileSize", "archive_location", "archive_path_1").Return(int64(1), nil).Once()
+	mr.On("NewFileReader", "archive_location", "archive_path_1").Return([]byte("x"), nil).Once()
+	mdb.On("GetHeaderByAccessionID", "accession_1").Return(malformed, nil).Once()
+
+	v := &sync{
+		archiveC4ghPrivateKey: &archivePrivateKey,
+		syncC4ghPubKey:        &syncPublicKey,
+		db:                    mdb,
+		archiveReader:         mr,
+		syncWriter:            &mocks.MockWriter{},
+	}
+
+	err = v.syncFile(context.Background(), "accession_1")
+	assert.ErrorContains(t, err, "invalid crypt4gh header")
+	mr.AssertExpectations(t)
+	mdb.AssertExpectations(t)
+}
