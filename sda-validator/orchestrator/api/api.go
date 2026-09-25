@@ -236,7 +236,7 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 	now := time.Now()
 	for _, validatorID := range requestedValidators {
 		for _, file := range userFiles.fileInformation {
-			if err := tx.InsertFileValidationJob(c, &model.InsertFileValidationJobParameters{
+			err := tx.InsertFileValidationJob(c, &model.InsertFileValidationJobParameters{
 				ValidationID:       validationID,
 				ValidatorID:        validatorID,
 				FileID:             file.FileID,
@@ -245,7 +245,8 @@ func (api *validatorAPIImpl) validate(c *gin.Context, userID, triggeredBy string
 				TriggeredBy:        triggeredBy,
 				FileSubmissionSize: file.SubmissionFileSize,
 				StartedAt:          now,
-			}); err != nil {
+			})
+			if err != nil {
 				log.Errorf("failed to insert file validation job due to: %v", err)
 				c.AbortWithStatus(http.StatusInternalServerError)
 

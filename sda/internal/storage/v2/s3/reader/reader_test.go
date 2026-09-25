@@ -237,7 +237,7 @@ func (ts *ReaderTestSuite) SetupSuite() {
 		}
 	}))
 
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err = os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   test:
     s3:
@@ -251,7 +251,8 @@ storage:
       secret_key: secret_key2
       disable_https: true
       region: us-east-1
-`, ts.s3Mock1.URL, ts.s3Mock2.URL)), 0600); err != nil {
+`, ts.s3Mock1.URL, ts.s3Mock2.URL)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
@@ -772,7 +773,7 @@ func (ts *ReaderTestSuite) TestPing_EndpointDown() {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   ping_fail_test:
     s3:
@@ -781,7 +782,8 @@ storage:
       secret_key: sk
       disable_https: true
       region: us-east-1
-`, server.URL)), 0600); err != nil {
+`, server.URL)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 

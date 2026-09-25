@@ -67,7 +67,7 @@ func (ts *WriterTestSuite) SetupTest() {
 	ts.dir2 = ts.T().TempDir()
 	ts.locationBrokerMock = &mockLocationBroker{}
 
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   test:
     posix:
@@ -77,7 +77,8 @@ storage:
     - path: %s
       max_objects: 5
       max_size: 5kb
-`, ts.dir1, ts.dir2)), 0600); err != nil {
+`, ts.dir1, ts.dir2)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
@@ -88,7 +89,6 @@ storage:
 	if err := viper.ReadInConfig(); err != nil {
 		ts.FailNow(err.Error())
 	}
-	var err error
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetSize", ts.dir1).Return(0, nil).Once()
 	ts.locationBrokerMock.On("GetObjectCount", ts.dir2).Return(0, nil).Once()

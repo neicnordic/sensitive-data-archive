@@ -46,14 +46,15 @@ type endpointConfig struct {
 func loadConfig(backendName string) ([]*endpointConfig, error) {
 	var endpointConf []*endpointConfig
 
-	if err := viper.UnmarshalKey(
+	err := viper.UnmarshalKey(
 		"storage."+backendName+".s3",
 		&endpointConf,
 		func(config *mapstructure.DecoderConfig) {
 			config.WeaklyTypedInput = true
 			config.ZeroFields = true
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 

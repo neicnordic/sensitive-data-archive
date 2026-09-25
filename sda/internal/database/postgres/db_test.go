@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
+	err = pool.Retry(func() error {
 		log.Println("waiting for docker postgres database to be ready")
 		db, err := sql.Open("postgres", databaseURL)
 		if err != nil {
@@ -93,7 +93,8 @@ func TestMain(m *testing.M) {
 		var dbVersion int
 
 		return db.QueryRow(query).Scan(&dbVersion)
-	}); err != nil {
+	})
+	if err != nil {
 		if err := pool.Purge(postgres); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}

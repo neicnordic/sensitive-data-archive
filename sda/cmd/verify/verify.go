@@ -510,10 +510,11 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	}
 
 	// Publish verified message
-	if err := app.broker.Publish(ctx, app.routingKey, broker.Message{
+	err = app.broker.Publish(ctx, app.routingKey, broker.Message{
 		Key:  ingestionVerification.FileID,
 		Body: verifiedMessage,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("failed to publish verified message",
 			slog.String("file-id", ingestionVerification.FileID),
 			slog.String("routing-key", app.routingKey),
